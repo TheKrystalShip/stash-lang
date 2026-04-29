@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
+using Stash.Bytecode;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -33,9 +34,18 @@ public sealed partial class VirtualMachine
         if (string.IsNullOrEmpty(command))
             throw new RuntimeError("Command cannot be empty.", span);
 
-        var (program, arguments) = CommandParser.Parse(command);
+        var parsedArgs = CommandParser.ParseWithQuotedFlags(command);
+        string program = parsedArgs.Count > 0 ? parsedArgs[0].Token : "";
+        var arguments = new List<string>(parsedArgs.Count > 1 ? parsedArgs.Count - 1 : 0);
+        var quotedFlags = new List<bool>(parsedArgs.Count > 1 ? parsedArgs.Count - 1 : 0);
+        for (int i = 1; i < parsedArgs.Count; i++)
+        {
+            arguments.Add(parsedArgs[i].Token);
+            quotedFlags.Add(parsedArgs[i].WasQuoted);
+        }
 
         ApplyTildeToArguments(arguments);
+        ApplyGlobExpansion(arguments, quotedFlags, span);
         ApplyElevationIfActive(ref program, ref arguments);
 
         bool isPassthrough = (flags & 0x01) != 0;
@@ -90,6 +100,31 @@ public sealed partial class VirtualMachine
                 ["stderr"] = StashValue.FromObj(stderr),
                 ["exitCode"] = StashValue.FromInt((long)exitCode)
             }) { StringifyField = "stdout" });
+        }
+    }
+
+    private static void ApplyGlobExpansion(List<string> arguments, List<bool> wasQuoted, SourceSpan? span)
+    {
+        // Iterate backwards so insertions don't invalidate earlier indices
+        for (int i = arguments.Count - 1; i >= 0; i--)
+        {
+            if (wasQuoted[i]) continue;
+            if (!GlobExpander.HasGlobChars(arguments[i])) continue;
+
+            var matches = GlobExpander.Expand(arguments[i]);
+            if (matches.Count == 0)
+                throw new RuntimeError(
+                    $"glob pattern '{arguments[i]}' did not match any files",
+                    span, StashErrorTypes.CommandError);
+
+            // Replace arg[i] with all matched paths
+            arguments.RemoveAt(i);
+            wasQuoted.RemoveAt(i);
+            for (int j = 0; j < matches.Count; j++)
+            {
+                arguments.Insert(i + j, matches[j]);
+                wasQuoted.Insert(i + j, false);
+            }
         }
     }
 
@@ -157,8 +192,17 @@ public sealed partial class VirtualMachine
             if (string.IsNullOrEmpty(command))
                 throw new RuntimeError("Command cannot be empty in pipe chain.", span);
 
-            var (program, arguments) = CommandParser.Parse(command);
+            var parsedStage = CommandParser.ParseWithQuotedFlags(command);
+            string program = parsedStage.Count > 0 ? parsedStage[0].Token : "";
+            var arguments = new List<string>(parsedStage.Count > 1 ? parsedStage.Count - 1 : 0);
+            var quotedFlags = new List<bool>(parsedStage.Count > 1 ? parsedStage.Count - 1 : 0);
+            for (int si = 1; si < parsedStage.Count; si++)
+            {
+                arguments.Add(parsedStage[si].Token);
+                quotedFlags.Add(parsedStage[si].WasQuoted);
+            }
             ApplyTildeToArguments(arguments);
+            ApplyGlobExpansion(arguments, quotedFlags, span);
             ApplyElevationIfActive(ref program, ref arguments);
 
             stages.Add(new PipeStage(program, arguments, flags));

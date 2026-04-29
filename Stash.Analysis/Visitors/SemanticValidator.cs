@@ -3,6 +3,7 @@ namespace Stash.Analysis;
 using System;
 using System.Collections.Generic;
 using Stash.Analysis.Rules;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 using Stash.Stdlib;
@@ -690,9 +691,86 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         DispatchNodeRules(expr);
         foreach (var part in expr.Parts)
         {
+            // SA0820: warn about unquoted glob metacharacters in literal command text
+            if (part is LiteralExpr { Value: string rawText })
+                CheckCommandLiteralForGlobChars(rawText, expr.Span);
+
             part.Accept(this);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Scans raw command literal text (which still contains shell-style quoting)
+    /// for unquoted words containing glob metacharacters and emits SA0820.
+    /// </summary>
+    private void CheckCommandLiteralForGlobChars(string raw, SourceSpan span)
+    {
+        bool inDouble = false;
+        bool inSingle = false;
+        bool wordHasGlob = false;
+        bool wordIsQuoted = false;
+        var wordBuf = new System.Text.StringBuilder();
+
+        void FlushWord()
+        {
+            if (wordBuf.Length > 0 && wordHasGlob && !wordIsQuoted)
+                _diagnostics.Add(DiagnosticDescriptors.SA0820.CreateDiagnostic(span, wordBuf.ToString()));
+            wordBuf.Clear();
+            wordHasGlob = false;
+            wordIsQuoted = false;
+        }
+
+        int i = 0;
+        while (i < raw.Length)
+        {
+            char c = raw[i];
+
+            if (inSingle)
+            {
+                if (c == '\'') { inSingle = false; }
+                else { wordBuf.Append(c); }
+                i++;
+                continue;
+            }
+
+            if (inDouble)
+            {
+                if (c == '"') { inDouble = false; }
+                else if (c == '\\' && i + 1 < raw.Length) { wordBuf.Append(raw[i + 1]); i += 2; continue; }
+                else { wordBuf.Append(c); }
+                i++;
+                continue;
+            }
+
+            // Unquoted
+            if (c == '"')
+            {
+                inDouble = true;
+                wordIsQuoted = true;
+                i++;
+            }
+            else if (c == '\'')
+            {
+                inSingle = true;
+                wordIsQuoted = true;
+                i++;
+            }
+            else if (char.IsWhiteSpace(c))
+            {
+                FlushWord();
+                i++;
+            }
+            else
+            {
+                if (c is '*' or '?' or '[')
+                    wordHasGlob = true;
+                wordBuf.Append(c);
+                i++;
+            }
+        }
+
+        FlushWord();
     }
 
     public object? VisitPipeExpr(PipeExpr expr)

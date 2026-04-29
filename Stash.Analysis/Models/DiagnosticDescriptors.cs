@@ -99,6 +99,14 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0813 = new("SA0813", "Unbounded lock wait", DiagnosticLevel.Information, "Locks", "This 'lock' block has no 'wait' option and is not enclosed in a 'timeout' block. It will wait indefinitely if another process holds the lock.");
     public static readonly DiagnosticDescriptor SA0814 = new("SA0814", "Non-blocking lock without try", DiagnosticLevel.Warning, "Locks", "This 'lock' block uses 'wait: 0s' but is not enclosed in 'try'. A LockError will be unhandled if the lock is already held.");
 
+    // ── SA082x — Glob expansion ───────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0820 =
+        new("SA0820",
+            "Unquoted glob pattern in command literal",
+            DiagnosticLevel.Information,
+            "Commands",
+            "Command argument '{0}' contains an unquoted glob character ('*', '?', '['). It will be expanded to matching filenames at runtime; if the literal pattern is intended, quote it.");
+
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
     public static readonly DiagnosticDescriptor SA0902 = new("SA0902", "Function body too long", DiagnosticLevel.Information, "Style", "Function '{0}' is {1} lines long, exceeding the threshold of {2}. Consider breaking it into smaller functions.");
@@ -204,6 +212,7 @@ public static class DiagnosticDescriptors
         dict[SA0812.Code] = SA0812;
         dict[SA0813.Code] = SA0813;
         dict[SA0814.Code] = SA0814;
+        dict[SA0820.Code] = SA0820;
         dict[SA0901.Code] = SA0901;
         dict[SA1002.Code] = SA1002;
         dict[SA1102.Code] = SA1102;

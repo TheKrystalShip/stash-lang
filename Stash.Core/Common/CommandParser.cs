@@ -10,16 +10,19 @@ namespace Stash.Common;
 public static class CommandParser
 {
     /// <summary>
-    /// Splits a raw command string into tokens.
-    /// The first token is the program name; the rest are arguments.
-    /// Double-quoted and single-quoted strings are treated as single tokens
-    /// with the quotes stripped. Backslash escapes within double quotes
-    /// are preserved (the program receives the literal backslash sequence).
+    /// Splits a raw command string into tokens, tracking whether each token
+    /// was (at least partially) quoted. Quoting suppresses glob expansion.
     /// </summary>
-    public static (string Program, List<string> Arguments) Parse(string command)
+    /// <returns>
+    /// List of <c>(Token, WasQuoted)</c> pairs. The first entry is the program;
+    /// the rest are arguments. <c>WasQuoted</c> is <c>true</c> when any portion
+    /// of the token was inside single or double quotes.
+    /// </returns>
+    public static List<(string Token, bool WasQuoted)> ParseWithQuotedFlags(string command)
     {
-        var tokens = new List<string>();
+        var tokens = new List<(string, bool)>();
         var current = new StringBuilder();
+        bool wasQuoted = false;
         int i = 0;
 
         while (i < command.Length)
@@ -28,7 +31,7 @@ public static class CommandParser
 
             if (c == '"')
             {
-                // Double-quoted segment: collect until closing quote
+                wasQuoted = true;
                 i++; // skip opening quote
                 while (i < command.Length && command[i] != '"')
                 {
@@ -46,13 +49,11 @@ public static class CommandParser
                     }
                 }
                 if (i < command.Length)
-                {
                     i++; // skip closing quote
-                }
             }
             else if (c == '\'')
             {
-                // Single-quoted segment: collect until closing quote (no escapes)
+                wasQuoted = true;
                 i++; // skip opening quote
                 while (i < command.Length && command[i] != '\'')
                 {
@@ -60,17 +61,15 @@ public static class CommandParser
                     i++;
                 }
                 if (i < command.Length)
-                {
                     i++; // skip closing quote
-                }
             }
             else if (char.IsWhiteSpace(c))
             {
-                // Whitespace: flush current token
                 if (current.Length > 0)
                 {
-                    tokens.Add(current.ToString());
+                    tokens.Add((current.ToString(), wasQuoted));
                     current.Clear();
+                    wasQuoted = false;
                 }
                 i++;
             }
@@ -81,19 +80,29 @@ public static class CommandParser
             }
         }
 
-        // Flush last token
         if (current.Length > 0)
-        {
-            tokens.Add(current.ToString());
-        }
+            tokens.Add((current.ToString(), wasQuoted));
 
-        if (tokens.Count == 0)
-        {
+        return tokens;
+    }
+
+    /// <summary>
+    /// Splits a raw command string into tokens.
+    /// The first token is the program name; the rest are arguments.
+    /// Double-quoted and single-quoted strings are treated as single tokens
+    /// with the quotes stripped. Backslash escapes within double quotes
+    /// are preserved (the program receives the literal backslash sequence).
+    /// </summary>
+    public static (string Program, List<string> Arguments) Parse(string command)
+    {
+        var parsed = ParseWithQuotedFlags(command);
+        if (parsed.Count == 0)
             return ("", new List<string>());
-        }
 
-        string program = tokens[0];
-        var args = tokens.Count > 1 ? tokens.GetRange(1, tokens.Count - 1) : new List<string>();
+        string program = parsed[0].Token;
+        var args = new List<string>(parsed.Count - 1);
+        for (int i = 1; i < parsed.Count; i++)
+            args.Add(parsed[i].Token);
         return (program, args);
     }
 }
