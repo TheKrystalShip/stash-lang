@@ -12,10 +12,11 @@ namespace Stash.Cli.Shell;
 /// Orchestrates the full shell-mode pipeline for a single REPL input line:
 ///   parse → expand args → execute passthrough → update exit code.
 ///
-/// Phase 4 scope:
-///   • Single-command and multi-stage pipelines.
-///   • Redirects are parsed but NOT executed (throws CommandError if present).
-///   • cd/pwd/exit/quit are NOT desugared (Phase 7).
+/// Phase 5 additions:
+///   • <c>\cmd</c>  forced shell execution (prefix stripped by lexer).
+///   • <c>!cmd</c>  strict mode — non-zero exit raises <see cref="StashErrorTypes.CommandError"/>.
+///   • Redirects (<c>&gt;</c> <c>&gt;&gt;</c> <c>2&gt;</c> <c>2&gt;&gt;</c> <c>&amp;&gt;</c> <c>&amp;&gt;&gt;</c>)
+///     applied to the last pipeline stage.
 ///
 /// Errors propagate as <see cref="RuntimeError"/> with error type
 /// <see cref="StashErrorTypes.CommandError"/> so the REPL prints them.
@@ -32,26 +33,39 @@ internal sealed class ShellRunner
     /// <summary>
     /// Execute a shell-mode line: parse → expand → run passthrough.
     /// Updates <see cref="VirtualMachine.LastExitCode"/> after each execution.
+    /// Throws <see cref="RuntimeError"/> (<see cref="StashErrorTypes.CommandError"/>) in strict mode
+    /// when any stage exits non-zero.
     /// </summary>
     public void Run(string line)
     {
         ShellCommandLine ast = ShellLineLexer.Parse(line);
 
-        // Phase 4: redirects are lexed but not yet implemented.
-        if (ast.Redirects.Count > 0)
-            throw new RuntimeError(
-                "redirects are not yet supported in shell mode (Phase 5+)",
-                null, StashErrorTypes.CommandError);
+        int[] exitCodes;
 
-        if (ast.Stages.Count == 1)
-            RunSingleStage(ast.Stages[0]);
+        if (ast.Redirects.Count > 0)
+            exitCodes = RunWithRedirects(ast);
+        else if (ast.Stages.Count == 1)
+            exitCodes = [RunSingleStage(ast.Stages[0])];
         else
-            RunPipeline(ast.Stages);
+            exitCodes = RunPipeline(ast.Stages);
+
+        _ctx.Vm.LastExitCode = exitCodes[^1];
+
+        if (ast.IsStrict)
+        {
+            foreach (int code in exitCodes)
+            {
+                if (code != 0)
+                    throw new RuntimeError(
+                        $"Command failed with exit code {code}: {line.Trim()}",
+                        null, StashErrorTypes.CommandError);
+            }
+        }
     }
 
     // ── Single-stage execution ───────────────────────────────────────────────
 
-    private void RunSingleStage(ShellStage stage)
+    private int RunSingleStage(ShellStage stage)
     {
         var (program, args) = BuildArgv(stage);
 
@@ -65,29 +79,116 @@ internal sealed class ShellRunner
             throw WrapSpawnError(program, ex);
         }
 
-        _ctx.Vm.LastExitCode = exitCode;
+        return exitCode;
     }
 
     // ── Pipeline execution ───────────────────────────────────────────────────
 
-    private void RunPipeline(IReadOnlyList<ShellStage> stages)
+    private int[] RunPipeline(IReadOnlyList<ShellStage> stages)
     {
         var resolved = new List<(string Program, List<string> Args)>(stages.Count);
         foreach (var stage in stages)
             resolved.Add(BuildArgv(stage));
 
-        int[] exitCodes;
         try
         {
-            exitCodes = _ctx.Vm.RunPassthroughPipeline(resolved, span: null);
+            return _ctx.Vm.RunPassthroughPipeline(resolved, span: null);
         }
         catch (RuntimeError ex) when (IsSpawnFailure(ex))
         {
-            // Try to identify the failing stage from the error message.
             throw WrapSpawnError(stages[0].Program, ex);
         }
+    }
 
-        _ctx.Vm.LastExitCode = exitCodes[^1];
+    // ── Redirected execution ─────────────────────────────────────────────────
+
+    private int[] RunWithRedirects(ShellCommandLine ast)
+    {
+        var openedStreams = new List<Stream>();
+        Stream? stdoutTarget = null;
+        Stream? stderrTarget = null;
+        bool stderrToStdout = false;
+
+        try
+        {
+            foreach (var redirect in ast.Redirects)
+            {
+                string path = ExpandRedirectTarget(redirect.Target);
+
+                var fileMode = redirect.Append ? FileMode.Append : FileMode.Create;
+                FileStream fs;
+                try
+                {
+                    fs = new FileStream(path, fileMode, FileAccess.Write, FileShare.Read);
+                }
+                catch (IOException ex)
+                {
+                    throw new RuntimeError(
+                        $"redirect to '{path}' failed: {ex.Message}", null, StashErrorTypes.CommandError);
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    throw new RuntimeError(
+                        $"redirect to '{path}' failed: {ex.Message}", null, StashErrorTypes.CommandError);
+                }
+
+                openedStreams.Add(fs);
+
+                switch (redirect.Stream)
+                {
+                    case RedirectStream.Stdout:
+                        stdoutTarget = fs;
+                        stderrToStdout = false;
+                        break;
+                    case RedirectStream.Stderr:
+                        stderrTarget = fs;
+                        break;
+                    case RedirectStream.Both:
+                        stdoutTarget = fs;
+                        stderrToStdout = true;
+                        stderrTarget = null;
+                        break;
+                }
+            }
+
+            var resolved = new List<(string Program, List<string> Args)>(ast.Stages.Count);
+            foreach (var stage in ast.Stages)
+                resolved.Add(BuildArgv(stage));
+
+            try
+            {
+                return _ctx.Vm.RunRedirectedPipeline(
+                    resolved, stdoutTarget, stderrTarget, stderrToStdout, span: null);
+            }
+            catch (RuntimeError ex) when (IsSpawnFailure(ex))
+            {
+                throw WrapSpawnError(ast.Stages[0].Program, ex);
+            }
+        }
+        finally
+        {
+            foreach (var s in openedStreams)
+                try { s.Dispose(); } catch { }
+        }
+    }
+
+    // ── Redirect target helpers ──────────────────────────────────────────────
+
+    private static string ExpandRedirectTarget(string target)
+    {
+        if (string.IsNullOrEmpty(target)) return target;
+
+        if (target == "~")
+            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (target.StartsWith("~/", StringComparison.Ordinal) ||
+            target.StartsWith("~\\", StringComparison.Ordinal))
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return Path.Combine(home, target[2..]);
+        }
+
+        return target;
     }
 
     // ── Arg building ─────────────────────────────────────────────────────────

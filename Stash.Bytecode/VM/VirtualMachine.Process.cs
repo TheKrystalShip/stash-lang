@@ -65,6 +65,224 @@ public sealed partial class VirtualMachine
         return exitCodes;
     }
 
+    // ── Public shell-mode entry points (Phase 5) ─────────────────────────────
+
+    /// <summary>
+    /// Run an N-stage pipeline where the last stage's stdout/stderr are redirected to the
+    /// provided streams instead of the terminal.  Intermediate stages still pipe stdout to the
+    /// next stage's stdin and let stderr inherit the terminal.
+    /// </summary>
+    /// <param name="stages">Ordered list of (program, args) pairs.</param>
+    /// <param name="stdoutTarget">Stream to receive last-stage stdout, or <c>null</c> to inherit terminal.</param>
+    /// <param name="stderrTarget">Stream to receive last-stage stderr, or <c>null</c> to inherit terminal.</param>
+    /// <param name="stderrToStdout">When <c>true</c>, last-stage stderr is merged into <paramref name="stdoutTarget"/>.</param>
+    /// <param name="span">Source location for error messages.</param>
+    /// <returns>Exit codes for every stage (index [^1] = last stage).</returns>
+    public int[] RunRedirectedPipeline(
+        IReadOnlyList<(string Program, List<string> Args)> stages,
+        Stream? stdoutTarget,
+        Stream? stderrTarget,
+        bool stderrToStdout,
+        SourceSpan? span = null)
+    {
+        var pipeStages = new List<PipeStage>(stages.Count);
+        foreach (var (program, args) in stages)
+            pipeStages.Add(new PipeStage(program, args, 0));
+
+        return ExecPipelineWithRedirects(pipeStages, stdoutTarget, stderrTarget, stderrToStdout, span, _ct);
+    }
+
+    // ── Phase 5: redirected pipeline execution ───────────────────────────────
+
+    /// <summary>
+    /// Like <see cref="ExecPipelineStreaming"/> in Passthrough mode, but the last stage's
+    /// stdout/stderr are pumped to caller-supplied <see cref="Stream"/> objects instead of
+    /// inheriting the terminal.
+    /// </summary>
+    private static int[] ExecPipelineWithRedirects(
+        List<PipeStage> stages,
+        Stream? stdoutTarget,
+        Stream? stderrTarget,
+        bool stderrToStdout,
+        SourceSpan? span,
+        CancellationToken ct)
+    {
+        int n = stages.Count;
+        var processes = new Process[n];
+        int started = 0;
+
+        bool captureLastStdout = stdoutTarget is not null;
+        bool captureLastStderr = stderrTarget is not null || stderrToStdout;
+
+        try
+        {
+            // Start all processes.
+            // Intermediate stages: redirect stdout (feeds next stage stdin), stderr inherits terminal.
+            // Last stage: redirect stdout/stderr only when a target stream is provided.
+            for (int i = 0; i < n; i++)
+            {
+                bool isLast = (i == n - 1);
+                var stage = stages[i];
+                var psi = new ProcessStartInfo
+                {
+                    FileName               = stage.Program,
+                    RedirectStandardOutput = !isLast || captureLastStdout,
+                    RedirectStandardError  = isLast && captureLastStderr,
+                    RedirectStandardInput  = (i > 0),
+                    UseShellExecute        = false,
+                    CreateNoWindow         = false,
+                };
+                foreach (string arg in stage.Arguments)
+                    psi.ArgumentList.Add(arg);
+
+                processes[i] = Process.Start(psi)
+                    ?? throw new RuntimeError($"Failed to start process: {stage.Program}", span);
+                started++;
+            }
+
+            // Pump tasks: stdout[i] → stdin[i+1].
+            var pumpTasks = new Task[n - 1];
+            for (int i = 0; i < n - 1; i++)
+            {
+                int idx = i;
+                StreamReader from = processes[i].StandardOutput;
+                StreamWriter to   = processes[i + 1].StandardInput;
+                pumpTasks[i] = Task.Run(
+                    async () =>
+                    {
+                        bool brokePipe = await PumpAsync(from, to, ct).ConfigureAwait(false);
+                        if (brokePipe)
+                            _ = ShutdownUpstreamAsync(processes, idx, gracePeriodMs: 500);
+                    }, ct);
+            }
+
+            // Redirect tasks: pump last stage stdout/stderr to file streams.
+            Task? stdoutRedirectTask = null;
+            Task? stderrRedirectTask = null;
+            SemaphoreSlim? sharedLock = null;
+
+            if (captureLastStdout && stdoutTarget is not null)
+            {
+                if (stderrToStdout && captureLastStderr)
+                {
+                    // &> — both streams to the same target; need a shared write lock.
+                    sharedLock = new SemaphoreSlim(1, 1);
+                    var target = stdoutTarget;
+                    var lk     = sharedLock;
+                    var proc   = processes[n - 1];
+                    stdoutRedirectTask = Task.Run(
+                        () => PumpToStreamLockedAsync(proc.StandardOutput.BaseStream, target, lk, ct), ct);
+                    stderrRedirectTask = Task.Run(
+                        () => PumpToStreamLockedAsync(proc.StandardError.BaseStream, target, lk, ct), ct);
+                }
+                else
+                {
+                    var target = stdoutTarget;
+                    var proc   = processes[n - 1];
+                    stdoutRedirectTask = Task.Run(
+                        () => PumpToStreamAsync(proc.StandardOutput.BaseStream, target, ct), ct);
+                }
+            }
+
+            if (!stderrToStdout && stderrTarget is not null)
+            {
+                var target = stderrTarget;
+                var proc   = processes[n - 1];
+                stderrRedirectTask = Task.Run(
+                    () => PumpToStreamAsync(proc.StandardError.BaseStream, target, ct), ct);
+            }
+
+            // Wait for all processes to exit.
+            var waitTasks = new Task[n];
+            for (int i = 0; i < n; i++)
+            {
+                int idx = i;
+                waitTasks[i] = processes[idx].WaitForExitAsync(ct);
+            }
+
+            try
+            {
+                Task.WaitAll(waitTasks, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                for (int i = 0; i < started; i++)
+                    try { processes[i].Kill(entireProcessTree: true); } catch { }
+                try { Task.WaitAll(pumpTasks); } catch { }
+                if (stdoutRedirectTask != null) try { stdoutRedirectTask.Wait(); } catch { }
+                if (stderrRedirectTask != null) try { stderrRedirectTask.Wait(); } catch { }
+                sharedLock?.Dispose();
+                throw;
+            }
+            catch (AggregateException ae) when (ae.InnerExceptions.All(e => e is OperationCanceledException))
+            {
+                for (int i = 0; i < started; i++)
+                    try { processes[i].Kill(entireProcessTree: true); } catch { }
+                try { Task.WaitAll(pumpTasks); } catch { }
+                if (stdoutRedirectTask != null) try { stdoutRedirectTask.Wait(); } catch { }
+                if (stderrRedirectTask != null) try { stderrRedirectTask.Wait(); } catch { }
+                sharedLock?.Dispose();
+                ct.ThrowIfCancellationRequested();
+            }
+
+            try { Task.WaitAll(pumpTasks); } catch { }
+            try { stdoutRedirectTask?.Wait(); } catch { }
+            try { stderrRedirectTask?.Wait(); } catch { }
+            sharedLock?.Dispose();
+
+            var exitCodes = new int[n];
+            for (int i = 0; i < n; i++)
+                exitCodes[i] = processes[i].ExitCode;
+            return exitCodes;
+        }
+        catch (RuntimeError)         { throw; }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Redirected pipeline execution failed: {ex.Message}", span);
+        }
+        finally
+        {
+            for (int i = 0; i < started; i++)
+                try { processes[i].Dispose(); } catch { }
+        }
+    }
+
+    /// <summary>Pump all bytes from <paramref name="source"/> into <paramref name="target"/>.</summary>
+    private static async Task PumpToStreamAsync(Stream source, Stream target, CancellationToken ct)
+    {
+        byte[] buf = new byte[8192];
+        int bytesRead;
+        while ((bytesRead = await source.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+        {
+            await target.WriteAsync(buf.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Pump all bytes from <paramref name="source"/> into <paramref name="target"/>, serialising
+    /// writes via <paramref name="writeLock"/> so that two concurrent pumps to the same stream
+    /// (e.g. <c>&amp;&gt;</c>) do not corrupt output.
+    /// </summary>
+    private static async Task PumpToStreamLockedAsync(
+        Stream source, Stream target, SemaphoreSlim writeLock, CancellationToken ct)
+    {
+        byte[] buf = new byte[8192];
+        int bytesRead;
+        while ((bytesRead = await source.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+        {
+            await writeLock.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await target.WriteAsync(buf.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                writeLock.Release();
+            }
+        }
+    }
+
     // ────────────────────────────────────────────────────────────────────────
 
     private static (string Stdout, string Stderr, int ExitCode) ExecCaptured(

@@ -69,9 +69,11 @@ internal sealed class ShellLineClassifier
             // Operator-leading (includes +, -, =, etc.)
             PeekKind.Operator => LineMode.Stash,
 
-            // Phase 5 prefixes — return Stash for Phase 4
-            PeekKind.Backslash => LineMode.Stash,
-            PeekKind.Bang => LineMode.Stash,
+            // §4.2 backslash-force prefix
+            PeekKind.Backslash => ClassifyBackslash(firstLine),
+
+            // §4.3 bang-strict prefix
+            PeekKind.Bang => ClassifyBang(firstLine),
 
             // Path-like first token → Shell (§4.1 table)
             PeekKind.PathLike => LineMode.Shell,
@@ -104,8 +106,89 @@ internal sealed class ShellLineClassifier
         // For a simple conservative check: if the line ends with '|' after trimming,
         // and the classifier would route this as shell mode, treat it as incomplete.
         var mode = Classify(line);
-        return mode == LineMode.Shell;
+        return mode is LineMode.Shell or LineMode.ShellForced or LineMode.ShellStrict;
     }
+
+    // ── §4.2 Backslash-force prefix ─────────────────────────────────────────
+
+    /// <summary>
+    /// Implements §4.2: <c>\cmd</c> forces shell mode regardless of symbol declarations.
+    /// Only valid when the character IMMEDIATELY after <c>\</c> is an identifier start,
+    /// <c>/</c>, <c>.</c>, or <c>~</c>.  A backslash followed by whitespace or other
+    /// chars falls through to Stash.
+    /// </summary>
+    private static LineMode ClassifyBackslash(string firstLine)
+    {
+        int i = 0;
+        while (i < firstLine.Length && IsWs(firstLine[i])) i++;
+        if (i >= firstLine.Length || firstLine[i] != '\\') return LineMode.Stash;
+        i++; // skip '\'
+
+        if (i >= firstLine.Length) return LineMode.Stash; // bare '\' at EOL
+
+        char next = firstLine[i];
+        return char.IsAsciiLetter(next) || next == '_' || next == '/' || next == '.' || next == '~'
+            ? LineMode.ShellForced
+            : LineMode.Stash;
+    }
+
+    /// <summary>
+    /// Implements §4.3: <c>!cmd</c> runs the command in strict mode (non-zero exit → error).
+    /// <c>!\cmd</c> combines strict + force.
+    /// <c>!keyword</c> and <c>!declaredGlobal</c> remain Stash (logical-not).
+    /// </summary>
+    private LineMode ClassifyBang(string firstLine)
+    {
+        int i = 0;
+        while (i < firstLine.Length && IsWs(firstLine[i])) i++;
+        if (i >= firstLine.Length || firstLine[i] != '!') return LineMode.Stash;
+        i++; // skip '!'
+
+        string remainder = firstLine[i..];
+        var inner = PeekTokenizer.Peek(remainder);
+
+        switch (inner.Kind)
+        {
+            case PeekKind.Backslash:
+                // !\<cmd> — strict + forced.  Verify that the char immediately after '\' is
+                // an identifier start or path-leading char (mirrors ClassifyBackslash logic).
+                {
+                    int j = 0;
+                    while (j < remainder.Length && IsWs(remainder[j])) j++;
+                    if (j < remainder.Length && remainder[j] == '\\')
+                    {
+                        j++;
+                        if (j < remainder.Length)
+                        {
+                            char next = remainder[j];
+                            if (char.IsAsciiLetter(next) || next == '_' || next == '/' || next == '.' || next == '~')
+                                return LineMode.ShellStrict; // lexer will also set IsForced
+                        }
+                    }
+                    return LineMode.Stash;
+                }
+
+            case PeekKind.Identifier:
+                // !<keyword>  → Stash (logical-not of boolean/null literal, etc.)
+                if (_ctx.Keywords.Contains(inner.FirstToken)) return LineMode.Stash;
+                // !<namespace>  → Stash
+                if (_ctx.Namespaces.Contains(inner.FirstToken)) return LineMode.Stash;
+                // !<declared global>  → Stash (logical-not of a variable)
+                if (_ctx.Vm.HasReplGlobal(inner.FirstToken)) return LineMode.Stash;
+                // !<shell builtin>  → ShellStrict
+                if (_ctx.ShellBuiltinNames.Contains(inner.FirstToken)) return LineMode.ShellStrict;
+                // !<PATH-resolvable>  → ShellStrict
+                if (_ctx.PathCache.IsExecutable(inner.FirstToken)) return LineMode.ShellStrict;
+                // Unknown identifier → Stash (undefined-identifier error from logical-not)
+                return LineMode.Stash;
+
+            default:
+                // !=  !(  !42  etc. → Stash
+                return LineMode.Stash;
+        }
+    }
+
+    private static bool IsWs(char c) => c == ' ' || c == '\t' || c == '\r' || c == '\n';
 
     // ── §4.4 Bare identifier rules ──────────────────────────────────────────
 

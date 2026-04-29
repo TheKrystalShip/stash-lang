@@ -270,4 +270,81 @@ public class ShellLineClassifierTests
         var clf = MakeClassifier();
         Assert.False(clf.IsShellIncomplete("let x = 5 |"));
     }
+
+    // ── §4.2 Backslash-force prefix ──────────────────────────────────────────
+
+    [Fact]
+    public void Classify_BackslashPrefix_ReturnsShellForced()
+    {
+        // \ls bypasses the global-symbol check and routes to ShellForced,
+        // even when 'ls' is declared as a Stash global.
+        var clf = MakeClassifier(globals: new[] { "ls" });
+        Assert.Equal(LineMode.ShellForced, clf.Classify("\\ls -la"));
+    }
+
+    [Fact]
+    public void Classify_BackslashFollowedBySpace_ReturnsStash()
+    {
+        // '\ ls' — backslash then whitespace — is not the forced prefix; falls to Stash.
+        var clf = MakeClassifier(isExec: name => name == "ls");
+        Assert.Equal(LineMode.Stash, clf.Classify("\\ ls"));
+    }
+
+    [Fact]
+    public void Classify_BackslashBangOrder_ReturnsStash()
+    {
+        // \!ls (reverse order) is NOT supported; treated as Stash.
+        var clf = MakeClassifier(isExec: name => name == "ls");
+        Assert.Equal(LineMode.Stash, clf.Classify("\\!ls"));
+    }
+
+    [Fact]
+    public void Classify_BackslashAbsolutePath_ReturnsShellForced()
+    {
+        var clf = MakeClassifier();
+        Assert.Equal(LineMode.ShellForced, clf.Classify("\\/usr/bin/git"));
+    }
+
+    // ── §4.3 Bang-strict prefix ───────────────────────────────────────────────
+
+    [Fact]
+    public void Classify_BangPrefix_PathResolvable_ReturnsShellStrict()
+    {
+        // 'ls' not a keyword/global, is on PATH → ShellStrict.
+        var clf = MakeClassifier(isExec: name => name == "ls");
+        Assert.Equal(LineMode.ShellStrict, clf.Classify("!ls -la"));
+    }
+
+    [Fact]
+    public void Classify_BangPrefix_DeclaredSymbol_ReturnsStash()
+    {
+        // !myFlag — 'myFlag' is a declared Stash global → logical-not in Stash.
+        var clf = MakeClassifier(globals: new[] { "myFlag" });
+        Assert.Equal(LineMode.Stash, clf.Classify("!myFlag"));
+    }
+
+    [Fact]
+    public void Classify_BangPrefix_Keyword_ReturnsStash()
+    {
+        // !true / !false → logical-not; 'true'/'false' are Stash keywords.
+        var clf = MakeClassifier(isExec: name => name == "true");
+        Assert.Equal(LineMode.Stash, clf.Classify("!true"));
+        Assert.Equal(LineMode.Stash, clf.Classify("!false"));
+    }
+
+    [Fact]
+    public void Classify_BangNonIdentifier_ReturnsStash()
+    {
+        // != is a comparison operator, not a shell command prefix.
+        var clf = MakeClassifier();
+        Assert.Equal(LineMode.Stash, clf.Classify("!="));
+    }
+
+    [Fact]
+    public void Classify_BangBackslashPrefix_ReturnsShellStrict()
+    {
+        // !\ls → ShellStrict (the lexer will set IsForced=true as well).
+        var clf = MakeClassifier(isExec: name => name == "ls");
+        Assert.Equal(LineMode.ShellStrict, clf.Classify("!\\ls"));
+    }
 }

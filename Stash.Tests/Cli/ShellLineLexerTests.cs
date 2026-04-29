@@ -110,4 +110,62 @@ public class ShellLineLexerTests
         var ast = ShellLineLexer.Parse("echo hello");
         Assert.Empty(ast.Redirects);
     }
+
+    // ── Phase 5: prefix flags ─────────────────────────────────────────────────
+
+    [Fact]
+    public void Lexer_NoPrefix_BothFlagsFalse()
+    {
+        var ast = ShellLineLexer.Parse("echo hello");
+        Assert.False(ast.IsStrict);
+        Assert.False(ast.IsForced);
+    }
+
+    [Fact]
+    public void Lexer_BangPrefix_StripsAndSetsStrict()
+    {
+        var ast = ShellLineLexer.Parse("!ls -la");
+        Assert.True(ast.IsStrict);
+        Assert.False(ast.IsForced);
+        Assert.Single(ast.Stages);
+        Assert.Equal("ls", ast.Stages[0].Program);
+    }
+
+    [Fact]
+    public void Lexer_BackslashPrefix_StripsAndSetsForced()
+    {
+        var ast = ShellLineLexer.Parse("\\ls -la");
+        Assert.False(ast.IsStrict);
+        Assert.True(ast.IsForced);
+        Assert.Single(ast.Stages);
+        Assert.Equal("ls", ast.Stages[0].Program);
+    }
+
+    [Fact]
+    public void Lexer_BangBackslashPrefix_StripsBoth()
+    {
+        var ast = ShellLineLexer.Parse("!\\ls -la");
+        Assert.True(ast.IsStrict);
+        Assert.True(ast.IsForced);
+        Assert.Single(ast.Stages);
+        Assert.Equal("ls", ast.Stages[0].Program);
+    }
+
+    [Fact]
+    public void Lexer_BangPrefix_LeadingWhitespace_StillStripsPrefix()
+    {
+        var ast = ShellLineLexer.Parse("  !echo hello");
+        Assert.True(ast.IsStrict);
+        Assert.Equal("echo", ast.Stages[0].Program);
+    }
+
+    [Fact]
+    public void Lexer_BangPrefix_PipelinePreserved()
+    {
+        var ast = ShellLineLexer.Parse("!echo hello | cat");
+        Assert.True(ast.IsStrict);
+        Assert.Equal(2, ast.Stages.Count);
+        Assert.Equal("echo", ast.Stages[0].Program);
+        Assert.Equal("cat", ast.Stages[1].Program);
+    }
 }

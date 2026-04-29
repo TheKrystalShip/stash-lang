@@ -22,8 +22,32 @@ internal static class ShellLineLexer
     /// </summary>
     public static ShellCommandLine Parse(string line)
     {
+        // Phase 5: peel optional '!' (strict) and '\' (force) prefixes before
+        // splitting the line.  Only the combination !\ (in that order) is supported;
+        // \! falls through to Stash and is never sent here.
+        bool isStrict = false;
+        bool isForced = false;
+
+        int prefixEnd = 0;
+        while (prefixEnd < line.Length && (line[prefixEnd] == ' ' || line[prefixEnd] == '\t'))
+            prefixEnd++;
+
+        if (prefixEnd < line.Length && line[prefixEnd] == '!')
+        {
+            isStrict = true;
+            prefixEnd++;
+        }
+
+        if (prefixEnd < line.Length && line[prefixEnd] == '\\')
+        {
+            isForced = true;
+            prefixEnd++;
+        }
+
+        string effectiveLine = prefixEnd > 0 ? line[prefixEnd..] : line;
+
         // Step 1: split on top-level '|' boundaries.
-        var rawStages = SplitOnPipes(line);
+        var rawStages = SplitOnPipes(effectiveLine);
 
         // Step 2: peel redirect clauses from the last stage.
         string lastRaw = rawStages[rawStages.Count - 1];
@@ -42,6 +66,8 @@ internal static class ShellLineLexer
         {
             Stages = stages,
             Redirects = redirects,
+            IsStrict = isStrict,
+            IsForced = isForced,
         };
     }
 
