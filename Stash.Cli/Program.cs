@@ -776,6 +776,7 @@ public class Program
         Console.WriteLine($"Stash v{Version} \u2014 Type statements or expressions, or 'exit' to quit.");
 
         var editor = new LineEditor();
+        var reader = new MultiLineReader(editor);
 
         var globals = CreateVMGlobals();
         var vm = new VirtualMachine(globals);
@@ -789,7 +790,7 @@ public class Program
         {
             while (true)
             {
-                string? line = editor.ReadLine("stash> ");
+                string? line = reader.ReadLogicalLine();
 
                 // null means EOF (Ctrl+D on Unix, Ctrl+Z+Enter on Windows).
                 if (line is null || line == "exit")
