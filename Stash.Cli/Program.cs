@@ -894,8 +894,10 @@ public class Program
                 if (shellModeEnabled && classifier is not null && shellRunner is not null)
                 {
                     var mode = classifier.Classify(line);
-                    if (mode == LineMode.Shell)
+                    if (mode is LineMode.Shell or LineMode.ShellForced or LineMode.ShellStrict)
                     {
+                        // ShellRunner consumes the full line; ShellLineLexer.Parse strips
+                        // the leading '\' or '!' and sets IsForced / IsStrict accordingly.
                         try
                         {
                             shellRunner.Run(line);
@@ -906,7 +908,7 @@ public class Program
                         }
                         continue;
                     }
-                    // Stash / ShellForced / ShellStrict all fall through to Stash path in Phase 4.
+                    // Stash mode falls through to the lex/parse/execute path below.
                 }
 
                 // ── Stash lex / parse / execute path ─────────────────────

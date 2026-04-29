@@ -247,6 +247,43 @@ public class ShellLineClassifierTests
         Assert.Equal(LineMode.Shell, clf.Classify("ls -la | grep txt"));
     }
 
+    [Fact]
+    public void Classify_BareIdentifier_OnPath_NoArgs_ReturnsShell()
+    {
+        // Bare `ls` (end-of-line) — not declared, on PATH → Shell.
+        // Spec §4.4 step 3 lookup chain runs even when next token is EOL.
+        var clf = MakeClassifier(isExec: name => name == "ls");
+        Assert.Equal(LineMode.Shell, clf.Classify("ls"));
+    }
+
+    [Fact]
+    public void Classify_BareShellBuiltin_NoArgs_ReturnsShell()
+    {
+        // Bare `pwd` (end-of-line) — shell builtin sugar always wins over the
+        // bare-identifier-expression interpretation when no Stash global shadows it.
+        var clf = MakeClassifier();
+        Assert.Equal(LineMode.Shell, clf.Classify("pwd"));
+    }
+
+    [Fact]
+    public void Classify_BareUnknown_NotOnPath_ReturnsStash()
+    {
+        // Bare `xyz` — not declared, not a builtin, not on PATH → Stash
+        // (will produce an undefined-identifier error, per spec §4.4 fallback).
+        var clf = MakeClassifier(isExec: _ => false);
+        Assert.Equal(LineMode.Stash, clf.Classify("xyzNotReal"));
+    }
+
+    [Fact]
+    public void Classify_IdentifierFollowedBySemicolon_ReturnsStash()
+    {
+        // Spec §4.4 step 2: `;` after a bare identifier → Stash mode.
+        // Without this, `ls;` would route to Shell and the lexer would treat
+        // `ls;` as a single program name → "command not found: ls;".
+        var clf = MakeClassifier(isExec: name => name == "ls");
+        Assert.Equal(LineMode.Stash, clf.Classify("ls;"));
+    }
+
     // ── §8.1 IsShellIncomplete ────────────────────────────────────────────────
 
     [Fact]

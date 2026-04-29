@@ -135,8 +135,16 @@ public sealed partial class VirtualMachine
                 foreach (string arg in stage.Arguments)
                     psi.ArgumentList.Add(arg);
 
-                processes[i] = Process.Start(psi)
-                    ?? throw new RuntimeError($"Failed to start process: {stage.Program}", span);
+                try
+                {
+                    processes[i] = Process.Start(psi)
+                        ?? throw new RuntimeError($"pipeline stage {i} failed to spawn: process start returned null", span, StashErrorTypes.CommandError);
+                }
+                catch (RuntimeError) { throw; }
+                catch (Exception ex)
+                {
+                    throw new RuntimeError($"pipeline stage {i} failed to spawn: {ex.Message}", span, StashErrorTypes.CommandError);
+                }
                 started++;
             }
 
@@ -430,8 +438,16 @@ public sealed partial class VirtualMachine
                 foreach (string arg in stage.Arguments)
                     psi.ArgumentList.Add(arg);
 
-                processes[i] = Process.Start(psi)
-                    ?? throw new RuntimeError($"Failed to start process: {stage.Program}", span);
+                try
+                {
+                    processes[i] = Process.Start(psi)
+                        ?? throw new RuntimeError($"pipeline stage {i} failed to spawn: process start returned null", span, StashErrorTypes.CommandError);
+                }
+                catch (RuntimeError) { throw; }
+                catch (Exception ex)
+                {
+                    throw new RuntimeError($"pipeline stage {i} failed to spawn: {ex.Message}", span, StashErrorTypes.CommandError);
+                }
                 started++;
             }
 

@@ -721,7 +721,7 @@ public static class ProcessBuiltIns
             string resolved = System.IO.Path.GetFullPath(expanded);
             if (!System.IO.Directory.Exists(resolved))
             {
-                throw new RuntimeError($"process.chdir: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
+                throw new RuntimeError($"no such directory: {resolved}", errorType: StashErrorTypes.CommandError);
             }
 
             // Cap the stack at 256 entries: drop the eldest (index 0) to make room.

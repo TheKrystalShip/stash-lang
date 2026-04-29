@@ -93,7 +93,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
     }
 
     [Fact]
-    public void Chdir_NonexistentDir_ThrowsIOError()
+    public void Chdir_NonexistentDir_ThrowsCommandError()
     {
         string originalCwd = GetInitialCwd();
         try
@@ -102,7 +102,8 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
                 process.chdir("/this/path/does/not/exist/at/all");
                 """);
             var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-            Assert.Equal(StashErrorTypes.IOError, ex.ErrorType);
+            Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+            Assert.StartsWith("no such directory: ", ex.Message);
         }
         finally
         {

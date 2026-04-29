@@ -207,9 +207,13 @@ internal sealed class ShellLineClassifier
         // Rule 2: Peek next token.
         switch (pr.NextKind)
         {
-            // End-of-line or semicolon → bare identifier expression → Stash.
+            // End-of-line: a bare identifier with nothing after it. Per spec §4.4 step 3,
+            // we still consult the lookup chain — declared global → Stash, shell builtin
+            // or PATH executable → Shell, otherwise Stash (undefined-identifier error).
+            // The literal "EOL → Stash" reading would strand `ls`, `pwd`, etc. in Stash
+            // mode and produce confusing "Undefined variable" errors at the REPL.
             case PeekKind.EndOfLine:
-                return LineMode.Stash;
+                goto default;
 
             // '(' → call expression → Stash.
             case PeekKind.OpenParen:
@@ -260,6 +264,7 @@ internal sealed class ShellLineClassifier
     /// indicates a Stash construct (assignment, member access, optional chaining, etc.).
     /// </summary>
     private static bool IsStashOperatorChar(char c) =>
+        // ';' → statement terminator; bare `ident;` is a Stash expression statement.
         // '=' → assignment or equality.
         // '.' → member access.
         // '?' → optional chain/null-coalescing.
@@ -269,5 +274,5 @@ internal sealed class ShellLineClassifier
         // NOTE: '+' and '-' are intentionally OMITTED.
         //   '-flag' is a shell argument prefix; we let PATH lookup disambiguate.
         //   '+' is similarly ambiguous. The fallback is still Stash when not on PATH.
-        c is '=' or '.' or '?' or '*' or '/' or '%' or '&' or '|' or '^' or '<' or '>' or '!';
+        c is ';' or '=' or '.' or '?' or '*' or '/' or '%' or '&' or '|' or '^' or '<' or '>' or '!';
 }

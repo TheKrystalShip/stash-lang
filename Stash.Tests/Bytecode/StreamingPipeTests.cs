@@ -137,4 +137,22 @@ public class StreamingPipeTests : StashTestBase
         var result = await Task.Run(() => Run("let r = $(yes) | $(sh -c 'exit 1'); let result = r.exitCode;"));
         Assert.Equal(1L, result);
     }
+
+    // =========================================================================
+    // 8. Non-existent intermediate stage — CommandError with spec message
+    // =========================================================================
+
+    [Fact(Timeout = 10000)]
+    public async Task Pipe_NonExistentIntermediateStage_ThrowsCommandError_WithPipelineStageMessage()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        // $(echo hi | nonexistent_cmd_xyz_99 | wc -l) — stage 1 does not exist.
+        // The spawn failure must surface as a CommandError whose message starts
+        // with "pipeline stage " (§15 error table).
+        var ex = await Task.Run(() => RunCapturingError(
+            "let r = $(echo hi | nonexistent_cmd_xyz_99 | wc -l);"));
+        Assert.Equal(Stash.Runtime.StashErrorTypes.CommandError, ex.ErrorType);
+        Assert.StartsWith("pipeline stage ", ex.Message, StringComparison.Ordinal);
+    }
 }
