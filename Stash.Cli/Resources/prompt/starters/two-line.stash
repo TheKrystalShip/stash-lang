@@ -1,0 +1,35 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Two-line starter — info on top, prompt on second line.
+//
+// Layout:
+//   ┌─ user@host  cwd  (branch*)
+//   └─❯ _
+//
+// First line carries all context, second line keeps the cursor at
+// column 4 so commands always start at a predictable position.
+// The ❯ mark goes green on success, red on failure.
+//
+// Activate with: starter.use("two-line")
+//
+starter.register("two-line", (ctx) => {
+    let p = prompt.palette();
+    let top_corner = term.color("┌─", p.muted);
+    let uh = term.color($"{ctx.user}@{ctx.host}", p.accent);
+    let cwd = term.color(ctx.cwd, p.cwd);
+    let git_seg = "";
+    if (ctx.git != null) {
+        let dirty_mark = ctx.git.isDirty ? "*" : "";
+        let branch_color = ctx.git.isDirty ? p.git_dirty : p.git_clean;
+        git_seg = "  " + term.color("(" + ctx.git.branch + dirty_mark + ")", branch_color);
+    }
+    let bottom_corner = term.color("└─", p.muted);
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color("❯", mark_color);
+    return $"{top_corner} {uh}  {cwd}{git_seg}\n{bottom_corner}{mark} ";
+});

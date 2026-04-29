@@ -1,0 +1,25 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Arrow starter — clean, modern, single-line.
+//
+// Layout:  cwd  →  _
+//
+//   cwd  — current working directory in cwd color
+//   →    — arrow mark, accent color (success) or error color
+//
+// Inspired by Spaceship and modern minimal prompts.
+//
+// Activate with: starter.use("arrow")
+//
+starter.register("arrow", (ctx) => {
+    let p = prompt.palette();
+    let cwd = term.color(ctx.cwd, p.cwd);
+    let mark_color = ctx.lastExitCode == 0 ? p.accent : p.error;
+    let mark = term.color("→", mark_color);
+    return cwd + "  " + mark + " ";
+});

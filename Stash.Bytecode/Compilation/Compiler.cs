@@ -66,6 +66,16 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     public static Chunk Compile(List<Stmt> statements)
     {
         var globalSlots = new GlobalSlotAllocator();
+        return Compile(statements, globalSlots);
+    }
+
+    /// <summary>
+    /// Compile a list of statements using a provided (potentially persistent) global slot allocator.
+    /// Used by the REPL to share slot assignments across successive inputs, ensuring that lambdas
+    /// compiled in an earlier REPL chunk read the correct global slots when invoked later.
+    /// </summary>
+    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots)
+    {
         var compiler = new Compiler(null, null, globalSlots);
 
         foreach (Stmt stmt in statements)

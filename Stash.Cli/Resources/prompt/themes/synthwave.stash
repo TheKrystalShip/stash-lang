@@ -1,0 +1,30 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Synthwave '84 — neon retro-future palette.
+// Inspired by 1980s synthwave / outrun aesthetic. High-contrast neons
+// against a dark purple void. Best on terminals with a black or deep
+// purple background.
+//
+let synthwave_palette = Palette {
+    fg:           "#f8f8f2",   // bright off-white
+    bg:           "",          // #241b2f — terminal default
+    accent:       "#ff7edb",   // hot pink
+    muted:        "#495495",   // muted blue
+    success:      "#72f1b8",   // mint green
+    error:        "#fe4450",   // neon red
+    warning:      "#fede5d",   // neon yellow
+    info:         "#36f9f6",   // electric cyan
+    git_clean:    "#72f1b8",   // mint
+    git_dirty:    "#fede5d",   // neon yellow
+    git_conflict: "#fe4450",   // neon red
+    user:         "#ff7edb",   // hot pink
+    host:         "#36f9f6",   // electric cyan
+    cwd:          "#b893ce"    // soft purple
+};
+
+prompt.themeRegister("synthwave", synthwave_palette);

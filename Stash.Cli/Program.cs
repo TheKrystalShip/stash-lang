@@ -166,6 +166,14 @@ public class Program
             {
                 shellExplicitlyDisabled = true;
             }
+            else if (args[i] == "--reset-prompt" && commandString is null)
+            {
+                // Re-extract bootstrap scripts and exit.
+                Stash.Cli.Repl.BootstrapExtractor.Extract(
+                    Stash.Cli.Repl.BootstrapExtractor.GetTargetDir());
+                System.Environment.Exit(0);
+                return;
+            }
             else if (args[i] == "--" && commandString is null)
             {
                 // Everything after -- becomes script args (for stdin piping)
@@ -371,6 +379,7 @@ public class Program
         Console.WriteLine("      --no-optimize         Disable bytecode optimizations");
         Console.WriteLine("      --shell               Enable REPL shell mode (experimental)");
         Console.WriteLine("      --no-shell            Disable REPL shell mode (overrides STASH_SHELL=1)");
+        Console.WriteLine("      --reset-prompt        Re-extract prompt bootstrap scripts and exit");
         Console.WriteLine("  -o, --output <path>       Output path for compiled bytecode");
         Console.WriteLine();
         Console.WriteLine("Subcommands:");
@@ -829,15 +838,52 @@ public class Program
         }
 
         var editor = new LineEditor();
-        var reader = new MultiLineReader(editor);
-
         var globals = CreateVMGlobals();
         var vm = new VirtualMachine(globals);
+        var reader = new MultiLineReader(editor,
+            firstPromptProvider: () => Stash.Cli.Repl.PromptRenderer.Render(vm),
+            continuationPromptProvider: depth => Stash.Cli.Repl.PromptRenderer.Continuation(vm, depth));
+
         _activeVM = vm;
         vm.Output = Console.Out;
         vm.ErrorOutput = Console.Error;
         vm.Input = Console.In;
         vm.ModuleLoader = LoadModuleForVM;
+
+        // Register the prompt.resetBootstrap() handler. This lets Stash code
+        // trigger a re-extract + reload without a layering violation (Stdlib
+        // cannot reference Cli directly).
+        Stash.Stdlib.BuiltIns.PromptBuiltIns.ResetBootstrapHandler = () =>
+        {
+            string promptDir = Stash.Cli.Repl.BootstrapExtractor.GetTargetDir();
+            Stash.Cli.Repl.BootstrapExtractor.Extract(promptDir);
+            Stash.Cli.Repl.BootstrapLoader.Load(promptDir, vm);
+        };
+
+        // Register the git status probe handler. Timeout is 150 ms by default
+        // and can be overridden via STASH_PROMPT_GIT_TIMEOUT_MS.
+        Stash.Stdlib.BuiltIns.PromptBuiltIns.GitProbeHandler = cwd =>
+        {
+            int timeoutMs = 150;
+            string? envVal = Environment.GetEnvironmentVariable("STASH_PROMPT_GIT_TIMEOUT_MS");
+            if (envVal != null && int.TryParse(envVal, out int parsed) && parsed > 0)
+                timeoutMs = parsed;
+            return Stash.Cli.Repl.GitStatusProbe.Probe(cwd, timeoutMs);
+        };
+
+        // Register the convention global resolver so prompt.render() (per spec §4.3) can
+        // fall back to a top-level `prompt` global defined in the REPL or rc file.
+        Stash.Stdlib.BuiltIns.PromptBuiltIns.ConventionFnResolver = name =>
+        {
+            if (!vm.HasReplGlobal(name)) return null;
+            return vm.Globals.TryGetValue(name, out StashValue val) && val.ToObject() is IStashCallable c
+                ? c
+                : null;
+        };
+
+        // Surface the active shell-mode flag so prompt.context() reports the correct
+        // mode (per spec \u00a75.1) regardless of how shell mode was activated.
+        Stash.Stdlib.BuiltIns.PromptBuiltIns.ShellModeActive = shellModeEnabled;
 
         // Build shell context once per REPL session.
         ShellLineClassifier? classifier = null;
@@ -862,6 +908,30 @@ public class Program
 
             // Extend the multi-line reader to recognise trailing-pipe continuation.
             reader.IsShellIncomplete = line => classifier.IsShellIncomplete(line);
+        }
+
+        // ── Prompt bootstrap (shell mode only, before RC) ────────────────────
+        // Extract embedded scripts to ~/.config/stash/prompt/ on first run or
+        // after a version upgrade, then load them into the VM so that theme.*
+        // and starter.* globals are available when ~/.stashrc runs.
+        // Skip if STASH_NO_PROMPT_BOOTSTRAP=1 (opt-out / CI environments).
+        if (shellModeEnabled &&
+            !string.Equals(
+                System.Environment.GetEnvironmentVariable("STASH_NO_PROMPT_BOOTSTRAP"),
+                "1",
+                StringComparison.Ordinal))
+        {
+            try
+            {
+                Stash.Cli.Repl.BootstrapExtractor.EnsureExtracted();
+                Stash.Cli.Repl.BootstrapLoader.Load(
+                    Stash.Cli.Repl.BootstrapExtractor.GetTargetDir(), vm);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"prompt: bootstrap error — {ex.Message}");
+                // Renderer falls back to "stash> " automatically.
+            }
         }
 
         // ── Load RC file (§12.2) — before the first REPL prompt ─────────────
@@ -898,6 +968,7 @@ public class Program
                     {
                         // ShellRunner consumes the full line; ShellLineLexer.Parse strips
                         // the leading '\' or '!' and sets IsForced / IsStrict accordingly.
+                        Stash.Cli.Repl.PromptRenderer.WriteCommandStart();
                         try
                         {
                             shellRunner.Run(line);
@@ -905,6 +976,10 @@ public class Program
                         catch (RuntimeError ex)
                         {
                             PrintRuntimeError(ex);
+                        }
+                        finally
+                        {
+                            Stash.Cli.Repl.PromptRenderer.WriteCommandEnd(vm.LastExitCode);
                         }
                         continue;
                     }
@@ -948,7 +1023,19 @@ public class Program
                     {
                         SemanticResolver.Resolve(statements);
                         Chunk chunk = Compiler.Compile(statements);
-                        vm.ExecuteRepl(chunk);
+                        Stash.Cli.Repl.PromptRenderer.WriteCommandStart();
+                        try
+                        {
+                            vm.ExecuteRepl(chunk);
+                        }
+                        catch (RuntimeError ex)
+                        {
+                            PrintRuntimeError(ex);
+                        }
+                        finally
+                        {
+                            Stash.Cli.Repl.PromptRenderer.WriteCommandEnd(vm.LastExitCode);
+                        }
                     }
                     catch (RuntimeError ex)
                     {
@@ -974,10 +1061,22 @@ public class Program
                     try
                     {
                         Chunk chunk = Compiler.CompileExpression(expr);
-                        object? result = vm.Execute(chunk);
-                        if (result is not null)
+                        Stash.Cli.Repl.PromptRenderer.WriteCommandStart();
+                        try
                         {
-                            Console.WriteLine(RuntimeValues.Stringify(result));
+                            object? result = vm.Execute(chunk);
+                            if (result is not null)
+                            {
+                                Console.WriteLine(RuntimeValues.Stringify(result));
+                            }
+                        }
+                        catch (RuntimeError ex)
+                        {
+                            PrintRuntimeError(ex);
+                        }
+                        finally
+                        {
+                            Stash.Cli.Repl.PromptRenderer.WriteCommandEnd(vm.LastExitCode);
                         }
                     }
                     catch (RuntimeError ex)

@@ -269,7 +269,7 @@ internal sealed class ShellRunner
                 null, StashErrorTypes.CommandError);
 
         SemanticResolver.Resolve(statements);
-        Chunk chunk = Compiler.Compile(statements);
+        Chunk chunk = Compiler.Compile(statements, vm.ReplGlobalAllocator);
         vm.ExecuteRepl(chunk);
     }
 

@@ -1,0 +1,31 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// PowerShell-style starter — familiar to PS users.
+//
+// Layout:  PS <cwd>>  _
+//
+//   "PS"  — colored with accent, mimics the PowerShell indicator
+//   cwd   — full path in cwd color
+//   ">"   — green on success, red on failure
+//
+// This layout is useful when working across both Stash and PowerShell
+// environments, or for users migrating from PS to Stash.
+//
+// Activate with: starter.use("pwsh-style")
+//
+starter.register("pwsh-style", (ctx) => {
+    let p = prompt.palette();
+    // "PS" indicator in accent color
+    let ps_label = term.color("PS", p.accent);
+    // Current working directory in cwd color
+    let cwd = term.color(ctx.cwd, p.cwd);
+    // Prompt mark: > in success/error color
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color(">", mark_color);
+    return ps_label + " " + cwd + mark + " ";
+});

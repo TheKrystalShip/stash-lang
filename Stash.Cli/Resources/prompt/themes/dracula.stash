@@ -1,0 +1,34 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Dracula theme — https://draculatheme.com/
+// High-contrast dark theme with vivid accent colors.
+//
+// Background: #282a36   Current Line: #44475a   Foreground: #f8f8f2
+// Accent colors:
+//   Comment:  #6272a4   Cyan:   #8be9fd   Green:  #50fa7b
+//   Orange:   #ffb86c   Pink:   #ff79c6   Purple: #bd93f9
+//   Red:      #ff5555   Yellow: #f1fa8c
+//
+let dracula_palette = Palette {
+    fg:           "#f8f8f2",   // foreground
+    bg:           "",          // terminal default background
+    accent:       "#bd93f9",   // purple — primary accent
+    muted:        "#6272a4",   // comment — dim blue-gray
+    success:      "#50fa7b",   // green
+    error:        "#ff5555",   // red
+    warning:      "#f1fa8c",   // yellow
+    info:         "#8be9fd",   // cyan
+    git_clean:    "#50fa7b",   // green
+    git_dirty:    "#f1fa8c",   // yellow
+    git_conflict: "#ff5555",   // red
+    user:         "#ff79c6",   // pink
+    host:         "#bd93f9",   // purple
+    cwd:          "#8be9fd"    // cyan
+};
+
+prompt.themeRegister("dracula", dracula_palette);

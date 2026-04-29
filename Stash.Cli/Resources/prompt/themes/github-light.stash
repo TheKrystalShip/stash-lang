@@ -1,0 +1,29 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// GitHub Light — official GitHub light editor palette.
+// Designed for high contrast on white backgrounds. Familiar to anyone
+// who's spent time on github.com.
+//
+let github_light_palette = Palette {
+    fg:           "#24292f",   // text — near-black
+    bg:           "",          // #ffffff — terminal default
+    accent:       "#0969da",   // GitHub blue
+    muted:        "#6e7781",   // muted text
+    success:      "#1a7f37",   // success green
+    error:        "#cf222e",   // danger red
+    warning:      "#9a6700",   // attention yellow
+    info:         "#0969da",   // accent blue
+    git_clean:    "#1a7f37",   // green
+    git_dirty:    "#9a6700",   // yellow
+    git_conflict: "#cf222e",   // red
+    user:         "#8250df",   // purple
+    host:         "#0969da",   // blue
+    cwd:          "#24292f"    // dark gray
+};
+
+prompt.themeRegister("github-light", github_light_palette);

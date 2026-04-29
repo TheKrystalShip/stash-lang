@@ -20,8 +20,8 @@ namespace Stash;
 public sealed class MultiLineReader
 {
     private readonly Func<string, string?> _readLine;
-    private readonly string _firstPrompt;
-    private readonly string _continuationPrompt;
+    private readonly Func<string> _firstPromptProvider;
+    private readonly Func<int, string> _continuationPromptProvider;
 
     /// <summary>
     /// Optional hook for shell-mode completeness checking.
@@ -40,8 +40,8 @@ public sealed class MultiLineReader
     public MultiLineReader(Func<string, string?> readLine, string firstPrompt = "stash> ", string continuationPrompt = "... ")
     {
         _readLine = readLine;
-        _firstPrompt = firstPrompt;
-        _continuationPrompt = continuationPrompt;
+        _firstPromptProvider = () => firstPrompt;
+        _continuationPromptProvider = _ => continuationPrompt;
     }
 
     /// <summary>
@@ -53,19 +53,35 @@ public sealed class MultiLineReader
     }
 
     /// <summary>
+    /// Constructor that accepts prompt provider delegates, called once per logical-line read.
+    /// Use this overload to support dynamic prompts (e.g. ANSI-colored or user-defined).
+    /// The <paramref name="continuationPromptProvider"/> receives the current continuation depth
+    /// (1 for the first continuation line, incrementing per additional line).
+    /// </summary>
+    public MultiLineReader(LineEditor editor,
+        Func<string> firstPromptProvider,
+        Func<int, string> continuationPromptProvider)
+    {
+        _readLine = editor.ReadLine;
+        _firstPromptProvider = firstPromptProvider;
+        _continuationPromptProvider = continuationPromptProvider;
+    }
+
+    /// <summary>
     /// Read one logical line (possibly spanning multiple physical lines).
     /// Returns null on EOF (Ctrl+D) at the FIRST prompt. EOF in the middle
     /// of a multi-line entry returns whatever has been accumulated so far.
     /// </summary>
     public string? ReadLogicalLine()
     {
-        string? first = _readLine(_firstPrompt);
+        string? first = _readLine(_firstPromptProvider());
         if (first is null)
         {
             return null;
         }
 
         var accumulator = new StringBuilder(first);
+        int contDepth = 0;
 
         while (true)
         {
@@ -81,7 +97,7 @@ public sealed class MultiLineReader
                     accumulator.Append(' ');
                 }
 
-                string? next = _readLine(_continuationPrompt);
+                string? next = _readLine(_continuationPromptProvider(++contDepth));
                 if (next is null)
                 {
                     return accumulator.ToString();
@@ -94,7 +110,7 @@ public sealed class MultiLineReader
             // Shell-mode: trailing pipe means the pipeline continues on the next line.
             if (IsShellIncomplete?.Invoke(current) == true)
             {
-                string? next = _readLine(_continuationPrompt);
+                string? next = _readLine(_continuationPromptProvider(++contDepth));
                 if (next is null)
                 {
                     return accumulator.ToString();
@@ -112,7 +128,7 @@ public sealed class MultiLineReader
             }
 
             // Input is incomplete — read another physical line.
-            string? continuation = _readLine(_continuationPrompt);
+            string? continuation = _readLine(_continuationPromptProvider(++contDepth));
             if (continuation is null)
             {
                 return current;

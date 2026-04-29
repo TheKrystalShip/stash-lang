@@ -1,0 +1,29 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Catppuccin Latte — https://catppuccin.com/
+// The light variant of the popular pastel theme.
+// Warm latte tones — companion to catppuccin-mocha.
+//
+let catppuccin_latte_palette = Palette {
+    fg:           "#4c4f69",   // text
+    bg:           "",          // base #eff1f5 — terminal default
+    accent:       "#8839ef",   // mauve
+    muted:        "#9ca0b0",   // overlay1
+    success:      "#40a02b",   // green
+    error:        "#d20f39",   // red
+    warning:      "#df8e1d",   // yellow
+    info:         "#1e66f5",   // blue
+    git_clean:    "#40a02b",   // green
+    git_dirty:    "#df8e1d",   // yellow
+    git_conflict: "#d20f39",   // red
+    user:         "#ea76cb",   // pink
+    host:         "#179299",   // teal
+    cwd:          "#1e66f5"    // blue
+};
+
+prompt.themeRegister("catppuccin-latte", catppuccin_latte_palette);

@@ -1,0 +1,19 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Minimal starter — just a colored mark character.
+//
+// Success:  > _   (in success color)
+// Failure:  > _   (in error color)
+//
+// Activate with: starter.use("minimal")
+//
+starter.register("minimal", (ctx) => {
+    let p = prompt.palette();
+    let c = ctx.lastExitCode == 0 ? p.success : p.error;
+    return term.color("> ", c);
+});

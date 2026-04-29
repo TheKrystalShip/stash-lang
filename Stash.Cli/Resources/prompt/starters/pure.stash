@@ -1,0 +1,34 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Pure starter — inspired by Sindre Sorhus's pure prompt.
+// https://github.com/sindresorhus/pure
+//
+// Layout:
+//   <cwd>            (blue/info)
+//   ❯ _              (green on success, red on failure)
+//
+// The cwd and mark are on the same line. No user/host by default.
+// Git branch shown when available (Phase 6 adds git probing).
+//
+// Activate with: starter.use("pure")
+//
+starter.register("pure", (ctx) => {
+    let p = prompt.palette();
+    // Working directory in info color
+    let cwd = term.color(ctx.cwd, p.info);
+    // Git branch segment (guarded — ctx.git is null until Phase 6)
+    let git_seg = "";
+    if (ctx.git != null) {
+        let branch_color = ctx.git.isDirty ? p.git_dirty : p.git_clean;
+        git_seg = " " + term.color(ctx.git.branch, branch_color);
+    }
+    // Prompt mark: ❯ in success/error color
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color("❯", mark_color);
+    return cwd + git_seg + " " + mark + " ";
+});

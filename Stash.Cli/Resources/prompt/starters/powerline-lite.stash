@@ -1,0 +1,35 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Powerline-lite starter — pseudo-powerline using box-drawing chars.
+//
+// Layout:  ▌cwd▐ > _
+//
+//   ▌ (left bar)  — accent color
+//   cwd           — working directory in cwd color
+//   ▐ (right bar) — accent color
+//   >             — prompt mark, green on success, red on failure
+//
+// Uses only Unicode box-drawing characters that render in most modern
+// terminal fonts (no Nerd Font required). For the full powerline look
+// with arrows, you need a Nerd Font — customize from this template.
+//
+// Activate with: starter.use("powerline-lite")
+//
+starter.register("powerline-lite", (ctx) => {
+    let p = prompt.palette();
+    // Decorative left bar in accent color
+    let left_bar = term.color("▌", p.accent);
+    // Current working directory
+    let cwd = term.color(ctx.cwd, p.cwd);
+    // Decorative right bar in accent color
+    let right_bar = term.color("▐", p.accent);
+    // Prompt mark
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color(">", mark_color);
+    return left_bar + cwd + right_bar + " " + mark + " ";
+});

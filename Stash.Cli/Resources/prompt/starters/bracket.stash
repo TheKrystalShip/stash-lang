@@ -1,0 +1,27 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Bracket starter — old-school squared layout.
+//
+// Layout:  [user@host cwd]$ _
+//
+// Mimics historical Unix prompts (think early Linux distributions and
+// classic FreeBSD). The whole context lives inside square brackets,
+// followed by a $ that turns red on failure.
+//
+// Activate with: starter.use("bracket")
+//
+starter.register("bracket", (ctx) => {
+    let p = prompt.palette();
+    let lb = term.color("[", p.muted);
+    let rb = term.color("]", p.muted);
+    let uh = term.color($"{ctx.user}@{ctx.host}", p.accent);
+    let cwd = term.color(ctx.cwd, p.cwd);
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color("$", mark_color);
+    return $"{lb}{uh} {cwd}{rb}{mark} ";
+});

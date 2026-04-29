@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Stash.Cli.Repl;
 
 namespace Stash;
 
@@ -20,6 +21,10 @@ public class LineEditor
     private int _cursor;
     /// <summary>The prompt string displayed before input.</summary>
     private string _prompt = "";
+    /// <summary>The portion of <see cref="_prompt"/> that lives on the cursor's line (everything after the last <c>\n</c>).</summary>
+    private string _promptLastLine = "";
+    /// <summary>Visible width of the prompt's last line after stripping ANSI escapes and zero-width markers.</summary>
+    private int _promptVisibleWidth;
     /// <summary>Length of previously rendered line for clearing leftovers.</summary>
     private int _previousLength;
 
@@ -29,6 +34,12 @@ public class LineEditor
     public string? ReadLine(string prompt)
     {
         _prompt = prompt;
+        // Split off any header lines (everything up to and including the last '\n').
+        // Only the last line is re-rendered on each keystroke — header lines are
+        // printed once and remain on the scrollback above the editing line.
+        int lastNl = prompt.LastIndexOf('\n');
+        _promptLastLine = lastNl >= 0 ? prompt.Substring(lastNl + 1) : prompt;
+        _promptVisibleWidth = PromptWidthCalculator.VisibleWidth(_promptLastLine);
         _buffer.Clear();
         _cursor = 0;
         _previousLength = 0;
@@ -191,8 +202,10 @@ public class LineEditor
     {
         // Return to column 0
         Console.Write('\r');
-        // Rewrite prompt + buffer
-        Console.Write(_prompt);
+        // Rewrite only the last line of the prompt + buffer. Any header lines
+        // (everything before the last '\n' of the original prompt) were
+        // printed once in ReadLine and stay on the scrollback above.
+        Console.Write(_promptLastLine);
         var text = _buffer.ToString();
         Console.Write(text);
         // Clear leftover chars from previous longer content
@@ -210,7 +223,7 @@ public class LineEditor
     /// <summary>Positions console cursor to match buffer cursor.</summary>
     private void MoveCursorToPosition()
     {
-        int targetCol = _prompt.Length + _cursor;
+        int targetCol = _promptVisibleWidth + _cursor;
         Console.Write('\r');
         if (targetCol > 0)
         {

@@ -26,6 +26,7 @@
 11. [Error Reference](#11-error-reference)
 12. [Static Analysis](#12-static-analysis)
 13. [Cross-Platform Notes](#13-cross-platform-notes)
+14. [Customizing the Prompt](#14-customizing-the-prompt)
 
 ---
 
@@ -661,3 +662,9 @@ Prior to this feature, `$(…)` command literals did not glob-expand arguments. 
 ---
 
 *See also: [Standard Library Reference — `process` namespace](Stash%20—%20Standard%20Library%20Reference.md#process--process-management) for the full API of `process.chdir`, `process.popDir`, `process.dirStack`, `process.dirStackDepth`, `process.exit`, and `process.lastExitCode`.*
+
+---
+
+## 14. Customizing the Prompt
+
+Shell-mode REPL prompts are fully customizable via Stash code. See [Prompt — Customizing the REPL Prompt](Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md) for the full guide on themes, starters, and writing your own `fn prompt(ctx)`.

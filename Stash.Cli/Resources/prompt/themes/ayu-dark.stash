@@ -1,0 +1,28 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Ayu Dark — https://github.com/ayu-theme/ayu-colors
+// Modern dark theme with warm orange accents and good contrast.
+//
+let ayu_dark_palette = Palette {
+    fg:           "#bfbdb6",   // primary text
+    bg:           "",          // #0b0e14 — terminal default
+    accent:       "#ffb454",   // signature warm orange
+    muted:        "#565b66",   // comment gray
+    success:      "#aad94c",   // green
+    error:        "#f07178",   // soft red
+    warning:      "#ffb454",   // orange
+    info:         "#59c2ff",   // cyan-blue
+    git_clean:    "#aad94c",   // green
+    git_dirty:    "#ffb454",   // orange
+    git_conflict: "#f07178",   // red
+    user:         "#d2a6ff",   // lavender
+    host:         "#59c2ff",   // cyan-blue
+    cwd:          "#ffb454"    // orange
+};
+
+prompt.themeRegister("ayu-dark", ayu_dark_palette);

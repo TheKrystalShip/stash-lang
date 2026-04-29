@@ -1,0 +1,28 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Gruvbox Light — https://github.com/morhetz/gruvbox
+// Retro-warm light variant. Easy on the eyes in bright environments.
+//
+let gruvbox_light_palette = Palette {
+    fg:           "#3c3836",   // dark fg on cream bg
+    bg:           "",          // #fbf1c7 — terminal default
+    accent:       "#076678",   // deep blue
+    muted:        "#7c6f64",   // warm gray
+    success:      "#79740e",   // green
+    error:        "#9d0006",   // red
+    warning:      "#b57614",   // amber
+    info:         "#427b58",   // aqua
+    git_clean:    "#79740e",   // green
+    git_dirty:    "#b57614",   // amber
+    git_conflict: "#9d0006",   // red
+    user:         "#8f3f71",   // purple
+    host:         "#427b58",   // aqua
+    cwd:          "#076678"    // deep blue
+};
+
+prompt.themeRegister("gruvbox-light", gruvbox_light_palette);

@@ -47,7 +47,29 @@ Stash can now be used as an interactive login shell. Enable with `--shell`, `STA
 - **`process.lastExitCode() -> int`** — exit code of the most recent `$(…)` or bare command.
 - **Cross-platform polish** — Windows is gate-blocked (`"shell mode not yet supported on Windows"`) with Windows-aware code paths ready for future re-enable: PATHEXT lookup, drive-path classifier, `OrdinalIgnoreCase` PATH cache, `%USERPROFILE%` tilde expansion.
 
+#### REPL Prompt Customization
+
+Full prompt customization via Stash code. Full documentation: [docs/Prompt — Customizing the REPL Prompt](docs/Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md).
+
+- **`prompt` namespace** — 17 primitive built-in functions for REPL prompt customization: `prompt.set`, `prompt.setContinuation`, `prompt.reset`, `prompt.resetContinuation`, `prompt.render`, `prompt.context`, `prompt.palette`, `prompt.setPalette`, theme registry (`prompt.themeRegister`, `prompt.themeUse`, `prompt.themeCurrent`, `prompt.themeList`), starter registry (`prompt.registerStarter`, `prompt.useStarter`, `prompt.listStarters`), `prompt.bootstrapDir`, `prompt.resetBootstrap`.
+- **`PromptContext`** built-in struct — `cwd`, `cwdAbsolute`, `user`, `host`, `hostFull`, `time`, `lastExitCode`, `lineNumber`, `mode`, `hostColor`, `git` fields.
+- **`PromptGit`** built-in struct — `isInRepo`, `branch`, `isDirty`, `stagedCount`, `unstagedCount`, `untrackedCount`, `ahead`, `behind` fields. Set to `null` on timeout or missing `git` binary.
+- **`term.zeroWidth(text)`** — marks a string as zero-width for prompt length calculation; use when embedding non-SGR escape sequences (OSC codes, hyperlinks) in prompt strings.
+- **`term.colorsEnabled()`** — returns `true` when ANSI color output is active; respects `NO_COLOR` and `STASH_FORCE_COLOR`.
+- **Bundled prompt bootstrap** — shipped at `~/.config/stash/prompt/` (Windows: `%APPDATA%\stash\prompt\`); defines `theme` and `starter` top-level global dictionaries plus:
+  - 6 bundled themes: `default`, `nord`, `catppuccin-mocha`, `monokai`, `dracula`, `gruvbox-dark`
+  - 6 bundled starter prompts: `minimal`, `bash-classic`, `pure`, `developer`, `pwsh-style`, `powerline-lite`
+- **Default REPL prompt** — when shell mode is active and the bootstrap is loaded, the default prompt is `<cwd> > ` with colored success (`✓`) / failure (`✗`) mark.
+- **OSC 133 prompt markers** — emitted by default in interactive TTYs for VS Code, iTerm2, WezTerm, and other shell-integration-aware terminals. Auto-disabled for dumb terminals (`TERM=dumb`, `TERM=linux`, screen multiplexers, non-TTY). Opt out with `STASH_NO_OSC133=1`.
+- **`--reset-prompt` CLI flag** — re-extracts the bundled bootstrap scripts to the bootstrap directory and exits. Useful after a Stash upgrade when you want to pick up updated themes/starters.
+- **`STASH_NO_PROMPT_BOOTSTRAP=1`** — full opt-out: bootstrap is not loaded; REPL falls back to `stash> ` / `... `; `theme` and `starter` globals are undefined.
+- **`STASH_PROMPT_GIT_TIMEOUT_MS`** — controls the `ctx.git` probe timeout in milliseconds (default: `150`). Set to `0` to disable the git probe entirely.
+
 ### Changed
+
+- **`LineEditor` cursor positioning** — now ANSI-aware: uses visible character width (excluding SGR sequences) for cursor positioning, fixing off-by-one errors in prompts that use color codes.
+- **`MultiLineReader` prompt providers** — now accepts `Func<string>` and `Func<int, string>` delegates instead of fixed prompt strings, enabling dynamic prompts per continuation depth.
+- **REPL VM global slot allocation** — the REPL VM now persists its global slot allocator (`VirtualMachine.ReplGlobalAllocator`) across REPL inputs, fixing a latent bug where global indices could collide between independently-compiled REPL inputs when many globals were declared.
 
 - **`$(…)` glob auto-expansion** (**BREAKING**) — Glob patterns (`*`, `?`, `[…]`, `**`) inside `$(…)` command literals are now **expanded against the filesystem** before being passed to the command. Previously, patterns were passed literally.
 

@@ -1,0 +1,32 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Default theme — minimal, ANSI-only, terminal-agnostic.
+//
+// Uses standard ANSI color names so it works on any terminal that
+// supports basic ANSI codes (xterm, vte, Windows Terminal, etc.).
+// No hex or 256-color indices — maximally compatible.
+//
+let default_palette = Palette {
+    fg:           "",        // terminal default foreground
+    bg:           "",        // terminal default background
+    accent:       "cyan",    // prompt marks, brackets, separators
+    muted:        "gray",    // timestamps, secondary info
+    success:      "green",   // exit-code 0 / git clean
+    error:        "red",     // non-zero exit / git conflict
+    warning:      "yellow",  // git dirty, uncommitted changes
+    info:         "cyan",    // git branch, env segments
+    git_clean:    "green",
+    git_dirty:    "yellow",
+    git_conflict: "red",
+    user:         "cyan",
+    host:         "blue",
+    cwd:          "blue"
+};
+
+// Register this palette so `theme.use("default")` can activate it.
+prompt.themeRegister("default", default_palette);

@@ -1,0 +1,29 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Monochrome — Pure grayscale theme for distraction-free shell work.
+// All accents are shades of gray. Useful for screencasts, demos,
+// and terminals where color clashes with the wallpaper.
+//
+let monochrome_palette = Palette {
+    fg:           "#e8e8e8",
+    bg:           "",
+    accent:       "#ffffff",
+    muted:        "#707070",
+    success:      "#c8c8c8",
+    error:        "#ffffff",   // bold-bright on error
+    warning:      "#a8a8a8",
+    info:         "#c0c0c0",
+    git_clean:    "#c8c8c8",
+    git_dirty:    "#a8a8a8",
+    git_conflict: "#ffffff",
+    user:         "#d8d8d8",
+    host:         "#a8a8a8",
+    cwd:          "#e8e8e8"
+};
+
+prompt.themeRegister("monochrome", monochrome_palette);

@@ -46,6 +46,54 @@ public class TermBuiltInsTests : StashTestBase
     }
 
     [Fact]
+    public void Color_Hex_Foreground()
+    {
+        var result = Run(@"let result = term.color(""hi"", ""#ff8040"");");
+        Assert.Equal("\x1b[38;2;255;128;64mhi\x1b[0m", result);
+    }
+
+    [Fact]
+    public void Color_Hex_Background()
+    {
+        var result = Run(@"let result = term.color(""hi"", ""#ffffff"", ""#000000"");");
+        Assert.Equal("\x1b[38;2;255;255;255;48;2;0;0;0mhi\x1b[0m", result);
+    }
+
+    [Fact]
+    public void Color_BrightCyan_Name()
+    {
+        var result = Run(@"let result = term.color(""x"", ""brightcyan"");");
+        Assert.Equal("\x1b[96mx\x1b[0m", result);
+    }
+
+    [Fact]
+    public void Color_RawSgr_256Color()
+    {
+        var result = Run(@"let result = term.color(""x"", ""38;5;81"");");
+        Assert.Equal("\x1b[38;5;81mx\x1b[0m", result);
+    }
+
+    [Fact]
+    public void Color_EmptyString_NoEscape()
+    {
+        var result = Run(@"let result = term.color(""plain"", """");");
+        Assert.Equal("plain", result);
+    }
+
+    [Fact]
+    public void Color_InvalidHex_Throws()
+    {
+        RunExpectingError(@"term.color(""x"", ""#zzzzzz"");");
+    }
+
+    [Fact]
+    public void Style_Hex_Color()
+    {
+        var result = Run(@"let result = term.style(""x"", { color: ""#80c0ff"" });");
+        Assert.Equal("\x1b[38;2;128;192;255mx\x1b[0m", result);
+    }
+
+    [Fact]
     public void Color_Unknown_Throws()
     {
         RunExpectingError(@"term.color(""x"", ""neon"");");

@@ -1,0 +1,21 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Compact starter — single character mark, nothing else.
+//
+// Layout:  λ _   (lambda mark in accent color, red on failure)
+//
+// For users who want maximum screen real-estate for command output.
+// Pair with a terminal title that shows the cwd.
+//
+// Activate with: starter.use("compact")
+//
+starter.register("compact", (ctx) => {
+    let p = prompt.palette();
+    let c = ctx.lastExitCode == 0 ? p.accent : p.error;
+    return term.color("λ ", c);
+});

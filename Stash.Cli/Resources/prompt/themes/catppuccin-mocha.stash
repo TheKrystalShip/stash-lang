@@ -1,0 +1,35 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Catppuccin Mocha theme — https://github.com/catppuccin/catppuccin
+// Pastel-on-dark palette, soothing and high-contrast.
+//
+// Base: #1e1e2e  Surface: #313244  Overlay: #6c7086
+// Text: #cdd6f4  Subtext: #a6adc8  Lavender: #b4befe
+// Rosewater: #f5e0dc  Flamingo: #f2cdcd  Pink: #f38ba8
+// Mauve: #cba6f7  Red: #f38ba8  Maroon: #eba0ac
+// Peach: #fab387  Yellow: #f9e2af  Green: #a6e3a1
+// Teal: #94e2d5  Sky: #89dceb  Sapphire: #74c7ec  Blue: #89b4fa
+//
+let catppuccin_mocha_palette = Palette {
+    fg:           "#cdd6f4",   // text
+    bg:           "",          // terminal default background
+    accent:       "#cba6f7",   // mauve — primary accent
+    muted:        "#6c7086",   // overlay0 — dimmed
+    success:      "#a6e3a1",   // green
+    error:        "#f38ba8",   // red/pink
+    warning:      "#f9e2af",   // yellow
+    info:         "#89b4fa",   // blue
+    git_clean:    "#a6e3a1",   // green
+    git_dirty:    "#f9e2af",   // yellow
+    git_conflict: "#f38ba8",   // red/pink
+    user:         "#94e2d5",   // teal
+    host:         "#89b4fa",   // blue
+    cwd:          "#cba6f7"    // mauve
+};
+
+prompt.themeRegister("catppuccin-mocha", catppuccin_mocha_palette);

@@ -1,0 +1,40 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Status starter — verbose layout showing exit code, host, cwd, branch.
+//
+// Layout:  [HH:MM] user@host  cwd  (branch*)  [exit-code on failure]
+//          ❯ _
+//
+// Two lines, designed to surface every diagnostic at a glance:
+//   - Wall-clock time in muted brackets
+//   - user@host in accent color
+//   - Working directory
+//   - Git branch with dirty marker
+//   - Exit code segment when last command failed
+//   - ❯ mark on its own line for predictable cursor position
+//
+// Activate with: starter.use("status")
+//
+starter.register("status", (ctx) => {
+    let p = prompt.palette();
+    let ts = term.color("[" + time.format(ctx.time, "HH:mm") + "]", p.muted);
+    let uh = term.color($"{ctx.user}@{ctx.host}", p.accent);
+    let cwd = term.color(ctx.cwd, p.cwd);
+    let git_seg = "";
+    if (ctx.git != null) {
+        let dirty_mark = ctx.git.isDirty ? "*" : "";
+        let branch_color = ctx.git.isDirty ? p.git_dirty : p.git_clean;
+        git_seg = "  " + term.color("(" + ctx.git.branch + dirty_mark + ")", branch_color);
+    }
+    let exit_seg = ctx.lastExitCode == 0
+        ? ""
+        : "  " + term.color($"[{ctx.lastExitCode}]", p.error);
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color("❯", mark_color);
+    return $"{ts} {uh}  {cwd}{git_seg}{exit_seg}\n{mark} ";
+});

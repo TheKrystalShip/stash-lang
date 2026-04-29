@@ -1,0 +1,29 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Rosé Pine — https://rosepinetheme.com/
+// All natural pine, faux fur, and a bit of soho vibes.
+// Soft, warm pastels with rose and pine accents.
+//
+let rose_pine_palette = Palette {
+    fg:           "#e0def4",   // text
+    bg:           "",          // base #191724 — terminal default
+    accent:       "#c4a7e7",   // iris (lavender)
+    muted:        "#6e6a86",   // muted
+    success:      "#9ccfd8",   // foam (mint)
+    error:        "#eb6f92",   // love (pink-red)
+    warning:      "#f6c177",   // gold
+    info:         "#31748f",   // pine (teal)
+    git_clean:    "#9ccfd8",   // foam
+    git_dirty:    "#f6c177",   // gold
+    git_conflict: "#eb6f92",   // love
+    user:         "#ebbcba",   // rose
+    host:         "#31748f",   // pine
+    cwd:          "#c4a7e7"    // iris
+};
+
+prompt.themeRegister("rose-pine", rose_pine_palette);

@@ -1,0 +1,35 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Emoji starter — playful layout with semantic emoji indicators.
+//
+// Layout:  📁 cwd  🌿 branch  ✅/❌  ❯ _
+//
+//   📁 — folder, always present
+//   🌿 — branch (only when in a git repo)
+//   ✅/❌ — last command status (only when last command ran)
+//   ❯  — prompt mark (success / error color)
+//
+// Requires a terminal font with emoji support (most modern fonts do).
+// If emoji render as boxes, switch to "developer" or "arrow" instead.
+//
+// Activate with: starter.use("emoji")
+//
+starter.register("emoji", (ctx) => {
+    let p = prompt.palette();
+    let folder = "📁 " + term.color(ctx.cwd, p.cwd);
+    let git_seg = "";
+    if (ctx.git != null) {
+        let branch_color = ctx.git.isDirty ? p.git_dirty : p.git_clean;
+        let dirty_mark = ctx.git.isDirty ? "*" : "";
+        git_seg = "  🌿 " + term.color(ctx.git.branch + dirty_mark, branch_color);
+    }
+    let status_seg = ctx.lastExitCode == 0 ? "  ✅" : $"  ❌ [{ctx.lastExitCode}]";
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color("❯", mark_color);
+    return $"{folder}{git_seg}{status_seg} {mark} ";
+});

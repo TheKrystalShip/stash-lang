@@ -1,0 +1,32 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Monokai theme — warm-on-dark, classic developer palette.
+//
+// Background: #272822  Foreground: #f8f8f2
+// Accent colors from the Sublime Text Monokai color scheme:
+//   Red:    #f92672   Green:  #a6e22e   Yellow: #e6db74
+//   Blue:   #66d9ef   Purple: #ae81ff   Orange: #fd971f
+//
+let monokai_palette = Palette {
+    fg:           "#f8f8f2",   // foreground
+    bg:           "",          // terminal default background
+    accent:       "#66d9ef",   // blue/cyan — marks and brackets
+    muted:        "#75715e",   // comments — dimmed gray
+    success:      "#a6e22e",   // green
+    error:        "#f92672",   // red/pink
+    warning:      "#e6db74",   // yellow
+    info:         "#66d9ef",   // cyan
+    git_clean:    "#a6e22e",   // green
+    git_dirty:    "#e6db74",   // yellow
+    git_conflict: "#f92672",   // red
+    user:         "#a6e22e",   // green
+    host:         "#ae81ff",   // purple
+    cwd:          "#fd971f"    // orange
+};
+
+prompt.themeRegister("monokai", monokai_palette);

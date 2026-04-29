@@ -1,0 +1,28 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Solarized Light — https://ethanschoonover.com/solarized
+// The light variant of Solarized. For terminals with light backgrounds.
+//
+let solarized_light_palette = Palette {
+    fg:           "#657b83",   // base00 — body text on light bg
+    bg:           "",          // base3 (#fdf6e3) — terminal default
+    accent:       "#268bd2",   // blue
+    muted:        "#93a1a1",   // base1
+    success:      "#859900",   // green
+    error:        "#dc322f",   // red
+    warning:      "#b58900",   // yellow
+    info:         "#2aa198",   // cyan
+    git_clean:    "#859900",   // green
+    git_dirty:    "#b58900",   // yellow
+    git_conflict: "#dc322f",   // red
+    user:         "#2aa198",   // cyan
+    host:         "#268bd2",   // blue
+    cwd:          "#6c71c4"    // violet
+};
+
+prompt.themeRegister("solarized-light", solarized_light_palette);

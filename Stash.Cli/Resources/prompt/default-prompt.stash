@@ -1,0 +1,51 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// The default Stash REPL prompt. Utilitarian: shows the working directory,
+// a colored mark indicating last-command success/failure, and a numeric
+// exit code segment when the last command failed.
+//
+// Result (success):   ~/projects/foo > _
+// Result (failure):   ~/projects/foo [127] > _
+//
+// To customize:
+//   1. Copy these functions to your ~/.stashrc.
+//   2. Edit the return string.
+//   3. Call prompt.set(your_fn) to activate.
+//
+// For richer layouts, try one of the bundled starters:
+//   starter.use("bash-classic")
+//   starter.use("minimal")
+//   starter.use("pure")
+//   starter.use("developer")
+//   starter.use("pwsh-style")
+//   starter.use("powerline-lite")
+//
+
+fn default_prompt_fn(ctx) {
+    let p = prompt.palette();
+    // Color the working directory with the theme's cwd color.
+    let cwd = term.color(ctx.cwd, p.cwd);
+    // Choose mark color based on last exit code.
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color(">", mark_color);
+    // Show "[N]" segment only on failure.
+    let exit_seg = ctx.lastExitCode == 0
+        ? ""
+        : " " + term.color($"[{ctx.lastExitCode}]", p.error);
+    return cwd + exit_seg + " " + mark + " ";
+}
+
+fn default_continuation_fn(ctx) {
+    let p = prompt.palette();
+    // Muted "..." for continuation lines (multi-line input).
+    return term.color("... ", p.muted);
+}
+
+// Register as the active prompt and continuation functions.
+prompt.set(default_prompt_fn);
+prompt.setContinuation(default_continuation_fn);

@@ -37,18 +37,19 @@
 21. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
 22. [`http` — HTTP Requests](#http--http-requests)
 23. [`process` — Process Management](#process--process-management)
-24. [`tpl` — Templating](#tpl--templating)
-25. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-26. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-27. [`term` — Terminal Formatting](#term--terminal-formatting)
-28. [`sys` — System Information](#sys--system-information)
-29. [`task` — Parallel Tasks](#task--parallel-tasks)
-30. [`net` — Networking](#net--networking)
-31. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-32. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-33. [Argument Parsing](#argument-parsing)
-34. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-35. [`log` — Structured Logging](#log--structured-logging)
+24. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
+25. [`tpl` — Templating](#tpl--templating)
+26. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+27. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+28. [`term` — Terminal Formatting](#term--terminal-formatting)
+29. [`sys` — System Information](#sys--system-information)
+30. [`task` — Parallel Tasks](#task--parallel-tasks)
+31. [`net` — Networking](#net--networking)
+32. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+33. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+34. [Argument Parsing](#argument-parsing)
+35. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+36. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -2121,33 +2122,33 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 
 ### Quick Reference
 
-| Function                         | Description                                                       |
-| -------------------------------- | ----------------------------------------------------------------- |
-| `process.exit(code)`             | Terminate the script with exit code                               |
-| `process.spawn(cmd)`             | Launch a background process, returns a `Process` handle           |
-| `process.wait(proc)`             | Block until a process exits, returns `CommandResult`              |
-| `process.waitTimeout(proc, ms)`  | Wait with timeout; returns `CommandResult` or `null` if timed out |
-| `process.kill(proc)`             | Send SIGTERM to a process                                         |
-| `process.isAlive(proc)`          | Check if a process is still running (returns `bool`)              |
-| `process.signal(proc, sig)`      | Send an arbitrary signal to a process                             |
-| `process.pid(proc)`              | Get the OS process ID                                             |
-| `process.detach(proc)`           | Detach a process so it survives script exit                       |
-| `process.list()`                 | List all tracked (spawned) process handles                        |
-| `process.read(proc)`             | Read available stdout from a running process (non-blocking)       |
-| `process.write(proc, data)`      | Write to a running process's stdin                                |
-| `process.onExit(proc, callback)` | Register a callback to run when a process exits                   |
-| `process.daemonize(cmd)`         | Launch a command as a daemon (not tracked, survives script exit)  |
-| `process.find(name)`             | Find system processes by name, returns array of `Process` handles |
-| `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)          |
-| `process.waitAll(procs)`         | Wait for all processes in an array to exit                        |
-| `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                  |
+| Function                         | Description                                                           |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `process.exit(code)`             | Terminate the script with exit code                                   |
+| `process.spawn(cmd)`             | Launch a background process, returns a `Process` handle               |
+| `process.wait(proc)`             | Block until a process exits, returns `CommandResult`                  |
+| `process.waitTimeout(proc, ms)`  | Wait with timeout; returns `CommandResult` or `null` if timed out     |
+| `process.kill(proc)`             | Send SIGTERM to a process                                             |
+| `process.isAlive(proc)`          | Check if a process is still running (returns `bool`)                  |
+| `process.signal(proc, sig)`      | Send an arbitrary signal to a process                                 |
+| `process.pid(proc)`              | Get the OS process ID                                                 |
+| `process.detach(proc)`           | Detach a process so it survives script exit                           |
+| `process.list()`                 | List all tracked (spawned) process handles                            |
+| `process.read(proc)`             | Read available stdout from a running process (non-blocking)           |
+| `process.write(proc, data)`      | Write to a running process's stdin                                    |
+| `process.onExit(proc, callback)` | Register a callback to run when a process exits                       |
+| `process.daemonize(cmd)`         | Launch a command as a daemon (not tracked, survives script exit)      |
+| `process.find(name)`             | Find system processes by name, returns array of `Process` handles     |
+| `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)              |
+| `process.waitAll(procs)`         | Wait for all processes in an array to exit                            |
+| `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                      |
 | `process.chdir(path)`            | Change the current working directory; pushes onto the directory stack |
-| `process.withDir(path, fn)`      | Run a function with a temporary working directory change          |
-| `process.popDir()`               | Pop the directory stack; restores previous cwd; returns popped path |
-| `process.dirStack()`             | Return a copy of the directory stack, oldest entry first          |
-| `process.dirStackDepth()`        | Return the number of entries in the directory stack               |
-| `process.exit(code?)`            | Terminate with exit code; defer-aware, catch-immune               |
-| `process.lastExitCode()`         | Return the exit code of the most recent `$(…)` or bare command    |
+| `process.withDir(path, fn)`      | Run a function with a temporary working directory change              |
+| `process.popDir()`               | Pop the directory stack; restores previous cwd; returns popped path   |
+| `process.dirStack()`             | Return a copy of the directory stack, oldest entry first              |
+| `process.dirStackDepth()`        | Return the number of entries in the directory stack                   |
+| `process.exit(code?)`            | Terminate with exit code; defer-aware, catch-immune                   |
+| `process.lastExitCode()`         | Return the exit code of the most recent `$(…)` or bare command        |
 
 ### `process.chdir(path)`
 
@@ -2540,6 +2541,54 @@ let finalResult = process.wait(server);
 `process.onExit(proc, callback)` registers a callback function to run when a process exits. The callback receives a `CommandResult` as its single argument. Multiple callbacks can be registered for the same process. Callbacks are fired synchronously on the main thread when the process result is collected via `process.wait()`, `process.waitTimeout()`, `process.waitAll()`, or `process.waitAny()`. Returns `null`.
 
 If the process handle is detached via `process.detach()`, any registered callbacks are discarded.
+
+---
+
+## `prompt` — REPL Prompt Customization
+
+The `prompt` namespace provides runtime control over the interactive REPL prompt. It exposes the primitive built-in functions; the bundled bootstrap wraps these with the `theme` and `starter` global dictionaries.
+
+> For a full guide covering themes, starters, git integration, OSC 133 markers, and cross-platform behavior, see [Prompt — Customizing the REPL Prompt](Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md).
+
+### Built-in Structs
+
+| Struct          | Fields                                                                                                                                                                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PromptContext` | `cwd`, `cwdAbsolute`, `user`, `host`, `hostFull`, `time`, `lastExitCode`, `lineNumber`, `mode`, `hostColor`, `git` — see [PromptContext reference](Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md#2-promptcontext-reference) |
+| `PromptGit`     | `isInRepo`, `branch`, `isDirty`, `stagedCount`, `unstagedCount`, `untrackedCount`, `ahead`, `behind` — see [PromptGit reference](Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md#3-promptgit-reference)                       |
+| `Palette`       | `cwd`, `user`, `host`, `time`, `info`, `success`, `error`, `branch`, `staged`, `unstaged`, `untracked`, `ahead`, `behind`, `separator` (all `string?`)                                                                                  |
+
+### Functions
+
+| Function                                 | Returns         | Description                                                                     |
+| ---------------------------------------- | --------------- | ------------------------------------------------------------------------------- |
+| `prompt.set(fn)`                         | `null`          | Set the active prompt function (`fn(ctx: PromptContext) -> string`)             |
+| `prompt.setContinuation(fn)`             | `null`          | Set the continuation prompt function                                            |
+| `prompt.reset()`                         | `null`          | Reset the prompt to the default                                                 |
+| `prompt.resetContinuation()`             | `null`          | Reset the continuation prompt to the default (`... `)                           |
+| `prompt.context() -> PromptContext`      | `PromptContext` | Return a freshly-computed context struct for the current REPL state             |
+| `prompt.render() -> string`              | `string`        | Render the prompt string using the current prompt function (without displaying) |
+| `prompt.palette() -> Palette`            | `Palette`       | Return the active color palette                                                 |
+| `prompt.setPalette(palette)`             | `null`          | Replace the active palette                                                      |
+| `prompt.themeRegister(name, palette)`    | `null`          | Register a named theme                                                          |
+| `prompt.themeUse(name)`                  | `null`          | Activate a registered theme by name                                             |
+| `prompt.themeCurrent() -> string`        | `string`        | Return the currently active theme name                                          |
+| `prompt.themeList() -> array<string>`    | `array<string>` | List all registered theme names                                                 |
+| `prompt.registerStarter(name, fn)`       | `null`          | Register a named starter function                                               |
+| `prompt.useStarter(name)`                | `null`          | Apply a registered starter by name                                              |
+| `prompt.listStarters() -> array<string>` | `array<string>` | List all registered starter names                                               |
+| `prompt.bootstrapDir() -> string`        | `string`        | Return the absolute path to the bootstrap directory                             |
+| `prompt.resetBootstrap()`                | `null`          | Re-extract bundled bootstrap scripts to the bootstrap directory                 |
+
+### Quick example
+
+```stash
+prompt.set((ctx) => {
+    let p = prompt.palette()
+    let g = ctx.git != null && ctx.git.isInRepo ? " (" + ctx.git.branch + ")" : ""
+    return term.color(ctx.cwd, p.cwd) + term.color(g, p.info) + " > "
+})
+```
 
 ---
 
@@ -3121,6 +3170,8 @@ The `term` namespace provides ANSI terminal formatting, color output, and table 
 | `term.underline(text)`              | Underlined text                                                                                               |
 | `term.style(text, opts)`            | Combined styles via dict `{ color: term.RED, bold: true }`                                                    |
 | `term.strip(text)`                  | Remove all ANSI escape codes from text                                                                        |
+| `term.zeroWidth(text)`              | Mark `text` as zero-width for prompt length calculation; wrap non-SGR escapes (OSC, hyperlinks) with this     |
+| `term.colorsEnabled()`              | Return `true` if ANSI color output is currently enabled (respects `NO_COLOR` and `STASH_FORCE_COLOR`)         |
 
 ### Terminal Info
 

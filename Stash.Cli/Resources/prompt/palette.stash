@@ -1,0 +1,45 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// The Palette struct. All theme files construct one of these.
+//
+// Color values may be ANSI names ("cyan"), 256-color SGR fragments
+// ("38;5;81"), or "#RRGGBB" hex — anything `term.color` accepts.
+// An empty string "" means "no color / terminal default".
+//
+// Fields:
+//   fg           — primary foreground color
+//   bg           — background (usually "" on terminals that don't support bg)
+//   accent       — highlighted elements: marks, separators, brackets
+//   muted        — dimmed text: timestamps, host info
+//   success      — exit-code 0 indicator, git clean state
+//   error        — non-zero exit code, git conflict state
+//   warning      — git dirty state, deprecation notices
+//   info         — informational segments (git branch, env, etc.)
+//   git_clean    — branch name when repo is clean
+//   git_dirty    — branch name when repo has uncommitted changes
+//   git_conflict — branch name when repo has merge conflicts
+//   user         — username segment
+//   host         — hostname segment
+//   cwd          — current-working-directory segment
+//
+struct Palette {
+    fg: string,
+    bg: string,
+    accent: string,
+    muted: string,
+    success: string,
+    error: string,
+    warning: string,
+    info: string,
+    git_clean: string,
+    git_dirty: string,
+    git_conflict: string,
+    user: string,
+    host: string,
+    cwd: string
+}

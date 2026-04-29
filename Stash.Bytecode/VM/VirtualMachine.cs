@@ -73,6 +73,14 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     // ── Debugger Integration ──
     private IDebugger? _debugger;
     private readonly List<DebugCallFrame> _debugCallStack = new();
+
+    /// <summary>
+    /// Persistent global slot allocator shared across all REPL compilations.
+    /// When non-null, <see cref="ShellRunner.EvaluateSource"/> uses this allocator so that
+    /// all REPL chunks assign the same slot index to the same global name. This prevents
+    /// cross-chunk lambdas from reading wrong global slot values when invoked in a later REPL input.
+    /// </summary>
+    public GlobalSlotAllocator ReplGlobalAllocator { get; } = new GlobalSlotAllocator();
     private int _debugThreadId = 1;
     private int[]? _lastDebugLinePerFrame;
     private int _loopCheckCounter;
@@ -108,6 +116,12 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
 
     /// <summary>The global variable store. Populate before Execute for built-in namespaces.</summary>
     public Dictionary<string, StashValue> Globals => _globals;
+
+    /// <summary>
+    /// The interpreter context for this VM instance. Used by components outside the bytecode
+    /// layer (e.g. PromptRenderer) that need to invoke callbacks or query VM state.
+    /// </summary>
+    public IInterpreterContext Context => _context;
 
     /// <summary>
     /// Returns true if the REPL global symbol table contains the given name.
@@ -277,19 +291,6 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         else
         {
             result = Run();
-        }
-
-        // Promote top-level locals to globals for next REPL input
-        if (chunk.LocalNames is not null)
-        {
-            for (int i = 0; i < chunk.LocalNames.Length; i++)
-            {
-                string? name = chunk.LocalNames[i];
-                if (!string.IsNullOrEmpty(name) && name[0] != '<')
-                {
-                    _globals[name] = _stack[i];
-                }
-            }
         }
 
         return result;

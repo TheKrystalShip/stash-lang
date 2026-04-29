@@ -233,6 +233,31 @@ public static class GlobalBuiltIns
         ]);
         b.Struct(StashErrorTypes.LockError, [new("message", "string"), new("path", "string")]);
 
+        // Prompt-related structs — registered here so LSP hover/completion knows their fields.
+        b.Struct("PromptGit", [
+            new("isInRepo",       "bool"),
+            new("branch",         "string"),
+            new("isDirty",        "bool"),
+            new("stagedCount",    "int"),
+            new("unstagedCount",  "int"),
+            new("untrackedCount", "int"),
+            new("ahead",          "int"),
+            new("behind",         "int"),
+        ]);
+        b.Struct("PromptContext", [
+            new("cwd",            "string"),
+            new("cwdAbsolute",    "string"),
+            new("user",           "string"),
+            new("host",           "string"),
+            new("hostFull",       "string"),
+            new("time",           "float"),
+            new("lastExitCode",   "int"),
+            new("lineNumber",     "int"),
+            new("mode",           "string"),
+            new("hostColor",      "string"),
+            new("git",            "PromptGit"),
+        ]);
+
         // Retry-related struct and context types
         b.Struct("RetryOptions", [
             new("delay",    "duration"),

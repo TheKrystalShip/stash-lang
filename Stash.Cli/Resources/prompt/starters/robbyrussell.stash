@@ -1,0 +1,39 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Robbyrussell starter — homage to the famous oh-my-zsh default theme.
+// https://github.com/ohmyzsh/ohmyzsh/blob/master/themes/robbyrussell.zsh-theme
+//
+// Layout:  ➜  cwd git:(branch) ✗ _
+//
+//   ➜            — green on success, red on failure
+//   cwd          — basename only (cwd may be long; this prompt favors brevity)
+//   git:(branch) — info color, parens around branch
+//   ✗            — red, shown only when repo is dirty
+//
+// Activate with: starter.use("robbyrussell")
+//
+starter.register("robbyrussell", (ctx) => {
+    let p = prompt.palette();
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let arrow = term.color("➜", mark_color);
+    // Use the basename of the cwd for compactness — a robbyrussell hallmark.
+    let cwd_str = path.base(ctx.cwd);
+    if (cwd_str == "" || cwd_str == null) { cwd_str = ctx.cwd; }
+    let cwd = term.color(cwd_str, p.info);
+    let git_seg = "";
+    if (ctx.git != null) {
+        let label = term.color("git:(", p.muted);
+        let branch = term.color(ctx.git.branch, p.git_dirty);
+        let close = term.color(")", p.muted);
+        git_seg = " " + label + branch + close;
+        if (ctx.git.isDirty) {
+            git_seg = git_seg + " " + term.color("✗", p.error);
+        }
+    }
+    return $"{arrow}  {cwd}{git_seg} ";
+});

@@ -1,0 +1,29 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Solarized Dark — https://ethanschoonover.com/solarized
+// The classic precision-engineered palette by Ethan Schoonover.
+// Carefully chosen for accessibility and on-screen legibility.
+//
+let solarized_dark_palette = Palette {
+    fg:           "#839496",   // base0 — body text
+    bg:           "",          // base03 (#002b36) — terminal default
+    accent:       "#268bd2",   // blue
+    muted:        "#586e75",   // base01
+    success:      "#859900",   // green
+    error:        "#dc322f",   // red
+    warning:      "#b58900",   // yellow
+    info:         "#2aa198",   // cyan
+    git_clean:    "#859900",   // green
+    git_dirty:    "#b58900",   // yellow
+    git_conflict: "#dc322f",   // red
+    user:         "#2aa198",   // cyan
+    host:         "#268bd2",   // blue
+    cwd:          "#6c71c4"    // violet
+};
+
+prompt.themeRegister("solarized-dark", solarized_dark_palette);

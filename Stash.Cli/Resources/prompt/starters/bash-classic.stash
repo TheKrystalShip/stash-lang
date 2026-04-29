@@ -1,0 +1,35 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Bash-classic starter — [HH:MM] user@host:cwd$
+//
+// Mimics the traditional bash default prompt with colored segments.
+// All three parts (timestamp, user@host, cwd) use the active palette.
+//
+// Example:  [14:23:07] alice@laptop:~/projects$  _
+//
+// Activate with: starter.use("bash-classic")
+//
+starter.register("bash-classic", (ctx) => {
+    const p = prompt.palette();
+    // Timestamp in brackets, muted
+    const ts = term.color("[${time.format(ctx.time, "HH:mm")}]", p.muted);
+    // user@host, colored with accent
+    const uh = term.color($"{ctx.user}@{ctx.host}", p.accent);
+    // Current working directory
+    const cwd = term.color(ctx.cwd, p.cwd);
+    // Prompt mark: $
+    const mark: string = "$";
+    // Dollar sign color green on success, red on failure
+    const mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    // Colored mark
+    const colored_mark = term.color(mark, mark_color);
+
+    // Final prompt: [HH:MM:SS] user@host:cwd$
+
+    return $"{ts} {uh} {cwd} {colored_mark} ";
+});

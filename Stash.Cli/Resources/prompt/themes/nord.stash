@@ -1,0 +1,33 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Nord theme — https://www.nordtheme.com/
+// Cool, arctic-inspired palette by Arctic Ice Studio.
+//
+// Polar Night (dark backgrounds): #2e3440 #3b4252 #434c5e #4c566a
+// Snow Storm  (light foregrounds): #d8dee9 #e5e9f0 #eceff4
+// Frost (blues/cyans): #8fbcbb #88c0d0 #81a1c1 #5e81ac
+// Aurora (accent colors): #bf616a #d08770 #ebcb8b #a3be8c #b48ead
+//
+let nord_palette = Palette {
+    fg:           "#d8dee9",   // snow-storm.1 — primary text
+    bg:           "",          // terminal default background
+    accent:       "#88c0d0",   // frost.1 — primary cyan
+    muted:        "#4c566a",   // polar-night.4 — dim gray
+    success:      "#a3be8c",   // aurora.4 — green
+    error:        "#bf616a",   // aurora.1 — red
+    warning:      "#ebcb8b",   // aurora.3 — yellow
+    info:         "#81a1c1",   // frost.2 — blue
+    git_clean:    "#a3be8c",   // aurora.4 — green
+    git_dirty:    "#ebcb8b",   // aurora.3 — yellow
+    git_conflict: "#bf616a",   // aurora.1 — red
+    user:         "#88c0d0",   // frost.1 — cyan
+    host:         "#81a1c1",   // frost.2 — blue
+    cwd:          "#5e81ac"    // frost.3 — deep blue
+};
+
+prompt.themeRegister("nord", nord_palette);

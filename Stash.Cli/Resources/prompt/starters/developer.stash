@@ -1,0 +1,37 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Developer starter — cwd + git branch + dirty marker.
+//
+// Layout:  ~/projects/foo (main*) > _
+//
+//   cwd          — in cwd color
+//   (branch)     — git branch in parens, colored by cleanliness
+//   dirty marker — "*" appended to branch when uncommitted changes exist
+//   > mark       — green on success, red on failure
+//
+// Git segments are guarded and skipped when ctx.git is null (Phase 6
+// adds the git probe; before that, ctx.git is always null).
+//
+// Activate with: starter.use("developer")
+//
+starter.register("developer", (ctx: PromptContext) => {
+    const p = prompt.palette();
+    // Current working directory
+    const cwd = term.color(ctx.cwd, p.cwd);
+    // Git segment: (branch[*]) when git info is available
+    let git_seg = "";
+    if (ctx.git != null) {
+        const dirty_mark = ctx.git.isDirty ? "*" : "";
+        const branch_color = ctx.git.isDirty ? p.git_dirty : p.git_clean;
+        git_seg = " " + term.color("(" + ctx.git.branch + dirty_mark + ")", branch_color);
+    }
+    // Prompt mark
+    const mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    const mark = term.color(">", mark_color);
+    return $"{cwd}{git_seg} {mark} ";
+});

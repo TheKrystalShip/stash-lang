@@ -1,0 +1,28 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// One Dark — Atom's flagship theme.
+// Balanced contrast with warm accents. Ported to dozens of editors.
+//
+let one_dark_palette = Palette {
+    fg:           "#abb2bf",   // light gray-blue text
+    bg:           "",          // #282c34 — terminal default
+    accent:       "#61afef",   // bright blue
+    muted:        "#5c6370",   // comment gray
+    success:      "#98c379",   // green
+    error:        "#e06c75",   // soft red
+    warning:      "#e5c07b",   // amber
+    info:         "#56b6c2",   // teal
+    git_clean:    "#98c379",   // green
+    git_dirty:    "#e5c07b",   // amber
+    git_conflict: "#e06c75",   // red
+    user:         "#c678dd",   // purple
+    host:         "#56b6c2",   // teal
+    cwd:          "#61afef"    // blue
+};
+
+prompt.themeRegister("one-dark", one_dark_palette);

@@ -1,0 +1,27 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Fish-style starter — inspired by the fish shell default.
+//
+// Layout:  user@host cwd ❯ _
+//
+// Compact single-line layout with cwd basename only (matches fish's
+// prompt_pwd shortening). The chevron is fish's signature mark.
+//
+// Activate with: starter.use("fish-style")
+//
+starter.register("fish-style", (ctx) => {
+    let p = prompt.palette();
+    let uh = term.color($"{ctx.user}@{ctx.host}", p.user);
+    // Fish shortens cwd to just the basename for brevity.
+    let cwd_str = path.base(ctx.cwd);
+    if (cwd_str == "" || cwd_str == null) { cwd_str = ctx.cwd; }
+    let cwd = term.color(cwd_str, p.cwd);
+    let mark_color = ctx.lastExitCode == 0 ? p.success : p.error;
+    let mark = term.color("❯", mark_color);
+    return $"{uh} {cwd} {mark} ";
+});

@@ -1,0 +1,61 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Bootstrap entry point. Loaded by Stash before ~/.stashrc runs.
+//
+// Defines two REPL globals that wrap the flat C# primitives in prompt.*:
+//
+//   theme   — theme.use(name), theme.register(name, palette),
+//             theme.current(), theme.list()
+//
+//   starter — starter.use(name), starter.register(name, f),
+//             starter.list()
+//
+// The Palette struct is defined in palette.stash (loaded before this).
+// All bundled themes are registered before this file runs.
+// The default prompt fn is set in default-prompt.stash (loaded after).
+//
+
+// ---------------------------------------------------------------------------
+// theme registry — wraps prompt.theme* C# primitives
+// ---------------------------------------------------------------------------
+let theme = {
+    // Activate a registered theme by name. Sets the active palette.
+    // Example: theme.use("nord")
+    use: (name) => { prompt.themeUse(name); },
+
+    // Register a custom palette under a name.
+    // Example: theme.register("my-theme", Palette { ... })
+    register: (name, palette) => { prompt.themeRegister(name, palette); },
+
+    // Return the name of the currently active theme, or "" if none.
+    current: () => { return prompt.themeCurrent(); },
+
+    // Return a sorted list of registered theme names.
+    // Example: theme.list()  →  ["catppuccin-mocha", "default", "dracula", ...]
+    list: () => { return prompt.themeList(); }
+};
+
+// ---------------------------------------------------------------------------
+// starter registry — wraps prompt.registerStarter / prompt.useStarter
+// ---------------------------------------------------------------------------
+let starter = {
+    // Activate a bundled starter layout by name.
+    // Example: starter.use("bash-classic")
+    use: (name) => { prompt.useStarter(name); },
+
+    // Register a custom starter prompt function under a name.
+    // The function must accept one argument (PromptContext) and return a string.
+    // Example: starter.register("my-prompt", (ctx) => { return "> "; })
+    register: (name, f) => { prompt.registerStarter(name, f); },
+
+    // Return a sorted list of registered starter names.
+    list: () => { return prompt.listStarters(); }
+};
+
+// Activate the default theme so prompt.palette() is non-null from the start.
+theme.use("default");

@@ -1,0 +1,29 @@
+// ============================================================
+// AUTO-GENERATED FROM EMBEDDED RESOURCES — DO NOT EDIT
+// This file will be overwritten on every Stash version upgrade.
+// To customize, put overrides in your ~/.stashrc file.
+// Documentation: https://stash-lang.dev/docs/prompt
+// ============================================================
+//
+// Tokyo Night theme — https://github.com/folke/tokyonight.nvim
+// Deep blues with vibrant magenta and cyan accents.
+// One of the most popular dark themes for terminals and editors.
+//
+let tokyo_night_palette = Palette {
+    fg:           "#c0caf5",   // primary text — soft lavender
+    bg:           "",          // terminal default
+    accent:       "#bb9af7",   // magenta-purple
+    muted:        "#565f89",   // dim slate
+    success:      "#9ece6a",   // green
+    error:        "#f7768e",   // pink-red
+    warning:      "#e0af68",   // amber
+    info:         "#7aa2f7",   // blue
+    git_clean:    "#9ece6a",   // green
+    git_dirty:    "#e0af68",   // amber
+    git_conflict: "#f7768e",   // pink-red
+    user:         "#7dcfff",   // bright cyan
+    host:         "#7aa2f7",   // blue
+    cwd:          "#bb9af7"    // magenta-purple
+};
+
+prompt.themeRegister("tokyo-night", tokyo_night_palette);
