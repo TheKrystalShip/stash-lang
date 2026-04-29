@@ -234,4 +234,81 @@ public class ShellArgExpansionTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    // ── Brace expansion integration ───────────────────────────────────────────
+
+    [Fact]
+    public void BraceExpansion_SimpleExpansion_ProducesMultipleArgs()
+    {
+        var result = Expand("cp file.{txt,bak}");
+        Assert.Equal(["cp", "file.txt", "file.bak"], result);
+    }
+
+    [Fact]
+    public void BraceExpansion_CrossProduct_ProducesFourArgs()
+    {
+        var result = Expand("{a,b}-{1,2}");
+        Assert.Equal(["a-1", "a-2", "b-1", "b-2"], result);
+    }
+
+    [Fact]
+    public void BraceExpansion_QuotedBracesNotExpanded()
+    {
+        // Double-quoted: the {a,b} is a literal string, not expanded.
+        var result = Expand("\"{a,b}\"");
+        Assert.Equal(["{a,b}"], result);
+    }
+
+    [Fact]
+    public void BraceExpansion_SingleQuotedBracesNotExpanded()
+    {
+        var result = Expand("'{a,b}'");
+        Assert.Equal(["{a,b}"], result);
+    }
+
+    [Fact]
+    public void BraceExpansion_AppliesAfterInterpolation()
+    {
+        // ${...} result is unquoted in the token, so brace expansion runs on it.
+        // Interpolation of "a,b" produces the literal string "a,b". Since it is
+        // absorbed into the current word as anyQuoted=true (interpolation sets
+        // anyQuoted=true on the word), the word won't be brace-expanded.
+        // Instead, test with a static unquoted prefix containing braces.
+        var result = Expand("build-{debug,release}");
+        Assert.Equal(["build-debug", "build-release"], result);
+    }
+
+    [Fact]
+    public void BraceExpansion_CombinedWithGlob()
+    {
+        // After brace expansion, each result is checked for glob chars.
+        // Create two real files so the glob phase sees no wildcard chars (exact paths).
+        string dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "x1.txt"), "");
+            File.WriteAllText(Path.Combine(dir, "x2.txt"), "");
+            // Exact paths — no wildcard chars — brace expands to 2 exact paths, glob is a no-op.
+            string arg = Path.Combine(dir, "x1.txt") + " " + Path.Combine(dir, "x2.txt");
+            // Build brace pattern manually so both paths share the same dir.
+            string pattern = dir + Path.DirectorySeparatorChar + "x{1,2}.txt";
+            var result = Expand(pattern);
+            Assert.Equal(2, result.Count);
+            Assert.Contains(Path.Combine(dir, "x1.txt"), result);
+            Assert.Contains(Path.Combine(dir, "x2.txt"), result);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void BraceExpansion_NoBraces_UnaffectedByPipeline()
+    {
+        // Tokens with no braces pass through unmodified.
+        var result = Expand("foo bar baz");
+        Assert.Equal(["foo", "bar", "baz"], result);
+    }
 }

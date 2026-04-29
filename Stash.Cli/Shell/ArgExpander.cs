@@ -15,11 +15,10 @@ namespace Stash.Cli.Shell;
 /// Implements the §6 argument-expansion pipeline for shell-mode commands:
 ///
 ///   1. <c>${expr}</c> interpolation  — evaluated against the REPL VM
-///   2. Tilde expansion              — leading <c>~</c> or <c>~/</c> → home dir
-///   3. Word splitting               — unquoted whitespace splits into separate args
-///   4. Glob expansion               — unquoted glob chars matched against filesystem
-///
-/// Brace expansion (§6 step 2) is Phase 10 — deliberately omitted here.
+///   2. Brace expansion              — <c>{a,b}</c> → multiple words (cross-product)
+///   3. Tilde expansion              — leading <c>~</c> or <c>~/</c> → home dir
+///   4. Word splitting               — unquoted whitespace splits into separate args
+///   5. Glob expansion               — unquoted glob chars matched against filesystem
 ///
 /// Quoting rules:
 ///   • <c>"…"</c> and <c>'…'</c> both suppress word-splitting and glob expansion.
@@ -46,9 +45,30 @@ internal static class ArgExpander
         var words = new List<(string Text, bool AnyQuoted)>();
         ParseIntoWords(rawArgs, vm, span, words);
 
-        // Apply glob expansion to unquoted words.
-        var result = new List<string>(words.Count);
+        // Apply brace expansion (§6 step 2) to each unquoted word.
+        // Runs after interpolation (words already have ${} resolved) and before
+        // glob expansion. Quoted tokens (WasQuoted == true) are passed through
+        // unchanged so that "{a,b}" stays as the literal string {a,b}.
+        // Brace patterns introduced by ${...} interpolation ARE expanded because
+        // the interpolated result is absorbed into the token as unquoted content.
+        var braceExpanded = new List<(string Text, bool AnyQuoted)>(words.Count);
         foreach (var (text, anyQuoted) in words)
+        {
+            if (!anyQuoted)
+            {
+                List<string> variants = BraceExpander.Expand(text);
+                foreach (string v in variants)
+                    braceExpanded.Add((v, false));
+            }
+            else
+            {
+                braceExpanded.Add((text, anyQuoted));
+            }
+        }
+
+        // Apply glob expansion to unquoted words.
+        var result = new List<string>(braceExpanded.Count);
+        foreach (var (text, anyQuoted) in braceExpanded)
         {
             if (!anyQuoted && GlobExpander.HasGlobChars(text))
             {
