@@ -119,6 +119,45 @@ public sealed partial class VirtualMachine
             {
                 return RunInner<DebugOn>(0);
             }
+            catch (ExitException ex)
+            {
+                // Defer-aware exit: run all pending defers on every frame (LIFO), then terminate.
+                List<StashError>? suppressed = null;
+                for (int i = _frameCount - 1; i >= 0; i--)
+                {
+                    ref CallFrame frame = ref _frames[i];
+                    if (frame.Defers is { Count: > 0 })
+                    {
+                        RunFrameDefers(ref frame, ref suppressed);
+                    }
+                }
+
+                _frameCount = 0;
+                _sp = 0;
+                _exceptionHandlers.Clear();
+
+                if (suppressed is { Count: > 0 })
+                {
+                    ex.SuppressedErrors = suppressed;
+                }
+
+                if (_context.EmbeddedMode)
+                {
+                    throw;
+                }
+
+                if (suppressed is { Count: > 0 })
+                {
+                    foreach (var err in suppressed)
+                    {
+                        try { _context.ErrorOutput.WriteLine($"[exit defer error] {err.Type}: {err.Message}"); }
+                        catch { /* best effort */ }
+                    }
+                }
+
+                System.Environment.Exit(ex.ExitCode);
+                return null; // unreachable
+            }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
             {
                 ExceptionHandler handler = _exceptionHandlers[^1];

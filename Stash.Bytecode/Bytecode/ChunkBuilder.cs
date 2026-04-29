@@ -270,8 +270,10 @@ public sealed class ChunkBuilder
     {
         if (_code.Count < 2) return;
 
-        // Build the set of jump targets so we don't optimize across basic block boundaries.
+        // Build the set of jump targets and companion word positions so we don't
+        // optimize across basic block boundaries or treat companion words as instructions.
         var jumpTargets = new HashSet<int>();
+        var companionWords = new HashSet<int>();
         for (int i = 0; i < _code.Count; i++)
         {
             uint inst = _code[i];
@@ -296,6 +298,7 @@ public sealed class ChunkBuilder
                 case OpCode.GetFieldIC:
                 case OpCode.CallBuiltIn:
                     i++; // skip companion word
+                    companionWords.Add(i); // track its position
                     break;
             }
         }
@@ -306,6 +309,9 @@ public sealed class ChunkBuilder
         {
             if (jumpTargets.Contains(i)) continue;
             if (jumpTargets.Contains(i + 1)) continue;
+            // Never treat a companion word as an instruction or optimize it away.
+            if (companionWords.Contains(i)) continue;
+            if (companionWords.Contains(i + 1)) continue;
 
             uint inst0 = _code[i];
             if (Instruction.GetOp(inst0) != OpCode.Move) continue;
@@ -341,7 +347,7 @@ public sealed class ChunkBuilder
             }
 
             // Patterns 3 & 4: Move + Move + GetTable/SetTable
-            if (i + 2 < _code.Count && op1 == OpCode.Move && !jumpTargets.Contains(i + 2))
+            if (i + 2 < _code.Count && op1 == OpCode.Move && !jumpTargets.Contains(i + 2) && !companionWords.Contains(i + 2))
             {
                 byte move2A = Instruction.GetA(inst1);
                 byte move2B = Instruction.GetB(inst1);

@@ -54,17 +54,20 @@ public static class ProcessBuiltIns
         ns.Constant("SIGUSR2", (long)12, "int", "12");
         ns.Constant("SIGTERM", (long)15, "int", "15");
 
-        // process.exit(code) — Exits the process with the given integer exit code. Runs cleanup for tracked processes first.
+        // process.exit(code?) — Exits the process with the given integer exit code (default 0).
+        // Defer-aware: all pending defer blocks on the call stack are run before termination.
+        // Catch-immune: no Stash try/catch clause can intercept this.
         ns.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var code = SvArgs.Long(args, 0, "process.exit");
+            long code = args.Length > 0 ? SvArgs.Long(args, 0, "process.exit") : 0L;
 
             ctx.CleanupTrackedProcesses();
             ctx.EmitExit((int)code);
             return StashValue.Null;
         },
             returnType: "null",
-            documentation: "Exits the current process with the given integer exit code. Tracked processes are cleaned up before exit.\n@param code The exit code to use\n@return Does not return — exits the process");
+            isVariadic: true,
+            documentation: "Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code. Defaults to 0\n@return Does not return — exits the process");
 
         // process.exec(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
         ns.Function("exec", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -709,22 +712,72 @@ public static class ProcessBuiltIns
             returnType: "CommandResult",
             documentation: "Waits until any process in the array exits. Returns the CommandResult of the first process to finish.\n@param handles A non-empty array of Process handles\n@return The CommandResult of the first process to exit");
 
-        // process.chdir(path) — Changes the current working directory of the script process to the given path.
+        // process.chdir(path) — Changes the current working directory and pushes it onto the directory stack.
         ns.Function("chdir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var path = SvArgs.String(args, 0, "process.chdir");
 
-            string resolved = System.IO.Path.GetFullPath(path);
+            string expanded = ctx.ExpandTilde(path);
+            string resolved = System.IO.Path.GetFullPath(expanded);
             if (!System.IO.Directory.Exists(resolved))
             {
                 throw new RuntimeError($"process.chdir: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
             }
 
+            // Cap the stack at 256 entries: drop the eldest (index 0) to make room.
+            var stack = ctx.DirStack;
+            if (stack.Count >= 256)
+            {
+                stack.RemoveAt(0);
+            }
+
+            // Atomic: change cwd first; only push to the stack if the change succeeds.
             System.Environment.CurrentDirectory = resolved;
+            stack.Add(resolved);
             return StashValue.Null;
         },
             returnType: "null",
-            documentation: "Changes the current working directory of the script process to the given path.\n@param path The directory path to change to\n@return null");
+            documentation: "Changes the current working directory to the given path and pushes it onto the directory stack.\n@param path The directory path to change to\n@return null");
+
+        // process.popDir() — Pops the top of the directory stack, restores the previous directory, and returns the popped path.
+        ns.Function("popDir", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
+        {
+            var stack = ctx.DirStack;
+            if (stack.Count <= 1)
+            {
+                throw new RuntimeError("directory stack is at root", errorType: StashErrorTypes.CommandError);
+            }
+
+            string popped = stack[^1];
+            stack.RemoveAt(stack.Count - 1);
+            string newTop = stack[^1];
+            System.Environment.CurrentDirectory = newTop;
+            return StashValue.FromObj(popped);
+        },
+            returnType: "string",
+            documentation: "Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path.\nThrows CommandError if the stack is at its root entry.\n@return The directory path that was popped");
+
+        // process.dirStack() — Returns a copy of the directory stack, oldest entry first.
+        ns.Function("dirStack", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
+        {
+            var stack = ctx.DirStack;
+            var result = new List<StashValue>(stack.Count);
+            foreach (string dir in stack)
+            {
+                result.Add(StashValue.FromObj(dir));
+            }
+            return StashValue.FromObj(result);
+        },
+            returnType: "array",
+            documentation: "Returns a copy of the directory stack, oldest entry first.\n@return An array of directory path strings");
+
+        // process.dirStackDepth() — Returns the number of entries in the directory stack.
+        ns.Function("dirStackDepth", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
+        {
+            return StashValue.FromInt((long)ctx.DirStack.Count);
+        },
+            returnType: "int",
+            documentation: "Returns the number of entries in the directory stack.\n@return The depth as an integer");
 
         // process.withDir(path, fn) — Temporarily changes the working directory to path, calls fn(), then restores the original directory. Returns fn's return value.
         ns.Function("withDir", [Param("path", "string"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

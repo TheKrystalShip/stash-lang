@@ -65,6 +65,14 @@ internal sealed class VMContext : IInterpreterContext
     /// <summary>Stack of active file lock handles held by this VM instance. LIFO; LockEnd pops the top.</summary>
     public Stack<FileLockHandle> ActiveLocks { get; } = new();
 
+    // --- Directory Stack ---
+    /// <summary>
+    /// Navigation history. Last entry is the current working directory.
+    /// Initialized with the cwd inherited from the parent process.
+    /// Capped at 256 entries; oldest is dropped when full.
+    /// </summary>
+    public List<string> DirStack { get; } = new() { System.Environment.CurrentDirectory };
+
     private bool _lockCleanupRegistered;
 
     // Keep references to prevent GC of signal registrations
@@ -104,12 +112,9 @@ internal sealed class VMContext : IInterpreterContext
     {
         CleanupTrackedProcesses();
         CleanupTrackedWatchers();
-        if (EmbeddedMode)
-        {
-            throw new Stash.Runtime.ExitException(code);
-        }
-
-        System.Environment.Exit(code);
+        // Always throw ExitException — the VM dispatch loop runs all pending defer blocks
+        // and then calls System.Environment.Exit (or re-throws in embedded mode).
+        throw new Stash.Runtime.ExitException(code);
     }
 
     public string ExpandTilde(string path)
