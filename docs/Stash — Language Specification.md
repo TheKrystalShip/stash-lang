@@ -63,7 +63,7 @@
 | Scoping             | Lexical                       | Predictable; standard in modern languages             |
 | Killer feature      | Structs/objects               | Structured data manipulation missing from Bash        |
 | Implementation lang | C#                            | Leverages existing expertise; strong standard library |
-| Interpreter type    | Bytecode VM                   | Compiled AST to opcodes; stack-based dispatch         |
+| Interpreter type    | Bytecode VM                   | Compiled AST to opcodes; register-based dispatch      |
 
 ---
 
@@ -5054,14 +5054,14 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Components
 
-| Component       | Responsibility                                                             |
-| --------------- | -------------------------------------------------------------------------- |
-| **Lexer**       | Reads source text, produces stream of tokens                               |
-| **Parser**      | Recursive descent; consumes tokens, produces AST                           |
-| **Resolver**    | Post-parse pass; binds variables to scope depth/slot                       |
-| **Interpreter** | Bytecode VM; compiles AST to opcodes and executes via stack-based dispatch |
-| **Environment** | Stores variable bindings; supports lexical scope chain                     |
-| **REPL**        | Interactive read-eval-print loop                                           |
+| Component       | Responsibility                                                                |
+| --------------- | ----------------------------------------------------------------------------- |
+| **Lexer**       | Reads source text, produces stream of tokens                                  |
+| **Parser**      | Recursive descent; consumes tokens, produces AST                              |
+| **Resolver**    | Post-parse pass; binds variables to scope depth/slot                          |
+| **Interpreter** | Bytecode VM; compiles AST to opcodes and executes via register-based dispatch |
+| **Environment** | Stores variable bindings; supports lexical scope chain                        |
+| **REPL**        | Interactive read-eval-print loop                                              |
 
 ### Token Types
 

@@ -800,8 +800,24 @@ public class Program
     {
         Console.WriteLine($"Stash v{Version} \u2014 Type statements or expressions, or 'exit' to quit.");
 
-        // ── Shell mode setup ─────────────────────────────────────────────────
-        bool shellModeEnabled = _shellEnabled && !_shellExplicitlyDisabled;
+        // ── RC file discovery (§12.1) ────────────────────────────────────────
+        string? rcPath = RcFileLoader.FindRcFile();
+
+        // ── Shell mode setup (§12.3 — RC presence implicitly enables shell) ──
+        // Priority: --no-shell / STASH_SHELL=0 > --shell / STASH_SHELL=1 > RC presence > default.
+        bool stashShellExplicitlyZero = string.Equals(
+            System.Environment.GetEnvironmentVariable("STASH_SHELL"), "0", StringComparison.Ordinal);
+        bool explicitlyDisabled = _shellExplicitlyDisabled || stashShellExplicitlyZero;
+
+        bool shellModeEnabled;
+        if (explicitlyDisabled)
+            shellModeEnabled = false;
+        else if (_shellEnabled)
+            shellModeEnabled = true;
+        else if (rcPath != null)
+            shellModeEnabled = true; // RC file presence → implicit shell activation
+        else
+            shellModeEnabled = false;
 
         // Shell mode is not supported on Windows in v1.
         if (shellModeEnabled && OperatingSystem.IsWindows())
@@ -845,6 +861,12 @@ public class Program
 
             // Extend the multi-line reader to recognise trailing-pipe continuation.
             reader.IsShellIncomplete = line => classifier.IsShellIncomplete(line);
+        }
+
+        // ── Load RC file (§12.2) — before the first REPL prompt ─────────────
+        if (rcPath != null)
+        {
+            RcFileLoader.Load(rcPath, vm, shellModeEnabled);
         }
 
         try
