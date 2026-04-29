@@ -235,7 +235,12 @@ internal sealed class ShellLineClassifier
                 // Rule 3: something that looks like arguments follows.
                 // Declared Stash symbol wins.
                 if (_ctx.Vm.HasReplGlobal(ident))
+                {
+                    // SA0821: warn once per session when the same name is also on PATH.
+                    if (_ctx.PathCache.IsExecutable(ident))
+                        ShellDiagnostics.EmitShadowWarning(ident);
                     return LineMode.Stash;
+                }
 
                 // Shell built-in names (cd, pwd, exit, quit) → Shell for Phase 4.
                 if (_ctx.ShellBuiltinNames.Contains(ident))

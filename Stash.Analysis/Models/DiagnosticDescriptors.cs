@@ -107,6 +107,13 @@ public static class DiagnosticDescriptors
             "Commands",
             "Command argument '{0}' contains an unquoted glob character ('*', '?', '['). It will be expanded to matching filenames at runtime; if the literal pattern is intended, quote it.");
 
+    public static readonly DiagnosticDescriptor SA0821 =
+        new("SA0821",
+            "Bare identifier may shadow PATH executable in shell mode",
+            DiagnosticLevel.Information,
+            "Shell",
+            "Bare identifier '{0}' is resolved as a declared Stash symbol, but an executable with the same name exists on PATH. The PATH executable is shadowed. Use '\\{0}' to force shell execution.");
+
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
     public static readonly DiagnosticDescriptor SA0902 = new("SA0902", "Function body too long", DiagnosticLevel.Information, "Style", "Function '{0}' is {1} lines long, exceeding the threshold of {2}. Consider breaking it into smaller functions.");
@@ -213,6 +220,7 @@ public static class DiagnosticDescriptors
         dict[SA0813.Code] = SA0813;
         dict[SA0814.Code] = SA0814;
         dict[SA0820.Code] = SA0820;
+        dict[SA0821.Code] = SA0821;
         dict[SA0901.Code] = SA0901;
         dict[SA1002.Code] = SA1002;
         dict[SA1102.Code] = SA1102;
