@@ -181,6 +181,9 @@ internal static class RcFileLoader
             if (string.IsNullOrWhiteSpace(logicalLine))
                 continue;
 
+            // ── REPL-only desugarings (§8.2) ─────────────────────────────
+            logicalLine = ReplLinePreprocessor.Apply(logicalLine);
+
             // ── Route and execute ────────────────────────────────────────────
             try
             {

@@ -886,6 +886,9 @@ public class Program
                     continue;
                 }
 
+                // ── REPL-only desugarings (§8.2): apply before classification/evaluation ──
+                line = ReplLinePreprocessor.Apply(line);
+
                 // ── Shell mode routing ────────────────────────────────────
                 if (shellModeEnabled && classifier is not null && shellRunner is not null)
                 {

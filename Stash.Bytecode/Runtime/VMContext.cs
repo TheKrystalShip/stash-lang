@@ -117,6 +117,8 @@ internal sealed class VMContext : IInterpreterContext
         throw new Stash.Runtime.ExitException(code);
     }
 
+    public int GetLastExitCode() => ActiveVM?.LastExitCode ?? 0;
+
     public string ExpandTilde(string path)
     {
         if (path.StartsWith('~'))

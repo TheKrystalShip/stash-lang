@@ -815,6 +815,14 @@ public static class ProcessBuiltIns
             new BuiltInField("command", "string"),
         ]);
 
+        // process.lastExitCode() — Returns the exit code of the most recently executed bare command.
+        ns.Function("lastExitCode", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            return StashValue.FromInt((long)ctx.GetLastExitCode());
+        },
+            returnType: "int",
+            documentation: "Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.\n@return The exit code as an integer");
+
         return ns.Build();
     }
 

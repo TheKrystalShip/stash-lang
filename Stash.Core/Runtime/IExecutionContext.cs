@@ -43,4 +43,10 @@ public interface IExecutionContext : IBuiltInContext
     /// an appropriate exception instead of terminating the host process.
     /// </remarks>
     void EmitExit(int code) { System.Environment.Exit(code); }
+
+    /// <summary>
+    /// Returns the exit code of the most recently executed bare shell command pipeline.
+    /// Defaults to 0 until any command has run.
+    /// </summary>
+    int GetLastExitCode() { return 0; }
 }
