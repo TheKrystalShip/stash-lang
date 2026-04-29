@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Stash.Bytecode;
+using Stash.Cli.Shell;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -42,6 +43,8 @@ public class Program
     private static VirtualMachine? _activeVM;
     private static bool _optimize = true;
     private static bool _disassemble = false;
+    private static bool _shellEnabled = false;
+    private static bool _shellExplicitlyDisabled = false;
     private const string Version = "0.5.0";
     /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
     /// <param name="args">Command-line arguments passed to the program.</param>
@@ -87,6 +90,8 @@ public class Program
         bool strip = false;
         bool verify = false;
         string? outputPath = null;
+        bool shellEnabled = false;
+        bool shellExplicitlyDisabled = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -151,6 +156,14 @@ public class Program
             {
                 disassemble = true;
             }
+            else if (args[i] == "--shell" && commandString is null)
+            {
+                shellEnabled = true;
+            }
+            else if (args[i] == "--no-shell" && commandString is null)
+            {
+                shellExplicitlyDisabled = true;
+            }
             else if (args[i] == "--" && commandString is null)
             {
                 // Everything after -- becomes script args (for stdin piping)
@@ -181,6 +194,16 @@ public class Program
             : Array.Empty<string>();
         _optimize = optimize;
         _disassemble = disassemble;
+
+        // Apply STASH_SHELL env var (can be overridden by --no-shell).
+        if (!shellExplicitlyDisabled &&
+            string.Equals(System.Environment.GetEnvironmentVariable("STASH_SHELL"), "1", StringComparison.Ordinal))
+        {
+            shellEnabled = true;
+        }
+
+        _shellEnabled = shellEnabled;
+        _shellExplicitlyDisabled = shellExplicitlyDisabled;
 
         // Register cleanup handlers for graceful shutdown
         Console.CancelKeyPress += (_, e) =>
@@ -344,6 +367,8 @@ public class Program
         Console.WriteLine("      --verify              Verify bytecode file integrity");
         Console.WriteLine("      --disassemble         Print bytecode disassembly");
         Console.WriteLine("      --no-optimize         Disable bytecode optimizations");
+        Console.WriteLine("      --shell               Enable REPL shell mode (experimental)");
+        Console.WriteLine("      --no-shell            Disable REPL shell mode (overrides STASH_SHELL=1)");
         Console.WriteLine("  -o, --output <path>       Output path for compiled bytecode");
         Console.WriteLine();
         Console.WriteLine("Subcommands:");
@@ -775,6 +800,17 @@ public class Program
     {
         Console.WriteLine($"Stash v{Version} \u2014 Type statements or expressions, or 'exit' to quit.");
 
+        // ── Shell mode setup ─────────────────────────────────────────────────
+        bool shellModeEnabled = _shellEnabled && !_shellExplicitlyDisabled;
+
+        // Shell mode is not supported on Windows in v1.
+        if (shellModeEnabled && OperatingSystem.IsWindows())
+        {
+            Console.Error.WriteLine(
+                "Warning: shell mode not yet supported on Windows; continuing in Stash-only mode.");
+            shellModeEnabled = false;
+        }
+
         var editor = new LineEditor();
         var reader = new MultiLineReader(editor);
 
@@ -785,6 +821,31 @@ public class Program
         vm.ErrorOutput = Console.Error;
         vm.Input = Console.In;
         vm.ModuleLoader = LoadModuleForVM;
+
+        // Build shell context once per REPL session.
+        ShellLineClassifier? classifier = null;
+        ShellRunner? shellRunner = null;
+
+        if (shellModeEnabled)
+        {
+            Console.WriteLine("Shell mode enabled (experimental). Type Stash code or shell commands.");
+
+            var shellCtx = new ShellContext
+            {
+                Vm = vm,
+                PathCache = new PathExecutableCache(),
+                Keywords = ShellContext.BuildKeywordSet(),
+                Namespaces = new System.Collections.Generic.HashSet<string>(
+                    StdlibRegistry.NamespaceNames, StringComparer.Ordinal),
+                ShellBuiltinNames = ShellContext.BuildShellBuiltinSet(),
+            };
+
+            classifier = new ShellLineClassifier(shellCtx);
+            shellRunner = new ShellRunner(shellCtx);
+
+            // Extend the multi-line reader to recognise trailing-pipe continuation.
+            reader.IsShellIncomplete = line => classifier.IsShellIncomplete(line);
+        }
 
         try
         {
@@ -803,7 +864,26 @@ public class Program
                     continue;
                 }
 
-                // --- Stage 1: Lex ---
+                // ── Shell mode routing ────────────────────────────────────
+                if (shellModeEnabled && classifier is not null && shellRunner is not null)
+                {
+                    var mode = classifier.Classify(line);
+                    if (mode == LineMode.Shell)
+                    {
+                        try
+                        {
+                            shellRunner.Run(line);
+                        }
+                        catch (RuntimeError ex)
+                        {
+                            PrintRuntimeError(ex);
+                        }
+                        continue;
+                    }
+                    // Stash / ShellForced / ShellStrict all fall through to Stash path in Phase 4.
+                }
+
+                // ── Stash lex / parse / execute path ─────────────────────
                 var lexer = new Lexer(line, "<stdin>");
                 List<Token> tokens = lexer.ScanTokens();
 

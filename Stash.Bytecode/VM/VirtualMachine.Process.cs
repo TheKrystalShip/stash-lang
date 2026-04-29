@@ -35,6 +35,38 @@ internal enum PipelineOutputMode
 /// </summary>
 public sealed partial class VirtualMachine
 {
+    // ── Public shell-mode entry points (Phase 4) ─────────────────────────────
+
+    /// <summary>
+    /// Run a single command in passthrough mode (terminal I/O inherited).
+    /// Used by <c>ShellRunner</c> for single-stage bare commands.
+    /// </summary>
+    /// <returns>The command's exit code.</returns>
+    public int RunPassthroughCommand(string program, List<string> args, SourceSpan? span = null)
+    {
+        var (_, _, exitCode) = ExecPassthrough(program, args, span, _ct);
+        return exitCode;
+    }
+
+    /// <summary>
+    /// Run an N-stage pipeline in passthrough mode (last stage's stdout/stderr inherit the terminal).
+    /// Used by <c>ShellRunner</c> for multi-stage bare-command pipelines.
+    /// </summary>
+    /// <returns>Exit codes for all stages; index [^1] is the overall (last stage) exit code.</returns>
+    public int[] RunPassthroughPipeline(
+        IReadOnlyList<(string Program, List<string> Args)> stages, SourceSpan? span = null)
+    {
+        var pipeStages = new List<PipeStage>(stages.Count);
+        foreach (var (program, args) in stages)
+            pipeStages.Add(new PipeStage(program, args, 0));
+
+        var (_, _, exitCodes) = ExecPipelineStreaming(
+            pipeStages, span, _ct, PipelineOutputMode.Passthrough);
+        return exitCodes;
+    }
+
+    // ────────────────────────────────────────────────────────────────────────
+
     private static (string Stdout, string Stderr, int ExitCode) ExecCaptured(
         string program, List<string> arguments, string? stdin, SourceSpan? span, CancellationToken ct = default)
     {

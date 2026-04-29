@@ -109,6 +109,18 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     /// <summary>The global variable store. Populate before Execute for built-in namespaces.</summary>
     public Dictionary<string, StashValue> Globals => _globals;
 
+    /// <summary>
+    /// Returns true if the REPL global symbol table contains the given name.
+    /// Used by ShellLineClassifier to determine whether a bare identifier is a declared symbol.
+    /// </summary>
+    public bool HasReplGlobal(string name) => _globals.ContainsKey(name);
+
+    /// <summary>
+    /// Exit code of the last shell-mode passthrough command.
+    /// Updated by ShellRunner after each bare-command execution.
+    /// </summary>
+    public int LastExitCode { get; set; }
+
     /// <summary>Standard output stream for built-in functions. Defaults to Console.Out.</summary>
     public TextWriter Output { get => _context.Output; set => _context.Output = value; }
 

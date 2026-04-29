@@ -13,6 +13,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Stash.Tests" />
     <InternalsVisibleTo Include="StashDap" />
+    <!-- Shell mode (ArgExpander in Stash.Cli) reuses GlobExpander -->
+    <InternalsVisibleTo Include="Stash" />
   </ItemGroup>
 
   <ItemGroup>

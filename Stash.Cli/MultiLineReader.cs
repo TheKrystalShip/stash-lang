@@ -24,6 +24,14 @@ public sealed class MultiLineReader
     private readonly string _continuationPrompt;
 
     /// <summary>
+    /// Optional hook for shell-mode completeness checking.
+    /// When set, a line ending with a bare <c>|</c> is treated as an incomplete
+    /// shell pipeline and more input is requested.
+    /// The delegate receives the entire accumulated logical line so far.
+    /// </summary>
+    public Func<string, bool>? IsShellIncomplete { get; set; }
+
+    /// <summary>
     /// Constructor used in tests: accepts any delegate for reading a physical line.
     /// </summary>
     /// <param name="readLine">Delegate that accepts a prompt string and returns the next line, or null on EOF.</param>
@@ -79,6 +87,20 @@ public sealed class MultiLineReader
                     return accumulator.ToString();
                 }
 
+                accumulator.Append(next);
+                continue;
+            }
+
+            // Shell-mode: trailing pipe means the pipeline continues on the next line.
+            if (IsShellIncomplete?.Invoke(current) == true)
+            {
+                string? next = _readLine(_continuationPrompt);
+                if (next is null)
+                {
+                    return accumulator.ToString();
+                }
+
+                accumulator.Append('\n');
                 accumulator.Append(next);
                 continue;
             }
