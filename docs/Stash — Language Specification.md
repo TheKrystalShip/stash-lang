@@ -5355,6 +5355,34 @@ The bytecode VM compiles the AST to a flat array of opcodes, and a tight `switch
 
 ---
 
+## 15. REPL Shell Mode
+
+> **Primary reference:** [Shell — Interactive Shell Mode](Shell%20—%20Interactive%20Shell%20Mode.md)
+
+Shell mode lets the Stash REPL accept bare command invocations directly at the prompt (e.g. `ls -la`, `git status | head -5`) without requiring the `$(…)` wrapper. It is a **REPL-only** feature — script files (`.stash` files invoked non-interactively) are **untouched** and always parse as Stash.
+
+### 15.1 Activation
+
+Shell mode is opt-in via `--shell` flag, `STASH_SHELL=1` env var, or implicitly when an RC file is present. It can be disabled with `--no-shell`. See [Shell — Interactive Shell Mode §1](Shell%20—%20Interactive%20Shell%20Mode.md#1-overview).
+
+### 15.2 Line Classification
+
+Every REPL line is classified as **Stash mode** or **shell mode** before evaluation. Stash keywords, literals, and delimiters are always Stash. Declared Stash symbols always shadow PATH binaries — use `\cmd` to bypass. See [Shell — Interactive Shell Mode §2](Shell%20—%20Interactive%20Shell%20Mode.md#2-line-classification).
+
+### 15.3 `$?` REPL Preprocessor
+
+Inside the REPL only, `$?` is syntactic sugar for `process.lastExitCode()`. It is desugared by the REPL preprocessor before lexing. `$?` is **not** part of the Stash language and is not valid in `.stash` scripts. See [Shell — Interactive Shell Mode §9](Shell%20—%20Interactive%20Shell%20Mode.md#9--repl-sugar).
+
+### 15.4 `$(…)` Glob Auto-Expansion — Breaking Change
+
+**Before this feature shipped:** `$(…)` command literals passed argument strings literally — no glob expansion. `$(rm *.tmp)` passed the literal string `*.tmp` to `rm`.
+
+**After this feature:** glob auto-expansion applies inside `$(…)` command literals **and** in bare shell-mode commands.
+
+**Migration:** quote the glob to preserve literal behavior: `$(rm "*.tmp")`. The static analyzer rule SA0820 warns on unquoted globs in `$(…)` expressions. See [Shell — Interactive Shell Mode §3.5](Shell%20—%20Interactive%20Shell%20Mode.md#35-glob-expansion----) and [§13.3](Shell%20—%20Interactive%20Shell%20Mode.md#133--glob-auto-expansion--breaking-change).
+
+---
+
 ## Appendix A — Open Questions
 
 - [x] ~~Language name~~ → **Stash**

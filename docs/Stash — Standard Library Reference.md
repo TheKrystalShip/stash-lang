@@ -2141,25 +2141,107 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 | `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)          |
 | `process.waitAll(procs)`         | Wait for all processes in an array to exit                        |
 | `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                  |
-| `process.chdir(path)`            | Change the current working directory                              |
+| `process.chdir(path)`            | Change the current working directory; pushes onto the directory stack |
 | `process.withDir(path, fn)`      | Run a function with a temporary working directory change          |
+| `process.popDir()`               | Pop the directory stack; restores previous cwd; returns popped path |
+| `process.dirStack()`             | Return a copy of the directory stack, oldest entry first          |
+| `process.dirStackDepth()`        | Return the number of entries in the directory stack               |
+| `process.exit(code?)`            | Terminate with exit code; defer-aware, catch-immune               |
+| `process.lastExitCode()`         | Return the exit code of the most recent `$(…)` or bare command    |
 
 ### `process.chdir(path)`
 
-Changes the current working directory of the process. Accepts absolute or relative paths. Throws a runtime error if the directory does not exist.
+Changes the current working directory of the process. Accepts absolute or relative paths. In the REPL, pushes the new path onto the **directory stack** (see `process.dirStack`). The change is atomic — if the target is missing, unreadable, or not a directory, `CommandError("no such directory: <path>")` is thrown and the stack is unchanged.
 
 ```stash
 // Save and restore working directory
 let original = env.cwd();
 process.chdir("/tmp");
 io.println(env.cwd());     // "/tmp"
-process.chdir(original);   // restore
+process.chdir(original);   // restore (also pushes onto dir stack in REPL)
 
 // Change to a subdirectory for a build step
 let cwd = env.cwd();
 process.chdir("src/frontend");
 let result = $(npm run build);
 process.chdir(cwd);
+```
+
+### `process.popDir()`
+
+Pops the top entry from the directory stack, restores the new top as the current working directory, and returns the popped path as a string.
+
+Throws `CommandError("directory stack is at root")` if the stack has only one entry (the stack minimum depth is 1 — it can never be fully emptied).
+
+In shell mode, `cd -` desugars to `process.popDir()` followed by printing the new cwd.
+
+```stash
+process.chdir("/tmp");         // stack: [..., "/home/alice", "/tmp"]
+process.chdir("/var/log");     // stack: [..., "/home/alice", "/tmp", "/var/log"]
+let prev = process.popDir();   // stack: [..., "/home/alice", "/tmp"]; returns "/var/log"
+io.println(process.cwd());     // "/tmp"
+io.println(prev);              // "/var/log"
+```
+
+### `process.dirStack()`
+
+Returns a copy of the directory stack as an `array<string>`, **oldest entry first** (index 0 is the initial cwd at interpreter startup, last index is the current cwd).
+
+```stash
+process.chdir("/tmp");
+process.chdir("/var/log");
+io.println(process.dirStack());      // ["/home/alice", "/tmp", "/var/log"]
+io.println(process.dirStackDepth()); // 3
+```
+
+The stack is capped at **256 entries**. When a push would exceed the cap, the oldest entry (index 0) is dropped.
+
+### `process.dirStackDepth()`
+
+Returns the number of entries in the directory stack as an `int`. Equivalent to `process.dirStack().length` but avoids allocating the array.
+
+```stash
+io.println(process.dirStackDepth()); // 1 at startup; increases with each chdir
+```
+
+### `process.exit(code: int = 0)`
+
+Terminates the interpreter with the given exit code. Defaults to `0` when called with no argument.
+
+**Defer-aware:** all pending `defer` blocks are executed in reverse declaration order, walking up the call stack, before the process exits. This guarantees resource cleanup.
+
+**Catch-immune:** no `try/catch` clause can intercept `process.exit`. The exit propagates through every `try` block, running their `defer` blocks, and terminates at the interpreter's top level.
+
+```stash
+fn run() {
+    defer io.println("cleanup");  // always runs
+    process.exit(1);              // defer executes, then exits with code 1
+}
+run();
+```
+
+```stash
+try {
+    process.exit(0);             // catch does NOT fire
+} catch (e) {
+    io.println("never reached"); // never executed
+}
+```
+
+In the REPL, `exit` and `quit` desugar to `process.exit(code)` — see [Shell — Interactive Shell Mode](Shell%20—%20Interactive%20Shell%20Mode.md).
+
+### `process.lastExitCode()`
+
+Returns the exit code of the most recently executed `$(…)` command or shell-mode bare command, as an `int`. Returns `0` before any command has been executed in the session.
+
+In the REPL, `$?` is syntactic sugar for `process.lastExitCode()`. In scripts, call the function directly.
+
+```stash
+let r = $(ls /nonexistent);
+io.println(process.lastExitCode()); // 2 (ls exit code for "no such file")
+
+let ok = $(git status);
+io.println(process.lastExitCode()); // 0
 ```
 
 ### `process.withDir(path, fn)`

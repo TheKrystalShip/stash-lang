@@ -83,6 +83,7 @@ Detailed docs live in `docs/` — link to these instead of duplicating content:
 | All namespaces + functions    | `docs/Stash — Standard Library Reference.md` |
 | LSP features & architecture   | `docs/LSP — Language Server Protocol.md`     |
 | DAP features & architecture   | `docs/DAP — Debug Adapter Protocol.md`       |
+| REPL shell mode               | `docs/Shell — Interactive Shell Mode.md`     |
 | TAP test framework            | `docs/TAP — Testing Infrastructure.md`       |
 | Templating engine             | `docs/TPL — Templating Engine.md`            |
 | Package manager CLI           | `docs/PKG — Package Manager CLI.md`          |

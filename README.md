@@ -26,6 +26,7 @@ A dynamically typed scripting language for system administration. Stash combines
 ## Why Stash?
 
 - **Shell commands are first-class.** `$(ls -la)` just works — no subprocess imports, no string wrangling. Pipe chains short-circuit on failure.
+- **Interactive shell mode.** `stash --shell` turns the REPL into a daily shell: type bare commands (`ls -la`, `git status | head -5`), brace-expand paths (`mkdir -p src/{lib,bin,tests}`), use `${expr}` interpolation, and stream pipelines at OS level. RC file, `$?` sugar, directory stack, and `cd`/`pwd`/`exit` built-ins all included. POSIX-only in v1.
 - **Real data structures.** Structs, enums, interfaces, and dictionaries — model your domain instead of juggling parallel arrays and magic strings.
 - **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read and write Stash immediately.
 - **Register-based bytecode VM.** Constant folding, dead branch elimination, peephole optimization, inline caching, and integer-specialized loop opcodes. No tree-walking overhead.

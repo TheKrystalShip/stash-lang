@@ -10,9 +10,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Shell mode cross-platform polish (§14)** — Shell mode is fully supported on Linux and macOS (v1). Windows is gate-blocked with the message `"shell mode not yet supported on Windows"` and falls back to Stash-only mode transparently. Windows-aware code paths are in place for a mechanical re-enable: PATHEXT extension-stripped name lookup, `C:\`-style drive-path classifier, `OrdinalIgnoreCase` PATH cache, `%USERPROFILE%` tilde expansion, and `cd` (no-args) home-dir sugar all have Windows branches.
 
-### Added
+#### Shell Mode — Interactive REPL Shell
+
+Stash can now be used as an interactive login shell. Enable with `--shell`, `STASH_SHELL=1`, or by placing a `~/.stashrc` (or `~/.config/stash/init.stash`) file. Full documentation: [docs/Shell — Interactive Shell Mode.md](docs/Shell%20—%20Interactive%20Shell%20Mode.md).
+
+- **Bare command execution** — type commands directly at the REPL prompt without `$(…)`:
+  ```text
+  $ ls -la
+  $ git status | head -5
+  $ ./deploy.sh --env prod
+  ```
+- **Line classifier** (`ShellLineClassifier`) — distinguishes Stash code from shell commands by inspecting the first token. Stash keywords, literals, and declared symbols always parse as Stash; PATH-resolvable identifiers route to the shell runner.
+- **`\cmd` — force shell execution** — bypasses Stash symbol lookup to invoke the PATH binary directly (e.g. `\ls` when `ls` is a declared Stash variable).
+- **`!cmd` — strict mode** — raises `CommandError` on non-zero exit; mirrors existing `$!(…)` semantics. `!\cmd` combines both.
+- **Brace expansion** — `{a,b,c}` patterns expand to multiple words; cross-product when multiple brace groups appear: `{a,b}-{1,2}` → `a-1 a-2 b-1 b-2`.
+- **`${expr}` interpolation** — evaluates any Stash expression in the REPL scope before passing arguments to the command. Bare `$VAR` is not supported; use `${env.get("VAR")}`.
+- **Tilde expansion** — leading `~` and `~/` expand to the home directory.
+- **Glob expansion** — `*`, `?`, `[…]`, `**` are expanded against the filesystem. No-match throws `CommandError` (zsh-style safe default).
+- **OS-level streaming pipelines** — `cmd1 | cmd2 | cmd3` uses true OS pipes; stages run concurrently. Downstream early-close (e.g. `head -5`) triggers graceful upstream shutdown.
+- **Redirects** — `>`, `>>`, `2>`, `2>>`, `&>`, `&>>` on the last pipeline stage.
+- **Multi-line pipelines** — a trailing `|` continues the pipeline on the next line with a `... ` prompt.
+- **Shell built-in sugar** — `cd`, `pwd`, `exit`, `quit` desugar to `process.*` stdlib calls, so all Stash error handling, stack traces, and `defer` blocks work normally:
+  - `cd <dir>` → `process.chdir(<dir>)`
+  - `cd` → home directory
+  - `cd -` → `process.popDir()` + print new cwd
+  - `pwd` → `io.println(process.cwd())`
+  - `exit [code]` / `quit [code]` → `process.exit(code)`
+- **`$?` REPL sugar** — the token `$?` is desugared to `process.lastExitCode()` before lexing. REPL-only; not valid in scripts.
+- **RC file** — `$XDG_CONFIG_HOME/stash/init.stash` → `~/.config/stash/init.stash` → `~/.stashrc` (first match). Lines are processed through the REPL evaluator (including the classifier). RC file presence implicitly enables shell mode.
+- **Directory stack** — `process.chdir` now maintains a directory stack (capped at 256 entries):
+  - `process.popDir() -> string` — pop + restore previous cwd
+  - `process.dirStack() -> array<string>` — oldest entry first
+  - `process.dirStackDepth() -> int` — stack depth
+- **`process.exit(code: int = 0)`** — defer-aware (runs all `defer` blocks on exit), catch-immune (no `try/catch` can intercept it).
+- **`process.lastExitCode() -> int`** — exit code of the most recent `$(…)` or bare command.
+- **Cross-platform polish** — Windows is gate-blocked (`"shell mode not yet supported on Windows"`) with Windows-aware code paths ready for future re-enable: PATHEXT lookup, drive-path classifier, `OrdinalIgnoreCase` PATH cache, `%USERPROFILE%` tilde expansion.
+
+### Changed
+
+- **`$(…)` glob auto-expansion** (**BREAKING**) — Glob patterns (`*`, `?`, `[…]`, `**`) inside `$(…)` command literals are now **expanded against the filesystem** before being passed to the command. Previously, patterns were passed literally.
+
+  **Impact:** any script that relied on passing an unquoted glob literally (e.g. `$(rm *.tmp)`, `$(find . -name *.log)`) will now have the glob expanded. If no files match, `CommandError` is thrown.
+
+  **Migration — quote the glob pattern:**
+  ```stash
+  // Before (was literal, now globs):
+  let result = $(find . -name *.log);
+
+  // After (quote to preserve literal behavior):
+  let result = $(find . -name "*.log");
+  ```
+
+  The static analyzer rule SA0820 flags all unquoted globs in `$(…)` to help locate affected code.
+
+### Static Analysis
+
+- **SA0820** (Warning) — Unquoted glob pattern in `$(…)` command literal. Warns when `$(…)` content contains an unquoted `*`, `?`, or `[`. Suppress with `// stash:ignore[SA0820]` when glob expansion is intentional.
+- **SA0821** (Info) — Bare identifier may shadow PATH executable in shell mode. Emitted by the REPL classifier when a declared Stash symbol also resolves on PATH. Not emitted for scripts.
+
 - **`archive` namespace** — ZIP, TAR, and GZIP support for sysadmin scripts
   - `archive.zip` / `archive.unzip` — Create and extract ZIP archives
   - `archive.tar` / `archive.untar` — Create and extract TAR archives (with optional gzip)
