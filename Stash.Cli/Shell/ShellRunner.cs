@@ -4,6 +4,10 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using Stash.Bytecode;
+using Stash.Lexing;
+using Stash.Parsing;
+using Stash.Parsing.AST;
+using Stash.Resolution;
 using Stash.Runtime;
 
 namespace Stash.Cli.Shell;
@@ -39,6 +43,21 @@ internal sealed class ShellRunner
     public void Run(string line)
     {
         ShellCommandLine ast = ShellLineLexer.Parse(line);
+
+        // ── Phase 7: §11.2 shell built-in desugaring ─────────────────────────
+        if (ast.Stages.Count == 1
+            && ast.Redirects.Count == 0
+            && ShellSugarDesugarer.IsSugarName(ast.Stages[0].Program))
+        {
+            List<string> expandedArgs = ArgExpander.Expand(ast.Stages[0].RawArgs, _ctx.Vm, span: null);
+            string? sugarSource = ShellSugarDesugarer.TryDesugar(ast, expandedArgs);
+            if (sugarSource is not null)
+            {
+                EvaluateSource(sugarSource, _ctx.Vm);
+                _ctx.Vm.LastExitCode = 0;
+                return;
+            }
+        }
 
         int[] exitCodes;
 
@@ -223,6 +242,36 @@ internal sealed class ShellRunner
     }
 
     // ── Spawn-failure detection and wrapping ─────────────────────────────────
+
+    // ── Shell sugar evaluation ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Compiles and executes a Stash source snippet against the given VM, preserving REPL
+    /// globals. Uses the statement-mode pipeline (lex → parse → resolve → compile → ExecuteRepl).
+    /// Any <see cref="RuntimeError"/> or <see cref="ExitException"/> propagates to the caller.
+    /// </summary>
+    internal static void EvaluateSource(string source, VirtualMachine vm)
+    {
+        var lexer = new Lexer(source, "<shell>");
+        List<Token> tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+            throw new RuntimeError(
+                $"shell sugar: lex error: {lexer.Errors[0]}",
+                null, StashErrorTypes.CommandError);
+
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
+            throw new RuntimeError(
+                $"shell sugar: parse error: {parser.Errors[0]}",
+                null, StashErrorTypes.CommandError);
+
+        SemanticResolver.Resolve(statements);
+        Chunk chunk = Compiler.Compile(statements);
+        vm.ExecuteRepl(chunk);
+    }
 
     private static bool IsSpawnFailure(RuntimeError ex)
     {
