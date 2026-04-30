@@ -138,7 +138,7 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
         Assert.Equal(true, result);
     }
 
-    // ── process.chdir / process.withDir ──────────────────────────────────────
+    // ── env.chdir / env.withDir ──────────────────────────────────────────────
 
     [Fact]
     public void Chdir_ValidDirectory_ChangesCurrentDir()
@@ -146,7 +146,7 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
         var orig = Environment.CurrentDirectory;
         try
         {
-            var result = Run($"process.chdir(\"{TestDir}\"); let result = env.cwd();");
+            var result = Run($"env.chdir(\"{TestDir}\"); let result = env.cwd();");
             Assert.Equal(TestDir, result);
         }
         finally
@@ -158,13 +158,13 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Chdir_NonexistentDir_ThrowsError()
     {
-        RunExpectingError($"process.chdir(\"{Path.Combine(TestDir, "no_such_dir")}\");");
+        RunExpectingError($"env.chdir(\"{Path.Combine(TestDir, "no_such_dir")}\");");
     }
 
     [Fact]
     public void WithDir_ExecutesInGivenDir()
     {
-        var result = Run($"let result = process.withDir(\"{TestDir}\", () => env.cwd());");
+        var result = Run($"let result = env.withDir(\"{TestDir}\", () => env.cwd());");
         Assert.Equal(TestDir, result);
     }
 
@@ -174,7 +174,7 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
         var orig = Environment.CurrentDirectory;
         var result = Run(
             $"let before = env.cwd();" +
-            $"process.withDir(\"{TestDir}\", () => null);" +
+            $"env.withDir(\"{TestDir}\", () => null);" +
             $"let result = env.cwd();");
         Assert.Equal(orig, result);
     }
@@ -249,12 +249,30 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void SignalConstant_SIGTERM_Is15()
     {
-        var result = Run("let result = process.SIGTERM;");
-        Assert.Equal(15L, result);
+        // Signal.Term is a Signal enum member — verify it's accessible and is-typed correctly.
+        var result = Run("let result = Signal.Term is Signal;");
+        Assert.Equal(true, result);
     }
 
     [Fact]
     public void SignalConstant_SIGKILL_Is9()
+    {
+        // Signal.Kill is a distinct Signal enum member from Signal.Term.
+        var result = Run("let result = Signal.Kill != Signal.Term;");
+        Assert.Equal(true, result);
+    }
+
+    // Regression: deprecated process.SIGTERM alias still works until N+2.
+    [Fact]
+    public void SignalConstant_ProcessSIGTERM_DeprecatedAlias_StillWorks()
+    {
+        var result = Run("let result = process.SIGTERM;");
+        Assert.Equal(15L, result);
+    }
+
+    // Regression: deprecated process.SIGKILL alias still works until N+2.
+    [Fact]
+    public void SignalConstant_ProcessSIGKILL_DeprecatedAlias_StillWorks()
     {
         var result = Run("let result = process.SIGKILL;");
         Assert.Equal(9L, result);

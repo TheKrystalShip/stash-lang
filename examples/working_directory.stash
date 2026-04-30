@@ -5,8 +5,8 @@
 // ─────────────────────────────────────────────────────────────────
 // Stash provides two ways to change the working directory:
 //
-//   process.chdir(path)       — Imperative: changes directory until you change it back
-//   process.withDir(path, fn) — Scoped: changes directory for a block, then auto-restores
+//   env.chdir(path)       — Imperative: changes directory until you change it back
+//   env.withDir(path, fn) — Scoped: changes directory for a block, then auto-restores
 //
 // This script demonstrates when and how to use each one.
 // ─────────────────────────────────────────────────────────────────
@@ -24,25 +24,25 @@ io.println("Starting in:    " + env.cwd());
 io.println();
 
 // ─────────────────────────────────────────────────────────────────
-// 1. process.chdir — Imperative Directory Changes
+// 1. env.chdir — Imperative Directory Changes
 // ─────────────────────────────────────────────────────────────────
-// Use process.chdir when:
+// Use env.chdir when:
 //   - You need early return, break, or continue from the enclosing scope
 //   - You need variables declared inside the block visible outside
 //   - You're changing directory for the rest of the script
 // ─────────────────────────────────────────────────────────────────
 
-io.println("═══ process.chdir ═══");
+io.println("═══ env.chdir ═══");
 
 // Basic usage: change and restore manually
 
 let original = env.cwd();
-process.chdir(demoDir);
+env.chdir(demoDir);
 io.println("Changed to: " + env.cwd());
 
 let config = fs.readFile("config.txt");
 io.println("Read config: " + config);
-process.chdir(original);
+env.chdir(original);
 io.println("Restored to: " + env.cwd());
 io.println();
 
@@ -50,15 +50,15 @@ io.println();
 
 fn findVersion(dir: string) -> string {
   let cwd = env.cwd();
-  process.chdir(dir);
+  env.chdir(dir);
 
   // With chdir, 'return' exits the function — not just a block
   if (!fs.exists("version.txt")) {
-    process.chdir(cwd);
+    env.chdir(cwd);
     return "unknown";
   }
   let version = str.trim(fs.readFile("version.txt"));
-  process.chdir(cwd);
+  env.chdir(cwd);
   return version;
 }
 
@@ -67,19 +67,19 @@ io.println("Found version: " + version);
 io.println();
 
 // ─────────────────────────────────────────────────────────────────
-// 2. process.withDir — Scoped Directory Changes
+// 2. env.withDir — Scoped Directory Changes
 // ─────────────────────────────────────────────────────────────────
-// Use process.withDir when:
+// Use env.withDir when:
 //   - You want automatic cleanup (no manual restore needed)
 //   - The operation is self-contained (no cross-boundary control flow)
 //   - You want exception-safe directory restoration
 // ─────────────────────────────────────────────────────────────────
 
-io.println("═══ process.withDir ═══");
+io.println("═══ env.withDir ═══");
 
 // Basic usage: no manual restore needed
 
-process.withDir(demoDir, () => {
+env.withDir(demoDir, () => {
   io.println("Inside withDir: " + env.cwd());
   let content = fs.readFile("config.txt");
   io.println("Read config: " + content);
@@ -89,7 +89,7 @@ io.println();
 
 // Capture return values
 
-let ver = process.withDir(subDir, () => {
+let ver = env.withDir(subDir, () => {
   return str.trim(fs.readFile("version.txt"));
 });
 io.println("Version (via withDir): " + ver);
@@ -97,16 +97,16 @@ io.println();
 
 // Expression-body lambda for one-liners
 
-let cfg = process.withDir(demoDir, () => fs.readFile("config.txt"));
+let cfg = env.withDir(demoDir, () => fs.readFile("config.txt"));
 io.println("Config (one-liner): " + cfg);
 io.println();
 
 // Nesting: each level auto-restores
 
 io.println("Before nesting: " + env.cwd());
-process.withDir(demoDir, () => {
+env.withDir(demoDir, () => {
   io.println("  Level 1: " + env.cwd());
-  process.withDir(subDir, () => {
+  env.withDir(subDir, () => {
     io.println("  Level 2: " + env.cwd());
   });
   io.println("  Back to level 1: " + env.cwd());
@@ -120,7 +120,7 @@ io.println();
 
 io.println("Before error test: " + env.cwd());
 
-let errorResult = try process.withDir(demoDir, () => {
+let errorResult = try env.withDir(demoDir, () => {
   io.println("  Inside (will error): " + env.cwd());
   return fs.readFile("nonexistent_file_xyz.txt");
 });
@@ -134,12 +134,12 @@ io.println();
 
 io.println("═══ Choosing the Right Tool ═══");
 io.println();
-io.println("Use process.chdir() when:");
+io.println("Use env.chdir() when:");
 io.println("  - You need return/break/continue to affect the outer scope");
 io.println("  - Variables declared inside must be visible outside");
 io.println("  - You're changing directory for the rest of the script");
 io.println();
-io.println("Use process.withDir() when:");
+io.println("Use env.withDir() when:");
 io.println("  - The operation is self-contained");
 io.println("  - You want guaranteed cleanup (exception-safe)");
 io.println("  - You want cleaner, more readable code");

@@ -6,7 +6,8 @@ public record NamespaceConstant(
     string Name,
     string Type,
     string Value,
-    string? Documentation = null)
+    string? Documentation = null,
+    DeprecationInfo? Deprecation = null)
 {
     public string QualifiedName => $"{Namespace}.{Name}";
     public string Detail => $"const {Namespace}.{Name}: {Type} = {Value}";

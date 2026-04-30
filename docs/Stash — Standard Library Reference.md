@@ -37,20 +37,21 @@
 21. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
 22. [`http` — HTTP Requests](#http--http-requests)
 23. [`process` — Process Management](#process--process-management)
-24. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
-25. [`complete` — Tab Completion](#complete--tab-completion)
-26. [`tpl` — Templating](#tpl--templating)
-27. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-28. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-29. [`term` — Terminal Formatting](#term--terminal-formatting)
-30. [`sys` — System Information](#sys--system-information)
-31. [`task` — Parallel Tasks](#task--parallel-tasks)
-32. [`net` — Networking](#net--networking)
-33. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-34. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-35. [Argument Parsing](#argument-parsing)
-36. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-37. [`log` — Structured Logging](#log--structured-logging)
+24. [`shell` — Shell Mode State](#shell--shell-mode-state)
+25. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
+26. [`complete` — Tab Completion](#complete--tab-completion)
+27. [`tpl` — Templating](#tpl--templating)
+28. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+29. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+30. [`term` — Terminal Formatting](#term--terminal-formatting)
+31. [`sys` — System Information](#sys--system-information)
+32. [`task` — Parallel Tasks](#task--parallel-tasks)
+33. [`net` — Networking](#net--networking)
+34. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+35. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+36. [Argument Parsing](#argument-parsing)
+37. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+38. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -207,20 +208,26 @@ conv.toHex(255, 8);         // "000000ff"
 
 > **Throws:** `TypeError` when a non-string value is passed as a variable name or value.
 
-| Function                  | Description                                                           |
-| ------------------------- | --------------------------------------------------------------------- |
-| `env.get(name, default?)` | Read environment variable. Returns `default` (or `null`) if unset     |
-| `env.set(name, value)`    | Set environment variable                                              |
-| `env.has(name)`           | Check if an environment variable exists                               |
-| `env.all()`               | Return all environment variables as a dictionary                      |
-| `env.withPrefix(prefix)`  | Return all environment variables starting with prefix as a dictionary |
-| `env.remove(name)`        | Delete an environment variable                                        |
-| `env.cwd()`               | Return the current working directory                                  |
-| `env.home()`              | Return the user's home directory path                                 |
-| `env.hostname()`          | Return the machine hostname                                           |
-| `env.user()`              | Return the current username                                           |
-| `env.os()`                | Return the OS name (`"linux"`, `"macos"`, `"windows"`)                |
-| `env.arch()`              | Return the CPU architecture (`"x64"`, `"arm64"`, etc.)                |
+| Function                          | Description                                                           |
+| --------------------------------- | --------------------------------------------------------------------- |
+| `env.get(name, default?)`         | Read environment variable. Returns `default` (or `null`) if unset     |
+| `env.set(name, value)`            | Set environment variable                                              |
+| `env.has(name)`                   | Check if an environment variable exists                               |
+| `env.all()`                       | Return all environment variables as a dictionary                      |
+| `env.withPrefix(prefix)`          | Return all environment variables starting with prefix as a dictionary |
+| `env.remove(name)`                | Delete an environment variable                                        |
+| `env.cwd()`                       | Return the current working directory                                  |
+| `env.home()`                      | Return the user's home directory path                                 |
+| `env.hostname()`                  | Return the machine hostname                                           |
+| `env.user()`                      | Return the current username                                           |
+| `env.os()`                        | Return the OS name (`"linux"`, `"macos"`, `"windows"`)                |
+| `env.arch()`                      | Return the CPU architecture (`"x64"`, `"arm64"`, etc.)                |
+| `env.chdir(path)`                 | Change the current working directory; pushes onto the directory stack |
+| `env.popDir()`                    | Pop the directory stack; restores previous cwd; returns popped path   |
+| `env.dirStack()`                  | Return a copy of the directory stack, oldest entry first              |
+| `env.dirStackDepth()`             | Return the number of entries in the directory stack                   |
+| `env.withDir(path, fn)`           | Run a function with a temporary working directory change              |
+| `env.exit(code?)`                 | Terminate with exit code; defer-aware, catch-immune                   |
 
 ### `env.withPrefix(prefix)`
 
@@ -273,6 +280,131 @@ Combine with `env.withPrefix` to load and retrieve namespaced configuration:
 env.loadFile(".env", "MYAPP_");
 let config = env.withPrefix("MYAPP_");
 ```
+
+### `env.chdir(path)`
+
+Changes the current working directory. Accepts absolute or relative paths. In the REPL, pushes the new path onto the **directory stack** (see `env.dirStack`). The change is atomic — if the target is missing, unreadable, or not a directory, `CommandError("no such directory: <path>")` is thrown and the stack is unchanged.
+
+```stash
+// Save and restore working directory
+let original = env.cwd();
+env.chdir("/tmp");
+io.println(env.cwd());     // "/tmp"
+env.chdir(original);       // restore
+
+// Change to a subdirectory for a build step
+let cwd = env.cwd();
+env.chdir("src/frontend");
+let result = $(npm run build);
+env.chdir(cwd);
+```
+
+> **Note:** `process.chdir` is a deprecated alias for `env.chdir` and emits diagnostic SA0830.
+
+### `env.popDir()`
+
+Pops the top entry from the directory stack, restores the new top as the current working directory, and returns the popped path as a string.
+
+Throws `CommandError("directory stack is at root")` if the stack has only one entry (the stack minimum depth is 1 — it can never be fully emptied).
+
+In shell mode, `cd -` desugars to `env.popDir()` followed by printing the new cwd.
+
+```stash
+env.chdir("/tmp");         // stack: [..., "/home/alice", "/tmp"]
+env.chdir("/var/log");     // stack: [..., "/home/alice", "/tmp", "/var/log"]
+let prev = env.popDir();   // stack: [..., "/home/alice", "/tmp"]; returns "/var/log"
+io.println(env.cwd());     // "/tmp"
+io.println(prev);          // "/var/log"
+```
+
+> **Note:** `process.popDir` is a deprecated alias and emits diagnostic SA0830.
+
+### `env.dirStack()`
+
+Returns a copy of the directory stack as an `array<string>`, **oldest entry first** (index 0 is the initial cwd at interpreter startup, last index is the current cwd).
+
+```stash
+env.chdir("/tmp");
+env.chdir("/var/log");
+io.println(env.dirStack());      // ["/home/alice", "/tmp", "/var/log"]
+io.println(env.dirStackDepth()); // 3
+```
+
+The stack is capped at **256 entries**. When a push would exceed the cap, the oldest entry (index 0) is dropped.
+
+> **Note:** `process.dirStack` is a deprecated alias and emits diagnostic SA0830.
+
+### `env.dirStackDepth()`
+
+Returns the number of entries in the directory stack as an `int`. Equivalent to `env.dirStack().length` but avoids allocating the array.
+
+```stash
+io.println(env.dirStackDepth()); // 1 at startup; increases with each chdir
+```
+
+> **Note:** `process.dirStackDepth` is a deprecated alias and emits diagnostic SA0830.
+
+### `env.withDir(path, fn)`
+
+Runs a function with the working directory temporarily changed to the given path. The original directory is automatically restored when the function returns — even if it throws an error. Returns whatever the callback returns.
+
+This is the recommended approach for short, self-contained directory changes. For cases where you need `return`, `break`, or `continue` to affect the enclosing function or loop, use `env.chdir()` instead.
+
+```stash
+// Run a build in a subdirectory — directory is restored automatically
+env.withDir("src/frontend", () => {
+    $(npm install);
+    $(npm run build);
+});
+
+// Capture a return value from the block
+let files = env.withDir("/var/log", () => {
+    return fs.glob("*.log");
+});
+
+// Nesting works naturally
+env.withDir("services/api", () => {
+    $(docker compose build);
+    env.withDir("migrations", () => {
+        $(./run_migrations.sh);
+    });
+    // back to services/api
+});
+// back to original directory
+
+// Expression-body lambda for one-liners
+let config = env.withDir("config", () => fs.readFile("app.json"));
+```
+
+> **Note:** `process.withDir` is a deprecated alias and emits diagnostic SA0830.
+
+### `env.exit(code: int = 0)`
+
+Terminates the interpreter with the given exit code. Defaults to `0` when called with no argument. The global `exit()` function is an alias for `env.exit()`.
+
+**Defer-aware:** all pending `defer` blocks are executed in reverse declaration order, walking up the call stack, before the process exits. This guarantees resource cleanup.
+
+**Catch-immune:** no `try/catch` clause can intercept `env.exit`. The exit propagates through every `try` block, running their `defer` blocks, and terminates at the interpreter's top level.
+
+```stash
+fn run() {
+    defer io.println("cleanup");  // always runs
+    env.exit(1);                  // defer executes, then exits with code 1
+}
+run();
+```
+
+```stash
+try {
+    env.exit(0);             // catch does NOT fire
+} catch (e) {
+    io.println("never reached"); // never executed
+}
+```
+
+In the REPL, `exit` and `quit` desugar to `env.exit(code)` — see [Shell — Interactive Shell Mode](Shell%20—%20Interactive%20Shell%20Mode.md).
+
+> **Note:** `process.exit` is a deprecated alias and emits diagnostic SA0830.
 
 ---
 
@@ -2025,7 +2157,7 @@ io.println(jsonStr);
 let cfg = try config.read("/etc/myservice/config.ini");
 if (cfg == null) {
     io.println("Error: " + lastError());
-    process.exit(1);
+    env.exit(1);
 }
 
 // Access nested config values with dot notation
@@ -2117,6 +2249,8 @@ http.download("https://example.com/large-file.tar.gz", "/tmp/download.tar.gz", {
 
 Stash provides built-in process management through the `process` namespace, enabling scripts to spawn background processes, track their lifecycle, communicate with them, and control their termination. This goes beyond the synchronous `$(...)` command execution to support long-running services, parallel workloads, and process orchestration.
 
+> **Deprecation notice:** `process.chdir`, `process.popDir`, `process.dirStack`, `process.dirStackDepth`, `process.withDir`, and `process.exit` have moved to the `env` namespace. The deprecated names still work but emit diagnostic SA0830 and will be removed in a future minor release. `process.lastExitCode` has moved to the `shell` namespace.
+
 ### Philosophy
 
 Synchronous command execution via `$(...)` is the right default — run a command, get the result. But scripting often requires launching a process that runs alongside the script: a development server, a file watcher, a background worker. The `process` namespace provides **explicit, tracked** background process management. Every spawned process is tracked by default and cleaned up on script exit unless explicitly detached.
@@ -2125,7 +2259,6 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 
 | Function                         | Description                                                           |
 | -------------------------------- | --------------------------------------------------------------------- |
-| `process.exit(code)`             | Terminate the script with exit code                                   |
 | `process.spawn(cmd)`             | Launch a background process, returns a `Process` handle               |
 | `process.wait(proc)`             | Block until a process exits, returns `CommandResult`                  |
 | `process.waitTimeout(proc, ms)`  | Wait with timeout; returns `CommandResult` or `null` if timed out     |
@@ -2143,111 +2276,33 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 | `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)              |
 | `process.waitAll(procs)`         | Wait for all processes in an array to exit                            |
 | `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                      |
-| `process.chdir(path)`            | Change the current working directory; pushes onto the directory stack |
-| `process.withDir(path, fn)`      | Run a function with a temporary working directory change              |
-| `process.popDir()`               | Pop the directory stack; restores previous cwd; returns popped path   |
-| `process.dirStack()`             | Return a copy of the directory stack, oldest entry first              |
-| `process.dirStackDepth()`        | Return the number of entries in the directory stack                   |
-| `process.exit(code?)`            | Terminate with exit code; defer-aware, catch-immune                   |
-| `process.lastExitCode()`         | Return the exit code of the most recent `$(…)` or bare command        |
 | `process.historyList()`          | Return the in-memory REPL history as an `array<string>`               |
 | `process.historyClear()`         | Clear the in-memory history and truncate the history file             |
 | `process.historyAdd(line)`       | Append a line to the in-memory history (and persist to file)          |
 
-### `process.chdir(path)`
+### `process.chdir(path)` *(deprecated — use `env.chdir`)*
 
-Changes the current working directory of the process. Accepts absolute or relative paths. In the REPL, pushes the new path onto the **directory stack** (see `process.dirStack`). The change is atomic — if the target is missing, unreadable, or not a directory, `CommandError("no such directory: <path>")` is thrown and the stack is unchanged.
+> **Deprecated (SA0830):** Use [`env.chdir`](#envchidirpath) instead. This alias still works but will be removed in a future minor release.
 
-```stash
-// Save and restore working directory
-let original = env.cwd();
-process.chdir("/tmp");
-io.println(env.cwd());     // "/tmp"
-process.chdir(original);   // restore (also pushes onto dir stack in REPL)
+### `process.popDir()` *(deprecated — use `env.popDir`)*
 
-// Change to a subdirectory for a build step
-let cwd = env.cwd();
-process.chdir("src/frontend");
-let result = $(npm run build);
-process.chdir(cwd);
-```
+> **Deprecated (SA0830):** Use [`env.popDir`](#envpopdir) instead. This alias still works but will be removed in a future minor release.
 
-### `process.popDir()`
+### `process.dirStack()` *(deprecated — use `env.dirStack`)*
 
-Pops the top entry from the directory stack, restores the new top as the current working directory, and returns the popped path as a string.
+> **Deprecated (SA0830):** Use [`env.dirStack`](#envdirstack) instead. This alias still works but will be removed in a future minor release.
 
-Throws `CommandError("directory stack is at root")` if the stack has only one entry (the stack minimum depth is 1 — it can never be fully emptied).
+### `process.dirStackDepth()` *(deprecated — use `env.dirStackDepth`)*
 
-In shell mode, `cd -` desugars to `process.popDir()` followed by printing the new cwd.
+> **Deprecated (SA0830):** Use [`env.dirStackDepth`](#envdirstackdepth) instead. This alias still works but will be removed in a future minor release.
 
-```stash
-process.chdir("/tmp");         // stack: [..., "/home/alice", "/tmp"]
-process.chdir("/var/log");     // stack: [..., "/home/alice", "/tmp", "/var/log"]
-let prev = process.popDir();   // stack: [..., "/home/alice", "/tmp"]; returns "/var/log"
-io.println(process.cwd());     // "/tmp"
-io.println(prev);              // "/var/log"
-```
+### `process.exit(code: int = 0)` *(deprecated — use `env.exit`)*
 
-### `process.dirStack()`
+> **Deprecated (SA0830):** Use [`env.exit`](#envexitcode-int--0) instead. This alias still works but will be removed in a future minor release.
 
-Returns a copy of the directory stack as an `array<string>`, **oldest entry first** (index 0 is the initial cwd at interpreter startup, last index is the current cwd).
+### `process.lastExitCode()` *(deprecated — use `shell.lastExitCode`)*
 
-```stash
-process.chdir("/tmp");
-process.chdir("/var/log");
-io.println(process.dirStack());      // ["/home/alice", "/tmp", "/var/log"]
-io.println(process.dirStackDepth()); // 3
-```
-
-The stack is capped at **256 entries**. When a push would exceed the cap, the oldest entry (index 0) is dropped.
-
-### `process.dirStackDepth()`
-
-Returns the number of entries in the directory stack as an `int`. Equivalent to `process.dirStack().length` but avoids allocating the array.
-
-```stash
-io.println(process.dirStackDepth()); // 1 at startup; increases with each chdir
-```
-
-### `process.exit(code: int = 0)`
-
-Terminates the interpreter with the given exit code. Defaults to `0` when called with no argument.
-
-**Defer-aware:** all pending `defer` blocks are executed in reverse declaration order, walking up the call stack, before the process exits. This guarantees resource cleanup.
-
-**Catch-immune:** no `try/catch` clause can intercept `process.exit`. The exit propagates through every `try` block, running their `defer` blocks, and terminates at the interpreter's top level.
-
-```stash
-fn run() {
-    defer io.println("cleanup");  // always runs
-    process.exit(1);              // defer executes, then exits with code 1
-}
-run();
-```
-
-```stash
-try {
-    process.exit(0);             // catch does NOT fire
-} catch (e) {
-    io.println("never reached"); // never executed
-}
-```
-
-In the REPL, `exit` and `quit` desugar to `process.exit(code)` — see [Shell — Interactive Shell Mode](Shell%20—%20Interactive%20Shell%20Mode.md).
-
-### `process.lastExitCode()`
-
-Returns the exit code of the most recently executed `$(…)` command or shell-mode bare command, as an `int`. Returns `0` before any command has been executed in the session.
-
-In the REPL, `$?` is syntactic sugar for `process.lastExitCode()`. In scripts, call the function directly.
-
-```stash
-let r = $(ls /nonexistent);
-io.println(process.lastExitCode()); // 2 (ls exit code for "no such file")
-
-let ok = $(git status);
-io.println(process.lastExitCode()); // 0
-```
+> **Deprecated (SA0830):** Use [`shell.lastExitCode`](#shelllastexitcode) instead. This alias still works but will be removed in a future minor release.
 
 ### `process.historyList()`
 
@@ -2293,37 +2348,9 @@ io.println(process.historyList()[len(process.historyList()) - 1]); // "git pull"
 
 This is useful when a Stash script programmatically produces commands that should appear in the user's history.
 
-### `process.withDir(path, fn)`
+### `process.withDir(path, fn)` *(deprecated — use `env.withDir`)*
 
-Runs a function with the working directory temporarily changed to the given path. The original directory is automatically restored when the function returns — even if it throws an error. Returns whatever the callback returns.
-
-This is the recommended approach for short, self-contained directory changes. For cases where you need `return`, `break`, or `continue` to affect the enclosing function or loop, use `process.chdir()` instead.
-
-```stash
-// Run a build in a subdirectory — directory is restored automatically
-process.withDir("src/frontend", () => {
-    $(npm install);
-    $(npm run build);
-});
-
-// Capture a return value from the block
-let files = process.withDir("/var/log", () => {
-    return fs.glob("*.log");
-});
-
-// Nesting works naturally
-process.withDir("services/api", () => {
-    $(docker compose build);
-    process.withDir("migrations", () => {
-        $(./run_migrations.sh);
-    });
-    // back to services/api
-});
-// back to original directory
-
-// Expression-body lambda for one-liners
-let config = process.withDir("config", () => fs.readFile("app.json"));
-```
+> **Deprecated (SA0830):** Use [`env.withDir`](#envwithdirpath-fn) instead. This alias still works but will be removed in a future minor release.
 
 ### The `Process` Handle
 
@@ -2394,26 +2421,31 @@ let pid = process.pid(server);  // same as server.pid
 // Send SIGTERM (graceful shutdown)
 process.kill(server);
 
-// Send a specific signal
-process.signal(server, process.SIGKILL);  // force kill
-process.signal(server, process.SIGHUP);   // hangup
+// Send a specific signal using the global Signal enum
+process.signal(server, Signal.Kill);  // force kill
+process.signal(server, Signal.Hup);   // hangup
+
+// Raw integers also work
+process.signal(server, 9);            // equivalent to Signal.Kill
 ```
 
 `process.kill(proc)` sends `SIGTERM` (signal 15) to the process. Returns `true` if the signal was sent, `false` if the process had already exited.
 
-`process.signal(proc, sig)` sends an arbitrary signal. The signal is specified as an integer. Common signal constants are provided on the `process` namespace:
+`process.signal(proc, sig)` sends an arbitrary signal. The signal can be a `Signal` enum member or a raw integer. The global `Signal` enum provides named constants for all supported signals:
 
-| Constant          | Value | Description             |
-| ----------------- | ----- | ----------------------- |
-| `process.SIGHUP`  | 1     | Hangup                  |
-| `process.SIGINT`  | 2     | Interrupt (Ctrl+C)      |
-| `process.SIGQUIT` | 3     | Quit                    |
-| `process.SIGKILL` | 9     | Kill (cannot be caught) |
-| `process.SIGTERM` | 15    | Terminate (graceful)    |
-| `process.SIGUSR1` | 10    | User-defined signal 1   |
-| `process.SIGUSR2` | 12    | User-defined signal 2   |
+| Member        | POSIX Signal | Value | Description             |
+| ------------- | ------------ | ----- | ----------------------- |
+| `Signal.Hup`  | SIGHUP       | 1     | Hangup                  |
+| `Signal.Int`  | SIGINT       | 2     | Interrupt (Ctrl+C)      |
+| `Signal.Quit` | SIGQUIT      | 3     | Quit                    |
+| `Signal.Kill` | SIGKILL      | 9     | Kill (cannot be caught) |
+| `Signal.Term` | SIGTERM      | 15    | Terminate (graceful)    |
+| `Signal.Usr1` | SIGUSR1      | 10    | User-defined signal 1   |
+| `Signal.Usr2` | SIGUSR2      | 12    | User-defined signal 2   |
 
-These are integer constants — `process.SIGTERM` is just `15`. Using `process.signal(proc, 15)` is equivalent.
+Using a `Signal` member is preferred over raw integers for readability. Both `process.signal(proc, Signal.Term)` and `process.signal(proc, 15)` are equivalent.
+
+> **Deprecated constants (SA0830):** `process.SIGHUP`, `process.SIGINT`, `process.SIGQUIT`, `process.SIGKILL`, `process.SIGTERM`, `process.SIGUSR1`, `process.SIGUSR2` still work but emit SA0830. Use `Signal.*` members instead.
 
 **Cross-platform behavior:** On Unix, `process.signal()` sends signals via the POSIX `kill()` syscall. On Windows, common signals (SIGTERM, SIGKILL) are mapped to `Process.Kill()` with graceful/forceful options.
 
@@ -2470,7 +2502,7 @@ When a Stash script exits (normally or due to an error), all **tracked** process
 
 Processes that have been `detach()`-ed are excluded from cleanup.
 
-`process.exit(code)` also triggers this cleanup before terminating the script.
+`env.exit(code)` also triggers this cleanup before terminating the script.
 
 ### Complete Example
 
@@ -2490,7 +2522,7 @@ if (health.stdout == "200") {
     io.println("Server is healthy");
 } else {
     io.println("Server failed to start");
-    process.exit(1);
+    env.exit(1);
 }
 
 // Run some tests against the server
@@ -2501,7 +2533,7 @@ io.println("Response length: " + len(testResult.stdout));
 process.kill(server);
 let finalResult = process.waitTimeout(server, 5000);
 if (finalResult == null) {
-    process.signal(server, process.SIGKILL);
+    process.signal(server, Signal.Kill);
     process.wait(server);
 }
 
@@ -2589,6 +2621,34 @@ let finalResult = process.wait(server);
 `process.onExit(proc, callback)` registers a callback function to run when a process exits. The callback receives a `CommandResult` as its single argument. Multiple callbacks can be registered for the same process. Callbacks are fired synchronously on the main thread when the process result is collected via `process.wait()`, `process.waitTimeout()`, `process.waitAll()`, or `process.waitAny()`. Returns `null`.
 
 If the process handle is detached via `process.detach()`, any registered callbacks are discarded.
+
+---
+
+## `shell` — Shell Mode State
+
+The `shell` namespace exposes state that is only meaningful inside the interactive REPL or shell mode. Available only when the `Shell` capability is enabled (default in the CLI; opt-in for embedded hosts).
+
+| Function                | Description                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `shell.lastExitCode()`  | Exit code of the most recently executed `$(…)` or bare shell-mode command        |
+
+### `shell.lastExitCode()`
+
+Returns the exit code of the most recently executed `$(…)` command or shell-mode bare command, as an `int`. Returns `0` before any command has been executed in the session.
+
+In the REPL, `$?` is syntactic sugar for `shell.lastExitCode()`. In scripts, call the function directly.
+
+```stash
+let r = $(ls /nonexistent);
+io.println(shell.lastExitCode()); // 2 (ls exit code for "no such file")
+
+let ok = $(git status);
+io.println(shell.lastExitCode()); // 0
+```
+
+> **Note:** `process.lastExitCode` is a deprecated alias and emits diagnostic SA0830.
+
+> **Capability:** `shell.lastExitCode` requires the `Shell` capability (`StashCapabilities.Shell`). It is enabled by default in the CLI and in shell mode. Embedded hosts that do not enable `Shell` will see a `NotSupportedError` if this function is called.
 
 ---
 

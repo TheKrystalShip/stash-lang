@@ -240,7 +240,7 @@ public class LspFeaturesRound4Tests : AnalysisTestBase
     [Fact]
     public void UnreachableCode_AfterProcessExit_FlaggedAsUnnecessary()
     {
-        var source = "process.exit(1);\nio.println(\"unreachable\");";
+        var source = "env.exit(1);\nio.println(\"unreachable\");";
         var result = FullAnalyze(source);
         var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
         Assert.Single(unreachable);
@@ -290,9 +290,9 @@ public class LspFeaturesRound4Tests : AnalysisTestBase
     [Fact]
     public void UnreachableCode_ProcessExitInsideIfBlock_OnlyAffectsThatBlock()
     {
-        // process.exit() inside an if-block should only gray out subsequent statements in that block,
+        // env.exit() inside an if-block should only gray out subsequent statements in that block,
         // not statements after the if-block
-        var source = "if (true) {\n  process.exit(1);\n  io.println(\"unreachable\");\n}\nio.println(\"reachable\");";
+        var source = "if (true) {\n  env.exit(1);\n  io.println(\"unreachable\");\n}\nio.println(\"reachable\");";
         var result = FullAnalyze(source);
         var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
         Assert.Single(unreachable);
@@ -302,7 +302,7 @@ public class LspFeaturesRound4Tests : AnalysisTestBase
     [Fact]
     public void UnreachableCode_MultipleStatementsAfterExit_AllFlagged()
     {
-        var source = "fn deploy() {\n  process.exit(1);\n  io.println(\"a\");\n  io.println(\"b\");\n  io.println(\"c\");\n}";
+        var source = "fn deploy() {\n  env.exit(1);\n  io.println(\"a\");\n  io.println(\"b\");\n  io.println(\"c\");\n}";
         var result = FullAnalyze(source);
         var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
         Assert.Equal(3, unreachable.Count);
@@ -314,9 +314,9 @@ public class LspFeaturesRound4Tests : AnalysisTestBase
     [Fact]
     public void UnreachableCode_DeployStashPattern_ConstAfterExitInBlock()
     {
-        // This mirrors the deploy.stash pattern: process.exit() inside an if block
+        // This mirrors the deploy.stash pattern: env.exit() inside an if block
         // The io.println after the exit should be grayed out, the code after the if should NOT
-        var source = "const DEST = \"/usr/bin\";\nfn deploy() {\n  if (true) {\n    process.exit(1);\n    io.println(\"dead\");\n  }\n  io.println(DEST);\n}";
+        var source = "const DEST = \"/usr/bin\";\nfn deploy() {\n  if (true) {\n    env.exit(1);\n    io.println(\"dead\");\n  }\n  io.println(DEST);\n}";
         var result = FullAnalyze(source);
         var unreachable = result.SemanticDiagnostics.Where(d => d.Message.Contains("Unreachable")).ToList();
         Assert.Single(unreachable);

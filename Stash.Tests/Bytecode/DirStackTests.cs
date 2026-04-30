@@ -10,9 +10,10 @@ using Stash.Stdlib;
 namespace Stash.Tests.Bytecode;
 
 /// <summary>
-/// Integration tests for the <c>process.chdir</c> directory stack and related functions
-/// (<c>process.popDir</c>, <c>process.dirStack</c>, <c>process.dirStackDepth</c>).
+/// Integration tests for the <c>env.chdir</c> directory stack and related functions
+/// (<c>env.popDir</c>, <c>env.dirStack</c>, <c>env.dirStackDepth</c>).
 /// </summary>
+[Collection("SystemCwdTests")]
 public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
 {
     private static string GetInitialCwd() => System.Environment.CurrentDirectory;
@@ -38,7 +39,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
     }
 
     // =========================================================================
-    // 1. process.chdir — push behaviour
+    // 1. env.chdir — push behaviour
     // =========================================================================
 
     [Fact]
@@ -50,9 +51,9 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                process.chdir("{{dir1}}");
-                process.chdir("{{dir2}}");
-                let depth = process.dirStackDepth();
+                env.chdir("{{dir1}}");
+                env.chdir("{{dir2}}");
+                let depth = env.dirStackDepth();
                 return depth;
                 """);
             var sw = new StringWriter();
@@ -79,7 +80,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                process.chdir("{{dir}}");
+                env.chdir("{{dir}}");
                 return env.cwd();
                 """);
             var result = vm.Execute(chunk);
@@ -99,7 +100,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM("""
-                process.chdir("/this/path/does/not/exist/at/all");
+                env.chdir("/this/path/does/not/exist/at/all");
                 """);
             var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
             Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
@@ -112,7 +113,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
     }
 
     // =========================================================================
-    // 2. process.popDir
+    // 2. env.popDir
     // =========================================================================
 
     [Fact]
@@ -125,9 +126,9 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                process.chdir("{{dir1}}");
-                process.chdir("{{dir2}}");
-                let popped = process.popDir();
+                env.chdir("{{dir1}}");
+                env.chdir("{{dir2}}");
+                let popped = env.popDir();
                 return popped;
                 """);
             var result = vm.Execute(chunk);
@@ -151,9 +152,9 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                process.chdir("{{dir1}}");
-                process.chdir("{{dir2}}");
-                process.popDir();
+                env.chdir("{{dir1}}");
+                env.chdir("{{dir2}}");
+                env.popDir();
                 return env.cwd();
                 """);
             var result = vm.Execute(chunk);
@@ -175,7 +176,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         {
             // Stack starts with 1 entry (initial cwd) — popDir should throw
             var (chunk, vm) = BuildVM("""
-                process.popDir();
+                env.popDir();
                 """);
             var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
             Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
@@ -188,7 +189,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
     }
 
     // =========================================================================
-    // 3. process.dirStack
+    // 3. env.dirStack
     // =========================================================================
 
     [Fact]
@@ -199,7 +200,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM("""
-                let s = process.dirStack();
+                let s = env.dirStack();
                 return s.length;
                 """);
             var result = vm.Execute(chunk);
@@ -222,9 +223,9 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                process.chdir("{{dir1}}");
-                process.chdir("{{dir2}}");
-                let s = process.dirStack();
+                env.chdir("{{dir1}}");
+                env.chdir("{{dir2}}");
+                let s = env.dirStack();
                 // index 0 = original, 1 = dir1, 2 = dir2 (oldest first)
                 return s[1];
                 """);
@@ -240,7 +241,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
     }
 
     // =========================================================================
-    // 4. process.dirStackDepth
+    // 4. env.dirStackDepth
     // =========================================================================
 
     [Fact]
@@ -251,11 +252,11 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                let d0 = process.dirStackDepth();
-                process.chdir("{{dir}}");
-                let d1 = process.dirStackDepth();
-                process.popDir();
-                let d2 = process.dirStackDepth();
+                let d0 = env.dirStackDepth();
+                env.chdir("{{dir}}");
+                let d1 = env.dirStackDepth();
+                env.popDir();
+                let d2 = env.dirStackDepth();
                 return [d0, d1, d2];
                 """);
             var result = Normalize(vm.Execute(chunk)) as System.Collections.Generic.List<object?>;
@@ -291,9 +292,9 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
             sb.AppendLine($$"""let d = "{{dir}}";""");
             for (int i = 0; i < 257; i++)
             {
-                sb.AppendLine("process.chdir(d);");
+                sb.AppendLine("env.chdir(d);");
             }
-            sb.AppendLine("return process.dirStackDepth();");
+            sb.AppendLine("return env.dirStackDepth();");
 
             var (chunk, vm) = BuildVM(sb.ToString());
             var result = vm.Execute(chunk);
@@ -303,6 +304,76 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         {
             System.Environment.CurrentDirectory = originalCwd;
             Directory.Delete(dir, true);
+        }
+    }
+
+    // =========================================================================
+    // Regression: deprecated process.* aliases still work until N+2
+    // =========================================================================
+
+    [Fact]
+    // Regression: deprecated process.chdir alias still works until N+2.
+    public void ProcessChdir_DeprecatedAlias_StillWorks()
+    {
+        string dir = CreateTempDir();
+        string originalCwd = GetInitialCwd();
+        string resolvedDir = Path.GetFullPath(dir);
+        try
+        {
+            var (chunk, vm) = BuildVM($$"""
+                process.chdir("{{dir}}");
+                return env.cwd();
+                """);
+            var result = vm.Execute(chunk);
+            Assert.Equal(resolvedDir, result);
+        }
+        finally
+        {
+            System.Environment.CurrentDirectory = originalCwd;
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    // Regression: deprecated process.popDir alias still works until N+2.
+    public void ProcessPopDir_DeprecatedAlias_StillWorks()
+    {
+        string dir = CreateTempDir();
+        string originalCwd = GetInitialCwd();
+        try
+        {
+            var (chunk, vm) = BuildVM($$"""
+                env.chdir("{{dir}}");
+                let popped = process.popDir();
+                return popped;
+                """);
+            var result = vm.Execute(chunk);
+            // Verify it returns the popped directory (a non-null string)
+            Assert.IsType<string>(result);
+        }
+        finally
+        {
+            System.Environment.CurrentDirectory = originalCwd;
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    // Regression: deprecated process.dirStackDepth alias still works until N+2.
+    public void ProcessDirStackDepth_DeprecatedAlias_StillWorks()
+    {
+        string originalCwd = GetInitialCwd();
+        try
+        {
+            var (chunk, vm) = BuildVM("""
+                return process.dirStackDepth();
+                """);
+            var result = vm.Execute(chunk);
+            Assert.Equal(1L, result);
+        }
+        finally
+        {
+            System.Environment.CurrentDirectory = originalCwd;
         }
     }
 }

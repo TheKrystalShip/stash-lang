@@ -55,13 +55,13 @@ public static class ProcessBuiltIns
         ns.RequiresCapability(StashCapabilities.Process);
 
         // Signal constants — POSIX signal numbers for use with process.signal().
-        ns.Constant("SIGHUP",  (long)1,  "int", "1");
-        ns.Constant("SIGINT",  (long)2,  "int", "2");
-        ns.Constant("SIGQUIT", (long)3,  "int", "3");
-        ns.Constant("SIGKILL", (long)9,  "int", "9");
-        ns.Constant("SIGUSR1", (long)10, "int", "10");
-        ns.Constant("SIGUSR2", (long)12, "int", "12");
-        ns.Constant("SIGTERM", (long)15, "int", "15");
+        ns.Constant("SIGHUP",  (long)1,  "int", "1",  deprecation: new DeprecationInfo("Signal.Hup"));
+        ns.Constant("SIGINT",  (long)2,  "int", "2",  deprecation: new DeprecationInfo("Signal.Int"));
+        ns.Constant("SIGQUIT", (long)3,  "int", "3",  deprecation: new DeprecationInfo("Signal.Quit"));
+        ns.Constant("SIGKILL", (long)9,  "int", "9",  deprecation: new DeprecationInfo("Signal.Kill"));
+        ns.Constant("SIGUSR1", (long)10, "int", "10", deprecation: new DeprecationInfo("Signal.Usr1"));
+        ns.Constant("SIGUSR2", (long)12, "int", "12", deprecation: new DeprecationInfo("Signal.Usr2"));
+        ns.Constant("SIGTERM", (long)15, "int", "15", deprecation: new DeprecationInfo("Signal.Term"));
 
         // process.exit(code?) — Exits the process with the given integer exit code (default 0).
         // Defer-aware: all pending defer blocks on the call stack are run before termination.
@@ -69,14 +69,13 @@ public static class ProcessBuiltIns
         ns.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             long code = args.Length > 0 ? SvArgs.Long(args, 0, "process.exit") : 0L;
-
-            ctx.CleanupTrackedProcesses();
-            ctx.EmitExit((int)code);
+            GlobalBuiltIns.EmitExitImpl(ctx, code);
             return StashValue.Null;
         },
             returnType: "null",
             isVariadic: true,
-            documentation: "Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code. Defaults to 0\n@return Does not return — exits the process");
+            documentation: "Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code. Defaults to 0\n@return Does not return — exits the process",
+            deprecation: new DeprecationInfo("env.exit"));
 
         // process.exec(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
         ns.Function("exec", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -326,10 +325,23 @@ public static class ProcessBuiltIns
             documentation: "Returns the OS process ID for a spawned Process handle.\n@param handle The Process handle returned by process.spawn()\n@return The integer process ID");
 
         // process.signal(handle, signum) — Sends a POSIX signal (integer) to a running process. Use process.SIGTERM etc. as constants. Returns true on success.
-        ns.Function("signal", [Param("handle", "Process"), Param("signum", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("signal", [Param("handle", "Process"), Param("signum", "Signal | int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var handle = SvArgs.Instance(args, 0, "Process", "process.signal");
-            var sig = SvArgs.Long(args, 1, "process.signal");
+
+            long sig;
+            var sigArg = args[1];
+            if (sigArg.IsObj && sigArg.AsObj is StashEnumValue ev && ev.TypeName == "Signal")
+            {
+                if (!GlobalBuiltIns.SignalNumbers.TryGetValue(ev.MemberName, out sig))
+                {
+                    throw new RuntimeError($"Unknown Signal member '{ev.MemberName}'.", errorType: StashErrorTypes.ValueError);
+                }
+            }
+            else
+            {
+                sig = SvArgs.Long(args, 1, "process.signal");
+            }
 
             if (sig < 1 || sig > 64)
             {
@@ -723,96 +735,38 @@ public static class ProcessBuiltIns
 
         // process.chdir(path) — Changes the current working directory and pushes it onto the directory stack.
         ns.Function("chdir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var path = SvArgs.String(args, 0, "process.chdir");
-
-            string expanded = ctx.ExpandTilde(path);
-            string resolved = System.IO.Path.GetFullPath(expanded);
-            if (!System.IO.Directory.Exists(resolved))
-            {
-                throw new RuntimeError($"no such directory: {resolved}", errorType: StashErrorTypes.CommandError);
-            }
-
-            // Cap the stack at 256 entries: drop the eldest (index 0) to make room.
-            var stack = ctx.DirStack;
-            if (stack.Count >= 256)
-            {
-                stack.RemoveAt(0);
-            }
-
-            // Atomic: change cwd first; only push to the stack if the change succeeds.
-            System.Environment.CurrentDirectory = resolved;
-            stack.Add(resolved);
-            return StashValue.Null;
-        },
+            CurrentProcessImpl.Chdir(ctx, args, "process.chdir"),
             returnType: "null",
-            documentation: "Changes the current working directory to the given path and pushes it onto the directory stack.\n@param path The directory path to change to\n@return null");
+            documentation: "Changes the current working directory to the given path and pushes it onto the directory stack.\n@param path The directory path to change to\n@return null",
+            deprecation: new DeprecationInfo("env.chdir"));
 
         // process.popDir() — Pops the top of the directory stack, restores the previous directory, and returns the popped path.
         ns.Function("popDir", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-        {
-            var stack = ctx.DirStack;
-            if (stack.Count <= 1)
-            {
-                throw new RuntimeError("directory stack is at root", errorType: StashErrorTypes.CommandError);
-            }
-
-            string popped = stack[^1];
-            stack.RemoveAt(stack.Count - 1);
-            string newTop = stack[^1];
-            System.Environment.CurrentDirectory = newTop;
-            return StashValue.FromObj(popped);
-        },
+            CurrentProcessImpl.PopDir(ctx, _args, "process.popDir"),
             returnType: "string",
-            documentation: "Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path.\nThrows CommandError if the stack is at its root entry.\n@return The directory path that was popped");
+            documentation: "Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path.\nThrows CommandError if the stack is at its root entry.\n@return The directory path that was popped",
+            deprecation: new DeprecationInfo("env.popDir"));
 
         // process.dirStack() — Returns a copy of the directory stack, oldest entry first.
         ns.Function("dirStack", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-        {
-            var stack = ctx.DirStack;
-            var result = new List<StashValue>(stack.Count);
-            foreach (string dir in stack)
-            {
-                result.Add(StashValue.FromObj(dir));
-            }
-            return StashValue.FromObj(result);
-        },
+            CurrentProcessImpl.DirStack(ctx, _args, "process.dirStack"),
             returnType: "array",
-            documentation: "Returns a copy of the directory stack, oldest entry first.\n@return An array of directory path strings");
+            documentation: "Returns a copy of the directory stack, oldest entry first.\n@return An array of directory path strings",
+            deprecation: new DeprecationInfo("env.dirStack"));
 
         // process.dirStackDepth() — Returns the number of entries in the directory stack.
         ns.Function("dirStackDepth", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-        {
-            return StashValue.FromInt((long)ctx.DirStack.Count);
-        },
+            CurrentProcessImpl.DirStackDepth(ctx, _args, "process.dirStackDepth"),
             returnType: "int",
-            documentation: "Returns the number of entries in the directory stack.\n@return The depth as an integer");
+            documentation: "Returns the number of entries in the directory stack.\n@return The depth as an integer",
+            deprecation: new DeprecationInfo("env.dirStackDepth"));
 
         // process.withDir(path, fn) — Temporarily changes the working directory to path, calls fn(), then restores the original directory. Returns fn's return value.
         ns.Function("withDir", [Param("path", "string"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var path = SvArgs.String(args, 0, "process.withDir");
-            var fn = SvArgs.Callable(args, 1, "process.withDir");
-
-            string resolved = System.IO.Path.GetFullPath(path);
-            if (!System.IO.Directory.Exists(resolved))
-            {
-                throw new RuntimeError($"process.withDir: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
-            }
-
-            string previous = System.Environment.CurrentDirectory;
-            System.Environment.CurrentDirectory = resolved;
-            try
-            {
-                return ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
-            }
-            finally
-            {
-                System.Environment.CurrentDirectory = previous;
-            }
-        },
+            CurrentProcessImpl.WithDir(ctx, args, "process.withDir"),
             returnType: "any",
-            documentation: "Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.\n@param path The directory to temporarily change to\n@param fn The function to execute in the new directory\n@return The return value of fn");
+            documentation: "Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.\n@param path The directory to temporarily change to\n@param fn The function to execute in the new directory\n@return The return value of fn",
+            deprecation: new DeprecationInfo("env.withDir"));
 
         ns.Struct("CommandResult", [
             new BuiltInField("stdout", "string"),
@@ -830,7 +784,8 @@ public static class ProcessBuiltIns
             return StashValue.FromInt((long)ctx.GetLastExitCode());
         },
             returnType: "int",
-            documentation: "Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.\n@return The exit code as an integer");
+            documentation: "Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.\n@return The exit code as an integer",
+            deprecation: new DeprecationInfo("shell.lastExitCode"));
 
         // process.historyList() — Returns a shallow copy of the in-memory REPL history, oldest-first.
         ns.Function("historyList", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

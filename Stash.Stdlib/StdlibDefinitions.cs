@@ -22,6 +22,7 @@ public static class StdlibDefinitions
         (() => IoBuiltIns.Define(),       StashCapabilities.None),
         (() => ConvBuiltIns.Define(),     StashCapabilities.None),
         (() => EnvBuiltIns.Define(),      StashCapabilities.Environment),
+        (() => ShellBuiltIns.Define(),    StashCapabilities.Shell),
         (() => ProcessBuiltIns.Define(),  StashCapabilities.Process),
         (() => PromptBuiltIns.Define(),   StashCapabilities.None),
         (() => FsBuiltIns.Define(),       StashCapabilities.FileSystem),

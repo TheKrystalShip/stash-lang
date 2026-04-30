@@ -5,7 +5,7 @@
 
 if (!scheduler.available()) {
   io.println("Service manager not available on this platform.");
-  process.exit(1);
+  env.exit(1);
 }
 // Define a periodic health check service
 

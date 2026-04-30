@@ -702,7 +702,8 @@ io.println(baz);";
         // Now 46 (added SA1301, SA1302 security rules; NoAccumulatingSpreadRule previously added)
         // Now 47 (added NullFlowRule SA0309)
         // Now 59 (added 12 rules: SA0211, SA0212, SA0311/SA0312, SA0406, SA0407, SA0902, SA1109, SA1110, SA1202, SA1203, SA1303, SA1403)
-        Assert.Equal(59, rules.Count);
+        // Now 60 (added DeprecatedBuiltInMemberRule SA0830)
+        Assert.Equal(60, rules.Count);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────

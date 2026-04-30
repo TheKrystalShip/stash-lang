@@ -64,7 +64,7 @@ The context struct passed to every prompt function.
 | `host`         | `string`     | Short hostname, without domain (e.g. `mybox`)                                                                          |
 | `hostFull`     | `string`     | Fully-qualified hostname (e.g. `mybox.example.com`; may equal `host` if FQDN is unavailable)                           |
 | `time`         | `string`     | Wall-clock time at render time, formatted `HH:mm:ss`                                                                   |
-| `lastExitCode` | `int`        | Exit code of the most recent command (same as `process.lastExitCode()`)                                                |
+| `lastExitCode` | `int`        | Exit code of the most recent command (same as `shell.lastExitCode()`)                                                 |
 | `lineNumber`   | `int`        | 1-based count of REPL inputs evaluated in this session                                                                 |
 | `mode`         | `string`     | `"stash"` or `"shell"` — the active line-classification mode                                                           |
 | `hostColor`    | `string`     | A stable color string (`term.*`) derived from the hostname hash — useful for multi-host prompts                        |

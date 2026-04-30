@@ -72,6 +72,9 @@ public static class RuleRegistry
             new UnusedImportRule(),
             new ImportOrderingRule(),
 
+            // Deprecations (SA083x)
+            new Deprecations.DeprecatedBuiltInMemberRule(),
+
             // Style (SA09xx)
             new NoUnnecessaryElseRule(),
             new FunctionBodyTooLongRule(),

@@ -13,7 +13,7 @@ using Stash.Runtime;
 using Stash.Stdlib;
 
 /// <summary>
-/// Tests for <c>process.lastExitCode()</c> stdlib function (§8.1) and the REPL <c>$?</c>
+/// Tests for <c>shell.lastExitCode()</c> stdlib function (§8.1) and the REPL <c>$?</c>
 /// sugar desugaring (§8.2) — both wired through <see cref="ShellRunner"/> and
 /// <see cref="ReplLinePreprocessor"/>.
 /// </summary>
@@ -62,14 +62,14 @@ public class LastExitCodeTests
         return (new ShellRunner(ctx), vm);
     }
 
-    // ── §8.1: process.lastExitCode() ─────────────────────────────────────────
+    // ── §8.1: shell.lastExitCode() ────────────────────────────────────────────
 
     [Fact]
     public void LastExitCode_DefaultZero()
     {
         var vm = MakeVm();
         // Fresh VM — no command has run yet — should return 0.
-        string output = RunSource("io.println(process.lastExitCode());", vm);
+        string output = RunSource("io.println(shell.lastExitCode());", vm);
         Assert.Equal("0", output);
     }
 
@@ -77,10 +77,10 @@ public class LastExitCodeTests
     public void LastExitCode_ReflectsManuallySetValue()
     {
         // Directly set LastExitCode on the VM (simulating what ShellRunner does)
-        // and verify that process.lastExitCode() picks it up.
+        // and verify that shell.lastExitCode() picks it up.
         var vm = MakeVm();
         vm.LastExitCode = 42;
-        string output = RunSource("io.println(process.lastExitCode());", vm);
+        string output = RunSource("io.println(shell.lastExitCode());", vm);
         Assert.Equal("42", output);
     }
 
@@ -90,7 +90,7 @@ public class LastExitCodeTests
         var vm = MakeVm();
         vm.LastExitCode = 1;
         // Verify that the result can participate in arithmetic.
-        string output = RunSource("io.println(process.lastExitCode() + 10);", vm);
+        string output = RunSource("io.println(shell.lastExitCode() + 10);", vm);
         Assert.Equal("11", output);
     }
 
@@ -98,7 +98,7 @@ public class LastExitCodeTests
     public void LastExitCode_AfterShellCommand_ReflectsExit()
     {
         // POSIX only: run a command that is known to exit with code 1 (false),
-        // then verify process.lastExitCode() reflects that code.
+        // then verify shell.lastExitCode() reflects that code.
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
         var (runner, vm) = MakeRunner();
@@ -106,7 +106,7 @@ public class LastExitCodeTests
         // 'false' is a POSIX command that always exits with code 1.
         runner.Run("false");
 
-        string output = RunSource("io.println(process.lastExitCode());", vm);
+        string output = RunSource("io.println(shell.lastExitCode());", vm);
         Assert.Equal("1", output);
     }
 
@@ -120,8 +120,20 @@ public class LastExitCodeTests
 
         runner.Run("true");
 
-        string output = RunSource("io.println(process.lastExitCode());", vm);
+        string output = RunSource("io.println(shell.lastExitCode());", vm);
         Assert.Equal("0", output);
+    }
+
+    // ── Regression: deprecated process.lastExitCode alias still works until N+2 ─────
+
+    [Fact]
+    // Regression: deprecated process.lastExitCode alias still works until N+2.
+    public void ProcessLastExitCode_DeprecatedAlias_StillWorks()
+    {
+        var vm = MakeVm();
+        vm.LastExitCode = 5;
+        string output = RunSource("io.println(process.lastExitCode());", vm);
+        Assert.Equal("5", output);
     }
 
     // ── §8.2: $? preprocessor integration ────────────────────────────────────

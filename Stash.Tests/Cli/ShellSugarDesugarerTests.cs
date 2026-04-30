@@ -44,7 +44,7 @@ public class ShellSugarDesugarerTests
     {
         var line = ParseLine("cd /tmp");
         string? source = ShellSugarDesugarer.TryDesugar(line, ["/tmp"]);
-        Assert.Equal("process.chdir(\"/tmp\");", source);
+        Assert.Equal("env.chdir(\"/tmp\");", source);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class ShellSugarDesugarerTests
         string expectedVar = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
             ? "USERPROFILE"
             : "HOME";
-        Assert.Equal($"process.chdir(env.get(\"{expectedVar}\"));", source);
+        Assert.Equal($"env.chdir(env.get(\"{expectedVar}\"));", source);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public class ShellSugarDesugarerTests
     {
         var line = ParseLine("cd -");
         string? source = ShellSugarDesugarer.TryDesugar(line, ["-"]);
-        Assert.Equal("process.popDir(); io.println(env.cwd());", source);
+        Assert.Equal("env.popDir(); io.println(env.cwd());", source);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class ShellSugarDesugarerTests
         string path = "/home/user/my\"path\\here";
         var line = ParseLine("cd /tmp"); // program name only; expanded arg provided separately
         string? source = ShellSugarDesugarer.TryDesugar(line, [path]);
-        Assert.Equal("process.chdir(\"/home/user/my\\\"path\\\\here\");", source);
+        Assert.Equal("env.chdir(\"/home/user/my\\\"path\\\\here\");", source);
     }
 
     [Fact]
@@ -94,7 +94,7 @@ public class ShellSugarDesugarerTests
         string path = "/tmp/a\nb";
         var line = ParseLine("cd /tmp");
         string? source = ShellSugarDesugarer.TryDesugar(line, [path]);
-        Assert.Equal("process.chdir(\"/tmp/a\\nb\");", source);
+        Assert.Equal("env.chdir(\"/tmp/a\\nb\");", source);
     }
 
     // ── pwd ───────────────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@ public class ShellSugarDesugarerTests
     {
         var line = ParseLine("exit");
         string? source = ShellSugarDesugarer.TryDesugar(line, []);
-        Assert.Equal("process.exit(0);", source);
+        Assert.Equal("env.exit(0);", source);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class ShellSugarDesugarerTests
     {
         var line = ParseLine("exit 7");
         string? source = ShellSugarDesugarer.TryDesugar(line, ["7"]);
-        Assert.Equal("process.exit(7);", source);
+        Assert.Equal("env.exit(7);", source);
     }
 
     [Fact]
@@ -165,8 +165,8 @@ public class ShellSugarDesugarerTests
         string? exitSource = ShellSugarDesugarer.TryDesugar(exitLine, ["3"]);
         string? quitSource = ShellSugarDesugarer.TryDesugar(quitLine, ["3"]);
         // Both should produce the same snippet (exit code literal, not "exit"/"quit" in source).
-        Assert.Equal("process.exit(3);", exitSource);
-        Assert.Equal("process.exit(3);", quitSource);
+        Assert.Equal("env.exit(3);", exitSource);
+        Assert.Equal("env.exit(3);", quitSource);
     }
 
     [Fact]

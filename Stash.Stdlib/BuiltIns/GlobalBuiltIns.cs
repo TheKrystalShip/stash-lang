@@ -178,16 +178,17 @@ public static class GlobalBuiltIns
         }, returnType: "array", isVariadic: true,
             documentation: "Generates an array of integers. With one argument, generates 0..n-1. With two, generates start..end-1. With three, uses the given step.\n@param start_or_end End (exclusive) when called with 1 arg, or start when called with 2-3 args\n@param end End (exclusive) when called with 2 or 3 args\n@param step Step size (positive or negative); must not be zero\n@return An array of integers");
 
-        if (capabilities.HasFlag(StashCapabilities.Process))
+        if (capabilities.HasFlag(StashCapabilities.Environment))
         {
             b.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
-                var code = SvArgs.Long(args, 0, "exit");
-                ctx.EmitExit((int)code);
+                long code = args.Length > 0 ? SvArgs.Long(args, 0, "exit") : 0L;
+                EmitExitImpl(ctx, code);
                 return StashValue.Null;
             },
                 returnType: "never",
-                documentation: "Terminates the program with the given exit code.\n@param code The exit code to return to the OS\n@return never");
+                isVariadic: true,
+                documentation: "Terminates the program with the given exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code to return to the OS. Defaults to 0\n@return never");
         }
 
         b.Function("hash", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -214,6 +215,7 @@ public static class GlobalBuiltIns
 
         // Enums
         b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);
+        b.Enum("Signal", ["Hup", "Int", "Quit", "Kill", "Usr1", "Usr2", "Term"]);
 
         // Typed error structs — registered here so the VM can instantiate them via
         // struct-init literals (e.g. `throw ValueError { message: "x" }`).
@@ -294,5 +296,31 @@ public static class GlobalBuiltIns
         ]);
 
         return b.Build();
+    }
+
+    /// <summary>
+    /// Maps a Signal enum member name to its POSIX signal number.
+    /// Used by process.signal() to accept both Signal.Term and raw integers.
+    /// Members not in the table are forwarded as-is via the integer path.
+    /// </summary>
+    public static readonly System.Collections.Generic.Dictionary<string, long> SignalNumbers = new()
+    {
+        ["Hup"]  = 1,
+        ["Int"]  = 2,
+        ["Quit"] = 3,
+        ["Kill"] = 9,
+        ["Usr1"] = 10,
+        ["Usr2"] = 12,
+        ["Term"] = 15,
+    };
+
+    /// <summary>
+    /// Shared implementation for the global <c>exit()</c> and <c>env.exit()</c> built-ins.
+    /// Cleans up tracked processes (via Process capability if available) then exits.
+    /// </summary>
+    internal static void EmitExitImpl(IInterpreterContext ctx, long code)
+    {
+        ctx.CleanupTrackedProcesses();
+        ctx.EmitExit((int)code);
     }
 }

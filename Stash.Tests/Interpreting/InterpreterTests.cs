@@ -2668,7 +2668,7 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Exit_NonIntegerArg_ThrowsError()
     {
-        RunExpectingError("process.exit(\"not a number\");");
+        RunExpectingError("env.exit(\"not a number\");");
     }
 
     // Note: exit(0) cannot be tested directly as it terminates the process
@@ -4883,7 +4883,7 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessNamespace_Exit_NonInteger_Throws()
     {
-        RunExpectingError("process.exit(\"not a number\");");
+        RunExpectingError("env.exit(\"not a number\");");
     }
 
     // ── process.exists ──────────────────────────────────────────────
@@ -5036,9 +5036,9 @@ fn makeAdder(x) {
     {
         var result = Run(@"
             let original = env.cwd();
-            process.chdir(""/tmp"");
+            env.chdir(""/tmp"");
             let result = env.cwd();
-            process.chdir(original);
+            env.chdir(original);
         ");
         Assert.Equal("/tmp", result);
     }
@@ -5046,13 +5046,13 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessChdir_NonStringArg_ThrowsError()
     {
-        RunExpectingError("process.chdir(42);");
+        RunExpectingError("env.chdir(42);");
     }
 
     [Fact]
     public void ProcessChdir_NonExistentDirectory_ThrowsError()
     {
-        RunExpectingError(@"process.chdir(""/nonexistent_dir_xyz_123"");");
+        RunExpectingError(@"env.chdir(""/nonexistent_dir_xyz_123"");");
     }
 
     [Fact]
@@ -5060,19 +5060,19 @@ fn makeAdder(x) {
     {
         var result = Run(@"
             let original = env.cwd();
-            let result = process.chdir(""/tmp"");
-            process.chdir(original);
+            let result = env.chdir(""/tmp"");
+            env.chdir(original);
         ");
         Assert.Null(result);
     }
 
-    // ── process.withDir ─────────────────────────────────────────────
+    // ── env.withDir ─────────────────────────────────────────────
 
     [Fact]
     public void ProcessWithDir_ChangesDirectoryInsideCallback()
     {
         var result = Run(@"
-            let result = process.withDir(""/tmp"", () => {
+            let result = env.withDir(""/tmp"", () => {
                 return env.cwd();
             });
         ");
@@ -5084,7 +5084,7 @@ fn makeAdder(x) {
     {
         var result = Run(@"
             let before = env.cwd();
-            process.withDir(""/tmp"", () => {});
+            env.withDir(""/tmp"", () => {});
             let result = env.cwd() == before;
         ");
         Assert.Equal(true, result);
@@ -5096,7 +5096,7 @@ fn makeAdder(x) {
         var result = Run(@"
             let before = env.cwd();
             try {
-                process.withDir(""/tmp"", () => {
+                env.withDir(""/tmp"", () => {
                     throw ""deliberate error"";
                 });
             }
@@ -5109,7 +5109,7 @@ fn makeAdder(x) {
     public void ProcessWithDir_ReturnsCallbackValue()
     {
         var result = Run(@"
-            let result = process.withDir(""/tmp"", () => {
+            let result = env.withDir(""/tmp"", () => {
                 return 42;
             });
         ");
@@ -5119,26 +5119,26 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWithDir_NonStringPath_ThrowsError()
     {
-        RunExpectingError("process.withDir(123, () => {});");
+        RunExpectingError("env.withDir(123, () => {});");
     }
 
     [Fact]
     public void ProcessWithDir_NonFunctionSecondArg_ThrowsError()
     {
-        RunExpectingError(@"process.withDir(""/tmp"", ""not a function"");");
+        RunExpectingError(@"env.withDir(""/tmp"", ""not a function"");");
     }
 
     [Fact]
     public void ProcessWithDir_NonExistentDirectory_ThrowsError()
     {
-        RunExpectingError(@"process.withDir(""/nonexistent_dir_xyz_123"", () => {});");
+        RunExpectingError(@"env.withDir(""/nonexistent_dir_xyz_123"", () => {});");
     }
 
     [Fact]
     public void ProcessWithDir_ExpressionBodyLambda()
     {
         var result = Run(@"
-            let result = process.withDir(""/tmp"", () => env.cwd());
+            let result = env.withDir(""/tmp"", () => env.cwd());
         ");
         Assert.Equal("/tmp", result);
     }

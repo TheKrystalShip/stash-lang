@@ -4,12 +4,12 @@ using Stash.Cli.Shell;
 
 /// <summary>
 /// Unit tests for <see cref="ReplLinePreprocessor.Apply"/>.
-/// Verifies that <c>$?</c> is replaced with <c>process.lastExitCode()</c>
+/// Verifies that <c>$?</c> is replaced with <c>shell.lastExitCode()</c>
 /// in code contexts and left unchanged inside strings and comments.
 /// </summary>
 public class ReplLinePreprocessorTests
 {
-    private const string Expanded = "process.lastExitCode()";
+    private const string Expanded = "shell.lastExitCode()";
 
     [Fact]
     public void Apply_BareDollarQuestion_Replaced()

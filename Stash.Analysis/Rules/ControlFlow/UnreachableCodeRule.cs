@@ -54,10 +54,11 @@ public sealed class UnreachableCodeRule : IAnalysisRule
             return true;
         }
 
-        // process.exit(...) call
+        // process.exit(...) or env.exit(...) call
         if (stmt is ExprStmt exprStmt && exprStmt.Expression is CallExpr call &&
             call.Callee is DotExpr dot &&
-            dot.Object is IdentifierExpr obj && obj.Name.Lexeme == "process" &&
+            dot.Object is IdentifierExpr obj &&
+            (obj.Name.Lexeme == "process" || obj.Name.Lexeme == "env") &&
             dot.Name.Lexeme == "exit")
         {
             return true;

@@ -357,7 +357,7 @@ public sealed class CfgBuilder
         return stmt.Expression is CallExpr call &&
                call.Callee is DotExpr dot &&
                dot.Object is IdentifierExpr obj &&
-               obj.Name.Lexeme == "process" &&
+               (obj.Name.Lexeme == "process" || obj.Name.Lexeme == "env") &&
                dot.Name.Lexeme == "exit";
     }
 

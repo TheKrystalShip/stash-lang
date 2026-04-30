@@ -10,7 +10,7 @@ using Stash.Stdlib;
 namespace Stash.Tests.Bytecode;
 
 /// <summary>
-/// Integration tests for defer-aware, catch-immune <c>process.exit</c> semantics.
+/// Integration tests for defer-aware, catch-immune <c>env.exit</c> semantics.
 /// All tests run with <c>EmbeddedMode = true</c> so the VM throws <see cref="ExitException"/>
 /// rather than calling <see cref="System.Environment.Exit"/>.
 /// </summary>
@@ -45,8 +45,8 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
         {
             var (chunk, vm) = BuildVM($$"""
                 defer fs.writeFile("{{markerFile}}", "deferred");
-                process.exit(0);
-                """);
+                env.exit(0);
+                """);;
             var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
             Assert.Equal(0, ex.ExitCode);
             Assert.True(File.Exists(markerFile), "Defer should have written the marker file before exit.");
@@ -66,7 +66,7 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
         var (chunk, vm) = BuildVM("""
             defer io.println("A");
             defer io.println("B");
-            process.exit(0);
+            env.exit(0);
             """, sw);
         var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
         Assert.Equal(0, ex.ExitCode);
@@ -82,8 +82,8 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
         // A defer that itself throws should not prevent exit from propagating.
         var (chunk, vm) = BuildVM("""
             defer { throw "oops"; }
-            process.exit(42);
-            """);
+            env.exit(42);
+            """);;
         var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
         Assert.Equal(42, ex.ExitCode);
         // The defer error should be recorded as suppressed.
@@ -101,11 +101,11 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
         // A Stash try/catch(e) must NOT intercept ExitException.
         var (chunk, vm) = BuildVM("""
             try {
-                process.exit(7);
+                env.exit(7);
             } catch (e) {
                 io.println("caught");
             }
-            """);
+            """);;
         // ExitException must propagate out to C# — not be swallowed by the Stash catch.
         var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
         Assert.Equal(7, ex.ExitCode);
@@ -117,11 +117,11 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
         // catch (Error e) likewise must not intercept ExitException.
         var (chunk, vm) = BuildVM("""
             try {
-                process.exit(3);
+                env.exit(3);
             } catch (Error e) {
                 io.println("caught as Error");
             }
-            """);
+            """);;
         var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
         Assert.Equal(3, ex.ExitCode);
     }
@@ -135,8 +135,8 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
     {
         // process.exit() with no argument must exit with code 0.
         var (chunk, vm) = BuildVM("""
-            process.exit();
-            """);
+            env.exit();
+            """);;
         var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
         Assert.Equal(0, ex.ExitCode);
     }
@@ -145,8 +145,8 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
     public void Exit_NonzeroCode_Preserved()
     {
         var (chunk, vm) = BuildVM("""
-            process.exit(99);
-            """);
+            env.exit(99);
+            """);;
         var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
         Assert.Equal(99, ex.ExitCode);
     }
@@ -165,7 +165,7 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
             var (chunk, vm) = BuildVM($$"""
                 fn inner() {
                     defer fs.writeFile("{{markerFile}}", "inner-deferred");
-                    process.exit(5);
+                    env.exit(5);
                 }
                 inner();
                 """);
@@ -177,5 +177,20 @@ public class ProcessExitTests : Stash.Tests.Interpreting.StashTestBase
         {
             File.Delete(markerFile);
         }
+    }
+
+    // =========================================================================
+    // Regression: deprecated process.exit alias still works until N+2
+    // =========================================================================
+
+    [Fact]
+    // Regression: deprecated process.exit alias still works until N+2.
+    public void ProcessExit_DeprecatedAlias_StillWorks()
+    {
+        var (chunk, vm) = BuildVM("""
+            process.exit(42);
+            """);
+        var ex = Assert.Throws<ExitException>(() => vm.Execute(chunk));
+        Assert.Equal(42, ex.ExitCode);
     }
 }

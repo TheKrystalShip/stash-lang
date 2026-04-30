@@ -7,7 +7,7 @@
 > **Companion documents:**
 >
 > - [Language Specification](Stash%20—%20Language%20Specification.md) — language syntax, type system, interpreter architecture
-> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions (including `process.*`)
+  - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions (including `process.*`, `env.*`, `shell.*`)
 
 ---
 
@@ -20,7 +20,7 @@
 5. [Redirects](#5-redirects)
 6. [Shell Built-in Sugar](#6-shell-built-in-sugar)
 7. [Directory Stack](#7-directory-stack)
-8. [`process.exit` Semantics](#8-processexit-semantics)
+8. [`env.exit` Semantics](#8-envexit-semantics)
 9. [`$?` REPL Sugar](#9--repl-sugar)
 10. [RC File](#10-rc-file)
 11. [Persistent History](#11-persistent-history)
@@ -375,15 +375,15 @@ $ grep -r "TODO" src/ | sort > todos.txt
 
 ## 6. Shell Built-in Sugar
 
-The shell runner recognizes `cd`, `pwd`, `exit`, `quit`, and `history` as special names and **desugars** them to `process.*` stdlib calls. The stdlib calls are real Stash code — errors, stack traces, and `defer` blocks all behave identically to direct calls.
+The shell runner recognizes `cd`, `pwd`, `exit`, `quit`, and `history` as special names and **desugars** them to `env.*` and `process.*` stdlib calls. The stdlib calls are real Stash code — errors, stack traces, and `defer` blocks all behave identically to direct calls.
 
 ### 6.1 `cd`
 
 | Input             | Desugared call                                                            |
 | ----------------- | ------------------------------------------------------------------------- |
-| `cd <dir>`        | `process.chdir(<expanded-dir>)`                                           |
-| `cd`              | `process.chdir(env.get("HOME"))` on Linux/macOS; `env.get("USERPROFILE")` on Windows |
-| `cd -`            | `process.popDir()` + `io.println(process.cwd())`                          |
+| `cd <dir>`        | `env.chdir(<expanded-dir>)`                                               |
+| `cd`              | `env.chdir(env.get("HOME"))` on Linux/macOS; `env.get("USERPROFILE")` on Windows |
+| `cd -`            | `env.popDir()` + `io.println(env.cwd())`                                  |
 
 ```text
 $ cd ~/projects/stash
@@ -422,9 +422,9 @@ $ exit 1      # exits with code 1
 $ quit        # alias for exit
 ```
 
-Desugars to `process.exit(<code>)`. The argument, if provided, must be an integer. `exit abc` raises `CommandError: exit: numeric argument required`.
+Desugars to `env.exit(<code>)`. The argument, if provided, must be an integer. `exit abc` raises `CommandError: exit: numeric argument required`.
 
-`exit` is **defer-aware and catch-immune** — see [§8](#8-processexit-semantics).
+`exit` is **defer-aware and catch-immune** — see [§8](#8-envexit-semantics).
 
 ### 6.4 `history`
 
@@ -453,53 +453,53 @@ See [§11](#11-persistent-history) for how history is persisted across sessions.
 
 ## 7. Directory Stack
 
-`process.chdir` maintains a **directory stack** inside the REPL session. The stack is the single source of truth for the working directory.
+`env.chdir` maintains a **directory stack** inside the REPL session. The stack is the single source of truth for the working directory.
 
-| Function                          | Description                                                                   |
-| --------------------------------- | ----------------------------------------------------------------------------- |
-| `process.chdir(dir: string)`      | Validate `dir`, push it onto the stack, and update the actual cwd. Atomic — fails before mutating if the target is inaccessible. |
-| `process.cwd() -> string`         | Returns the top of the stack (the current working directory).                 |
-| `process.popDir() -> string`      | Pops the top of the stack, restores the new top as cwd, returns the popped path. Throws `CommandError("directory stack is at root")` when only one entry remains. |
-| `process.dirStack() -> array`     | Returns a copy of the stack, **oldest entry first**.                          |
-| `process.dirStackDepth() -> int`  | Returns the number of entries in the stack.                                   |
+| Function                       | Description                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `env.chdir(dir: string)`       | Validate `dir`, push it onto the stack, and update the actual cwd. Atomic — fails before mutating if the target is inaccessible. |
+| `env.cwd() -> string`          | Returns the top of the stack (the current working directory).                 |
+| `env.popDir() -> string`       | Pops the top of the stack, restores the new top as cwd, returns the popped path. Throws `CommandError("directory stack is at root")` when only one entry remains. |
+| `env.dirStack() -> array`      | Returns a copy of the stack, **oldest entry first**.                          |
+| `env.dirStackDepth() -> int`   | Returns the number of entries in the stack.                                   |
 
 ### Stack Semantics
 
 - **Initial state:** the stack has one entry — the cwd inherited from the parent process at REPL startup.
 - **`cd -`** pops the top and prints the new cwd (equivalent to many shells' "pop and go back").
-- **Stack cap:** the stack is capped at **256 entries**. When `process.chdir` would push to a full stack, the **oldest entry (index 0) is dropped** to make room. Long sessions stay bounded.
+- **Stack cap:** the stack is capped at **256 entries**. When `env.chdir` would push to a full stack, the **oldest entry (index 0) is dropped** to make room. Long sessions stay bounded.
 - **Session-scoped:** the stack is not persisted across REPL restarts and not shared with child processes.
-- **Minimum depth:** `process.popDir` never empties the stack — minimum depth is 1.
+- **Minimum depth:** `env.popDir` never empties the stack — minimum depth is 1.
 
 ```stash
 // Inspect the stack from within Stash code at the REPL
-io.println(process.dirStack());      // ["/home/alice", "/home/alice/projects", "/tmp"]
-io.println(process.dirStackDepth()); // 3
-process.popDir();                    // pops "/tmp", restores "/home/alice/projects"
+io.println(env.dirStack());      // ["/home/alice", "/home/alice/projects", "/tmp"]
+io.println(env.dirStackDepth()); // 3
+env.popDir();                    // pops "/tmp", restores "/home/alice/projects"
 ```
 
 ---
 
-## 8. `process.exit` Semantics
+## 8. `env.exit` Semantics
 
-`process.exit(code: int = 0)` terminates the interpreter with the given exit code.
+`env.exit(code: int = 0)` terminates the interpreter with the given exit code. The global `exit()` function is an alias for `env.exit()`.
 
 **Defer-aware:** all pending `defer` blocks are run in reverse declaration order, walking up the call stack. Resource cleanup declared with `defer` is guaranteed to execute.
 
 ```stash
 fn cleanup() {
     defer io.println("deferred cleanup");
-    process.exit(1);
+    env.exit(1);
     // "deferred cleanup" is still printed before the process exits
 }
 cleanup();
 ```
 
-**Catch-immune:** no `try/catch` clause matches `process.exit`. The exit propagates through every `try` block, executing their `defer` blocks along the way, and terminates the interpreter at the top level.
+**Catch-immune:** no `try/catch` clause matches `env.exit`. The exit propagates through every `try` block, executing their `defer` blocks along the way, and terminates the interpreter at the top level.
 
 ```stash
 try {
-    process.exit(0);
+    env.exit(0);
     // This CANNOT be caught — the catch block is not reached
 } catch (e) {
     io.println("This never runs");
@@ -508,15 +508,15 @@ try {
 
 This is intentional: a misplaced `try/catch` cannot accidentally swallow an exit. If a `defer` block itself throws during exit unwinding, the secondary error is recorded as a suppressed error (mirroring the existing `defer` suppressed-error mechanism) and the original exit code is preserved.
 
-In the REPL, `process.exit` exits the REPL host process — there is no "soft exit" that returns to the prompt.
+In the REPL, `env.exit` exits the REPL host process — there is no "soft exit" that returns to the prompt.
 
 ---
 
 ## 9. `$?` REPL Sugar
 
-Inside the REPL only, the token `$?` is syntactic sugar for `process.lastExitCode()`. The REPL preprocessor rewrites it before lexing.
+Inside the REPL only, the token `$?` is syntactic sugar for `shell.lastExitCode()`. The REPL preprocessor rewrites it before lexing.
 
-`process.lastExitCode()` returns the exit code of the most recent bare command (or `$(…)` command). Defaults to `0` before any command runs.
+`shell.lastExitCode()` returns the exit code of the most recent bare command (or `$(…)` command). Defaults to `0` before any command runs.
 
 ```text
 $ ls /nonexistent
@@ -533,7 +533,7 @@ $ io.println("exit code was: " + code)
 exit code was: 2
 ```
 
-`$?` is recognized **only** at the REPL — it is not valid in `.stash` scripts. In scripts, use `process.lastExitCode()` directly.
+`$?` is recognized **only** at the REPL — it is not valid in `.stash` scripts. In scripts, use `shell.lastExitCode()` directly.
 
 `$?` is not recognized inside string literals or comments:
 
@@ -684,8 +684,8 @@ All shell-mode errors are `CommandError` values (the existing built-in error typ
 | Permission denied executing file       | `"permission denied: <path>"`                                      |
 | Glob with no matches                   | `"glob pattern '<pat>' did not match any files"`                   |
 | Strict command non-zero exit           | `"command exited with status <n>: <cmdline>"`                      |
-| `cd` to nonexistent directory          | `"no such directory: <path>"` (from `process.chdir`)               |
-| `cd -` when stack is at root           | `"directory stack is at root"` (from `process.popDir`)             |
+| `cd` to nonexistent directory          | `"no such directory: <path>"` (from `env.chdir`)                   |
+| `cd -` when stack is at root           | `"directory stack is at root"` (from `env.popDir`)                 |
 | `cd` / `pwd` / `exit` — too many args  | `"<name>: too many arguments"`                                     |
 | `exit` with non-integer argument       | `"exit: numeric argument required"`                                |
 | Interpolation expression error         | The expression's own error, with a context note                    |
@@ -769,7 +769,7 @@ Prior to this feature, `$(…)` command literals did not glob-expand arguments. 
 
 ---
 
-*See also: [Standard Library Reference — `process` namespace](Stash%20—%20Standard%20Library%20Reference.md#process--process-management) for the full API of `process.chdir`, `process.popDir`, `process.dirStack`, `process.dirStackDepth`, `process.exit`, `process.lastExitCode`, `process.historyList`, `process.historyClear`, and `process.historyAdd`.*
+*See also: [Standard Library Reference — `env` namespace](Stash%20—%20Standard%20Library%20Reference.md#env--environment-variables) for `env.chdir`, `env.popDir`, `env.dirStack`, `env.dirStackDepth`, `env.withDir`, and `env.exit`; [`shell` namespace](Stash%20—%20Standard%20Library%20Reference.md#shell--shell-mode-state) for `shell.lastExitCode`; [`process` namespace](Stash%20—%20Standard%20Library%20Reference.md#process--process-management) for `process.historyList`, `process.historyClear`, and `process.historyAdd`.*
 
 ---
 

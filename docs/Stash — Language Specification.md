@@ -2061,7 +2061,7 @@ io.println(r.exitCode);          // 0
 let result = $>(make install);
 if (result.exitCode != 0) {
     io.println("Installation failed!");
-    process.exit(1);
+    env.exit(1);
 }
 ```
 
@@ -3284,6 +3284,26 @@ enum Backoff { Fixed, Linear, Exponential }
 - **Fixed:** Every retry waits `delay`.
 - **Linear:** Delay increases by `delay` each retry (delay × attempt).
 - **Exponential:** Delay doubles each retry (delay × 2^(attempt-1)).
+
+### Signal Enum
+
+```stash
+enum Signal { Hup, Int, Quit, Kill, Usr1, Usr2, Term }
+```
+
+The global `Signal` enum identifies POSIX signals for use with `process.signal()`. Each member maps to a POSIX signal number:
+
+| Member        | POSIX Signal | Value | Description             |
+| ------------- | ------------ | ----- | ----------------------- |
+| `Signal.Hup`  | SIGHUP       | 1     | Hangup                  |
+| `Signal.Int`  | SIGINT       | 2     | Interrupt (Ctrl+C)      |
+| `Signal.Quit` | SIGQUIT      | 3     | Quit                    |
+| `Signal.Kill` | SIGKILL      | 9     | Kill (cannot be caught) |
+| `Signal.Term` | SIGTERM      | 15    | Terminate (graceful)    |
+| `Signal.Usr1` | SIGUSR1      | 10    | User-defined signal 1   |
+| `Signal.Usr2` | SIGUSR2      | 12    | User-defined signal 2   |
+
+`process.signal(handle, sig)` accepts both `Signal` enum members and raw integers. `Signal.Term` and `15` are equivalent.
 
 ### Attempt Context
 
@@ -5371,7 +5391,7 @@ Every REPL line is classified as **Stash mode** or **shell mode** before evaluat
 
 ### 15.3 `$?` REPL Preprocessor
 
-Inside the REPL only, `$?` is syntactic sugar for `process.lastExitCode()`. It is desugared by the REPL preprocessor before lexing. `$?` is **not** part of the Stash language and is not valid in `.stash` scripts. See [Shell — Interactive Shell Mode §9](Shell%20—%20Interactive%20Shell%20Mode.md#9--repl-sugar).
+Inside the REPL only, `$?` is syntactic sugar for `shell.lastExitCode()`. It is desugared by the REPL preprocessor before lexing. `$?` is **not** part of the Stash language and is not valid in `.stash` scripts. See [Shell — Interactive Shell Mode §9](Shell%20—%20Interactive%20Shell%20Mode.md#9--repl-sugar).
 
 ### 15.4 `$(…)` Glob Auto-Expansion — Breaking Change
 

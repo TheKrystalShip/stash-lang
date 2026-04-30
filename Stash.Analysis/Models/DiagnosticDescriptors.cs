@@ -92,6 +92,9 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
     public static readonly DiagnosticDescriptor SA0804 = new("SA0804", "Import statements not in canonical order", DiagnosticLevel.Information, "Imports", "Import statements are not in canonical order.", FixApplicability.Safe);
 
+    // ── SA083x — Deprecations ─────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0830 = new("SA0830", "Deprecated built-in member", DiagnosticLevel.Warning, "Deprecations", "'{0}' is deprecated \u2014 use '{1}' instead.");
+
     // ── SA081x — Locks ────────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0810 = new("SA0810", "Lock path not a string", DiagnosticLevel.Warning, "Locks", "The 'lock' path expression does not evaluate to a string. The path must be a string value.");
     public static readonly DiagnosticDescriptor SA0811 = new("SA0811", "Lock body is empty", DiagnosticLevel.Warning, "Locks", "The 'lock' block body is empty. An empty lock block serves no purpose.");

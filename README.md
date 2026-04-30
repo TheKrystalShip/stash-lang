@@ -304,9 +304,9 @@ fs.watch("/etc/nginx/", (event) => {
 });
 
 // Signal handling
-process.onSignal(process.SIGTERM, () => {
+process.onSignal(Signal.Term, () => {
   cleanup();
-  process.exit(0);
+  env.exit(0);
 });
 ```
 

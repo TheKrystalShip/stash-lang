@@ -25,6 +25,9 @@ public enum StashCapabilities
     /// <summary>Environment variable access (env.get, env.set, etc.)</summary>
     Environment = 1 << 3,
 
+    /// <summary>Interactive shell mode features (shell.lastExitCode, shell history APIs, prompt hooks).</summary>
+    Shell = 1 << 4,
+
     /// <summary>All capabilities enabled. This is the default for CLI usage.</summary>
-    All = FileSystem | Network | Process | Environment,
+    All = FileSystem | Network | Process | Environment | Shell,
 }

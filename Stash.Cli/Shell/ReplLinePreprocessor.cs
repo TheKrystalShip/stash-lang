@@ -7,13 +7,14 @@ using System.Text;
 /// Applies REPL-only textual desugarings to a logical input line before it is lexed.
 ///
 /// Currently handles:
-///   <c>$?</c>  →  <c>process.lastExitCode()</c>
+///   <c>$?</c>  →  <c>shell.lastExitCode()</c>
 ///
 /// Replacements are only performed outside of string literals and comments.
 /// </summary>
 internal static class ReplLinePreprocessor
 {
-    private const string DollarQuestionReplacement = "process.lastExitCode()";
+    private const string DollarQuestionReplacement = "shell.lastExitCode()";
+
 
     /// <summary>
     /// Applies all REPL-only desugarings to <paramref name="line"/>.

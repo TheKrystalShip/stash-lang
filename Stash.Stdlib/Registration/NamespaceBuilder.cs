@@ -43,12 +43,13 @@ public class NamespaceBuilder
     /// </summary>
     public NamespaceBuilder Function(string name, BuiltInParam[] parameters,
         Runtime.BuiltInFunction.DirectHandler body,
-        string? returnType = null, bool isVariadic = false, string? documentation = null)
+        string? returnType = null, bool isVariadic = false, string? documentation = null,
+        DeprecationInfo? deprecation = null)
     {
         int arity = isVariadic ? -1 : parameters.Length;
         string qualifiedName = string.IsNullOrEmpty(_name) ? name : $"{_name}.{name}";
         _namespace.Define(name, new Runtime.BuiltInFunction(qualifiedName, arity, body));
-        _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation));
+        _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation, deprecation));
         return this;
     }
 
@@ -60,11 +61,13 @@ public class NamespaceBuilder
     /// <param name="type">The type string for documentation (e.g., "float").</param>
     /// <param name="displayValue">The display string for documentation (e.g., "3.141592653589793").</param>
     /// <param name="documentation">Optional documentation string.</param>
+    /// <param name="deprecation">Optional deprecation metadata for SA0830.</param>
     public NamespaceBuilder Constant(string name, object? runtimeValue,
-        string type, string displayValue, string? documentation = null)
+        string type, string displayValue, string? documentation = null,
+        DeprecationInfo? deprecation = null)
     {
         _namespace.Define(name, runtimeValue);
-        _constants.Add(new NamespaceConstant(_name, name, type, displayValue, documentation));
+        _constants.Add(new NamespaceConstant(_name, name, type, displayValue, documentation, deprecation));
         return this;
     }
 

@@ -9,7 +9,8 @@ public record NamespaceFunction(
     BuiltInParam[] Parameters,
     string? ReturnType = null,
     bool IsVariadic = false,
-    string? Documentation = null)
+    string? Documentation = null,
+    DeprecationInfo? Deprecation = null)
 {
     public string QualifiedName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
 

@@ -49,7 +49,7 @@ public class ShellSugarIntegrationTests
         try
         {
             runner.Run("cd /tmp");
-            // process.chdir pushes onto the directory stack, so depth should be ≥ 1.
+            // env.chdir pushes onto the directory stack, so depth should be ≥ 1.
             Assert.Equal("/tmp", Environment.CurrentDirectory,
                 StringComparer.OrdinalIgnoreCase);
         }
@@ -107,7 +107,7 @@ public class ShellSugarIntegrationTests
     {
         var (runner, _) = MakeRunner();
 
-        // process.exit(7) → ExitException(7) propagates out of EvaluateSource → out of Run.
+        // env.exit(7) → ExitException(7) propagates out of EvaluateSource → out of Run.
         var ex = Assert.Throws<ExitException>(() => runner.Run("exit 7"));
         Assert.Equal(7, ex.ExitCode);
     }

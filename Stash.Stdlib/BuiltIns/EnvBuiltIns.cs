@@ -259,6 +259,41 @@ public static class EnvBuiltIns
             returnType: "null",
             documentation: "Saves all current environment variables to a .env file at the given path.\n@param path Path to write the .env file\n@return null");
 
+        ns.Function("chdir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            CurrentProcessImpl.Chdir(ctx, args, "env.chdir"),
+            returnType: "null",
+            documentation: "Changes the current working directory to the given path and pushes it onto the directory stack.\n@param path The directory path to change to\n@return null");
+
+        ns.Function("popDir", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            CurrentProcessImpl.PopDir(ctx, args, "env.popDir"),
+            returnType: "string",
+            documentation: "Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path.\nThrows CommandError if the stack is at its root entry.\n@return The directory path that was popped");
+
+        ns.Function("dirStack", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            CurrentProcessImpl.DirStack(ctx, args, "env.dirStack"),
+            returnType: "array",
+            documentation: "Returns a copy of the directory stack, oldest entry first.\n@return An array of directory path strings");
+
+        ns.Function("dirStackDepth", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            CurrentProcessImpl.DirStackDepth(ctx, args, "env.dirStackDepth"),
+            returnType: "int",
+            documentation: "Returns the number of entries in the directory stack.\n@return The depth as an integer");
+
+        ns.Function("withDir", [Param("path", "string"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            CurrentProcessImpl.WithDir(ctx, args, "env.withDir"),
+            returnType: "any",
+            documentation: "Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.\n@param path The directory to temporarily change to\n@param fn The function to execute in the new directory\n@return The return value of fn");
+
+        ns.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            long code = args.Length > 0 ? SvArgs.Long(args, 0, "env.exit") : 0L;
+            GlobalBuiltIns.EmitExitImpl(ctx, code);
+            return StashValue.Null;
+        },
+            returnType: "null",
+            isVariadic: true,
+            documentation: "Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code. Defaults to 0\n@return Does not return — exits the process");
+
         return ns.Build();
     }
 }

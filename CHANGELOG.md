@@ -166,6 +166,16 @@ Full prompt customization via Stash code. Full documentation: [docs/Prompt — C
   - Example: `"Operands must be numbers or strings, got 'bool' and 'int'. Convert with conv.toInt() or conv.toFloat() first."`
   - Constant assignment error now names the variable: `"Cannot assign to constant 'myVar'."`
 
+### Changed
+
+#### Process Namespace Decomposition
+
+- **stdlib**: `process.chdir`, `process.popDir`, `process.dirStack`, `process.dirStackDepth`, `process.withDir`, and `process.exit` moved to the `env` namespace. The old names still work but emit a new deprecation warning (SA0830) and will be removed in a future minor release.
+- **stdlib**: `process.lastExitCode` moved to a new `shell` namespace gated on `StashCapabilities.Shell` (enabled by default in the CLI, opt-in for embedded hosts). The old name still works (deprecated, SA0830).
+- **stdlib**: `process.SIGHUP`, `process.SIGINT`, `process.SIGQUIT`, `process.SIGKILL`, `process.SIGUSR1`, `process.SIGUSR2`, `process.SIGTERM` integer constants replaced by a global `Signal` enum (`Signal.Hup`, `Signal.Int`, `Signal.Quit`, `Signal.Kill`, `Signal.Usr1`, `Signal.Usr2`, `Signal.Term`). The old constants still work (deprecated, SA0830). `process.signal(handle, sig)` now accepts both `Signal` enum members and raw integers.
+- **analysis**: New diagnostic SA0830 ("Deprecated built-in member"), Warning severity, Category: Deprecations.
+- **runtime**: New capability flag `StashCapabilities.Shell` for shell/REPL-only built-ins.
+
 ---
 
 ## [0.9.0] — Pre-release

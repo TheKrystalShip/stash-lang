@@ -93,16 +93,16 @@ internal static class ShellSugarDesugarer
             string homeVar = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
                 ? "USERPROFILE"
                 : "HOME";
-            return $"process.chdir(env.get(\"{homeVar}\"));";
+            return $"env.chdir(env.get(\"{homeVar}\"));";
         }
 
         string arg = args[0];
 
         // `cd -` (or `cd "-"`, `cd \-` — all expand to the literal string "-") → pop dir.
         if (arg == "-")
-            return "process.popDir(); io.println(env.cwd());";
+            return "env.popDir(); io.println(env.cwd());";
 
-        return $"process.chdir(\"{EscapeForStashString(arg)}\");";
+        return $"env.chdir(\"{EscapeForStashString(arg)}\");";
     }
 
     private static string DesugarPwd(IReadOnlyList<string> args)
@@ -119,16 +119,16 @@ internal static class ShellSugarDesugarer
             throw new RuntimeError($"{program}: too many arguments", null, StashErrorTypes.CommandError);
 
         if (args.Count == 0)
-            return "process.exit(0);";
+            return "env.exit(0);";
 
         string arg = args[0];
 
         // Validate numeric argument in C# to produce the right error immediately, then
-        // embed the parsed integer as a literal so `process.exit` receives a plain int.
+        // embed the parsed integer as a literal so `env.exit` receives a plain int.
         if (!long.TryParse(arg, out long code))
             throw new RuntimeError($"{program}: numeric argument required", null, StashErrorTypes.CommandError);
 
-        return $"process.exit({code});";
+        return $"env.exit({code});";
     }
 
     // ── String escaping ───────────────────────────────────────────────────────
