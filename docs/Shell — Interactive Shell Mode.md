@@ -27,6 +27,7 @@
 12. [Static Analysis](#12-static-analysis)
 13. [Cross-Platform Notes](#13-cross-platform-notes)
 14. [Customizing the Prompt](#14-customizing-the-prompt)
+15. [Tab Completion](#15-tab-completion)
 
 ---
 
@@ -668,3 +669,72 @@ Prior to this feature, `$(…)` command literals did not glob-expand arguments. 
 ## 14. Customizing the Prompt
 
 Shell-mode REPL prompts are fully customizable via Stash code. See [Prompt — Customizing the REPL Prompt](Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md) for the full guide on themes, starters, and writing your own `fn prompt(ctx)`.
+
+---
+
+## 15. Tab Completion
+
+Tab completion is **on by default** in both shell mode and REPL Stash mode whenever the REPL is running interactively. Pressing `Tab` triggers context-aware completion; the interaction model is **bash-classic**.
+
+### 15.1 Bash-Classic UX
+
+| Trigger | Candidates | Action |
+| ------- | ---------- | ------ |
+| First `Tab` | 0 | Bell (`\x07`) — no candidates available |
+| First `Tab` | 1 | Replace token with the single candidate |
+| First `Tab` | N > 1 | Insert the **longest common prefix** of all candidates |
+| Second consecutive `Tab` | N > 1 | Print candidates in a multi-column list below the prompt, then redraw |
+| Any non-`Tab` key | — | Resets the double-`Tab` state |
+
+When more than 100 candidates are available, the engine prints a `Display all N possibilities? (y or n)` prompt before listing them. The threshold is fixed at 100 in v1.
+
+**Directory exception:** when the unique match is a directory, a trailing `/` is appended automatically so the user can keep typing into the path without needing an extra keystroke.
+
+### 15.2 What Gets Completed
+
+| Position | Completions offered |
+| -------- | ------------------- |
+| Command position (shell mode) | PATH executables, shell-sugar names (`cd`, `pwd`, `exit`, `quit`), callable Stash globals |
+| Argument position, redirect target, inside quotes (shell mode) | File paths with `~/` tilde expansion and dotfile rules |
+| REPL Stash mode (bare identifier) | Stash keywords, global functions, stdlib namespace names, declared REPL globals |
+| After a `.` (e.g. `fs.<Tab>`) | Namespace member functions and constants |
+| Inside `${…}` substitutions | Stash identifier completion (same rules as Stash mode) |
+
+**Smart-case prefix matching** is applied across all completion types: if the typed prefix is all-lowercase, matching is case-insensitive; if any uppercase letter is present, matching is case-sensitive.
+
+**Glob patterns skip completion.** If the token at the cursor contains `*`, `?`, `[`, or `{`, no candidates are offered — the token is intended as a pattern for the argument-expansion pipeline.
+
+### 15.3 Custom Completers
+
+Register a Stash function to control what is offered in argument position after a specific command:
+
+```stash
+complete.register("git", (ctx) => {
+    let sub = ["add", "checkout", "commit", "diff", "log",
+               "pull", "push", "rebase", "status", "tag"];
+    return arr.filter(sub, (s) => str.startsWith(s, ctx.current));
+});
+```
+
+A registered completer **replaces** the default file-path completer for that command. Call `complete.paths(ctx)` inside the function and merge results to also include file paths.
+
+See [Standard Library Reference — `complete`](Stash%20%E2%80%94%20Standard%20Library%20Reference.md#complete--tab-completion) for the full `complete.*` API, the `CompletionContext` and `CompletionResult` struct types, and a complete worked example.
+
+### 15.4 Disabling
+
+Set `STASH_NO_COMPLETION=1` before starting the REPL to disable tab completion entirely. `Tab` then inserts a literal tab character, restoring pre-v1.x behavior.
+
+```bash
+STASH_NO_COMPLETION=1 stash --shell
+```
+
+### 15.5 Multi-line Input
+
+Completion operates on the **current physical line only**. In a multi-line continuation (`cat foo |` + Enter → `gr<Tab>`), the engine sees only the current line and classifies it independently. This is intentional: it keeps the completer simple and covers the vast majority of use cases correctly.
+
+### 15.6 Cross-Platform Notes
+
+- **Linux / macOS:** Tab completion is fully supported.
+- **Windows:** Tab completion is available in Stash-mode REPL sessions. Shell-mode completion is gated alongside shell mode itself (not yet available on Windows in v1).
+
+*For the full specification including phase-by-phase completion procedure, completer dispatch rules, and multi-column layout details, see the spec at `.kanban/3-review/Tab Completion — Shell and REPL Mode.md`.*

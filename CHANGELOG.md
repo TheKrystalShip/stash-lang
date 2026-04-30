@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Tab Completion
+
+- **Tab completion in the interactive REPL** (shell mode and Stash mode). Bash-classic UX: first `Tab` inserts the longest common prefix; second consecutive `Tab` lists candidates in a multi-column layout with a pager prompt for more than 100 results. Covers PATH executables, file paths, Stash keywords and globals, namespace members (e.g. `fs.<Tab>`), and custom user-registered completers. Disable with `STASH_NO_COMPLETION=1`.
+- **`complete.*` stdlib namespace** for registering custom command completers: `complete.register`, `complete.unregister`, `complete.registered`, `complete.suggest`, `complete.paths`. New built-in struct types `CompletionContext` and `CompletionResult`. See [Standard Library Reference — `complete`](docs/Stash%20—%20Standard%20Library%20Reference.md#complete--tab-completion) and [Shell — Tab Completion](docs/Shell%20—%20Interactive%20Shell%20Mode.md#15-tab-completion).
+
 #### Shell Mode — Interactive REPL Shell
 
 Stash can now be used as an interactive login shell. Enable with `--shell`, `STASH_SHELL=1`, or by placing a `~/.stashrc` (or `~/.config/stash/init.stash`) file. Full documentation: [docs/Shell — Interactive Shell Mode.md](docs/Shell%20—%20Interactive%20Shell%20Mode.md).

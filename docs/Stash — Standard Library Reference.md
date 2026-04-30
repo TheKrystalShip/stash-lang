@@ -38,18 +38,19 @@
 22. [`http` — HTTP Requests](#http--http-requests)
 23. [`process` — Process Management](#process--process-management)
 24. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
-25. [`tpl` — Templating](#tpl--templating)
-26. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-27. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-28. [`term` — Terminal Formatting](#term--terminal-formatting)
-29. [`sys` — System Information](#sys--system-information)
-30. [`task` — Parallel Tasks](#task--parallel-tasks)
-31. [`net` — Networking](#net--networking)
-32. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-33. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-34. [Argument Parsing](#argument-parsing)
-35. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-36. [`log` — Structured Logging](#log--structured-logging)
+25. [`complete` — Tab Completion](#complete--tab-completion)
+26. [`tpl` — Templating](#tpl--templating)
+27. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+28. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+29. [`term` — Terminal Formatting](#term--terminal-formatting)
+30. [`sys` — System Information](#sys--system-information)
+31. [`task` — Parallel Tasks](#task--parallel-tasks)
+32. [`net` — Networking](#net--networking)
+33. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+34. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+35. [Argument Parsing](#argument-parsing)
+36. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+37. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -2588,6 +2589,158 @@ prompt.set((ctx) => {
     let g = ctx.git != null && ctx.git.isInRepo ? " (" + ctx.git.branch + ")" : ""
     return term.color(ctx.cwd, p.cwd) + term.color(g, p.info) + " > "
 })
+```
+
+---
+
+## `complete` — Tab Completion
+
+The `complete` namespace provides control over the interactive REPL tab-completion engine. It is a **REPL-only** feature — all functions are safe to call from scripts but have no effect outside the REPL (returning `null`, `false`, or an empty array as appropriate).
+
+> **See also:** [Shell — Interactive Shell Mode](Shell%20%E2%80%94%20Interactive%20Shell%20Mode.md#15-tab-completion) for an overview of the tab-completion UX and behavior. Disable entirely with `STASH_NO_COMPLETION=1`.
+
+### Built-in Structs
+
+| Struct              | Fields                                                          | Description                                                             |
+| ------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `CompletionContext` | `command`, `args`, `current`, `position`, `mode`                | Passed to custom completer functions describing the completion site     |
+| `CompletionResult`  | `replace_start`, `replace_end`, `candidates`, `common_prefix`   | Returned by `complete.suggest`; describes the replacement range and candidates |
+
+#### `CompletionContext`
+
+```stash
+struct CompletionContext {
+    command:  string         // resolved program name of the current pipeline stage
+    args:     array<string>  // already-typed args before the cursor token (best-effort)
+    current:  string         // partial text of the token at the cursor
+    position: int            // 1-based index of the current token within args
+    mode:     string         // "shell" | "stash" | "substitution"
+}
+```
+
+| Field      | Type            | Description                                                                                              |
+| ---------- | --------------- | -------------------------------------------------------------------------------------------------------- |
+| `command`  | `string`        | Resolved program name of the current pipeline stage (e.g. `"git"`)                                      |
+| `args`     | `array<string>` | Already-typed arguments before the cursor token. Best-effort; may be empty if args are not parseable    |
+| `current`  | `string`        | Partial text of the token at the cursor — the text the completer should expand                          |
+| `position` | `int`           | 1-based index of the current token in the argument list (`1` = first arg after the command name)        |
+| `mode`     | `string`        | Completion mode: `"shell"`, `"stash"`, or `"substitution"` (inside `${…}`)                              |
+
+#### `CompletionResult`
+
+```stash
+struct CompletionResult {
+    replace_start: int            // byte offset in the line where replacement begins
+    replace_end:   int            // byte offset where replacement ends (exclusive)
+    candidates:    array<string>  // candidate strings (insert form, sorted alphabetically)
+    common_prefix: string         // longest common prefix among all candidates
+}
+```
+
+| Field           | Type            | Description                                                                      |
+| --------------- | --------------- | -------------------------------------------------------------------------------- |
+| `replace_start` | `int`           | Byte offset in the input line where the current token starts                     |
+| `replace_end`   | `int`           | Byte offset where the current token ends (exclusive)                             |
+| `candidates`    | `array<string>` | Proposed completion strings in insert form, sorted alphabetically                |
+| `common_prefix` | `string`        | Longest common prefix across all candidates; used by the editor on first `Tab`   |
+
+### Functions
+
+| Function                                           | Returns            | Description                                                                                          |
+| -------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------- |
+| `complete.register(name: string, fn: any)`         | `null`             | Register `fn` as the custom completer for command `name`                                             |
+| `complete.unregister(name: string)`                | `bool`             | Remove a registered completer; returns `true` if one existed, `false` otherwise                     |
+| `complete.registered() -> array<string>`           | `array<string>`    | Return the alphabetically sorted list of registered command names                                    |
+| `complete.suggest(line: string, cursor: int = -1)` | `CompletionResult` | Programmatically run the completion engine on `line` at `cursor`                                     |
+| `complete.paths(ctx: CompletionContext)`            | `array<string>`    | Helper for custom completers — run the built-in file-path completer and return its candidate strings |
+
+#### `complete.register(name: string, fn: any) -> null`
+
+Register `fn` as the custom completer called when the user presses `Tab` in argument position after the command `name`. Re-registering with the same `name` replaces the previous completer.
+
+`fn` must be callable and accept exactly one `CompletionContext` argument. It should return an array of strings (each string becomes a candidate). Returning `null` or an empty array falls back to the default file-path completer.
+
+> **Throws:** `TypeError` if `fn` is not callable.
+
+No-op when called outside the REPL (e.g. from a `.stash` script run non-interactively).
+
+```stash
+complete.register("git", (ctx) => {
+    let sub = ["add", "checkout", "commit", "diff", "log", "pull", "push", "status"];
+    return arr.filter(sub, (s) => str.startsWith(s, ctx.current));
+});
+```
+
+#### `complete.unregister(name: string) -> bool`
+
+Remove the completer registered for `name`. Returns `true` if a completer was registered and removed, `false` if no completer was registered for that name.
+
+```stash
+complete.unregister("git");     // true — removed
+complete.unregister("kubectl"); // false — nothing was registered
+```
+
+#### `complete.registered() -> array<string>`
+
+Return the alphabetically sorted list of all registered command names.
+
+```stash
+complete.register("git", myGitFn);
+complete.register("docker", myDockerFn);
+io.println(complete.registered());   // ["docker", "git"]
+```
+
+#### `complete.suggest(line: string, cursor: int = -1) -> CompletionResult`
+
+Programmatically run the completion engine on `line` with the cursor at byte position `cursor`. When `cursor = -1` (the default), the cursor is treated as end-of-line.
+
+Useful for testing custom completers and for building interactive completion UIs in Stash scripts.
+
+```stash
+let result = complete.suggest("git che", -1);
+io.println(result.candidates);     // ["checkout"]
+io.println(result.common_prefix);  // "checkout"
+```
+
+#### `complete.paths(ctx: CompletionContext) -> array<string>`
+
+Run the built-in file-path completer on `ctx` and return its candidate strings. Intended for use inside custom completer functions that want to augment — rather than replace — the default file completions.
+
+```stash
+complete.register("cp", (ctx) => {
+    let flags = ["--archive", "--recursive", "--verbose", "--preserve"];
+    let files = complete.paths(ctx);
+    return arr.concat(flags, files);
+});
+```
+
+### Example — Git completer with branch names and file fallback
+
+```stash
+// Place in ~/.stashrc to register on every shell startup
+
+fn git_complete(ctx: CompletionContext) -> array<string> {
+    let sub_cmds = ["add", "branch", "checkout", "commit", "diff",
+                    "fetch", "log", "merge", "pull", "push",
+                    "rebase", "reset", "stash", "status", "tag"];
+
+    // First arg after "git" — offer subcommands
+    if ctx.position == 1 {
+        return arr.filter(sub_cmds, (s) => str.startsWith(s, ctx.current));
+    }
+
+    // For checkout/branch: offer local branch names, then fall back to files
+    if ctx.position > 1 && (ctx.args[0] == "checkout" || ctx.args[0] == "branch") {
+        let raw = $(git branch --format="%(refname:short)").stdout;
+        let branches = arr.filter(str.split(raw, "\n"), (s) => s != "");
+        return arr.concat(branches, complete.paths(ctx));
+    }
+
+    // Default: file path completion
+    return complete.paths(ctx);
+}
+
+complete.register("git", git_complete);
 ```
 
 ---
