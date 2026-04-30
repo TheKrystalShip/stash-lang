@@ -736,5 +736,3 @@ Completion operates on the **current physical line only**. In a multi-line conti
 
 - **Linux / macOS:** Tab completion is fully supported.
 - **Windows:** Tab completion is available in Stash-mode REPL sessions. Shell-mode completion is gated alongside shell mode itself (not yet available on Windows in v1).
-
-*For the full specification including phase-by-phase completion procedure, completer dispatch rules, and multi-column layout details, see the spec at `.kanban/3-review/Tab Completion — Shell and REPL Mode.md`.*

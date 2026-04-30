@@ -144,7 +144,7 @@ public static class CompleteBuiltIns
             documentation: "Programmatically runs the tab-completion engine on the given line and cursor position. " +
                 "cursor = -1 means end-of-line. Returns a CompletionResult struct.\n" +
                 "@param line The buffer string to complete\n" +
-                "@param cursor Cursor position (byte index); -1 means end of line\n" +
+                "@param cursor Cursor position (character/UTF-16 code unit index); -1 means end of line\n" +
                 "@return CompletionResult struct with replace_start, replace_end, candidates, common_prefix");
 
         // complete.paths(ctx) — Helper for custom completers to enumerate file candidates.

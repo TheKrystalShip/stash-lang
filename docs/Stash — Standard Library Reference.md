@@ -2630,8 +2630,8 @@ struct CompletionContext {
 
 ```stash
 struct CompletionResult {
-    replace_start: int            // byte offset in the line where replacement begins
-    replace_end:   int            // byte offset where replacement ends (exclusive)
+    replace_start: int            // character offset in the line where replacement begins
+    replace_end:   int            // character offset where replacement ends (exclusive)
     candidates:    array<string>  // candidate strings (insert form, sorted alphabetically)
     common_prefix: string         // longest common prefix among all candidates
 }
@@ -2639,8 +2639,8 @@ struct CompletionResult {
 
 | Field           | Type            | Description                                                                      |
 | --------------- | --------------- | -------------------------------------------------------------------------------- |
-| `replace_start` | `int`           | Byte offset in the input line where the current token starts                     |
-| `replace_end`   | `int`           | Byte offset where the current token ends (exclusive)                             |
+| `replace_start` | `int`           | Character offset (UTF-16 code unit) in the input line where the current token starts |
+| `replace_end`   | `int`           | Character offset (UTF-16 code unit) where the current token ends (exclusive)     |
 | `candidates`    | `array<string>` | Proposed completion strings in insert form, sorted alphabetically                |
 | `common_prefix` | `string`        | Longest common prefix across all candidates; used by the editor on first `Tab`   |
 
@@ -2692,7 +2692,7 @@ io.println(complete.registered());   // ["docker", "git"]
 
 #### `complete.suggest(line: string, cursor: int = -1) -> CompletionResult`
 
-Programmatically run the completion engine on `line` with the cursor at byte position `cursor`. When `cursor = -1` (the default), the cursor is treated as end-of-line.
+Programmatically run the completion engine on `line` with the cursor at character position `cursor` (UTF-16 code unit index). When `cursor = -1` (the default), the cursor is treated as end-of-line.
 
 Useful for testing custom completers and for building interactive completion UIs in Stash scripts.
 
