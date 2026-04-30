@@ -130,6 +130,18 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     public bool HasReplGlobal(string name) => _globals.ContainsKey(name);
 
     /// <summary>
+    /// Enumerates all global variables in the VM along with their current value and
+    /// whether the binding is const. Useful for completion and introspection.
+    /// </summary>
+    public IEnumerable<(string Name, StashValue Value, bool IsConst)> EnumerateGlobals()
+    {
+        foreach (var kv in _globals)
+        {
+            yield return (kv.Key, kv.Value, _constGlobals.Contains(kv.Key));
+        }
+    }
+
+    /// <summary>
     /// Exit code of the last shell-mode passthrough command.
     /// Updated by ShellRunner after each bare-command execution.
     /// </summary>

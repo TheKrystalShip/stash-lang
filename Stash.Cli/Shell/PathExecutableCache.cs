@@ -14,6 +14,7 @@ internal sealed class PathExecutableCache
 {
     private readonly Dictionary<string, bool> _cache =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private List<string>? _allExecutables;
     private DateTime _lastRefresh = DateTime.MinValue;
     private readonly TimeSpan _ttl = TimeSpan.FromSeconds(60);
     private readonly object _lock = new();
@@ -50,7 +51,23 @@ internal sealed class PathExecutableCache
         lock (_lock)
         {
             _cache.Clear();
+            _allExecutables = null;
             _lastRefresh = DateTime.MinValue;
+        }
+    }
+
+    /// <summary>
+    /// Returns all executable names found across all PATH directories, sorted
+    /// alphabetically (case-insensitive) and deduplicated (first PATH occurrence wins).
+    /// On Windows, names are returned without their PATHEXT extension.
+    /// Results are cached with the same 60-second TTL as <see cref="IsExecutable"/>.
+    /// </summary>
+    public IReadOnlyList<string> GetAllExecutables()
+    {
+        lock (_lock)
+        {
+            RefreshIfStale();
+            return _allExecutables ?? (IReadOnlyList<string>)Array.Empty<string>();
         }
     }
 
@@ -61,16 +78,23 @@ internal sealed class PathExecutableCache
             return;
 
         _cache.Clear();
+        _allExecutables = null;
 
         string? pathEnv = Environment.GetEnvironmentVariable("PATH");
         if (string.IsNullOrEmpty(pathEnv))
         {
+            _allExecutables = new List<string>();
             _lastRefresh = DateTime.UtcNow;
             return;
         }
 
         char separator = OperatingSystem.IsWindows() ? ';' : ':';
         string[] dirs = pathEnv.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+
+        // Canonical name set: on Windows, extension-stripped; on POSIX, full filename.
+        // HashSet preserves first-occurrence-wins deduplication.
+        var canonicalNames = new HashSet<string>(
+            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
 
         foreach (string dir in dirs)
         {
@@ -87,13 +111,18 @@ internal sealed class PathExecutableCache
                     if (IsFileExecutable(filePath))
                     {
                         _cache[fileName] = true;
-                        // On Windows, also register the extension-stripped name so that typing
-                        // 'notepad' resolves even though the file is 'notepad.exe' on PATH.
                         if (OperatingSystem.IsWindows())
                         {
                             string nameNoExt = Path.GetFileNameWithoutExtension(filePath);
                             if (!string.IsNullOrEmpty(nameNoExt) && !_cache.ContainsKey(nameNoExt))
                                 _cache[nameNoExt] = true;
+                            // Canonical name for GetAllExecutables: extension-stripped.
+                            canonicalNames.Add(nameNoExt);
+                        }
+                        else
+                        {
+                            // Canonical name for GetAllExecutables: full filename.
+                            canonicalNames.Add(fileName);
                         }
                     }
                 }
@@ -102,6 +131,8 @@ internal sealed class PathExecutableCache
             catch (IOException) { }
         }
 
+        _allExecutables = new List<string>(canonicalNames);
+        _allExecutables.Sort(StringComparer.OrdinalIgnoreCase);
         _lastRefresh = DateTime.UtcNow;
     }
 
