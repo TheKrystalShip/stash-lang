@@ -1,3 +1,4 @@
+using System.IO;
 using Stash.Cli.Shell;
 using Stash.Bytecode;
 
@@ -10,4 +11,5 @@ namespace Stash.Cli.Completion;
 internal sealed record CompletionDeps(
     VirtualMachine Vm,
     PathExecutableCache PathCache,
-    CustomCompleterRegistry CustomCompleters);
+    CustomCompleterRegistry CustomCompleters,
+    TextWriter ErrorOutput);

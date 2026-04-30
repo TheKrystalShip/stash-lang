@@ -26,7 +26,7 @@ public class StashIdentifierCompleterTests
     }
 
     private static CompletionDeps MakeDeps(Stash.Bytecode.VirtualMachine? vm = null) =>
-        new(vm ?? MakeVm(), new PathExecutableCache(), new CustomCompleterRegistry());
+        new(vm ?? MakeVm(), new PathExecutableCache(), new CustomCompleterRegistry(), System.IO.TextWriter.Null);
 
     private static CursorContext MakeCtx(string token, CompletionMode mode = CompletionMode.Stash) =>
         new(mode, 0, token.Length, token, false, '\0', false, Array.Empty<string>());

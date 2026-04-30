@@ -18,7 +18,7 @@ public class CommandCompleterTests
         var realVm = MakeVm();
         var cache = new PathExecutableCache();
         var registry = new CustomCompleterRegistry();
-        return new CompletionDeps(realVm, cache, registry);
+        return new CompletionDeps(realVm, cache, registry, System.IO.TextWriter.Null);
     }
 
     private static Stash.Bytecode.VirtualMachine MakeVm(string? source = null)
@@ -36,7 +36,7 @@ public class CommandCompleterTests
         new(CompletionMode.Shell, 0, token.Length, token, false, '\0', false, Array.Empty<string>());
 
     private static CompletionDeps MakeDepsWithVm(Stash.Bytecode.VirtualMachine vm) =>
-        new(vm, new PathExecutableCache(), new CustomCompleterRegistry());
+        new(vm, new PathExecutableCache(), new CustomCompleterRegistry(), System.IO.TextWriter.Null);
 
     // ── Sugar names ──────────────────────────────────────────────────────────
 

@@ -30,7 +30,7 @@ public sealed class PathCompleterTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_tmpDir, "subdir"));
 
         var vm = new Stash.Bytecode.VirtualMachine(Stash.Stdlib.StdlibDefinitions.CreateVMGlobals());
-        _deps = new CompletionDeps(vm, new PathExecutableCache(), new CustomCompleterRegistry());
+        _deps = new CompletionDeps(vm, new PathExecutableCache(), new CustomCompleterRegistry(), System.IO.TextWriter.Null);
     }
 
     public void Dispose()

@@ -19,8 +19,25 @@ public static partial class StdlibRegistry
         new("stack",   "array"),
     ]);
 
+    private static readonly BuiltInStruct _completionContextStruct = new("CompletionContext",
+    [
+        new("command",  "string"),
+        new("args",     "array"),
+        new("current",  "string"),
+        new("position", "int"),
+        new("mode",     "string"),
+    ]);
+
+    private static readonly BuiltInStruct _completionResultStruct = new("CompletionResult",
+    [
+        new("replace_start", "int"),
+        new("replace_end",   "int"),
+        new("candidates",    "array"),
+        new("common_prefix", "string"),
+    ]);
+
     public static readonly IReadOnlyList<BuiltInStruct> Structs =
-        new[] { _errorStruct }
+        new[] { _errorStruct, _completionContextStruct, _completionResultStruct }
             .Concat(StdlibDefinitions.GetGlobalNamespace(StashCapabilities.All).Structs)
             .Concat(StdlibDefinitions.Structs)
             .ToArray();

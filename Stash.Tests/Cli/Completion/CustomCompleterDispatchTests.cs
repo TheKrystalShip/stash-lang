@@ -31,8 +31,9 @@ public class CustomCompleterDispatchTests
 
     private static CompletionDeps MakeDeps(
         Stash.Bytecode.VirtualMachine? vm = null,
-        CustomCompleterRegistry? registry = null) =>
-        new(vm ?? MakeVm(), new PathExecutableCache(), registry ?? new CustomCompleterRegistry());
+        CustomCompleterRegistry? registry = null,
+        System.IO.TextWriter? errorOutput = null) =>
+        new(vm ?? MakeVm(), new PathExecutableCache(), registry ?? new CustomCompleterRegistry(), errorOutput ?? System.IO.TextWriter.Null);
 
     private static CursorContext MakeCtx(string token, IReadOnlyList<string>? priorArgs = null) =>
         new(CompletionMode.Shell, 0, token.Length, token, false, '\0', false,
@@ -204,19 +205,21 @@ public class CustomCompleterDispatchTests
         var vm = MakeVm();
         var registry = new CustomCompleterRegistry();
         registry.Register("kaboom", new LambdaCallable((_, _) => throw new InvalidOperationException("boom")));
-        var deps = MakeDeps(vm, registry);
+        var sw = new System.IO.StringWriter();
+        var deps = MakeDeps(vm, registry, sw);
         var dispatch = new CustomCompleterDispatch();
 
-        string stderr1 = CaptureStderr(() =>
-            dispatch.TryDispatch(MakeCtx(""), deps, "kaboom"));
+        dispatch.TryDispatch(MakeCtx(""), deps, "kaboom");
+        string stderr1 = sw.ToString();
 
         // First call: logs the error
         Assert.Contains("kaboom", stderr1);
         Assert.Contains("boom", stderr1);
         Assert.True(registry.HasReportedError("kaboom"));
 
-        string stderr2 = CaptureStderr(() =>
-            dispatch.TryDispatch(MakeCtx(""), deps, "kaboom"));
+        sw.GetStringBuilder().Clear();
+        dispatch.TryDispatch(MakeCtx(""), deps, "kaboom");
+        string stderr2 = sw.ToString();
 
         // Second call: error already recorded, no output
         Assert.Empty(stderr2);
@@ -228,12 +231,10 @@ public class CustomCompleterDispatchTests
         var vm = MakeVm();
         var registry = new CustomCompleterRegistry();
         registry.Register("bad", new LambdaCallable((_, _) => throw new Exception("fail")));
-        var deps = MakeDeps(vm, registry);
+        var deps = MakeDeps(vm, registry, System.IO.TextWriter.Null);
         var dispatch = new CustomCompleterDispatch();
 
-        _ = CaptureStderr(() => { }); // warm up
-        IReadOnlyList<Candidate>? result = CaptureStderrResult(
-            () => dispatch.TryDispatch(MakeCtx(""), deps, "bad"));
+        IReadOnlyList<Candidate>? result = dispatch.TryDispatch(MakeCtx(""), deps, "bad");
 
         Assert.Null(result);
     }

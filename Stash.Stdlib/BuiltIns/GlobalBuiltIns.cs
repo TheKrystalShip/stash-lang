@@ -277,6 +277,22 @@ public static class GlobalBuiltIns
             new("errors",    "array"),
         ]);
 
+        // Completion-related struct types — registered here so the VM can instantiate them
+        // at runtime and the LSP knows their fields.
+        b.Struct("CompletionContext", [
+            new("command",  "string"),
+            new("args",     "array"),
+            new("current",  "string"),
+            new("position", "int"),
+            new("mode",     "string"),
+        ]);
+        b.Struct("CompletionResult", [
+            new("replace_start", "int"),
+            new("replace_end",   "int"),
+            new("candidates",    "array"),
+            new("common_prefix", "string"),
+        ]);
+
         return b.Build();
     }
 }

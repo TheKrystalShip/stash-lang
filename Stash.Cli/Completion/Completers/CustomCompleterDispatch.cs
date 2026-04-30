@@ -49,7 +49,7 @@ internal sealed class CustomCompleterDispatch
         catch (Exception ex)
         {
             if (!deps.CustomCompleters.HasReportedError(commandName))
-                Console.Error.WriteLine($"completer for '{commandName}' failed: {ex.Message}");
+                deps.ErrorOutput.WriteLine($"completer for '{commandName}' failed: {ex.Message}");
             deps.CustomCompleters.RecordError(commandName);
             return null;
         }

@@ -23,7 +23,7 @@ public class DottedMemberCompleterTests
         };
 
     private static CompletionDeps MakeDeps() =>
-        new(MakeVm(), new PathExecutableCache(), new CustomCompleterRegistry());
+        new(MakeVm(), new PathExecutableCache(), new CustomCompleterRegistry(), System.IO.TextWriter.Null);
 
     private static CursorContext MakeCtx(string token, CompletionMode mode = CompletionMode.Stash) =>
         new(mode, 0, token.Length, token, false, '\0', false, Array.Empty<string>());
