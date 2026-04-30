@@ -17,7 +17,7 @@ namespace Stash.Cli.Shell;
 internal static class ShellSugarDesugarer
 {
     private static readonly HashSet<string> _sugarNames =
-        new(System.StringComparer.Ordinal) { "cd", "pwd", "exit", "quit" };
+        new(System.StringComparer.Ordinal) { "cd", "pwd", "exit", "quit", "history" };
 
     /// <summary>Returns <c>true</c> when <paramref name="program"/> is one of the four sugar names.</summary>
     public static bool IsSugarName(string program) => _sugarNames.Contains(program);
@@ -47,12 +47,41 @@ internal static class ShellSugarDesugarer
             "cd"             => DesugarCd(expandedArgs),
             "pwd"            => DesugarPwd(expandedArgs),
             "exit" or "quit" => DesugarExit(program, expandedArgs),
+            "history"        => DesugarHistory(expandedArgs),
             _                => null,
         };
     }
 
     // ── Per-built-in desugaring helpers ──────────────────────────────────────
+    private static string DesugarHistory(IReadOnlyList<string> args)
+    {
+        if (args.Count == 0)
+            return "for entry in process.historyList() { io.println(entry); }";
 
+        if (args.Count == 1)
+        {
+            string arg = args[0];
+
+            if (arg == "-c")
+                return "process.historyClear();";
+
+            if (int.TryParse(arg, out int n))
+            {
+                if (n < 0)
+                    throw new RuntimeError("history: numeric argument must be a positive integer", null, StashErrorTypes.CommandError);
+
+                // history 0 → print nothing
+                if (n == 0)
+                    return "null;";
+
+                return $"let __h = process.historyList(); let __n = arr.len(__h); let __s = __n > {n} ? __n - {n} : 0; let __slice = arr.slice(__h, __s, __n); for entry in __slice {{ io.println(entry); }}";
+            }
+
+            throw new RuntimeError("history: usage: history [N | -c]", null, StashErrorTypes.CommandError);
+        }
+
+        throw new RuntimeError("history: usage: history [N | -c]", null, StashErrorTypes.CommandError);
+    }
     private static string DesugarCd(IReadOnlyList<string> args)
     {
         if (args.Count > 1)

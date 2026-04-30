@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Cli.Completion;
+using Stash.Cli.History;
 using Stash.Cli.Repl;
 
 namespace Stash;
@@ -30,6 +31,16 @@ public class LineEditor
     private int _previousLength;
     /// <summary>True when the previous key was Tab (used by the bash-classic state machine).</summary>
     private bool _lastKeyWasTab;
+
+    /// <summary>History sink for persistent file storage. Null means persistence disabled.</summary>
+    internal IHistorySink? HistorySink { get; set; }
+
+    /// <summary>Seeds the in-memory history list from a pre-loaded snapshot (oldest-first).</summary>
+    internal void SeedHistory(IReadOnlyList<string> initial)
+    {
+        _history.Clear();
+        _history.AddRange(initial);
+    }
 
     /// <summary>
     /// The completion engine to use when Tab is pressed.
@@ -119,10 +130,11 @@ public class LineEditor
                 case ConsoleKey.Enter:
                     Console.WriteLine();
                     var result = _buffer.ToString();
-                    if (result.Length > 0 && (_history.Count == 0 || _history[^1] != result))
+                    if (result.Length > 0 && result[0] != ' ' && (_history.Count == 0 || _history[^1] != result))
                     {
                         _history.Add(result);
                     }
+                    HistorySink?.Append(result);
                     return result;
 
                 case ConsoleKey.Backspace:

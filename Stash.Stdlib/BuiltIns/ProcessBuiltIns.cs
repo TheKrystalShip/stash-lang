@@ -35,6 +35,15 @@ using static Stash.Stdlib.Registration.P;
 /// </remarks>
 public static class ProcessBuiltIns
 {
+    /// <summary>Set by Stash.Cli on REPL startup. Returns a snapshot of the current in-memory history. Null means persistence disabled.</summary>
+    public static Func<IReadOnlyList<string>>? HistoryListProvider;
+
+    /// <summary>Set by Stash.Cli on REPL startup. Clears in-memory + on-disk history. Null means persistence disabled.</summary>
+    public static Action? HistoryClearHandler;
+
+    /// <summary>Set by Stash.Cli on REPL startup. Appends an entry to in-memory + on-disk history (subject to dedup and leading-space rules). Null means persistence disabled.</summary>
+    public static Action<string>? HistoryAddHandler;
+
     /// <summary>
     /// Registers all <c>process</c> namespace functions into the global environment.
     /// </summary>
@@ -822,6 +831,41 @@ public static class ProcessBuiltIns
         },
             returnType: "int",
             documentation: "Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.\n@return The exit code as an integer");
+
+        // process.historyList() — Returns a shallow copy of the in-memory REPL history, oldest-first.
+        ns.Function("historyList", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var snap = HistoryListProvider?.Invoke();
+            var list = new List<StashValue>(snap?.Count ?? 0);
+            if (snap != null)
+            {
+                foreach (var s in snap) list.Add(StashValue.FromObj(s));
+            }
+            return StashValue.FromObj(list);
+        },
+            returnType: "array",
+            documentation: "Returns the REPL command history as an array of strings, oldest-first. Each entry is one logical command line (multi-line entries contain embedded newlines). Returns an empty array when persistence is disabled or in non-interactive script mode.\n@return Array of history entries");
+
+        // process.historyClear() — Clears in-memory history and truncates the on-disk file.
+        ns.Function("historyClear", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            HistoryClearHandler?.Invoke();
+            return StashValue.Null;
+        },
+            returnType: "null",
+            documentation: "Clears the REPL command history both in memory and on disk (preserving the file header). No-op when persistence is disabled.\n@return null");
+
+        // process.historyAdd(line) — Programmatically add an entry to the REPL history.
+        ns.Function("historyAdd", [Param("line", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var line = SvArgs.String(args, 0, "process.historyAdd");
+            if (string.IsNullOrWhiteSpace(line))
+                throw new RuntimeError("process.historyAdd: line must not be empty or whitespace-only.", errorType: StashErrorTypes.ValueError);
+            HistoryAddHandler?.Invoke(line);
+            return StashValue.Null;
+        },
+            returnType: "null",
+            documentation: "Adds the given line to the REPL command history. Subject to the same dedup and leading-space-skip rules as user input. Throws ValueError if line is empty or whitespace-only. No-op when persistence is disabled.\n@param line The command line to append\n@return null");
 
         return ns.Build();
     }

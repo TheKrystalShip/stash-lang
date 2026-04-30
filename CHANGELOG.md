@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Persistent REPL History
+
+- **Persistent command history** across REPL sessions. Every command typed at the interactive REPL is appended to a history file so that up-arrow recall works after restart. History is always on for any interactive REPL session; always off for non-interactive script execution.
+- **Default history file location:**
+  - POSIX: `$XDG_STATE_HOME/stash/history` → `~/.local/state/stash/history` → `~/.stash_history`
+  - Windows: `%LOCALAPPDATA%\stash\history` → `%USERPROFILE%\.stash_history`
+- **`STASH_HISTORY_FILE`** env var — override the path; set to empty string to disable persistence for the session.
+- **`STASH_HISTORY_SIZE`** env var — cap on stored entries (default: `10000`; `0` disables; negative = unlimited).
+- **`--no-history`** CLI flag — disable persistence for the session (equivalent to `STASH_HISTORY_FILE=`).
+- **`history` shell built-in** — `history` (all entries), `history N` (last N entries), `history -c` (clear). Output is pipeable: `history | grep git`.
+- **`process.historyList() -> array<string>`** — return the in-memory history, oldest-first.
+- **`process.historyClear()`** — clear in-memory history and truncate the file.
+- **`process.historyAdd(line: string)`** — append a line, applying the same leading-space and dedup rules as interactive input.
+- **Behavioral rules:** leading-space lines not stored (secret-redaction escape hatch), empty/whitespace-only lines never stored, consecutive duplicates collapsed, multi-line entries kept whole, cap enforced only at startup.
+
 #### Tab Completion
 
 - **Tab completion in the interactive REPL** (shell mode and Stash mode). Bash-classic UX: first `Tab` inserts the longest common prefix; second consecutive `Tab` lists candidates in a multi-column layout with a pager prompt for more than 100 results. Covers PATH executables, file paths, Stash keywords and globals, namespace members (e.g. `fs.<Tab>`), and custom user-registered completers. Disable with `STASH_NO_COMPLETION=1`.

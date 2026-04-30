@@ -2150,6 +2150,9 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 | `process.dirStackDepth()`        | Return the number of entries in the directory stack                   |
 | `process.exit(code?)`            | Terminate with exit code; defer-aware, catch-immune                   |
 | `process.lastExitCode()`         | Return the exit code of the most recent `$(…)` or bare command        |
+| `process.historyList()`          | Return the in-memory REPL history as an `array<string>`               |
+| `process.historyClear()`         | Clear the in-memory history and truncate the history file             |
+| `process.historyAdd(line)`       | Append a line to the in-memory history (and persist to file)          |
 
 ### `process.chdir(path)`
 
@@ -2245,6 +2248,50 @@ io.println(process.lastExitCode()); // 2 (ls exit code for "no such file")
 let ok = $(git status);
 io.println(process.lastExitCode()); // 0
 ```
+
+### `process.historyList()`
+
+Returns the current in-memory REPL command history as an `array<string>`, one entry per command. The array is ordered oldest-first (index 0 is the earliest recorded command, last index is the most recent). Returns an empty array in non-interactive script mode.
+
+```stash
+let h = process.historyList();
+io.println(len(h));              // number of history entries
+io.println(h[len(h) - 1]);      // most recent command
+
+// Find all git commands in history
+let git = arr.filter(process.historyList(), (e) => str.startsWith(e, "git"));
+```
+
+> **REPL only:** This function is meaningful only when running interactively. In non-interactive script mode it always returns `[]`.
+
+### `process.historyClear()`
+
+Clears the in-memory history list and atomically truncates (overwrites with an empty file) the history file on disk. After this call, `process.historyList()` returns `[]` and the persisted file contains only the optional header line.
+
+```stash
+process.historyClear();
+io.println(len(process.historyList())); // 0
+```
+
+Equivalent to the `history -c` shell built-in.
+
+### `process.historyAdd(line: string)`
+
+Appends `line` to the in-memory history list and writes it to the history file. Applies the same filtering rules as interactive input: lines that are empty, whitespace-only, or begin with a space are silently ignored. Consecutive identical entries are collapsed (no consecutive duplicates). Returns `null`.
+
+| Parameter | Type     | Description              |
+| --------- | -------- | ------------------------ |
+| `line`    | `string` | The command line to add  |
+
+```stash
+process.historyAdd("git pull");
+process.historyAdd("git pull");  // duplicate — ignored
+process.historyAdd(" secret");   // leading space — ignored
+process.historyAdd("");          // empty — ignored
+io.println(process.historyList()[len(process.historyList()) - 1]); // "git pull"
+```
+
+This is useful when a Stash script programmatically produces commands that should appear in the user's history.
 
 ### `process.withDir(path, fn)`
 

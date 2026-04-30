@@ -226,4 +226,73 @@ public class ShellSugarDesugarerTests
         string result = ShellSugarDesugarer.EscapeForStashString("a\rb");
         Assert.Equal("a\\rb", result);
     }
+
+    // ── history ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void History_NoArgs_ReturnsForLoop()
+    {
+        var line = ParseLine("history");
+        string? source = ShellSugarDesugarer.TryDesugar(line, []);
+        Assert.Equal("for entry in process.historyList() { io.println(entry); }", source);
+    }
+
+    [Fact]
+    public void History_DashC_ReturnsClear()
+    {
+        var line = ParseLine("history -c");
+        string? source = ShellSugarDesugarer.TryDesugar(line, ["-c"]);
+        Assert.Equal("process.historyClear();", source);
+    }
+
+    [Fact]
+    public void History_PositiveInt_ReturnsSliceLoop()
+    {
+        var line = ParseLine("history 5");
+        string? source = ShellSugarDesugarer.TryDesugar(line, ["5"]);
+        Assert.NotNull(source);
+        Assert.Contains("process.historyList()", source);
+        Assert.Contains("5", source);
+    }
+
+    [Fact]
+    public void History_Zero_ReturnsNullStatement()
+    {
+        var line = ParseLine("history 0");
+        string? source = ShellSugarDesugarer.TryDesugar(line, ["0"]);
+        Assert.Equal("null;", source);
+    }
+
+    [Fact]
+    public void History_NegativeInt_ThrowsCommandError()
+    {
+        var line = ParseLine("history -1");
+        var ex = Assert.Throws<RuntimeError>(
+            () => ShellSugarDesugarer.TryDesugar(line, ["-1"]));
+        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+    }
+
+    [Fact]
+    public void History_NonNumericArg_ThrowsCommandError()
+    {
+        var line = ParseLine("history foo");
+        var ex = Assert.Throws<RuntimeError>(
+            () => ShellSugarDesugarer.TryDesugar(line, ["foo"]));
+        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+    }
+
+    [Fact]
+    public void History_TooManyArgs_ThrowsCommandError()
+    {
+        var line = ParseLine("history 5 extra");
+        var ex = Assert.Throws<RuntimeError>(
+            () => ShellSugarDesugarer.TryDesugar(line, ["5", "extra"]));
+        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+    }
+
+    [Fact]
+    public void IsSugarName_History_True()
+    {
+        Assert.True(ShellSugarDesugarer.IsSugarName("history"));
+    }
 }

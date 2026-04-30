@@ -23,11 +23,12 @@
 8. [`process.exit` Semantics](#8-processexit-semantics)
 9. [`$?` REPL Sugar](#9--repl-sugar)
 10. [RC File](#10-rc-file)
-11. [Error Reference](#11-error-reference)
-12. [Static Analysis](#12-static-analysis)
-13. [Cross-Platform Notes](#13-cross-platform-notes)
-14. [Customizing the Prompt](#14-customizing-the-prompt)
-15. [Tab Completion](#15-tab-completion)
+11. [Persistent History](#11-persistent-history)
+12. [Error Reference](#12-error-reference)
+13. [Static Analysis](#13-static-analysis)
+14. [Cross-Platform Notes](#14-cross-platform-notes)
+15. [Customizing the Prompt](#15-customizing-the-prompt)
+16. [Tab Completion](#16-tab-completion)
 
 ---
 
@@ -374,7 +375,7 @@ $ grep -r "TODO" src/ | sort > todos.txt
 
 ## 6. Shell Built-in Sugar
 
-The shell runner recognizes `cd`, `pwd`, `exit`, and `quit` as special names and **desugars** them to `process.*` stdlib calls. The stdlib calls are real Stash code — errors, stack traces, and `defer` blocks all behave identically to direct calls.
+The shell runner recognizes `cd`, `pwd`, `exit`, `quit`, and `history` as special names and **desugars** them to `process.*` stdlib calls. The stdlib calls are real Stash code — errors, stack traces, and `defer` blocks all behave identically to direct calls.
 
 ### 6.1 `cd`
 
@@ -424,6 +425,29 @@ $ quit        # alias for exit
 Desugars to `process.exit(<code>)`. The argument, if provided, must be an integer. `exit abc` raises `CommandError: exit: numeric argument required`.
 
 `exit` is **defer-aware and catch-immune** — see [§8](#8-processexit-semantics).
+
+### 6.4 `history`
+
+```text
+$ history          # print all history entries, numbered
+$ history 20       # print the last 20 entries
+$ history -c       # clear history (in-memory and on disk)
+```
+
+`history` (no arguments) prints the entire in-memory history list, one entry per line, with a 1-based index prefix.
+
+`history N` (where N is a positive integer) prints only the last N entries.
+
+`history -c` clears the history — equivalent to `process.historyClear()`.
+
+Because `history` outputs to stdout, it is fully pipeable:
+
+```text
+$ history | grep git
+$ history 50 | tail -10
+```
+
+See [§11](#11-persistent-history) for how history is persisted across sessions.
 
 ---
 
@@ -567,7 +591,90 @@ stash --no-shell
 
 ---
 
-## 11. Error Reference
+## 11. Persistent History
+
+The REPL records every command you type to a history file so that up-arrow recall works across sessions. History is **always on** for any interactive REPL session (including plain Stash REPL without shell mode) and **always off** for non-interactive script execution.
+
+### 11.1 File location
+
+The history file is resolved on REPL startup. The first path that is writable wins.
+
+**POSIX (Linux, macOS)**
+
+| Priority | Path                              | Condition                               |
+| -------- | --------------------------------- | --------------------------------------- |
+| 1        | `$STASH_HISTORY_FILE`             | If env var is set and non-empty         |
+| 2        | `$XDG_STATE_HOME/stash/history`   | If `XDG_STATE_HOME` is set and non-empty |
+| 3        | `~/.local/state/stash/history`    | Default XDG state directory             |
+| 4        | `~/.stash_history`                | Final fallback                          |
+
+**Windows**
+
+| Priority | Path                              | Condition                               |
+| -------- | --------------------------------- | --------------------------------------- |
+| 1        | `%STASH_HISTORY_FILE%`            | If env var is set and non-empty         |
+| 2        | `%LOCALAPPDATA%\stash\history`    | If `LOCALAPPDATA` is set and non-empty  |
+| 3        | `%USERPROFILE%\.stash_history`    | Final fallback                          |
+
+The parent directory is created automatically on first write. If the chosen path cannot be opened for writing (permission denied, read-only filesystem), persistence is **silently disabled** for the session and a one-line warning is written to `stderr`:
+
+```text
+stash: history disabled — cannot write <path>: <reason>
+```
+
+In-memory history (up-arrow recall within the session) continues to work regardless.
+
+### 11.2 Configuration
+
+| Setting                 | Effect                                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `STASH_HISTORY_FILE=`   | Override the file path. **Empty string** disables persistence entirely for the session.                                |
+| `STASH_HISTORY_SIZE=N`  | Cap the number of stored entries. `0` disables persistence; negative values mean unlimited (file may grow unbounded). Default: `10000`. |
+| `--no-history`          | Disable persistence for this session. Equivalent to `STASH_HISTORY_FILE=`.                                             |
+
+### 11.3 Behavioral rules
+
+- **Leading-space lines are not stored.** A command prefixed with one or more spaces is executed normally but never written to the history file or in-memory list. Use this as a manual secret-redaction escape hatch:
+  ```text
+  $  export AWS_SECRET_ACCESS_KEY=abc123    ← space before 'export'
+  ```
+- **Empty and whitespace-only lines are never stored.**
+- **Consecutive duplicate entries are collapsed.** Running the same command twice in a row stores it once.
+- **Multi-line entries are kept whole.** A pipeline continued across multiple lines is recorded as a single entry with embedded newlines.
+- **Entry cap** is enforced on startup only (not on every write). When the file exceeds `STASH_HISTORY_SIZE`, the oldest entries are evicted and the file is atomically rewritten. Mid-session writes only append.
+- **Cross-session sync caveat.** Two concurrent REPL sessions do not see each other's commands in real time. Each session loads its snapshot at startup; the other session's commands become visible only on the next startup.
+
+### 11.4 File format
+
+The file is UTF-8, LF line endings. An optional first line `# stash history v1` identifies the format. Entries are separated by blank lines; multi-line entries are stored with their internal newlines intact.
+
+```text
+# stash history v1
+
+git status
+
+ls -la
+
+git log --oneline |
+    head -10
+
+```
+
+### 11.5 Stdlib access
+
+Three `process.*` functions expose history to scripts:
+
+| Function                       | Description                                                  |
+| ------------------------------ | ------------------------------------------------------------ |
+| `process.historyList()`        | Return the in-memory history as `array<string>`, oldest-first |
+| `process.historyClear()`       | Clear in-memory history and truncate the file                |
+| `process.historyAdd(line)`     | Append a line, applying the same filtering rules             |
+
+See [Standard Library Reference — `process`](Stash%20—%20Standard%20Library%20Reference.md#processhistorylist) for full signatures and examples.
+
+---
+
+## 12. Error Reference
 
 All shell-mode errors are `CommandError` values (the existing built-in error type). No new error types are introduced.
 
@@ -587,7 +694,7 @@ All shell-mode errors are `CommandError` values (the existing built-in error typ
 
 ---
 
-## 12. Static Analysis
+## 13. Static Analysis
 
 Two diagnostic rules cover shell-mode concerns:
 
@@ -628,9 +735,9 @@ SA0821 is REPL-only — it does not apply to scripts.
 
 ---
 
-## 13. Cross-Platform Notes
+## 14. Cross-Platform Notes
 
-### 13.1 Windows Status
+### 14.1 Windows Status
 
 Shell mode is **gated on Windows** in v1. The `--shell` flag and `STASH_SHELL=1` env var produce the message `"shell mode not yet supported on Windows"` and the REPL starts in Stash-only mode.
 
@@ -643,14 +750,14 @@ Windows-aware code paths are in place for a future mechanical re-enable:
 - **`cd` (no args)** uses `env.get("USERPROFILE")` on Windows.
 - **Streaming pipes** use .NET's `Process` API, which handles SIGPIPE as a broken-pipe `IOException`.
 
-### 13.2 POSIX-Specific Notes
+### 14.2 POSIX-Specific Notes
 
 - **Executable check:** a file is executable if the current user has `+x` permission.
 - **Tilde expansion** uses `$HOME`.
 - **`cd` (no args)** uses `env.get("HOME")`.
 - **Glob expansion** is case-sensitive on Linux; case-insensitive on macOS (HFS+/APFS case-insensitive mounts).
 
-### 13.3 `$(…)` Glob Auto-Expansion — Breaking Change
+### 14.3 `$(…)` Glob Auto-Expansion — Breaking Change
 
 Prior to this feature, `$(…)` command literals did not glob-expand arguments. After this feature ships, **glob auto-expansion applies inside `$(…)` for both bare-command pipelines and script-mode command literals**.
 
@@ -662,21 +769,21 @@ Prior to this feature, `$(…)` command literals did not glob-expand arguments. 
 
 ---
 
-*See also: [Standard Library Reference — `process` namespace](Stash%20—%20Standard%20Library%20Reference.md#process--process-management) for the full API of `process.chdir`, `process.popDir`, `process.dirStack`, `process.dirStackDepth`, `process.exit`, and `process.lastExitCode`.*
+*See also: [Standard Library Reference — `process` namespace](Stash%20—%20Standard%20Library%20Reference.md#process--process-management) for the full API of `process.chdir`, `process.popDir`, `process.dirStack`, `process.dirStackDepth`, `process.exit`, `process.lastExitCode`, `process.historyList`, `process.historyClear`, and `process.historyAdd`.*
 
 ---
 
-## 14. Customizing the Prompt
+## 15. Customizing the Prompt
 
 Shell-mode REPL prompts are fully customizable via Stash code. See [Prompt — Customizing the REPL Prompt](Prompt%20%E2%80%94%20Customizing%20the%20REPL%20Prompt.md) for the full guide on themes, starters, and writing your own `fn prompt(ctx)`.
 
 ---
 
-## 15. Tab Completion
+## 16. Tab Completion
 
 Tab completion is **on by default** in both shell mode and REPL Stash mode whenever the REPL is running interactively. Pressing `Tab` triggers context-aware completion; the interaction model is **bash-classic**.
 
-### 15.1 Bash-Classic UX
+### 16.1 Bash-Classic UX
 
 | Trigger | Candidates | Action |
 | ------- | ---------- | ------ |
@@ -690,7 +797,7 @@ When more than 100 candidates are available, the engine prints a `Display all N 
 
 **Directory exception:** when the unique match is a directory, a trailing `/` is appended automatically so the user can keep typing into the path without needing an extra keystroke.
 
-### 15.2 What Gets Completed
+### 16.2 What Gets Completed
 
 | Position | Completions offered |
 | -------- | ------------------- |
@@ -704,7 +811,7 @@ When more than 100 candidates are available, the engine prints a `Display all N 
 
 **Glob patterns skip completion.** If the token at the cursor contains `*`, `?`, `[`, or `{`, no candidates are offered — the token is intended as a pattern for the argument-expansion pipeline.
 
-### 15.3 Custom Completers
+### 16.3 Custom Completers
 
 Register a Stash function to control what is offered in argument position after a specific command:
 
@@ -720,7 +827,7 @@ A registered completer **replaces** the default file-path completer for that com
 
 See [Standard Library Reference — `complete`](Stash%20%E2%80%94%20Standard%20Library%20Reference.md#complete--tab-completion) for the full `complete.*` API, the `CompletionContext` and `CompletionResult` struct types, and a complete worked example.
 
-### 15.4 Disabling
+### 16.4 Disabling
 
 Set `STASH_NO_COMPLETION=1` before starting the REPL to disable tab completion entirely. `Tab` then inserts a literal tab character, restoring pre-v1.x behavior.
 
@@ -728,11 +835,11 @@ Set `STASH_NO_COMPLETION=1` before starting the REPL to disable tab completion e
 STASH_NO_COMPLETION=1 stash --shell
 ```
 
-### 15.5 Multi-line Input
+### 16.5 Multi-line Input
 
 Completion operates on the **current physical line only**. In a multi-line continuation (`cat foo |` + Enter → `gr<Tab>`), the engine sees only the current line and classifies it independently. This is intentional: it keeps the completer simple and covers the vast majority of use cases correctly.
 
-### 15.6 Cross-Platform Notes
+### 16.6 Cross-Platform Notes
 
 - **Linux / macOS:** Tab completion is fully supported.
 - **Windows:** Tab completion is available in Stash-mode REPL sessions. Shell-mode completion is gated alongside shell mode itself (not yet available on Windows in v1).

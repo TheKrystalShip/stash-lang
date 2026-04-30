@@ -46,6 +46,7 @@ public class Program
     private static bool _disassemble = false;
     private static bool _shellEnabled = false;
     private static bool _shellExplicitlyDisabled = false;
+    private static bool _historyDisabled = false;
     private const string Version = "0.5.0";
     /// <summary>Exact stderr message emitted when shell mode is requested on Windows (v1 not yet supported).</summary>
     internal const string WindowsNoShellMessage = "shell mode not yet supported on Windows";
@@ -166,6 +167,10 @@ public class Program
             else if (args[i] == "--no-shell" && commandString is null)
             {
                 shellExplicitlyDisabled = true;
+            }
+            else if (args[i] == "--no-history" && commandString is null)
+            {
+                _historyDisabled = true;
             }
             else if (args[i] == "--reset-prompt" && commandString is null)
             {
@@ -380,6 +385,7 @@ public class Program
         Console.WriteLine("      --no-optimize         Disable bytecode optimizations");
         Console.WriteLine("      --shell               Enable REPL shell mode (experimental)");
         Console.WriteLine("      --no-shell            Disable REPL shell mode (overrides STASH_SHELL=1)");
+        Console.WriteLine("      --no-history          Disable persistent REPL history for this session");
         Console.WriteLine("      --reset-prompt        Re-extract prompt bootstrap scripts and exit");
         Console.WriteLine("  -o, --output <path>       Output path for compiled bytecode");
         Console.WriteLine();
@@ -956,6 +962,25 @@ public class Program
         if (rcPath != null)
         {
             RcFileLoader.Load(rcPath, vm, shellModeEnabled);
+        }
+
+        // ── History setup (Persistent REPL History spec §9.3) ────────────────
+        if (!_historyDisabled)
+        {
+            int cap = Stash.Cli.History.HistoryFileLoader.GetCap();
+            string? historyPath = cap == 0 ? null : Stash.Cli.History.HistoryFileLoader.ResolvePath();
+            if (historyPath != null)
+            {
+                var initial = Stash.Cli.History.HistoryFileLoader.Load(historyPath, cap, Console.Error);
+                var writer = new Stash.Cli.History.HistoryFileWriter(historyPath, cap, initial, Console.Error);
+                var sink = new Stash.Cli.History.FileHistorySink(writer, initial);
+                editor.HistorySink = sink;
+                editor.SeedHistory(initial);
+
+                Stash.Stdlib.BuiltIns.ProcessBuiltIns.HistoryListProvider = () => writer.Snapshot();
+                Stash.Stdlib.BuiltIns.ProcessBuiltIns.HistoryClearHandler = () => writer.Clear();
+                Stash.Stdlib.BuiltIns.ProcessBuiltIns.HistoryAddHandler = entry => writer.Append(entry);
+            }
         }
 
         try
