@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Stash.Bytecode;
+using Stash.Cli.Completion;
 using Stash.Cli.Shell;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -886,6 +887,19 @@ public class Program
         Stash.Stdlib.BuiltIns.PromptBuiltIns.ShellModeActive = shellModeEnabled;
 
         // Build shell context once per REPL session.
+        // Always constructed for tab-completion; also used for shell execution if enabled.
+        var completionPathCache = new PathExecutableCache();
+        var completionShellCtx = new ShellContext
+        {
+            Vm = vm,
+            PathCache = completionPathCache,
+            Keywords = ShellContext.BuildKeywordSet(),
+            Namespaces = new System.Collections.Generic.HashSet<string>(
+                StdlibRegistry.NamespaceNames, StringComparer.Ordinal),
+            ShellBuiltinNames = ShellContext.BuildShellBuiltinSet(),
+        };
+        var completionClassifier = new ShellLineClassifier(completionShellCtx);
+
         ShellLineClassifier? classifier = null;
         ShellRunner? shellRunner = null;
 
@@ -893,22 +907,26 @@ public class Program
         {
             Console.WriteLine("Shell mode enabled (experimental). Type Stash code or shell commands.");
 
-            var shellCtx = new ShellContext
-            {
-                Vm = vm,
-                PathCache = new PathExecutableCache(),
-                Keywords = ShellContext.BuildKeywordSet(),
-                Namespaces = new System.Collections.Generic.HashSet<string>(
-                    StdlibRegistry.NamespaceNames, StringComparer.Ordinal),
-                ShellBuiltinNames = ShellContext.BuildShellBuiltinSet(),
-            };
-
-            classifier = new ShellLineClassifier(shellCtx);
-            shellRunner = new ShellRunner(shellCtx);
+            // Reuse the already-constructed context, path cache, and classifier.
+            classifier = completionClassifier;
+            shellRunner = new ShellRunner(completionShellCtx);
 
             // Extend the multi-line reader to recognise trailing-pipe continuation.
             reader.IsShellIncomplete = line => classifier.IsShellIncomplete(line);
         }
+
+        // ── Tab completion setup ─────────────────────────────────────────────
+        bool completionEnabled = !string.Equals(
+            Environment.GetEnvironmentVariable("STASH_NO_COMPLETION"),
+            "1", StringComparison.Ordinal);
+
+        var customCompleters = new CustomCompleterRegistry();
+        var completionEngine = new CompletionEngine(
+            vm, completionPathCache, customCompleters, completionClassifier);
+        CompletionWiring.Wire(completionEngine, customCompleters, vm);
+
+        editor.CompletionEngine = completionEngine;
+        editor.CompletionEnabled = completionEnabled;
 
         // ── Prompt bootstrap (shell mode only, before RC) ────────────────────
         // Extract embedded scripts to ~/.config/stash/prompt/ on first run or

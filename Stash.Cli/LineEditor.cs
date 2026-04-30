@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Stash.Cli.Completion;
 using Stash.Cli.Repl;
 
 namespace Stash;
@@ -27,6 +28,20 @@ public class LineEditor
     private int _promptVisibleWidth;
     /// <summary>Length of previously rendered line for clearing leftovers.</summary>
     private int _previousLength;
+    /// <summary>True when the previous key was Tab (used by the bash-classic state machine).</summary>
+    private bool _lastKeyWasTab;
+
+    /// <summary>
+    /// The completion engine to use when Tab is pressed.
+    /// When <c>null</c>, Tab inserts a literal tab character.
+    /// </summary>
+    internal CompletionEngine? CompletionEngine { get; set; }
+
+    /// <summary>
+    /// When <c>false</c> (e.g. <c>STASH_NO_COMPLETION=1</c>), Tab inserts a literal
+    /// tab character instead of triggering completion.
+    /// </summary>
+    public bool CompletionEnabled { get; set; } = true;
 
     /// <summary>Reads a line with interactive editing (arrows, history, word movement).</summary>
     /// <param name="prompt">The prompt string to display before input.</param>
@@ -45,6 +60,7 @@ public class LineEditor
         _previousLength = 0;
         _historyIndex = _history.Count;
         _savedCurrentLine = "";
+        _lastKeyWasTab = false;
 
         Console.Write(prompt);
 
@@ -52,8 +68,54 @@ public class LineEditor
         {
             var key = Console.ReadKey(true);
 
+            // Reset _lastKeyWasTab on any non-Tab key so the user must double-Tab
+            // again to see the candidate list (bash-classic state machine, spec §4).
+            bool wasTab = key.Key == ConsoleKey.Tab;
+            if (!wasTab)
+                _lastKeyWasTab = false;
+
             switch (key.Key)
             {
+                case ConsoleKey.Tab:
+                    if (!CompletionEnabled || CompletionEngine is null)
+                    {
+                        // Completion disabled or unavailable → insert literal tab
+                        _buffer.Insert(_cursor, '\t');
+                        _cursor++;
+                        Render();
+                    }
+                    else
+                    {
+                        var actionResult = TabCompletionAction.Apply(
+                            _buffer,
+                            ref _cursor,
+                            ref _lastKeyWasTab,
+                            CompletionEngine,
+                            candidates =>
+                            {
+                                Console.WriteLine();
+                                CompletionMenu.Render(candidates,
+                                    msg => CompletionEngine.PromptYesNo(msg));
+                                Console.WriteLine();
+                                Render();
+                            });
+
+                        switch (actionResult.Kind)
+                        {
+                            case TabActionKind.Bell:
+                                Console.Error.Write('\x07');
+                                break;
+                            case TabActionKind.Modified:
+                                Render();
+                                break;
+                            case TabActionKind.NoOp:
+                            case TabActionKind.ListedCandidates:
+                                // ListedCandidates: menu + redraw handled by the lambda above.
+                                // NoOp: nothing to do.
+                                break;
+                        }
+                    }
+                    break;
                 case ConsoleKey.Enter:
                     Console.WriteLine();
                     var result = _buffer.ToString();
