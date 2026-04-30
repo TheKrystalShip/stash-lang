@@ -114,9 +114,9 @@ io.println($"  toHex(255)         = {hex}");
 io.println($"  fromHex(\"ff\")      = {conv.fromHex("ff")}");
 
 // Character encoding
-let code = conv.charCode("A");
+let code = str.charCode("A");
 io.println($"  charCode(\"A\")      = {code}");
-io.println($"  fromCharCode(65)   = {conv.fromCharCode(65)}");
+io.println($"  fromCharCode(65)   = {str.fromCharCode(65)}");
 
 // Safe conversion: bad input returns null via try
 let bad = try conv.toInt("not-a-number");

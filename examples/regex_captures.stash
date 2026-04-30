@@ -1,7 +1,7 @@
 #!/usr/bin/env stash
 
 // examples/regex_captures.stash
-// Regex Captures — str.capture() and str.captureAll() with positional/named groups,
+// Regex Captures — re.capture() and re.captureAll() with positional/named groups,
 // RegexMatch/RegexGroup fields, namedGroups dict, and practical log-line parsing.
 
 io.println("=" * 56);
@@ -10,7 +10,7 @@ io.println("=" * 56);
 // ─── Guard: No Match Returns null ────────────────────────────────────────────
 
 io.println("\n-- No Match Returns null --");
-let nomatch = str.capture("hello world", "\\d+");
+let nomatch = re.capture("hello world", "\\d+");
 if (nomatch == null) {
   io.println("  No digits found — capture returned null");
 }
@@ -19,7 +19,7 @@ if (nomatch == null) {
 io.println("\n-- Positional Capture Groups --");
 // groups[0] is always the full match; groups[1], [2], ... are the capture groups
 
-let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+let m = re.capture("version 1.23", "(\\d+)\\.(\\d+)");
 io.println($"  full match : \"{m.value}\"");
 io.println($"  at index   : {m.index}, length: {m.length}");
 io.println($"  groups[0]  : \"{m.groups[0].value}\"  (full match)");
@@ -36,7 +36,7 @@ io.println($"  group 2 → value={g2.value}, index={g2.index}, length={g2.length
 
 io.println("\n-- Named Capture Groups --");
 let date_str = "2026-04-08";
-let dm = str.capture(date_str, "(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2})");
+let dm = re.capture(date_str, "(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2})");
 // Access via .namedGroups dict (convenient name-based lookup)
 
 io.println($"  input  : \"{date_str}\"");
@@ -55,7 +55,7 @@ for (let g in dm.groups) {
 io.println("\n-- Optional Group (null when it doesn't participate) --");
 // Pattern: (a)(b)?(c) — the middle group is optional
 
-let om = str.capture("ac", "(a)(b)?(c)");
+let om = re.capture("ac", "(a)(b)?(c)");
 io.println($"  input     : \"ac\"");
 io.println($"  groups[1] : {om.groups[1].value}"); // "a"
 
@@ -72,12 +72,12 @@ if (optional_b == null) {
   io.println($"  group 2 captured: \"{optional_b}\"");
 }
 
-// ─── str.captureAll() — Multiple Matches ─────────────────────────────────────
+// ─── re.captureAll() — Multiple Matches ─────────────────────────────────────
 
 io.println("\n-- captureAll: All Matches --");
 
 let text = "alice@example.com and bob@work.org and carol@dev.io";
-let email_matches = str.captureAll(text, "(?<user>[\\w.]+)@(?<domain>[\\w.]+)");
+let email_matches = re.captureAll(text, "(?<user>[\\w.]+)@(?<domain>[\\w.]+)");
 
 io.println($"  Found {len(email_matches)} email address(es):");
 
@@ -103,7 +103,7 @@ let log_lines = [
 let log_pattern = "(?<ip>[\\d.]+) - (?<user>\\S+) \\[(?<ts>[^\\]]+)\\] \"(?<method>\\w+) (?<path>\\S+) [^\"]+\" (?<status>\\d+) (?<bytes>\\d+)";
 io.println($"  Parsing {len(log_lines)} log line(s):\n");
 for (let line in log_lines) {
-  let lm = str.capture(line, log_pattern);
+  let lm = re.capture(line, log_pattern);
   if (lm == null) {
     io.println($"  [WARN] Could not parse: {line}");
   } else {

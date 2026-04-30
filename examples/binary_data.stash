@@ -74,7 +74,7 @@ let haystack = buf.from("find the needle here");
 let needle = buf.from("needle");
 
 io.println($"  buf.len(haystack):              {buf.len(haystack)}");
-io.println($"  buf.get(haystack, 0):           {buf.get(haystack, 0)}   ('{conv.fromCharCode(conv.toInt(buf.get(haystack, 0)))}')");io.println($"  buf.indexOf(haystack, needle):  {buf.indexOf(haystack, needle)}");
+io.println($"  buf.get(haystack, 0):           {buf.get(haystack, 0)}   ('{str.fromCharCode(conv.toInt(buf.get(haystack, 0)))}')");io.println($"  buf.indexOf(haystack, needle):  {buf.indexOf(haystack, needle)}");
 io.println($"  buf.includes(haystack, needle): {buf.includes(haystack, needle)}");
 
 let copy_a = buf.from("abc");

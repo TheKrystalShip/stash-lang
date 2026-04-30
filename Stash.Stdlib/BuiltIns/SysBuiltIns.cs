@@ -1,13 +1,13 @@
 namespace Stash.Stdlib.BuiltIns;
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -28,8 +28,6 @@ using static Stash.Stdlib.Registration.P;
 /// </remarks>
 public static class SysBuiltIns
 {
-    private static readonly ConcurrentDictionary<string, (IInterpreterContext Context, IStashCallable Handler, PosixSignalRegistration? Registration)> _signalHandlers = new();
-    private static readonly object _signalLock = new();
 
     /// <summary>
     /// Registers all <c>sys</c> namespace functions into the global environment.
@@ -298,79 +296,20 @@ public static class SysBuiltIns
             documentation: "Searches the system PATH for an executable with the given name.\nReturns the full path to the first match, or null if not found.\nWhen 'all' is true, returns an array of all matching paths.\nOn Windows, also searches PATHEXT extensions (.exe, .cmd, .bat, etc.).\n\n@param name The command name to search for\n@param all Optional. When true, returns an array of all matches instead of just the first\n@return Full path to the executable (or null), or an array of paths when all=true"
         );
 
-        // sys.onSignal(signal, handler) — Registers a callback for the given POSIX signal.
+        // sys.onSignal(signal, handler) — Deprecated. Use signal.on.
         ns.Function("onSignal", [Param("signal", "Signal"), Param("handler", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                var signal = SvArgs.EnumValue(args, 0, "Signal", "sys.onSignal");
-                var handler = SvArgs.Callable(args, 1, "sys.onSignal");
-
-                string name = signal.MemberName;
-
-                lock (_signalLock)
-                {
-                    // Remove existing handler if any
-                    if (_signalHandlers.TryRemove(name, out var existing))
-                    {
-                        existing.Registration?.Dispose();
-                    }
-
-                    PosixSignal? posixSignal = MapToPosixSignal(name);
-                    if (posixSignal is null)
-                    {
-                        // Signal not supported on this platform — store handler but no registration
-                        _signalHandlers[name] = (ctx, handler, null);
-                        return StashValue.Null;
-                    }
-
-                    PosixSignalRegistration? registration = null;
-                    try
-                    {
-                        registration = PosixSignalRegistration.Create(posixSignal.Value, context =>
-                        {
-                            context.Cancel = true; // Prevent default signal handling
-                            if (_signalHandlers.TryGetValue(name, out var entry))
-                            {
-                                try
-                                {
-                                    entry.Context.InvokeCallbackDirect(entry.Handler, ReadOnlySpan<StashValue>.Empty);
-                                }
-                                catch
-                                {
-                                    // Errors in signal handlers are non-fatal
-                                }
-                            }
-                        });
-                    }
-                    catch (PlatformNotSupportedException)
-                    {
-                        // Signal not supported on this platform — store handler but no registration
-                    }
-
-                    _signalHandlers[name] = (ctx, handler, registration);
-                }
-                return StashValue.Null;
-            },
+            SignalImpl.OnSignal(ctx, args, "sys.onSignal"),
             returnType: "null",
-            documentation: "Registers a callback function to be invoked when the specified signal is received.\nReplaces any existing handler for that signal.\nOn Windows, only SIGHUP, SIGINT, SIGQUIT, and SIGTERM are supported; SIGUSR1/SIGUSR2 are no-ops.\n\n@param signal A sys.Signal enum value (e.g., sys.Signal.SIGTERM)\n@param handler A function to invoke when the signal is received"
+            documentation: "Deprecated. Use signal.on.",
+            deprecation: new DeprecationInfo("signal.on")
         );
 
-        // sys.offSignal(signal) — Removes a previously registered signal handler.
-        ns.Function("offSignal", [Param("signal", "Signal")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                var signal = SvArgs.EnumValue(args, 0, "Signal", "sys.offSignal");
-
-                lock (_signalLock)
-                {
-                    if (_signalHandlers.TryRemove(signal.MemberName, out var existing))
-                    {
-                        existing.Registration?.Dispose();
-                    }
-                }
-
-                return StashValue.Null;
-            },
+        // sys.offSignal(signal) — Deprecated. Use signal.off.
+        ns.Function("offSignal", [Param("signal", "Signal")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            SignalImpl.OffSignal(ctx, args, "sys.offSignal"),
             returnType: "null",
-            documentation: "Removes a previously registered signal handler.\nIf no handler was registered for the signal, this is a no-op.\n\n@param signal A sys.Signal enum value (e.g., sys.Signal.SIGTERM)"
+            documentation: "Deprecated. Use signal.off.",
+            deprecation: new DeprecationInfo("signal.off")
         );
 
         return ns.Build();
@@ -392,24 +331,4 @@ public static class SysBuiltIns
         }
     }
 
-    private static PosixSignal? MapToPosixSignal(string signalName)
-    {
-        return signalName switch
-        {
-            "SIGHUP"  => PosixSignal.SIGHUP,
-            "SIGINT"  => PosixSignal.SIGINT,
-            "SIGQUIT" => PosixSignal.SIGQUIT,
-            "SIGTERM" => PosixSignal.SIGTERM,
-            "SIGUSR1" => MapUserSignal(linuxNum: 10, macNum: 30),
-            "SIGUSR2" => MapUserSignal(linuxNum: 12, macNum: 31),
-            _ => null,
-        };
-    }
-
-    private static PosixSignal? MapUserSignal(int linuxNum, int macNum)
-    {
-        if (OperatingSystem.IsLinux()) return (PosixSignal)linuxNum;
-        if (OperatingSystem.IsMacOS()) return (PosixSignal)macNum;
-        return null; // Windows and other platforms — not supported
-    }
 }

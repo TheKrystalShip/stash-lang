@@ -2,6 +2,7 @@ namespace Stash.Stdlib.BuiltIns;
 
 using System;
 using Stash.Runtime;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -234,7 +235,8 @@ public static class ConvBuiltIns
             return StashValue.FromInt((long)s[0]);
         },
             returnType: "int",
-            documentation: "Returns the Unicode code point of the first character in the string.\n@param s A non-empty string\n@return The Unicode code point as an integer");
+            documentation: "Deprecated. Use `str.charCode`. Returns the Unicode code point of the first character in the string.\n@param s A non-empty string\n@return The Unicode code point as an integer",
+            deprecation: new DeprecationInfo("str.charCode"));
 
         ns.Function("fromCharCode", [Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -244,7 +246,8 @@ public static class ConvBuiltIns
             return StashValue.FromObj(((char)(int)n).ToString());
         },
             returnType: "string",
-            documentation: "Returns a single-character string from a Unicode code point.\n@param n The Unicode code point\n@return A string containing the character");
+            documentation: "Deprecated. Use `str.fromCharCode`. Returns a single-character string from a Unicode code point.\n@param n The Unicode code point\n@return A string containing the character",
+            deprecation: new DeprecationInfo("str.fromCharCode"));
 
         return ns.Build();
     }

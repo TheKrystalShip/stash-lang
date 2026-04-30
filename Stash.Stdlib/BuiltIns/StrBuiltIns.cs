@@ -454,6 +454,28 @@ public static class StrBuiltIns
             returnType: "bool",
             documentation: "Returns true if the string has letters and all are lowercase.\n@param s The string\n@return true if all lowercase letters");
 
+        // str.charCode(s) — Returns the Unicode code point of the first character in the string.
+        ns.Function("charCode", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            string s = SvArgs.String(args, 0, "str.charCode");
+            if (s.Length == 0)
+                throw new RuntimeError("Argument to 'str.charCode' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+            return StashValue.FromInt((long)s[0]);
+        },
+            returnType: "int",
+            documentation: "Returns the Unicode code point of the first character in the string.\n@param s A non-empty string\n@return The Unicode code point as an integer");
+
+        // str.fromCharCode(n) — Returns a single-character string from a Unicode code point.
+        ns.Function("fromCharCode", [Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            long n = SvArgs.Long(args, 0, "str.fromCharCode");
+            if (n < 0 || n > 0x10FFFF)
+                throw new RuntimeError($"Code point {n} is out of the valid Unicode range (0–0x10FFFF).", errorType: StashErrorTypes.ValueError);
+            return StashValue.FromObj(((char)(int)n).ToString());
+        },
+            returnType: "string",
+            documentation: "Returns a single-character string from a Unicode code point.\n@param n The Unicode code point\n@return A string containing the character");
+
         // str.isEmpty(s) — Returns true if s is empty or contains only whitespace characters.
         // Throws RuntimeError if the argument is not a string.
         ns.Function("isEmpty", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -464,10 +486,7 @@ public static class StrBuiltIns
             returnType: "bool",
             documentation: "Returns true if the string is empty or contains only whitespace.\n@param s The string\n@return true if empty or whitespace");
 
-        // str.match(s, pattern) — Returns the first substring of s matching the regex pattern,
-        // or null if no match is found. Uses a 5-second timeout.
-        // Throws RuntimeError if either argument is not a string, the pattern is invalid,
-        // or the match times out.
+        // str.match(s, pattern) — Deprecated. Use re.match.
         ns.Function("match", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var s = SvArgs.String(args, 0, "str.match");
@@ -488,12 +507,10 @@ public static class StrBuiltIns
             }
         },
             returnType: "string",
-            documentation: "Returns the first regex match in the string, or null if none.\n@param s The string\n@param pattern Regex pattern\n@return Matched string or null");
+            documentation: "Deprecated. Use re.match.",
+            deprecation: new DeprecationInfo("re.match"));
 
-        // str.matchAll(s, pattern) — Returns an array of all substrings in s that match the
-        // regex pattern. Returns an empty array if no matches are found. Uses a 5-second timeout.
-        // Throws RuntimeError if either argument is not a string, the pattern is invalid,
-        // or the match times out.
+        // str.matchAll(s, pattern) — Deprecated. Use re.matchAll.
         ns.Function("matchAll", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var s = SvArgs.String(args, 0, "str.matchAll");
@@ -517,12 +534,10 @@ public static class StrBuiltIns
             }
         },
             returnType: "array",
-            documentation: "Returns an array of all regex matches in the string.\n@param s The string\n@param pattern Regex pattern\n@return Array of matched strings");
+            documentation: "Deprecated. Use re.matchAll.",
+            deprecation: new DeprecationInfo("re.matchAll"));
 
-        // str.isMatch(s, pattern) — Returns true if s has at least one match for the regex
-        // pattern, false otherwise. Uses a 5-second timeout.
-        // Throws RuntimeError if either argument is not a string, the pattern is invalid,
-        // or the match times out.
+        // str.isMatch(s, pattern) — Deprecated. Use re.test.
         ns.Function("isMatch", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var s = SvArgs.String(args, 0, "str.isMatch");
@@ -542,12 +557,10 @@ public static class StrBuiltIns
             }
         },
             returnType: "bool",
-            documentation: "Returns true if the string matches the regex pattern.\n@param s The string\n@param pattern Regex pattern\n@return true if the string matches");
+            documentation: "Deprecated. Use re.test.",
+            deprecation: new DeprecationInfo("re.test"));
 
-        // str.replaceRegex(s, pattern, replacement) — Returns a copy of s with all matches of
-        // the regex pattern replaced by replacement. Supports backreference syntax in replacement.
-        // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
-        // pattern is invalid, or the match times out.
+        // str.replaceRegex(s, pattern, replacement) — Deprecated. Use re.replace.
         ns.Function("replaceRegex", [Param("s", "string"), Param("pattern", "string"), Param("replacement", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var s = SvArgs.String(args, 0, "str.replaceRegex");
@@ -568,12 +581,10 @@ public static class StrBuiltIns
             }
         },
             returnType: "string",
-            documentation: "Returns the string with all regex matches replaced by replacement.\n@param s The string\n@param pattern Regex pattern\n@param replacement Replacement string (backreferences supported)\n@return Modified string");
+            documentation: "Deprecated. Use re.replace.",
+            deprecation: new DeprecationInfo("re.replace"));
 
-        // str.capture(s, pattern) — Returns a RegexMatch struct for the first match of pattern
-        // in s, or null if no match. Supports named capture groups via (?<name>...) syntax.
-        // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
-        // pattern is invalid, or the match times out.
+        // str.capture(s, pattern) — Deprecated. Use re.capture.
         ns.Function("capture", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var s = SvArgs.String(args, 0, "str.capture");
@@ -583,7 +594,7 @@ public static class StrBuiltIns
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
                 var m = regex.Match(s);
                 if (!m.Success) return StashValue.Null;
-                return StashValue.FromObj(BuildRegexMatch(m));
+                return StashValue.FromObj(RegexImpl.BuildRegexMatch(m));
             }
             catch (RegexMatchTimeoutException)
             {
@@ -595,12 +606,10 @@ public static class StrBuiltIns
             }
         },
             returnType: "RegexMatch",
-            documentation: "Returns a RegexMatch struct for the first regex match with capture groups, or null if none.\n@param s The string to search\n@param pattern Regex pattern (supports named groups via (?<name>...) syntax)\n@return RegexMatch struct with value, index, length, groups, and namedGroups — or null");
+            documentation: "Deprecated. Use re.capture.",
+            deprecation: new DeprecationInfo("re.capture"));
 
-        // str.captureAll(s, pattern) — Returns an array of RegexMatch structs for all matches
-        // of pattern in s. Supports named capture groups via (?<name>...) syntax.
-        // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
-        // pattern is invalid, or the match times out.
+        // str.captureAll(s, pattern) — Deprecated. Use re.captureAll.
         ns.Function("captureAll", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var s = SvArgs.String(args, 0, "str.captureAll");
@@ -611,7 +620,7 @@ public static class StrBuiltIns
                 var matches = regex.Matches(s);
                 var result = new List<StashValue>(matches.Count);
                 foreach (Match m in matches)
-                    result.Add(StashValue.FromObj(BuildRegexMatch(m)));
+                    result.Add(StashValue.FromObj(RegexImpl.BuildRegexMatch(m)));
                 return StashValue.FromObj(result);
             }
             catch (RegexMatchTimeoutException)
@@ -624,7 +633,8 @@ public static class StrBuiltIns
             }
         },
             returnType: "array",
-            documentation: "Returns an array of RegexMatch structs for all regex matches with capture groups.\n@param s The string to search\n@param pattern Regex pattern (supports named groups via (?<name>...) syntax)\n@return Array of RegexMatch structs");
+            documentation: "Deprecated. Use re.captureAll.",
+            deprecation: new DeprecationInfo("re.captureAll"));
 
         // str.count(s, substring) — Returns the number of non-overlapping occurrences of
         // substring in s using ordinal comparison. Substring must not be empty.
@@ -831,43 +841,5 @@ public static class StrBuiltIns
         return ns.Build();
     }
 
-    private static StashInstance BuildRegexMatch(Match m)
-    {
-        var groups = new List<StashValue>(m.Groups.Count);
-        var namedGroups = new StashDictionary();
-
-        for (int i = 0; i < m.Groups.Count; i++)
-        {
-            Group g = m.Groups[i];
-            string? groupName = null;
-
-            // Check if this group has a name (non-numeric)
-            string gName = m.Groups.Keys.ElementAtOrDefault(i) ?? i.ToString();
-            if (gName != i.ToString())
-                groupName = gName;
-
-            var groupInstance = new StashInstance("RegexGroup", new Dictionary<string, StashValue>
-            {
-                ["value"] = g.Success ? StashValue.FromObj(g.Value) : StashValue.Null,
-                ["index"] = g.Success ? StashValue.FromInt(g.Index) : StashValue.FromInt(-1L),
-                ["length"] = g.Success ? StashValue.FromInt(g.Length) : StashValue.FromInt(0L),
-                ["name"] = groupName != null ? StashValue.FromObj(groupName) : StashValue.Null,
-            });
-
-            groups.Add(StashValue.FromObj(groupInstance));
-
-            // Add to namedGroups dict if this is a named group and it succeeded
-            if (groupName != null && g.Success)
-                namedGroups.Set(groupName, StashValue.FromObj(g.Value));
-        }
-
-        return new StashInstance("RegexMatch", new Dictionary<string, StashValue>
-        {
-            ["value"] = StashValue.FromObj(m.Value),
-            ["index"] = StashValue.FromInt(m.Index),
-            ["length"] = StashValue.FromInt(m.Length),
-            ["groups"] = StashValue.FromObj(groups),
-            ["namedGroups"] = StashValue.FromObj(namedGroups),
-        });
-    }
+    private static StashInstance BuildRegexMatch(Match m) => RegexImpl.BuildRegexMatch(m);
 }

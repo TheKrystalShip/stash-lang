@@ -92,8 +92,8 @@ io.println("\n-- Conv --");
 
 io.println($"  conv.toHex(255):         \"{conv.toHex(255)}\"");
 io.println($"  conv.fromHex(\"ff\"):       {conv.fromHex("ff")}");
-io.println($"  conv.charCode(\"A\"):       {conv.charCode("A")}");
-io.println($"  conv.fromCharCode(9829):  {conv.fromCharCode(9829)}");
+io.println($"  str.charCode(\"A\"):       {str.charCode("A")}");
+io.println($"  str.fromCharCode(9829):  {str.fromCharCode(9829)}");
 io.println($"  conv.toBool(0):           {conv.toBool(0)}");
 io.println($"  conv.toBool(\"yes\"):       {conv.toBool("yes")}");
 io.println($"  conv.toStr(3.14):         \"{conv.toStr(3.14)}\"");

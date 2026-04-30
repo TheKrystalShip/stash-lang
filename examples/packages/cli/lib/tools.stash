@@ -75,7 +75,7 @@ fn tool_version_number(name, version_flag = "--version") {
     if (full is null) {
         return null;
     }
-    let matched = str.match(full, "[0-9]+\\.[0-9]+[0-9.]*");
+    let matched = re.match(full, "[0-9]+\\.[0-9]+[0-9.]*");
     if (matched is null) {
         return null;
     }

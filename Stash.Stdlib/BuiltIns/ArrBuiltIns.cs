@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -874,6 +875,15 @@ public static class ArrBuiltIns
             return StashValue.Null;
         }, returnType: "string", documentation: "Returns the element type name of a typed array, or null for generic arrays.\n@param source The array to inspect\n@return The element type (\"int\", \"float\", \"string\", \"bool\") or null");
 
+        ns.Function("create", [Param("elementType", "string"), Param("size", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            string elementType = SvArgs.String(args, 0, "arr.create");
+            long size = SvArgs.Long(args, 1, "arr.create");
+            if (size < 0) throw new RuntimeError("Array size cannot be negative.", errorType: StashErrorTypes.ValueError);
+            StashTypedArray result = StashTypedArray.CreateWithCapacity(elementType, (int)size);
+            return StashValue.FromObj(result);
+        }, returnType: "array", documentation: "Creates a new zero-initialized typed array with the specified size.\n@param elementType The element type: \"int\", \"float\", \"string\", or \"bool\"\n@param size The number of elements (zero-initialized)\n@return A new typed array");
+
         ns.Function("new", [Param("elementType", "string"), Param("size", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             string elementType = SvArgs.String(args, 0, "arr.new");
@@ -881,7 +891,8 @@ public static class ArrBuiltIns
             if (size < 0) throw new RuntimeError("Array size cannot be negative.", errorType: StashErrorTypes.ValueError);
             StashTypedArray result = StashTypedArray.CreateWithCapacity(elementType, (int)size);
             return StashValue.FromObj(result);
-        }, returnType: "array", documentation: "Creates a new zero-initialized typed array with the specified size.\n@param elementType The element type: \"int\", \"float\", \"string\", or \"bool\"\n@param size The number of elements (zero-initialized)\n@return A new typed array");
+        }, returnType: "array", documentation: "Deprecated. Use `arr.create`. Creates a new zero-initialized typed array with the specified size.\n@param elementType The element type: \"int\", \"float\", \"string\", or \"bool\"\n@param size The number of elements (zero-initialized)\n@return A new typed array",
+            deprecation: new DeprecationInfo("arr.create"));
 
         return ns.Build();
     }

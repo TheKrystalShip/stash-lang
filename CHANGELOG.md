@@ -11,6 +11,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Stdlib Namespace Audit — New Namespaces
+
+Six new top-level namespaces extracted from overloaded namespaces. All old names remain as **deprecated aliases** (SA0830 warning) so existing scripts continue to work without modification.
+
+**`re` — Regular Expressions** (from `str`):
+- `re.match`, `re.matchAll`, `re.test` (was `str.isMatch`), `re.replace` (was `str.replaceRegex`), `re.capture`, `re.captureAll`
+- `RegexMatch` and `RegexGroup` structs are available in both `re` and `str`
+
+**`tcp` — TCP Sockets** (from `net`):
+- `tcp.connect`, `tcp.send`, `tcp.recv`, `tcp.close`, `tcp.listen`
+- `tcp.connectAsync`, `tcp.sendAsync`, `tcp.sendBytesAsync`, `tcp.recvAsync`, `tcp.recvBytesAsync`, `tcp.closeAsync`, `tcp.listenAsync`, `tcp.serverClose`, `tcp.isOpen`, `tcp.state`
+- `TcpConnection`, `TcpConnectOptions`, `TcpRecvOptions`, `TcpServer`, `TcpConnectionState` available in both `tcp` and `net`
+
+**`udp` — UDP Datagrams** (from `net`):
+- `udp.send`, `udp.recv`
+- `UdpMessage` available in both `udp` and `net`
+
+**`ws` — WebSockets** (from `net`):
+- `ws.connect`, `ws.send`, `ws.sendBinary`, `ws.recv`, `ws.close`, `ws.state`, `ws.isOpen`
+- `WsConnection`, `WsMessage`, `WsConnectionState` available in both `ws` and `net`
+
+**`dns` — DNS Resolution** (from `net`):
+- `dns.resolve`, `dns.resolveAll`, `dns.reverseLookup`, `dns.resolveMx`, `dns.resolveTxt`
+- `MxRecord` available in both `dns` and `net`
+
+**`signal` — Signal Handling** (from `sys`):
+- `signal.on` (was `sys.onSignal`), `signal.off` (was `sys.offSignal`)
+- `Signal` is now a **global enum** with shorter member names: `Signal.Hup`, `Signal.Int`, `Signal.Quit`, `Signal.Kill`, `Signal.Term`, `Signal.Usr1`, `Signal.Usr2` (was `sys.Signal.SIGHUP` etc.)
+
+### Changed
+
+#### Function Renames (Deprecated Aliases Provided)
+
+| Old name | New name | Reason |
+| -------- | -------- | ------ |
+| `str.match` | `re.match` | Moved to `re` namespace |
+| `str.matchAll` | `re.matchAll` | Moved to `re` namespace |
+| `str.isMatch` | `re.test` | Moved to `re` namespace; name aligns with JS `RegExp.test` |
+| `str.replaceRegex` | `re.replace` | Moved to `re` namespace |
+| `str.capture` | `re.capture` | Moved to `re` namespace |
+| `str.captureAll` | `re.captureAll` | Moved to `re` namespace |
+| `arr.new` | `arr.create` | `new` is a soft keyword; `create` is unambiguous |
+| `conv.charCode` | `str.charCode` | Character ↔ code-point belongs in `str` |
+| `conv.fromCharCode` | `str.fromCharCode` | Character ↔ code-point belongs in `str` |
+| `sys.onSignal` | `signal.on` | Moved to `signal` namespace |
+| `sys.offSignal` | `signal.off` | Moved to `signal` namespace |
+| `sys.Signal.*` | `Signal.*` | Global enum with shortened member names |
+| `net.tcp*` | `tcp.*` | Moved to `tcp` namespace |
+| `net.udp*` | `udp.*` | Moved to `udp` namespace |
+| `net.ws*` | `ws.*` | Moved to `ws` namespace |
+| `net.resolve*` | `dns.*` | Moved to `dns` namespace |
+
+All old names emit SA0830 (`DeprecatedBuiltInMember`) when used. See [Stdlib Namespace Audit spec](.kanban/2-in-progress/Stdlib%20Namespace%20Audit%20—%20Mixed-Responsibility%20Cleanup.md).
+
+### Added
+
 #### Persistent REPL History
 
 - **Persistent command history** across REPL sessions. Every command typed at the interactive REPL is appended to a history file so that up-arrow recall works after restart. History is always on for any interactive REPL session; always off for non-interactive script execution.

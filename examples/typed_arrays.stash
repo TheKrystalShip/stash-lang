@@ -89,14 +89,14 @@ let untyped = arr.untyped(typed);
 io.println("  untyped typeof: " + typeof(untyped));
 io.println("  elementType:    " + arr.elementType(untyped));
 
-// ─── arr.new ─────────────────────────────────────
-io.println("\n-- arr.new --");
-let buf: int[] = arr.new("int", 5);
+// ─── arr.create ─────────────────────────────────────
+io.println("\n-- arr.create --");
+let buf: int[] = arr.create("int", 5);
 io.println("  int[] capacity 5: " + buf);
 arr.push(buf, 99);
 io.println("  after push 99:    " + buf);
 
-let blank: string[] = arr.new("string", 3);
+let blank: string[] = arr.create("string", 3);
 io.println("  string[] cap 3:   " + blank);
 
 // ─── Float Promotion ─────────────────────────────

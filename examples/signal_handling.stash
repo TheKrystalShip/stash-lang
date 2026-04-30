@@ -32,16 +32,16 @@ for (let tool in required) {
 
 // ── Signal Enum ────────────────────────────────────────────────────────
 
-// sys.Signal is a built-in enum with trappable POSIX signals.
+// Signal is a global enum with trappable POSIX signals.
 // The LSP provides autocompletion for all members.
 
 io.println("\nAvailable signals:");
-io.println("  " + sys.Signal.SIGHUP);    // Config reload
-io.println("  " + sys.Signal.SIGINT);    // Ctrl+C
-io.println("  " + sys.Signal.SIGQUIT);   // Quit
-io.println("  " + sys.Signal.SIGTERM);   // Graceful termination
-io.println("  " + sys.Signal.SIGUSR1);   // User-defined 1
-io.println("  " + sys.Signal.SIGUSR2);   // User-defined 2
+io.println("  " + Signal.Hup);    // Config reload
+io.println("  " + Signal.Int);    // Ctrl+C
+io.println("  " + Signal.Quit);   // Quit
+io.println("  " + Signal.Term);   // Graceful termination
+io.println("  " + Signal.Usr1);   // User-defined 1
+io.println("  " + Signal.Usr2);   // User-defined 2
 
 // ── Graceful Shutdown Pattern ──────────────────────────────────────────
 
@@ -52,7 +52,7 @@ let tempFile = fs.tempFile();
 fs.writeFile(tempFile, "locked");
 io.println($"\nCreated lock file: {tempFile}");
 
-sys.onSignal(sys.Signal.SIGTERM, () => {
+signal.on(Signal.Term, () => {
     io.println("[SIGTERM] Graceful shutdown initiated...");
     if (fs.exists(tempFile)) {
         fs.delete(tempFile);
@@ -63,7 +63,7 @@ sys.onSignal(sys.Signal.SIGTERM, () => {
 
 // ── Ctrl+C Handling ────────────────────────────────────────────────────
 
-sys.onSignal(sys.Signal.SIGINT, () => {
+signal.on(Signal.Int, () => {
     io.println("\n[SIGINT] Caught Ctrl+C — cleaning up...");
     if (fs.exists(tempFile)) {
         fs.delete(tempFile);
@@ -75,7 +75,7 @@ sys.onSignal(sys.Signal.SIGINT, () => {
 
 // Convention: SIGHUP = "reload configuration without restarting"
 
-sys.onSignal(sys.Signal.SIGHUP, () => {
+signal.on(Signal.Hup, () => {
     io.println("[SIGHUP] Reloading configuration...");
     // In a real script, this would re-read config files:
     // config = config.read("/etc/myapp/config.toml");
@@ -87,7 +87,7 @@ sys.onSignal(sys.Signal.SIGHUP, () => {
 // SIGUSR1/SIGUSR2 are custom signals — use them for anything.
 // Note: These only work on Linux and macOS. On Windows they are no-ops.
 
-sys.onSignal(sys.Signal.SIGUSR1, () => {
+signal.on(Signal.Usr1, () => {
     io.println("[SIGUSR1] Status report requested");
     io.println("  PID: " + sys.pid());
     io.println("  Uptime: " + sys.uptime() + "s");
@@ -104,8 +104,8 @@ let _ = try $(sleep 0.2);  // Brief wait for async handler
 // ── Cleanup ────────────────────────────────────────────────────────────
 
 // Unregister handlers when no longer needed
-sys.offSignal(sys.Signal.SIGUSR1);
-sys.offSignal(sys.Signal.SIGUSR2);
+signal.off(Signal.Usr1);
+signal.off(Signal.Usr2);
 io.println("\nUSR1/USR2 handlers removed.");
 
 // Clean up temp file

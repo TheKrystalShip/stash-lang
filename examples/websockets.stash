@@ -1,32 +1,32 @@
 /// WebSocket Client Examples
-/// Demonstrates net.ws* functions for real-time communication
+/// Demonstrates ws.* functions for real-time communication
 
 // ─── Basic Echo Client ───────────────────────────────────
 // Connect to a WebSocket echo server
 
-let ws = await net.wsConnect("wss://echo.websocket.org");
+let ws = await ws.connect("wss://echo.websocket.org");
 io.println("Connected: " + ws.url);
-io.println("State: " + net.wsState(ws));  // WsConnectionState.Open
+io.println("State: " + ws.state(ws));  // WsConnectionState.Open
 
 // Send a text message
-let bytes = await net.wsSend(ws, "Hello, WebSocket!");
+let bytes = await ws.send(ws, "Hello, WebSocket!");
 io.println($"Sent {bytes} bytes");
 
 // Receive the echo
-let msg = await net.wsRecv(ws, 5s);
+let msg = await ws.recv(ws, 5s);
 if (msg != null) {
     io.println($"Received ({msg.type}): {msg.data}");
 }
 
 // Clean close
-await net.wsClose(ws);
-io.println("State after close: " + net.wsState(ws));  // WsConnectionState.Closed
+await ws.close(ws);
+io.println("State after close: " + ws.state(ws));  // WsConnectionState.Closed
 
 
 // ─── Try Expression — Graceful Error Handling ─────────────
 // Use `try` to catch connection errors as values
 
-let result = try await net.wsConnect("ws://unreachable:9999", { timeout: 2s });
+let result = try await ws.connect("ws://unreachable:9999", { timeout: 2s });
 if (result is Error) {
     io.println("Expected failure: " + result.message);
 }
@@ -36,16 +36,16 @@ if (result is Error) {
 // Wrap entire WebSocket workflow in a timeout
 
 let status = try timeout 10s {
-    let ws = await net.wsConnect("ws://localhost:8080/api", {
+    let ws = await ws.connect("ws://localhost:8080/api", {
         headers: { "Authorization": "Bearer " + env.get("API_TOKEN") },
         timeout: 5s
     });
 
-    await net.wsSend(ws, json.stringify({ action: "get_status" }));
+    await ws.send(ws, json.stringify({ action: "get_status" }));
 
-    let msg = await net.wsRecv(ws);
+    let msg = await ws.recv(ws);
 
-    await net.wsClose(ws);
+    await ws.close(ws);
 
     json.parse(msg.data);
 
@@ -58,7 +58,7 @@ io.println($"Server status: {status.status}");
 // Automatically retry failed connections with backoff
 
 let ws2 = retry (5, delay: 1s, backoff: Backoff.Exponential, maxDelay: 15s){
-    await net.wsConnect("ws://broker:15674/ws", {
+    await ws.connect("ws://broker:15674/ws", {
         headers: { "Authorization": "Basic " + encoding.base64Encode("guest:guest") },
         subprotocol: "stomp",
         timeout: 5s
@@ -70,7 +70,7 @@ io.println($"Connected after retries: {ws2.url}");
 // ─── JSON Message Pattern ────────────────────────────────
 // Common pattern: JSON over WebSocket
 
-let ws3 = await net.wsConnect("ws://localhost:8080/api", {
+let ws3 = await ws.connect("ws://localhost:8080/api", {
     headers: { "Authorization": "Bearer " + env.get("API_TOKEN") },
     timeout: 5s
 });
@@ -80,15 +80,15 @@ let event = {
     type: "subscribe",
     channels: ["deployments", "alerts"]
 };
-await net.wsSend(ws3, json.stringify(event));
+await ws.send(ws3, json.stringify(event));
 
 // Receive loop with timeout
-while (net.wsIsOpen(ws3)) {
-    let msg = await net.wsRecv(ws3, 10s);
+while (ws.isOpen(ws3)) {
+    let msg = await ws.recv(ws3, 10s);
 
     if (msg == null) {
         // Timeout — send a heartbeat
-        await net.wsSend(ws3, json.stringify({ type: "ping" }));
+        await ws.send(ws3, json.stringify({ type: "ping" }));
         continue;
     }
 
@@ -101,19 +101,19 @@ while (net.wsIsOpen(ws3)) {
     io.println($"[{payload.type}] {payload.message}");
 }
 
-await net.wsClose(ws3);
+await ws.close(ws3);
 
 
 // ─── Background Receiver with Tasks ─────────────────────
 // Use task.run() for concurrent send/receive
 
-let ws4 = await net.wsConnect("ws://localhost:8080/stream");
+let ws4 = await ws.connect("ws://localhost:8080/stream");
 
 // Receiver runs in background
 let receiver = task.run(() => {
     let count = 0;
-    while (net.wsIsOpen(ws4)) {
-        let msg = await net.wsRecv(ws4, 5s);
+    while (ws.isOpen(ws4)) {
+        let msg = await ws.recv(ws4, 5s);
         if (msg != null && !msg.close) {
             count = count + 1;
             io.println($"Message #{count}: {msg.data}");
@@ -123,12 +123,12 @@ let receiver = task.run(() => {
 });
 
 // Main thread sends commands
-await net.wsSend(ws4, "start-streaming");
+await ws.send(ws4, "start-streaming");
 time.sleep(10);
-await net.wsSend(ws4, "stop-streaming");
+await ws.send(ws4, "stop-streaming");
 
 // Close and collect results
-await net.wsClose(ws4);
+await ws.close(ws4);
 let total = task.await(receiver);
 io.println($"Received {total} messages total");
 
@@ -137,10 +137,10 @@ io.println($"Received {total} messages total");
 // Production-style pattern combining all language features
 
 retry (10, delay: 5s, backoff: Backoff.Exponential, maxDelay: 1m) {
-    let ws = await net.wsConnect("ws://broker:8080/events", { timeout: 5s });
+    let ws = await ws.connect("ws://broker:8080/events", { timeout: 5s });
 
-    while (net.wsIsOpen(ws)) {
-        let msg = try await net.wsRecv(ws, 30s);
+    while (ws.isOpen(ws)) {
+        let msg = try await ws.recv(ws, 30s);
 
         if (msg is Error) {
             io.println("Receive error, will reconnect...");
@@ -148,7 +148,7 @@ retry (10, delay: 5s, backoff: Backoff.Exponential, maxDelay: 1m) {
         }
 
         if (msg == null) {
-            await net.wsSend(ws, "heartbeat");
+            await ws.send(ws, "heartbeat");
             continue;
         }
 
@@ -160,5 +160,5 @@ retry (10, delay: 5s, backoff: Backoff.Exponential, maxDelay: 1m) {
         io.println($"[{time.format(time.now(), "HH:mm:ss")}] {payload.type}: {payload.data}");
     }
 
-    await net.wsClose(ws);
+    await ws.close(ws);
 }

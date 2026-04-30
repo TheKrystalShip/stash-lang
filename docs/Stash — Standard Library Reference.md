@@ -23,35 +23,41 @@
 7. [`csv` — Parsing and Writing ](#csv--csv-parsing-and-writing)
 8. [`archive` — Archive Operations](#archive--archive-operations)
 9. [`str` — String Operations](#str--string-operations)
-10. [`arr` — Array Operations](#arr--array-operations)
-11. [`buf` — Byte Array Operations](#buf--byte-array-operations)
-12. [`dict` — Dictionary Operations](#dict--dictionary-operations)
-13. [`math` — Math Functions](#math--math-functions)
-14. [`time` — Time & Date](#time--time--date)
-15. [`json` — JSON](#json--json)
-16. [`xml` — XML](#xml--xml)
-17. [`ini` — INI Configuration](#ini--ini-configuration)
-18. [`yaml` — YAML](#yaml--yaml)
-19. [`toml` — TOML](#toml--toml)
+10. [`re` — Regular Expressions](#re--regular-expressions)
+11. [`arr` — Array Operations](#arr--array-operations)
+12. [`buf` — Byte Array Operations](#buf--byte-array-operations)
+13. [`dict` — Dictionary Operations](#dict--dictionary-operations)
+14. [`math` — Math Functions](#math--math-functions)
+15. [`time` — Time & Date](#time--time--date)
+16. [`json` — JSON](#json--json)
+17. [`xml` — XML](#xml--xml)
+18. [`ini` — INI Configuration](#ini--ini-configuration)
+19. [`yaml` — YAML](#yaml--yaml)
 20. [`toml` — TOML](#toml--toml)
-21. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
-22. [`http` — HTTP Requests](#http--http-requests)
-23. [`process` — Process Management](#process--process-management)
-24. [`shell` — Shell Mode State](#shell--shell-mode-state)
-25. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
-26. [`complete` — Tab Completion](#complete--tab-completion)
-27. [`tpl` — Templating](#tpl--templating)
-28. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-29. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-30. [`term` — Terminal Formatting](#term--terminal-formatting)
-31. [`sys` — System Information](#sys--system-information)
-32. [`task` — Parallel Tasks](#task--parallel-tasks)
-33. [`net` — Networking](#net--networking)
-34. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-35. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-36. [Argument Parsing](#argument-parsing)
-37. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-38. [`log` — Structured Logging](#log--structured-logging)
+21. [`toml` — TOML](#toml--toml)
+22. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
+23. [`http` — HTTP Requests](#http--http-requests)
+24. [`process` — Process Management](#process--process-management)
+25. [`shell` — Shell Mode State](#shell--shell-mode-state)
+26. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
+27. [`complete` — Tab Completion](#complete--tab-completion)
+28. [`tpl` — Templating](#tpl--templating)
+29. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+30. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+31. [`term` — Terminal Formatting](#term--terminal-formatting)
+32. [`sys` — System Information](#sys--system-information)
+33. [`signal` — Signal Handling](#signal--signal-handling)
+34. [`task` — Parallel Tasks](#task--parallel-tasks)
+35. [`net` — Networking](#net--networking)
+36. [`tcp` — TCP Sockets](#tcp--tcp-sockets)
+37. [`udp` — UDP Datagrams](#udp--udp-datagrams)
+38. [`ws` — WebSockets](#ws--websockets)
+39. [`dns` — DNS Resolution](#dns--dns-resolution)
+40. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+41. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+42. [Argument Parsing](#argument-parsing)
+43. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+44. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -183,8 +189,8 @@ let ok = io.confirm("Are you sure?", false);         // [y/N]
 | `conv.fromHex(s)`         | Parse a hexadecimal string to integer (supports `0x`)                                                     |
 | `conv.fromOct(s)`         | Parse an octal string to integer (supports `0o`)                                                          |
 | `conv.fromBin(s)`         | Parse a binary string to integer (supports `0b`)                                                          |
-| `conv.charCode(c)`        | Return the Unicode code point of the first character                                                      |
-| `conv.fromCharCode(n)`    | Return a character from its Unicode code point                                                            |
+| `conv.charCode(c)` *(deprecated)* | Deprecated. Use [`str.charCode`](#strcharcodec) instead.                                     |
+| `conv.fromCharCode(n)` *(deprecated)* | Deprecated. Use [`str.fromCharCode`](#strfromcharcode n) instead.                        |
 
 ### Examples
 
@@ -899,71 +905,30 @@ All `str` functions take the target string as the first argument. Strings are im
 | `str.slug(s)`                      | Convert to URL-friendly slug (lowercase, hyphens, no special chars)                        |
 | `str.wrap(s, width)`               | Word-wrap string to specified width, preserving paragraph breaks                           |
 
-### Regex
+### Regex *(deprecated — use [`re`](#re--regular-expressions))*
 
-| Function                             | Description                                                                      |
-| ------------------------------------ | -------------------------------------------------------------------------------- |
-| `str.match(s, pattern)`              | Return the first substring matching a regex pattern (or `null`)                  |
-| `str.matchAll(s, pattern)`           | Return an array of all substrings matching a regex pattern                       |
-| `str.capture(s, pattern)`            | Return a `RegexMatch` struct for the first match with capture groups (or `null`) |
-| `str.captureAll(s, pattern)`         | Return an array of `RegexMatch` structs for all matches with capture groups      |
-| `str.isMatch(s, pattern)`            | Return `true` if string contains a match for the regex pattern                   |
-| `str.replaceRegex(s, pattern, repl)` | Replace all regex matches with a replacement string                              |
+The following regex functions have moved to the `re` namespace. The old names still work but emit an SA0830 deprecation warning.
 
-All regex functions use a 5-second timeout to guard against catastrophic backtracking.
+| Function                             | Replacement                                               |
+| ------------------------------------ | --------------------------------------------------------- |
+| `str.match(s, pattern)` *(deprecated)*       | Use [`re.match`](#rematchs-pattern) instead       |
+| `str.matchAll(s, pattern)` *(deprecated)*    | Use [`re.matchAll`](#rematchalls-pattern) instead |
+| `str.isMatch(s, pattern)` *(deprecated)*     | Use [`re.test`](#retests-pattern) instead         |
+| `str.replaceRegex(s, pattern, repl)` *(deprecated)* | Use [`re.replace`](#replaces-pattern-repl) instead |
+| `str.capture(s, pattern)` *(deprecated)*     | Use [`re.capture`](#recaptures-pattern) instead   |
+| `str.captureAll(s, pattern)` *(deprecated)*  | Use [`re.captureAll`](#recapturealls-pattern) instead |
 
-#### `RegexMatch` Struct
+### Character Codes
 
-Returned by `str.capture()` and `str.captureAll()`.
-
-| Field         | Type                   | Description                                     |
-| ------------- | ---------------------- | ----------------------------------------------- |
-| `value`       | `string`               | The full matched text                           |
-| `index`       | `int`                  | Start position of the match in the input string |
-| `length`      | `int`                  | Length of the matched text                      |
-| `groups`      | `array<RegexGroup>`    | All capture groups (index 0 = full match)       |
-| `namedGroups` | `dict<string, string>` | Named capture group values keyed by group name  |
-
-#### `RegexGroup` Struct
-
-Each entry in `RegexMatch.groups`.
-
-| Field    | Type     | Description                                                |
-| -------- | -------- | ---------------------------------------------------------- |
-| `value`  | `string` | Captured text (`null` if the group did not participate)    |
-| `index`  | `int`    | Start position in the input (`-1` if group didn't match)   |
-| `length` | `int`    | Length of the capture                                      |
-| `name`   | `string` | Group name for named groups (`null` for positional groups) |
-
-#### Regex Capture Examples
+| Function               | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `str.charCode(c)`      | Return the Unicode code point of the first character |
+| `str.fromCharCode(n)`  | Return a character from its Unicode code point |
 
 ```stash
-// Positional capture groups
-let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
-io.println(m.value);           // "1.23"
-io.println(m.groups[1].value); // "1"
-io.println(m.groups[2].value); // "23"
-
-// Named capture groups
-let line = "192.168.1.1 myhost";
-let m = str.capture(line, "(?<ip>\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+(?<host>\\S+)");
-io.println(m.namedGroups["ip"]);   // "192.168.1.1"
-io.println(m.namedGroups["host"]); // "myhost"
-
-// Multiple matches with captureAll
-let emails = "alice@example.com and bob@work.org";
-let matches = str.captureAll(emails, "(\\w+)@(\\w+)");
-for (let m in matches) {
-    io.println(m.groups[1].value + " at " + m.groups[2].value);
-}
-// "alice at example"
-// "bob at work"
-
-// Optional group that doesn't participate
-let m = str.capture("ac", "(a)(b)?(c)");
-io.println(m.groups[1].value); // "a"
-io.println(m.groups[2].value); // null (group didn't match)
-io.println(m.groups[3].value); // "c"
+str.charCode("A")      // 65
+str.fromCharCode(65)   // "A"
+str.fromCharCode(9829) // "♥"
 ```
 
 ### Examples
@@ -1002,6 +967,92 @@ let tag = str.trim("<div>", "<>divDIV");               // ("div" may vary — tr
 // Padding
 io.println(str.padStart("42", 5, "0"));               // "00042"
 io.println(str.padEnd("hi", 6));                      // "hi    "
+```
+
+---
+
+## `re` — Regular Expressions
+
+The `re` namespace provides all regular expression operations. All functions use a 5-second timeout to guard against catastrophic backtracking.
+
+> **Throws:** `TypeError` for non-string arguments; `ValueError` for invalid regex patterns.
+
+| Function                         | Description                                                                       |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| `re.match(s, pattern)`           | Return the first substring matching a regex pattern (or `null`)                   |
+| `re.matchAll(s, pattern)`        | Return an array of all substrings matching a regex pattern                        |
+| `re.test(s, pattern)`            | Return `true` if the string contains at least one match for the pattern           |
+| `re.replace(s, pattern, repl)`   | Replace all regex matches with a replacement string                               |
+| `re.capture(s, pattern)`         | Return a `RegexMatch` struct for the first match with capture groups (or `null`)  |
+| `re.captureAll(s, pattern)`      | Return an array of `RegexMatch` structs for all matches with capture groups       |
+
+### `RegexMatch` Struct
+
+Returned by `re.capture()` and `re.captureAll()`. Also available as `str.RegexMatch`.
+
+| Field         | Type                   | Description                                     |
+| ------------- | ---------------------- | ----------------------------------------------- |
+| `value`       | `string`               | The full matched text                           |
+| `index`       | `int`                  | Start position of the match in the input string |
+| `length`      | `int`                  | Length of the matched text                      |
+| `groups`      | `array<RegexGroup>`    | All capture groups (index 0 = full match)       |
+| `namedGroups` | `dict<string, string>` | Named capture group values keyed by group name  |
+
+### `RegexGroup` Struct
+
+Each entry in `RegexMatch.groups`. Also available as `str.RegexGroup`.
+
+| Field    | Type     | Description                                                |
+| -------- | -------- | ---------------------------------------------------------- |
+| `value`  | `string` | Captured text (`null` if the group did not participate)    |
+| `index`  | `int`    | Start position in the input (`-1` if group didn't match)   |
+| `length` | `int`    | Length of the capture                                      |
+| `name`   | `string` | Group name for named groups (`null` for positional groups) |
+
+### Examples
+
+```stash
+// Simple matching
+let date = re.match("Log: 2026-04-08 ERROR", "\\d{4}-\\d{2}-\\d{2}");
+// "2026-04-08"
+
+let all = re.matchAll("one1two2three3", "\\d");
+// ["1", "2", "3"]
+
+// Test for match
+re.test("hello world", "\\d+");     // false
+re.test("hello123", "\\d+");        // true
+
+// Replace
+let clean = re.replace("192.168.1.100", "\\d{1,3}", "X");
+// "X.X.X.X"
+
+// Positional capture groups
+let m = re.capture("version 1.23", "(\\d+)\\.(\\d+)");
+io.println(m.value);           // "1.23"
+io.println(m.groups[1].value); // "1"
+io.println(m.groups[2].value); // "23"
+
+// Named capture groups
+let line = "192.168.1.1 myhost";
+let m = re.capture(line, "(?<ip>\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+(?<host>\\S+)");
+io.println(m.namedGroups["ip"]);   // "192.168.1.1"
+io.println(m.namedGroups["host"]); // "myhost"
+
+// Multiple matches with captureAll
+let emails = "alice@example.com and bob@work.org";
+let matches = re.captureAll(emails, "(\\w+)@(\\w+)");
+for (let m in matches) {
+    io.println(m.groups[1].value + " at " + m.groups[2].value);
+}
+// "alice at example"
+// "bob at work"
+
+// Optional group that doesn't participate
+let m = re.capture("ac", "(a)(b)?(c)");
+io.println(m.groups[1].value); // "a"
+io.println(m.groups[2].value); // null (group didn't match)
+io.println(m.groups[3].value); // "c"
 ```
 
 ---
@@ -1094,7 +1145,8 @@ Typed arrays (`int[]`, `float[]`, `string[]`, `bool[]`) are homogeneous arrays b
 | `arr.typed(array, elementType)` | Convert a generic array to a typed array. `elementType` is `"int"`, `"float"`, `"string"`, or `"bool"` |
 | `arr.untyped(typedArray)`       | Convert a typed array back to a generic array                                                          |
 | `arr.elementType(array)`        | Return the element type name (`"int"`, `"float"`, etc.) or `null` for generic arrays                   |
-| `arr.new(elementType, size)`    | Create a zero-initialized typed array with the given number of elements                                |
+| `arr.create(elementType, size)` | Create a zero-initialized typed array with the given number of elements                                |
+| `arr.new(elementType, size)` *(deprecated)* | Deprecated. Use [`arr.create`](#arrcreateelement type-size) instead.              |
 
 ### Examples
 
@@ -1189,7 +1241,7 @@ let generic = arr.untyped(typed);          // generic array
 arr.elementType(typed);                    // "int"
 arr.elementType(generic);                  // null
 
-let buf = arr.new("string", 10);           // zero-initialized string[] with 10 elements
+let buf = arr.create("string", 10);        // zero-initialized string[] with 10 elements
 arr.push(buf, "hello");                    // ["hello"]
 
 // Derived arrays preserve type
@@ -3514,8 +3566,8 @@ The `sys` namespace provides functions for querying system-level information: CP
 | `sys.tempDir()`                 | OS temporary directory path                                                                                                             |
 | `sys.networkInterfaces()`       | Array of network interface dicts                                                                                                        |
 | `sys.which(name, all?)`         | Find an executable in PATH. Returns the full path of the first match (or `null`). When `all` is `true`, returns an array of all matches |
-| `sys.onSignal(signal, handler)` | Register a callback for a POSIX signal                                                                                                  |
-| `sys.offSignal(signal)`         | Remove a previously registered signal handler                                                                                           |
+| `sys.onSignal(signal, handler)` *(deprecated)* | Deprecated. Use [`signal.on`](#signalonsignal-handler) instead                                                                          |
+| `sys.offSignal(signal)` *(deprecated)*         | Deprecated. Use [`signal.off`](#signaloffsignal) instead                                                                                |
 
 ### CPU & Memory
 
@@ -3615,62 +3667,91 @@ for (let tool in tools) {
 io.println("All tools available!");
 ```
 
-### Signal Handling
+### Signal Handling *(moved to [`signal`](#signal--signal-handling))*
 
-Stash supports trapping POSIX signals for graceful shutdown, config reloading, and custom signal handling. Signal handlers are registered per-signal and run in an isolated execution context when the signal is delivered.
+Signal handling has moved to the dedicated [`signal`](#signal--signal-handling) namespace. The old `sys.onSignal` and `sys.offSignal` functions still work but emit an SA0830 deprecation warning. The `sys.Signal` enum has been replaced by the global `Signal` enum.
 
-#### `sys.Signal` Enum
+| Old name | Replacement |
+| -------- | ----------- |
+| `sys.onSignal(signal, handler)` *(deprecated)* | [`signal.on(signal, handler)`](#signalonsignal-handler) |
+| `sys.offSignal(signal)` *(deprecated)*         | [`signal.off(signal)`](#signaloffsignal) |
+| `sys.Signal.SIGHUP` *(deprecated)*             | `Signal.Hup` |
+| `sys.Signal.SIGINT` *(deprecated)*             | `Signal.Int` |
+| `sys.Signal.SIGQUIT` *(deprecated)*            | `Signal.Quit` |
+| `sys.Signal.SIGTERM` *(deprecated)*            | `Signal.Term` |
+| `sys.Signal.SIGUSR1` *(deprecated)*            | `Signal.Usr1` |
+| `sys.Signal.SIGUSR2` *(deprecated)*            | `Signal.Usr2` |
 
-`sys.Signal` is a **built-in enum** listing the trappable POSIX signals.
+---
 
-| Member               | Signal    | Typical Use                        | Windows Support |
-| -------------------- | --------- | ---------------------------------- | --------------- |
-| `sys.Signal.SIGHUP`  | HUP (1)   | Config reload, terminal disconnect | ✅              |
-| `sys.Signal.SIGINT`  | INT (2)   | Interrupt (Ctrl+C)                 | ✅              |
-| `sys.Signal.SIGQUIT` | QUIT (3)  | Quit with core dump                | ✅              |
-| `sys.Signal.SIGTERM` | TERM (15) | Graceful termination               | ✅              |
-| `sys.Signal.SIGUSR1` | USR1 (10) | User-defined signal 1              | No-op           |
-| `sys.Signal.SIGUSR2` | USR2 (12) | User-defined signal 2              | No-op           |
+## `signal` — Signal Handling
 
-> **Note:** `SIGUSR1` and `SIGUSR2` are only supported on Linux and macOS. On Windows, registering handlers for these signals is a no-op — the handler is stored but never invoked.
+The `signal` namespace provides POSIX signal handling for graceful shutdown, config reloading, and custom inter-process communication. Signal handlers are registered per-signal and run in an isolated execution context when the signal is delivered.
 
-#### `sys.onSignal(signal, handler)`
+### `Signal` Enum
+
+`Signal` is a **global built-in enum** listing the trappable POSIX signals. No namespace prefix is needed.
+
+| Member          | Signal    | Typical Use                        | Windows Support |
+| --------------- | --------- | ---------------------------------- | --------------- |
+| `Signal.Hup`    | HUP (1)   | Config reload, terminal disconnect | ✅              |
+| `Signal.Int`    | INT (2)   | Interrupt (Ctrl+C)                 | ✅              |
+| `Signal.Quit`   | QUIT (3)  | Quit with core dump                | ✅              |
+| `Signal.Kill`   | KILL (9)  | Force kill (cannot be trapped)     | ✅              |
+| `Signal.Term`   | TERM (15) | Graceful termination               | ✅              |
+| `Signal.Usr1`   | USR1 (10) | User-defined signal 1              | No-op           |
+| `Signal.Usr2`   | USR2 (12) | User-defined signal 2              | No-op           |
+
+> **Note:** `Signal.Usr1` and `Signal.Usr2` are only supported on Linux and macOS. On Windows, registering handlers for these signals is a no-op — the handler is stored but never invoked.
+
+### `signal.on(signal, handler)`
 
 Registers a callback function to be invoked when the specified signal is received by the current process. If a handler was already registered for that signal, it is replaced.
 
 The handler function takes no arguments and runs in an isolated forked context — it cannot modify variables in the main script scope.
 
+- `signal` — A `Signal` enum value (e.g. `Signal.Term`)
+- `handler` — Zero-argument function to invoke on delivery
+
 ```stash
 // Graceful shutdown on SIGTERM
-sys.onSignal(sys.Signal.SIGTERM, () => {
+signal.on(Signal.Term, () => {
     log.info("Received SIGTERM — shutting down gracefully...");
     cleanup();
 });
 
 // Reload configuration on SIGHUP
-sys.onSignal(sys.Signal.SIGHUP, () => {
+signal.on(Signal.Hup, () => {
     log.info("Received SIGHUP — reloading configuration...");
     config = config.read("/etc/myapp/config.toml");
 });
+
+// Custom inter-process protocol with SIGUSR1
+signal.on(Signal.Usr1, () => {
+    io.println("Status: PID " + sys.pid() + ", uptime " + sys.uptime() + "s");
+});
 ```
 
-#### `sys.offSignal(signal)`
+### `signal.off(signal)`
 
 Removes a previously registered signal handler, restoring the default OS behavior for that signal. If no handler was registered, this is a no-op.
 
+- `signal` — A `Signal` enum value
+
 ```stash
-sys.offSignal(sys.Signal.SIGTERM);  // Restore default SIGTERM behavior
+signal.off(Signal.Term);  // Restore default SIGTERM behavior
+signal.off(Signal.Usr1);
 ```
 
-#### Cross-Platform Behavior
+### Cross-Platform Behavior
 
-| Platform | SIGHUP | SIGINT | SIGQUIT | SIGTERM | SIGUSR1 | SIGUSR2 |
-| -------- | ------ | ------ | ------- | ------- | ------- | ------- |
-| Linux    | ✅     | ✅     | ✅      | ✅      | ✅      | ✅      |
-| macOS    | ✅     | ✅     | ✅      | ✅      | ✅      | ✅      |
-| Windows  | ✅     | ✅     | ✅      | ✅      | No-op   | No-op   |
+| Platform | Hup | Int | Quit | Term | Usr1  | Usr2  |
+| -------- | --- | --- | ---- | ---- | ----- | ----- |
+| Linux    | ✅  | ✅  | ✅   | ✅   | ✅    | ✅    |
+| macOS    | ✅  | ✅  | ✅   | ✅   | ✅    | ✅    |
+| Windows  | ✅  | ✅  | ✅   | ✅   | No-op | No-op |
 
-On Windows, all signals except SIGUSR1/SIGUSR2 are supported via .NET's `PosixSignalRegistration`. SIGINT corresponds to Ctrl+C, and SIGTERM maps to process termination requests. SIGUSR1 and SIGUSR2 have no Windows equivalent — handlers are silently stored but never triggered.
+On Windows, all signals except `Usr1`/`Usr2` are supported via .NET's `PosixSignalRegistration`. `Int` corresponds to Ctrl+C, and `Term` maps to process termination requests.
 
 ---
 
@@ -3977,19 +4058,13 @@ Special prefix lengths:
 - `/31` — Point-to-point link: `hostCount` = 2, both addresses usable
 - `/0` — Entire address space
 
-### DNS Resolution
+### DNS Resolution *(deprecated — use [`dns`](#dns--dns-resolution))*
 
 | Function            | Signature    | Returns  | Description                                   |
 | ------------------- | ------------ | -------- | --------------------------------------------- |
-| `net.resolve`       | `(hostname)` | `ip`     | Resolves hostname to first IP address via DNS |
-| `net.resolveAll`    | `(hostname)` | `array`  | Resolves hostname to all IP addresses via DNS |
-| `net.reverseLookup` | `(ip)`       | `string` | Performs reverse DNS lookup for an IP address |
-
-```stash
-let addr = net.resolve("example.com")      // @93.184.216.34
-let all = net.resolveAll("example.com")    // [@93.184.216.34, ...]
-let name = net.reverseLookup(@8.8.8.8)    // "dns.google"
-```
+| `net.resolve` *(deprecated)*       | `(hostname)` | `ip`     | Deprecated. Use [`dns.resolve`](#dnsresolvehostname) instead |
+| `net.resolveAll` *(deprecated)*    | `(hostname)` | `array`  | Deprecated. Use [`dns.resolveAll`](#dnsresolveallhostname) instead |
+| `net.reverseLookup` *(deprecated)* | `(ip)`       | `string` | Deprecated. Use [`dns.reverseLookup`](#dnsreverselookupip) instead |
 
 ### Connectivity Testing
 
@@ -4019,465 +4094,19 @@ let webOpen = net.isPortOpen("example.com", 443, 5000)  // 5s timeout
 
 > **Note**: On Linux, `net.ping` requires root privileges or the `CAP_NET_RAW` capability for raw ICMP sockets.
 
-### TCP Sockets
-
-| Function                               | Description                                                                    |
-| -------------------------------------- | ------------------------------------------------------------------------------ |
-| `net.tcpConnect(host, port, timeout?)` | Creates a TCP connection to a host. Returns a `TcpConnection` struct.          |
-| `net.tcpSend(conn, data)`              | Sends string data over a TCP connection. Returns bytes sent.                   |
-| `net.tcpRecv(conn, maxBytes?)`         | Receives data from a TCP connection. Returns string.                           |
-| `net.tcpClose(conn)`                   | Closes a TCP connection.                                                       |
-| `net.tcpListen(port, handler)`         | Listens on a port, accepts one connection, calls handler with `TcpConnection`. |
-
-#### `net.tcpConnect(host, port, timeout?)`
-
-Creates a TCP connection to a host and port. Returns a `TcpConnection` struct.
-
-- `host` — Hostname or IP address string
-- `port` — Port number (1–65535)
-- `timeout` — Optional connection timeout in milliseconds (default: 5000)
-
-```stash
-let conn = net.tcpConnect("example.com", 80);
-io.println(conn.host);       // "example.com"
-io.println(conn.port);       // 80
-io.println(conn.localPort);  // ephemeral port
-```
-
-#### `net.tcpSend(conn, data)`
-
-Sends UTF-8 string data over an open TCP connection.
-
-- Returns the number of bytes sent
-
-```stash
-let sent = net.tcpSend(conn, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
-io.println(sent);  // number of bytes written
-```
-
-#### `net.tcpRecv(conn, maxBytes?)`
-
-Receives data from a TCP connection.
-
-- `maxBytes` — Maximum bytes to read (default: 4096)
-- Returns the received data as a UTF-8 string
-
-```stash
-let response = net.tcpRecv(conn);
-io.println(response);
-```
-
-#### `net.tcpClose(conn)`
-
-Closes a TCP connection and releases resources.
-
-```stash
-net.tcpClose(conn);
-```
-
-#### `net.tcpListen(port, handler)`
-
-Starts a TCP listener on a port, accepts one connection, invokes the handler function with a `TcpConnection`, then stops listening. This is a blocking call.
-
-- `port` — Port to listen on (1–65535)
-- `handler` — Function that receives the `TcpConnection`
-
-```stash
-// Echo server (handles one connection)
-net.tcpListen(8080, (conn) => {
-    let data = net.tcpRecv(conn);
-    net.tcpSend(conn, "echo:" + data);
-    net.tcpClose(conn);
-});
-```
-
-#### `TcpConnection`
-
-| Field       | Type     | Description           |
-| ----------- | -------- | --------------------- |
-| `host`      | `string` | Remote hostname or IP |
-| `port`      | `int`    | Remote port           |
-| `localPort` | `int`    | Local ephemeral port  |
-
-### Async TCP Sockets
-
-| Function                                    | Description                                                           |
-| ------------------------------------------- | --------------------------------------------------------------------- |
-| `net.tcpConnectAsync(host, port, options?)` | Async. Creates a TCP connection. Returns `Future<TcpConnection>`.     |
-| `net.tcpSendAsync(conn, data)`              | Async. Sends string data. Returns `Future<int>` (bytes sent).         |
-| `net.tcpSendBytesAsync(conn, data)`         | Async. Sends binary data (`byte[]`). Returns `Future<int>`.           |
-| `net.tcpRecvAsync(conn, options?)`          | Async. Receives string data. Returns `Future<string\|null>`.          |
-| `net.tcpRecvBytesAsync(conn, options?)`     | Async. Receives binary data. Returns `Future<byte[]\|null>`.          |
-| `net.tcpCloseAsync(conn)`                   | Async. Gracefully closes a connection. Returns `Future<null>`.        |
-| `net.tcpListenAsync(port, handler)`         | Async. Starts a multi-client TCP server. Returns `Future<TcpServer>`. |
-| `net.tcpServerClose(server)`                | Stops a TCP server.                                                   |
-| `net.tcpIsOpen(conn)`                       | Returns `true` if the TCP connection is open.                         |
-| `net.tcpState(conn)`                        | Returns `TcpConnectionState` enum value.                              |
-
-#### `net.tcpConnectAsync(host, port, options?)`
-
-Async. Creates a TCP connection to a host and port.
-
-- `host` — Hostname or IP address string
-- `port` — Port number (1–65535)
-- `options` — Optional `TcpConnectOptions` struct
-
-```stash
-let conn = await net.tcpConnectAsync("redis.local", 6379);
-
-// With options:
-let conn = await net.tcpConnectAsync("nats.local", 4222, net.TcpConnectOptions {
-    timeoutMs: 3000,
-    noDelay: true,
-    keepAlive: true,
-});
-
-// TLS connection:
-let conn = await net.tcpConnectAsync("example.com", 443, net.TcpConnectOptions {
-    tls: true,
-});
-
-// TLS with SNI override and skip cert validation (insecure):
-let conn = await net.tcpConnectAsync("10.0.0.1", 8443, net.TcpConnectOptions {
-    tls: true,
-    tlsSni: "internal.myhost.com",
-    tlsVerify: false,
-});
-```
-
-#### `net.tcpSendAsync(conn, data)`
-
-Async. Sends UTF-8 string data over an open TCP connection.
-
-- Returns `Future<int>` — bytes sent
-
-```stash
-let sent = await net.tcpSendAsync(conn, "PING\r\n");
-io.println("Sent ${sent} bytes");
-```
-
-#### `net.tcpSendBytesAsync(conn, data)`
-
-Async. Sends binary data (`byte[]`) over a TCP connection.
-
-```stash
-let cmd = buf.from("*1\r\n$4\r\nPING\r\n");
-let sent = await net.tcpSendBytesAsync(conn, cmd);
-```
-
-#### `net.tcpRecvAsync(conn, options?)`
-
-Async. Receives string data from a TCP connection. Returns `null` on timeout, `""` on peer close.
-
-- `options` — Optional `TcpRecvOptions` struct
-
-```stash
-let data = await net.tcpRecvAsync(conn);
-if data == null {
-    io.println("Timed out");
-} else if data == "" {
-    io.println("Connection closed by peer");
-} else {
-    io.println("Got: ${data}");
-}
-
-// With options:
-let data = await net.tcpRecvAsync(conn, net.TcpRecvOptions { maxBytes: 8192, timeoutMs: 5000 });
-```
-
-#### `net.tcpRecvBytesAsync(conn, options?)`
-
-Async. Receives binary data as `byte[]`. Returns `null` on timeout, empty `byte[]` on peer close.
-
-```stash
-let data = await net.tcpRecvBytesAsync(conn, net.TcpRecvOptions { maxBytes: 1024 });
-if data != null {
-    io.println("Received ${buf.len(data)} bytes");
-}
-```
-
-#### `net.tcpCloseAsync(conn)`
-
-Async. Gracefully closes a TCP connection with `Shutdown(Both)` + `Dispose()`. Idempotent — safe to call on already-closed connections.
-
-```stash
-await net.tcpCloseAsync(conn);
-```
-
-#### `net.tcpListenAsync(port, handler)`
-
-Async. Starts a multi-client TCP server. Returns a `TcpServer` handle immediately after the listener starts. Each accepted connection runs the handler in its own execution context.
-
-- `port` — Port to listen on (1–65535, or 0 for auto-assign)
-- `handler` — Function that receives each `TcpConnection`
-
-```stash
-let server = await net.tcpListenAsync(8080, fn(conn) {
-    let request = await net.tcpRecvAsync(conn);
-    await net.tcpSendAsync(conn, "HTTP/1.1 200 OK\r\n\r\nHello\n");
-    await net.tcpCloseAsync(conn);
-});
-
-io.println("Listening on port ${server.port}");
-// ... do other work ...
-
-net.tcpServerClose(server);
-```
-
-#### `net.tcpServerClose(server)`
-
-Stops a TCP server and closes the listener. Does not close existing accepted connections. Idempotent.
-
-```stash
-net.tcpServerClose(server);
-```
-
-#### `net.tcpIsOpen(conn)` / `net.tcpState(conn)`
-
-Sync. Query connection state. Works with both sync and async TCP connections.
-
-```stash
-if net.tcpIsOpen(conn) {
-    await net.tcpSendAsync(conn, "PING\r\n");
-}
-
-match net.tcpState(conn) {
-    TcpConnectionState.Open => io.println("Connected"),
-    TcpConnectionState.Closed => io.println("Disconnected"),
-}
-```
-
-#### `TcpConnectOptions`
-
-| Field       | Type     | Default | Description                                                              |
-| ----------- | -------- | ------- | ------------------------------------------------------------------------ |
-| `timeoutMs` | `int`    | `5000`  | Connection timeout in milliseconds                                       |
-| `tls`       | `bool`   | `false` | Enable TLS wrapping over the TCP connection                              |
-| `noDelay`   | `bool`   | `false` | Disable Nagle's algorithm                                                |
-| `keepAlive` | `bool`   | `false` | Enable TCP keep-alive                                                    |
-| `tlsVerify` | `bool`   | `true`  | Validate the server's TLS certificate. Set to `false` to skip (insecure) |
-| `tlsSni`    | `string` | `""`    | Override the SNI hostname sent during TLS handshake. Defaults to `host`  |
-
-#### `TcpRecvOptions`
-
-| Field       | Type  | Default | Description                         |
-| ----------- | ----- | ------- | ----------------------------------- |
-| `maxBytes`  | `int` | `4096`  | Max bytes to read (capped at 16 MB) |
-| `timeoutMs` | `int` | `30000` | Receive timeout in milliseconds     |
-
-#### `TcpServer`
-
-| Field    | Type   | Description                                 |
-| -------- | ------ | ------------------------------------------- |
-| `port`   | `int`  | Listening port                              |
-| `active` | `bool` | Whether the server is accepting connections |
-
-#### `TcpConnectionState` Enum
-
-| Value    | Description          |
-| -------- | -------------------- |
-| `Open`   | Connection is active |
-| `Closed` | Connection is closed |
-
-### UDP Datagrams
-
-| Function                        | Description                                             |
-| ------------------------------- | ------------------------------------------------------- |
-| `net.udpSend(host, port, data)` | Sends a UDP datagram. Returns bytes sent.               |
-| `net.udpRecv(port, timeout?)`   | Receives one UDP datagram. Returns `UdpMessage` struct. |
-
-#### `net.udpSend(host, port, data)`
-
-Sends a UDP datagram to a host and port.
-
-- `host` — Destination hostname or IP address
-- `port` — Destination port (1–65535)
-- `data` — String data to send
-- Returns the number of bytes sent
-
-```stash
-let sent = net.udpSend("127.0.0.1", 514, "syslog message");
-```
-
-#### `net.udpRecv(port, timeout?)`
-
-Listens on a UDP port and receives one datagram. Returns a `UdpMessage` struct.
-
-- `port` — Port to listen on (1–65535)
-- `timeout` — Optional timeout in milliseconds (default: 5000)
-
-```stash
-let msg = net.udpRecv(9999, 3000);
-io.println(msg.data);  // received data
-io.println(msg.host);  // sender's IP
-io.println(msg.port);  // sender's port
-```
-
-#### `UdpMessage`
-
-| Field  | Type     | Description               |
-| ------ | -------- | ------------------------- |
-| `data` | `string` | Received datagram content |
-| `host` | `string` | Sender's IP address       |
-| `port` | `int`    | Sender's port             |
-
-### WebSocket Client
-
-| Function                            | Description                                                          |
-| ----------------------------------- | -------------------------------------------------------------------- |
-| `net.wsConnect(url, options?)`      | Async. Opens a WebSocket connection. Returns `Future<WsConnection>`. |
-| `net.wsSend(conn, data)`            | Async. Sends a text message. Returns `Future<int>` (bytes sent).     |
-| `net.wsSendBinary(conn, data)`      | Async. Sends binary data (base64-encoded). Returns `Future<int>`.    |
-| `net.wsRecv(conn, timeout?)`        | Async. Receives next message. Returns `Future<WsMessage\|null>`.     |
-| `net.wsClose(conn, code?, reason?)` | Async. Initiates graceful close handshake.                           |
-| `net.wsState(conn)`                 | Returns `WsConnectionState` enum value.                              |
-| `net.wsIsOpen(conn)`                | Returns `true` if connection is `WsConnectionState.Open`.            |
-
-#### `net.wsConnect(url, options?)`
-
-Async. Opens a WebSocket connection to a `ws://` or `wss://` URL.
-
-- `url` — WebSocket URL (must start with `ws://` or `wss://`)
-- `options` — Optional dict:
-
-| Key           | Type       | Default | Description                                 |
-| ------------- | ---------- | ------- | ------------------------------------------- |
-| `headers`     | `dict`     | `{}`    | Custom HTTP headers for the upgrade request |
-| `timeout`     | `duration` | `10s`   | Connection timeout                          |
-| `subprotocol` | `string`   | `null`  | Requested WebSocket subprotocol             |
-
-```stash
-let ws = await net.wsConnect("ws://localhost:8080/events");
-
-// With auth and subprotocol
-let ws = await net.wsConnect("wss://broker.example.com/ws", {
-    headers: { "Authorization": "Bearer " + token },
-    subprotocol: "stomp",
-    timeout: 5s
-});
-```
-
-#### `net.wsSend(conn, data)`
-
-Async. Sends a UTF-8 text message over an open WebSocket connection.
-
-- Returns `Future<int>` — bytes sent
-
-```stash
-let bytes = await net.wsSend(ws, json.stringify({ event: "deploy", app: "web-api" }));
-```
-
-#### `net.wsSendBinary(conn, data)`
-
-Async. Sends binary data. The `data` parameter must be base64-encoded; it is decoded to raw bytes before sending.
-
-```stash
-let payload = encoding.base64Encode(rawBytes);
-await net.wsSendBinary(ws, payload);
-```
-
-#### `net.wsRecv(conn, timeout?)`
-
-Async. Receives the next complete message. Blocks until a message arrives or the timeout (default: `30s`) expires.
-
-- Returns `Future<WsMessage|null>` — `WsMessage` struct or `null` on timeout
-- Fragmented frames are reassembled internally
-
-```stash
-let msg = await net.wsRecv(ws, 5s);
-if (msg == null) {
-    io.println("Timed out");
-} else if (msg.close) {
-    io.println("Server closed: " + msg.data);
-} else {
-    io.println(msg.type + ": " + msg.data);
-}
-```
-
-#### `net.wsClose(conn, code?, reason?)`
-
-Async. Initiates the WebSocket close handshake.
-
-- `code` — Close status code (default: `1000`)
-- `reason` — Close reason (default: `""`)
-- Idempotent — safe to call on already-closed connections
-
-```stash
-await net.wsClose(ws);
-await net.wsClose(ws, 1001, "going away");
-```
-
-#### `net.wsState(conn)` / `net.wsIsOpen(conn)`
-
-Sync. Query connection state. Returns `WsConnectionState` enum value or `bool`.
-
-```stash
-if (net.wsIsOpen(ws)) {
-    await net.wsSend(ws, "ping");
-}
-io.println(net.wsState(ws));  // WsConnectionState.Open, .Closing, or .Closed
-```
-
-#### `WsConnectionState` Enum
-
-| Value        | Description                                   |
-| ------------ | --------------------------------------------- |
-| `Connecting` | Handshake in progress                         |
-| `Open`       | Connection established, ready to send/receive |
-| `Closing`    | Close handshake initiated                     |
-| `Closed`     | Connection fully closed                       |
-
-#### `WsConnection`
-
-| Field      | Type     | Description                                   |
-| ---------- | -------- | --------------------------------------------- |
-| `url`      | `string` | The URL connected to                          |
-| `protocol` | `string` | Negotiated subprotocol (empty string if none) |
-
-#### `WsMessage`
-
-| Field   | Type     | Description                                               |
-| ------- | -------- | --------------------------------------------------------- |
-| `data`  | `string` | Message payload (UTF-8 text, or base64-encoded if binary) |
-| `type`  | `string` | `"text"` or `"binary"`                                    |
-| `close` | `bool`   | `true` if this is a close frame                           |
-
-### Advanced DNS
-
-| Function                 | Description                                               |
-| ------------------------ | --------------------------------------------------------- |
-| `net.resolveMx(domain)`  | Resolves MX records. Returns array of `MxRecord` structs. |
-| `net.resolveTxt(domain)` | Resolves TXT records. Returns array of strings.           |
-
-#### `net.resolveMx(domain)`
-
-Resolves MX (mail exchange) records for a domain via raw DNS query. Returns an array of `MxRecord` structs sorted by priority.
-
-```stash
-let records = net.resolveMx("google.com");
-for (let mx in records) {
-    io.println(mx.priority + " " + mx.exchange);
-}
-// 10 smtp.google.com
-```
-
-#### `net.resolveTxt(domain)`
-
-Resolves TXT records for a domain. Returns an array of strings.
-
-```stash
-let records = net.resolveTxt("google.com");
-for (let txt in records) {
-    io.println(txt);
-}
-```
-
-#### `MxRecord`
-
-| Field      | Type     | Description                     |
-| ---------- | -------- | ------------------------------- |
-| `priority` | `int`    | MX priority (lower = preferred) |
-| `exchange` | `string` | Mail server hostname            |
+### TCP Sockets, UDP Datagrams, WebSockets & DNS *(moved)*
+
+These functions have moved to dedicated namespaces. The old `net.tcp*`, `net.udp*`, `net.ws*`, and `net.resolve*` names still work but emit an SA0830 deprecation warning.
+
+| Old namespace | New namespace | Documentation |
+| ------------- | ------------- | ------------- |
+| `net.tcpConnect`, `net.tcpSend`, `net.tcpRecv`, `net.tcpClose`, `net.tcpListen` | `tcp.*` | [`tcp` — TCP Sockets](#tcp--tcp-sockets) |
+| `net.tcpConnectAsync`, `net.tcpSendAsync`, `net.tcpRecvAsync`, `net.tcpCloseAsync`, `net.tcpListenAsync`, `net.tcpSendBytesAsync`, `net.tcpRecvBytesAsync`, `net.tcpIsOpen`, `net.tcpState`, `net.tcpServerClose` | `tcp.*` | [`tcp` — TCP Sockets](#tcp--tcp-sockets) |
+| `net.udpSend`, `net.udpRecv` | `udp.*` | [`udp` — UDP Datagrams](#udp--udp-datagrams) |
+| `net.wsConnect`, `net.wsSend`, `net.wsSendBinary`, `net.wsRecv`, `net.wsClose`, `net.wsState`, `net.wsIsOpen` | `ws.*` | [`ws` — WebSockets](#ws--websockets) |
+| `net.resolve`, `net.resolveAll`, `net.reverseLookup`, `net.resolveMx`, `net.resolveTxt` | `dns.*` | [`dns` — DNS Resolution](#dns--dns-resolution) |
+
+Structs and enums defined in `net` (`TcpConnection`, `TcpConnectOptions`, `TcpRecvOptions`, `TcpServer`, `TcpConnectionState`, `UdpMessage`, `WsConnection`, `WsMessage`, `WsConnectionState`, `MxRecord`) are available in both the `net` namespace and their respective new namespaces.
 
 ### Network Interfaces
 
@@ -4513,6 +4142,407 @@ let eth0 = net.interface("eth0")
 println("IP: ${eth0.ip}, Gateway: ${eth0.gateway}")
 println("Subnet: ${eth0.subnet}")
 ```
+
+---
+
+## `tcp` — TCP Sockets
+
+The `tcp` namespace provides synchronous and asynchronous TCP socket operations. Requires the **Network** capability.
+
+> **Throws:** `IOError` for connection failures; `TimeoutError` when an operation exceeds its deadline.
+
+### Synchronous TCP
+
+| Function                              | Description                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------ |
+| `tcp.connect(host, port, timeout?)`   | Creates a TCP connection. Returns a `TcpConnection` struct.                    |
+| `tcp.send(conn, data)`                | Sends string data over a TCP connection. Returns bytes sent.                   |
+| `tcp.recv(conn, maxBytes?)`           | Receives data from a TCP connection. Returns string.                           |
+| `tcp.close(conn)`                     | Closes a TCP connection.                                                       |
+| `tcp.listen(port, handler)`           | Listens on a port, accepts one connection, calls handler with `TcpConnection`. |
+
+#### `tcp.connect(host, port, timeout?)`
+
+Creates a TCP connection to a host and port. Returns a `TcpConnection` struct.
+
+- `host` — Hostname or IP address string
+- `port` — Port number (1–65535)
+- `timeout` — Optional connection timeout in milliseconds (default: 5000)
+
+```stash
+let conn = tcp.connect("example.com", 80);
+io.println(conn.host);       // "example.com"
+io.println(conn.port);       // 80
+io.println(conn.localPort);  // ephemeral port
+```
+
+#### `tcp.send(conn, data)`
+
+Sends UTF-8 string data over an open TCP connection.
+
+```stash
+let sent = tcp.send(conn, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+io.println(sent);  // number of bytes written
+```
+
+#### `tcp.recv(conn, maxBytes?)`
+
+Receives data from a TCP connection. `maxBytes` defaults to 4096.
+
+```stash
+let response = tcp.recv(conn);
+io.println(response);
+```
+
+#### `tcp.close(conn)`
+
+Closes a TCP connection and releases resources.
+
+```stash
+tcp.close(conn);
+```
+
+#### `tcp.listen(port, handler)`
+
+Starts a TCP listener on a port, accepts one connection, invokes the handler with a `TcpConnection`, then stops. Blocking.
+
+```stash
+tcp.listen(8080, (conn) => {
+    let data = tcp.recv(conn);
+    tcp.send(conn, "echo:" + data);
+    tcp.close(conn);
+});
+```
+
+### Async TCP
+
+| Function                                   | Description                                                           |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| `tcp.connectAsync(host, port, options?)`   | Async. Creates a TCP connection. Returns `Future<TcpConnection>`.     |
+| `tcp.sendAsync(conn, data)`                | Async. Sends string data. Returns `Future<int>` (bytes sent).         |
+| `tcp.sendBytesAsync(conn, data)`           | Async. Sends binary data (`byte[]`). Returns `Future<int>`.           |
+| `tcp.recvAsync(conn, options?)`            | Async. Receives string data. Returns `Future<string\|null>`.          |
+| `tcp.recvBytesAsync(conn, options?)`       | Async. Receives binary data. Returns `Future<byte[]\|null>`.          |
+| `tcp.closeAsync(conn)`                     | Async. Gracefully closes a connection. Returns `Future<null>`.        |
+| `tcp.listenAsync(port, handler)`           | Async. Starts a multi-client TCP server. Returns `Future<TcpServer>`. |
+| `tcp.serverClose(server)`                  | Stops a TCP server.                                                   |
+| `tcp.isOpen(conn)`                         | Returns `true` if the connection is open.                             |
+| `tcp.state(conn)`                          | Returns `TcpConnectionState` enum value.                              |
+
+#### `tcp.connectAsync(host, port, options?)`
+
+Async. Creates a TCP connection.
+
+- `options` — Optional `TcpConnectOptions` struct
+
+```stash
+let conn = await tcp.connectAsync("redis.local", 6379);
+
+// With options
+let conn = await tcp.connectAsync("nats.local", 4222, TcpConnectOptions {
+    timeoutMs: 3000,
+    noDelay: true,
+    keepAlive: true,
+});
+
+// TLS connection
+let conn = await tcp.connectAsync("example.com", 443, TcpConnectOptions {
+    tls: true,
+});
+```
+
+#### `tcp.listenAsync(port, handler)`
+
+Async. Starts a multi-client TCP server. Returns a `TcpServer` handle immediately after the listener starts. Each accepted connection runs the handler in its own execution context.
+
+```stash
+let server = await tcp.listenAsync(8080, fn(conn) {
+    let request = await tcp.recvAsync(conn);
+    await tcp.sendAsync(conn, "HTTP/1.1 200 OK\r\n\r\nHello\n");
+    await tcp.closeAsync(conn);
+});
+
+io.println("Listening on port ${server.port}");
+tcp.serverClose(server);
+```
+
+#### `tcp.isOpen(conn)` / `tcp.state(conn)`
+
+```stash
+if tcp.isOpen(conn) {
+    await tcp.sendAsync(conn, "PING\r\n");
+}
+
+match tcp.state(conn) {
+    TcpConnectionState.Open => io.println("Connected"),
+    TcpConnectionState.Closed => io.println("Disconnected"),
+}
+```
+
+### Structs & Enums
+
+#### `TcpConnection`
+
+| Field       | Type     | Description           |
+| ----------- | -------- | --------------------- |
+| `host`      | `string` | Remote hostname or IP |
+| `port`      | `int`    | Remote port           |
+| `localPort` | `int`    | Local ephemeral port  |
+
+#### `TcpConnectOptions`
+
+| Field       | Type     | Default | Description                                                              |
+| ----------- | -------- | ------- | ------------------------------------------------------------------------ |
+| `timeoutMs` | `int`    | `5000`  | Connection timeout in milliseconds                                       |
+| `tls`       | `bool`   | `false` | Enable TLS wrapping                                                      |
+| `noDelay`   | `bool`   | `false` | Disable Nagle's algorithm                                                |
+| `keepAlive` | `bool`   | `false` | Enable TCP keep-alive                                                    |
+| `tlsVerify` | `bool`   | `true`  | Validate the server's TLS certificate                                    |
+| `tlsSni`    | `string` | `""`    | Override the SNI hostname sent during TLS handshake                      |
+
+#### `TcpRecvOptions`
+
+| Field       | Type  | Default | Description                         |
+| ----------- | ----- | ------- | ----------------------------------- |
+| `maxBytes`  | `int` | `4096`  | Max bytes to read (capped at 16 MB) |
+| `timeoutMs` | `int` | `30000` | Receive timeout in milliseconds     |
+
+#### `TcpServer`
+
+| Field    | Type   | Description                                 |
+| -------- | ------ | ------------------------------------------- |
+| `port`   | `int`  | Listening port                              |
+| `active` | `bool` | Whether the server is accepting connections |
+
+#### `TcpConnectionState` Enum
+
+| Value    | Description          |
+| -------- | -------------------- |
+| `Open`   | Connection is active |
+| `Closed` | Connection is closed |
+
+---
+
+## `udp` — UDP Datagrams
+
+The `udp` namespace provides UDP datagram operations. Requires the **Network** capability.
+
+> **Throws:** `IOError` for network failures; `TimeoutError` on receive timeout.
+
+| Function                        | Description                                             |
+| ------------------------------- | ------------------------------------------------------- |
+| `udp.send(host, port, data)`    | Sends a UDP datagram. Returns bytes sent.               |
+| `udp.recv(port, timeout?)`      | Receives one UDP datagram. Returns `UdpMessage` struct. |
+
+#### `udp.send(host, port, data)`
+
+Sends a UDP datagram to a host and port.
+
+- `host` — Destination hostname or IP address
+- `port` — Destination port (1–65535)
+- `data` — String data to send
+
+```stash
+let sent = udp.send("127.0.0.1", 514, "syslog message");
+```
+
+#### `udp.recv(port, timeout?)`
+
+Listens on a UDP port and receives one datagram. Returns a `UdpMessage` struct.
+
+- `port` — Port to listen on (1–65535)
+- `timeout` — Optional timeout in milliseconds (default: 5000)
+
+```stash
+let msg = udp.recv(9999, 3000);
+io.println(msg.data);  // received data
+io.println(msg.host);  // sender's IP
+io.println(msg.port);  // sender's port
+```
+
+#### `UdpMessage`
+
+| Field  | Type     | Description               |
+| ------ | -------- | ------------------------- |
+| `data` | `string` | Received datagram content |
+| `host` | `string` | Sender's IP address       |
+| `port` | `int`    | Sender's port             |
+
+---
+
+## `ws` — WebSockets
+
+The `ws` namespace provides WebSocket client operations. All functions are async. Requires the **Network** capability.
+
+> **Throws:** `IOError` for connection failures; `TimeoutError` when an operation exceeds its deadline.
+
+| Function                            | Description                                                          |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| `ws.connect(url, options?)`         | Async. Opens a WebSocket connection. Returns `Future<WsConnection>`. |
+| `ws.send(conn, data)`               | Async. Sends a text message. Returns `Future<int>` (bytes sent).     |
+| `ws.sendBinary(conn, data)`         | Async. Sends binary data (base64-encoded). Returns `Future<int>`.    |
+| `ws.recv(conn, timeout?)`           | Async. Receives next message. Returns `Future<WsMessage\|null>`.     |
+| `ws.close(conn, code?, reason?)`    | Async. Initiates graceful close handshake.                           |
+| `ws.state(conn)`                    | Returns `WsConnectionState` enum value.                              |
+| `ws.isOpen(conn)`                   | Returns `true` if connection is `WsConnectionState.Open`.            |
+
+#### `ws.connect(url, options?)`
+
+Async. Opens a WebSocket connection to a `ws://` or `wss://` URL.
+
+- `url` — WebSocket URL (must start with `ws://` or `wss://`)
+- `options` — Optional dict with `headers`, `timeout`, `subprotocol`
+
+```stash
+let conn = await ws.connect("ws://localhost:8080/events");
+
+// With auth and subprotocol
+let conn = await ws.connect("wss://broker.example.com/ws", {
+    headers: { "Authorization": "Bearer " + token },
+    subprotocol: "stomp",
+    timeout: 5s
+});
+```
+
+#### `ws.send(conn, data)` / `ws.sendBinary(conn, data)`
+
+```stash
+let bytes = await ws.send(conn, json.stringify({ event: "deploy" }));
+
+let payload = encoding.base64Encode(rawBytes);
+await ws.sendBinary(conn, payload);
+```
+
+#### `ws.recv(conn, timeout?)`
+
+Receives the next complete message. Returns `null` on timeout, `WsMessage` otherwise.
+
+```stash
+let msg = await ws.recv(conn, 5s);
+if (msg == null) {
+    io.println("Timed out");
+} else if (msg.close) {
+    io.println("Server closed: " + msg.data);
+} else {
+    io.println(msg.type + ": " + msg.data);
+}
+```
+
+#### `ws.close(conn, code?, reason?)`
+
+Initiates the WebSocket close handshake. Idempotent.
+
+```stash
+await ws.close(conn);
+await ws.close(conn, 1001, "going away");
+```
+
+#### `ws.state(conn)` / `ws.isOpen(conn)`
+
+```stash
+if (ws.isOpen(conn)) {
+    await ws.send(conn, "ping");
+}
+io.println(ws.state(conn));  // WsConnectionState.Open, .Closing, or .Closed
+```
+
+### Structs & Enums
+
+#### `WsConnectionState` Enum
+
+| Value        | Description                                   |
+| ------------ | --------------------------------------------- |
+| `Connecting` | Handshake in progress                         |
+| `Open`       | Connection established, ready to send/receive |
+| `Closing`    | Close handshake initiated                     |
+| `Closed`     | Connection fully closed                       |
+
+#### `WsConnection`
+
+| Field      | Type     | Description                                   |
+| ---------- | -------- | --------------------------------------------- |
+| `url`      | `string` | The URL connected to                          |
+| `protocol` | `string` | Negotiated subprotocol (empty string if none) |
+
+#### `WsMessage`
+
+| Field   | Type     | Description                                               |
+| ------- | -------- | --------------------------------------------------------- |
+| `data`  | `string` | Message payload (UTF-8 text, or base64-encoded if binary) |
+| `type`  | `string` | `"text"` or `"binary"`                                    |
+| `close` | `bool`   | `true` if this is a close frame                           |
+
+---
+
+## `dns` — DNS Resolution
+
+The `dns` namespace provides DNS resolution functions. Requires the **Network** capability.
+
+> **Throws:** `IOError` for DNS failures; `TimeoutError` when resolution exceeds its deadline.
+
+| Function                    | Description                                               |
+| --------------------------- | --------------------------------------------------------- |
+| `dns.resolve(hostname)`     | Resolves hostname to first IP address                     |
+| `dns.resolveAll(hostname)`  | Resolves hostname to all IP addresses                     |
+| `dns.reverseLookup(ip)`     | Performs reverse DNS lookup for an IP address             |
+| `dns.resolveMx(domain)`     | Resolves MX records. Returns array of `MxRecord` structs. |
+| `dns.resolveTxt(domain)`    | Resolves TXT records. Returns array of strings.           |
+
+#### `dns.resolve(hostname)`
+
+Returns the first IP address for a hostname.
+
+```stash
+let addr = dns.resolve("example.com")      // @93.184.216.34
+```
+
+#### `dns.resolveAll(hostname)`
+
+Returns all IP addresses for a hostname.
+
+```stash
+let all = dns.resolveAll("example.com")    // [@93.184.216.34, ...]
+```
+
+#### `dns.reverseLookup(ip)`
+
+Performs reverse DNS (PTR record) lookup. Not all IPs have PTR records — use `try` for graceful handling.
+
+```stash
+let name = try dns.reverseLookup(@8.8.8.8)    // "dns.google" or Error
+```
+
+#### `dns.resolveMx(domain)`
+
+Resolves MX (mail exchange) records. Returns an array of `MxRecord` structs sorted by priority.
+
+```stash
+let records = dns.resolveMx("google.com");
+for (let mx in records) {
+    io.println(mx.priority + " " + mx.exchange);
+}
+// 10 smtp.google.com
+```
+
+#### `dns.resolveTxt(domain)`
+
+Resolves TXT records for a domain. Returns an array of strings.
+
+```stash
+let records = dns.resolveTxt("google.com");
+for (let txt in records) {
+    io.println(txt);
+}
+```
+
+#### `MxRecord`
+
+| Field      | Type     | Description                     |
+| ---------- | -------- | ------------------------------- |
+| `priority` | `int`    | MX priority (lower = preferred) |
+| `exchange` | `string` | Mail server hostname            |
+
+---
 
 ## `ssh` — SSH Remote Execution
 

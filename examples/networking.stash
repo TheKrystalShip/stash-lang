@@ -14,13 +14,13 @@ io.println("\n-- 1. TCP Echo Server & Client --");
 let port = 18900;
 
 // Start a simple echo server in a background task
-// net.tcpListen accepts one connection, calls the handler, then exits
+// tcp.listen accepts one connection, calls the handler, then exits
 
 let server = task.run(() => {
-    net.tcpListen(port, (conn) => {
-        let data = net.tcpRecv(conn);
-        net.tcpSend(conn, "echo:" + data);
-        net.tcpClose(conn);
+    tcp.listen(port, (conn) => {
+        let data = tcp.recv(conn);
+        tcp.send(conn, "echo:" + data);
+        tcp.close(conn);
     });
 });
 
@@ -30,19 +30,19 @@ time.sleep(0.1);
 
 // Connect as a client
 
-let conn = net.tcpConnect("127.0.0.1", port);
+let conn = tcp.connect("127.0.0.1", port);
 io.println($"  Connected to {conn.host}:{conn.port}");
 io.println($"  Local port:  {conn.localPort}");
 
 // Send a message and read the echoed response
 
-let bytesSent = net.tcpSend(conn, "hello world");
+let bytesSent = tcp.send(conn, "hello world");
 io.println($"  Sent {bytesSent} bytes");
 
-let response = net.tcpRecv(conn);
+let response = tcp.recv(conn);
 io.println($"  Received:    \"{response}\"");
 
-net.tcpClose(conn);
+tcp.close(conn);
 task.await(server);
 
 // ─── 2. UDP Messaging ────────────────────────────────────────────────────────
@@ -54,14 +54,14 @@ let udpPort = 18901;
 // Start a UDP receiver in a background task (waits up to 5 seconds)
 
 let receiver = task.run(() => {
-    return net.udpRecv(udpPort, 5000);
+    return udp.recv(udpPort, 5000);
 });
 
 time.sleep(0.1);
 
 // Send a datagram to the receiver
 
-let sent = net.udpSend("127.0.0.1", udpPort, "hello via UDP");
+let sent = udp.send("127.0.0.1", udpPort, "hello via UDP");
 io.println($"  Sent {sent} bytes via UDP");
 
 let msg = task.await(receiver);
@@ -74,17 +74,17 @@ io.println("\n-- 3. Basic DNS Resolution --");
 
 // Forward lookup: hostname → single IP (first result)
 
-let ip = net.resolve("google.com");
+let ip = dns.resolve("google.com");
 io.println($"  google.com → {ip}");
 
 // All IP addresses for a hostname
 
-let allIps = net.resolveAll("google.com");
+let allIps = dns.resolveAll("google.com");
 io.println($"  All IPs:   {allIps}");
 
 // Reverse DNS: IP → hostname
 
-let hostname = try net.reverseLookup(ip);
+let hostname = try dns.reverseLookup(ip);
 if (hostname is Error) {
     // Not all IPs have PTR records — that's normal
     io.println("  Reverse lookup: no PTR record");
@@ -96,7 +96,7 @@ if (hostname is Error) {
 
 io.println("\n-- 4. MX Records --");
 
-let mxRecords = net.resolveMx("google.com");
+let mxRecords = dns.resolveMx("google.com");
 io.println("  MX records for google.com:");
 for (let mx in mxRecords) {
     io.println($"    priority {mx.priority}: {mx.exchange}");
@@ -108,7 +108,7 @@ io.println("\n-- 5. TXT Records --");
 
 // TXT records carry SPF, DKIM, domain verification tokens, etc.
 
-let txtRecords = net.resolveTxt("google.com");
+let txtRecords = dns.resolveTxt("google.com");
 io.println("  TXT records for google.com:");
 for (let txt in txtRecords) {
     // Truncate long TXT records for readability
