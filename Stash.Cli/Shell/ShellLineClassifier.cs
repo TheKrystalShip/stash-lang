@@ -237,6 +237,12 @@ internal sealed class ShellLineClassifier
 
             default:
                 // Rule 3: something that looks like arguments follows.
+                // Alias registry wins over declared Stash symbols (spec §6.2): a function
+                // alias registers a Stash global of the same name, but bare-word invocation
+                // must still route to shell so the alias body runs, not the Stash call.
+                if (_ctx.Vm.AliasRegistry.Exists(ident))
+                    return LineMode.Shell;
+
                 // Declared Stash symbol wins.
                 if (_ctx.Vm.HasReplGlobal(ident))
                 {

@@ -917,6 +917,10 @@ public class Program
             classifier = completionClassifier;
             shellRunner = new ShellRunner(completionShellCtx);
 
+            // Wire alias.exec() so template aliases can run through the shell runner
+            // from Stash code (e.g. alias.exec("g", ["status"])).
+            Stash.Cli.Shell.AliasDispatcher.Wire(shellRunner, vm);
+
             // Extend the multi-line reader to recognise trailing-pipe continuation.
             reader.IsShellIncomplete = line => classifier.IsShellIncomplete(line);
         }

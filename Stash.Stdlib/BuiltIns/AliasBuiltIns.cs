@@ -58,6 +58,13 @@ public static class AliasBuiltIns
         RegexOptions.Compiled,
         TimeSpan.FromMilliseconds(100));
 
+    // Matches only argument placeholders: ${args}, ${args[N]}, ${argv}.
+    // Used by the strict-args guard to decide whether a template accepts arguments.
+    private static readonly Regex _argPlaceholderCheck = new(
+        @"\$\{args(?:\[\d+\])?\}|\$\{argv\}",
+        RegexOptions.Compiled,
+        TimeSpan.FromMilliseconds(100));
+
     // ---------------------------------------------------------------------------
     // Namespace definition
     // ---------------------------------------------------------------------------
@@ -389,10 +396,18 @@ public static class AliasBuiltIns
     }
 
     /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="template"/> contains at least one
+    /// argument placeholder (<c>${args}</c>, <c>${args[N]}</c>, or <c>${argv}</c>).
+    /// Used by the dispatcher to enforce the strict-args policy (spec §15).
+    /// </summary>
+    public static bool HasArgPlaceholder(string template) =>
+        _argPlaceholderCheck.IsMatch(template);
+
+    /// <summary>
     /// Substitutes <c>${args}</c>, <c>${args[N]}</c>, and <c>${argv}</c> placeholders
     /// in a template alias body, leaving other <c>${...}</c> expressions untouched.
     /// </summary>
-    internal static string ExpandTemplate(string aliasName, string template, string[] args)
+    public static string ExpandTemplate(string aliasName, string template, string[] args)
     {
         return _substRegex.Replace(template, m =>
         {

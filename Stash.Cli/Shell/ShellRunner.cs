@@ -9,6 +9,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Cli.Shell;
 
@@ -55,6 +56,24 @@ internal sealed class ShellRunner
             {
                 EvaluateSource(sugarSource, _ctx.Vm);
                 _ctx.Vm.LastExitCode = 0;
+                return;
+            }
+        }
+
+        // ── Phase B: alias dispatch ───────────────────────────────────────────
+        // Single-stage, no-redirect, non-forced, non-strict lines are eligible
+        // for alias dispatch.  Both \name (IsForced) and !name (IsStrict) bypass
+        // the alias registry and fall through to PATH lookup (spec §6.2).
+        if (!ast.IsForced && !ast.IsStrict
+            && ast.Stages.Count == 1
+            && ast.Redirects.Count == 0)
+        {
+            if (_ctx.Vm.AliasRegistry.TryGet(ast.Stages[0].Program, out AliasRegistry.AliasEntry? aliasEntry)
+                && aliasEntry is not null)
+            {
+                List<string> expandedArgs = ArgExpander.Expand(ast.Stages[0].RawArgs, _ctx.Vm, span: null);
+                int exitCode = AliasDispatcher.ExecuteAlias(this, _ctx.Vm, aliasEntry, [.. expandedArgs]);
+                _ctx.Vm.LastExitCode = exitCode;
                 return;
             }
         }
@@ -107,7 +126,7 @@ internal sealed class ShellRunner
     {
         var resolved = new List<(string Program, List<string> Args)>(stages.Count);
         foreach (var stage in stages)
-            resolved.Add(BuildArgv(stage));
+            resolved.Add(BuildArgvWithAliasExpansion(stage));
 
         try
         {
@@ -172,7 +191,7 @@ internal sealed class ShellRunner
 
             var resolved = new List<(string Program, List<string> Args)>(ast.Stages.Count);
             foreach (var stage in ast.Stages)
-                resolved.Add(BuildArgv(stage));
+                resolved.Add(BuildArgvWithAliasExpansion(stage));
 
             try
             {
@@ -221,6 +240,32 @@ internal sealed class ShellRunner
         List<string> args = ArgExpander.Expand(stage.RawArgs, _ctx.Vm, span: null);
 
         return (program, args);
+    }
+
+    /// <summary>
+    /// Builds the (Program, Args) tuple for a pipeline stage, expanding template
+    /// aliases in-place before the pipeline is launched.  Function aliases in
+    /// pipeline position are not expanded (Phase B limitation — they fall through
+    /// to PATH lookup; see §8.2 / future Phase E work).
+    /// </summary>
+    private (string Program, List<string> Args) BuildArgvWithAliasExpansion(ShellStage stage)
+    {
+        if (!string.IsNullOrEmpty(stage.Program)
+            && _ctx.Vm.AliasRegistry.TryGet(stage.Program, out AliasRegistry.AliasEntry? entry)
+            && entry is not null
+            && entry.Kind == AliasRegistry.AliasKind.Template)
+        {
+            List<string> stageArgs = ArgExpander.Expand(stage.RawArgs, _ctx.Vm, span: null);
+            string expanded = AliasBuiltIns.ExpandTemplate(entry.Name, entry.TemplateBody!, [.. stageArgs]);
+            // Re-lex the expanded body to obtain its program and args.
+            // Only the first stage of the expanded line is used; multi-stage expansion
+            // from a single alias position is not supported in Phase B.
+            ShellCommandLine expandedAst = ShellLineLexer.Parse(expanded);
+            if (expandedAst.Stages.Count > 0)
+                return BuildArgv(expandedAst.Stages[0]);
+        }
+        // Function aliases in pipeline: fall through to PATH (Phase B limitation).
+        return BuildArgv(stage);
     }
 
     private static string ExpandProgramName(string program)
