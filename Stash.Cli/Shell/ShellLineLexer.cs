@@ -50,9 +50,21 @@ internal static class ShellLineLexer
         var rawStages = SplitOnPipes(effectiveLine);
 
         // Step 2: peel redirect clauses from the last stage.
+        // Skip redirect peeling for `alias`/`unalias` lines because their
+        // bodies may legitimately contain `=>` (lambda arrow) which would
+        // otherwise be mis-parsed as a `>` stdout redirect.
         string lastRaw = rawStages[rawStages.Count - 1];
-        var (lastRawTrimmed, redirects) = PeelRedirects(lastRaw);
-        rawStages[rawStages.Count - 1] = lastRawTrimmed;
+        List<RedirectClause> redirects;
+        string firstProgram = PeekFirstProgram(rawStages[0]);
+        if (firstProgram is "alias" or "unalias")
+        {
+            redirects = new List<RedirectClause>();
+        }
+        else
+        {
+            (lastRaw, redirects) = PeelRedirects(lastRaw);
+            rawStages[rawStages.Count - 1] = lastRaw;
+        }
 
         // Step 3: parse each stage into (Program, RawArgs).
         var stages = new List<ShellStage>(rawStages.Count);
@@ -250,6 +262,12 @@ internal static class ShellLineLexer
     }
 
     // ── Step 3: split program and args ──────────────────────────────────────
+
+    private static string PeekFirstProgram(string stage)
+    {
+        var (program, _) = SplitProgramAndArgs(stage.Trim());
+        return program;
+    }
 
     private static (string Program, string RawArgs) SplitProgramAndArgs(string stage)
     {

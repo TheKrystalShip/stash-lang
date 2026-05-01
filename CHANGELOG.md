@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Shell Aliases
 
-- **Shell mode:** New `alias` sugar at the REPL prompt — `alias name = "body"` (template), `alias name(params) = body` (function), and `unalias name` (remove). Aliases are resolved before PATH executables in bare-word line classification.
+- **Shell mode:** New `alias` sugar at the REPL prompt — `alias name = "body"` (template), `alias name = (params) => body` (function alias, standard lambda syntax), and `unalias name` (remove). Aliases are resolved before PATH executables in bare-word line classification.
 - **Stdlib:** New `alias` namespace with full programmatic API:
   - `alias.define(name, body, opts?)` — register a template or function alias
   - `alias.list()` — return all aliases as `AliasInfo` structs

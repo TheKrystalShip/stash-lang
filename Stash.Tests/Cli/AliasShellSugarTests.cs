@@ -117,7 +117,7 @@ public sealed class AliasShellSugarTests
     {
         var (runner, vm, sw) = MakeRunner();
 
-        runner.Run("alias greet(msg) = io.println(msg)");
+        runner.Run("alias greet = (msg) => io.println(msg)");
 
         // Verify it was registered as a function alias
         Assert.True(vm.AliasRegistry.Exists("greet"));
@@ -140,7 +140,7 @@ public sealed class AliasShellSugarTests
     {
         var (runner, vm, sw) = MakeRunner();
 
-        runner.Run("alias greetblock(msg) { io.println(msg); }");
+        runner.Run("alias greetblock = (msg) => { io.println(msg); }");
 
         Assert.True(vm.AliasRegistry.Exists("greetblock"));
         vm.AliasRegistry.TryGet("greetblock", out var entry);
@@ -161,7 +161,7 @@ public sealed class AliasShellSugarTests
     {
         var (runner, vm, sw) = MakeRunner();
 
-        runner.Run("alias greetdef(msg: string = \"Hi\") { io.println(msg); }");
+        runner.Run("alias greetdef = (msg: string = \"Hi\") => { io.println(msg); }");
 
         Assert.True(vm.AliasRegistry.Exists("greetdef"));
         vm.AliasRegistry.TryGet("greetdef", out var entry);
@@ -400,7 +400,7 @@ public sealed class AliasShellSugarTests
 
         // ${msg} appears inside a $() shell call — it is a Stash lambda parameter
         // reference, NOT a REPL variable to be expanded at define time.
-        runner.Run("alias echoarg(msg) = io.println(msg)");
+        runner.Run("alias echoarg = (msg) => io.println(msg)");
 
         Assert.True(vm.AliasRegistry.Exists("echoarg"));
         vm.AliasRegistry.TryGet("echoarg", out var entry);

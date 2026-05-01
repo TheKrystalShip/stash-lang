@@ -887,16 +887,16 @@ Placeholders:
 **Function alias** — stores a Stash callable. Useful when the body requires branching, loops, or side-effects that cannot be expressed as a single string:
 
 ```text
-alias mkcd(dir) = {
+alias mkcd = (dir: string) => {
     fs.createDir(dir);
     env.chdir(dir);
 }
 ```
 
-The block form (braces) is a single-expression lambda body that returns the last value. A one-liner is also valid:
+Function alias bodies use Stash's standard lambda syntax — anything you can put on the right-hand side of `let f = ...` works here. A one-liner expression form is also valid:
 
 ```text
-alias mkcd(dir) = fs.createDir(dir) && env.chdir(dir)
+alias mkcd = (dir: string) => fs.createDir(dir) && env.chdir(dir)
 ```
 
 ### 17.2 Using Aliases

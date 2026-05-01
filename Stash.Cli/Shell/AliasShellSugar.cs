@@ -17,8 +17,8 @@ using Stash.Runtime;
 ///   <item><c>alias --save &lt;name&gt; = &lt;body&gt;</c> → <c>{ alias.define(...); alias.save("name"); }</c></item>
 ///   <item><c>alias &lt;name&gt;</c>                    → <c>alias.__getPretty("name")</c></item>
 ///   <item><c>alias &lt;name&gt; = &lt;body&gt;</c>     → <c>alias.define("name", "body")</c></item>
-///   <item><c>alias &lt;name&gt;(params) = &lt;expr&gt;</c> → <c>alias.define("name", (params) =&gt; expr)</c></item>
-///   <item><c>alias &lt;name&gt;(params) { stmts }</c>  → <c>alias.define("name", (params) =&gt; { stmts })</c></item>
+///   <item><c>alias &lt;name&gt; = (params) =&gt; &lt;expr&gt;</c> → <c>alias.define("name", (params) =&gt; expr)</c></item>
+///   <item><c>alias &lt;name&gt; = (params) =&gt; { stmts }</c> → <c>alias.define("name", (params) =&gt; { stmts })</c></item>
 ///   <item><c>unalias &lt;name&gt;</c>                  → <c>alias.remove("name")</c></item>
 ///   <item><c>unalias --all</c>                         → <c>alias.clear()</c></item>
 ///   <item><c>unalias --save &lt;name&gt;</c>           → <c>{ alias.remove("name"); alias.__removeSaved("name"); }</c></item>
@@ -74,16 +74,13 @@ internal static class AliasShellSugar
                     $"alias --save: missing '=' or '(' after alias name '{saveName}'",
                     null, StashErrorTypes.CommandError);
 
-            string? defineSource = afterSave[j] switch
-            {
-                '(' => DesugarFunctionForm(saveName, afterSave, j),
-                '=' => DesugarTemplateForm(saveName, afterSave, j + 1),
-                _   => null,
-            };
+            string? defineSource = afterSave[j] == '='
+                ? DesugarBodyAfterEq(saveName, afterSave, j + 1)
+                : null;
 
             if (defineSource is null)
                 throw new RuntimeError(
-                    $"alias --save: expected '=' or '(' after alias name '{saveName}'",
+                    $"alias --save: expected '=' after alias name '{saveName}'",
                     null, StashErrorTypes.CommandError);
 
             string escapedSaveName = ShellSugarDesugarer.EscapeForStashString(saveName);
@@ -101,15 +98,40 @@ internal static class AliasShellSugar
         if (i >= raw.Length)
             return $"alias.__getPretty(\"{ShellSugarDesugarer.EscapeForStashString(name)}\");";
 
-        // Case 5: function form: alias <name>(params) = expr | { stmts }
-        if (raw[i] == '(')
-            return DesugarFunctionForm(name, raw, i);
-
-        // Case 6: template form: alias <name> = body
+        // Case 5: `alias <name> = <body>` — body is either a template string
+        //         or a lambda `(params) => expr | { stmts }`.
         if (raw[i] == '=')
-            return DesugarTemplateForm(name, raw, i + 1);
+            return DesugarBodyAfterEq(name, raw, i + 1);
 
         return null;
+    }
+
+    /// <summary>
+    /// Dispatches to lambda-form or template-form desugaring based on what follows '='.
+    /// A body that begins with '(' AND has '=&gt;' after the matching ')' is treated as a
+    /// lambda function alias; otherwise it is a template alias.
+    /// </summary>
+    private static string DesugarBodyAfterEq(string name, string raw, int afterEqPos)
+    {
+        int peek = afterEqPos;
+        SkipWhitespace(raw, ref peek);
+        if (peek < raw.Length && raw[peek] == '(' && IsLambdaShape(raw, peek))
+            return DesugarLambdaForm(name, raw, peek);
+        return DesugarTemplateForm(name, raw, afterEqPos);
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="raw"/> at <paramref name="openParenPos"/>
+    /// looks like a lambda parameter list — i.e. <c>(...)</c> followed (after optional whitespace)
+    /// by <c>=&gt;</c>.
+    /// </summary>
+    private static bool IsLambdaShape(string raw, int openParenPos)
+    {
+        int closeParen = FindMatchingClose(raw, openParenPos, '(', ')');
+        if (closeParen < 0) return false;
+        int p = closeParen + 1;
+        SkipWhitespace(raw, ref p);
+        return p + 1 < raw.Length && raw[p] == '=' && raw[p + 1] == '>';
     }
 
     /// <summary>
@@ -218,46 +240,41 @@ internal static class AliasShellSugar
         return $"alias.define(\"{escapedName}\", \"{escapedBody}\");";
     }
 
-    // ── Function-form desugaring ──────────────────────────────────────────────
+    // ── Lambda-form desugaring ────────────────────────────────────────────────
 
-    private static string? DesugarFunctionForm(string name, string raw, int parenPos)
+    /// <summary>
+    /// Desugars a lambda function alias of the form
+    /// <c>(params) =&gt; expr</c> or <c>(params) =&gt; { stmts }</c>, starting at the
+    /// opening parenthesis at <paramref name="parenPos"/>.
+    /// </summary>
+    private static string DesugarLambdaForm(string name, string raw, int parenPos)
     {
-        // raw[parenPos] == '('
+        // raw[parenPos] == '(' and IsLambdaShape has already verified the trailing '=>'.
         int closeParen = FindMatchingClose(raw, parenPos, '(', ')');
         if (closeParen < 0)
             throw new RuntimeError(
                 $"alias: unmatched '(' in alias '{name}' definition",
                 null, StashErrorTypes.ParseError);
 
-        // paramList is the content between ( and ) — lifted verbatim into the lambda
         string paramList = raw[(parenPos + 1)..closeParen];
 
         int i = closeParen + 1;
         SkipWhitespace(raw, ref i);
 
+        // Skip the '=>' arrow (presence guaranteed by IsLambdaShape).
+        if (i + 1 >= raw.Length || raw[i] != '=' || raw[i + 1] != '>')
+            throw new RuntimeError(
+                $"alias: expected '=>' after parameter list for alias '{name}'",
+                null, StashErrorTypes.ParseError);
+        i += 2;
+        SkipWhitespace(raw, ref i);
+
         if (i >= raw.Length)
             throw new RuntimeError(
-                $"alias: missing body after parameter list for alias '{name}'",
+                $"alias: missing body after '=>' for alias '{name}'",
                 null, StashErrorTypes.ParseError);
 
         string escapedName = ShellSugarDesugarer.EscapeForStashString(name);
-
-        if (raw[i] == '=')
-        {
-            // Expression body: everything after '=' to end of line
-            int bodyStart = i + 1;
-            string exprBody = raw[bodyStart..].Trim();
-            // Strip optional trailing semicolon (spec §5.2: NEWLINE | ";")
-            if (exprBody.EndsWith(";", StringComparison.Ordinal))
-                exprBody = exprBody[..^1].TrimEnd();
-
-            if (exprBody.Length == 0)
-                throw new RuntimeError(
-                    $"alias: missing expression after '=' for alias '{name}'",
-                    null, StashErrorTypes.ParseError);
-
-            return $"alias.define(\"{escapedName}\", ({paramList}) => {exprBody});";
-        }
 
         if (raw[i] == '{')
         {
@@ -268,12 +285,22 @@ internal static class AliasShellSugar
                     $"alias: unmatched '{{' in alias '{name}' definition",
                     null, StashErrorTypes.ParseError);
 
-            // Include braces in the block string
             string block = raw[i..(closeBrace + 1)];
             return $"alias.define(\"{escapedName}\", ({paramList}) => {block});";
         }
 
-        return null;
+        // Expression body: everything from '=>' to end of line
+        string exprBody = raw[i..].Trim();
+        // Strip optional trailing semicolon
+        if (exprBody.EndsWith(";", StringComparison.Ordinal))
+            exprBody = exprBody[..^1].TrimEnd();
+
+        if (exprBody.Length == 0)
+            throw new RuntimeError(
+                $"alias: missing body after '=>' for alias '{name}'",
+                null, StashErrorTypes.ParseError);
+
+        return $"alias.define(\"{escapedName}\", ({paramList}) => {exprBody});";
     }
 
     // ── String scanning helpers ───────────────────────────────────────────────
@@ -452,8 +479,8 @@ internal static class AliasShellSugar
             "  alias <name>                         Show a single alias definition",
             "  alias <name> = \"body\"              Define a template alias (quoted body)",
             "  alias <name> = word                  Define a template alias (single-word body)",
-            "  alias <name>(<params>) = <expr>      Define a function alias (expression body)",
-            "  alias <name>(<params>) { <stmts> }   Define a function alias (block body)",
+            "  alias <name> = (<params>) => <expr>  Define a function alias (lambda, expression body)",
+            "  alias <name> = (<params>) => { ... } Define a function alias (lambda, block body)",
             "  alias --save <name> = <body>         Define and persist to aliases.stash (Phase F)",
             "  alias --help                         Show this help",
             "",
@@ -470,7 +497,7 @@ internal static class AliasShellSugar
             "Examples:",
             "  alias gst = \"git status\"",
             "  alias g   = \"git ${args}\"",
-            "  alias gco(branch: string = \"main\") = $(git checkout ${branch})",
+            "  alias gco = (branch: string = \"main\") => $(git checkout ${branch})",
             "",
             "Use \\name to bypass aliases (force PATH lookup).",
             "Use !name for strict mode (bypass + fail on non-zero exit).");

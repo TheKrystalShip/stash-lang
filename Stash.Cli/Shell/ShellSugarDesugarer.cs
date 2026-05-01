@@ -27,7 +27,7 @@ internal static class ShellSugarDesugarer
     /// raw command text is parsed directly by the sugar handler. This prevents the
     /// <see cref="ArgExpander"/> from attempting to evaluate Stash variables that appear in
     /// function alias parameter lists or bodies (e.g. <c>${msg}</c> in
-    /// <c>alias g(msg) = $(echo ${msg})</c>).
+    /// <c>alias g = (msg) => $(echo ${msg})</c>).
     /// </summary>
     public static bool IsRawArgSugar(string program) => program is "alias" or "unalias";
 
