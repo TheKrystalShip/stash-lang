@@ -100,6 +100,17 @@ internal static class AliasDispatcher
     {
         _expansionStack ??= new Stack<string>();
 
+        // Per-alias --help interception (spec §12.1).  When the FIRST argument is
+        // exactly "--help", bypass cycle/hook/body and print the alias's own
+        // metadata via alias.__getPretty.  Users can pass --help to the underlying
+        // command via the bypass forms (\name --help, !name --help).
+        if (args.Length > 0 && args[0] == "--help")
+        {
+            PrettyPrintHelp(vm, entry.Name);
+            vm.LastExitCode = 0;
+            return 0;
+        }
+
         // Cycle guard (spec §6.4 + §9.3): push BEFORE hooks so that a hook
         // calling the same alias also sees the entry on the stack.
         if (_expansionStack.Contains(entry.Name))
@@ -319,5 +330,15 @@ internal static class AliasDispatcher
         // _expansionStack enumerates LIFO (top to bottom).  Reverse() gives
         // chronological (bottom to top = push order) for a readable chain.
         return string.Join(" → ", _expansionStack!.Reverse().Append(newName));
+    }
+
+    /// <summary>
+    /// Prints help for a single alias by delegating to
+    /// <see cref="AliasBuiltIns.PrettyPrintOne"/>.  Invoked when the first argument to
+    /// an alias invocation is <c>--help</c> (spec §12.1).
+    /// </summary>
+    private static void PrettyPrintHelp(VirtualMachine vm, string name)
+    {
+        AliasBuiltIns.PrettyPrintOne(vm.Context, name);
     }
 }

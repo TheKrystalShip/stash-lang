@@ -925,9 +925,15 @@ Use `\gs` when you genuinely want the raw binary named `gs`, not the alias.
 ```text
 alias              # List all currently defined aliases
 alias gs           # Show the definition of a single alias
+gs --help          # Show metadata for alias `gs` and skip its body
 unalias gs         # Remove the alias named 'gs'
-unalias gs gco     # Remove multiple aliases at once
+unalias --all      # Remove all user-defined aliases (built-ins kept)
 ```
+
+Passing `--help` as the first argument to any alias prints its metadata
+(name, kind, source location, description) instead of executing the body.
+To pass `--help` through to the underlying command, use a bypass prefix
+(`\gs --help`).
 
 ### 17.5 Programmatic Definition via `alias.define`
 

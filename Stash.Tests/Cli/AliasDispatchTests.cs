@@ -341,4 +341,45 @@ public sealed class AliasDispatchTests : IDisposable
 
         Assert.Equal("aliasexec\n", File.ReadAllText(tmp));
     }
+
+    // =========================================================================
+    // 14. Per-alias --help interception (spec §12.1)
+    // =========================================================================
+
+    [Fact]
+    public void Alias_HelpFlag_PrintsMetadataAndSkipsBody()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+        var (runner, vm, _, sw) = MakeRunner();
+        // Body that would WRITE to a temp file if it ran — proves --help skips it.
+        string tmp = TmpFile();
+        DefineTemplateAlias(vm, "gst", $"echo executed > {tmp}");
+
+        runner.Run("gst --help");
+
+        // Body did NOT run.
+        Assert.False(File.Exists(tmp), "alias body should not execute when --help is passed");
+        // Output contains alias metadata.
+        string output = sw.ToString();
+        Assert.Contains("gst", output);
+        Assert.Contains("template", output);
+        Assert.Equal(0, vm.LastExitCode);
+    }
+
+    [Fact]
+    public void Alias_HelpFlag_OnFunctionAlias_PrintsMetadata()
+    {
+        var (runner, vm, _, sw) = MakeRunner();
+        ShellRunner.EvaluateSource(
+            """alias.define("greet", () => { io.println("hi"); });""", vm);
+
+        runner.Run("greet --help");
+
+        string output = sw.ToString();
+        Assert.Contains("greet", output);
+        Assert.Contains("function", output);
+        Assert.DoesNotContain("hi", output); // body did not run
+        Assert.Equal(0, vm.LastExitCode);
+    }
 }

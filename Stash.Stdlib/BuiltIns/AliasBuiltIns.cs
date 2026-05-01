@@ -501,7 +501,13 @@ public static class AliasBuiltIns
         }
     }
 
-    private static void PrettyPrintOne(IInterpreterContext ctx, string name)
+    /// <summary>
+    /// Prints a single alias definition (name, kind, source, description) to
+    /// <see cref="IInterpreterContext.Output"/>.  Used by <c>alias.__getPretty</c>
+    /// and by the alias dispatcher's per-alias <c>--help</c> interception
+    /// (spec §12.1).
+    /// </summary>
+    public static void PrettyPrintOne(IInterpreterContext ctx, string name)
     {
         if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
         {
