@@ -1,0 +1,130 @@
+#!/usr/bin/env stash
+
+// examples/aliases.stash
+// Demonstrates the alias namespace: defining, listing, inspecting, and invoking aliases.
+// Run with: dotnet run --project Stash.Cli/ -- examples/aliases.stash
+
+io.println("=" * 58);
+io.println("  Alias Namespace Demo");
+io.println("=" * 58);
+
+// ─── 1. Template aliases ──────────────────────────────────────────────────────
+// A template alias stores a body string. The placeholder ${args} expands to all
+// arguments passed when the alias is invoked. ${args[N]} selects a single arg.
+
+io.println("\n-- Template Aliases --");
+
+alias.define("gs",   "git status ${args}");
+alias.define("glog", "git log --oneline ${args}");
+alias.define("gl",   "git pull ${args}");
+alias.define("gp",   "git push ${args}");
+
+io.println("Defined: gs, glog, gl, gp");
+
+// Inspect a single alias via alias.get
+let gs_info = alias.get("gs");
+if (gs_info != null) {
+    io.println($"  gs -> kind={gs_info.kind}  body={gs_info.body}");
+}
+
+// ─── 2. Function alias ────────────────────────────────────────────────────────
+// A function alias stores a first-class Stash callable. Useful when the body
+// requires logic, not just a string substitution.
+
+io.println("\n-- Function Alias --");
+
+alias.define("mkcd", (dir) => {
+    io.println($"  [mkcd] Would create and enter: {dir}");
+    return 0;
+});
+
+let mkcd_info = alias.get("mkcd");
+if (mkcd_info != null) {
+    let param_names = arr.join(arr.map(mkcd_info.params, (p) => p.name), ", ");
+    io.println($"  mkcd -> kind={mkcd_info.kind}  params={param_names}");
+}
+
+// ─── 3. AliasOptions with hooks ──────────────────────────────────────────────
+
+io.println("\n-- AliasOptions with hooks --");
+
+alias.define("deploy", "kubectl apply -f deployment.yaml", AliasOptions {
+    description: "Deploy to the active cluster",
+    before: () => {
+        io.println("  [before] Checking cluster connectivity...");
+    },
+    after: () => {
+        io.println("  [after] Deployment submitted.");
+    }
+});
+
+let deploy_info = alias.get("deploy");
+if (deploy_info != null) {
+    io.println($"  deploy -> hasBefore={deploy_info.hasBefore}  hasAfter={deploy_info.hasAfter}");
+    io.println($"           description={deploy_info.description}");
+}
+
+// ─── 4. AliasOptions — confirm prompt ────────────────────────────────────────
+// Provide a non-empty confirm string to prompt the user before execution.
+// (In non-interactive script mode the prompt is always accepted automatically.)
+
+alias.define("nuke", "rm -rf /tmp/scratch", AliasOptions {
+    description: "Wipe the scratch directory",
+    confirm:     "This will delete /tmp/scratch. Continue?"
+});
+
+let nuke_info = alias.get("nuke");
+if (nuke_info != null) {
+    io.println($"\n  nuke -> confirm={nuke_info.confirm}");
+}
+
+// ─── 5. alias.list() — introspect all registered aliases ─────────────────────
+
+io.println("\n-- alias.list() --");
+
+let all = alias.list();
+io.println($"  Total registered: {len(all)}");
+for (let info in all) {
+    let kind_tag = info.kind == "template" ? "T" : "F";
+    let desc     = info.description ?? "";
+    io.println($"  [{kind_tag}] {str.padEnd(info.name, 10)} {desc}");
+}
+
+// ─── 6. alias.names() ────────────────────────────────────────────────────────
+
+io.println("\n-- alias.names() --");
+let name_list = arr.join(alias.names(), ", ");
+io.println($"  Names: {name_list}");
+
+// ─── 7. alias.exists() ───────────────────────────────────────────────────────
+
+io.println("\n-- alias.exists() --");
+let exists_gs  = alias.exists("gs");
+let exists_unk = alias.exists("unknown");
+io.println($"  exists(gs)      = {exists_gs}");
+io.println($"  exists(unknown) = {exists_unk}");
+
+// ─── 8. alias.expand() — expand a template without executing ─────────────────
+
+io.println("\n-- alias.expand() --");
+let expanded = alias.expand("gs", ["--short"]);
+io.println($"  alias.expand(gs, --short) = {expanded}");
+
+// ─── 9. alias.remove() and alias.clear() ─────────────────────────────────────
+
+io.println("\n-- alias.remove() / alias.clear() --");
+alias.define("tmp", "echo temporary");
+let before_remove = alias.exists("tmp");
+io.println($"  Before remove: exists(tmp) = {before_remove}");
+alias.remove("tmp");
+let after_remove = alias.exists("tmp");
+io.println($"  After remove:  exists(tmp) = {after_remove}");
+
+let count_before = len(alias.names());
+alias.clear();
+let count_after = len(alias.names());
+io.println($"  After clear: alias count = {count_after} (was {count_before})");
+
+io.println("\n" + "=" * 58);
+io.println("  Done.");
+io.println("=" * 58);

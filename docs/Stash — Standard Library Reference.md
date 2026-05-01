@@ -41,23 +41,24 @@
 25. [`shell` — Shell Mode State](#shell--shell-mode-state)
 26. [`prompt` — REPL Prompt Customization](#prompt--repl-prompt-customization)
 27. [`complete` — Tab Completion](#complete--tab-completion)
-28. [`tpl` — Templating](#tpl--templating)
-29. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-30. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-31. [`term` — Terminal Formatting](#term--terminal-formatting)
-32. [`sys` — System Information](#sys--system-information)
-33. [`signal` — Signal Handling](#signal--signal-handling)
-34. [`task` — Parallel Tasks](#task--parallel-tasks)
-35. [`net` — Networking](#net--networking)
-36. [`tcp` — TCP Sockets](#tcp--tcp-sockets)
-37. [`udp` — UDP Datagrams](#udp--udp-datagrams)
-38. [`ws` — WebSockets](#ws--websockets)
-39. [`dns` — DNS Resolution](#dns--dns-resolution)
-40. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-41. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-42. [Argument Parsing](#argument-parsing)
-43. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-44. [`log` — Structured Logging](#log--structured-logging)
+28. [`alias` — Shell Aliases](#alias--shell-aliases)
+29. [`tpl` — Templating](#tpl--templating)
+30. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+31. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+32. [`term` — Terminal Formatting](#term--terminal-formatting)
+33. [`sys` — System Information](#sys--system-information)
+34. [`signal` — Signal Handling](#signal--signal-handling)
+35. [`task` — Parallel Tasks](#task--parallel-tasks)
+36. [`net` — Networking](#net--networking)
+37. [`tcp` — TCP Sockets](#tcp--tcp-sockets)
+38. [`udp` — UDP Datagrams](#udp--udp-datagrams)
+39. [`ws` — WebSockets](#ws--websockets)
+40. [`dns` — DNS Resolution](#dns--dns-resolution)
+41. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+42. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+43. [Argument Parsing](#argument-parsing)
+44. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+45. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -75,6 +76,8 @@ Stash defines a set of built-in named error types. These types are available glo
 | `NotSupportedError` | `message: string`                                                                         | Feature not available on this platform              |
 | `TimeoutError`      | `message: string`                                                                         | Operation timed out                                 |
 | `CommandError`      | `message: string`, `exitCode: int`, `stderr: string`, `stdout: string`, `command: string` | Strict command (`$!(...)`) exited non-zero          |
+| `AliasError`        | `message: string`, `aliasName: string?`, `detail: string?`                                | Invalid alias name, missing alias, or override conflict |
+| `LockError`         | `message: string`, `path: string`                                                         | File lock acquisition failed                        |
 
 ### Usage
 
@@ -2920,6 +2923,180 @@ fn git_complete(ctx: CompletionContext) -> array<string> {
 }
 
 complete.register("git", git_complete);
+```
+
+---
+
+## `alias` — Shell Aliases
+
+The `alias` namespace provides programmatic access to the session-local alias registry used by shell mode. Template aliases store a body string with `${args}`, `${args[N]}`, and `${argv}` placeholders; function aliases store a first-class Stash callable.
+
+Gated on `StashCapabilities.None` — available on all platforms, including Windows and embedded hosts.
+
+### Supporting Structs
+
+#### `AliasOptions`
+
+Options bag for `alias.define`.
+
+| Field         | Type        | Default | Description                                                                  |
+| ------------- | ----------- | ------- | ---------------------------------------------------------------------------- |
+| `description` | `string?`   | `null`  | Human-readable description shown in `alias` listings                         |
+| `before`      | `function?` | `null`  | Callable invoked immediately before the alias body executes                  |
+| `after`       | `function?` | `null`  | Callable invoked after the alias body returns (even on error)                |
+| `confirm`     | `string?`   | `null`  | Non-null: prompt user with this text; empty string triggers SA0851 warning   |
+| `override`    | `bool`      | `false` | Required to replace a built-in alias (`cd`, `pwd`, `exit`, `quit`)          |
+
+#### `AliasInfo`
+
+Return type of `alias.get` and elements of `alias.list`.
+
+| Field         | Type        | Description                                                                  |
+| ------------- | ----------- | ---------------------------------------------------------------------------- |
+| `name`        | `string`    | Alias name                                                                   |
+| `kind`        | `string`    | `"template"` or `"function"`                                                 |
+| `body`        | `string`    | Template body string (for template aliases) or stringified repr (functions)  |
+| `params`      | `array`     | Array of `ParamInfo` for function aliases; empty for template aliases        |
+| `description` | `string?`   | Description from `AliasOptions`, or `null`                                   |
+| `hasBefore`   | `bool`      | Whether a `before` hook is set                                               |
+| `hasAfter`    | `bool`      | Whether an `after` hook is set                                               |
+| `confirm`     | `string?`   | Confirm prompt text, or `null`                                               |
+| `source`      | `string`    | `"user"` or `"builtin"`                                                      |
+| `sourceLoc`   | `SourceLoc?`| Source location where the alias was defined, or `null` for built-ins        |
+
+#### `ParamInfo`
+
+Describes a single parameter of a function alias.
+
+| Field     | Type      | Description                                  |
+| --------- | --------- | -------------------------------------------- |
+| `name`    | `string`  | Parameter name                               |
+| `type`    | `string?` | Declared type annotation, or `null`          |
+| `rest`    | `bool`    | `true` if this is a rest (`...`) parameter   |
+| `default` | `any?`    | Default value expression result, or `null`   |
+
+#### `SourceLoc`
+
+Source code location.
+
+| Field  | Type     | Description                    |
+| ------ | -------- | ------------------------------ |
+| `file` | `string` | File path or `"<repl>"`        |
+| `line` | `int`    | 1-based line number            |
+
+### `alias.define(name: string, body, opts: AliasOptions? = null) -> null`
+
+Defines a new alias. `body` may be a string (template alias) or a callable (function alias).
+
+- `name` — must be a valid identifier (`[A-Za-z_][A-Za-z0-9_]*`); `AliasError` is thrown at runtime for invalid names (SA0850 catches them statically).
+- `body` — string template or any Stash callable.
+- `opts` — optional `AliasOptions` struct.
+- Throws `AliasError` if `name` is a built-in alias and `opts.override` is `false`.
+
+```stash
+alias.define("gs", "git status ${args}");
+
+alias.define("mkcd", (dir) => {
+    fs.createDir(dir);
+    env.chdir(dir);
+}, AliasOptions {
+    description: "Create a directory and enter it",
+    confirm:     "Create directory?"
+});
+```
+
+### `alias.list() -> array<AliasInfo>`
+
+Returns a sorted array of `AliasInfo` structs for all currently registered aliases.
+
+```stash
+for (let a in alias.list()) {
+    io.println($"{a.name}: {a.kind}");
+}
+```
+
+### `alias.names() -> array<string>`
+
+Returns a sorted array of all registered alias names.
+
+```stash
+io.println(arr.join(alias.names(), ", "));
+```
+
+### `alias.get(name: string) -> AliasInfo?`
+
+Returns the `AliasInfo` for alias `name`, or `null` if not defined.
+
+```stash
+let info = alias.get("gs");
+if (info != null) {
+    io.println($"gs expands to: {info.body}");
+}
+```
+
+### `alias.exists(name: string) -> bool`
+
+Returns `true` if an alias with the given name is registered.
+
+```stash
+if (!alias.exists("deploy")) {
+    alias.define("deploy", "kubectl apply -f deploy.yaml");
+}
+```
+
+### `alias.remove(name: string) -> bool`
+
+Removes the alias named `name`. Returns `true` if it existed and was removed, `false` if not found.
+
+```stash
+alias.remove("gs");    // true if 'gs' was defined
+```
+
+### `alias.clear() -> null`
+
+Removes all user-defined aliases. Built-in aliases (`cd`, `pwd`, `exit`, `quit`, `history`) remain.
+
+### `alias.exec(name: string, args: array<string> = []) -> int`
+
+Invokes the alias programmatically with the given argument strings. Returns the exit code.
+
+- For template aliases, expands the body and executes via the shell runner.
+- For function aliases, calls the callable with `args` as arguments.
+- Throws `AliasError` if `name` is not defined.
+
+```stash
+let code = alias.exec("gs", ["--short"]);
+io.println($"exit code: {code}");
+```
+
+> **Note:** `alias.exec` requires the shell runner (Stash.Cli). In embedded mode (no shell runner wired), it throws `AliasError: "alias execution not available in embedded mode"`.
+
+### `alias.expand(name: string, args: array<string> = []) -> string`
+
+Expands a template alias body with the given arguments and returns the resulting string without executing it. Useful for inspection and testing. Throws `AliasError` if `name` is not defined or refers to a function alias (function aliases cannot be expanded to a string).
+
+```stash
+let cmd = alias.expand("gs", ["--short"]);
+io.println($"Would run: {cmd}");
+// => "git status --short"
+```
+
+### `alias.save(name: string? = null) -> string`
+
+Persists aliases to `aliases.stash`. If `name` is provided, only that alias is saved; otherwise all aliases are saved. Returns the absolute path of the file written. Throws `AliasError` if `name` is provided but not defined, or if shell-mode integration is unavailable.
+
+```stash
+let path = alias.save();           // save all
+alias.save("gs");                   // save only 'gs'
+```
+
+### `alias.load(path: string? = null) -> int`
+
+Loads aliases from `aliases.stash` (or the path override). Returns the count of aliases loaded. Duplicate names overwrite existing definitions. Throws `IOError` if the file cannot be read.
+
+```stash
+let n = alias.load();              // load from default location
+io.println($"Loaded {n} aliases");
 ```
 
 ---

@@ -11,6 +11,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Shell Aliases
+
+- **Shell mode:** New `alias` sugar at the REPL prompt — `alias name = "body"` (template), `alias name(params) = body` (function), and `unalias name` (remove). Aliases are resolved before PATH executables in bare-word line classification.
+- **Stdlib:** New `alias` namespace with full programmatic API:
+  - `alias.define(name, body, opts?)` — register a template or function alias
+  - `alias.list()` — return all aliases as `AliasInfo` structs
+  - `alias.names()` — return sorted array of alias names
+  - `alias.get(name)` — return `AliasInfo` for a single alias
+  - `alias.exists(name)` — test whether an alias is registered
+  - `alias.remove(name)` — remove an alias
+  - `alias.clear()` — remove all user-defined aliases
+  - `alias.exec(name, args?)` — programmatically invoke an alias
+  - `alias.expand(name, args?)` — expand a template alias to a string without executing
+  - `alias.save(name?)` — persist one or all aliases to `aliases.stash`
+  - `alias.load(path?)` — load aliases from `aliases.stash`
+- **Built-in aliases:** `cd`, `pwd`, `exit`, `quit`, `history` are pre-registered at shell startup and map to their Stash stdlib equivalents. They can be overridden with `AliasOptions { override: true }`.
+- **Hooks:** `AliasOptions.before` and `AliasOptions.after` callables run immediately before and after alias execution.
+- **Confirm prompts:** `AliasOptions.confirm` shows an interactive prompt before execution; accepted automatically in non-interactive mode.
+- **Persistence:** Aliases survive REPL restarts via `aliases.stash` in the platform config directory (`~/.config/stash/` on Linux, `~/Library/Application Support/stash/` on macOS, `%APPDATA%\stash\` on Windows). Use `alias name --save` or `alias.save()` to persist.
+- **Tab completion:** Alias names appear in shell-mode completion at command position, interleaved with PATH executables and callable Stash globals.
+- **New error type:** `AliasError` (fields: `message`, `aliasName?`, `detail?`) thrown for invalid alias names, missing aliases, and override conflicts.
+- **Static analysis:**
+  - **SA0850** (Error, Aliases) — `alias.define` called with a name that is not a valid identifier (contains spaces, `.`, `/`, starts with a digit, or is empty).
+  - **SA0851** (Warning, Aliases) — `AliasOptions.confirm` is an empty string; the user will see no prompt text.
+
 - **Language:** `unset name1, name2, …;` statement removes one or more top-level bindings (`let`, `fn`, `struct`, `enum` globals; `const` in REPL only). Unsetting an unknown name is a runtime no-op (SA0840 warning). Built-ins, imports, and script `const` bindings are rejected at analysis time (SA0841–SA0844). In shell mode, `unset ls` un-shadows an accidentally-declared Stash symbol so the PATH binary becomes reachable again. See [Language Specification — §7i](docs/Stash%20—%20Language%20Specification.md#7i-unset-statement).
 - **Stdlib:** `env.unset(name: str) -> bool` removes an environment variable from the current process environment. Returns `true` if the variable existed. Throws `TypeError` for non-string names and `ValueError` for names that are empty, contain `=`, or contain a null byte. See [Standard Library Reference — env](docs/Stash%20—%20Standard%20Library%20Reference.md#env--environment-variables).
 - **Bytecode:** new `UnsetGlobal` opcode; `.stashc` files compiled before this change will fail to load with an "unknown opcode" error and must be recompiled.

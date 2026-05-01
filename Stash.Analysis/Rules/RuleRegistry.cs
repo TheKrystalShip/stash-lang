@@ -72,6 +72,9 @@ public static class RuleRegistry
             new UnusedImportRule(),
             new ImportOrderingRule(),
 
+            // Aliases (SA085x)
+            new Aliases.AliasDefineRule(),
+
             // Deprecations (SA083x)
             new Deprecations.DeprecatedBuiltInMemberRule(),
 

@@ -29,6 +29,7 @@
 14. [Cross-Platform Notes](#14-cross-platform-notes)
 15. [Customizing the Prompt](#15-customizing-the-prompt)
 16. [Tab Completion](#16-tab-completion)
+17. [Aliases](#17-aliases)
 
 ---
 
@@ -856,3 +857,167 @@ Completion operates on the **current physical line only**. In a multi-line conti
 
 - **Linux / macOS:** Tab completion is fully supported.
 - **Windows:** Tab completion is available in Stash-mode REPL sessions. Shell-mode completion is gated alongside shell mode itself (not yet available on Windows in v1).
+
+---
+
+## 17. Aliases
+
+Aliases let you define short, memorable names for frequently typed commands. They are a first-class shell-mode feature: typed at the bare prompt, an alias name is resolved and expanded before the line is dispatched as a shell command.
+
+### 17.1 Defining Aliases
+
+There are two syntaxes for defining an alias at the REPL prompt:
+
+**Template alias** — stores a body string with optional argument placeholders:
+
+```text
+alias gs = "git status ${args}"
+alias glog = "git log --oneline --graph ${args}"
+alias gco = "git checkout ${args[0]}"
+```
+
+Placeholders:
+
+| Placeholder      | Expands to                                          |
+| ---------------- | --------------------------------------------------- |
+| `${args}`        | All arguments, shell-quoted and space-joined        |
+| `${args[N]}`     | The argument at zero-based index N (unquoted)       |
+| `${argv}`        | Stash array literal of all raw argument strings     |
+
+**Function alias** — stores a Stash callable. Useful when the body requires branching, loops, or side-effects that cannot be expressed as a single string:
+
+```text
+alias mkcd(dir) = {
+    fs.createDir(dir);
+    env.chdir(dir);
+}
+```
+
+The block form (braces) is a single-expression lambda body that returns the last value. A one-liner is also valid:
+
+```text
+alias mkcd(dir) = fs.createDir(dir) && env.chdir(dir)
+```
+
+### 17.2 Using Aliases
+
+At the shell prompt, type the alias name followed by any arguments:
+
+```text
+$ gs --short
+$ gco feature/auth
+$ mkcd /tmp/workspace
+```
+
+Stash resolves aliases **before** checking the PATH, so an alias named `ls` overrides the `ls` binary. See [§2.2](#22-bare-identifier-resolution) for the full resolution order.
+
+### 17.3 Bypass Prefixes
+
+| Prefix | Effect                                                                |
+| ------ | --------------------------------------------------------------------- |
+| `\gs`  | **Force-shell** — bypass alias registry and invoke `gs` from PATH    |
+| `!gs`  | **Strict-shell** — bypass alias registry, fail if `gs` not on PATH   |
+
+Use `\gs` when you genuinely want the raw binary named `gs`, not the alias.
+
+### 17.4 Listing and Removing Aliases
+
+```text
+alias              # List all currently defined aliases
+alias gs           # Show the definition of a single alias
+unalias gs         # Remove the alias named 'gs'
+unalias gs gco     # Remove multiple aliases at once
+```
+
+### 17.5 Programmatic Definition via `alias.define`
+
+For aliases that need hooks, descriptions, or override flags, use the `alias.define` function from a script or RC file:
+
+```stash
+alias.define("deploy", "kubectl apply -f deployment.yaml", AliasOptions {
+    description: "Deploy to the active cluster",
+    confirm:     "Deploy to production?",
+    before: () => {
+        io.println($"Deploying as {env.get("USER")}...");
+    },
+    after: () => {
+        io.println("Done.");
+    }
+});
+```
+
+`AliasOptions` fields:
+
+| Field         | Type        | Default | Description                                                         |
+| ------------- | ----------- | ------- | ------------------------------------------------------------------- |
+| `description` | `string?`   | `null`  | Human-readable description shown in `alias` listings               |
+| `before`      | `function?` | `null`  | Called with no args immediately before the alias body is executed   |
+| `after`       | `function?` | `null`  | Called with no args after the alias body returns (even on error)    |
+| `confirm`     | `string?`   | `null`  | Non-null: prompt the user with this text; empty string warns SA0851 |
+| `override`    | `bool`      | `false` | Required to replace a built-in alias (`cd`, `pwd`, `exit`, `quit`) |
+
+See [Standard Library Reference — `alias`](Stash%20—%20Standard%20Library%20Reference.md#alias--shell-aliases) for the full API.
+
+### 17.6 Built-in Aliases
+
+The following aliases are pre-registered at shell startup and map to their Stash stdlib equivalents. They behave identically to the sugar commands (§6) but pass through the alias dispatch pipeline, so hooks and overrides apply.
+
+| Alias   | Expands to              | Notes                                                    |
+| ------- | ----------------------- | -------------------------------------------------------- |
+| `cd`    | `env.chdir(…)`          | Also pushes to the dir stack                             |
+| `pwd`   | `env.cwd()`             | Prints the current working directory                     |
+| `exit`  | `env.exit(…)`           | Accepts optional exit code                               |
+| `quit`  | `env.exit(0)`           | Alias for `exit 0`                                       |
+| `history` | `process.historyList()` | Lists REPL history; also see `history clear`           |
+
+To override a built-in alias, pass `AliasOptions { override: true }`:
+
+```stash
+alias.define("cd", (dir) => {
+    io.println($"  [cd] entering {dir}");
+    env.chdir(dir);
+}, AliasOptions { override: true });
+```
+
+Without `override: true`, `alias.define` throws `AliasError` when the name is a protected built-in.
+
+### 17.7 Persistence
+
+Aliases survive REPL restarts through an `aliases.stash` file maintained automatically:
+
+| Platform | Default location                                               |
+| -------- | -------------------------------------------------------------- |
+| Linux    | `$XDG_CONFIG_HOME/stash/aliases.stash` or `~/.config/stash/aliases.stash` |
+| macOS    | `~/Library/Application Support/stash/aliases.stash`            |
+| Windows  | `%APPDATA%\stash\aliases.stash`                                |
+
+Persistence commands:
+
+```text
+alias gs --save          # Save only the 'gs' alias to aliases.stash
+alias --save-all         # Save all current aliases
+```
+
+Or programmatically:
+
+```stash
+alias.save();            // Save all aliases
+alias.save("gs");        // Save only the 'gs' alias
+alias.load();            // Reload from aliases.stash (happens automatically at startup)
+```
+
+### 17.8 Static Analysis
+
+The static analyzer emits two alias-related diagnostics:
+
+| Code   | Level   | Trigger                                                                                        |
+| ------ | ------- | ---------------------------------------------------------------------------------------------- |
+| SA0850 | Error   | `alias.define` called with a name that is not a valid identifier (contains spaces, `.`, `/`, starts with a digit, or is empty) |
+| SA0851 | Warning | `AliasOptions { confirm: "" }` — empty confirm prompt means the user sees no text             |
+
+Example:
+
+```stash
+alias.define("bad name", "git status");   // SA0850 — space in name
+alias.define("g", "git", AliasOptions { confirm: "" });  // SA0851 — empty confirm
+```

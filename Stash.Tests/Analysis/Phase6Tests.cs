@@ -703,7 +703,8 @@ io.println(baz);";
         // Now 47 (added NullFlowRule SA0309)
         // Now 59 (added 12 rules: SA0211, SA0212, SA0311/SA0312, SA0406, SA0407, SA0902, SA1109, SA1110, SA1202, SA1203, SA1303, SA1403)
         // Now 60 (added DeprecatedBuiltInMemberRule SA0830)
-        Assert.Equal(60, rules.Count);
+        // Now 61 (added AliasDefineRule SA0850/SA0851)
+        Assert.Equal(61, rules.Count);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────
