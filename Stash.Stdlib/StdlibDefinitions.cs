@@ -64,6 +64,7 @@ public static class StdlibDefinitions
         (() => SchedulerBuiltIns.Define(), StashCapabilities.Process | StashCapabilities.FileSystem),
         (() => LogBuiltIns.Define(),       StashCapabilities.None),
         (() => CompleteBuiltIns.Define(),  StashCapabilities.None),
+        (() => AliasBuiltIns.Define(),     StashCapabilities.None),
     ];
 
     private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();

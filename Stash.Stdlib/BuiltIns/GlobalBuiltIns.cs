@@ -234,6 +234,42 @@ public static class GlobalBuiltIns
             new("command",  "string"),
         ]);
         b.Struct(StashErrorTypes.LockError, [new("message", "string"), new("path", "string")]);
+        b.Struct(StashErrorTypes.AliasError, [
+            new("message",   "string"),
+            new("aliasName", "string?"),
+            new("detail",    "string?"),
+        ]);
+
+        // Alias-related structs — registered here so LSP hover/completion knows their fields.
+        b.Struct("SourceLoc", [
+            new("file", "string"),
+            new("line", "int"),
+        ]);
+        b.Struct("ParamInfo", [
+            new("name",    "string"),
+            new("type",    "string?"),
+            new("rest",    "bool"),
+            new("default", "any?"),
+        ]);
+        b.Struct("AliasOptions", [
+            new("description", "string?"),
+            new("before",      "function?"),
+            new("after",       "function?"),
+            new("confirm",     "string?"),
+            new("override",    "bool"),
+        ]);
+        b.Struct("AliasInfo", [
+            new("name",        "string"),
+            new("kind",        "string"),
+            new("body",        "string"),
+            new("params",      "array"),
+            new("description", "string?"),
+            new("hasBefore",   "bool"),
+            new("hasAfter",    "bool"),
+            new("confirm",     "string?"),
+            new("source",      "string"),
+            new("sourceLoc",   "SourceLoc?"),
+        ]);
 
         // Prompt-related structs — registered here so LSP hover/completion knows their fields.
         b.Struct("PromptGit", [

@@ -93,6 +93,7 @@ public static partial class StdlibRegistry
         ["NotSupportedError"] = new("NotSupportedError",  "Thrown when a feature is not available on the current platform."),
         ["TimeoutError"]      = new("TimeoutError",       "Thrown when an operation exceeds its timeout."),
         ["CommandError"]      = new("CommandError",       "Thrown by strict command expressions (`$!(...)`, `$!>(...)`) when the command exits with a non-zero code. Extra fields: `exitCode`, `stderr`, `stdout`, `command`."),
+        ["AliasError"]        = new("AliasError",          "Thrown by the `alias` namespace when an alias operation fails. Extra fields: `aliasName`, `detail`."),
         ["Future"] = new("Future", "Represents an asynchronous computation that may not have completed yet. Returned by async functions. Use `await` to get the resolved value."),
         ["secret"] = new("secret", "Secret type. Auto-redacts when printed or interpolated. Use `reveal()` to access the underlying value."),
         ["int[]"] = new("int[]", "Typed integer array. All elements must be `int`. Created with `let x: int[] = [1, 2, 3]` or `arr.typed([1, 2, 3], \"int\")` ."),

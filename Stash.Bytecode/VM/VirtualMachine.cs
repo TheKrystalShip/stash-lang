@@ -147,6 +147,13 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     /// </summary>
     public int LastExitCode { get; set; }
 
+    /// <summary>
+    /// Registry of user-defined aliases for this VM session.
+    /// Shell-mode components and the <c>alias</c> namespace built-ins read and write through
+    /// this registry. Each VM instance owns its own independent registry.
+    /// </summary>
+    public AliasRegistry AliasRegistry { get; } = new();
+
     /// <summary>Standard output stream for built-in functions. Defaults to Console.Out.</summary>
     public TextWriter Output { get => _context.Output; set => _context.Output = value; }
 

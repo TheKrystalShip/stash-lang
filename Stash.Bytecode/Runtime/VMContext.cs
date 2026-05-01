@@ -119,6 +119,9 @@ internal sealed class VMContext : IInterpreterContext
 
     public int GetLastExitCode() => ActiveVM?.LastExitCode ?? 0;
 
+    /// <inheritdoc/>
+    public AliasRegistry AliasRegistry => ActiveVM?.AliasRegistry ?? new AliasRegistry();
+
     public string ExpandTilde(string path)
     {
         if (path.StartsWith('~'))

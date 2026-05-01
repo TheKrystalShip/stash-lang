@@ -49,4 +49,13 @@ public interface IExecutionContext : IBuiltInContext
     /// Defaults to 0 until any command has run.
     /// </summary>
     int GetLastExitCode() { return 0; }
+
+    /// <summary>
+    /// Registry of user-defined aliases for the current session.
+    /// Each <see cref="VirtualMachine"/> instance owns its own registry.
+    /// The default implementation returns a new ephemeral instance suitable for embedded
+    /// hosts that do not support shell-mode aliases. The bytecode VM overrides this to
+    /// return the VM-owned registry so that aliases persist across built-in calls.
+    /// </summary>
+    AliasRegistry AliasRegistry { get => new AliasRegistry(); }
 }
