@@ -60,6 +60,13 @@ internal sealed class CommandCompleter : ICompleter
                 candidates.Add(new Candidate(name, prefix + name, CandidateKind.StashGlobal));
         }
 
+        // 4. Alias names (§11.1)
+        foreach (string aliasName in deps.Vm.AliasRegistry.Names())
+        {
+            if (seen.Add(aliasName))
+                candidates.Add(new Candidate(aliasName, prefix + aliasName, CandidateKind.Alias));
+        }
+
         return candidates;
     }
 }

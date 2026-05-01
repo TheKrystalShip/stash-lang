@@ -5,6 +5,7 @@ using System.Linq;
 using Stash.Bytecode;
 using Stash.Cli.Completion.Completers;
 using Stash.Cli.Shell;
+using Stash.Runtime;
 
 namespace Stash.Cli.Completion;
 
@@ -66,7 +67,19 @@ internal sealed class CompletionEngine
         int adjustedReplaceStart = ctx.ReplaceStart;
         string filterPrefix = token; // used in Phase 5; may be overridden for dotted members
 
-        if (ctx.Mode == CompletionMode.Stash || ctx.Mode == CompletionMode.Substitution)
+        // §11.3 — alias/unalias sugar position completions (before mode routing).
+        // The `alias` namespace name causes the classifier to route these lines as Stash,
+        // but the shell-sugar semantics require alias-name / executable completion here.
+        if (IsAliasNamePosition(buffer, ctx.ReplaceStart))
+        {
+            rawCandidates = BuildAliasCandidates(_deps);
+        }
+        else if (IsAliasValuePosition(buffer, ctx.ReplaceStart))
+        {
+            // Complete PATH executables only at the body position (alias <name> = <TAB>)
+            rawCandidates = BuildExecutableCandidates(_deps);
+        }
+        else if (ctx.Mode == CompletionMode.Stash || ctx.Mode == CompletionMode.Substitution)
         {
             if (token.Contains('.'))
             {
@@ -99,14 +112,25 @@ internal sealed class CompletionEngine
 
                 if (!string.IsNullOrEmpty(commandName))
                 {
-                    var customResult = _customDispatch.TryDispatch(ctx, _deps, commandName);
-                    if (customResult != null)
+                    // §11.2 — template alias argument completion delegates to underlying command
+                    if (_deps.Vm.AliasRegistry.TryGet(commandName, out AliasRegistry.AliasEntry? aliasEntry) &&
+                             aliasEntry!.Kind == AliasRegistry.AliasKind.Template)
                     {
-                        rawCandidates = customResult;
+                        string underlyingCmd = ExtractFirstWordFromTemplate(aliasEntry.TemplateBody!);
+                        if (!string.IsNullOrEmpty(underlyingCmd))
+                        {
+                            var customResult = _customDispatch.TryDispatch(ctx, _deps, underlyingCmd);
+                            rawCandidates = customResult ?? _pathCompleter.Complete(ctx, _deps);
+                        }
+                        else
+                        {
+                            rawCandidates = _pathCompleter.Complete(ctx, _deps);
+                        }
                     }
                     else
                     {
-                        rawCandidates = _pathCompleter.Complete(ctx, _deps);
+                        var customResult = _customDispatch.TryDispatch(ctx, _deps, commandName);
+                        rawCandidates = customResult ?? _pathCompleter.Complete(ctx, _deps);
                     }
                 }
                 else
@@ -262,5 +286,77 @@ internal sealed class CompletionEngine
             return string.Empty;
 
         return slice[wordStart..pos];
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the cursor is at the alias/command name position
+    /// in <c>alias &lt;TAB&gt;</c> or <c>unalias &lt;TAB&gt;</c> — i.e. after the keyword
+    /// word with no <c>=</c> character in the stage slice (§11.3).
+    /// </summary>
+    private static bool IsAliasNamePosition(string buffer, int replaceStart)
+    {
+        string stage = buffer[..Math.Min(replaceStart, buffer.Length)].TrimStart();
+        // Strip leading force/strict prefixes
+        int pos = 0;
+        while (pos < stage.Length && (stage[pos] == '\\' || stage[pos] == '!'))
+            pos++;
+        stage = stage[pos..];
+        return (stage.StartsWith("alias ", StringComparison.Ordinal) ||
+                stage.StartsWith("unalias ", StringComparison.Ordinal)) &&
+               !stage.Contains('=');
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the cursor is after the <c>=</c> in
+    /// <c>alias name = &lt;TAB&gt;</c>, signalling that the user is completing the body
+    /// executable (§11.3).
+    /// </summary>
+    private static bool IsAliasValuePosition(string buffer, int replaceStart)
+    {
+        string stage = buffer[..Math.Min(replaceStart, buffer.Length)].TrimStart();
+        int pos = 0;
+        while (pos < stage.Length && (stage[pos] == '\\' || stage[pos] == '!'))
+            pos++;
+        stage = stage[pos..];
+        return stage.StartsWith("alias ", StringComparison.Ordinal) &&
+               stage.Contains('=');
+    }
+
+    /// <summary>
+    /// Returns the first non-placeholder word from a template alias body.
+    /// Returns an empty string if the body starts with a <c>${</c> placeholder (§11.2).
+    /// </summary>
+    private static string ExtractFirstWordFromTemplate(string templateBody)
+    {
+        ReadOnlySpan<char> span = templateBody.AsSpan().TrimStart();
+        int end = 0;
+        while (end < span.Length && !char.IsWhiteSpace(span[end]))
+            end++;
+        string word = span[..end].ToString();
+        return word.StartsWith("${", StringComparison.Ordinal) ? string.Empty : word;
+    }
+
+    /// <summary>
+    /// Builds alias-name candidates from the VM's alias registry for use at the
+    /// <c>alias</c> / <c>unalias</c> name-argument position (§11.3).
+    /// </summary>
+    private static IReadOnlyList<Candidate> BuildAliasCandidates(CompletionDeps deps)
+    {
+        var candidates = new List<Candidate>();
+        foreach (string name in deps.Vm.AliasRegistry.Names())
+            candidates.Add(new Candidate(name, name, CandidateKind.Alias));
+        return candidates;
+    }
+
+    /// <summary>
+    /// Builds PATH-executable candidates only, for use at the alias body position
+    /// (<c>alias &lt;name&gt; = &lt;TAB&gt;</c>). Aliases and REPL globals are excluded (§11.3).
+    /// </summary>
+    private static IReadOnlyList<Candidate> BuildExecutableCandidates(CompletionDeps deps)
+    {
+        var candidates = new List<Candidate>();
+        foreach (string exe in deps.PathCache.GetAllExecutables())
+            candidates.Add(new Candidate(exe, exe, CandidateKind.Executable));
+        return candidates;
     }
 }

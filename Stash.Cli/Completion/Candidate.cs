@@ -6,6 +6,7 @@ internal enum CandidateKind
     Directory,
     Executable,
     Sugar,
+    Alias,
     StashGlobal,
     StashNamespace,
     StashFunction,
