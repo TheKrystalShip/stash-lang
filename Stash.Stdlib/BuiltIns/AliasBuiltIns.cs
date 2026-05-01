@@ -318,6 +318,31 @@ public static class AliasBuiltIns
                            "Phase F — not yet implemented.\n" +
                            "@param path (optional) Custom file path; defaults to the managed aliases file\n@return Count of aliases loaded");
 
+        // ── alias.__listPretty() — internal shell sugar helper (Phase C) ─────
+        // Not part of the public API; called by the alias shell sugar to pretty-print
+        // all registered aliases grouped by source.
+        ns.Function("__listPretty", [],
+            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
+            {
+                PrettyPrintAll(ctx);
+                return StashValue.Null;
+            },
+            returnType: null,
+            documentation: "Internal: pretty-prints all aliases grouped by source. Used by alias shell sugar.");
+
+        // ── alias.__getPretty(name) — internal shell sugar helper (Phase C) ──
+        // Not part of the public API; called by the alias shell sugar to pretty-print
+        // a single alias, or report that it is not defined.
+        ns.Function("__getPretty", [Param("name", "string")],
+            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            {
+                string name = SvArgs.String(args, 0, "alias.__getPretty");
+                PrettyPrintOne(ctx, name);
+                return StashValue.Null;
+            },
+            returnType: null,
+            documentation: "Internal: pretty-prints a single alias definition. Used by alias shell sugar.");
+
         return ns.Build();
     }
 
@@ -372,6 +397,72 @@ public static class AliasBuiltIns
         AliasRegistry.AliasSource.Saved   => "saved",
         AliasRegistry.AliasSource.Builtin => "builtin",
         _                                  => "repl",
+    };
+
+    // ── Pretty-print helpers (used by __listPretty / __getPretty) ─────────────
+
+    private static void PrettyPrintAll(IInterpreterContext ctx)
+    {
+        var all = ctx.AliasRegistry.All().ToList();
+        if (all.Count == 0)
+        {
+            ctx.Output.WriteLine("(no aliases defined)");
+            return;
+        }
+
+        var groups = all
+            .GroupBy(e => e.Source)
+            .OrderBy(g => SourceOrder(g.Key));
+
+        bool first = true;
+        foreach (var group in groups)
+        {
+            if (!first) ctx.Output.WriteLine();
+            first = false;
+
+            ctx.Output.WriteLine($"[{SourceToString(group.Key)}]");
+            foreach (var entry in group.OrderBy(e => e.Name, StringComparer.Ordinal))
+            {
+                string body = entry.Kind == AliasRegistry.AliasKind.Function
+                    ? "function alias"
+                    : $"= \"{entry.TemplateBody}\"";
+                string desc = entry.Description is not null ? $"  — {entry.Description}" : "";
+                ctx.Output.WriteLine($"  {entry.Name,-12}{body}{desc}");
+            }
+        }
+    }
+
+    private static void PrettyPrintOne(IInterpreterContext ctx, string name)
+    {
+        if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
+        {
+            ctx.Output.WriteLine($"alias '{name}' is not defined");
+            return;
+        }
+
+        if (entry.Kind == AliasRegistry.AliasKind.Template)
+            ctx.Output.WriteLine($"{entry.Name} = \"{entry.TemplateBody}\"");
+        else
+            ctx.Output.WriteLine($"{entry.Name} — function alias");
+
+        ctx.Output.WriteLine($"  kind:   {(entry.Kind == AliasRegistry.AliasKind.Template ? "template" : "function")}");
+
+        string sourceInfo = SourceToString(entry.Source);
+        if (entry.SourceFile is not null)
+            sourceInfo += $" ({entry.SourceFile}:{entry.SourceLine ?? 0})";
+        ctx.Output.WriteLine($"  source: {sourceInfo}");
+
+        if (entry.Description is not null)
+            ctx.Output.WriteLine($"  desc:   {entry.Description}");
+    }
+
+    private static int SourceOrder(AliasRegistry.AliasSource source) => source switch
+    {
+        AliasRegistry.AliasSource.Builtin => 0,
+        AliasRegistry.AliasSource.Rc      => 1,
+        AliasRegistry.AliasSource.Repl    => 2,
+        AliasRegistry.AliasSource.Saved   => 3,
+        _                                  => 4,
     };
 
     /// <summary>

@@ -1,6 +1,7 @@
 namespace Stash.Tests.Stdlib;
 
 using Stash.Runtime;
+using Stash.Stdlib.BuiltIns;
 using Stash.Tests.Interpreting;
 
 /// <summary>
@@ -334,12 +335,26 @@ public class AliasBuiltInsTests : StashTestBase
     [Fact]
     public void Exec_TemplateAlias_WhenExecutorNull_ThrowsAliasError()
     {
-        // AliasExecutor is null in Phase A — template exec must throw.
-        var err = RunCapturingError("""
-            alias.define("g", "git \${args}");
-            alias.exec("g", ["status"]);
-            """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        // Explicitly null the executor so this test is order-independent.
+        // Other test classes (AliasDispatchTests, AliasShellSugarTests) call
+        // AliasDispatcher.Wire which sets the static AliasExecutor; we clear it
+        // here to test the embedded-mode guard.
+        var savedExecutor = AliasBuiltIns.AliasExecutor;
+        try
+        {
+            AliasBuiltIns.AliasExecutor = null;
+
+            // AliasExecutor is null — template exec must throw AliasError.
+            var err = RunCapturingError("""
+                alias.define("g", "git \${args}");
+                alias.exec("g", ["status"]);
+                """);
+            Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        }
+        finally
+        {
+            AliasBuiltIns.AliasExecutor = savedExecutor;
+        }
     }
 
     [Fact]

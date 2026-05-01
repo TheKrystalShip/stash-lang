@@ -50,7 +50,12 @@ internal sealed class ShellRunner
             && ast.Redirects.Count == 0
             && ShellSugarDesugarer.IsSugarName(ast.Stages[0].Program))
         {
-            List<string> expandedArgs = ArgExpander.Expand(ast.Stages[0].RawArgs, _ctx.Vm, span: null);
+            // alias / unalias parse directly from RawArgs and must not have their
+            // body text pre-expanded (e.g. ${msg} in a function alias definition
+            // is NOT a REPL variable — it is a lambda parameter reference).
+            List<string> expandedArgs = ShellSugarDesugarer.IsRawArgSugar(ast.Stages[0].Program)
+                ? new List<string>()
+                : ArgExpander.Expand(ast.Stages[0].RawArgs, _ctx.Vm, span: null);
             string? sugarSource = ShellSugarDesugarer.TryDesugar(ast, expandedArgs);
             if (sugarSource is not null)
             {

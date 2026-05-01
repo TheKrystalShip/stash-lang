@@ -17,10 +17,19 @@ namespace Stash.Cli.Shell;
 internal static class ShellSugarDesugarer
 {
     private static readonly HashSet<string> _sugarNames =
-        new(System.StringComparer.Ordinal) { "cd", "pwd", "exit", "quit", "history" };
+        new(System.StringComparer.Ordinal) { "cd", "pwd", "exit", "quit", "history", "alias", "unalias" };
 
     /// <summary>Returns <c>true</c> when <paramref name="program"/> is one of the four sugar names.</summary>
     public static bool IsSugarName(string program) => _sugarNames.Contains(program);
+
+    /// <summary>
+    /// Returns <c>true</c> for sugars where argument expansion must be skipped because the
+    /// raw command text is parsed directly by the sugar handler. This prevents the
+    /// <see cref="ArgExpander"/> from attempting to evaluate Stash variables that appear in
+    /// function alias parameter lists or bodies (e.g. <c>${msg}</c> in
+    /// <c>alias g(msg) = $(echo ${msg})</c>).
+    /// </summary>
+    public static bool IsRawArgSugar(string program) => program is "alias" or "unalias";
 
     /// <summary>
     /// If <paramref name="line"/> is a single-stage, redirect-free line whose program is a
@@ -48,6 +57,8 @@ internal static class ShellSugarDesugarer
             "pwd"            => DesugarPwd(expandedArgs),
             "exit" or "quit" => DesugarExit(program, expandedArgs),
             "history"        => DesugarHistory(expandedArgs),
+            "alias"          => AliasShellSugar.TryDesugarAlias(line, expandedArgs),
+            "unalias"        => AliasShellSugar.TryDesugarUnalias(line, expandedArgs),
             _                => null,
         };
     }
