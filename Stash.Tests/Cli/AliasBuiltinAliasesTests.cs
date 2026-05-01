@@ -15,6 +15,7 @@ namespace Stash.Tests.Cli;
 /// Phase D tests: five shell commands (cd, pwd, exit, quit, history) are now
 /// registered as built-in aliases at startup via <see cref="BuiltinAliases.RegisterBuiltins"/>.
 /// </summary>
+[Collection("AliasStaticState")]
 public sealed class AliasBuiltinAliasesTests : IDisposable
 {
     // ── Fixture ───────────────────────────────────────────────────────────────

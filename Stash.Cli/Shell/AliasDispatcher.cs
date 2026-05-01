@@ -58,6 +58,8 @@ internal static class AliasDispatcher
     /// <summary>
     /// Assigns <see cref="AliasBuiltIns.AliasExecutor"/> so that <c>alias.exec</c> calls in
     /// Stash code invoke the shell runner for template aliases.
+    /// Also assigns <see cref="AliasBuiltIns.SaveHandler"/>, <see cref="AliasBuiltIns.LoadHandler"/>,
+    /// and <see cref="AliasBuiltIns.RemoveSavedHandler"/> for Phase F persistence.
     /// Also registers the five built-in aliases (cd, pwd, exit, quit, history) into the
     /// VM's alias registry (Phase D).
     /// Must be called after <paramref name="shellRunner"/> is fully initialised.
@@ -66,6 +68,15 @@ internal static class AliasDispatcher
     {
         AliasBuiltIns.AliasExecutor = (entry, args, _) =>
             ExecuteAlias(shellRunner, vm, entry, args);
+
+        AliasBuiltIns.SaveHandler = (name) =>
+            AliasPersistence.Save(vm, name);
+
+        AliasBuiltIns.LoadHandler = (pathOverride) =>
+            AliasPersistence.Load(vm, shellRunner, pathOverride);
+
+        AliasBuiltIns.RemoveSavedHandler = (name) =>
+            AliasPersistence.RemoveSaved(name);
 
         BuiltinAliases.RegisterBuiltins(vm);
     }

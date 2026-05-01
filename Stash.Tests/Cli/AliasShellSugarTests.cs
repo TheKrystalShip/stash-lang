@@ -15,6 +15,7 @@ namespace Stash.Tests.Cli;
 /// Integration tests for Phase C alias shell sugar — desugaring of <c>alias</c> and
 /// <c>unalias</c> shell-mode lines through <see cref="ShellRunner"/>.
 /// </summary>
+[Collection("AliasStaticState")]
 public sealed class AliasShellSugarTests
 {
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -215,18 +216,35 @@ public sealed class AliasShellSugarTests
     }
 
     // =========================================================================
-    // 10. unalias --save — Phase F stub throws NotSupportedError
+    // 10. unalias --save — Phase F: removes from session and from file
     // =========================================================================
 
     [Fact]
-    public void UnaliasSave_ThrowsNotSupportedError()
+    public void UnaliasSave_RemovesFromSessionAndFile()
     {
-        var (runner, vm, _) = MakeRunner();
-        runner.Run("alias g = \"git\"");
+        var tmpFile = System.IO.Path.GetTempFileName();
+        var prevPath = Stash.Cli.Shell.AliasPersistence.PathOverride;
+        Stash.Cli.Shell.AliasPersistence.PathOverride = tmpFile;
+        try
+        {
+            var (runner, vm, _) = MakeRunner();
+            runner.Run("alias g = \"git\"");
+            // Persist it first so there's something to remove
+            runner.Run("alias --save g = \"git\"");
+            Assert.True(System.IO.File.Exists(tmpFile));
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("unalias --save g"));
-        Assert.Equal(StashErrorTypes.NotSupportedError, ex.ErrorType);
-        Assert.Contains("Phase F", ex.Message, StringComparison.Ordinal);
+            // Now unalias --save should remove from session and from file
+            runner.Run("unalias --save g");
+
+            Assert.False(vm.AliasRegistry.Exists("g"));
+            string contents = System.IO.File.ReadAllText(tmpFile);
+            Assert.DoesNotContain("\"g\"", contents, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Stash.Cli.Shell.AliasPersistence.PathOverride = prevPath;
+            System.IO.File.Delete(tmpFile);
+        }
     }
 
     // =========================================================================
@@ -249,17 +267,34 @@ public sealed class AliasShellSugarTests
     }
 
     // =========================================================================
-    // 12. alias --save — Phase F stub throws NotSupportedError
+    // 12. alias --save — Phase F: defines alias and persists to file
     // =========================================================================
 
     [Fact]
-    public void AliasSave_ThrowsNotSupportedError()
+    public void AliasSave_DefinesAndPersistsAlias()
     {
-        var (runner, _, _) = MakeRunner();
+        var tmpFile = System.IO.Path.GetTempFileName();
+        var prevPath = Stash.Cli.Shell.AliasPersistence.PathOverride;
+        Stash.Cli.Shell.AliasPersistence.PathOverride = tmpFile;
+        try
+        {
+            var (runner, vm, _) = MakeRunner();
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("alias --save g = \"git\""));
-        Assert.Equal(StashErrorTypes.NotSupportedError, ex.ErrorType);
-        Assert.Contains("Phase F", ex.Message, StringComparison.Ordinal);
+            runner.Run("alias --save g = \"git\"");
+
+            // Alias registered in session
+            Assert.True(vm.AliasRegistry.Exists("g"));
+
+            // Alias written to file
+            string contents = System.IO.File.ReadAllText(tmpFile);
+            Assert.Contains("\"g\"", contents, StringComparison.Ordinal);
+            Assert.Contains("git", contents, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Stash.Cli.Shell.AliasPersistence.PathOverride = prevPath;
+            System.IO.File.Delete(tmpFile);
+        }
     }
 
     // =========================================================================

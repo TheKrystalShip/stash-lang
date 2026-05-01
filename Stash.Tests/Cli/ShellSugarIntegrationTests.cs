@@ -13,6 +13,7 @@ namespace Stash.Tests.Cli;
 /// Integration tests for §11.2 shell built-in desugaring: exercises the full runner pipeline
 /// (arg expansion → desugaring → VM execution) for cd / pwd / exit / quit.
 /// </summary>
+[Collection("AliasStaticState")]
 public class ShellSugarIntegrationTests
 {
     // ── Helpers ───────────────────────────────────────────────────────────────

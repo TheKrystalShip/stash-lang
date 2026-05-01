@@ -42,6 +42,13 @@ public interface IStashCallable
     SourceSpan? DefinitionSpan => null;
 
     /// <summary>
+    /// When non-null, identifies this callable as a named top-level function with no captured
+    /// upvalues, making it persistable by name.  Returns <see langword="null"/> for anonymous
+    /// lambdas, closures that capture outer variables, and built-in functions.
+    /// </summary>
+    string? TopLevelFunctionName => null;
+
+    /// <summary>
     /// Zero-allocation call path for the bytecode VM.  
     /// Args are borrowed directly from the VM stack — do not store the span.
     /// </summary>

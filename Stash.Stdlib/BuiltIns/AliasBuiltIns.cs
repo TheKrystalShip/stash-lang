@@ -44,6 +44,27 @@ public static class AliasBuiltIns
     /// </summary>
     public static Func<AliasRegistry.AliasEntry, string[], IInterpreterContext, int>? AliasExecutor { get; set; }
 
+    /// <summary>
+    /// Delegate that persists one or all aliases to <c>aliases.stash</c>.
+    /// Receives an optional alias name (null = save all) and returns the path written.
+    /// Populated by <c>AliasDispatcher.Wire()</c>; null in embedded mode.
+    /// </summary>
+    public static Func<string?, string>? SaveHandler { get; set; }
+
+    /// <summary>
+    /// Delegate that loads aliases from <c>aliases.stash</c> (or a path override).
+    /// Receives an optional path override and returns the count of aliases loaded.
+    /// Populated by <c>AliasDispatcher.Wire()</c>; null in embedded mode.
+    /// </summary>
+    public static Func<string?, int>? LoadHandler { get; set; }
+
+    /// <summary>
+    /// Delegate that removes a named alias entry from <c>aliases.stash</c>.
+    /// Receives the alias name; returns 1 if removed, 0 if not found.
+    /// Populated by <c>AliasDispatcher.Wire()</c>; null in embedded mode.
+    /// </summary>
+    public static Func<string, int>? RemoveSavedHandler { get; set; }
+
     // ---------------------------------------------------------------------------
     // Template substitution regex
     // ---------------------------------------------------------------------------
@@ -288,34 +309,51 @@ public static class AliasBuiltIns
                            "For function aliases, returns a '<function alias `name`>' placeholder.\n" +
                            "@param name Alias name\n@param args Array of string arguments\n@return Expanded string");
 
-        // ── alias.save(name? = null) — Phase F stub ──────────────────────────
+        // ── alias.save(name? = null) ────────────────────────────────────────
         ns.Function("save", [Param("name", "string?")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> __) =>
+            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
-                throw new RuntimeError(
-                    "alias.save is not yet implemented (Phase F)",
-                    null,
-                    StashErrorTypes.NotSupportedError);
+                if (SaveHandler is null)
+                    throw new RuntimeError(
+                        "alias.save requires shell mode (not available in embedded mode)",
+                        null,
+                        StashErrorTypes.NotSupportedError);
+
+                string? name = null;
+                if (args.Length > 0 && !args[0].IsNull && args[0].IsObj && args[0].AsObj is string n)
+                    name = n;
+
+                string path = SaveHandler(name);
+                return StashValue.FromObj(path);
             },
             returnType: "string",
             isVariadic: true,
             documentation: "Persists one or all aliases to the managed aliases file. " +
-                           "Phase F — not yet implemented.\n" +
-                           "@param name (optional) Alias name to save; saves all when omitted\n@return Path written");
+                           "Function aliases must reference a top-level fn (lambdas cannot be saved). " +
+                           "Returns the path written.\n" +
+                           "@param name (optional) Alias name to save; saves all non-builtin when omitted\n@return Path written");
 
-        // ── alias.load(path? = null) — Phase F stub ──────────────────────────
+        // ── alias.load(path? = null) ────────────────────────────────────────
         ns.Function("load", [Param("path", "string?")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> __) =>
+            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
-                throw new RuntimeError(
-                    "alias.load is not yet implemented (Phase F)",
-                    null,
-                    StashErrorTypes.NotSupportedError);
+                if (LoadHandler is null)
+                    throw new RuntimeError(
+                        "alias.load requires shell mode (not available in embedded mode)",
+                        null,
+                        StashErrorTypes.NotSupportedError);
+
+                string? pathOverride = null;
+                if (args.Length > 0 && !args[0].IsNull && args[0].IsObj && args[0].AsObj is string p)
+                    pathOverride = p;
+
+                int count = LoadHandler(pathOverride);
+                return StashValue.FromInt((long)count);
             },
             returnType: "int",
             isVariadic: true,
             documentation: "Loads aliases from the managed aliases file (or a custom path). " +
-                           "Phase F — not yet implemented.\n" +
+                           "Evaluates each alias.define call tolerantly and tags loaded aliases as source='saved'.\n" +
                            "@param path (optional) Custom file path; defaults to the managed aliases file\n@return Count of aliases loaded");
 
         // ── alias.__listPretty() — internal shell sugar helper (Phase C) ─────
@@ -355,6 +393,24 @@ public static class AliasBuiltIns
             },
             returnType: null,
             documentation: "Internal: session-disables a built-in alias. Used by unalias --force sugar.");
+
+        // ── alias.__removeSaved(name) — internal for unalias --save (Phase F) ──
+        // Not part of the public API; called by unalias --save sugar to remove a persisted
+        // alias entry from aliases.stash without affecting the in-memory registry.
+        ns.Function("__removeSaved", [Param("name", "string")],
+            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            {
+                string name = SvArgs.String(args, 0, "alias.__removeSaved");
+                if (RemoveSavedHandler is null)
+                    throw new RuntimeError(
+                        "alias.__removeSaved requires shell mode (not available in embedded mode)",
+                        null,
+                        StashErrorTypes.NotSupportedError);
+                RemoveSavedHandler(name);
+                return StashValue.Null;
+            },
+            returnType: null,
+            documentation: "Internal: removes a persisted alias entry from aliases.stash. Used by unalias --save sugar.");
 
         return ns.Build();
     }

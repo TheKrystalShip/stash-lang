@@ -16,6 +16,7 @@ namespace Stash.Tests.Cli;
 /// callbacks. Verifies spec §9 — execution order, parameter passing, abort semantics,
 /// and cycle-guard interaction.
 /// </summary>
+[Collection("AliasStaticState")]
 public sealed class AliasHooksTests : IDisposable
 {
     // ── Fixture ───────────────────────────────────────────────────────────────

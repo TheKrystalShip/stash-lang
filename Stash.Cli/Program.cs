@@ -968,6 +968,14 @@ public class Program
             RcFileLoader.Load(rcPath, vm, shellModeEnabled);
         }
 
+        // ── Load aliases.stash (§10.3) — after RC file, before first prompt ─
+        // Sources the managed aliases file so persisted aliases are available at start-up.
+        // Errors are tolerant (warn to stderr); missing file is silently skipped.
+        if (shellModeEnabled && shellRunner is not null)
+        {
+            Stash.Cli.Shell.AliasPersistence.Load(vm, shellRunner);
+        }
+
         // ── History setup (Persistent REPL History spec §9.3) ────────────────
         if (!_historyDisabled)
         {

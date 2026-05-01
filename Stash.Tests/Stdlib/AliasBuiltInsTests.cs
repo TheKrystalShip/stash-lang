@@ -8,6 +8,7 @@ using Stash.Tests.Interpreting;
 /// Tests for the <c>alias</c> namespace — Phase A: stdlib core only.
 /// Covers define, list, names, get, exists, remove, clear, exec, expand, save, load.
 /// </summary>
+[Collection("AliasStaticState")]
 public class AliasBuiltInsTests : StashTestBase
 {
     // =========================================================================
@@ -367,24 +368,42 @@ public class AliasBuiltInsTests : StashTestBase
     }
 
     // =========================================================================
-    // alias.save / alias.load — Phase F stubs
+    // alias.save / alias.load — not wired (embedded mode)
     // =========================================================================
 
     [Fact]
-    public void Save_ThrowsNotSupportedError()
+    public void Save_NotWired_ThrowsNotSupportedError()
     {
-        var err = RunCapturingError("""
-            alias.save();
-            """);
-        Assert.Equal(StashErrorTypes.NotSupportedError, err.ErrorType);
+        var prev = AliasBuiltIns.SaveHandler;
+        AliasBuiltIns.SaveHandler = null;
+        try
+        {
+            var err = RunCapturingError("""
+                alias.save();
+                """);
+            Assert.Equal(StashErrorTypes.NotSupportedError, err.ErrorType);
+        }
+        finally
+        {
+            AliasBuiltIns.SaveHandler = prev;
+        }
     }
 
     [Fact]
-    public void Load_ThrowsNotSupportedError()
+    public void Load_NotWired_ThrowsNotSupportedError()
     {
-        var err = RunCapturingError("""
-            alias.load();
-            """);
-        Assert.Equal(StashErrorTypes.NotSupportedError, err.ErrorType);
+        var prev = AliasBuiltIns.LoadHandler;
+        AliasBuiltIns.LoadHandler = null;
+        try
+        {
+            var err = RunCapturingError("""
+                alias.load();
+                """);
+            Assert.Equal(StashErrorTypes.NotSupportedError, err.ErrorType);
+        }
+        finally
+        {
+            AliasBuiltIns.LoadHandler = prev;
+        }
     }
 }

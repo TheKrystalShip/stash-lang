@@ -19,6 +19,14 @@ internal sealed class VMFunction : IStashCallable
     public int Arity => Chunk.Arity;
     public int MinArity => Chunk.MinArity;
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Returns the function's name when it has no captured upvalues (i.e. it is a true
+    /// top-level <c>fn</c> declaration that can be referenced by name at persistence time).
+    /// Returns <see langword="null"/> for anonymous lambdas and closures with captures.
+    /// </remarks>
+    public string? TopLevelFunctionName => Upvalues.Length == 0 ? Chunk.Name : null;
+
     /// <summary>
     /// The globals dictionary of the module where this function was defined.
     /// Used by <c>LoadGlobal</c> to resolve module-level definitions (enums, functions, etc.)

@@ -10,19 +10,19 @@ using Stash.Runtime;
 /// that are then compiled and evaluated against the REPL VM.
 ///
 /// <para>
-/// Supported forms (Phase C):
+/// Supported forms (Phase C + Phase F):
 /// <list type="bullet">
 ///   <item><c>alias</c>                                 → <c>alias.__listPretty()</c></item>
 ///   <item><c>alias --help</c>                          → <c>io.println(&lt;help text&gt;)</c></item>
-///   <item><c>alias --save …</c>                        → NotSupportedError (Phase F stub)</item>
+///   <item><c>alias --save &lt;name&gt; = &lt;body&gt;</c> → <c>{ alias.define(...); alias.save("name"); }</c></item>
 ///   <item><c>alias &lt;name&gt;</c>                    → <c>alias.__getPretty("name")</c></item>
 ///   <item><c>alias &lt;name&gt; = &lt;body&gt;</c>     → <c>alias.define("name", "body")</c></item>
 ///   <item><c>alias &lt;name&gt;(params) = &lt;expr&gt;</c> → <c>alias.define("name", (params) =&gt; expr)</c></item>
 ///   <item><c>alias &lt;name&gt;(params) { stmts }</c>  → <c>alias.define("name", (params) =&gt; { stmts })</c></item>
 ///   <item><c>unalias &lt;name&gt;</c>                  → <c>alias.remove("name")</c></item>
 ///   <item><c>unalias --all</c>                         → <c>alias.clear()</c></item>
-///   <item><c>unalias --save &lt;name&gt;</c>           → NotSupportedError (Phase F stub)</item>
-///   <item><c>unalias --force &lt;name&gt;</c>          → NotSupportedError (Phase D stub)</item>
+///   <item><c>unalias --save &lt;name&gt;</c>           → <c>{ alias.remove("name"); alias.__removeSaved("name"); }</c></item>
+///   <item><c>unalias --force &lt;name&gt;</c>          → <c>alias.__forceDisable("name")</c></item>
 /// </list>
 /// </para>
 /// </summary>
@@ -52,12 +52,43 @@ internal static class AliasShellSugar
         if (StartsWithFlag(raw, "--help"))
             return $"io.println(\"{EscapeBodyForStash(HelpText)}\");";
 
-        // Case 3: --save (Phase F stub)
-        // TODO Phase F: implement alias --save persistence
+        // Case 3: --save <name> = <body>  →  alias.define(...); alias.save("name");
         if (StartsWithFlag(raw, "--save"))
-            throw new RuntimeError(
-                "alias --save is not yet implemented (Phase F)",
-                null, StashErrorTypes.NotSupportedError);
+        {
+            string afterSave = raw["--save".Length..].TrimStart();
+            if (afterSave.Length == 0)
+                throw new RuntimeError(
+                    "alias --save: missing alias definition after '--save'",
+                    null, StashErrorTypes.CommandError);
+
+            int j = 0;
+            string? saveName = ReadIdentifier(afterSave, ref j);
+            if (saveName is null)
+                throw new RuntimeError(
+                    "alias --save: expected alias name",
+                    null, StashErrorTypes.CommandError);
+
+            SkipWhitespace(afterSave, ref j);
+            if (j >= afterSave.Length)
+                throw new RuntimeError(
+                    $"alias --save: missing '=' or '(' after alias name '{saveName}'",
+                    null, StashErrorTypes.CommandError);
+
+            string? defineSource = afterSave[j] switch
+            {
+                '(' => DesugarFunctionForm(saveName, afterSave, j),
+                '=' => DesugarTemplateForm(saveName, afterSave, j + 1),
+                _   => null,
+            };
+
+            if (defineSource is null)
+                throw new RuntimeError(
+                    $"alias --save: expected '=' or '(' after alias name '{saveName}'",
+                    null, StashErrorTypes.CommandError);
+
+            string escapedSaveName = ShellSugarDesugarer.EscapeForStashString(saveName);
+            return $"{{ {defineSource} alias.save(\"{escapedSaveName}\"); }}";
+        }
 
         // Parse the alias name
         int i = 0;
@@ -98,12 +129,20 @@ internal static class AliasShellSugar
         if (raw.Equals("--all", StringComparison.Ordinal))
             return "alias.clear();";
 
-        // --save (Phase F stub)
-        // TODO Phase F: implement unalias --save (remove from registry AND from aliases.stash)
+        // --save <name>  →  alias.remove("name"); alias.__removeSaved("name");
         if (StartsWithFlag(raw, "--save"))
-            throw new RuntimeError(
-                "unalias --save is not yet implemented (Phase F)",
-                null, StashErrorTypes.NotSupportedError);
+        {
+            string remainder = raw["--save".Length..].Trim();
+            int j = 0;
+            string? saveName = ReadIdentifier(remainder, ref j);
+            SkipWhitespace(remainder, ref j);
+            if (saveName is null || j < remainder.Length)
+                throw new RuntimeError(
+                    "unalias --save: usage: unalias --save <name>",
+                    null, StashErrorTypes.CommandError);
+            string escaped = ShellSugarDesugarer.EscapeForStashString(saveName);
+            return $"{{ alias.remove(\"{escaped}\"); alias.__removeSaved(\"{escaped}\"); }}";
+        }
 
         // --force <name> → session-disable a built-in alias for the current session
         if (StartsWithFlag(raw, "--force"))
@@ -375,7 +414,7 @@ internal static class AliasShellSugar
     /// alias-definition time — they are preserved for the alias expansion engine at
     /// invocation time.
     /// </summary>
-    private static string EscapeBodyForStash(string body)
+    internal static string EscapeBodyForStash(string body)
     {
         var sb = new StringBuilder(body.Length + 4);
         foreach (char c in body)

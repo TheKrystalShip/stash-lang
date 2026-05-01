@@ -19,6 +19,10 @@ namespace Stash.Tests.Cli;
 /// <see cref="ShellRedirectTests"/>).  Function aliases that use <c>io.println</c> write
 /// to <c>vm.Output</c> and can be captured via <see cref="StringWriter"/>.
 /// </summary>
+[CollectionDefinition("AliasStaticState", DisableParallelization = true)]
+public class AliasStaticStateCollection { }
+
+[Collection("AliasStaticState")]
 public sealed class AliasDispatchTests : IDisposable
 {
     // ── Temp-file bookkeeping ─────────────────────────────────────────────────
