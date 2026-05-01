@@ -105,12 +105,20 @@ internal static class AliasShellSugar
                 "unalias --save is not yet implemented (Phase F)",
                 null, StashErrorTypes.NotSupportedError);
 
-        // --force (Phase D stub)
-        // TODO Phase D: implement unalias --force to session-disable a built-in alias
+        // --force <name> → session-disable a built-in alias for the current session
         if (StartsWithFlag(raw, "--force"))
-            throw new RuntimeError(
-                "unalias --force is not yet implemented (Phase D)",
-                null, StashErrorTypes.NotSupportedError);
+        {
+            string remainder = raw["--force".Length..].Trim();
+            int j = 0;
+            string? forceName = ReadIdentifier(remainder, ref j);
+            SkipWhitespace(remainder, ref j);
+            if (forceName is null || j < remainder.Length)
+                throw new RuntimeError(
+                    "unalias --force: usage: unalias --force <name>",
+                    null, StashErrorTypes.CommandError);
+            string escaped = ShellSugarDesugarer.EscapeForStashString(forceName);
+            return $"alias.__forceDisable(\"{escaped}\");";
+        }
 
         // unalias <name>
         int i = 0;

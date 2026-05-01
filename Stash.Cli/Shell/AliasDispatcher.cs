@@ -45,12 +45,16 @@ internal static class AliasDispatcher
     /// <summary>
     /// Assigns <see cref="AliasBuiltIns.AliasExecutor"/> so that <c>alias.exec</c> calls in
     /// Stash code invoke the shell runner for template aliases.
+    /// Also registers the five built-in aliases (cd, pwd, exit, quit, history) into the
+    /// VM's alias registry (Phase D).
     /// Must be called after <paramref name="shellRunner"/> is fully initialised.
     /// </summary>
     internal static void Wire(ShellRunner shellRunner, VirtualMachine vm)
     {
         AliasBuiltIns.AliasExecutor = (entry, args, _) =>
             ExecuteAlias(shellRunner, vm, entry, args);
+
+        BuiltinAliases.RegisterBuiltins(vm);
     }
 
     // ── Dispatch ─────────────────────────────────────────────────────────────

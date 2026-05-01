@@ -17,7 +17,7 @@ namespace Stash.Cli.Shell;
 internal static class ShellSugarDesugarer
 {
     private static readonly HashSet<string> _sugarNames =
-        new(System.StringComparer.Ordinal) { "cd", "pwd", "exit", "quit", "history", "alias", "unalias" };
+        new(System.StringComparer.Ordinal) { "alias", "unalias" };
 
     /// <summary>Returns <c>true</c> when <paramref name="program"/> is one of the four sugar names.</summary>
     public static bool IsSugarName(string program) => _sugarNames.Contains(program);
@@ -53,10 +53,6 @@ internal static class ShellSugarDesugarer
 
         return program switch
         {
-            "cd"             => DesugarCd(expandedArgs),
-            "pwd"            => DesugarPwd(expandedArgs),
-            "exit" or "quit" => DesugarExit(program, expandedArgs),
-            "history"        => DesugarHistory(expandedArgs),
             "alias"          => AliasShellSugar.TryDesugarAlias(line, expandedArgs),
             "unalias"        => AliasShellSugar.TryDesugarUnalias(line, expandedArgs),
             _                => null,
@@ -64,7 +60,7 @@ internal static class ShellSugarDesugarer
     }
 
     // ── Per-built-in desugaring helpers ──────────────────────────────────────
-    private static string DesugarHistory(IReadOnlyList<string> args)
+    internal static string DesugarHistory(IReadOnlyList<string> args)
     {
         if (args.Count == 0)
             return "for entry in process.historyList() { io.println(entry); }";
@@ -93,7 +89,7 @@ internal static class ShellSugarDesugarer
 
         throw new RuntimeError("history: usage: history [N | -c]", null, StashErrorTypes.CommandError);
     }
-    private static string DesugarCd(IReadOnlyList<string> args)
+    internal static string DesugarCd(IReadOnlyList<string> args)
     {
         if (args.Count > 1)
             throw new RuntimeError("cd: too many arguments", null, StashErrorTypes.CommandError);
@@ -116,7 +112,7 @@ internal static class ShellSugarDesugarer
         return $"env.chdir(\"{EscapeForStashString(arg)}\");";
     }
 
-    private static string DesugarPwd(IReadOnlyList<string> args)
+    internal static string DesugarPwd(IReadOnlyList<string> args)
     {
         if (args.Count > 0)
             throw new RuntimeError("pwd: too many arguments", null, StashErrorTypes.CommandError);
@@ -124,7 +120,7 @@ internal static class ShellSugarDesugarer
         return "io.println(env.cwd());";
     }
 
-    private static string DesugarExit(string program, IReadOnlyList<string> args)
+    internal static string DesugarExit(string program, IReadOnlyList<string> args)
     {
         if (args.Count > 1)
             throw new RuntimeError($"{program}: too many arguments", null, StashErrorTypes.CommandError);

@@ -34,7 +34,12 @@ public class ShellSugarIntegrationTests
             Namespaces = new HashSet<string>(StdlibRegistry.NamespaceNames, StringComparer.Ordinal),
             ShellBuiltinNames = ShellContext.BuildShellBuiltinSet(),
         };
-        return (new ShellRunner(ctx), vm);
+        var runner = new ShellRunner(ctx);
+
+        // Phase D: Wire registers the five built-in aliases (cd, pwd, exit, quit, history).
+        AliasDispatcher.Wire(runner, vm);
+
+        return (runner, vm);
     }
 
     // ── cd ────────────────────────────────────────────────────────────────────

@@ -343,6 +343,19 @@ public static class AliasBuiltIns
             returnType: null,
             documentation: "Internal: pretty-prints a single alias definition. Used by alias shell sugar.");
 
+        // ── alias.__forceDisable(name) — internal for unalias --force (Phase D) ──
+        // Not part of the public API; called by unalias --force sugar to session-disable
+        // a built-in alias without removing it from the registry.
+        ns.Function("__forceDisable", [Param("name", "string")],
+            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            {
+                string name = SvArgs.String(args, 0, "alias.__forceDisable");
+                ctx.AliasRegistry.ForceDisable(name);
+                return StashValue.Null;
+            },
+            returnType: null,
+            documentation: "Internal: session-disables a built-in alias. Used by unalias --force sugar.");
+
         return ns.Build();
     }
 

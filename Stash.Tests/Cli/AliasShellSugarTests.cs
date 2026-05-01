@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
@@ -194,7 +195,7 @@ public sealed class AliasShellSugarTests
     // =========================================================================
 
     [Fact]
-    public void UnaliasAll_RemovesAllUserAliases()
+    public void UnaliasAll_RemovesUserAliasesLeavesBuiltins()
     {
         var (runner, vm, _) = MakeRunner();
 
@@ -204,7 +205,13 @@ public sealed class AliasShellSugarTests
 
         runner.Run("unalias --all");
 
-        Assert.Empty(vm.AliasRegistry.All());
+        // Phase D: built-in aliases (cd, pwd, exit, quit, history) survive --all.
+        Assert.False(vm.AliasRegistry.Exists("a"));
+        Assert.False(vm.AliasRegistry.Exists("b"));
+        Assert.False(vm.AliasRegistry.Exists("c"));
+        // Only builtins remain.
+        var remaining = vm.AliasRegistry.All().ToList();
+        Assert.All(remaining, e => Assert.Equal(AliasRegistry.AliasSource.Builtin, e.Source));
     }
 
     // =========================================================================
@@ -223,17 +230,22 @@ public sealed class AliasShellSugarTests
     }
 
     // =========================================================================
-    // 11. unalias --force — Phase D stub throws NotSupportedError
+    // 11. unalias --force — Phase D: session-disables a built-in alias
     // =========================================================================
 
     [Fact]
-    public void UnaliasForce_ThrowsNotSupportedError()
+    public void UnaliasForce_SessionDisablesBuiltin()
     {
-        var (runner, _, _) = MakeRunner();
+        var (runner, vm, _) = MakeRunner();
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("unalias --force cd"));
-        Assert.Equal(StashErrorTypes.NotSupportedError, ex.ErrorType);
-        Assert.Contains("Phase D", ex.Message, StringComparison.Ordinal);
+        // cd is registered as a builtin at startup.
+        Assert.True(vm.AliasRegistry.Exists("cd"));
+
+        // unalias --force cd disables it for the session — no error.
+        runner.Run("unalias --force cd");
+
+        // cd is now invisible.
+        Assert.False(vm.AliasRegistry.Exists("cd"));
     }
 
     // =========================================================================
@@ -328,13 +340,16 @@ public sealed class AliasShellSugarTests
     // =========================================================================
 
     [Fact]
-    public void AliasNoArgs_NoAliasesDefined_ShowsEmpty()
+    public void AliasNoArgs_ShowsBuiltinGroup()
     {
+        // Phase D: five builtins are now always registered, so bare 'alias' shows [builtin].
         var (runner, _, sw) = MakeRunner();
 
         runner.Run("alias");
 
-        Assert.Contains("no aliases", sw.ToString(), StringComparison.OrdinalIgnoreCase);
+        string output = sw.ToString();
+        Assert.Contains("[builtin]", output, StringComparison.Ordinal);
+        Assert.Contains("cd", output, StringComparison.Ordinal);
     }
 
     // =========================================================================

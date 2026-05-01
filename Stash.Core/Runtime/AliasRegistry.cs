@@ -46,6 +46,14 @@ public sealed class AliasRegistry
         /// <summary>Whether this entry is permitted to shadow a built-in alias of the same name.</summary>
         public bool Override { get; set; }
 
+        /// <summary>
+        /// When <see langword="true"/> the entry is session-disabled via <c>unalias --force</c>.
+        /// Disabled entries are invisible to <see cref="TryGet"/>, <see cref="Exists"/>,
+        /// <see cref="All"/>, and <see cref="Names"/> but remain in the dictionary so that
+        /// a subsequent <see cref="Define"/> call (REPL restart simulation) can re-enable them.
+        /// </summary>
+        public bool Disabled { get; set; }
+
         public string? SourceFile { get; set; }
         public int? SourceLine { get; set; }
     }
@@ -73,8 +81,11 @@ public sealed class AliasRegistry
                 StashErrorTypes.AliasError);
         }
 
+        // Allow a Builtin→Builtin replacement unconditionally (re-registration at startup).
+        // Block user→Builtin unless override: true.
         if (_entries.TryGetValue(entry.Name, out AliasEntry? existing) &&
             existing.Source == AliasSource.Builtin &&
+            entry.Source != AliasSource.Builtin &&
             !entry.Override)
         {
             throw new RuntimeError(
@@ -86,12 +97,18 @@ public sealed class AliasRegistry
         _entries[entry.Name] = entry;
     }
 
-    /// <summary>Looks up an alias entry by name.</summary>
+    /// <summary>Looks up an alias entry by name. Returns <see langword="false"/> for disabled entries.</summary>
     public bool TryGet(string name, out AliasEntry? entry)
-        => _entries.TryGetValue(name, out entry);
+    {
+        if (_entries.TryGetValue(name, out entry) && !entry.Disabled)
+            return true;
+        entry = null;
+        return false;
+    }
 
-    /// <summary>Returns <see langword="true"/> if the name is registered.</summary>
-    public bool Exists(string name) => _entries.ContainsKey(name);
+    /// <summary>Returns <see langword="true"/> if the name is registered and not disabled.</summary>
+    public bool Exists(string name)
+        => _entries.TryGetValue(name, out AliasEntry? e) && !e.Disabled;
 
     /// <summary>
     /// Removes a user alias by name.
@@ -102,6 +119,9 @@ public sealed class AliasRegistry
     public bool Remove(string name)
     {
         if (!_entries.TryGetValue(name, out AliasEntry? entry)) return false;
+
+        // A force-disabled builtin is invisible; treat as not found.
+        if (entry.Disabled) return false;
 
         if (entry.Source == AliasSource.Builtin)
         {
@@ -116,9 +136,27 @@ public sealed class AliasRegistry
 
     /// <summary>
     /// Removes an alias unconditionally, bypassing the built-in guard.
-    /// Used by the <c>unalias --force</c> flag (Phase C).
     /// </summary>
     public bool ForceRemove(string name) => _entries.Remove(name);
+
+    /// <summary>
+    /// Session-disables an alias by setting its <see cref="AliasEntry.Disabled"/> flag.
+    /// The entry remains in the dictionary so that a subsequent <see cref="Define"/> call
+    /// (simulating REPL restart) can re-enable it by overwriting with a fresh entry.
+    /// Throws <see cref="RuntimeError"/> with <see cref="StashErrorTypes.AliasError"/> if
+    /// the alias does not exist (including already-disabled entries).
+    /// </summary>
+    public void ForceDisable(string name)
+    {
+        if (!_entries.TryGetValue(name, out AliasEntry? entry) || entry.Disabled)
+        {
+            throw new RuntimeError(
+                $"alias '{name}' is not defined",
+                null,
+                StashErrorTypes.AliasError);
+        }
+        entry.Disabled = true;
+    }
 
     /// <summary>
     /// Removes all non-Builtin aliases and returns the count removed.
@@ -136,11 +174,15 @@ public sealed class AliasRegistry
         return toRemove.Count;
     }
 
-    /// <summary>Returns all entries sorted by name.</summary>
+    /// <summary>Returns all non-disabled entries sorted by name.</summary>
     public IEnumerable<AliasEntry> All()
-        => _entries.Values.OrderBy(e => e.Name, StringComparer.Ordinal);
+        => _entries.Values
+            .Where(e => !e.Disabled)
+            .OrderBy(e => e.Name, StringComparer.Ordinal);
 
-    /// <summary>Returns all registered names sorted.</summary>
+    /// <summary>Returns all non-disabled registered names sorted.</summary>
     public IEnumerable<string> Names()
-        => _entries.Keys.OrderBy(k => k, StringComparer.Ordinal);
+        => _entries.Where(kv => !kv.Value.Disabled)
+            .Select(kv => kv.Key)
+            .OrderBy(k => k, StringComparer.Ordinal);
 }

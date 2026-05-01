@@ -110,6 +110,8 @@ internal static class RcFileLoader
             };
             classifier = new ShellLineClassifier(ctx);
             runner = new ShellRunner(ctx);
+            // Register built-in aliases (cd, pwd, exit, quit, history) so they work in RC files.
+            AliasDispatcher.Wire(runner, vm);
         }
 
         // Split into physical lines (handle both LF and CRLF).
