@@ -1,0 +1,83 @@
+#!/usr/bin/env stash
+
+// examples/unset.stash
+// unset statement — removing top-level bindings and environment variables
+
+io.println("=" * 56);
+io.println("  unset Statement");
+io.println("=" * 56);
+
+// ─── 1. Basic unset ─────────────────────────────────────────
+
+io.println("\n-- 1. Basic unset --");
+
+let greeting = "hello";
+io.println($"  before unset: greeting = {greeting}");
+
+unset greeting;
+
+// Attempting to read 'greeting' now raises NameError.
+// We guard with try/catch to show the error gracefully.
+let err = try greeting;
+io.println($"  after  unset: {err.message}");  // undefined global 'greeting'
+
+// A fresh declaration reuses the same slot — no conflict.
+let greeting = "world";
+io.println($"  re-declared:  greeting = {greeting}");
+
+// ─── 2. Removing multiple bindings ──────────────────────────
+
+io.println("\n-- 2. Multi-target unset --");
+
+let a = 10;
+let b = 20;
+let c = 30;
+io.println($"  a={a}  b={b}  c={c}");
+
+unset a, b, c;
+io.println("  a, b, c removed.");
+
+// ─── 3. Unsetting a function or struct type ──────────────────
+
+io.println("\n-- 3. Function and struct targets --");
+
+fn helper() { return 42; }
+struct Config { host, port }
+
+io.println($"  helper() = {helper()}");
+let cfg = Config { host: "localhost", port: 8080 };
+io.println($"  cfg is Config: {cfg is Config}");
+
+unset helper, Config;
+
+let helperErr = try helper();
+io.println($"  helper after unset: {helperErr.message}");
+
+io.println($"  cfg is Config after unset: {cfg is Config}");  // false
+
+// ─── 4. env.unset — removing an environment variable ────────
+
+io.println("\n-- 4. env.unset --");
+
+env.set("EXAMPLE_VAR", "stash");
+io.println($"  set:     env.get(EXAMPLE_VAR) = {env.get("EXAMPLE_VAR")}");
+
+let removed = env.unset("EXAMPLE_VAR");
+io.println($"  unset:   returned {removed}");             // true
+io.println($"  after:   env.get(EXAMPLE_VAR) = {env.get("EXAMPLE_VAR")}"); // null
+
+let missing = env.unset("EXAMPLE_VAR");
+io.println($"  unset again: returned {missing}");         // false
+
+// ─── Shell mode note ─────────────────────────────────────────
+// In the interactive REPL, accidentally declaring a variable
+// that shadows a PATH binary blocks shell execution:
+//
+//   shell> let ls = "test"   # shadows /bin/ls
+//   shell> ls                # Stash variable lookup → "test"
+//   shell> unset ls          # remove binding
+//   shell> ls                # /bin/ls runs again
+
+io.println("\n" + "=" * 56);
+io.println("  Done.");
+io.println("=" * 56);

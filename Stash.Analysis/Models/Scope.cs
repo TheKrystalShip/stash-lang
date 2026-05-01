@@ -71,4 +71,17 @@ public class Scope
         TypeNarrowings ??= new();
         TypeNarrowings[name] = typeHint;
     }
+
+    public bool RemoveSymbol(string name)
+    {
+        if (_symbolsByName.TryGetValue(name, out var list) && list.Count > 0)
+        {
+            var sym = list[^1];
+            list.RemoveAt(list.Count - 1);
+            if (list.Count == 0) _symbolsByName.Remove(name);
+            Symbols.Remove(sym);
+            return true;
+        }
+        return false;
+    }
 }

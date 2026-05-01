@@ -91,6 +91,25 @@ public static class EnvBuiltIns
             returnType: "null",
             documentation: "Removes an environment variable.\n@param name The environment variable name to remove\n@return null");
 
+        ns.Function("unset", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            StashValue v0 = args[0];
+            if (!v0.IsObj || v0.AsObj is not string name)
+                throw new RuntimeError("1st argument to 'env.unset' must be a string.", errorType: StashErrorTypes.TypeError);
+            if (name.Length == 0)
+                throw new RuntimeError("'env.unset': name must not be empty.", errorType: StashErrorTypes.ValueError);
+            if (name.Contains('='))
+                throw new RuntimeError("'env.unset': name must not contain '='.", errorType: StashErrorTypes.ValueError);
+            if (name.Contains('\0'))
+                throw new RuntimeError("'env.unset': name must not contain null characters.", errorType: StashErrorTypes.ValueError);
+
+            bool existed = System.Environment.GetEnvironmentVariable(name) is not null;
+            System.Environment.SetEnvironmentVariable(name, null);
+            return StashValue.FromBool(existed);
+        },
+            returnType: "bool",
+            documentation: "Removes the environment variable 'name'. Returns true if the variable existed, false otherwise.\n@param name The environment variable name to remove\n@return True if the variable was set, false if it was not set");
+
         ns.Function("cwd", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             return StashValue.FromObj(System.Environment.CurrentDirectory);

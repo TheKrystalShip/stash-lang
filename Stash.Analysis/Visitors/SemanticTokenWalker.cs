@@ -1,5 +1,6 @@
 namespace Stash.Analysis;
 
+using System;
 using System.Collections.Generic;
 using static Stash.Analysis.SemanticTokenConstants;
 using System.Linq;
@@ -414,6 +415,16 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         stmt.WaitOption?.Accept(this);
         stmt.StaleOption?.Accept(this);
         stmt.Body.Accept(this);
+        return 0;
+    }
+
+    public int VisitUnsetStmt(UnsetStmt stmt)
+    {
+        EmitFromToken(stmt.UnsetKeyword, TokenTypeKeyword, 0);
+        foreach (var target in stmt.Targets)
+        {
+            Emit(target.Span.StartLine - 1, target.Span.StartColumn - 1, TokenTypeVariable, 0);
+        }
         return 0;
     }
 

@@ -2,6 +2,7 @@ namespace Stash.Analysis.Rules;
 
 using System;
 using System.Collections.Generic;
+using Stash.Parsing.AST;
 
 /// <summary>
 /// SA0201 — Post-walk rule that emits an information (unnecessary) diagnostic for every declared
@@ -17,6 +18,17 @@ public sealed class UnusedDeclarationRule : IAnalysisRule
     public void Analyze(RuleContext context)
     {
         var globalSymbols = new HashSet<SymbolInfo>(context.ScopeTree.GlobalScope.Symbols);
+
+        // Collect names that appear as unset targets — these count as a use of the binding.
+        var unsetNames = new HashSet<string>();
+        foreach (var stmt in context.AllStatements)
+        {
+            if (stmt is UnsetStmt us)
+            {
+                foreach (var t in us.Targets)
+                    unsetNames.Add(t.Name);
+            }
+        }
 
         foreach (var symbol in context.ScopeTree.All)
         {
@@ -70,6 +82,11 @@ public sealed class UnusedDeclarationRule : IAnalysisRule
                     break;
                 }
             }
+
+            // An unset target counts as a use — let x = ...; unset x; should not warn.
+            if (!isUsed && unsetNames.Contains(symbol.Name))
+                isUsed = true;
+
             if (isUsed)
             {
                 continue;

@@ -95,6 +95,13 @@ public static class DiagnosticDescriptors
     // ── SA083x — Deprecations ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0830 = new("SA0830", "Deprecated built-in member", DiagnosticLevel.Warning, "Deprecations", "'{0}' is deprecated \u2014 use '{1}' instead.");
 
+    // ── SA084x — Bindings ─────────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0840 = new("SA0840", "Unknown 'unset' target", DiagnosticLevel.Warning, "Bindings", "'{0}' is not defined; 'unset' has no effect.");
+    public static readonly DiagnosticDescriptor SA0841 = new("SA0841", "Cannot 'unset' built-in", DiagnosticLevel.Error, "Bindings", "Cannot 'unset' built-in '{0}'.");
+    public static readonly DiagnosticDescriptor SA0842 = new("SA0842", "Cannot 'unset' import", DiagnosticLevel.Error, "Bindings", "Cannot 'unset' imported binding '{0}'; remove or refactor the 'import' instead.");
+    public static readonly DiagnosticDescriptor SA0843 = new("SA0843", "Cannot 'unset' const in script", DiagnosticLevel.Error, "Bindings", "Cannot 'unset' 'const' binding '{0}' in a script (allowed in REPL only).");
+    public static readonly DiagnosticDescriptor SA0844 = new("SA0844", "'unset' must be top-level", DiagnosticLevel.Error, "Bindings", "'unset' is only valid at the top level of a script or REPL input.");
+
     // ── SA081x — Locks ────────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0810 = new("SA0810", "Lock path not a string", DiagnosticLevel.Warning, "Locks", "The 'lock' path expression does not evaluate to a string. The path must be a string value.");
     public static readonly DiagnosticDescriptor SA0811 = new("SA0811", "Lock body is empty", DiagnosticLevel.Warning, "Locks", "The 'lock' block body is empty. An empty lock block serves no purpose.");
@@ -224,6 +231,12 @@ public static class DiagnosticDescriptors
         dict[SA0814.Code] = SA0814;
         dict[SA0820.Code] = SA0820;
         dict[SA0821.Code] = SA0821;
+        dict[SA0830.Code] = SA0830;
+        dict[SA0840.Code] = SA0840;
+        dict[SA0841.Code] = SA0841;
+        dict[SA0842.Code] = SA0842;
+        dict[SA0843.Code] = SA0843;
+        dict[SA0844.Code] = SA0844;
         dict[SA0901.Code] = SA0901;
         dict[SA1002.Code] = SA1002;
         dict[SA1102.Code] = SA1102;

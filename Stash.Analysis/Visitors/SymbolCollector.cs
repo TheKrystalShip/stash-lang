@@ -1,5 +1,6 @@
 namespace Stash.Analysis;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
@@ -38,6 +39,10 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     /// <summary>All identifier references accumulated during traversal.</summary>
     private readonly List<ReferenceInfo> _references = new();
+
+    /// <summary>Tracks (name, line) of every <c>unset</c> statement encountered during traversal,
+    /// used to suppress symbol resolution for references after the unset point.</summary>
+    private readonly List<(string Name, int Line)> _unsetEvents = new();
 
     /// <summary>
     /// Holds narrowing info extracted from an <c>is</c> expression condition.  The
@@ -177,6 +182,19 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
                 var sym = scope.Symbols[i];
                 if (sym.Name == name && (sym.Span.StartLine < line || (sym.Span.StartLine == line && sym.Span.StartColumn <= column)))
                 {
+                    // If this symbol was unset between its declaration and this reference, treat as unresolved.
+                    int declLine = sym.Span.StartLine;
+                    bool wasUnset = false;
+                    foreach (var (evtName, evtLine) in _unsetEvents)
+                    {
+                        if (evtName == name && evtLine > declLine && evtLine <= line)
+                        {
+                            wasUnset = true;
+                            break;
+                        }
+                    }
+                    if (wasUnset)
+                        return null;
                     return sym;
                 }
             }
@@ -892,6 +910,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         stmt.WaitOption?.Accept(this);
         stmt.StaleOption?.Accept(this);
         stmt.Body.Accept(this);
+        return null;
+    }
+
+    public object? VisitUnsetStmt(UnsetStmt stmt)
+    {
+        foreach (var t in stmt.Targets)
+            _unsetEvents.Add((t.Name, stmt.UnsetKeyword.Span.StartLine));
         return null;
     }
 

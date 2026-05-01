@@ -134,5 +134,36 @@ public sealed partial class VirtualMachine
         if (!_stack[frame.BaseSlot + a].IsNumeric)
             throw new RuntimeError("Operand of '++' or '--' must be a number.", GetCurrentSpan(ref frame));
     }
+
+    private void ExecuteUnsetGlobal(ref CallFrame frame, uint inst)
+    {
+        uint ax = Instruction.GetAx(inst);
+        string name = (string)frame.Chunk.Constants[(int)ax].AsObj!;
+
+        Dictionary<string, StashValue> targetGlobals = frame.ModuleGlobals ?? _globals;
+
+        targetGlobals.Remove(name);
+
+        if (targetGlobals == _globals)
+        {
+            _constGlobals.Remove(name);
+
+            // Reset the slot-indexed mirror (O(N) scan; unset is rare).
+            for (int slot = 0; slot < _globalNameTable.Length; slot++)
+            {
+                if (_globalNameTable[slot] == name)
+                {
+                    if (slot < _globalSlots.Length)
+                        _globalSlots[slot] = UndefinedGlobal;
+                    if (slot < _constGlobalSlots.Length)
+                        _constGlobalSlots[slot] = false;
+                    break;
+                }
+            }
+
+            // Invalidate the REPL const-fold cache so future inputs don't see stale folded values.
+            ReplGlobalAllocator.RemoveConstValue(name);
+        }
+    }
 }
 

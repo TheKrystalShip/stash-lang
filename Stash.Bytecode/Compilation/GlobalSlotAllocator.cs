@@ -33,6 +33,9 @@ public sealed class GlobalSlotAllocator
     /// <summary>Returns true and the tracked value if <paramref name="name"/> is a folded const global.</summary>
     public bool TryGetConstValue(string name, out object? value) => _constValues.TryGetValue(name, out value);
 
+    /// <summary>Removes the compile-time folded value for <paramref name="name"/>, invalidating the const-fold cache entry.</summary>
+    public void RemoveConstValue(string name) => _constValues.Remove(name);
+
     /// <summary>Total number of global slots allocated so far.</summary>
     public int Count => _nextSlot;
 

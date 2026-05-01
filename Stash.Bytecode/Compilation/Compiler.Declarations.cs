@@ -434,4 +434,20 @@ partial class Compiler
         }
         return null;
     }
+
+    public object? VisitUnsetStmt(UnsetStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        // Defensive: must be top-level. Analyzer should have caught nested unset already.
+        if (_enclosing != null || _scope.ScopeDepth != 0)
+            throw new InvalidOperationException("'unset' must appear at the top level (compiler invariant).");
+
+        foreach (var target in stmt.Targets)
+        {
+            ushort nameIdx = _builder.AddConstant(target.Name);
+            _builder.EmitAx(OpCode.UnsetGlobal, nameIdx);
+        }
+        return null;
+    }
 }

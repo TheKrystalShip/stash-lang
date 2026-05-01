@@ -106,11 +106,13 @@ public sealed partial class VirtualMachine
             {
                 result = CheckIsType(value, typeName);
             }
-            else if (value is StashEnumValue ev && ev.TypeName == typeName)
+            else if (value is StashEnumValue ev && ev.TypeName == typeName
+                && globals.TryGetValue(typeName, out var evDescVal) && evDescVal.AsObj is StashEnum)
             {
                 result = true;
             }
-            else if (value is StashInstance inst2 && inst2.TypeName == typeName)
+            else if (value is StashInstance inst2 && inst2.TypeName == typeName
+                && globals.TryGetValue(typeName, out var instDescVal) && instDescVal.AsObj is StashStruct)
             {
                 result = true;
             }
@@ -131,10 +133,17 @@ public sealed partial class VirtualMachine
         }
         else
         {
+            // At global scope (BaseSlot == 0), struct/enum names are also stored in global slots.
+            // Verify the type is still in globals so that `unset S` makes `v is S` return false.
+            // Inside functions (BaseSlot > 0), local structs are not in globals — skip the check.
+            Dictionary<string, StashValue> globals2 = frame.ModuleGlobals ?? _globals;
+            bool atGlobalScope = frame.BaseSlot == 0;
             result = typeObj switch
             {
-                StashStruct sd    => value is StashInstance inst4 && inst4.TypeName == sd.Name,
-                StashEnum se      => value is StashEnumValue ev && ev.TypeName == se.Name,
+                StashStruct sd    => value is StashInstance inst4 && inst4.TypeName == sd.Name
+                                     && (!atGlobalScope || globals2.ContainsKey(sd.Name)),
+                StashEnum se      => value is StashEnumValue ev && ev.TypeName == se.Name
+                                     && (!atGlobalScope || globals2.ContainsKey(se.Name)),
                 StashInterface si => value is StashInstance inst5 &&
                     InstanceImplementsInterfaceName(inst5, si.Name),
                 _ => throw new RuntimeError(

@@ -217,6 +217,7 @@ public sealed partial class VirtualMachine
                 case OpCode.GetGlobal: ExecuteGetGlobal(ref frame, inst); break;
                 case OpCode.SetGlobal: ExecuteSetGlobal(ref frame, inst); break;
                 case OpCode.InitConstGlobal: ExecuteInitConstGlobal(ref frame, inst); break;
+                case OpCode.UnsetGlobal: ExecuteUnsetGlobal(ref frame, inst); break;
                 case OpCode.GetUpval: ExecuteGetUpval(ref frame, inst); break;
                 case OpCode.SetUpval: ExecuteSetUpval(ref frame, inst); break;
                 case OpCode.CloseUpval: ExecuteCloseUpval(ref frame, inst); break;

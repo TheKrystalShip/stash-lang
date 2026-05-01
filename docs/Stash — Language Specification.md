@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [7f. Timeout Blocks](#7f-timeout-blocks) · [7g. Defer](#7g-defer) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [7f. Timeout Blocks](#7f-timeout-blocks) · [7g. Defer](#7g-defer) · [7h. Lock Block](#7h-lock-block) · [7i. Unset Statement](#7i-unset-statement) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -3963,6 +3963,102 @@ When `sys.isDry()` is `true`, the lock block prints `DRY: Would acquire lock: <p
 | Signal cleanup    | SIGINT, SIGTERM, SIGHUP registered | `Console.CancelKeyPress`            |
 | Lock semantics    | Only Stash processes coordinated   | OS enforces against all processes   |
 | Recommended paths | `/var/run/` or `/tmp/`             | `%TEMP%` or well-known app data dir |
+
+---
+
+## 7i. Unset Statement
+
+`unset name1, name2, …;` removes one or more named bindings from the **top-level global scope**. After the statement executes, the names are gone: reading them raises `NameError`, the shell classifier stops treating them as Stash symbols (enabling PATH lookup again), and `is StructName` / `is EnumName` return `false`. A later `let name = …` re-declares the name cleanly.
+
+`unset` is a **soft keyword** — it is recognised as a statement keyword only when the parser sees `unset` followed by a bare identifier at statement position. In any other position (`let unset = 1;`, `unset()`, `obj.unset`) it is a regular identifier.
+
+### Syntax
+
+```stash
+unset name;
+unset name1, name2, name3;
+```
+
+At least one target is required. Trailing commas and dotted paths (`unset foo.bar;`) are parse errors. Targets must be bare identifiers.
+
+### Allowed Targets
+
+| Target kind                   | REPL      | Script    | Notes                                                            |
+| ----------------------------- | --------- | --------- | ---------------------------------------------------------------- |
+| User `let` global             | ✅        | ✅        | Primary use case.                                                |
+| User `fn` global              | ✅        | ✅        | Function lives in the same global slot.                          |
+| User `struct` global          | ✅        | ✅        | Removes type registry entry; `is MyStruct` → false.              |
+| User `enum` global            | ✅        | ✅        | Removes type registry entry; `is MyEnum` → false.                |
+| User `const` global           | ✅        | ❌        | SA0843. `const` is inviolable in scripts; REPL permits fix-typo. |
+| Imported module / alias       | ❌        | ❌        | SA0842. Remove or refactor the `import` instead.                 |
+| Built-in namespace / function | ❌        | ❌        | SA0841. Runtime fixtures cannot be removed.                      |
+| Unknown / never-declared name | ⚠ warning | ⚠ warning | SA0840; runtime no-op. Bash precedent.                           |
+
+When a statement lists several targets and one is invalid, the diagnostic is **per-target** — the others still proceed.
+
+### Examples
+
+```stash
+// Remove a binding and re-declare
+let x = 1;
+unset x;
+let x = "hello";        // OK — same slot, fresh value
+io.println(x);          // "hello"
+```
+
+```stash
+// Remove multiple temporaries at once
+let tmp1 = computeA();
+let tmp2 = computeB();
+let tmp3 = computeC();
+// ... use them ...
+unset tmp1, tmp2, tmp3;
+```
+
+```stash
+// Unset a function or struct type
+fn helper() { return 42; }
+struct Cfg { host, port }
+
+unset helper, Cfg;
+// subsequent: helper() → NameError; let c = Cfg {...} → NameError
+```
+
+```stash
+// REPL only — remove a const to fix a typo
+const TIMOUT_MS = 500;  // typo
+unset TIMOUT_MS;
+const TIMEOUT_MS = 500; // correct spelling
+```
+
+### REPL Behaviour
+
+In the REPL, the primary motivation for `unset` is **un-shadowing a PATH executable** that was accidentally overwritten by a `let` declaration:
+
+```text
+shell> let ls = "test"      # accidentally shadows /bin/ls
+shell> ls                   # Stash variable lookup → "test"
+shell> unset ls             # binding removed
+shell> ls                   # PATH executable runs again
+```
+
+`unset` is exactly what the shell classifier sees at the prompt — no backslash prefix or special syntax required.
+
+### Static Analysis
+
+| Code   | Level   | Condition                                                       |
+| ------ | ------- | --------------------------------------------------------------- |
+| SA0840 | Warning | Target is not defined; `unset` has no effect.                   |
+| SA0841 | Error   | Target is a built-in namespace or function.                     |
+| SA0842 | Error   | Target is an imported binding or alias.                         |
+| SA0843 | Error   | Target is a `const` binding in a script (allowed in REPL only). |
+| SA0844 | Error   | `unset` appears inside a function or block (top-level only).    |
+
+The analyzer also removes the target from its symbol table so subsequent references in the same compilation unit produce SA0202 ("undefined name"). A `let x = …` followed only by `unset x;` does **not** trigger the unused-variable diagnostic — the `unset` counts as a use.
+
+### Relationship to `env.unset`
+
+`unset` removes a **Stash binding**. It does not affect environment variables. To delete an environment variable, call [`env.unset(name)`](Stash%20—%20Standard%20Library%20Reference.md#envunsetname) explicitly.
 
 ---
 

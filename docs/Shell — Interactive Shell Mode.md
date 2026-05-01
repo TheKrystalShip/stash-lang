@@ -162,6 +162,19 @@ let ok = true
 
 `\!foo` is **not** supported — `!` must precede `\`.
 
+### 2.6 Removing a Binding with `unset`
+
+If a Stash declaration accidentally shadows a PATH executable, the `unset` statement removes the binding so the classifier falls back to PATH lookup on the very next input. No restart required.
+
+```text
+shell> let ls = "test"    # accidentally shadows /bin/ls
+shell> ls                 # Stash symbol → "test"
+shell> unset ls           # binding removed
+shell> ls                 # /bin/ls runs again
+```
+
+`unset` is a soft keyword, so bare `unset name` at the REPL prompt parses directly as the language statement — no prefix or quoting needed. Multiple names can be removed in one line: `unset a, b, c;`. For full details, including allowed targets and static-analysis diagnostics, see [§7i of the Language Specification](Stash%20—%20Language%20Specification.md#7i-unset-statement).
+
 ---
 
 ## 3. Argument Expansion Pipeline

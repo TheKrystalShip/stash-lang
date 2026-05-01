@@ -142,4 +142,9 @@ public interface IStmtVisitor<T>
     /// Visits a <see cref="LockStmt"/> node (<c>lock path { block }</c>).
     /// </summary>
     T VisitLockStmt(LockStmt stmt);
+
+    /// <summary>
+    /// Visits an <see cref="UnsetStmt"/> node (<c>unset name1, name2, …;</c>).
+    /// </summary>
+    T VisitUnsetStmt(UnsetStmt stmt);
 }

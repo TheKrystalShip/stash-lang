@@ -252,6 +252,10 @@ public enum OpCode : byte
 
     /// <summary>Ax: Release the top lock from VMContext.ActiveLocks. No operands (A=0).</summary>
     LockEnd = 97,
+
+    // === Global Bindings ===
+    /// <summary>Ax: Remove the global binding at slot Ax from the globals dictionary.</summary>
+    UnsetGlobal = 98,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>
@@ -285,7 +289,7 @@ public static class OpCodeInfo
             => OpCodeFormat.ABx,
 
         // Ax format: 24-bit payload
-        OpCode.TryEnd or OpCode.ElevateEnd or OpCode.LockEnd
+        OpCode.TryEnd or OpCode.ElevateEnd or OpCode.LockEnd or OpCode.UnsetGlobal
             => OpCodeFormat.Ax,
 
         // Everything else is ABC

@@ -387,6 +387,24 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitUnsetStmt(UnsetStmt stmt)
+    {
+        _ctx.EmitToken(); // unset
+        for (int i = 0; i < stmt.Targets.Count; i++)
+        {
+            if (i == 0)
+                _ctx.Space();
+            else
+            {
+                _ctx.EmitToken(); // ,
+                _ctx.Space();
+            }
+            _ctx.EmitToken(); // target identifier
+        }
+        _ctx.EmitToken(); // ;
+        return 0;
+    }
+
     public int VisitExprStmt(ExprStmt stmt)
     {
         ControlFlowPrinter.PrintExprStmt(stmt, _ctx, FormatExpr);

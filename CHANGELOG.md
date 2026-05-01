@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Language:** `unset name1, name2, …;` statement removes one or more top-level bindings (`let`, `fn`, `struct`, `enum` globals; `const` in REPL only). Unsetting an unknown name is a runtime no-op (SA0840 warning). Built-ins, imports, and script `const` bindings are rejected at analysis time (SA0841–SA0844). In shell mode, `unset ls` un-shadows an accidentally-declared Stash symbol so the PATH binary becomes reachable again. See [Language Specification — §7i](docs/Stash%20—%20Language%20Specification.md#7i-unset-statement).
+- **Stdlib:** `env.unset(name: str) -> bool` removes an environment variable from the current process environment. Returns `true` if the variable existed. Throws `TypeError` for non-string names and `ValueError` for names that are empty, contain `=`, or contain a null byte. See [Standard Library Reference — env](docs/Stash%20—%20Standard%20Library%20Reference.md#env--environment-variables).
+- **Bytecode:** new `UnsetGlobal` opcode; `.stashc` files compiled before this change will fail to load with an "unknown opcode" error and must be recompiled.
+
 #### Stdlib Namespace Audit — New Namespaces
 
 Six new top-level namespaces extracted from overloaded namespaces. All old names remain as **deprecated aliases** (SA0830 warning) so existing scripts continue to work without modification.

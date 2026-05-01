@@ -1,5 +1,6 @@
 namespace Stash.Resolution;
 
+using System;
 using System.Collections.Generic;
 using Stash.Parsing.AST;
 using Stash.Lexing;
@@ -281,6 +282,12 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
         if (stmt.StaleOption is not null)
             ResolveExpr(stmt.StaleOption);
         ResolveStmt(stmt.Body);
+        return null;
+    }
+
+    public object? VisitUnsetStmt(UnsetStmt stmt)
+    {
+        // Targets are bare identifiers being removed — nothing to resolve.
         return null;
     }
 

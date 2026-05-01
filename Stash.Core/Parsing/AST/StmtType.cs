@@ -31,4 +31,5 @@ public enum StmtType : byte
     Switch,
     Defer,
     Lock,
+    Unset,
 }

@@ -218,6 +218,7 @@ conv.toHex(255, 8);         // "000000ff"
 | --------------------------------- | --------------------------------------------------------------------- |
 | `env.get(name, default?)`         | Read environment variable. Returns `default` (or `null`) if unset     |
 | `env.set(name, value)`            | Set environment variable                                              |
+| `env.unset(name)`                 | Remove environment variable; returns `true` if it existed             |
 | `env.has(name)`                   | Check if an environment variable exists                               |
 | `env.all()`                       | Return all environment variables as a dictionary                      |
 | `env.withPrefix(prefix)`          | Return all environment variables starting with prefix as a dictionary |
@@ -262,6 +263,25 @@ let host = env.get("DB_HOST", "localhost");      // fallback to "localhost"
 let port = env.get("DB_PORT", "5432");           // fallback to "5432"
 let debug = env.get("DEBUG");                    // null if unset
 ```
+
+### `env.unset(name)`
+
+**Signature:** `env.unset(name: str) -> bool`
+
+Removes the environment variable `name` from the current process's environment. Returns `true` if the variable existed and was removed, `false` if it was already absent.
+
+```stash
+env.set("BUILD_CACHE", "on");
+io.println(env.unset("BUILD_CACHE"));   // true  — existed
+io.println(env.unset("BUILD_CACHE"));   // false — already gone
+io.println(env.get("BUILD_CACHE"));     // null
+```
+
+**Errors:**
+- `TypeError` — `name` is not a string.
+- `ValueError` — `name` is empty, contains `=`, or contains a null byte (`\0`). These characters make an env-var name invalid across all supported platforms.
+
+> **Note:** `env.unset` removes an **environment variable** from the process environment. To remove a Stash binding (a `let`, `fn`, `struct`, or `enum` global), use the language-level [`unset` statement](Stash%20—%20Language%20Specification.md#7i-unset-statement).
 
 ### `env.loadFile(path, prefix?)`
 

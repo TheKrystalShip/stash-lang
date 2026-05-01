@@ -708,6 +708,12 @@ public class Parser
                 return LockStatement();
             }
 
+            if (lexeme == "unset" && IsUnsetKeyword())
+            {
+                Advance(); // consume 'unset'
+                return UnsetStatement();
+            }
+
             if (lexeme == "elevate" && IsElevateKeyword())
             {
                 Advance(); // consume 'elevate'
@@ -946,6 +952,21 @@ public class Parser
             }
         }
         return expr;
+    }
+
+    private Stmt UnsetStatement()
+    {
+        Token unsetKeyword = Previous();
+        var targets = new List<UnsetTarget>();
+
+        do
+        {
+            Token name = Consume(TokenType.Identifier, "Expected identifier after 'unset'.");
+            targets.Add(new UnsetTarget(name.Lexeme, name.Span));
+        } while (Match(TokenType.Comma));
+
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after 'unset' statement.");
+        return new UnsetStmt(unsetKeyword, targets, MakeSpan(unsetKeyword.Span, semi.Span));
     }
 
     /// <returns>A <see cref="DoWhileStmt"/>.</returns>
@@ -2691,6 +2712,13 @@ public class Parser
         bool result = IsLambdaStart();
         _current = saved;
         return result;
+    }
+
+    /// <summary>Returns true if 'unset' at current position is used as a keyword (not an identifier).</summary>
+    private bool IsUnsetKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        return _tokens[_current + 1].Type == TokenType.Identifier;
     }
 
     /// <summary>Returns true if the token type can start an expression (used for await keyword disambiguation).</summary>

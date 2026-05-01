@@ -19,11 +19,13 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     private int _loopDepth;
     private int _functionDepth;
+    private int _blockDepth;
     private int _elevateDepth;
     private int _asyncDepth;
     private int _catchDepth;
     private int _lockDepth;
     private readonly Dictionary<string, int> _activeLockPaths = new();
+    private readonly bool _isRepl;
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
@@ -40,9 +42,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// </summary>
     private readonly bool _runUnreachableCheck;
 
-    public SemanticValidator(ScopeTree scopeTree, IReadOnlyList<IAnalysisRule>? rules = null)
+    public SemanticValidator(ScopeTree scopeTree, IReadOnlyList<IAnalysisRule>? rules = null, bool isRepl = false)
     {
         _scopeTree = scopeTree;
+        _isRepl = isRepl;
 
         var allRules = rules ?? RuleRegistry.GetAllRules();
 
@@ -85,6 +88,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _allStatements = statements;
         _loopDepth = 0;
         _functionDepth = 0;
+        _blockDepth = 0;
         _elevateDepth = 0;
 
         CheckUnreachableStatements(statements);
@@ -313,9 +317,17 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         var savedStatements = _allStatements;
         _allStatements = stmt.Statements;
         CheckUnreachableStatements(stmt.Statements);
-        foreach (var s in stmt.Statements)
+        _blockDepth++;
+        try
         {
-            s.Accept(this);
+            foreach (var s in stmt.Statements)
+            {
+                s.Accept(this);
+            }
+        }
+        finally
+        {
+            _blockDepth--;
         }
         _allStatements = savedStatements;
         return null;
@@ -519,6 +531,64 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 _activeLockPaths.Remove(literalPath);
             else
                 _activeLockPaths[literalPath] = remaining;
+        }
+
+        return null;
+    }
+
+    public object? VisitUnsetStmt(UnsetStmt stmt)
+    {
+        // SA0844 — unset is only valid at top level (not inside a function, lambda, or block)
+        if (_functionDepth > 0 || _blockDepth > 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0844.CreateDiagnostic(stmt.UnsetKeyword.Span));
+            return null;
+        }
+
+        foreach (var target in stmt.Targets)
+        {
+            string name = target.Name;
+
+            // SA0841 — cannot unset built-in namespace or built-in global function
+            if (StdlibRegistry.IsBuiltInFunction(name) || StdlibRegistry.IsBuiltInNamespace(name))
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0841.CreateDiagnostic(target.Span, name));
+                continue;
+            }
+
+            // Look up in global scope (built-ins are at line 0, skip them)
+            SymbolInfo? symbol = null;
+            foreach (var candidate in _scopeTree.GlobalScope.GetSymbolsByName(name))
+            {
+                if (candidate.Span.StartLine > 0)
+                {
+                    symbol = candidate;
+                    break;
+                }
+            }
+
+            if (symbol == null)
+            {
+                // SA0840 — target is unknown / never declared
+                _diagnostics.Add(DiagnosticDescriptors.SA0840.CreateDiagnostic(target.Span, name));
+                continue;
+            }
+
+            // SA0842 — cannot unset an import binding
+            bool isImport = symbol.SourceUri != null
+                || symbol.Detail?.StartsWith("imported from", StringComparison.Ordinal) == true
+                || symbol.Detail?.StartsWith("namespace from", StringComparison.Ordinal) == true;
+            if (isImport)
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0842.CreateDiagnostic(target.Span, name));
+                continue;
+            }
+
+            // SA0843 — cannot unset a const in a script (allowed in REPL)
+            if (symbol.Kind == SymbolKind.Constant && !_isRepl)
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0843.CreateDiagnostic(target.Span, name));
+            }
         }
 
         return null;
