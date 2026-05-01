@@ -107,11 +107,48 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         // Push all classified tokens to the builder
         var tokenList = result.Tokens;
         var classified = walker.ClassifiedTokens;
-        for (int i = 0; i < tokenList.Count; i++)
+        EmitTokens(builder, tokenList, classified);
+
+        _logger.LogDebug("SemanticTokens: tokenized {Uri}", identifier.TextDocument.Uri);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Pushes classifications for every token in <paramref name="tokens"/> into <paramref name="builder"/>,
+    /// recursing into the inner token lists carried by <see cref="TokenType.InterpolatedString"/>,
+    /// <see cref="TokenType.CommandLiteral"/>, and related multi-segment tokens.
+    /// </summary>
+    private static void EmitTokens(
+        SemanticTokensBuilder builder,
+        System.Collections.Generic.IReadOnlyList<Token> tokens,
+        System.Collections.Generic.IReadOnlyDictionary<(int Line, int Col), (int Type, int Modifiers)> classified)
+    {
+        for (int i = 0; i < tokens.Count; i++)
         {
-            var token = tokenList[i];
+            var token = tokens[i];
             if (token.Type == TokenType.Eof)
             {
+                continue;
+            }
+
+            // Interpolated strings and command literals carry their inner expression
+            // tokens in token.Literal as a List<object> whose elements are either
+            // string (literal segment) or List<Token> (an inner expression). Recurse
+            // so identifiers inside ${...} / {...} receive semantic colors too.
+            if (token.Literal is System.Collections.Generic.List<object> parts &&
+                (token.Type == TokenType.InterpolatedString ||
+                 token.Type == TokenType.CommandLiteral ||
+                 token.Type == TokenType.PassthroughCommandLiteral ||
+                 token.Type == TokenType.StrictCommandLiteral ||
+                 token.Type == TokenType.StrictPassthroughCommandLiteral))
+            {
+                foreach (var part in parts)
+                {
+                    if (part is System.Collections.Generic.List<Token> innerTokens)
+                    {
+                        EmitTokens(builder, innerTokens, classified);
+                    }
+                }
                 continue;
             }
 
@@ -124,9 +161,6 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 builder.Push(line, col, length, cls.Type, cls.Modifiers);
             }
         }
-
-        _logger.LogDebug("SemanticTokens: tokenized {Uri}", identifier.TextDocument.Uri);
-        return Task.CompletedTask;
     }
 
     /// <summary>

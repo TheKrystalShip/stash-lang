@@ -412,7 +412,7 @@
     },
 
     "command-interpolation": {
-      "name": "meta.interpolation.command.stash",
+      "name": "meta.interpolation.expression.stash",
       "begin": "\\$\\{",
       "beginCaptures": {
         "0": { "name": "punctuation.section.interpolation.begin.stash" }
@@ -422,16 +422,7 @@
         "0": { "name": "punctuation.section.interpolation.end.stash" }
       },
       "patterns": [
-        { "include": "#comments" },
-        { "include": "#constants" },
-        { "include": "#interpolated-string-prefix" },
-        { "include": "#string" },
-        { "include": "#numbers" },
-        { "include": "#operators" },
-        { "include": "#control-keywords" },
-        { "include": "#function-call" },
-        { "include": "#variable-declaration" },
-        { "include": "#identifiers" }
+        { "include": "$self" }
       ]
     },
 
@@ -500,14 +491,13 @@
     },
 
     "triple-quoted-interpolated-string": {
-      "name": "string.quoted.triple.interpolated.stash",
       "begin": "\\$\"\"\"",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.string.begin.stash" }
+        "0": { "name": "punctuation.definition.string.begin.stash string.quoted.triple.interpolated.stash" }
       },
       "end": "\"\"\"",
       "endCaptures": {
-        "0": { "name": "punctuation.definition.string.end.stash" }
+        "0": { "name": "punctuation.definition.string.end.stash string.quoted.triple.interpolated.stash" }
       },
       "patterns": [
         { "include": "#string-interpolation-bare" },
@@ -520,14 +510,13 @@
     },
 
     "triple-quoted-string": {
-      "name": "string.quoted.triple.stash",
       "begin": "\"\"\"",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.string.begin.stash" }
+        "0": { "name": "punctuation.definition.string.begin.stash string.quoted.triple.stash" }
       },
       "end": "\"\"\"",
       "endCaptures": {
-        "0": { "name": "punctuation.definition.string.end.stash" }
+        "0": { "name": "punctuation.definition.string.end.stash string.quoted.triple.stash" }
       },
       "patterns": [
         { "include": "#string-interpolation-dollar" },
@@ -544,14 +533,13 @@
     },
 
     "interpolated-string-prefix": {
-      "name": "string.interpolated.stash",
       "begin": "\\$\"",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.string.begin.stash" }
+        "0": { "name": "punctuation.definition.string.begin.stash string.interpolated.stash" }
       },
       "end": "\"",
       "endCaptures": {
-        "0": { "name": "punctuation.definition.string.end.stash" }
+        "0": { "name": "punctuation.definition.string.end.stash string.interpolated.stash" }
       },
       "patterns": [
         { "include": "#string-interpolation-bare" },
@@ -564,14 +552,13 @@
     },
 
     "string": {
-      "name": "string.quoted.double.stash",
       "begin": "\"",
       "beginCaptures": {
-        "0": { "name": "punctuation.definition.string.begin.stash" }
+        "0": { "name": "punctuation.definition.string.begin.stash string.quoted.double.stash" }
       },
       "end": "\"",
       "endCaptures": {
-        "0": { "name": "punctuation.definition.string.end.stash" }
+        "0": { "name": "punctuation.definition.string.end.stash string.quoted.double.stash" }
       },
       "patterns": [
         { "include": "#string-interpolation-dollar" },
@@ -588,7 +575,7 @@
     },
 
     "string-interpolation-bare": {
-      "name": "meta.interpolation.stash",
+      "name": "meta.interpolation.expression.stash",
       "begin": "\\{",
       "beginCaptures": {
         "0": { "name": "punctuation.section.interpolation.begin.stash" }
@@ -598,12 +585,12 @@
         "0": { "name": "punctuation.section.interpolation.end.stash" }
       },
       "patterns": [
-        { "include": "#expression" }
+        { "include": "$self" }
       ]
     },
 
     "string-interpolation-dollar": {
-      "name": "meta.interpolation.stash",
+      "name": "meta.interpolation.expression.stash",
       "begin": "\\$\\{",
       "beginCaptures": {
         "0": { "name": "punctuation.section.interpolation.begin.stash" }
@@ -613,24 +600,7 @@
         "0": { "name": "punctuation.section.interpolation.end.stash" }
       },
       "patterns": [
-        { "include": "#expression" }
-      ]
-    },
-
-    "expression": {
-      "patterns": [
-        { "include": "#comments" },
-        { "include": "#constants" },
-        { "include": "#triple-quoted-interpolated-string" },
-        { "include": "#triple-quoted-string" },
-        { "include": "#interpolated-string-prefix" },
-        { "include": "#string" },
-        { "include": "#numbers" },
-        { "include": "#operators" },
-        { "include": "#control-keywords" },
-        { "include": "#function-call" },
-        { "include": "#variable-declaration" },
-        { "include": "#identifiers" }
+        { "include": "$self" }
       ]
     },
 

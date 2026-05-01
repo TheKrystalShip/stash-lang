@@ -69,6 +69,10 @@ Six new top-level namespaces extracted from overloaded namespaces. All old names
 
 All old names emit SA0830 (`DeprecatedBuiltInMember`) when used. See [Stdlib Namespace Audit spec](.kanban/2-in-progress/Stdlib%20Namespace%20Audit%20—%20Mixed-Responsibility%20Cleanup.md).
 
+### Fixed
+
+- **Editor (TextMate grammar):** Identifiers, namespace members, struct types, and dot-property access now highlight correctly inside string interpolations (`$"{expr}"`, `"text ${expr}"`, triple-quoted variants, and `$(cmd ${expr})` command interpolations). Two independent bugs were fixed: (1) the TextMate grammar wrapped interpolation contents in a `string.*` parent scope, suppressing both inner scopes and semantic tokens — interpolation content now uses `meta.interpolation.expression.stash` and falls through to `$self`; (2) the LSP `SemanticTokensHandler` iterated only the outer token list, never visiting the inner tokens nested inside `InterpolatedString` / `CommandLiteral` tokens — it now recurses into them so identifiers inside `${…}` / `{…}` receive their semantic colors. **Theme migration:** the legacy `meta.interpolation.stash` and `meta.interpolation.command.stash` scopes are removed; themes that targeted them should switch to `meta.interpolation.expression.stash`.
+
 ### Added
 
 #### Persistent REPL History
