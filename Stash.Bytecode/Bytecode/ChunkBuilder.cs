@@ -319,6 +319,13 @@ public sealed class ChunkBuilder
             byte moveA = Instruction.GetA(inst0);  // destination
             byte moveB = Instruction.GetB(inst0);  // source
 
+            // Pattern 11: Move(A, A) — self-move is a no-op, drop it.
+            if (moveA == moveB)
+            {
+                removals.Add(i);
+                continue;
+            }
+
             uint inst1 = _code[i + 1];
             OpCode op1 = Instruction.GetOp(inst1);
 
@@ -342,6 +349,14 @@ public sealed class ChunkBuilder
             if (op1 == OpCode.SetGlobal && Instruction.GetA(inst1) == moveA)
             {
                 _code[i + 1] = Instruction.EncodeABx(OpCode.SetGlobal, moveB, Instruction.GetBx(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 6: Move(A,B) + InitConstGlobal(A, slotBx) → InitConstGlobal(B, slotBx)
+            if (op1 == OpCode.InitConstGlobal && Instruction.GetA(inst1) == moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABx(OpCode.InitConstGlobal, moveB, Instruction.GetBx(inst1));
                 removals.Add(i);
                 continue;
             }
