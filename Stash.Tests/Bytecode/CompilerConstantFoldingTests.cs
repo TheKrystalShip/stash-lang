@@ -107,7 +107,7 @@ public class CompilerConstantFoldingTests : BytecodeTestBase
     public void ConstPropagation_RuntimeExpression_NotFolded()
     {
         // const X = 5; let y = 3; X + y → not folded (y is variable)
-        string disasm = Disassemble("const X = 5; let y = 3; X + y;");
+        string disasm = Disassemble("const X = 5; let y = 3; X + y;", enableDce: false);
         Assert.Contains("add", disasm);
     }
 

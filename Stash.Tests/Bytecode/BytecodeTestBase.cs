@@ -52,14 +52,14 @@ public abstract class BytecodeTestBase
         return value;
     }
 
-    protected static Chunk CompileSource(string source)
+    protected static Chunk CompileSource(string source, bool enableDce = true)
     {
         var lexer = new Lexer(source, "<test>");
         List<Token> tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         List<Stmt> stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
+        return Compiler.Compile(stmts, enableDce);
     }
 
     protected static object? Execute(string source)
@@ -72,9 +72,9 @@ public abstract class BytecodeTestBase
     /// <summary>
     /// Compile source and return the disassembly string.
     /// </summary>
-    protected static string Disassemble(string source)
+    protected static string Disassemble(string source, bool enableDce = true)
     {
-        Chunk chunk = CompileSource(source);
+        Chunk chunk = CompileSource(source, enableDce);
         return Disassembler.Disassemble(chunk);
     }
 }

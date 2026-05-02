@@ -14,6 +14,7 @@ public class PeepholeExtendedTests
         // Build a synthetic chunk: LoadNull r0, Move r0 r0, Return r0 0 0
         // The self-move should be dropped unconditionally.
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 2;
 
         builder.EmitA(OpCode.LoadNull, 0);       // instruction 0 — effectful
@@ -32,6 +33,7 @@ public class PeepholeExtendedTests
     {
         // Move r1, r0 is NOT a self-move — must be preserved.
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 2;
 
         builder.EmitA(OpCode.LoadNull, 0);       // instruction 0
@@ -211,6 +213,7 @@ public class PeepholeExtendedTests
         // Return r4, 1, 0
         // → GetTable r4, r3, r1
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 6;
 
         builder.EmitA(OpCode.LoadNull, 0);
@@ -240,6 +243,7 @@ public class PeepholeExtendedTests
         // Return r4, 1, 0
         // → GetTable r4, r1, r3
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 6;
 
         builder.EmitA(OpCode.LoadNull, 0);
@@ -269,6 +273,7 @@ public class PeepholeExtendedTests
         // Return r4, 1, 0
         // → GetField r4, r3, k0
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 6;
 
         ushort k0 = builder.AddConstant("field");
@@ -315,6 +320,7 @@ public class PeepholeExtendedTests
         //   4: <companion: icSlot1>   ← must be untouched
         //   5: Return r0, 0, 0
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 8;
 
         ushort k0 = builder.AddConstant("field");
@@ -431,6 +437,7 @@ public class PeepholeExtendedTests
         // Return r4, 1, 0
         // → Self r4, r3, k0
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.MaxRegs = 7;
 
         ushort k0 = builder.AddConstant("method");

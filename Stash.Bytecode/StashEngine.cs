@@ -136,6 +136,12 @@ public class StashEngine
     public bool OptimizeBytecode { get; set; } = true;
 
     /// <summary>
+    /// When true (default), the trivial dead-code elimination pass runs during compilation,
+    /// removing pure instructions whose result register is never read.
+    /// </summary>
+    public bool EnableDce { get; set; } = true;
+
+    /// <summary>
     /// Adds a custom stdlib provider whose namespaces and globals will be
     /// merged into the VM alongside Stash's built-in standard library.
     /// Must be called before the first script execution.

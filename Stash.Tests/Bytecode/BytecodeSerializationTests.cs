@@ -47,6 +47,7 @@ public class BytecodeSerializationTests
     public void RoundTrip_SimpleOpcodes_PreservesCode()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.EmitA(OpCode.LoadNull, 0);
         builder.EmitA(OpCode.LoadNull, 0);
         builder.EmitA(OpCode.Return, 0);
@@ -195,6 +196,7 @@ public class BytecodeSerializationTests
     public void RoundTrip_SourceMap_PreservesLocations()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
 
         // Add a mapping, emit instruction, then add next mapping (offset is auto-tracked)
         builder.AddSourceMapping(new SourceSpan("test.stash",  1, 1, 1, 5));

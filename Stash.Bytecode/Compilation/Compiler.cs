@@ -54,8 +54,11 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
         _builder = new ChunkBuilder();
         _scope = new CompilerScope();
         _builder.Name = functionName;
-
         _builder.SetGlobalSlots(globalSlots);
+
+        // Propagate DCE flag from parent so child chunks honour the same setting
+        if (enclosing != null)
+            _builder.EnableDce = enclosing._builder.EnableDce;
     }
 
     // ==================================================================
@@ -63,10 +66,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     // ==================================================================
 
     /// <summary>Compile a list of statements (script body) into a Chunk.</summary>
-    public static Chunk Compile(List<Stmt> statements)
+    public static Chunk Compile(List<Stmt> statements, bool enableDce = true)
     {
         var globalSlots = new GlobalSlotAllocator();
-        return Compile(statements, globalSlots);
+        return Compile(statements, globalSlots, enableDce);
     }
 
     /// <summary>
@@ -74,9 +77,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// Used by the REPL to share slot assignments across successive inputs, ensuring that lambdas
     /// compiled in an earlier REPL chunk read the correct global slots when invoked later.
     /// </summary>
-    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots)
+    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true)
     {
         var compiler = new Compiler(null, null, globalSlots);
+        compiler._builder.EnableDce = enableDce;
 
         foreach (Stmt stmt in statements)
             compiler.CompileStmt(stmt);

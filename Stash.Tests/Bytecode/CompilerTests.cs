@@ -33,7 +33,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Literal_IntegerConstant_EmitsConst()
     {
-        string disasm = Disassemble("42;");
+        string disasm = Disassemble("42;", enableDce: false);
         Assert.Contains("load.k", disasm);
         Assert.Contains("42", disasm);
     }
@@ -41,28 +41,28 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Literal_Null_EmitsNull()
     {
-        string disasm = Disassemble("null;");
+        string disasm = Disassemble("null;", enableDce: false);
         Assert.Contains("null", disasm);
     }
 
     [Fact]
     public void Literal_True_EmitsTrue()
     {
-        string disasm = Disassemble("true;");
+        string disasm = Disassemble("true;", enableDce: false);
         Assert.Contains("true", disasm);
     }
 
     [Fact]
     public void Literal_False_EmitsFalse()
     {
-        string disasm = Disassemble("false;");
+        string disasm = Disassemble("false;", enableDce: false);
         Assert.Contains("false", disasm);
     }
 
     [Fact]
     public void Literal_String_EmitsConst()
     {
-        string disasm = Disassemble("\"hello\";");
+        string disasm = Disassemble("\"hello\";", enableDce: false);
         Assert.Contains("const", disasm);
         Assert.Contains("\"hello\"", disasm);
     }
@@ -70,7 +70,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Literal_Float_EmitsConst()
     {
-        string disasm = Disassemble("3.14;");
+        string disasm = Disassemble("3.14;", enableDce: false);
         Assert.Contains("const", disasm);
         Assert.Contains("3.14", disasm);
     }
@@ -82,21 +82,21 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Unary_Negate_EmitsNegate()
     {
-        string disasm = Disassemble("let x = 42; -x;");
+        string disasm = Disassemble("let x = 42; -x;", enableDce: false);
         Assert.Contains("neg", disasm);
     }
 
     [Fact]
     public void Unary_LogicalNot_EmitsNot()
     {
-        string disasm = Disassemble("let x = true; !x;");
+        string disasm = Disassemble("let x = true; !x;", enableDce: false);
         Assert.Contains("not", disasm);
     }
 
     [Fact]
     public void Unary_BitwiseNot_EmitsBitNot()
     {
-        string disasm = Disassemble("let x = 42; ~x;");
+        string disasm = Disassemble("let x = 42; ~x;", enableDce: false);
         Assert.Contains("bnot", disasm);
     }
 
@@ -107,35 +107,35 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Binary_Addition_EmitsAdd()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a + b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a + b;", enableDce: false);
         Assert.Contains("add", disasm);
     }
 
     [Fact]
     public void Binary_Subtraction_EmitsSubtract()
     {
-        string disasm = Disassemble("let a = 5; let b = 3; a - b;");
+        string disasm = Disassemble("let a = 5; let b = 3; a - b;", enableDce: false);
         Assert.Contains("sub", disasm);
     }
 
     [Fact]
     public void Binary_Multiplication_EmitsMultiply()
     {
-        string disasm = Disassemble("let a = 2; let b = 3; a * b;");
+        string disasm = Disassemble("let a = 2; let b = 3; a * b;", enableDce: false);
         Assert.Contains("mul", disasm);
     }
 
     [Fact]
     public void Binary_Division_EmitsDivide()
     {
-        string disasm = Disassemble("let a = 10; let b = 2; a / b;");
+        string disasm = Disassemble("let a = 10; let b = 2; a / b;", enableDce: false);
         Assert.Contains("div", disasm);
     }
 
     [Fact]
     public void Binary_Modulo_EmitsModulo()
     {
-        string disasm = Disassemble("let a = 10; let b = 3; a % b;");
+        string disasm = Disassemble("let a = 10; let b = 3; a % b;", enableDce: false);
         Assert.Contains("mod", disasm);
     }
 
@@ -146,42 +146,42 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Binary_Equal_EmitsEqual()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a == b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a == b;", enableDce: false);
         Assert.Contains("eq", disasm);
     }
 
     [Fact]
     public void Binary_NotEqual_EmitsNotEqual()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a != b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a != b;", enableDce: false);
         Assert.Contains("ne", disasm);
     }
 
     [Fact]
     public void Binary_LessThan_EmitsLessThan()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a < b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a < b;", enableDce: false);
         Assert.Contains("lt", disasm);
     }
 
     [Fact]
     public void Binary_GreaterThan_EmitsGreaterThan()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a > b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a > b;", enableDce: false);
         Assert.Contains("gt", disasm);
     }
 
     [Fact]
     public void Binary_LessEqual_EmitsLessEqual()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a <= b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a <= b;", enableDce: false);
         Assert.Contains("le", disasm);
     }
 
     [Fact]
     public void Binary_GreaterEqual_EmitsGreaterEqual()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; a >= b;");
+        string disasm = Disassemble("let a = 1; let b = 2; a >= b;", enableDce: false);
         Assert.Contains("ge", disasm);
     }
 
@@ -192,35 +192,35 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Binary_BitwiseAnd_EmitsBitAnd()
     {
-        string disasm = Disassemble("let a = 5; let b = 3; a & b;");
+        string disasm = Disassemble("let a = 5; let b = 3; a & b;", enableDce: false);
         Assert.Contains("band", disasm);
     }
 
     [Fact]
     public void Binary_BitwiseOr_EmitsBitOr()
     {
-        string disasm = Disassemble("let a = 5; let b = 3; a | b;");
+        string disasm = Disassemble("let a = 5; let b = 3; a | b;", enableDce: false);
         Assert.Contains("bor", disasm);
     }
 
     [Fact]
     public void Binary_BitwiseXor_EmitsBitXor()
     {
-        string disasm = Disassemble("let a = 5; let b = 3; a ^ b;");
+        string disasm = Disassemble("let a = 5; let b = 3; a ^ b;", enableDce: false);
         Assert.Contains("bxor", disasm);
     }
 
     [Fact]
     public void Binary_ShiftLeft_EmitsShiftLeft()
     {
-        string disasm = Disassemble("let a = 1; let b = 3; a << b;");
+        string disasm = Disassemble("let a = 1; let b = 3; a << b;", enableDce: false);
         Assert.Contains("shl", disasm);
     }
 
     [Fact]
     public void Binary_ShiftRight_EmitsShiftRight()
     {
-        string disasm = Disassemble("let a = 8; let b = 2; a >> b;");
+        string disasm = Disassemble("let a = 8; let b = 2; a >> b;", enableDce: false);
         Assert.Contains("shr", disasm);
     }
 
@@ -231,7 +231,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Logic_And_EmitsAndWithJump()
     {
-        string disasm = Disassemble("let a = true; let b = false; a && b;");
+        string disasm = Disassemble("let a = true; let b = false; a && b;", enableDce: false);
         // Register VM short-circuit AND uses test.set + jmp (jmp has no arrow in disassembly)
         Assert.Contains("test.set", disasm);
     }
@@ -239,7 +239,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Logic_Or_EmitsOrWithJump()
     {
-        string disasm = Disassemble("let a = false; let b = true; a || b;");
+        string disasm = Disassemble("let a = false; let b = true; a || b;", enableDce: false);
         Assert.Contains("test.set", disasm);
     }
 
@@ -250,7 +250,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NullCoalesce_EmitsNullCoalesceWithJump()
     {
-        string disasm = Disassemble("null ?? 42;");
+        string disasm = Disassemble("null ?? 42;", enableDce: false);
         Assert.Contains("null", disasm);
         Assert.Contains("eq", disasm);
         Assert.Contains("jmp.true", disasm);
@@ -264,7 +264,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Ternary_EmitsConditionAndJumps()
     {
-        string disasm = Disassemble("let x = true; x ? 1 : 2;");
+        string disasm = Disassemble("let x = true; x ? 1 : 2;", enableDce: false);
         Assert.Contains("jmp.false", disasm);
         Assert.Contains("jmp", disasm);
     }
@@ -276,7 +276,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void VarDecl_WithInitializer_EmitsValue()
     {
-        string disasm = Disassemble("let x = 42;");
+        string disasm = Disassemble("let x = 42;", enableDce: false);
         Assert.Contains("const", disasm);
         Assert.Contains("42", disasm);
     }
@@ -284,14 +284,14 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void VarDecl_WithoutInitializer_EmitsNull()
     {
-        string disasm = Disassemble("let x;");
+        string disasm = Disassemble("let x;", enableDce: false);
         Assert.Contains("null", disasm);
     }
 
     [Fact]
     public void ConstDecl_EmitsValue()
     {
-        string disasm = Disassemble("const x = 42;");
+        string disasm = Disassemble("const x = 42;", enableDce: false);
         Assert.Contains("const", disasm);
         Assert.Contains("42", disasm);
     }
@@ -311,7 +311,7 @@ public class CompilerTests : BytecodeTestBase
     public void Identifier_Local_EmitsLoadLocal()
     {
         // Top-level variables are global; use a function body to get local register access
-        Chunk chunk = CompileSource("fn foo() { let x = 42; x; }");
+        Chunk chunk = CompileSource("fn foo() { let x = 42; x; }", enableDce: false);
         Chunk? fnChunk = null;
         foreach (StashValue c in chunk.Constants)
             if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
@@ -323,7 +323,7 @@ public class CompilerTests : BytecodeTestBase
     public void Assign_Local_EmitsStoreLocal()
     {
         // Top-level variables are global; use a function body to get local register assignment
-        Chunk chunk = CompileSource("fn foo() { let x = 1; x = 2; }");
+        Chunk chunk = CompileSource("fn foo() { let x = 1; x = 2; }", enableDce: false);
         Chunk? fnChunk = null;
         foreach (StashValue c in chunk.Constants)
             if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
@@ -340,7 +340,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Block_PopsLocalsOnExit()
     {
-        string disasm = Disassemble("{ let x = 1; let y = 2; }");
+        string disasm = Disassemble("{ let x = 1; let y = 2; }", enableDce: false);
         // In register VM, locals are freed by register reuse, not explicit pop instructions
         int loadKCount = CountOccurrences(disasm, "load.k");
         Assert.True(loadKCount >= 2, $"Expected at least 2 load.k instructions for the 2 locals, found {loadKCount}");
@@ -353,14 +353,14 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void If_WithoutElse_EmitsJumpFalse()
     {
-        string disasm = Disassemble("let x = true; if (x) { 42; }");
+        string disasm = Disassemble("let x = true; if (x) { 42; }", enableDce: false);
         Assert.Contains("jmp.false", disasm);
     }
 
     [Fact]
     public void If_WithElse_EmitsJumpFalseAndJump()
     {
-        string disasm = Disassemble("let x = true; if (x) { 1; } else { 2; }");
+        string disasm = Disassemble("let x = true; if (x) { 1; } else { 2; }", enableDce: false);
         Assert.Contains("jmp.false", disasm);
         Assert.Contains("jmp", disasm);
     }
@@ -372,7 +372,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void While_EmitsLoopAndJumpFalse()
     {
-        string disasm = Disassemble("let x = 0; while (x < 10) { x = x + 1; }");
+        string disasm = Disassemble("let x = 0; while (x < 10) { x = x + 1; }", enableDce: false);
         Assert.Contains("loop", disasm);
         Assert.True(disasm.Contains("jmp.false") || disasm.Contains("jmp.lt.false"), "Expected jmp.false or jmp.lt.false");
         Assert.Contains("lt", disasm);
@@ -385,7 +385,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void DoWhile_EmitsLoopAfterCondition()
     {
-        string disasm = Disassemble("let x = 0; do { x = x + 1; } while (x < 10);");
+        string disasm = Disassemble("let x = 0; do { x = x + 1; } while (x < 10);", enableDce: false);
         Assert.Contains("loop", disasm);
         Assert.True(disasm.Contains("jmp.false") || disasm.Contains("jmp.lt.false"), "Expected jmp.false or jmp.lt.false");
     }
@@ -397,7 +397,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void For_EmitsInitConditionBodyIncrementLoop()
     {
-        string disasm = Disassemble("for (let i = 0; i < 10; i = i + 1) { 42; }");
+        string disasm = Disassemble("for (let i = 0; i < 10; i = i + 1) { 42; }", enableDce: false);
         Assert.Contains("loop", disasm);
         Assert.Contains("jmp.false", disasm);
         Assert.Contains("lt", disasm);
@@ -406,7 +406,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NumericFor_EmitsForPrepAndForLoop()
     {
-        string disasm = Disassemble("for (let i = 0; i < 10; i++) { 42; }");
+        string disasm = Disassemble("for (let i = 0; i < 10; i++) { 42; }", enableDce: false);
         Assert.Contains("for.prep", disasm);
         Assert.Contains("for.loop", disasm);
         Assert.DoesNotContain("jmp.false", disasm);
@@ -415,7 +415,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NumericFor_LessEqual_EmitsForPrepAndForLoop()
     {
-        string disasm = Disassemble("for (let i = 0; i <= 9; i++) { 42; }");
+        string disasm = Disassemble("for (let i = 0; i <= 9; i++) { 42; }", enableDce: false);
         Assert.Contains("for.prep", disasm);
         Assert.Contains("for.loop", disasm);
     }
@@ -423,7 +423,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NumericFor_Decrement_EmitsForPrepAndForLoop()
     {
-        string disasm = Disassemble("for (let i = 10; i > 0; i--) { 42; }");
+        string disasm = Disassemble("for (let i = 10; i > 0; i--) { 42; }", enableDce: false);
         Assert.Contains("for.prep", disasm);
         Assert.Contains("for.loop", disasm);
     }
@@ -431,7 +431,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NumericFor_GreaterEqual_EmitsForPrepAndForLoop()
     {
-        string disasm = Disassemble("for (let i = 10; i >= 0; i--) { 42; }");
+        string disasm = Disassemble("for (let i = 10; i >= 0; i--) { 42; }", enableDce: false);
         Assert.Contains("for.prep", disasm);
         Assert.Contains("for.loop", disasm);
     }
@@ -440,7 +440,7 @@ public class CompilerTests : BytecodeTestBase
     public void NumericFor_NonMatchingPattern_FallsBackToGeneric()
     {
         // i = i + 1 is AssignExpr, not UpdateExpr — should NOT match
-        string disasm = Disassemble("for (let i = 0; i < 10; i = i + 1) { 42; }");
+        string disasm = Disassemble("for (let i = 0; i < 10; i = i + 1) { 42; }", enableDce: false);
         Assert.DoesNotContain("for.prep", disasm);
         Assert.DoesNotContain("for.loop", disasm);
         Assert.Contains("jmp.false", disasm);
@@ -450,7 +450,7 @@ public class CompilerTests : BytecodeTestBase
     public void NumericFor_MismatchedStepAndComparison_FallsBackToGeneric()
     {
         // ++ with > doesn't make sense — should fall back
-        string disasm = Disassemble("for (let i = 0; i > 10; i++) { 42; }");
+        string disasm = Disassemble("for (let i = 0; i > 10; i++) { 42; }", enableDce: false);
         Assert.DoesNotContain("for.prep", disasm);
         Assert.DoesNotContain("for.loop", disasm);
     }
@@ -458,7 +458,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NumericFor_IntLiteralInit_EmitsForPrepII()
     {
-        string disasm = Disassemble("for (let i = 0; i < 10; i++) { 42; }");
+        string disasm = Disassemble("for (let i = 0; i < 10; i++) { 42; }", enableDce: false);
         Assert.Contains("for.prepII", disasm);
         Assert.Contains("for.loopII", disasm);
     }
@@ -466,7 +466,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void NumericFor_IntLiteralInit_Decrement_EmitsForPrepII()
     {
-        string disasm = Disassemble("for (let i = 10; i > 0; i--) { 42; }");
+        string disasm = Disassemble("for (let i = 10; i > 0; i--) { 42; }", enableDce: false);
         Assert.Contains("for.prepII", disasm);
         Assert.Contains("for.loopII", disasm);
     }
@@ -478,7 +478,7 @@ public class CompilerTests : BytecodeTestBase
         string disasm = Disassemble("""
             let start = 0;
             for (let i = start; i < 10; i++) { 42; }
-            """);
+            """, enableDce: false);
         Assert.DoesNotContain("for.prepII", disasm);
         Assert.DoesNotContain("for.loopII", disasm);
         Assert.Contains("for.prep", disasm);
@@ -489,7 +489,7 @@ public class CompilerTests : BytecodeTestBase
     public void NumericFor_ExpressionInit_EmitsGenericForPrep()
     {
         // When init is an expression (not a literal), should NOT specialize
-        string disasm = Disassemble("for (let i = 1 + 2; i < 10; i++) { 42; }");
+        string disasm = Disassemble("for (let i = 1 + 2; i < 10; i++) { 42; }", enableDce: false);
         Assert.DoesNotContain("for.prepII", disasm);
         Assert.DoesNotContain("for.loopII", disasm);
         Assert.Contains("for.prep", disasm);
@@ -503,7 +503,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Break_EmitsJump()
     {
-        string disasm = Disassemble("while (true) { break; }");
+        string disasm = Disassemble("while (true) { break; }", enableDce: false);
         Assert.Contains("jmp", disasm);
         Assert.Contains("loop", disasm);
     }
@@ -511,7 +511,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Continue_InWhile_EmitsLoop()
     {
-        string disasm = Disassemble("let x = 0; while (x < 10) { x = x + 1; continue; }");
+        string disasm = Disassemble("let x = 0; while (x < 10) { x = x + 1; continue; }", enableDce: false);
         int loopCount = CountOccurrences(disasm, "loop");
         Assert.True(loopCount >= 2, $"Expected >= 2 Loop instructions, found {loopCount}");
     }
@@ -535,14 +535,14 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Return_WithValue_EmitsValueAndReturn()
     {
-        string disasm = Disassemble("fn foo() { return 42; } foo();");
+        string disasm = Disassemble("fn foo() { return 42; } foo();", enableDce: false);
         Assert.Contains("ret", disasm);
     }
 
     [Fact]
     public void Return_WithoutValue_EmitsNullAndReturn()
     {
-        string disasm = Disassemble("fn foo() { return; } foo();");
+        string disasm = Disassemble("fn foo() { return; } foo();", enableDce: false);
         Assert.Contains("null", disasm);
         Assert.Contains("ret", disasm);
     }
@@ -554,7 +554,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void FnDecl_EmitsClosure()
     {
-        string disasm = Disassemble("fn add(a, b) { return a + b; }");
+        string disasm = Disassemble("fn add(a, b) { return a + b; }", enableDce: false);
         Assert.Contains("closure", disasm);
     }
 
@@ -599,7 +599,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Call_EmitsCallWithArgCount()
     {
-        string disasm = Disassemble("fn foo(x) { return x; } foo(42);");
+        string disasm = Disassemble("fn foo(x) { return x; } foo(42);", enableDce: false);
         Assert.Contains("call", disasm);
     }
 
@@ -610,14 +610,14 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Lambda_ExpressionBody_EmitsClosure()
     {
-        string disasm = Disassemble("let f = (x) => x + 1;");
+        string disasm = Disassemble("let f = (x) => x + 1;", enableDce: false);
         Assert.Contains("closure", disasm);
     }
 
     [Fact]
     public void Lambda_BlockBody_EmitsClosure()
     {
-        string disasm = Disassemble("let f = (x) => { return x + 1; };");
+        string disasm = Disassemble("let f = (x) => { return x + 1; };", enableDce: false);
         Assert.Contains("closure", disasm);
     }
 
@@ -642,7 +642,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Array_EmitsArrayOpcode()
     {
-        string disasm = Disassemble("[1, 2, 3];");
+        string disasm = Disassemble("[1, 2, 3];", enableDce: false);
         Assert.Contains("array", disasm);
     }
 
@@ -653,14 +653,14 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Index_Get_EmitsGetIndex()
     {
-        string disasm = Disassemble("let arr = [1, 2, 3]; arr[0];");
+        string disasm = Disassemble("let arr = [1, 2, 3]; arr[0];", enableDce: false);
         Assert.Contains("get.table", disasm);
     }
 
     [Fact]
     public void Index_Set_EmitsSetIndex()
     {
-        string disasm = Disassemble("let arr = [1, 2, 3]; arr[0] = 42;");
+        string disasm = Disassemble("let arr = [1, 2, 3]; arr[0] = 42;", enableDce: false);
         Assert.Contains("set.table", disasm);
     }
 
@@ -672,7 +672,7 @@ public class CompilerTests : BytecodeTestBase
     public void Dot_Get_EmitsGetField()
     {
         // Use non-call dot access so DotExpr emits GetFieldIC (not fused CallBuiltIn)
-        string disasm = Disassemble("let f = math.sqrt;");
+        string disasm = Disassemble("let f = math.sqrt;", enableDce: false);
         Assert.Contains("get.field", disasm);
         Assert.Contains("sqrt", disasm);
     }
@@ -684,7 +684,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void InterpolatedString_EmitsInterpolate()
     {
-        string disasm = Disassemble("let x = 42; $\"value is {x}\";");
+        string disasm = Disassemble("let x = 42; $\"value is {x}\";", enableDce: false);
         Assert.Contains("interpolate", disasm);
     }
 
@@ -696,7 +696,7 @@ public class CompilerTests : BytecodeTestBase
     public void Update_PrefixIncrement_EmitsAddAndStore()
     {
         // Top-level variables are global; use a function body to get StoreLocal
-        Chunk chunk = CompileSource("fn foo() { let x = 0; ++x; }");
+        Chunk chunk = CompileSource("fn foo() { let x = 0; ++x; }", enableDce: false);
         Chunk? fnChunk = null;
         foreach (StashValue c in chunk.Constants)
             if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
@@ -711,7 +711,7 @@ public class CompilerTests : BytecodeTestBase
     public void Update_PrefixIncrement_NonVoid_EmitsMove()
     {
         // When result IS used (e.g., assigned), move is still emitted
-        Chunk chunk = CompileSource("fn foo() { let x = 0; let y = ++x; }");
+        Chunk chunk = CompileSource("fn foo() { let x = 0; let y = ++x; }", enableDce: false);
         Chunk? fnChunk = null;
         foreach (StashValue c in chunk.Constants)
             if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
@@ -724,7 +724,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Update_PostfixIncrement_EmitsDupAndAdd()
     {
-        string disasm = Disassemble("let x = 0; x++;");
+        string disasm = Disassemble("let x = 0; x++;", enableDce: false);
         // In register VM, postfix increment uses addi (no dup instruction)
         Assert.True(disasm.Contains("addi") || disasm.Contains("add"), "Expected addi or add for postfix increment");
     }
@@ -736,7 +736,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Switch_EmitsDupEqualJump()
     {
-        string disasm = Disassemble("let x = 1; x switch { 1 => \"one\", _ => \"other\" };");
+        string disasm = Disassemble("let x = 1; x switch { 1 => \"one\", _ => \"other\" };", enableDce: false);
         // In register VM, switch uses eq + jmp.false per arm (no dup instruction)
         Assert.Contains("eq", disasm);
         Assert.True(disasm.Contains("jmp.false") || disasm.Contains("jmp.eq.false"), "Expected jmp.false or jmp.eq.false");
@@ -749,7 +749,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Grouping_TransparentToCompiler()
     {
-        string disasm = Disassemble("let a = 1; let b = 2; (a + b);");
+        string disasm = Disassemble("let a = 1; let b = 2; (a + b);", enableDce: false);
         Assert.Contains("add", disasm);
     }
 
@@ -777,7 +777,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void TryExpr_EmitsTryBeginAndTryEnd()
     {
-        string disasm = Disassemble("let x = try 42;");
+        string disasm = Disassemble("let x = try 42;", enableDce: false);
         Assert.Contains("try.begin", disasm);
         Assert.Contains("try.end", disasm);
     }
@@ -790,7 +790,7 @@ public class CompilerTests : BytecodeTestBase
     public void StructDecl_CompilesSuccessfully()
     {
         // Should compile without throwing — Phase 5 implements struct declarations
-        string disasm = Disassemble("struct Point { x, y }");
+        string disasm = Disassemble("struct Point { x, y }", enableDce: false);
         Assert.Contains("struct.decl", disasm);
     }
 
@@ -798,14 +798,14 @@ public class CompilerTests : BytecodeTestBase
     public void EnumDecl_CompilesSuccessfully()
     {
         // Should compile without throwing — Phase 5 implements enum declarations
-        string disasm = Disassemble("enum Color { Red, Green, Blue }");
+        string disasm = Disassemble("enum Color { Red, Green, Blue }", enableDce: false);
         Assert.Contains("enum.decl", disasm);
     }
 
     [Fact]
     public void Import_EmitsImportOpcode()
     {
-        string disasm = Disassemble("import { foo } from \"bar\";");
+        string disasm = Disassemble("import { foo } from \"bar\";", enableDce: false);
         Assert.Contains("import", disasm);
     }
 
@@ -816,7 +816,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Script_EndsWithNullReturn()
     {
-        string disasm = Disassemble("42;");
+        string disasm = Disassemble("42;", enableDce: false);
         string[] lines = disasm.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.Contains("ret", lines[^1]);
     }
@@ -824,7 +824,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Script_EmptyProgram_EmitsNullReturn()
     {
-        string disasm = Disassemble("");
+        string disasm = Disassemble("", enableDce: false);
         Assert.Contains("null", disasm);
         Assert.Contains("ret", disasm);
     }
@@ -837,7 +837,7 @@ public class CompilerTests : BytecodeTestBase
     public void Complex_NestedArithmetic_ProducesCorrectOrder()
     {
         // a + b * c parses as a + (b * c) → Multiply emitted before Add
-        string disasm = Disassemble("let a = 1; let b = 2; let c = 3; a + b * c;");
+        string disasm = Disassemble("let a = 1; let b = 2; let c = 3; a + b * c;", enableDce: false);
         int mulIdx = disasm.IndexOf("mul", StringComparison.Ordinal);
         int addIdx = disasm.IndexOf("add", StringComparison.Ordinal);
         Assert.True(mulIdx < addIdx, "mul should be emitted before add for correct precedence");
@@ -850,7 +850,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Await_EmitsAwait()
     {
-        string disasm = Disassemble("fn foo() { return 42; } let x = await foo();");
+        string disasm = Disassemble("fn foo() { return 42; } let x = await foo();", enableDce: false);
         Assert.Contains("await", disasm);
     }
 
@@ -861,7 +861,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Range_TwoOperands_EmitsRange()
     {
-        string disasm = Disassemble("0..10;");
+        string disasm = Disassemble("0..10;", enableDce: false);
         Assert.Contains("range", disasm);
     }
 
@@ -872,7 +872,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Spread_EmitsSpread()
     {
-        string disasm = Disassemble("let arr = [1, 2]; [...arr];");
+        string disasm = Disassemble("let arr = [1, 2]; [...arr];", enableDce: false);
         Assert.Contains("spread", disasm);
     }
 
@@ -883,7 +883,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void ForIn_EmitsIteratorAndIterate()
     {
-        string disasm = Disassemble("for (let x in [1, 2, 3]) { x; }");
+        string disasm = Disassemble("for (let x in [1, 2, 3]) { x; }", enableDce: false);
         Assert.Contains("iter.prep", disasm);
         Assert.Contains("iter.loop", disasm);
         Assert.Contains("loop", disasm);
@@ -917,7 +917,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Continue_InForLoop_JumpsToIncrement()
     {
-        string disasm = Disassemble("for (let i = 0; i < 10; i = i + 1) { continue; }");
+        string disasm = Disassemble("for (let i = 0; i < 10; i = i + 1) { continue; }", enableDce: false);
         Assert.Contains("loop", disasm);
     }
 
@@ -1007,7 +1007,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void SwitchStmt_EmitsEqAndJumps()
     {
-        string disasm = Disassemble("switch (1) { case 1: { let x = 1; } case 2: { let y = 2; } }");
+        string disasm = Disassemble("switch (1) { case 1: { let x = 1; } case 2: { let y = 2; } }", enableDce: false);
         Assert.Contains("eq", disasm);
         Assert.True(disasm.Contains("jmp.false") || disasm.Contains("jmp.eq.false"));
     }
@@ -1015,7 +1015,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void SwitchStmt_WithDefault_EmitsJump()
     {
-        string disasm = Disassemble("switch (1) { case 1: { let x = 1; } default: { let y = 2; } }");
+        string disasm = Disassemble("switch (1) { case 1: { let x = 1; } default: { let y = 2; } }", enableDce: false);
         Assert.Contains("eq", disasm);
         Assert.Contains("jmp", disasm);
     }

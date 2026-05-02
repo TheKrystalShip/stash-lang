@@ -175,6 +175,7 @@ public class DisassemblerTests
     public void Disassemble_HexOffsets_Used()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
         builder.EmitA(OpCode.LoadNull, 0);
@@ -247,6 +248,7 @@ public class DisassemblerTests
     public void Disassemble_SourceLineAnnotations_Shown()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
         builder.EmitA(OpCode.LoadNull, 0);
         builder.AddSourceMapping(new SourceSpan("test.stash", 2, 1, 2, 5));

@@ -126,6 +126,7 @@ public class ChunkBuilderTests
     public void Emit_MultipleInstructions_ProducesCorrectSequence()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         ushort constIdx = builder.AddConstant(42L);
         builder.EmitABx(OpCode.LoadK, 0, constIdx);   // instruction 0
         builder.EmitABC(OpCode.Add, 0, 0, 0);          // instruction 1
@@ -216,6 +217,7 @@ public class ChunkBuilderTests
     public void EmitJump_PatchJump_ProducesCorrectForwardOffset()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         // JmpFalse at instruction index 0 (placeholder sBx=0)
         int patch = builder.EmitJump(OpCode.JmpFalse);
         // Add at instruction index 1
@@ -247,6 +249,7 @@ public class ChunkBuilderTests
     public void EmitLoop_ProducesCorrectBackwardOffset()
     {
         var builder = new ChunkBuilder();
+        builder.EnableDce = false;
         int loopStart = builder.CurrentOffset;          // index 0
         builder.EmitABC(OpCode.Add, 0, 1, 2);           // instruction 0
         builder.EmitABC(OpCode.Sub, 0, 0, 1);           // instruction 1
