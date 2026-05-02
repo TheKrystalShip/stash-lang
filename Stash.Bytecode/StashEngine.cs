@@ -142,6 +142,12 @@ public class StashEngine
     public bool EnableDce { get; set; } = true;
 
     /// <summary>
+    /// When true (default), compilation uses the pass-pipeline framework (CFG construction +
+    /// registered optimization passes).  Set to false to use the legacy direct-mutation path.
+    /// </summary>
+    public bool EnableOptimizationPipeline { get; set; } = true;
+
+    /// <summary>
     /// Adds a custom stdlib provider whose namespaces and globals will be
     /// merged into the VM alongside Stash's built-in standard library.
     /// Must be called before the first script execution.

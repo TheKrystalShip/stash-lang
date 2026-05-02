@@ -1,3 +1,4 @@
+using Stash.Bytecode.Optimization;
 using Stash.Runtime;
 using Stash.Runtime.Stdlib;
 
@@ -65,6 +66,12 @@ public sealed class Chunk
 
     /// <summary>Optional stdlib manifest declaring required globals for load-time validation.</summary>
     public StdlibManifest? StdlibManifest { get; internal set; }
+
+    /// <summary>
+    /// Per-compilation pass-pipeline statistics.  Populated by <see cref="ChunkBuilder.Build"/>
+    /// when the optimization pipeline runs.  Not serialized to .stashc — debug use only.
+    /// </summary>
+    internal PassPipelineStats? PipelineStats { get; set; }
 
     internal Chunk(
         uint[] code,

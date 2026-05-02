@@ -58,7 +58,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
 
         // Propagate DCE flag from parent so child chunks honour the same setting
         if (enclosing != null)
+        {
             _builder.EnableDce = enclosing._builder.EnableDce;
+            _builder.EnableOptimizationPipeline = enclosing._builder.EnableOptimizationPipeline;
+        }
     }
 
     // ==================================================================
@@ -66,10 +69,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     // ==================================================================
 
     /// <summary>Compile a list of statements (script body) into a Chunk.</summary>
-    public static Chunk Compile(List<Stmt> statements, bool enableDce = true)
+    public static Chunk Compile(List<Stmt> statements, bool enableDce = true, bool enableOptimizationPipeline = true)
     {
         var globalSlots = new GlobalSlotAllocator();
-        return Compile(statements, globalSlots, enableDce);
+        return Compile(statements, globalSlots, enableDce, enableOptimizationPipeline);
     }
 
     /// <summary>
@@ -77,10 +80,11 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// Used by the REPL to share slot assignments across successive inputs, ensuring that lambdas
     /// compiled in an earlier REPL chunk read the correct global slots when invoked later.
     /// </summary>
-    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true)
+    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true, bool enableOptimizationPipeline = true)
     {
         var compiler = new Compiler(null, null, globalSlots);
         compiler._builder.EnableDce = enableDce;
+        compiler._builder.EnableOptimizationPipeline = enableOptimizationPipeline;
 
         foreach (Stmt stmt in statements)
             compiler.CompileStmt(stmt);

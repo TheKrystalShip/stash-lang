@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Stash.Bytecode.Optimization;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Stdlib;
@@ -229,13 +230,42 @@ public sealed class ChunkBuilder
     public bool EnableDce { get; set; } = true;
 
     /// <summary>
+    /// When true (default), compilation runs through the <see cref="PassPipeline"/> which
+    /// builds a CFG and runs registered passes.  Set to false to use the legacy direct-mutation
+    /// path as a rollback safety net (spec §13.2).
+    /// </summary>
+    public bool EnableOptimizationPipeline { get; set; } = true;
+
+    /// <summary>Pipeline statistics from the last Build() call, if the pipeline ran.</summary>
+    internal PassPipelineStats? LastPipelineStats;
+
+    /// <summary>Read-only view of the raw instruction stream; used by optimization passes.</summary>
+    internal IReadOnlyList<uint> RawCode => _code;
+
+    /// <summary>Read-only view of the constant pool; used by optimization passes (e.g., Closure companion-word counting).</summary>
+    internal IReadOnlyList<StashValue> RawConstants => _constants;
+
+    /// <summary>
     /// Freeze the builder into an immutable <see cref="Chunk"/>.
     /// </summary>
     public Chunk Build()
     {
-        if (EnablePeephole) Peephole();
-        if (EnableDce) DeadCodeEliminate();
-        if (EnablePeephole) Peephole();
+        if (EnableOptimizationPipeline)
+        {
+            // Run passes through the pipeline framework.
+            var pipeline = new PassPipeline();
+            if (EnablePeephole) pipeline.Add(new PeepholePass());
+            if (EnableDce)      pipeline.Add(new DeadCodeEliminationPass());
+            if (EnablePeephole) pipeline.Add(new PeepholePass());
+            LastPipelineStats = pipeline.Run(this);
+        }
+        else
+        {
+            // Legacy direct path — rollback safety net (spec §13.2).
+            if (EnablePeephole) Peephole();
+            if (EnableDce) DeadCodeEliminate();
+            if (EnablePeephole) Peephole();
+        }
 
         string[]? globalNameTable = _globalSlots?.BuildNameTable();
         int globalSlotCount = _globalSlots?.Count ?? 0;
@@ -267,6 +297,7 @@ public sealed class ChunkBuilder
             constGlobalInits: _constGlobalInits?.ToArray());
 
         chunk.StdlibManifest = _stdlibManifest;
+        chunk.PipelineStats = LastPipelineStats;
         return chunk;
     }
 
@@ -274,7 +305,7 @@ public sealed class ChunkBuilder
     // Peephole Optimizer
     // ==================================================================
 
-    private void Peephole()
+    internal void Peephole()
     {
         if (_code.Count < 2) return;
 
@@ -494,7 +525,7 @@ public sealed class ChunkBuilder
     /// Conservative: resets liveness to all-live at every jump-target block boundary,
     /// so cross-block opportunities are not exploited.
     /// </summary>
-    private void DeadCodeEliminate()
+    internal void DeadCodeEliminate()
     {
         if (_code.Count < 2) return;
 
