@@ -49,17 +49,20 @@ public class PassPipelineTests : BytecodeTestBase
     // ===========================================================================
 
     [Fact]
-    public void EnableOptimizationPipeline_False_UsesLegacyPath_ProducesSameOutput()
+    public void EnableOptimizationPipeline_False_UsesLegacyPath_ProducesEquivalentResult()
     {
+        // Phase 2: the pipeline now includes copy propagation, so bytecode emitted by the
+        // pipeline path differs from the legacy path.  Verify execution correctness instead.
         const string source = "let x = 1; let y = 2; let z = x + y; z;";
 
         Chunk withPipeline    = CompileWithFlags(source, enableOptPipeline: true);
         Chunk withoutPipeline = CompileWithFlags(source, enableOptPipeline: false);
 
-        // Both paths run the same Peephole + DCE + Peephole sequence; output must be identical.
-        Assert.Equal(withPipeline.Code.Length, withoutPipeline.Code.Length);
-        for (int i = 0; i < withPipeline.Code.Length; i++)
-            Assert.Equal(withPipeline.Code[i], withoutPipeline.Code[i]);
+        var vm1 = new VirtualMachine();
+        var vm2 = new VirtualMachine();
+        object? r1 = vm1.Execute(withPipeline);
+        object? r2 = vm2.Execute(withoutPipeline);
+        Assert.Equal(r1, r2);
     }
 
     // ===========================================================================
@@ -67,7 +70,7 @@ public class PassPipelineTests : BytecodeTestBase
     // ===========================================================================
 
     [Fact]
-    public void PassOrder_IsPeepholeDcePeephole()
+    public void PassOrder_IsCopyPropDcePeepholeDcePeephole()
     {
         const string source = "let x = 1 + 2; x;";
         Chunk chunk = CompileWithFlags(source, enableOptPipeline: true);
@@ -75,11 +78,13 @@ public class PassPipelineTests : BytecodeTestBase
         Assert.NotNull(chunk.PipelineStats);
         var passNames = chunk.PipelineStats!.Passes.Select(p => p.Name).ToList();
 
-        // Default pipeline: PeepholePass, DeadCodeEliminationPass, PeepholePass
-        Assert.Equal(3, passNames.Count);
-        Assert.Equal("PeepholePass",             passNames[0]);
+        // Phase 2 default pipeline: CopyProp → DCE → Peephole → DCE → Peephole
+        Assert.Equal(5, passNames.Count);
+        Assert.Equal("CopyPropagationPass",      passNames[0]);
         Assert.Equal("DeadCodeEliminationPass",  passNames[1]);
         Assert.Equal("PeepholePass",             passNames[2]);
+        Assert.Equal("DeadCodeEliminationPass",  passNames[3]);
+        Assert.Equal("PeepholePass",             passNames[4]);
     }
 
     // ===========================================================================

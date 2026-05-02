@@ -60,6 +60,7 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
         if (enclosing != null)
         {
             _builder.EnableDce = enclosing._builder.EnableDce;
+            _builder.EnableCopyProp = enclosing._builder.EnableCopyProp;
             _builder.EnableOptimizationPipeline = enclosing._builder.EnableOptimizationPipeline;
         }
     }

@@ -229,6 +229,9 @@ public sealed class ChunkBuilder
     /// <summary>When true (default), the trivial dead-code elimination pass runs during Build.</summary>
     public bool EnableDce { get; set; } = true;
 
+    /// <summary>When true (default), the copy-propagation pass runs during Build.</summary>
+    public bool EnableCopyProp { get; set; } = true;
+
     /// <summary>
     /// When true (default), compilation runs through the <see cref="PassPipeline"/> which
     /// builds a CFG and runs registered passes.  Set to false to use the legacy direct-mutation
@@ -246,6 +249,23 @@ public sealed class ChunkBuilder
     internal IReadOnlyList<StashValue> RawConstants => _constants;
 
     /// <summary>
+    /// Writes back a mutated <see cref="ControlFlowGraph"/> into <c>_code</c> and
+    /// <c>_sourceEntries</c>.  Called by the pass pipeline after a CFG-mutating pass
+    /// (e.g., <see cref="CopyPropagationPass"/>) so that subsequent <c>_code</c>-based
+    /// passes (Peephole, DCE) operate on the updated instruction stream.
+    /// </summary>
+    internal void WriteBackFromCfg(ControlFlowGraph cfg)
+    {
+        var newCode = new List<uint>(_code.Count);
+        var newSrc  = new List<SourceMapEntry>(_sourceEntries.Count);
+        CfgLowering.Lower(cfg, newCode, newSrc, _sourceEntries);
+        _code.Clear();
+        _code.AddRange(newCode);
+        _sourceEntries.Clear();
+        _sourceEntries.AddRange(newSrc);
+    }
+
+    /// <summary>
     /// Freeze the builder into an immutable <see cref="Chunk"/>.
     /// </summary>
     public Chunk Build()
@@ -254,6 +274,8 @@ public sealed class ChunkBuilder
         {
             // Run passes through the pipeline framework.
             var pipeline = new PassPipeline();
+            if (EnableCopyProp) pipeline.Add(new CopyPropagationPass());
+            if (EnableDce)      pipeline.Add(new DeadCodeEliminationPass());
             if (EnablePeephole) pipeline.Add(new PeepholePass());
             if (EnableDce)      pipeline.Add(new DeadCodeEliminationPass());
             if (EnablePeephole) pipeline.Add(new PeepholePass());

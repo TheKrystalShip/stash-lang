@@ -95,6 +95,7 @@ public class PeepholeExtendedTests
         //
         // Because instruction 1 is a jump target, Pattern 6 must be suppressed.
         var builder = new ChunkBuilder();
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 3;
 
         builder.EmitAsBx(OpCode.Jmp, 0, 0);             // instruction 0 — jumps to index 1
@@ -214,6 +215,7 @@ public class PeepholeExtendedTests
         // → GetTable r4, r3, r1
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 6;
 
         builder.EmitA(OpCode.LoadNull, 0);
@@ -244,6 +246,7 @@ public class PeepholeExtendedTests
         // → GetTable r4, r1, r3
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 6;
 
         builder.EmitA(OpCode.LoadNull, 0);
@@ -274,6 +277,7 @@ public class PeepholeExtendedTests
         // → GetField r4, r3, k0
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 6;
 
         ushort k0 = builder.AddConstant("field");
@@ -321,6 +325,7 @@ public class PeepholeExtendedTests
         //   5: Return r0, 0, 0
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 8;
 
         ushort k0 = builder.AddConstant("field");
@@ -438,6 +443,7 @@ public class PeepholeExtendedTests
         // → Self r4, r3, k0
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 7;
 
         ushort k0 = builder.AddConstant("method");
@@ -470,6 +476,7 @@ public class PeepholeExtendedTests
         // Without the guard, Self would write r3 (= X+1) with the receiver,
         // clobbering the source we substituted in.
         var builder = new ChunkBuilder();
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 5;
 
         ushort k0 = builder.AddConstant("method");
@@ -501,6 +508,7 @@ public class PeepholeExtendedTests
         //
         // The jumpTargets.Contains(i) guard blocks the pattern at instruction 1.
         var builder = new ChunkBuilder();
+        builder.EnableCopyProp = false;
         builder.MaxRegs = 5;
 
         builder.EmitAsBx(OpCode.Jmp, 0, 0);             // 0 → target 1

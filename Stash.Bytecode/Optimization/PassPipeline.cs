@@ -36,18 +36,30 @@ internal sealed class PassPipeline
         if (_passes.Count == 0)
             return stats;
 
-        // Build initial CFG (used as metadata by Phase 1 passes; future passes will use it as IR).
+        // Build initial CFG.
         ControlFlowGraph cfg = CfgBuilder.Build(builder.RawCode, builder.RawConstants);
 
-        foreach (IBytecodePass pass in _passes)
+        for (int i = 0; i < _passes.Count; i++)
         {
+            IBytecodePass pass = _passes[i];
             PassResult r = pass.Run(builder, cfg);
             stats.RecordPass(pass.Name, r);
 
-            // Rebuild CFG if the pass changed the instruction stream, so the next pass
-            // sees an up-to-date graph.
-            if (r.ChangedAnything && _passes.IndexOf(pass) < _passes.Count - 1)
-                cfg = CfgBuilder.Build(builder.RawCode, builder.RawConstants);
+            if (r.ChangedAnything)
+            {
+                if (pass.MutatesCfg)
+                {
+                    // Pass mutated cfg.Blocks directly — write them back to builder._code
+                    // so downstream _code-based passes (Peephole, DCE) see the updated stream.
+                    // TODO Phase 3+: re-home Peephole and DCE to operate on cfg.Blocks;
+                    //      remove WriteBackFromCfg.
+                    builder.WriteBackFromCfg(cfg);
+                }
+
+                // Rebuild CFG for the next pass so it starts from a fresh, consistent graph.
+                if (i < _passes.Count - 1)
+                    cfg = CfgBuilder.Build(builder.RawCode, builder.RawConstants);
+            }
         }
 
         return stats;
