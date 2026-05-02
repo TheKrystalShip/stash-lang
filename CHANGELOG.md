@@ -11,6 +11,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Compiler / Optimizer
+
+- **Peephole expansion:** Five new fusion pattern groups (Patterns 6–11) extend the existing linear peephole optimizer in `ChunkBuilder`:
+  - **Pattern 6** — `Move + InitConstGlobal`: eliminates the intermediate register from const-global initializations (analogous to the existing Pattern 5 for mutable globals).
+  - **Patterns 7a/7b** — `Move + SetTable`: fuses single-register moves into `set.table` instructions, both for the table register and the value register.
+  - **Patterns 8a/8b** — `Move + GetTable`: fuses single-register moves into `get.table` instructions.
+  - **Patterns 9a–9d** — `Move + GetField/SetField/Self`: fuses single-register moves into field-access and method-dispatch instructions, with `GetFieldIC` companion-word safety.
+  - **Pattern 11** — Redundant self-move (`Move A, A`): unconditionally dropped.
+- **Dead Code Elimination pass:** A new conservative linear-scan DCE pass (`DeadCodeEliminate()`) removes side-effect-free instructions (e.g. `LoadK`, `Move`, arithmetic) whose destination register is overwritten before being read. Liveness is reset at every basic-block boundary (jump targets and companion words) for correctness without a full CFG.
+- **Two-pass pipeline:** The compilation pipeline is now `Peephole → DCE → Peephole`. The second peephole run catches new fusion opportunities exposed by DCE (e.g. a `LoadK` removal leaving a `Move` adjacent to a fusable instruction).
+- **Engine flags:** `StashEngine.EnablePeephole` (existing) and new `StashEngine.EnableDce` (default `true`) allow each layer to be toggled independently for A/B testing and regression diagnosis.
+- **Impact on `build.stash`:** −13.5% instruction count (200 → 173 instructions); 8 `Move + InitConstGlobal` pairs, 6 `Move + SetTable` pairs, and 8 dead `LoadK` instructions eliminated. Runtime benchmarks show 2–8% improvement on const-heavy and dict-population workloads.
+
 #### Shell Aliases
 
 - **Shell mode:** New `alias` sugar at the REPL prompt — `alias name = "body"` (template), `alias name = (params) => body` (function alias, standard lambda syntax), and `unalias name` (remove). Aliases are resolved before PATH executables in bare-word line classification.

@@ -1859,3 +1859,91 @@ Jump targets are displayed as `.L{N}` labels. Both the label and the signed offs
   0010:  jmp.false           r0, .L015               ; +5
   0020:  loop                .L010                    ; -10
 ```
+
+---
+
+## 9. Compile-Time Optimizations
+
+The Stash compiler applies several compile-time optimization passes inside `ChunkBuilder.Build()` before the final `Chunk` is constructed. All passes are purely subtractive — they only remove or rewrite instructions using existing opcodes; they never introduce new opcodes, change the `.stashc` format, or alter observable semantics.
+
+### 9.1 Pass Pipeline
+
+```
+1. Peephole()           ← linear-scan fusion (Patterns 1–11)
+2. DeadCodeEliminate()  ← conservative linear DCE
+3. Peephole()           ← second run; catches opportunities exposed by DCE
+```
+
+The pipeline is bounded at two peephole runs to keep compile-time predictable. Both passes can be toggled via `StashEngine` flags:
+
+| Flag | Default | Effect |
+| ---- | ------- | ------ |
+| `EnablePeephole` | `true` | Runs both peephole passes |
+| `EnableDce` | `true` | Runs the DCE pass |
+
+Setting both flags to `false` produces bytecode identical to the pre-optimizer output (useful for A/B regression testing).
+
+### 9.2 Peephole Patterns
+
+All peephole patterns share three safety preconditions:
+
+1. Neither instruction index is a **jump target** (would cross a basic-block boundary).
+2. Neither instruction index is a **companion-word** slot (`GetFieldIC` / `CallBuiltIn` consume a companion word at `i+1`; those slots are never treated as instructions).
+3. Pattern-specific register matching (described below).
+
+When a pattern fires, the first instruction (`Move`) is added to a removal list and the second instruction is rewritten in place. `ApplyRemovals()` then compacts the code array, patches all jump offsets, and updates the source map.
+
+| Pattern | Shape | Effect |
+| ------- | ----- | ------ |
+| **1** | `Move(A,B)` + `JmpFalse/JmpTrue(A, off)` | Branch reads `B` directly; `Move` removed. |
+| **2** | `Move(A,B)` + `Return(A, C, 0)` | Return reads `B` directly; `Move` removed. |
+| **3** | `Move(A,B)` + `Move(C,D)` + `GetTable(X, A, C)` | Both moves fused; `GetTable(X, B, D)`; two `Move`s removed (3-instruction window). |
+| **4** | `Move(A,B)` + `Move(C,D)` + `SetTable(A, C, E)` | Both moves fused; `SetTable(B, D, E)`; two `Move`s removed (3-instruction window). |
+| **5** | `Move(A,B)` + `SetGlobal(A, slot)` | Global write reads `B` directly; `Move` removed. |
+| **6** | `Move(A,B)` + `InitConstGlobal(A, slot)` | Const-global init reads `B` directly; `Move` removed. Eliminates the intermediate temp register common in `const X = <expr>`. |
+| **7a** | `Move(A,B)` + `SetTable(A, K, V)` | Table register was moved; `SetTable(B, K, V)`; `Move` removed. |
+| **7b** | `Move(A,B)` + `SetTable(T, K, A)` | Value register was moved; `SetTable(T, K, B)`; `Move` removed. |
+| **8a** | `Move(A,B)` + `GetTable(X, A, K)` | Table register was moved; `GetTable(X, B, K)`; `Move` removed. |
+| **8b** | `Move(A,B)` + `GetTable(X, T, A)` | Index/key register was moved; `GetTable(X, T, B)`; `Move` removed. |
+| **9a** | `Move(A,B)` + `GetField(X, A, K)` | Object register was moved; `GetField(X, B, K)`; `Move` removed. Also applies to `GetFieldIC` (companion word is preserved unchanged). |
+| **9b** | `Move(A,B)` + `SetField(A, K, V)` | Object register was moved; `SetField(B, K, V)`; `Move` removed. |
+| **9c** | `Move(A,B)` + `SetField(T, K, A)` | Value register was moved; `SetField(T, K, B)`; `Move` removed. |
+| **9d** | `Move(A,B)` + `Self(X, A, K)` | Object register was moved; `Self(X, B, K)`; `Move` removed. Guard: dest `X+1` must not collide with `B` (Self writes two consecutive registers). |
+| **11** | `Move(A, A)` | Self-move is a no-op; removed unconditionally (never emitted intentionally, but may appear after other rewrites). |
+
+> **Note on numbering:** Patterns 1–5 predate this spec; Patterns 6–11 were added together. Pattern 10 (`Move + Call` fusion) is intentionally deferred to the companion CFG/LVN optimizer because it requires proving that argument registers are co-located — something copy-propagation handles correctly.
+
+### 9.3 Dead Code Elimination Pass
+
+The DCE pass performs a **conservative backward linear scan** within each basic block (ranges split at jump targets and companion words). It maintains a `liveRegs` set and removes **pure** instructions whose destination register is not live (i.e., is overwritten before being read in the current block).
+
+#### Side-Effect Classification
+
+**Pure (eligible for removal):** `LoadK`, `LoadNull`, `LoadBool`, `Move`, `Add`, `Sub`, `Mul`, `Div`, `Mod`, `Pow`, `Neg`, `AddI`, `BAnd`, `BOr`, `BXor`, `BNot`, `Shl`, `Shr`, `Eq`, `Ne`, `Lt`, `Le`, `Gt`, `Ge`, `Not`, `AddK`, `SubK`, `EqK`, `NeK`, `LtK`, `LeK`, `GtK`, `GeK`, `TypeOf`, `Is`, `In`, `GetGlobal`.
+
+**Effectful (never removed):** Everything else — stores, calls, allocations, control flow, I/O, exceptions, imports, and `GetFieldIC` (whose companion word would orphan an IC slot index if the main instruction were removed).
+
+#### Conservative Block Boundary
+
+Liveness is **reset at every basic-block boundary** (jump target or companion-word). A register that appears dead within one block may be live on entry to the next block. This conservative choice is safe without a full data-flow analysis; it means DCE misses some cross-block dead writes (those are left to the companion CFG/LVN optimizer).
+
+#### Source Map Preservation
+
+When DCE removes an instruction, its source-map entry is redirected to the next surviving instruction via the shared `ApplyRemovals()` machinery. Debugger line-number resolution and static-analysis diagnostics remain accurate after DCE.
+
+### 9.4 Interaction with Inline Caching
+
+`GetFieldIC` and `CallBuiltIn` each consume a **companion word** at `i+1`. Both the peephole and DCE passes track companion-word positions via a `HashSet<int>`. The companion word is never inspected as an instruction, never rewritten, and never removed. IC slot indices stored in companion words therefore remain stable through all optimization passes.
+
+### 9.5 Measured Impact
+
+On `build.stash` (the project's own build script — representative of const-heavy, dict-population code):
+
+| Metric | Before | After | Δ |
+| ------ | -----: | ----: | -: |
+| Instruction count | 200 | 173 | −27 (−13.5%) |
+| `Move + InitConstGlobal` pairs | 8 | 0 | −8 |
+| `Move + SetTable` (value-reg) pairs | 6 | 0 | −6 |
+| Dead `LoadK` instructions | 8 | 0 | −8 |
+
+Runtime benchmarks on a locked-clock system (median of 3 runs) showed 2–8% improvement on const-heavy and dict-population workloads with no regressions in tight-loop benchmarks.
