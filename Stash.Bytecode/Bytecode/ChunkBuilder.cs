@@ -361,6 +361,86 @@ public sealed class ChunkBuilder
                 continue;
             }
 
+            // Pattern 7a: Move(A,B) + SetTable(A, K, V) → SetTable(B, K, V) (table register)
+            // Guard: K and V must not also be moveA, or removing the Move would break them.
+            if (op1 == OpCode.SetTable && Instruction.GetA(inst1) == moveA
+                && Instruction.GetB(inst1) != moveA && Instruction.GetC(inst1) != moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.SetTable, moveB, Instruction.GetB(inst1), Instruction.GetC(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 7b: Move(A,B) + SetTable(T, K, A) → SetTable(T, K, B) (value register)
+            if (op1 == OpCode.SetTable && Instruction.GetC(inst1) == moveA
+                && Instruction.GetA(inst1) != moveA && Instruction.GetB(inst1) != moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.SetTable, Instruction.GetA(inst1), Instruction.GetB(inst1), moveB);
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 8a: Move(A,B) + GetTable(X, A, K) → GetTable(X, B, K) (table register)
+            if (op1 == OpCode.GetTable && Instruction.GetB(inst1) == moveA
+                && Instruction.GetC(inst1) != moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.GetTable, Instruction.GetA(inst1), moveB, Instruction.GetC(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 8b: Move(A,B) + GetTable(X, T, A) → GetTable(X, T, B) (key register)
+            if (op1 == OpCode.GetTable && Instruction.GetC(inst1) == moveA
+                && Instruction.GetB(inst1) != moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.GetTable, Instruction.GetA(inst1), Instruction.GetB(inst1), moveB);
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 9a: Move(A,B) + GetField(X, A, K) → GetField(X, B, K)
+            // Also handles GetFieldIC: companion word at i+2 is left untouched by the rewrite
+            // (it is in companionWords and will be kept adjacent to the patched instruction by
+            // ApplyRemovals, which skips companion words during compaction).
+            if ((op1 == OpCode.GetField || op1 == OpCode.GetFieldIC) && Instruction.GetB(inst1) == moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(op1, Instruction.GetA(inst1), moveB, Instruction.GetC(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 9b: Move(A,B) + SetField(A, K, V) → SetField(B, K, V) (object register)
+            // Guard: value register C must not also be moveA.
+            if (op1 == OpCode.SetField && Instruction.GetA(inst1) == moveA
+                && Instruction.GetC(inst1) != moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.SetField, moveB, Instruction.GetB(inst1), Instruction.GetC(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 9c: Move(A,B) + SetField(T, K, A) → SetField(T, K, B) (value register)
+            // Guard: object register A must not also be moveA.
+            if (op1 == OpCode.SetField && Instruction.GetC(inst1) == moveA
+                && Instruction.GetA(inst1) != moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.SetField, Instruction.GetA(inst1), Instruction.GetB(inst1), moveB);
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 9d: Move(A,B) + Self(X, A, K) → Self(X, B, K) (object register)
+            // Guard: X+1 != B — Self writes two consecutive registers R(X) and R(X+1);
+            // if R(X+1) == R(B=moveB), removing the Move and substituting moveB would cause
+            // Self to overwrite the register it is reading as its object source.
+            if (op1 == OpCode.Self && Instruction.GetB(inst1) == moveA
+                && (Instruction.GetA(inst1) + 1) != moveB)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.Self, Instruction.GetA(inst1), moveB, Instruction.GetC(inst1));
+                removals.Add(i);
+                continue;
+            }
+
             // Patterns 3 & 4: Move + Move + GetTable/SetTable
             if (i + 2 < _code.Count && op1 == OpCode.Move && !jumpTargets.Contains(i + 2) && !companionWords.Contains(i + 2))
             {
