@@ -1919,9 +1919,19 @@ The DCE pass performs a **conservative backward linear scan** within each basic 
 
 #### Side-Effect Classification
 
-**Pure (eligible for removal):** `LoadK`, `LoadNull`, `LoadBool`, `Move`, `Add`, `Sub`, `Mul`, `Div`, `Mod`, `Pow`, `Neg`, `AddI`, `BAnd`, `BOr`, `BXor`, `BNot`, `Shl`, `Shr`, `Eq`, `Ne`, `Lt`, `Le`, `Gt`, `Ge`, `Not`, `AddK`, `SubK`, `EqK`, `NeK`, `LtK`, `LeK`, `GtK`, `GeK`, `TypeOf`, `Is`, `In`, `GetGlobal`.
+**Pure (eligible for removal):** `LoadK`, `LoadNull`, `LoadBool`, `Move`, `Eq`, `Ne`, `EqK`, `NeK`, `Not`, `TypeOf`.
 
-**Effectful (never removed):** Everything else — stores, calls, allocations, control flow, I/O, exceptions, imports, and `GetFieldIC` (whose companion word would orphan an IC slot index if the main instruction were removed).
+**Effectful (never removed):** Everything else, including:
+
+- All arithmetic (`Add`, `Sub`, `Mul`, `Div`, `Mod`, `Pow`, `Neg`, `AddI`, `AddK`, `SubK`) — can throw `TypeError` on operand-type mismatch.
+- All bitwise ops (`BAnd`, `BOr`, `BXor`, `BNot`, `Shl`, `Shr`) — can throw `TypeError`.
+- All ordered comparisons (`Lt`, `Le`, `Gt`, `Ge`, `LtK`, `LeK`, `GtK`, `GeK`) — can throw `TypeError` on incomparable operands.
+- `Is`, `In` — can throw `TypeError` on bad RHS.
+- `GetGlobal` — throws on undefined variable.
+- All stores, calls, allocations, control flow, I/O, exceptions, imports.
+- `GetFieldIC` (whose companion word would orphan an IC slot index if the main instruction were removed).
+
+A throwing instruction is observable even when its destination register is dead: removing it would prevent a `RuntimeError` from being raised or a `try/catch` handler from firing. Stash equality (`==`/`!=`) never throws — type mismatch returns `false` — so `Eq`/`Ne`/`EqK`/`NeK` remain pure. `Not` and `TypeOf` are total functions over all values.
 
 #### Conservative Block Boundary
 

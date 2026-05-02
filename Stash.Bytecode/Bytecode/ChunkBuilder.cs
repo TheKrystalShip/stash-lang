@@ -659,18 +659,24 @@ public sealed class ChunkBuilder
     /// <summary>
     /// Returns true if <paramref name="op"/> has no observable side effects and may be
     /// removed when its destination register is provably dead.
+    /// <para>
+    /// IMPORTANT: An instruction is "pure" for DCE only when it cannot raise a
+    /// <see cref="Stash.Runtime.RuntimeError"/> for any input. Removing a throwing
+    /// instruction with a dead destination changes observable program behavior
+    /// (the program no longer throws, or a try/catch handler no longer fires).
+    /// </para>
+    /// <para>
+    /// Stash equality (<c>==</c>/<c>!=</c>) never throws — type mismatch returns
+    /// <c>false</c>. <c>Not</c> uses <c>RuntimeOps.IsFalsy</c> which never throws.
+    /// <c>TypeOf</c> always returns a string. All arithmetic, comparison, bitwise,
+    /// <c>Is</c>, and <c>In</c> opcodes can throw on type mismatch and are excluded.
+    /// </para>
     /// </summary>
     private static bool IsPureForDce(OpCode op) => op switch
     {
         OpCode.LoadK or OpCode.LoadNull or OpCode.LoadBool or OpCode.Move
-            or OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Pow
-            or OpCode.Neg or OpCode.AddI
-            or OpCode.BAnd or OpCode.BOr or OpCode.BXor or OpCode.BNot
-            or OpCode.Eq or OpCode.Ne or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge
-            or OpCode.Not
-            or OpCode.AddK or OpCode.SubK
-            or OpCode.EqK or OpCode.NeK or OpCode.LtK or OpCode.LeK or OpCode.GtK or OpCode.GeK
-            or OpCode.TypeOf or OpCode.Is or OpCode.In => true,
+            or OpCode.Eq or OpCode.Ne or OpCode.EqK or OpCode.NeK
+            or OpCode.Not or OpCode.TypeOf => true,
         _ => false
     };
 
@@ -699,7 +705,18 @@ public sealed class ChunkBuilder
                 or OpCode.TryBegin   // writes error register on catch entry
                 or OpCode.Timeout
                 or OpCode.Retry
-                or OpCode.ElevateBegin => Instruction.GetA(instr),
+                or OpCode.ElevateBegin
+                // Arithmetic/comparison/bitwise that may throw — not removable, but
+                // they still write R(A), so tracking the def lets preceding pure writes
+                // to the same register be eliminated.
+                or OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Div or OpCode.Mod
+                or OpCode.Pow or OpCode.Neg or OpCode.AddI
+                or OpCode.BAnd or OpCode.BOr or OpCode.BXor or OpCode.BNot
+                or OpCode.Shl or OpCode.Shr
+                or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge
+                or OpCode.AddK or OpCode.SubK
+                or OpCode.LtK or OpCode.LeK or OpCode.GtK or OpCode.GeK
+                or OpCode.Is or OpCode.In => Instruction.GetA(instr),
             _ => -1
         };
     }

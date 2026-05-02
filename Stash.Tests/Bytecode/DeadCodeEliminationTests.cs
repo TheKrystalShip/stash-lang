@@ -1,4 +1,5 @@
 using Stash.Bytecode;
+using Stash.Runtime;
 
 namespace Stash.Tests.Bytecode;
 
@@ -6,7 +7,7 @@ namespace Stash.Tests.Bytecode;
 /// Tests for the trivial backward-scan dead-code elimination pass in ChunkBuilder.
 /// Each test builds a synthetic chunk and asserts on the resulting instruction layout.
 /// </summary>
-public class DeadCodeEliminationTests
+public class DeadCodeEliminationTests : BytecodeTestBase
 {
     // =========================================================================
     // Basic elimination — dead LoadK
@@ -395,5 +396,138 @@ public class DeadCodeEliminationTests
         bool hasLoadK = chunk.Code.Any(w =>
             Instruction.GetOp(w) == OpCode.LoadK && Instruction.GetA(w) == 1);
         Assert.True(hasLoadK, "LoadK r1 must survive because it feeds SetGlobal");
+    }
+
+    // =========================================================================
+    // Throwing-pure ops must NEVER be eliminated even when destination is dead.
+    // Removing them changes observable program behavior (the program no longer
+    // throws, or a try/catch handler no longer fires).
+    // Regression for review finding: spec §5.2's "pure" list included Add/Sub/
+    // Mul/Pow/Neg/AddI/Bxxx/Lt/Le/Gt/Ge/AddK/SubK/LtK/LeK/GtK/GeK/Is/In, all of
+    // which can raise a TypeError on operand-type mismatch and must be excluded.
+    // =========================================================================
+
+    [Theory]
+    [InlineData(OpCode.Add)]
+    [InlineData(OpCode.Sub)]
+    [InlineData(OpCode.Mul)]
+    [InlineData(OpCode.Div)]
+    [InlineData(OpCode.Mod)]
+    [InlineData(OpCode.Pow)]
+    [InlineData(OpCode.Neg)]
+    [InlineData(OpCode.BAnd)]
+    [InlineData(OpCode.BOr)]
+    [InlineData(OpCode.BXor)]
+    [InlineData(OpCode.BNot)]
+    [InlineData(OpCode.Shl)]
+    [InlineData(OpCode.Shr)]
+    [InlineData(OpCode.Lt)]
+    [InlineData(OpCode.Le)]
+    [InlineData(OpCode.Gt)]
+    [InlineData(OpCode.Ge)]
+    [InlineData(OpCode.Is)]
+    [InlineData(OpCode.In)]
+    public void ThrowingArithmeticOp_DeadDest_IsPreserved(OpCode op)
+    {
+        // Layout: pure write to r0 (LoadK), then `op` writing r2 with r0 and r1
+        // as operands. r2 is never read. The op CAN throw on type mismatch, so
+        // it must remain in the chunk even though its destination is dead.
+        var builder = new ChunkBuilder();
+        builder.MaxRegs = 4;
+        ushort k0 = builder.AddConstant(1L);
+        builder.EmitABx(OpCode.LoadK, 0, k0);  // [0]
+        builder.EmitABx(OpCode.LoadK, 1, k0);  // [1]
+        builder.EmitABC(op, 2, 0, 1);          // [2] R(2) = R(0) op R(1) — dead dest
+        builder.EmitABC(OpCode.Return, 3, 0, 0); // [3] B=0 → no read
+
+        Chunk chunk = builder.Build();
+
+        bool hasOp = chunk.Code.Any(w => Instruction.GetOp(w) == op);
+        Assert.True(hasOp, $"{op} can throw and must not be eliminated even with dead dest");
+    }
+
+    [Theory]
+    [InlineData(OpCode.AddI)]
+    [InlineData(OpCode.AddK)]
+    [InlineData(OpCode.SubK)]
+    [InlineData(OpCode.LtK)]
+    [InlineData(OpCode.LeK)]
+    [InlineData(OpCode.GtK)]
+    [InlineData(OpCode.GeK)]
+    public void ThrowingFusedConstOp_DeadDest_IsPreserved(OpCode op)
+    {
+        // Same shape as above but for ABC ops with one constant operand.
+        var builder = new ChunkBuilder();
+        builder.MaxRegs = 4;
+        ushort k0 = builder.AddConstant(1L);
+        builder.EmitABx(OpCode.LoadK, 0, k0);  // [0]
+        if (op == OpCode.AddI)
+            builder.EmitAsBx(op, 2, 1);        // R(2) = R(2) + 1 — but reads R(2) too
+        else
+            builder.EmitABC(op, 2, 0, (byte)k0);
+        builder.EmitABC(OpCode.Return, 3, 0, 0);
+
+        Chunk chunk = builder.Build();
+
+        bool hasOp = chunk.Code.Any(w => Instruction.GetOp(w) == op);
+        Assert.True(hasOp, $"{op} can throw and must not be eliminated even with dead dest");
+    }
+
+    [Fact]
+    public void EndToEnd_DeadStoreThatThrows_StillThrows()
+    {
+        // Regression: a function whose dead-store right-hand side throws must still
+        // throw at runtime even when DCE is enabled.
+        const string source = @"
+            fn run() {
+                let x = 0;
+                x = -""abc"";
+                return ""unreached"";
+            }
+            run();
+        ";
+        Assert.Throws<RuntimeError>(() => Execute(source));
+    }
+
+    [Fact]
+    public void EndToEnd_DeadStoreInTry_HandlerStillFires()
+    {
+        // Regression: a try/catch that wraps a dead-store throwing expression must
+        // catch the error rather than fall through. Side-channel via a global so
+        // we don't depend on the script-level expression-vs-statement value rules.
+        const string source = @"
+            let outcome = ""init"";
+            fn run() {
+                let x = 0;
+                try {
+                    x = -""abc"";
+                } catch (e) {
+                    outcome = ""caught"";
+                    return;
+                }
+                outcome = ""no-throw"";
+            }
+            run();
+            return outcome;
+        ";
+        Assert.Equal("caught", Execute(source));
+    }
+
+    [Fact]
+    public void EqK_NeK_RemainsPure_DeadDest_IsEliminated()
+    {
+        // Stash equality never throws (mismatched types return false), so EqK/NeK
+        // remain in the pure list and ARE eliminated when their destination is dead.
+        var builder = new ChunkBuilder();
+        builder.MaxRegs = 3;
+        ushort k0 = builder.AddConstant(1L);
+        builder.EmitABx(OpCode.LoadK, 0, k0);     // [0]
+        builder.EmitABC(OpCode.EqK, 1, 0, (byte)k0); // [1] dead dest r1
+        builder.EmitABC(OpCode.Return, 2, 0, 0);  // [2]
+
+        Chunk chunk = builder.Build();
+
+        bool hasEqK = chunk.Code.Any(w => Instruction.GetOp(w) == OpCode.EqK);
+        Assert.False(hasEqK, "EqK is pure (never throws) and must be eliminated when dest is dead");
     }
 }
