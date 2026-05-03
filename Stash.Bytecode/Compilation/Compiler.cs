@@ -56,11 +56,12 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
         _builder.Name = functionName;
         _builder.SetGlobalSlots(globalSlots);
 
-        // Propagate DCE flag from parent so child chunks honour the same setting
+        // Propagate optimizer flags from parent so child chunks honour the same settings.
         if (enclosing != null)
         {
             _builder.EnableDce = enclosing._builder.EnableDce;
             _builder.EnableCopyProp = enclosing._builder.EnableCopyProp;
+            _builder.EnableLvn = enclosing._builder.EnableLvn;
             _builder.EnableOptimizationPipeline = enclosing._builder.EnableOptimizationPipeline;
         }
     }
@@ -70,10 +71,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     // ==================================================================
 
     /// <summary>Compile a list of statements (script body) into a Chunk.</summary>
-    public static Chunk Compile(List<Stmt> statements, bool enableDce = true, bool enableOptimizationPipeline = true)
+    public static Chunk Compile(List<Stmt> statements, bool enableDce = true, bool enableOptimizationPipeline = true, bool enableLvn = true)
     {
         var globalSlots = new GlobalSlotAllocator();
-        return Compile(statements, globalSlots, enableDce, enableOptimizationPipeline);
+        return Compile(statements, globalSlots, enableDce, enableOptimizationPipeline, enableLvn);
     }
 
     /// <summary>
@@ -81,10 +82,11 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// Used by the REPL to share slot assignments across successive inputs, ensuring that lambdas
     /// compiled in an earlier REPL chunk read the correct global slots when invoked later.
     /// </summary>
-    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true, bool enableOptimizationPipeline = true)
+    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true, bool enableOptimizationPipeline = true, bool enableLvn = true)
     {
         var compiler = new Compiler(null, null, globalSlots);
         compiler._builder.EnableDce = enableDce;
+        compiler._builder.EnableLvn = enableLvn;
         compiler._builder.EnableOptimizationPipeline = enableOptimizationPipeline;
 
         foreach (Stmt stmt in statements)

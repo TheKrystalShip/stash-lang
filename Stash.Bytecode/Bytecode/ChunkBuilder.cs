@@ -232,6 +232,9 @@ public sealed class ChunkBuilder
     /// <summary>When true (default), the copy-propagation pass runs during Build.</summary>
     public bool EnableCopyProp { get; set; } = true;
 
+    /// <summary>When true (default), the local value numbering pass runs during Build.</summary>
+    public bool EnableLvn { get; set; } = true;
+
     /// <summary>
     /// When true (default), compilation runs through the <see cref="PassPipeline"/> which
     /// builds a CFG and runs registered passes.  Set to false to use the legacy direct-mutation
@@ -275,6 +278,7 @@ public sealed class ChunkBuilder
             // Run passes through the pipeline framework.
             var pipeline = new PassPipeline();
             if (EnableCopyProp) pipeline.Add(new CopyPropagationPass());
+            if (EnableLvn)      pipeline.Add(new LocalValueNumberingPass());
             if (EnableDce)      pipeline.Add(new DeadCodeEliminationPass());
             if (EnablePeephole) pipeline.Add(new PeepholePass());
             if (EnableDce)      pipeline.Add(new DeadCodeEliminationPass());

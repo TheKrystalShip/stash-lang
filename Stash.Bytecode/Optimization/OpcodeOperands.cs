@@ -363,4 +363,76 @@ internal static class OpcodeOperands
                 return instr;
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // LVN Classification Helpers
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true if <paramref name="op"/> is pure for LVN purposes — its result depends
+    /// only on its register/constant operands, and if the instruction already executed once
+    /// with those inputs, re-executing it would yield the same result.
+    /// <para>
+    /// Note: arithmetic ops that can throw (Add, Sub, …) are still listed as "pure for LVN"
+    /// because if the first execution ran without throwing, identical inputs produce the same
+    /// result. The replaced (Move) instruction won't throw — that is correct behaviour because
+    /// if the first had thrown we would never have reached the second.
+    /// </para>
+    /// </summary>
+    public static bool IsPureForLvn(OpCode op) => op switch
+    {
+        // Constants
+        OpCode.LoadK or OpCode.LoadNull or OpCode.LoadBool
+        // Register copy
+        or OpCode.Move
+        // Arithmetic (can throw on type mismatch, but safe for LVN — see doc above)
+        or OpCode.Add or OpCode.Sub or OpCode.Mul or OpCode.Div or OpCode.Mod or OpCode.Pow
+        or OpCode.Neg or OpCode.Not or OpCode.BNot
+        or OpCode.BAnd or OpCode.BOr or OpCode.BXor or OpCode.Shl or OpCode.Shr
+        // Fused-K arithmetic
+        or OpCode.AddK or OpCode.SubK
+        // Comparisons — never coerce, never throw (Stash spec)
+        or OpCode.Lt or OpCode.Le or OpCode.Gt or OpCode.Ge
+        or OpCode.Eq or OpCode.Ne
+        // Fused-K comparisons
+        or OpCode.LtK or OpCode.LeK or OpCode.GtK or OpCode.GeK
+        or OpCode.EqK or OpCode.NeK
+        // Type operators (Is does not throw on valid type names; TypeOf is total)
+        or OpCode.TypeOf or OpCode.Is
+        // Field/table reads (conservatively invalidated on SetField/SetTable/calls)
+        or OpCode.GetField or OpCode.GetFieldIC or OpCode.GetTable
+        // Global reads (const-global VNs survive calls; mutable globals killed by calls)
+        or OpCode.GetGlobal
+            => true,
+        // Not numbered: allocating, call-like, multi-register-range, In (not pure on all
+        // collection types), AddI (in-place R(A) read+write), GetUpval/SetUpval (closure
+        // semantics too complex), and everything else.
+        _ => false,
+    };
+
+    /// <summary>
+    /// Returns true if <paramref name="op"/> is call-like — it may invoke Stash code or
+    /// built-ins and therefore can observe and mutate globals and object fields.
+    /// </summary>
+    public static bool IsCallLike(OpCode op) => op switch
+    {
+        OpCode.Call or OpCode.CallSpread or OpCode.CallBuiltIn
+        or OpCode.Await
+        or OpCode.Command or OpCode.PipeChain
+            => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Returns true if <paramref name="op"/> always allocates a fresh heap object — its
+    /// result has a unique identity and must never be value-numbered.
+    /// </summary>
+    public static bool IsAllocating(OpCode op) => op switch
+    {
+        OpCode.NewArray or OpCode.NewDict or OpCode.NewRange
+        or OpCode.NewStruct or OpCode.Closure
+        or OpCode.Interpolate or OpCode.Spread
+            => true,
+        _ => false,
+    };
 }

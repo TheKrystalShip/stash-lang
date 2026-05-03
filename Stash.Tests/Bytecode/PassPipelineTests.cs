@@ -70,7 +70,7 @@ public class PassPipelineTests : BytecodeTestBase
     // ===========================================================================
 
     [Fact]
-    public void PassOrder_IsCopyPropDcePeepholeDcePeephole()
+    public void PassOrder_IsCopyPropLvnDcePeepholeDcePeephole()
     {
         const string source = "let x = 1 + 2; x;";
         Chunk chunk = CompileWithFlags(source, enableOptPipeline: true);
@@ -78,13 +78,14 @@ public class PassPipelineTests : BytecodeTestBase
         Assert.NotNull(chunk.PipelineStats);
         var passNames = chunk.PipelineStats!.Passes.Select(p => p.Name).ToList();
 
-        // Phase 2 default pipeline: CopyProp → DCE → Peephole → DCE → Peephole
-        Assert.Equal(5, passNames.Count);
+        // Phase 3 default pipeline: CopyProp → LVN → DCE → Peephole → DCE → Peephole
+        Assert.Equal(6, passNames.Count);
         Assert.Equal("CopyPropagationPass",      passNames[0]);
-        Assert.Equal("DeadCodeEliminationPass",  passNames[1]);
-        Assert.Equal("PeepholePass",             passNames[2]);
-        Assert.Equal("DeadCodeEliminationPass",  passNames[3]);
-        Assert.Equal("PeepholePass",             passNames[4]);
+        Assert.Equal("LocalValueNumberingPass",  passNames[1]);
+        Assert.Equal("DeadCodeEliminationPass",  passNames[2]);
+        Assert.Equal("PeepholePass",             passNames[3]);
+        Assert.Equal("DeadCodeEliminationPass",  passNames[4]);
+        Assert.Equal("PeepholePass",             passNames[5]);
     }
 
     // ===========================================================================
@@ -150,6 +151,37 @@ public class PassPipelineTests : BytecodeTestBase
         var passNames = stats.Passes.Select(p => p.Name).ToList();
         Assert.DoesNotContain("PeepholePass", passNames);
         Assert.Contains("DeadCodeEliminationPass", passNames);
+    }
+
+    // ===========================================================================
+    // EnableLvn=false — skips the LVN pass
+    // ===========================================================================
+
+    [Fact]
+    public void EnableLvn_False_SkipsLvnPass()
+    {
+        const string source = "let x = 1 + 2; x;";
+
+        var lexer = new Lexer(source, "<test>");
+        List<Token> tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        List<Stmt> stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+
+        // Compile with LVN disabled.
+        Chunk chunk = Compiler.Compile(stmts, new GlobalSlotAllocator(),
+            enableDce: true, enableOptimizationPipeline: true, enableLvn: false);
+
+        Assert.NotNull(chunk.PipelineStats);
+        var passNames = chunk.PipelineStats!.Passes.Select(p => p.Name).ToList();
+
+        // LVN should not appear when disabled.
+        Assert.DoesNotContain("LocalValueNumberingPass", passNames);
+        // CopyProp, DCE, Peephole should still be present (5 passes).
+        Assert.Equal(5, passNames.Count);
+        Assert.Equal("CopyPropagationPass",     passNames[0]);
+        Assert.Equal("DeadCodeEliminationPass", passNames[1]);
+        Assert.Equal("PeepholePass",            passNames[2]);
     }
 
     // ===========================================================================

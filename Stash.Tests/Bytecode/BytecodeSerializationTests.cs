@@ -48,6 +48,7 @@ public class BytecodeSerializationTests
     {
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableLvn = false;  // prevent LVN from rewriting the duplicate LoadNull to Move
         builder.EmitA(OpCode.LoadNull, 0);
         builder.EmitA(OpCode.LoadNull, 0);
         builder.EmitA(OpCode.Return, 0);
@@ -197,6 +198,7 @@ public class BytecodeSerializationTests
     {
         var builder = new ChunkBuilder();
         builder.EnableDce = false;
+        builder.EnableLvn = false;  // prevent LVN from rewriting the duplicate LoadNull to Move
 
         // Add a mapping, emit instruction, then add next mapping (offset is auto-tracked)
         builder.AddSourceMapping(new SourceSpan("test.stash",  1, 1, 1, 5));
