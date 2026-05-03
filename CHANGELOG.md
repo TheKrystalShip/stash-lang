@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Two-pass pipeline:** The compilation pipeline is now `Peephole → DCE → Peephole`. The second peephole run catches new fusion opportunities exposed by DCE (e.g. a `LoadK` removal leaving a `Move` adjacent to a fusable instruction).
 - **Engine flags:** `StashEngine.EnablePeephole` (existing) and new `StashEngine.EnableDce` (default `true`) allow each layer to be toggled independently for A/B testing and regression diagnosis.
 - **Impact on `build.stash`:** −13.5% instruction count (200 → 173 instructions); 8 `Move + InitConstGlobal` pairs, 6 `Move + SetTable` pairs, and 8 dead `LoadK` instructions eliminated. Runtime benchmarks show 2–8% improvement on const-heavy and dict-population workloads.
+- **Basic Block Optimization Pipeline (CFG + LVN + Copy Propagation):** The compiler now runs a 7-pass basic-block optimization pipeline (`BuildCfg → CopyPropagation → LVN → DCE → Peephole → DCE → Peephole`) before emitting each chunk, reducing instruction counts by an additional 5–20% on top of the peephole/DCE passes above. Highlights:
+  - **Local Value Numbering (LVN):** Eliminates redundant computations within each basic block. `const` globals are treated as immortal (their VNs persist across calls), collapsing repeated `get.global` loads of constant globals to a single load.
+  - **Copy Propagation:** Forwards register-copy chains so that LVN expression keys normalise to canonical source registers, increasing VN hit rates.
+  - **IC Slot Compaction:** After LVN rewrites `GetFieldIC` instructions to `Move` on VN hits, the inline-cache slot table is compacted to remove orphaned entries (O(n) pass, runs only when needed).
+  - All passes are individually toggleable via `ChunkBuilder` flags (`EnableCopyProp`, `EnableLvn`, `EnableDce`, `EnablePeephole`). The entire CFG pipeline can be disabled via `EnableOptimizationPipeline = false` for rollback safety.
 
 #### Shell Aliases
 

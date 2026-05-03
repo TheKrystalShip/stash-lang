@@ -13,6 +13,13 @@ internal sealed class PassPipelineStats
     public int TotalInstructionsRemoved { get; private set; }
     public int TotalInstructionsRewritten { get; private set; }
 
+    /// <summary>
+    /// True if any pass orphaned an IC companion word (e.g. <c>GetFieldIC</c> → <c>Move</c>
+    /// rewrite by <see cref="LocalValueNumberingPass"/>).  Signals <see cref="ChunkBuilder"/>
+    /// to run the IC slot compaction step after the pipeline completes.
+    /// </summary>
+    public bool HasOrphanedICSlots { get; set; }
+
     public void RecordPass(string name, PassResult r)
     {
         Passes.Add((name, r));

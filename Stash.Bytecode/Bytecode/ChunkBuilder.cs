@@ -284,6 +284,9 @@ public sealed class ChunkBuilder
             if (EnableDce)      pipeline.Add(new DeadCodeEliminationPass());
             if (EnablePeephole) pipeline.Add(new PeepholePass());
             LastPipelineStats = pipeline.Run(this);
+            // 4A: IC slot compaction — remove orphaned slots left by GetFieldIC → Move rewrites.
+            if (LastPipelineStats.HasOrphanedICSlots)
+                CompactICSlots();
         }
         else
         {
@@ -325,6 +328,71 @@ public sealed class ChunkBuilder
         chunk.StdlibManifest = _stdlibManifest;
         chunk.PipelineStats = LastPipelineStats;
         return chunk;
+    }
+
+    // ==================================================================
+    // IC Slot Compaction (Phase 4A)
+    // ==================================================================
+
+    /// <summary>
+    /// Compacts the IC slot table after <see cref="LocalValueNumberingPass"/> has orphaned
+    /// slots by rewriting <c>GetFieldIC</c> instructions to <c>Move</c> and removing their
+    /// companion words.  Only <c>GetFieldIC</c> and <c>CallBuiltIn</c> reference IC slots
+    /// (via companion words at <c>i+1</c>); Closure companion words are upvalue descriptors
+    /// and are never IC slot indices.
+    /// <para>
+    /// Algorithm: O(n) scan over <c>_code</c> + O(k) over IC slots.
+    /// Skipped automatically if <c>_icSlotCount == 0</c> or all slots remain referenced.
+    /// </para>
+    /// </summary>
+    private void CompactICSlots()
+    {
+        if (_icSlotCount == 0) return;
+
+        // Step 1: Scan _code to collect all still-referenced IC slot indices.
+        var referencedSlots = new HashSet<ushort>();
+        var companionPositions = new Dictionary<int, ushort>(); // _code index → old slot index
+
+        for (int i = 0; i < _code.Count; i++)
+        {
+            OpCode op = Instruction.GetOp(_code[i]);
+            if (op == OpCode.GetFieldIC || op == OpCode.CallBuiltIn)
+            {
+                if (i + 1 < _code.Count)
+                {
+                    var slotIdx = (ushort)_code[i + 1];
+                    referencedSlots.Add(slotIdx);
+                    companionPositions[i + 1] = slotIdx;
+                }
+                i++; // skip companion word — cannot be an instruction
+            }
+        }
+
+        // Step 2: If all slots are still referenced there is nothing to compact.
+        if (referencedSlots.Count == _icSlotCount) return;
+
+        // Step 3: Build old-index → new-index mapping (ascending order preserves original ordering).
+        var newIdx = new ushort[_icSlotCount];
+        var newConstantIndices = new List<ushort>();
+        ushort next = 0;
+        for (ushort old = 0; old < (ushort)_icSlotCount; old++)
+        {
+            if (referencedSlots.Contains(old))
+            {
+                newIdx[old] = next++;
+                newConstantIndices.Add(old < _icConstantIndices.Count ? _icConstantIndices[old] : (ushort)0);
+            }
+            // Unreferenced slots: newIdx[old] is intentionally unset (never looked up).
+        }
+
+        // Step 4: Patch companion words in _code to use the new compact indices.
+        foreach ((int pos, ushort oldSlot) in companionPositions)
+            _code[pos] = newIdx[oldSlot];
+
+        // Step 5: Update builder state — IC slot count and constant-index table.
+        _icSlotCount = next;
+        _icConstantIndices.Clear();
+        _icConstantIndices.AddRange(newConstantIndices);
     }
 
     // ==================================================================

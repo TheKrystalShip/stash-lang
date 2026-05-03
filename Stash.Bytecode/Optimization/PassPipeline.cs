@@ -39,11 +39,18 @@ internal sealed class PassPipeline
         // Build initial CFG.
         ControlFlowGraph cfg = CfgBuilder.Build(builder.RawCode, builder.RawConstants);
 
+        // Track HasOrphanedICSlots across CFG rebuilds: each rebuild creates a fresh
+        // ControlFlowGraph object with the flag reset to false, so we accumulate it here.
+        bool hasOrphanedICSlots = false;
+
         for (int i = 0; i < _passes.Count; i++)
         {
             IBytecodePass pass = _passes[i];
             PassResult r = pass.Run(builder, cfg);
             stats.RecordPass(pass.Name, r);
+
+            // Accumulate before any CFG rebuild loses the flag.
+            hasOrphanedICSlots |= cfg.HasOrphanedICSlots;
 
             if (r.ChangedAnything)
             {
@@ -62,6 +69,7 @@ internal sealed class PassPipeline
             }
         }
 
+        stats.HasOrphanedICSlots = hasOrphanedICSlots;
         return stats;
     }
 }

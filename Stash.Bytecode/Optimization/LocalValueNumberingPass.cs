@@ -217,6 +217,10 @@ internal sealed class LocalValueNumberingPass : IBytecodePass
                 KillReg(a, regToVN, vnToReg);
                 regToVN[a] = existingVn;
                 // Keep existingReg as the canonical holder (don't promote a).
+                // If a == existingReg, KillReg removed vnToReg[existingVn]; restore it so
+                // future VN HIT checks on the same VN can still find the canonical register.
+                if (!vnToReg.ContainsKey(existingVn))
+                    vnToReg[existingVn] = existingReg;
 
                 // Track per-category VNs (already tracked from the miss that created them).
                 continue;

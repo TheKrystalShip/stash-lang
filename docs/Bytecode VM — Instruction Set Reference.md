@@ -1420,10 +1420,10 @@ Simple register copy used after a catch clause to move the exception handler's r
 
 #### `catch.match` — Typed Catch Dispatch (Opcode 94)
 
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABx                |
-| Operands | `R(A), K(Bx)`      |
+| Field    | Value         |
+| -------- | ------------- |
+| Format   | ABx           |
+| Operands | `R(A), K(Bx)` |
 
 **Operation:** Multi-clause typed catch dispatch.
 
@@ -1504,28 +1504,29 @@ Concatenates B parts from consecutive registers into a single string. Parts alte
 
 #### `pipe.chain` — Streaming Pipe Chain
 
-| Field    | Value                         |
-| -------- | ----------------------------- |
-| Format   | ABC + B companion words       |
-| Operands | `R(A), R(B), R(C)`            |
+| Field    | Value                   |
+| -------- | ----------------------- |
+| Format   | ABC + B companion words |
+| Operands | `R(A), R(B), R(C)`      |
 
 Execute a streaming shell pipe chain. All stages run concurrently with OS-level pipes connecting them.
 
-| Field | Meaning |
-| ----- | ------- |
+| Field | Meaning                                         |
+| ----- | ----------------------------------------------- |
 | A     | Destination register (receives `CommandResult`) |
-| B     | Stage count (2–255) |
-| C     | Base register of the flattened parts block |
+| B     | Stage count (2–255)                             |
+| C     | Base register of the flattened parts block      |
 
 Followed immediately by B **companion words** (one per stage, in order):
 
-| Bits | Meaning |
-| ---- | ------- |
-| 15–8 | Part count for this stage (number of registers in the parts block) |
-| 7–1  | Reserved (must be 0) |
+| Bits | Meaning                                                                                    |
+| ---- | ------------------------------------------------------------------------------------------ |
+| 15–8 | Part count for this stage (number of registers in the parts block)                         |
+| 7–1  | Reserved (must be 0)                                                                       |
 | 0    | Strict flag: if 1, a non-zero exit code from the **last stage only** throws `CommandError` |
 
 **Execution model:**
+
 1. Read B companion words from the instruction stream.
 2. Build command strings from contiguous registers starting at R(C).
 3. Start all N processes with OS pipes: `stdout[0] → stdin[1] → … → stdin[N-1]`.
@@ -1536,6 +1537,7 @@ Followed immediately by B **companion words** (one per stage, in order):
 8. Write `CommandResult` (stdout, stderr, exitCode) to R(A).
 
 **Notes:**
+
 - The exit code stored in `CommandResult.exitCode` is the last stage's exit code.
 - `stderr` in `CommandResult` is the last stage's stderr only; intermediate stages' stderr is drained and discarded.
 - If the downstream process exits early (e.g., `head -5`), the upstream pump gets an `IOException` (broken pipe) and terminates gracefully — this is the streaming termination signal.
@@ -1876,10 +1878,10 @@ The Stash compiler applies several compile-time optimization passes inside `Chun
 
 The pipeline is bounded at two peephole runs to keep compile-time predictable. Both passes can be toggled via `StashEngine` flags:
 
-| Flag | Default | Effect |
-| ---- | ------- | ------ |
-| `EnablePeephole` | `true` | Runs both peephole passes |
-| `EnableDce` | `true` | Runs the DCE pass |
+| Flag             | Default | Effect                    |
+| ---------------- | ------- | ------------------------- |
+| `EnablePeephole` | `true`  | Runs both peephole passes |
+| `EnableDce`      | `true`  | Runs the DCE pass         |
 
 Setting both flags to `false` produces bytecode identical to the pre-optimizer output (useful for A/B regression testing).
 
@@ -1893,23 +1895,23 @@ All peephole patterns share three safety preconditions:
 
 When a pattern fires, the first instruction (`Move`) is added to a removal list and the second instruction is rewritten in place. `ApplyRemovals()` then compacts the code array, patches all jump offsets, and updates the source map.
 
-| Pattern | Shape | Effect |
-| ------- | ----- | ------ |
-| **1** | `Move(A,B)` + `JmpFalse/JmpTrue(A, off)` | Branch reads `B` directly; `Move` removed. |
-| **2** | `Move(A,B)` + `Return(A, C, 0)` | Return reads `B` directly; `Move` removed. |
-| **3** | `Move(A,B)` + `Move(C,D)` + `GetTable(X, A, C)` | Both moves fused; `GetTable(X, B, D)`; two `Move`s removed (3-instruction window). |
-| **4** | `Move(A,B)` + `Move(C,D)` + `SetTable(A, C, E)` | Both moves fused; `SetTable(B, D, E)`; two `Move`s removed (3-instruction window). |
-| **5** | `Move(A,B)` + `SetGlobal(A, slot)` | Global write reads `B` directly; `Move` removed. |
-| **6** | `Move(A,B)` + `InitConstGlobal(A, slot)` | Const-global init reads `B` directly; `Move` removed. Eliminates the intermediate temp register common in `const X = <expr>`. |
-| **7a** | `Move(A,B)` + `SetTable(A, K, V)` | Table register was moved; `SetTable(B, K, V)`; `Move` removed. |
-| **7b** | `Move(A,B)` + `SetTable(T, K, A)` | Value register was moved; `SetTable(T, K, B)`; `Move` removed. |
-| **8a** | `Move(A,B)` + `GetTable(X, A, K)` | Table register was moved; `GetTable(X, B, K)`; `Move` removed. |
-| **8b** | `Move(A,B)` + `GetTable(X, T, A)` | Index/key register was moved; `GetTable(X, T, B)`; `Move` removed. |
-| **9a** | `Move(A,B)` + `GetField(X, A, K)` | Object register was moved; `GetField(X, B, K)`; `Move` removed. Also applies to `GetFieldIC` (companion word is preserved unchanged). |
-| **9b** | `Move(A,B)` + `SetField(A, K, V)` | Object register was moved; `SetField(B, K, V)`; `Move` removed. |
-| **9c** | `Move(A,B)` + `SetField(T, K, A)` | Value register was moved; `SetField(T, K, B)`; `Move` removed. |
-| **9d** | `Move(A,B)` + `Self(X, A, K)` | Object register was moved; `Self(X, B, K)`; `Move` removed. Guard: dest `X+1` must not collide with `B` (Self writes two consecutive registers). |
-| **11** | `Move(A, A)` | Self-move is a no-op; removed unconditionally (never emitted intentionally, but may appear after other rewrites). |
+| Pattern | Shape                                           | Effect                                                                                                                                           |
+| ------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **1**   | `Move(A,B)` + `JmpFalse/JmpTrue(A, off)`        | Branch reads `B` directly; `Move` removed.                                                                                                       |
+| **2**   | `Move(A,B)` + `Return(A, C, 0)`                 | Return reads `B` directly; `Move` removed.                                                                                                       |
+| **3**   | `Move(A,B)` + `Move(C,D)` + `GetTable(X, A, C)` | Both moves fused; `GetTable(X, B, D)`; two `Move`s removed (3-instruction window).                                                               |
+| **4**   | `Move(A,B)` + `Move(C,D)` + `SetTable(A, C, E)` | Both moves fused; `SetTable(B, D, E)`; two `Move`s removed (3-instruction window).                                                               |
+| **5**   | `Move(A,B)` + `SetGlobal(A, slot)`              | Global write reads `B` directly; `Move` removed.                                                                                                 |
+| **6**   | `Move(A,B)` + `InitConstGlobal(A, slot)`        | Const-global init reads `B` directly; `Move` removed. Eliminates the intermediate temp register common in `const X = <expr>`.                    |
+| **7a**  | `Move(A,B)` + `SetTable(A, K, V)`               | Table register was moved; `SetTable(B, K, V)`; `Move` removed.                                                                                   |
+| **7b**  | `Move(A,B)` + `SetTable(T, K, A)`               | Value register was moved; `SetTable(T, K, B)`; `Move` removed.                                                                                   |
+| **8a**  | `Move(A,B)` + `GetTable(X, A, K)`               | Table register was moved; `GetTable(X, B, K)`; `Move` removed.                                                                                   |
+| **8b**  | `Move(A,B)` + `GetTable(X, T, A)`               | Index/key register was moved; `GetTable(X, T, B)`; `Move` removed.                                                                               |
+| **9a**  | `Move(A,B)` + `GetField(X, A, K)`               | Object register was moved; `GetField(X, B, K)`; `Move` removed. Also applies to `GetFieldIC` (companion word is preserved unchanged).            |
+| **9b**  | `Move(A,B)` + `SetField(A, K, V)`               | Object register was moved; `SetField(B, K, V)`; `Move` removed.                                                                                  |
+| **9c**  | `Move(A,B)` + `SetField(T, K, A)`               | Value register was moved; `SetField(T, K, B)`; `Move` removed.                                                                                   |
+| **9d**  | `Move(A,B)` + `Self(X, A, K)`                   | Object register was moved; `Self(X, B, K)`; `Move` removed. Guard: dest `X+1` must not collide with `B` (Self writes two consecutive registers). |
+| **11**  | `Move(A, A)`                                    | Self-move is a no-op; removed unconditionally (never emitted intentionally, but may appear after other rewrites).                                |
 
 > **Note on numbering:** Patterns 1–5 predate this spec; Patterns 6–11 were added together. Pattern 10 (`Move + Call` fusion) is intentionally deferred to the companion CFG/LVN optimizer because it requires proving that argument registers are co-located — something copy-propagation handles correctly.
 
@@ -1949,11 +1951,89 @@ When DCE removes an instruction, its source-map entry is redirected to the next 
 
 On `build.stash` (the project's own build script — representative of const-heavy, dict-population code):
 
-| Metric | Before | After | Δ |
-| ------ | -----: | ----: | -: |
-| Instruction count | 200 | 173 | −27 (−13.5%) |
-| `Move + InitConstGlobal` pairs | 8 | 0 | −8 |
-| `Move + SetTable` (value-reg) pairs | 6 | 0 | −6 |
-| Dead `LoadK` instructions | 8 | 0 | −8 |
+| Metric                              | Before | After |            Δ |
+| ----------------------------------- | -----: | ----: | -----------: |
+| Instruction count                   |    200 |   173 | −27 (−13.5%) |
+| `Move + InitConstGlobal` pairs      |      8 |     0 |           −8 |
+| `Move + SetTable` (value-reg) pairs |      6 |     0 |           −6 |
+| Dead `LoadK` instructions           |      8 |     0 |           −8 |
 
 Runtime benchmarks on a locked-clock system (median of 3 runs) showed 2–8% improvement on const-heavy and dict-population workloads with no regressions in tight-loop benchmarks.
+
+### 9.6 Basic Block Optimization Pipeline (CFG + LVN + Copy Propagation)
+
+When `EnableOptimizationPipeline = true` (the default), the compiler runs a 7-step pipeline
+**before** the Peephole/DCE passes described in §9.1–9.3:
+
+```
+1. BuildCfg()                  — construct control-flow graph from _code
+2. CopyPropagationPass         — forward register-copy chains within each basic block
+3. LocalValueNumberingPass     — eliminate redundant computations within each basic block
+4. DeadCodeEliminationPass     — remove dead instructions (enhanced by CopyProp + LVN)
+5. PeepholePass                — fuse adjacent instruction pairs (patterns §9.2)
+6. DeadCodeEliminationPass     — second run; LVN/CopyProp expose more dead code
+7. PeepholePass                — second run; DCE may expose more fusion opportunities
+   (+ IC Slot Compaction)      — post-pipeline: compact IC table if slots were orphaned
+```
+
+Setting `EnableOptimizationPipeline = false` drops back to the legacy `Peephole → DCE →
+Peephole` sequence as a rollback safety net.
+
+#### Pass Control Flags
+
+| Flag                         | Default | Controls                                       |
+| ---------------------------- | ------- | ---------------------------------------------- |
+| `EnableOptimizationPipeline` | `true`  | Entire CFG-based pipeline (master kill switch) |
+| `EnableCopyProp`             | `true`  | `CopyPropagationPass`                          |
+| `EnableLvn`                  | `true`  | `LocalValueNumberingPass`                      |
+| `EnableDce`                  | `true`  | Both `DeadCodeEliminationPass` runs            |
+| `EnablePeephole`             | `true`  | Both `PeepholePass` runs                       |
+
+#### Copy Propagation
+
+Runs first. Within each basic block, maintains a `copyOf[dest] → src` map. When
+`Move(A, B)` is encountered, subsequent uses of register `A` are replaced with `B`. A
+register overwrite kills the copy chain through that register. Running before LVN
+normalises expression operands so that LVN expression keys hit the value-number dictionary
+more often.
+
+#### Local Value Numbering (LVN)
+
+Assigns a _value number_ to each computed expression within a basic block. When the same
+expression is computed again with the same operand VNs, the second instruction is rewritten
+to `Move(dest, existingReg)`. Key invalidation rules:
+
+- **`const` global immortality:** `GetGlobal` of a `const`-declared global is numbered once
+  and its VN persists across `Call`/`CallBuiltIn` instructions within the block. This
+  collapses repeated loads of the same constant global to a single load plus cheap `Move`
+  copies — the optimisation that handles the §1.1 pattern of six repeated `get.global` loads.
+- **Mutable global invalidation:** `GetGlobal` of a mutable slot is invalidated by
+  `SetGlobal` to that specific slot, and conservatively by any call instruction.
+- **Field invalidation:** `GetField`/`GetFieldIC` VNs are conservatively invalidated by any
+  `SetField`/`SetTable` or call instruction.
+- **`GetFieldIC` on VN hit:** the instruction is rewritten to `Move`, its companion word
+  (IC slot index) is removed, and the `HasOrphanedICSlots` flag is set on the CFG for the
+  post-pipeline compaction step.
+
+#### IC Slot Compaction
+
+After the pipeline, if `HasOrphanedICSlots` is set, a compaction step renumbers the IC slot
+table. It scans all remaining `GetFieldIC`/`CallBuiltIn` companion words to collect the set
+of live slot indices, builds an old→new index remapping, patches companion words in `_code`,
+and shrinks `_icConstantIndices` to only the surviving entries. Cost: O(n) over instructions
+
+- O(k) over IC slots. Skipped when no slots were orphaned (clean fast path via the dirty flag).
+
+#### Measured Impact (Cumulative — Full Pipeline)
+
+On `build.stash` (representative const-heavy, dict-population script):
+
+| Metric                                     | Legacy path | Full pipeline |           Δ |
+| ------------------------------------------ | ----------: | ------------: | ----------: |
+| Instruction count                          |        ~200 |          ~152 |       ~−24% |
+| Repeated `get.global` loads (const global) |          6+ |             1 |         −5+ |
+| Dead `Move` instructions                   |        many |             0 | all removed |
+
+Benchmark impact (median of 3 runs on a locked-clock system): no regression > 3% on any
+benchmark; `bench_scope_lookup` and `bench_namespace_calls` show measurable improvement on
+const-heavy and field-access workloads.
