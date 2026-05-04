@@ -5208,7 +5208,7 @@ Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is
 
 `and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
 
-Contextual keywords (soft keywords — recognised as keywords only in specific syntactic positions; valid identifiers elsewhere): `from` (only reserved after `import`), `async` (only before `fn` or `(` starting a lambda), `await` (only before an expression starter), `defer` (only before a block or expression statement), `lock` (only before `(` followed by a lock path), `elevate` (only before `{`), `retry` (only before `{`)
+Contextual keywords (soft keywords — recognised as keywords only in specific syntactic positions; valid identifiers elsewhere): `from` (only reserved after `import`), `async` (only before `fn` or `(` starting a lambda), `await` (only before an expression starter), `defer` (only before a block or expression statement), `lock` (only before `(` followed by a lock path), `elevate` (only before `{`), `retry` (only before `{`), `timeout` (only before a duration expression followed by `{`)
 
 Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`, `=>`, `>>`, `2>`, `2>>`, `&>`, `&>>`
 
