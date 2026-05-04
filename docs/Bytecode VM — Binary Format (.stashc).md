@@ -20,6 +20,8 @@ The `.stashc` format is a binary serialization of compiled Stash bytecode chunks
 │  ├── Const Global Inits  │
 │  └── Debug Info (opt)    │
 ├──────────────────────────┤
+│  Stdlib Manifest (opt)   │
+├──────────────────────────┤
 │  Embedded Source (opt)   │
 └──────────────────────────┘
 ```
@@ -30,7 +32,7 @@ The `.stashc` format is a binary serialization of compiled Stash bytecode chunks
 | ------ | ---- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | 0x00   | 4    | Magic           | `0x53 0x54 0x42 0x43` ("STBC") — identifies the file format                                                                              |
 | 0x04   | 2    | FormatVersion   | `u16 LE` — currently `1`                                                                                                                 |
-| 0x06   | 1    | Flags           | Bit flags: bit 0 = HasDebugInfo, bit 1 = Optimized, bit 2 = HasEmbeddedSource                                                            |
+| 0x06   | 1    | Flags           | Bit flags: bit 0 = HasDebugInfo, bit 1 = Optimized, bit 2 = HasEmbeddedSource, bit 3 = HasStdlibManifest                                 |
 | 0x07   | 1    | Reserved        | Always `0x00`, reserved for future use                                                                                                   |
 | 0x08   | 4    | CompilerHash    | `u32 LE` — hash of the compiler assembly version (informational, not validated on read)                                                  |
 | 0x0C   | 4    | OpCodeTableHash | `u32 LE` — FNV-1a hash of all OpCode names + numeric values. Must match the reader's computed hash; mismatch means incompatible bytecode |
@@ -102,6 +104,7 @@ Each constant entry starts with a **1-byte type tag** followed by tag-specific p
 | 14  | RetryMetadata       | `u16 LE` OptionCount + `u8` HasUntilClause + `u8` HasOnRetryClause + `u8` OnRetryIsReference                                                                                                                         |
 | 15  | StructInitMetadata  | String TypeName + `u8` HasTypeReg + StringArray FieldNames                                                                                                                                                           |
 | 16  | Byte                | `u8` value                                                                                                                                                                                                           |
+| 17  | LockMetadata        | `i32 LE` OptionCount + `u8` HasWait + `u8` HasStale                                                                                                                                                                  |
 
 **String encoding helpers used throughout:**
 
@@ -182,16 +185,28 @@ Only present when the `HasDebugInfo` flag (bit 0) is set in the file header. The
 | 1    | Count | `u8` — number of upvalue names                      |
 | var  | Names | count × NullableString — name for each upvalue slot |
 
-## 3. Embedded Source (conditional)
+## 3. Stdlib Manifest (conditional)
 
-Only present when the `HasEmbeddedSource` flag (bit 2) is set in the file header. Appears after the complete chunk serialization.
+Only present when the `HasStdlibManifest` flag (bit 3) is set in the file header. Appears immediately after the complete chunk serialization and before the embedded source (if any). The manifest records the standard-library surface the bytecode requires, so a host can verify that the loaded chunk's namespace, global, and capability requirements match what is being injected.
+
+| Size | Field          | Description                                                                                              |
+| ---- | -------------- | -------------------------------------------------------------------------------------------------------- |
+| 2    | NamespaceCount | `u16 LE` — number of required namespace names                                                            |
+| var  | Namespaces     | NamespaceCount × String(u16) — names of stdlib namespaces the bytecode references                        |
+| 2    | GlobalCount    | `u16 LE` — number of required top-level global names                                                     |
+| var  | Globals        | GlobalCount × String(u16) — names of stdlib globals the bytecode references                              |
+| 4    | Capabilities   | `u32 LE` — bitmask of `StashCapabilities` values that must be granted to the VM for this chunk to run    |
+
+## 4. Embedded Source (conditional)
+
+Only present when the `HasEmbeddedSource` flag (bit 2) is set in the file header. Appears after the chunk and the optional stdlib manifest.
 
 | Size | Field  | Description                                                         |
 | ---- | ------ | ------------------------------------------------------------------- |
 | 4    | Length | `u32 LE` — byte length of the UTF-8 encoded source text (0 if null) |
 | N    | Source | UTF-8 bytes                                                         |
 
-## 4. Validation on Read
+## 5. Validation on Read
 
 The reader validates:
 
@@ -200,9 +215,9 @@ The reader validates:
 - OpCode table hash matches the current build's computed hash
 - Code length does not exceed 16 MB
 - String lengths do not exceed 16 MB
-- All tag values in the constant pool are recognized (0–16)
+- All tag values in the constant pool are recognized (0–17)
 
-## 5. Compatibility
+## 6. Compatibility
 
 The `.stashc` format is versioned at two levels:
 

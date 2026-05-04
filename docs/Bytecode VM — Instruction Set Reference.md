@@ -1750,11 +1750,12 @@ Several opcodes consume **companion words** — additional 32-bit words that imm
 
 #### Opcodes with Companion Words
 
-| Opcode              | Companion Count                 | Companion Encoding       | IP Advancement               |
-| ------------------- | ------------------------------- | ------------------------ | ---------------------------- |
-| `get.field.ic` (80) | 1                               | IC slot index (u32)      | +2 (instruction + companion) |
-| `call.builtin` (81) | 1                               | IC slot index (u32)      | +2 (instruction + companion) |
-| `closure` (52)      | N (= sub-chunk's upvalue count) | Upvalue descriptor (u32) | +1+N                         |
+| Opcode              | Companion Count                 | Companion Encoding              | IP Advancement                          |
+| ------------------- | ------------------------------- | ------------------------------- | --------------------------------------- |
+| `get.field.ic` (80) | 1                               | IC slot index (u32)             | +2 (instruction + companion)            |
+| `call.builtin` (81) | 1                               | IC slot index (u32)             | +2 (instruction + companion)            |
+| `closure` (52)      | N (= sub-chunk's upvalue count) | Upvalue descriptor (u32)        | +1+N                                    |
+| `pipe.chain` (65)   | B (= stage count, from operand) | Stage descriptor (u32, see §5.17) | +1+B (instruction + B stage descriptors) |
 
 #### IC Slot Companion (get.field.ic, call.builtin)
 

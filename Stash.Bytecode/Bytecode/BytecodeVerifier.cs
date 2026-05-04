@@ -362,7 +362,7 @@ public sealed class BytecodeVerifier
             {
                 string opName = Enum.IsDefined(lastOp) ? lastOp.ToString() : $"op_{(byte)lastOp:x2}";
                 AddError(errors, lastInstrIdx, prefix,
-                    $"Warning: last instruction is {opName} (expected Return); execution may fall off the end.");
+                    $"Last instruction is {opName} (expected Return); execution may fall off the end.");
             }
         }
     }
