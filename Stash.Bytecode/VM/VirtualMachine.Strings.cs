@@ -241,27 +241,6 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void ExecutePipe(ref CallFrame frame, uint inst)
-    {
-        // ABC: R(A) = pipe(R(B), R(C)) — both sides already evaluated
-        byte a = Instruction.GetA(inst);
-        byte b = Instruction.GetB(inst);
-        byte c = Instruction.GetC(inst);
-        int @base = frame.BaseSlot;
-
-        static bool IsCommandResult(object? obj) =>
-            obj is StashDictionary d && d.Has("stdout") && d.Has("exitCode");
-
-        object? leftResult  = _stack[@base + b].ToObject();
-        object? rightResult = _stack[@base + c].ToObject();
-
-        if (!IsCommandResult(leftResult) || !IsCommandResult(rightResult))
-            throw new RuntimeError("All stages in a pipe must be command expressions.", GetCurrentSpan(ref frame));
-
-        _stack[@base + a] = _stack[@base + c]; // result is the right side
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteRedirect(ref CallFrame frame, uint inst)
     {
         // ABC: Redirect R(A) stream (B=flags) to file R(C); result back in R(A)

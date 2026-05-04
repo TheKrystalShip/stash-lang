@@ -5204,11 +5204,11 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `retry`, `import`, `as`, `switch`, `and`, `or`, `async`, `await`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`
 
 `and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
 
-Contextual keywords: `from` (only reserved after `import`, can be used as a variable name elsewhere)
+Contextual keywords (soft keywords — recognised as keywords only in specific syntactic positions; valid identifiers elsewhere): `from` (only reserved after `import`), `async` (only before `fn` or `(` starting a lambda), `await` (only before an expression starter), `defer` (only before a block or expression statement), `lock` (only before `(` followed by a lock path), `elevate` (only before `{`), `retry` (only before `{`)
 
 Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`, `=>`, `>>`, `2>`, `2>>`, `&>`, `&>>`
 
