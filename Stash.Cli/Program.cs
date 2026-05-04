@@ -1388,9 +1388,21 @@ public class Program
         {
             Console.Error.WriteLine($"{errorType}: {ex.Message}");
             foreach (var frame in ex.CallStack)
-                Console.Error.WriteLine($"  at {frame.FunctionName} ({frame.Span})");
+            {
+                if (frame.FunctionName == "<truncated>")
+                    Console.Error.WriteLine($"  ... {frame.Span.StartLine} more frames omitted");
+                else
+                    Console.Error.WriteLine($"  at {frame.FunctionName} ({frame.Span})");
+            }
 
-            PrintSourceContext(ex.CallStack[0]);
+            // Source context only for the innermost real frame
+            StackFrame? innermost = null;
+            foreach (var frame in ex.CallStack)
+            {
+                if (frame.FunctionName != "<truncated>") { innermost = frame; break; }
+            }
+            if (innermost is { } first)
+                PrintSourceContext(first);
         }
         else if (ex.Span is { } span)
         {

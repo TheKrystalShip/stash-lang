@@ -30,4 +30,16 @@ public readonly record struct SourceSpan(
     int StartColumn,
     int EndLine,
     int EndColumn
-);
+)
+{
+    /// <summary>
+    /// Formats the span as <c>file:line:col</c> for use in stack traces and error messages.
+    /// If <see cref="File"/> is empty, omits the file portion.
+    /// </summary>
+    public override string ToString()
+    {
+        return string.IsNullOrEmpty(File)
+            ? $"{StartLine}:{StartColumn}"
+            : $"{File}:{StartLine}:{StartColumn}";
+    }
+}

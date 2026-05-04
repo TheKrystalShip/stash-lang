@@ -38,6 +38,14 @@ public sealed partial class VirtualMachine
             {
                 return RunInner<DebugOff>(0);
             }
+            catch (RuntimeError ex) when (_exceptionHandlers.Count == 0 && ex.CallStack is null)
+            {
+                // Unhandled error boundary — capture the call stack now (before frames are unwound
+                // by stack rethrow) so the CLI can render a useful trace. The catch filter ensures
+                // we only do this once for a given error.
+                ex.CallStack = CaptureCallStack();
+                throw;
+            }
             catch (ExitException ex)
             {
                 // Defer-aware exit: run all pending defers on every frame (LIFO), then terminate.
@@ -84,6 +92,11 @@ public sealed partial class VirtualMachine
                 ExceptionHandler handler = _exceptionHandlers[^1];
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
 
+                // Capture the call stack BEFORE unwinding so we still see all the frames
+                // between the throw site and the handler. (innermost frame first, capped at 50)
+                var callStack = CaptureCallStack();
+                ex.CallStack = callStack;
+
                 // Execute defers for frames being unwound BEFORE closing upvalues
                 List<StashError>? suppressed = null;
                 for (int i = _frameCount - 1; i > handler.FrameIndex; i--)
@@ -107,17 +120,18 @@ public sealed partial class VirtualMachine
                 if (ex.SuppressedErrors is { Count: > 0 })
                     (suppressed ??= new()).AddRange(ex.SuppressedErrors);
 
-                // Capture the call stack (innermost frame first, capped at 50)
-                var callStack = CaptureCallStack();
-                ex.CallStack = callStack;
-
                 // Construct the StashError via the canonical factory
                 List<string>? stackLines = null;
                 if (callStack is { Count: > 0 })
                 {
                     stackLines = new List<string>(callStack.Count);
                     foreach (var sf in callStack)
-                        stackLines.Add($"  at {sf.FunctionName} ({sf.Span})");
+                    {
+                        if (sf.FunctionName == "<truncated>")
+                            stackLines.Add($"  ... {sf.Span.StartLine} more frames omitted");
+                        else
+                            stackLines.Add($"  at {sf.FunctionName} ({sf.Span})");
+                    }
                 }
                 var stashError = StashError.FromRuntimeError(ex, stackLines, suppressed);
                 _context.LastError = stashError;
@@ -474,17 +488,35 @@ public sealed partial class VirtualMachine
     private List<StackFrame> CaptureCallStack()
     {
         const int MaxFrames = 50;
-        int count = Math.Min(_frameCount, MaxFrames);
-        var frames = new List<StackFrame>(count);
+        var frames = new List<StackFrame>(Math.Min(_frameCount, MaxFrames));
+        int captured = 0;
+        int omitted = 0;
         for (int i = _frameCount - 1; i >= 0; i--)
         {
             ref CallFrame f = ref _frames[i];
             SourceSpan? span = f.Chunk.SourceMap.GetSpan(f.IP > 0 ? f.IP - 1 : 0);
             if (span is null) continue;
-            string fnName = f.FunctionName ?? "<main>";
-            frames.Add(new StackFrame(fnName, span.Value));
-            if (frames.Count >= MaxFrames) break;
+
+            if (captured < MaxFrames)
+            {
+                string fnName = f.FunctionName ?? "<main>";
+                frames.Add(new StackFrame(fnName, span.Value));
+                captured++;
+            }
+            else
+            {
+                omitted++;
+            }
         }
+
+        if (omitted > 0)
+        {
+            // Encode the omitted-frame count via the Span's StartLine; the renderer
+            // recognises the sentinel function name "<truncated>" and prints a one-line
+            // "... N more frames omitted" notice.
+            frames.Add(new StackFrame("<truncated>", new SourceSpan(string.Empty, omitted, 0, omitted, 0)));
+        }
+
         return frames;
     }
 
