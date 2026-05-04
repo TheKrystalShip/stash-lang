@@ -259,6 +259,25 @@ public class StaticAnalysisEnhancementsTests : AnalysisTestBase
         Assert.DoesNotContain(diagnostics, d => d.Code == "SA0407" && d.Message.Contains("safeFetch"));
     }
 
+    [Fact]
+    public void SA0407_AsyncLambdaWithoutAwait_ReportsWarning()
+    {
+        var source = "let f = async () => 42;";
+        var diagnostics = Validate(source);
+        Assert.Contains(diagnostics, d => d.Code == "SA0407");
+    }
+
+    [Fact]
+    public void SA0407_AsyncLambdaWithAwait_NoWarning()
+    {
+        var source = """
+            async fn fetchData() { return 1; }
+            let f = async () => await fetchData();
+            """;
+        var diagnostics = Validate(source);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0407" && d.Message.Contains("<lambda>"));
+    }
+
     // ── SA0902 — Function Body Too Long ───────────────────────────────────────
 
     [Fact]

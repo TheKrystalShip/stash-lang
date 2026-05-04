@@ -1,4 +1,4 @@
-namespace Stash.Analysis.Rules;
+namespace Stash.Analysis.Rules.Performance;
 
 using System;
 using System.Collections.Generic;
@@ -24,7 +24,7 @@ public sealed class RepeatedCallInLoopConditionRule : IAnalysisRule
         typeof(ForStmt),
     };
 
-    private static readonly HashSet<string> CacheableMethods = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> _cacheableMethods = new(StringComparer.Ordinal)
     {
         "len", "size", "keys"
     };
@@ -52,18 +52,21 @@ public sealed class RepeatedCallInLoopConditionRule : IAnalysisRule
                 return;
         }
 
-        if (condition == null) return;
+        if (condition == null)
+            return;
 
         var calls = new List<(string Receiver, string Method, Expr CallExpr)>();
         FindCacheableCalls(condition, calls);
 
-        if (calls.Count == 0) return;
+        if (calls.Count == 0)
+            return;
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (receiver, method, callExpr) in calls)
         {
             string key = $"{receiver}.{method}";
-            if (!seen.Add(key)) continue;
+            if (!seen.Add(key))
+                continue;
 
             if (!IsReceiverMutatedInBody(receiver, bodyStatements))
             {
@@ -76,7 +79,7 @@ public sealed class RepeatedCallInLoopConditionRule : IAnalysisRule
     private static void FindCacheableCalls(Expr expr, List<(string, string, Expr)> result)
     {
         if (expr is CallExpr call && call.Callee is DotExpr dot &&
-            dot.Object is IdentifierExpr id && CacheableMethods.Contains(dot.Name.Lexeme))
+            dot.Object is IdentifierExpr id && _cacheableMethods.Contains(dot.Name.Lexeme))
         {
             result.Add((id.Name.Lexeme, dot.Name.Lexeme, call));
         }
@@ -90,7 +93,8 @@ public sealed class RepeatedCallInLoopConditionRule : IAnalysisRule
                 break;
             case CallExpr c:
                 FindCacheableCalls(c.Callee, result);
-                foreach (var arg in c.Arguments) FindCacheableCalls(arg, result);
+                foreach (var arg in c.Arguments)
+                    FindCacheableCalls(arg, result);
                 break;
             case DotExpr d:
                 FindCacheableCalls(d.Object, result);
@@ -108,7 +112,8 @@ public sealed class RepeatedCallInLoopConditionRule : IAnalysisRule
     {
         foreach (var stmt in stmts)
         {
-            if (IsStmtMutating(stmt, receiverName)) return true;
+            if (IsStmtMutating(stmt, receiverName))
+                return true;
         }
         return false;
     }
@@ -119,6 +124,22 @@ public sealed class RepeatedCallInLoopConditionRule : IAnalysisRule
         BlockStmt block => block.Statements.Any(s => IsStmtMutating(s, name)),
         IfStmt ifStmt => IsStmtMutating(ifStmt.ThenBranch, name) ||
                          (ifStmt.ElseBranch != null && IsStmtMutating(ifStmt.ElseBranch, name)),
+        WhileStmt w => IsExprMutating(w.Condition, name) || IsStmtMutating(w.Body, name),
+        DoWhileStmt dw => IsStmtMutating(dw.Body, name) || IsExprMutating(dw.Condition, name),
+        ForStmt f => (f.Initializer != null && IsStmtMutating(f.Initializer, name)) ||
+                     (f.Condition != null && IsExprMutating(f.Condition, name)) ||
+                     (f.Increment != null && IsExprMutating(f.Increment, name)) ||
+                     IsStmtMutating(f.Body, name),
+        ForInStmt fi => IsExprMutating(fi.Iterable, name) || IsStmtMutating(fi.Body, name),
+        TryCatchStmt tc => tc.TryBody.Statements.Any(s => IsStmtMutating(s, name)) ||
+                           tc.CatchClauses.Any(cc => cc.Body.Statements.Any(s => IsStmtMutating(s, name))) ||
+                           (tc.FinallyBody != null && tc.FinallyBody.Statements.Any(s => IsStmtMutating(s, name))),
+        ReturnStmt r => r.Value != null && IsExprMutating(r.Value, name),
+        VarDeclStmt v => v.Initializer != null && IsExprMutating(v.Initializer, name),
+        ConstDeclStmt c => IsExprMutating(c.Initializer, name),
+        DeferStmt d => IsStmtMutating(d.Body, name),
+        ElevateStmt e => e.Body.Statements.Any(s => IsStmtMutating(s, name)),
+        LockStmt l => l.Body.Statements.Any(s => IsStmtMutating(s, name)),
         _ => false
     };
 

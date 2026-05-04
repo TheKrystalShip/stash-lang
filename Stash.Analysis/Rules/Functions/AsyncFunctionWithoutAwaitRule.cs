@@ -1,4 +1,4 @@
-namespace Stash.Analysis.Rules;
+namespace Stash.Analysis.Rules.Functions;
 
 using System;
 using System.Collections.Generic;
@@ -12,18 +12,50 @@ public sealed class AsyncFunctionWithoutAwaitRule : IAnalysisRule
 {
     public DiagnosticDescriptor Descriptor => DiagnosticDescriptors.SA0407;
 
-    public IReadOnlySet<Type> SubscribedNodeTypes { get; } = new HashSet<Type> { typeof(FnDeclStmt) };
+    public IReadOnlySet<Type> SubscribedNodeTypes { get; } = new HashSet<Type>
+    {
+        typeof(FnDeclStmt),
+        typeof(LambdaExpr),
+    };
 
     public void Analyze(RuleContext context)
     {
-        if (context.Statement is not FnDeclStmt fn) return;
-        if (!fn.IsAsync) return;
-
-        // Check if body contains any await expression (not inside nested functions/lambdas)
-        if (!ContainsAwait(fn.Body.Statements))
+        if (context.Statement is FnDeclStmt fn)
         {
-            context.ReportDiagnostic(
-                DiagnosticDescriptors.SA0407.CreateDiagnostic(fn.Name.Span, fn.Name.Lexeme));
+            if (!fn.IsAsync)
+                return;
+            if (!ContainsAwait(fn.Body.Statements))
+            {
+                context.ReportDiagnostic(
+                    DiagnosticDescriptors.SA0407.CreateDiagnostic(fn.Name.Span, fn.Name.Lexeme));
+            }
+            return;
+        }
+
+        if (context.Expression is LambdaExpr lambda)
+        {
+            if (!lambda.IsAsync)
+                return;
+
+            bool hasAwait;
+            if (lambda.BlockBody != null)
+            {
+                hasAwait = ContainsAwait(lambda.BlockBody.Statements);
+            }
+            else if (lambda.ExpressionBody != null)
+            {
+                hasAwait = ExprContainsAwait(lambda.ExpressionBody);
+            }
+            else
+            {
+                hasAwait = false;
+            }
+
+            if (!hasAwait)
+            {
+                context.ReportDiagnostic(
+                    DiagnosticDescriptors.SA0407.CreateDiagnostic(lambda.Span, "<lambda>"));
+            }
         }
     }
 
@@ -31,7 +63,8 @@ public sealed class AsyncFunctionWithoutAwaitRule : IAnalysisRule
     {
         foreach (var stmt in stmts)
         {
-            if (StmtContainsAwait(stmt)) return true;
+            if (StmtContainsAwait(stmt))
+                return true;
         }
         return false;
     }

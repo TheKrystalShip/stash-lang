@@ -65,10 +65,11 @@ public sealed class MagicNumberRule : IAnalysisRule, IConfigurableRule
                 ? ((long)value).ToString()
                 : value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-            foreach (var span in spans)
+            // Spec: report on the second and subsequent occurrences (skip the first).
+            for (int i = 1; i < spans.Count; i++)
             {
                 context.ReportDiagnostic(
-                    DiagnosticDescriptors.SA1110.CreateDiagnostic(span, formatted, spans.Count));
+                    DiagnosticDescriptors.SA1110.CreateDiagnostic(spans[i], formatted, spans.Count));
             }
         }
     }

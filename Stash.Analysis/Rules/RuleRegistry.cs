@@ -1,6 +1,8 @@
 namespace Stash.Analysis.Rules;
 
 using System.Collections.Generic;
+using Stash.Analysis.Rules.Functions;
+using Stash.Analysis.Rules.Performance;
 
 /// <summary>
 /// Central registry of all <see cref="IAnalysisRule"/> implementations.
