@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Stash.Bytecode;
 
@@ -10,6 +11,12 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed class BytecodeVerifier
 {
+    // Maximum defined opcode value, computed once from the OpCode enum.
+    // Using Enum.GetValues keeps this in sync automatically when new opcodes are added,
+    // avoiding the recurring drift bug where this constant lagged behind the enum
+    // (e.g., CatchMatch, Rethrow, LockEnd, UnsetGlobal were each rejected as "invalid"
+    // for a period after being added).
+    private static readonly byte MaxOpcode = Enum.GetValues<OpCode>().Max(op => (byte)op);
     /// <summary>
     /// Verifies a chunk and all its nested sub-chunks (closures).
     /// Returns a result indicating whether the bytecode is valid.
@@ -38,8 +45,8 @@ public sealed class BytecodeVerifier
             uint word = chunk.Code[i];
             var op = Instruction.GetOp(word);
 
-            // 1. Validate opcode range (0–97); keep upper bound in sync with OpCode enum (LockEnd = 97)
-            if ((byte)op > 97)
+            // 1. Validate opcode range against the actual OpCode enum extent.
+            if ((byte)op > MaxOpcode || !Enum.IsDefined(op))
             {
                 AddError(errors, instrIdx, prefix, $"Invalid opcode {(byte)op}.");
                 lastInstrIdx = instrIdx;
@@ -52,7 +59,7 @@ public sealed class BytecodeVerifier
             byte c = Instruction.GetC(word);
             ushort bx = Instruction.GetBx(word);
 
-            // 2. A is always a register except for Ax-format opcodes (TryEnd, ElevateEnd, LockEnd)
+            // 2. A is always a register except for Ax-format opcodes (TryEnd, ElevateEnd, LockEnd, UnsetGlobal)
             if (fmt != OpCodeFormat.Ax && a >= chunk.MaxRegs)
                 AddError(errors, instrIdx, prefix, $"Opcode {op}: register A={a} out of bounds (MaxRegs={chunk.MaxRegs}).");
 
@@ -332,6 +339,16 @@ public sealed class BytecodeVerifier
 
                 case OpCode.LockEnd:
                     break; // No operands to validate
+
+                // ── UnsetGlobal: Ax = constant index of the global name string ──────
+
+                case OpCode.UnsetGlobal:
+                {
+                    uint ax = Instruction.GetAx(word);
+                    if (ax >= (uint)chunk.Constants.Length)
+                        AddError(errors, instrIdx, prefix, $"Opcode {op}: constant index Ax={ax} out of bounds (Constants.Length={chunk.Constants.Length}).");
+                    break;
+                }
             }
 
             lastInstrIdx = instrIdx;
