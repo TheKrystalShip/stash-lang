@@ -1,0 +1,88 @@
+// =============================================================================
+// Benchmark: Text Processing (Log-style Filtering & Aggregation)
+// Real-world workload: generate a synthetic log dataset, then filter, parse,
+// and aggregate it. Stresses string splitting, substring search, dict-based
+// counting, and array iteration — the bread-and-butter of log-processing
+// scripts.
+// =============================================================================
+
+const LINES = 50000;
+const SCANS = 20;
+
+// --- Generate synthetic log lines (no external I/O) ---
+fn build_log(n) {
+    let levels = ["INFO", "WARN", "ERROR", "DEBUG", "INFO", "ERROR"];
+    let mods   = ["auth", "db", "net", "cache", "api", "fs"];
+    let users  = ["alice", "bob", "carol", "dave", "eve"];
+    let lines  = [];
+    let i = 0;
+    while (i < n) {
+        let lvl = levels[i % 6];
+        let mn  = mods[i % 6];
+        let u   = users[i % 5];
+        let ts  = "2026-01-15 12:" + conv.toStr((i / 60) % 60) + ":" + conv.toStr(i % 60);
+        let line = ts + " " + lvl + " [" + mn + "] event=" + conv.toStr(i) + " user=" + u;
+        arr.push(lines, line);
+        i++;
+    }
+    return lines;
+}
+
+io.println("=== Benchmark: Text Processing ===");
+
+let lines = build_log(LINES);
+
+let start = time.millis();
+let total_errors = 0;
+let total_chars  = 0;
+let scan = 0;
+
+while (scan < SCANS) {
+    let by_module = dict.new();
+    let by_user   = dict.new();
+    let errors    = 0;
+
+    for (let line in lines) {
+        // Cheap filter: only process ERROR lines
+        if (str.contains(line, "ERROR", false)) {
+            errors++;
+            total_chars = total_chars + len(line);
+
+            // Parse module name between [ and ]
+            let lb = str.indexOf(line, "[", 0);
+            let rb = str.indexOf(line, "]", 0);
+            let modname = str.substring(line, lb + 1, rb);
+
+            // Parse user= field
+            let up   = str.indexOf(line, "user=", 0);
+            let user = str.substring(line, up + 5, len(line));
+
+            // Aggregate counts
+            let prev_m = dict.get(by_module, modname, 0);
+            dict.set(by_module, modname, prev_m + 1);
+
+            let prev_u = dict.get(by_user, user, 0);
+            dict.set(by_user, user, prev_u + 1);
+        }
+    }
+
+    total_errors = total_errors + errors;
+
+    // Build a sorted-ish summary (touches dict.keys, str.upper, str.replace)
+    let mods = dict.keys(by_module);
+    for (let m in mods) {
+        let n  = dict.get(by_module, m, 0);
+        let up = str.upper(m);
+        let rp = str.replace(up, "_", "-", -1);
+        total_chars = total_chars + len(rp) + n;
+    }
+
+    scan++;
+}
+
+let elapsed = time.millis() - start;
+
+io.println($"Lines: {LINES}, Scans: {SCANS}");
+io.println($"Total errors matched: {total_errors}");
+io.println($"Result (checksum): {total_chars}");
+io.println($"Time: {elapsed} ms");

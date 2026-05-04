@@ -114,6 +114,29 @@ Both forms are explicit, intentional, and easy to read. Regular strings (without
 
 The lexer treats `$"..."` as a special token type (`InterpolatedString`). Inside `"...${...}..."` strings, the lexer scans for `${` and switches to expression-parsing mode until the matching `}`.
 
+### String Escape Sequences
+
+Double-quoted strings (both plain `"..."` and interpolated `$"..."` / `"...${...}..."`) support the following backslash escape sequences:
+
+| Escape | Character  | Description                                             |
+| ------ | ---------- | ------------------------------------------------------- |
+| `\\`   | `\`        | Literal backslash                                       |
+| `\"`   | `"`        | Double quote (avoids closing the string)                |
+| `\n`   | LF (0x0A)  | Newline                                                 |
+| `\t`   | TAB (0x09) | Horizontal tab                                          |
+| `\r`   | CR (0x0D)  | Carriage return                                         |
+| `\0`   | NUL (0x00) | Null character                                          |
+| `\$`   | `$`        | Literal dollar sign (suppresses `${...}` interpolation) |
+
+```stash
+let msg = "Hello\nWorld";      // two lines when printed
+let path = "C:\\Users\\Admin"; // literal backslashes
+let tab = "col1\tcol2";        // tab-separated columns
+let raw = "Price: \$5.00";     // literal $, no interpolation
+```
+
+Any other `\X` sequence is a lex error. Multi-line strings (`"""..."""`) also process these escape sequences.
+
 ### Comments
 
 ```stash

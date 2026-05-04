@@ -22,8 +22,8 @@ io.println(upper.stdout);    // → "HELLO WORLD"
 
 // Interpolation in any stage
 let pattern = "world";
-let filtered = $(echo "hello\nworld" | grep ${pattern});
-io.println(filtered.stdout); // → "world"
+let filtered = $(echo hello world | grep ${pattern});
+io.println(filtered.stdout); // → "hello world"
 
 // Inline + external compose freely
 let composed = $(echo "hello" | cat) | $(cat);

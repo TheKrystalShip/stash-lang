@@ -1,0 +1,88 @@
+// =============================================================================
+// Benchmark: Data Transformation (CSV-style ETL)
+// Real-world workload: build a dataset of CSV-style records, parse them,
+// group by a category field, compute aggregates (sum, count, avg), then
+// serialize the result back to a key=value summary. Stresses split/parse,
+// numeric conversion, dict aggregation, and string concatenation.
+// =============================================================================
+
+const ROWS   = 30000;
+const PASSES = 8;
+
+// --- Generate synthetic CSV rows in memory: id,name,dept,salary ---
+fn build_rows(n) {
+    let depts = ["eng", "sales", "ops", "support", "eng", "sales"];
+    let names = ["Ada", "Ben", "Cyd", "Dan", "Eli", "Fay", "Gus", "Hal"];
+    let rows  = [];
+    let i = 0;
+    while (i < n) {
+        let d = depts[i % 6];
+        let nm = names[i % 8];
+        let salary = 30000 + ((i * 137) % 70000);
+        let row = conv.toStr(i) + "," + nm + "," + d + "," + conv.toStr(salary);
+        arr.push(rows, row);
+        i++;
+    }
+    return rows;
+}
+
+io.println("=== Benchmark: Data Transformation ===");
+
+let rows = build_rows(ROWS);
+
+let start = time.millis();
+let total_summary_chars = 0;
+let total_count = 0;
+let pass = 0;
+
+while (pass < PASSES) {
+    let counts = dict.new();
+    let sums   = dict.new();
+    let maxs   = dict.new();
+
+    for (let row in rows) {
+        // Parse: "id,name,dept,salary"
+        let parts  = str.split(row, ",", -1);
+        let dept   = parts[2];
+        let salary = conv.toInt(parts[3]);
+
+        let c = dict.get(counts, dept, 0);
+        dict.set(counts, dept, c + 1);
+
+        let s = dict.get(sums, dept, 0);
+        dict.set(sums, dept, s + salary);
+
+        let mx = dict.get(maxs, dept, 0);
+        if (salary > mx) {
+            dict.set(maxs, dept, salary);
+        }
+
+        total_count++;
+    }
+
+    // Serialize the aggregate result back to a key=value string
+    let keys = dict.keys(counts);
+    let parts_out = [];
+    for (let k in keys) {
+        let c   = dict.get(counts, k, 0);
+        let s   = dict.get(sums, k, 0);
+        let mx  = dict.get(maxs, k, 0);
+        let avg = s / c;
+        let line = k + "=count:" + conv.toStr(c)
+                     + ",sum:"   + conv.toStr(s)
+                     + ",avg:"   + conv.toStr(avg)
+                     + ",max:"   + conv.toStr(mx);
+        arr.push(parts_out, line);
+    }
+    let summary = arr.join(parts_out, ";");
+    total_summary_chars = total_summary_chars + len(summary);
+
+    pass++;
+}
+
+let elapsed = time.millis() - start;
+
+io.println($"Rows: {ROWS}, Passes: {PASSES}");
+io.println($"Total rows processed: {total_count}");
+io.println($"Result (checksum): {total_summary_chars}");
+io.println($"Time: {elapsed} ms");

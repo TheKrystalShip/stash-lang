@@ -272,6 +272,52 @@ for lang_label_cmd in \
 done
 
 echo ""
+
+# --- Text Processing ---
+echo ">>> Text Processing"
+declare -A text_results
+for lang_label_cmd in \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_text_processing.stash" \
+    "Python:python3 $SCRIPT_DIR/bench_text_processing.py" \
+    "Node.js:node $SCRIPT_DIR/bench_text_processing.js" \
+    "Ruby:ruby $SCRIPT_DIR/bench_text_processing.rb" \
+    "Perl:perl $SCRIPT_DIR/bench_text_processing.pl" \
+    "Lua:lua $SCRIPT_DIR/bench_text_processing.lua" \
+    "Bash:bash $SCRIPT_DIR/bench_text_processing.sh"; do
+    lang="${lang_label_cmd%%:*}"
+    cmd="${lang_label_cmd#*:}"
+    if should_run "$lang"; then
+        printf "  %-10s " "$lang"
+        median=$(run_benchmark "$lang" "^Time" $cmd)
+        text_results["$lang"]=$median
+        echo "$(fmt "$median")"
+    fi
+done
+
+echo ""
+
+# --- Data Transformation ---
+echo ">>> Data Transformation"
+declare -A data_results
+for lang_label_cmd in \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_data_transform.stash" \
+    "Python:python3 $SCRIPT_DIR/bench_data_transform.py" \
+    "Node.js:node $SCRIPT_DIR/bench_data_transform.js" \
+    "Ruby:ruby $SCRIPT_DIR/bench_data_transform.rb" \
+    "Perl:perl $SCRIPT_DIR/bench_data_transform.pl" \
+    "Lua:lua $SCRIPT_DIR/bench_data_transform.lua" \
+    "Bash:bash $SCRIPT_DIR/bench_data_transform.sh"; do
+    lang="${lang_label_cmd%%:*}"
+    cmd="${lang_label_cmd#*:}"
+    if should_run "$lang"; then
+        printf "  %-10s " "$lang"
+        median=$(run_benchmark "$lang" "^Time" $cmd)
+        data_results["$lang"]=$median
+        echo "$(fmt "$median")"
+    fi
+done
+
+echo ""
 echo "========================================================"
 echo "SUMMARY TABLE (all times in ms, median of $RUNS runs)"
 echo "========================================================"
@@ -283,6 +329,8 @@ if [[ -z "$LANG_FILTER" ]]; then
     printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Expression Throughput" "${expr_results[Stash]}"  "${expr_results[Python]}"  "${expr_results[Node.js]}"  "${expr_results[Ruby]}"  "${expr_results[Perl]}"  "${expr_results[Lua]}"  "${expr_results[Bash]}"
     printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Built-in Functions"    "${ns_results[Stash]}"    "${ns_results[Python]}"    "${ns_results[Node.js]}"    "${ns_results[Ruby]}"    "${ns_results[Perl]}"    "${ns_results[Lua]}"    "${ns_results[Bash]}"
     printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Scope Lookup"          "${scope_results[Stash]}" "${scope_results[Python]}" "${scope_results[Node.js]}" "${scope_results[Ruby]}" "${scope_results[Perl]}" "${scope_results[Lua]}" "${scope_results[Bash]}"
+    printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Text Processing"       "${text_results[Stash]}"  "${text_results[Python]}"  "${text_results[Node.js]}"  "${text_results[Ruby]}"  "${text_results[Perl]}"  "${text_results[Lua]}"  "${text_results[Bash]}"
+    printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Data Transformation"   "${data_results[Stash]}"  "${data_results[Python]}"  "${data_results[Node.js]}"  "${data_results[Ruby]}"  "${data_results[Perl]}"  "${data_results[Lua]}"  "${data_results[Bash]}"
 else
     printf "%-26s %12s\n" "Benchmark" "$LANG_FILTER"
     printf "%-26s %12s\n" "--------------------------" "----------"
@@ -291,5 +339,7 @@ else
     printf "%-26s %12s\n" "Expression Throughput" "${expr_results[$LANG_FILTER]:-n/a}"
     printf "%-26s %12s\n" "Built-in Functions"    "${ns_results[$LANG_FILTER]:-n/a}"
     printf "%-26s %12s\n" "Scope Lookup"          "${scope_results[$LANG_FILTER]:-n/a}"
+    printf "%-26s %12s\n" "Text Processing"       "${text_results[$LANG_FILTER]:-n/a}"
+    printf "%-26s %12s\n" "Data Transformation"   "${data_results[$LANG_FILTER]:-n/a}"
 fi
 echo ""
