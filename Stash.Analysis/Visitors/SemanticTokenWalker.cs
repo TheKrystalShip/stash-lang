@@ -82,7 +82,73 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             modifiers |= ModifierReadonly;
         }
 
+        // Built-ins are registered at synthetic line 0; tag them with defaultLibrary
+        // so themes can distinguish them from user symbols (Decision 3).
+        if (definition.Span.StartLine == 0)
+        {
+            modifiers |= ModifierDefaultLibrary;
+            // The synthetic span never matches a real token, so no spurious declaration flag is possible.
+        }
+
+        if (definition.IsAsync)
+        {
+            modifiers |= ModifierAsync;
+        }
+
         return (tokenType, modifiers);
+    }
+
+    /// <summary>
+    /// Classifies an identifier token used in a type reference position
+    /// (type hints, typed catch clauses, <c>is</c>-expression fallback).
+    /// Per spec Decisions 3 and 4, user-defined struct/enum/interface references
+    /// emit their specific kind, and built-in types carry <c>defaultLibrary</c>.
+    /// </summary>
+    private void EmitTypeReference(Token token)
+    {
+        // Keyword tokens (e.g. 'null' in 'is null') are owned by the grammar.
+        if (token.Type != TokenType.Identifier)
+        {
+            return;
+        }
+
+        // 1. Resolved user-defined struct/enum/interface/type alias.
+        if (_resolvedRefs.TryGetValue((token.Span.StartLine, token.Span.StartColumn), out var def))
+        {
+            var (type, modifiers) = MapSymbolKind(def, token);
+            EmitFromToken(token, type, modifiers);
+            return;
+        }
+
+        // 2. Built-in struct (Error, ValueError, TypeError, etc.).
+        foreach (var s in StdlibRegistry.Structs)
+        {
+            if (s.Name == token.Lexeme)
+            {
+                EmitFromToken(token, TokenTypeStruct, ModifierDefaultLibrary);
+                return;
+            }
+        }
+
+        // 3. Top-level built-in enum.
+        foreach (var e in StdlibRegistry.Enums)
+        {
+            if (e.Namespace == null && e.Name == token.Lexeme)
+            {
+                EmitFromToken(token, TokenTypeEnum, ModifierDefaultLibrary);
+                return;
+            }
+        }
+
+        // 4. Built-in primitive type (int, string, bool, …).
+        if (StdlibRegistry.ValidTypes.Contains(token.Lexeme))
+        {
+            EmitFromToken(token, TokenTypeType, ModifierDefaultLibrary);
+            return;
+        }
+
+        // 5. Unknown user type — emit generic type so grammar can color it.
+        EmitFromToken(token, TokenTypeType, 0);
     }
 
     private void ClassifyStandaloneIdentifier(Token token)
@@ -222,7 +288,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration);
         if (stmt.TypeHint is not null)
         {
-            EmitFromToken(stmt.TypeHint.Name, TokenTypeType, 0);
+            EmitTypeReference(stmt.TypeHint.Name);
         }
 
         stmt.Initializer?.Accept(this);
@@ -235,7 +301,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration | ModifierReadonly);
         if (stmt.TypeHint is not null)
         {
-            EmitFromToken(stmt.TypeHint.Name, TokenTypeType, 0);
+            EmitTypeReference(stmt.TypeHint.Name);
         }
 
         stmt.Initializer.Accept(this);
@@ -312,7 +378,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.VariableName, TokenTypeVariable, ModifierDeclaration);
         if (stmt.TypeHint is not null)
         {
-            EmitFromToken(stmt.TypeHint.Name, TokenTypeType, 0);
+            EmitTypeReference(stmt.TypeHint.Name);
         }
 
         stmt.Iterable.Accept(this);
@@ -339,7 +405,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             EmitFromToken(stmt.Parameters[i], TokenTypeParameter, ModifierDeclaration);
             if (stmt.ParameterTypes[i] is TypeHint paramType)
             {
-                EmitFromToken(paramType.Name, TokenTypeType, 0);
+                EmitTypeReference(paramType.Name);
             }
 
             if (stmt.DefaultValues[i] is Expr defaultVal)
@@ -349,7 +415,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         }
         if (stmt.ReturnType is TypeHint returnType)
         {
-            EmitFromToken(returnType.Name, TokenTypeType, 0);
+            EmitTypeReference(returnType.Name);
         }
 
         stmt.Body.Accept(this);
@@ -374,11 +440,11 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         stmt.TryBody.Accept(this);
         foreach (CatchClause clause in stmt.CatchClauses)
         {
-            // Emit type tokens for typed catch clauses
+            // Emit type tokens for typed catch clauses (built-in error types
+            // resolve to struct.defaultLibrary via EmitTypeReference).
             foreach (Token typeToken in clause.TypeTokens)
             {
-                if (typeToken.Lexeme != "Error")
-                    EmitFromToken(typeToken, TokenTypeType, 0);
+                EmitTypeReference(typeToken);
             }
             EmitFromToken(clause.Variable, TokenTypeVariable, ModifierDeclaration);
             clause.Body.Accept(this);
@@ -436,7 +502,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
             if (stmt.FieldTypes[i] is TypeHint fieldType)
             {
-                EmitFromToken(fieldType.Name, TokenTypeType, 0);
+                EmitTypeReference(fieldType.Name);
             }
         }
         _isMethodContext = true;
@@ -482,7 +548,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
             if (i < stmt.FieldTypes.Count && stmt.FieldTypes[i] is TypeHint fieldType)
             {
-                EmitFromToken(fieldType.Name, TokenTypeType, 0);
+                EmitTypeReference(fieldType.Name);
             }
         }
         foreach (var method in stmt.Methods)
@@ -493,12 +559,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 EmitFromToken(method.Parameters[i], TokenTypeParameter, ModifierDeclaration);
                 if (i < method.ParameterTypes.Count && method.ParameterTypes[i] is TypeHint paramType)
                 {
-                    EmitFromToken(paramType.Name, TokenTypeType, 0);
+                    EmitTypeReference(paramType.Name);
                 }
             }
             if (method.ReturnType is TypeHint returnType)
             {
-                EmitFromToken(returnType.Name, TokenTypeType, 0);
+                EmitTypeReference(returnType.Name);
             }
         }
         return 0;
@@ -580,16 +646,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         expr.Left.Accept(this);
         if (expr.TypeName != null)
         {
-            if (expr.TypeName.Type == TokenType.Identifier &&
-                _resolvedRefs.TryGetValue((expr.TypeName.Span.StartLine, expr.TypeName.Span.StartColumn), out var def))
-            {
-                var (type, modifiers) = MapSymbolKind(def, expr.TypeName);
-                EmitFromToken(expr.TypeName, type, modifiers);
-            }
-            else
-            {
-                EmitFromToken(expr.TypeName, TokenTypeType, 0);
-            }
+            EmitTypeReference(expr.TypeName);
         }
         else
         {
@@ -753,11 +810,11 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 if (expr.OnRetryClause.ParamAttempt is not null)
                     EmitFromToken(expr.OnRetryClause.ParamAttempt, TokenTypeVariable, ModifierDeclaration);
                 if (expr.OnRetryClause.ParamAttemptTypeHint is not null)
-                    EmitFromToken(expr.OnRetryClause.ParamAttemptTypeHint.Name, TokenTypeType, 0);
+                    EmitTypeReference(expr.OnRetryClause.ParamAttemptTypeHint.Name);
                 if (expr.OnRetryClause.ParamError is not null)
                     EmitFromToken(expr.OnRetryClause.ParamError, TokenTypeVariable, ModifierDeclaration);
                 if (expr.OnRetryClause.ParamErrorTypeHint is not null)
-                    EmitFromToken(expr.OnRetryClause.ParamErrorTypeHint.Name, TokenTypeType, 0);
+                    EmitTypeReference(expr.OnRetryClause.ParamErrorTypeHint.Name);
                 expr.OnRetryClause.Body.Accept(this);
             }
         }
@@ -805,7 +862,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);
             if (expr.ParameterTypes[i] is TypeHint paramType)
             {
-                EmitFromToken(paramType.Name, TokenTypeType, 0);
+                EmitTypeReference(paramType.Name);
             }
 
             if (expr.DefaultValues[i] is Expr defaultVal)
