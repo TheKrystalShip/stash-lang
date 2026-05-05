@@ -5402,6 +5402,47 @@ fn makeAdder(x) {
         Assert.Equal(9L, Run("let result = (1 + 2) * 3;"));
     }
 
+    // Regression: for-in loop closure capture (kanban: Task Run — Loop Variable
+    // Closure Capture). Each iteration must produce a fresh binding so closures
+    // that escape the loop see distinct values, not the final loop value.
+    [Fact]
+    public void ForIn_LetBinding_PerIterationCapture()
+    {
+        // Stash semantics: `for (let n in ...)` should give each iteration a
+        // distinct binding for n, so closures capturing n see the iteration's
+        // value rather than sharing the final value across all closures.
+        var result = Run(@"
+let fns = [];
+for (let n in 0..5) {
+    arr.push(fns, () => n);
+}
+let collected = [];
+for (let f in fns) {
+    arr.push(collected, f());
+}
+let result = collected;
+");
+        var list = (System.Collections.Generic.List<object?>)result!;
+        Assert.Equal(new object?[] { 0L, 1L, 2L, 3L, 4L }, list);
+    }
+
+    [Fact]
+    public void ForIn_LetBinding_ClosureCapturesNotShared()
+    {
+        // Same scenario with a string concatenation in the closure body —
+        // exercises the path where the closure does extra work using `n`.
+        var result = Run(@"
+let labels = [];
+for (let n in 0..3) {
+    let cb = () => ""label_"" + conv.toStr(n);
+    arr.push(labels, cb());
+}
+let result = labels;
+");
+        var list = (System.Collections.Generic.List<object?>)result!;
+        Assert.Equal(new object?[] { "label_0", "label_1", "label_2" }, list);
+    }
+
     // Switch expression
 
     [Fact]

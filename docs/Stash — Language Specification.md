@@ -2802,6 +2802,21 @@ for (let key in d) {
 
 This applies to arrays and dictionaries. Strings and ranges are inherently safe (strings are immutable; ranges yield computed values).
 
+#### Per-Iteration Binding
+
+The `let` declaration in a `for-in` loop header creates a **fresh binding for each iteration**. Closures captured during one iteration retain that iteration's value, even if the loop variable is later mutated by subsequent iterations:
+
+```stash
+let fns = [];
+for (let n in 0..5) {
+    arr.push(fns, () => n);
+}
+io.println(fns[0]());  // 0  (not 4)
+io.println(fns[3]());  // 3  (not 4)
+```
+
+This matches JavaScript's `let`-in-`for` semantics and avoids the classic "all closures share the final loop value" footgun that plagues capture-by-reference loop variables. The same guarantee applies to `task.run`, `arr.parForEach`, and any other API that escapes a closure created inside the loop body.
+
 ### Break / Continue
 
 Standard `break` and `continue` within loops.

@@ -236,4 +236,30 @@ public class CopyPropagationTests : BytecodeTestBase
         Assert.Equal(OpCode.Add, Instruction.GetOp(addInstr));
         Assert.Equal(0, (int)Instruction.GetB(addInstr)); // r0 unchanged
     }
+
+    // ===========================================================================
+    // Regression — for-in loop closure capture (kanban: Task Run — Loop Variable
+    // Closure Capture). CloseUpval(A) treats A as a stack-slot lower bound, NOT
+    // a register read. Copy propagation must NOT rewrite its A operand: doing so
+    // would change which slot range gets closed and leave per-iteration upvalues
+    // open, so all iterations end up sharing the final loop value.
+    // ===========================================================================
+
+    [Fact]
+    public void CopyProp_CloseUpval_OperandNotRewritten()
+    {
+        // Move r1, r3; CloseUpval r1 → must remain CloseUpval r1, NOT r3.
+        var builder = new ChunkBuilder();
+        builder.MaxRegs = 4;
+        builder.EmitABC(OpCode.Move, 1, 3, 0);    // Move r1 = r3
+        builder.EmitA(OpCode.CloseUpval, 1);       // CloseUpval r1 (slot lower-bound)
+        builder.EmitABC(OpCode.Return, 0, 0, 0);
+
+        RunCopyPropOnly(builder);
+
+        // CloseUpval is at index 1. Its A operand must still be r1.
+        uint closeInstr = builder.RawCode[1];
+        Assert.Equal(OpCode.CloseUpval, Instruction.GetOp(closeInstr));
+        Assert.Equal(1, (int)Instruction.GetA(closeInstr));
+    }
 }

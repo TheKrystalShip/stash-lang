@@ -225,7 +225,6 @@ internal static class OpcodeOperands
             case OpCode.SetGlobal:
             case OpCode.InitConstGlobal:
             case OpCode.SetUpval:
-            case OpCode.CloseUpval:
             case OpCode.Switch:
             case OpCode.Test:
             case OpCode.TypedWrap:
@@ -236,6 +235,13 @@ internal static class OpcodeOperands
                 byte na = rewrite(a);
                 return na == a ? instr : PatchA(instr, na);
             }
+
+            // ── CloseUpval: A is a register-slot lower-bound, NOT a value read ──────
+            // CloseUpval(A) means "close all open upvalues whose stack slot is >= base+A".
+            // Substituting A through copy propagation would change which slot range gets
+            // closed and is semantically wrong. Leave A unchanged.
+            case OpCode.CloseUpval:
+                return instr;
 
             // ── Import / ImportAs / Destructure: A is both source and first write slot ─
             // All three read R(A) as input and write results starting at R(A), R(A+1), …
