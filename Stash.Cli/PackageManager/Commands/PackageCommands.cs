@@ -88,6 +88,9 @@ public static class PackageCommands
                 case "logout":
                     LogoutCommand.Execute(subArgs);
                     break;
+                case "whoami":
+                    WhoamiCommand.Execute(subArgs);
+                    break;
                 case "owner":
                     OwnerCommand.Execute(subArgs);
                     break;
@@ -163,6 +166,7 @@ public static class PackageCommands
         Console.WriteLine("  info              Show package information");
         Console.WriteLine("  login             Authenticate with registry");
         Console.WriteLine("  logout            Remove stored credentials");
+        Console.WriteLine("  whoami            Show the username for the configured registry.");
         Console.WriteLine("  owner             Manage package owners");
         Console.WriteLine("  unpublish         Remove a published version");
         Console.WriteLine("  deprecate         Deprecate a package or version");

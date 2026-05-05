@@ -475,6 +475,41 @@ The `--registry` flag is **required**. If the logged-out registry was the defaul
 
 ---
 
+### `stash pkg whoami`
+
+Show the username for the configured registry.
+
+```bash
+stash pkg whoami                                               # default registry
+stash pkg whoami --registry https://registry.example.com/api/v1
+stash pkg whoami --verbose
+stash pkg whoami -v
+```
+
+Prints the authenticated username to stdout (one line) and exits 0.  Mirrors `npm whoami` — output is script-friendly.
+
+With `--verbose` / `-v`, additional fields are printed:
+
+```
+alice
+email: alice@example.com
+role: admin
+registry: https://registry.example.com/api/v1
+```
+
+Missing optional fields (email, role) are shown as `(none)`.
+
+**Flags:**
+
+| Flag               | Description                                     |
+| ------------------ | ----------------------------------------------- |
+| `--registry <url>` | Use a specific registry URL                     |
+| `--verbose`, `-v`  | Print email, role, and registry URL as well     |
+
+Exits 1 (with a message to stderr) when not logged in or when the registry is unreachable.
+
+---
+
 ### `stash pkg owner <action> <package> [username]`
 
 Manage package owners.

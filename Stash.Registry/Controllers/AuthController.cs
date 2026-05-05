@@ -9,6 +9,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Stash.Registry.Auth;
 using Stash.Registry.Configuration;
@@ -41,6 +42,7 @@ public class AuthController : ControllerBase
     private readonly IAuthProvider _authProvider;
     private readonly AuditService _auditService;
     private readonly RegistryConfig _config;
+    private readonly ILogger<AuthController> _logger;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -55,13 +57,15 @@ public class AuthController : ControllerBase
         JwtTokenService jwtService,
         IAuthProvider authProvider,
         AuditService auditService,
-        RegistryConfig config)
+        RegistryConfig config,
+        ILogger<AuthController> logger)
     {
         _db = db;
         _jwtService = jwtService;
         _authProvider = authProvider;
         _auditService = auditService;
         _config = config;
+        _logger = logger;
     }
 
     /// <summary>
@@ -209,7 +213,13 @@ public class AuthController : ControllerBase
 
         try
         {
-            await _authProvider.CreateUserAsync(username, password);
+            string role = await _authProvider.CreateUserBootstrappingAdminAsync(username, password);
+            if (role == "admin")
+            {
+                _logger.LogInformation(
+                    "User '{User}' is the first registered user and was created as admin.",
+                    username);
+            }
         }
         catch (InvalidOperationException ex)
         {

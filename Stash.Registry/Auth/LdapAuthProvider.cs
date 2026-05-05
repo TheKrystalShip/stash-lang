@@ -104,4 +104,12 @@ public sealed class LdapAuthProvider : IAuthProvider
         throw new NotSupportedException(
             "LDAP user lookup is not yet implemented.");
     }
+
+    /// <summary>Not implemented. Bootstrap admin seeding is not supported for LDAP providers.</summary>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public Task<string> CreateUserBootstrappingAdminAsync(string username, string password)
+    {
+        throw new NotSupportedException(
+            "Bootstrap admin creation is not supported for LDAP providers.");
+    }
 }

@@ -49,13 +49,30 @@ curl -X POST http://localhost:8080/api/v1/auth/login \
 
 ### 3. Grant admin access
 
-The first registered user is a regular user. To promote to admin, update the database directly:
+The first registered user automatically becomes admin. Subsequent registrations are normal users.
 
-```bash
-sqlite3 data/registry.db "UPDATE users SET role='admin' WHERE username='admin'"
-```
+For automated deployments (Docker, CI), seed an admin via environment variable instead:
 
-If you already have an admin account, use the admin API instead:
+1. Set `Registry:Bootstrap:AdminUsername` and `Registry:Bootstrap:AdminPasswordEnv` in `appsettings.json`:
+   ```json
+   "Bootstrap": {
+     "AdminUsername": "admin",
+     "AdminPasswordEnv": "STASH_REGISTRY_ADMIN_PASSWORD"
+   }
+   ```
+2. Set the env var when starting the registry:
+   ```bash
+   STASH_REGISTRY_ADMIN_PASSWORD='strong-password-here' ./stash-registry
+   ```
+
+The bootstrap runs on every startup but is **idempotent**:
+- If the user does not exist, it is created with `role=admin`.
+- If the user already exists with `role=admin`, nothing happens.
+- If the user exists with a non-admin role, a warning is logged and bootstrap does **not** auto-promote (prevents privilege escalation across restarts).
+
+If `RegistrationEnabled: false` and no `AdminPasswordEnv` is configured, the registry will start with no admins and no path to create one — a startup error is logged with remediation instructions.
+
+If you already have an admin account, use the admin API to create additional admin users:
 
 ```bash
 # As an existing admin, create a new admin user directly

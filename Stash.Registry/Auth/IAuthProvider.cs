@@ -18,4 +18,11 @@ public interface IAuthProvider
     /// Check if a user exists in the auth backend.
     /// </summary>
     Task<bool> UserExistsAsync(string username);
+
+    /// <summary>
+    /// Creates a new user, assigning role=admin if this is the first user, otherwise role=user.
+    /// The assignment is performed inside a database transaction to prevent races.
+    /// </summary>
+    /// <returns>The role assigned: "admin" or "user".</returns>
+    Task<string> CreateUserBootstrappingAdminAsync(string username, string password);
 }

@@ -82,6 +82,17 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="registryUrl">The canonical registry URL for persisting refreshed tokens.</param>
     public RegistryClient(string baseUrl, string? token = null, string? refreshToken = null,
         DateTime? tokenExpiresAt = null, string? machineId = null, string? registryUrl = null)
+        : this(baseUrl, new HttpClient(), token, refreshToken, tokenExpiresAt, machineId, registryUrl)
+    {
+    }
+
+    /// <summary>
+    /// Initialises a new <see cref="RegistryClient"/> using a provided <see cref="HttpClient"/>
+    /// instance.  Intended for unit testing with a fake message handler.
+    /// </summary>
+    internal RegistryClient(string baseUrl, HttpClient http, string? token = null,
+        string? refreshToken = null, DateTime? tokenExpiresAt = null,
+        string? machineId = null, string? registryUrl = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _token = token;
@@ -89,7 +100,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         _tokenExpiresAt = tokenExpiresAt;
         _machineId = machineId;
         _registryUrl = registryUrl;
-        _http = new HttpClient();
+        _http = http;
         if (_token != null)
         {
             _http.DefaultRequestHeaders.Authorization =
@@ -547,6 +558,61 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         }
 
         return null;
+    }
+
+    /// <summary>Holds the fields returned by <c>GET /auth/whoami</c>.</summary>
+    public sealed record WhoamiInfo(string? Username, string? Email, string? Role);
+
+    /// <summary>
+    /// Returns detailed information about the authenticated user.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="Whoami"/>, this method throws on any failure so callers can
+    /// surface a specific error message to the user.
+    /// </remarks>
+    /// <returns>A <see cref="WhoamiInfo"/> record with the user's details.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown on network failure, 401, other non-success status, or a missing
+    /// <c>username</c> field in the response.
+    /// </exception>
+    public WhoamiInfo WhoamiDetailed()
+    {
+        EnsureTokenFresh();
+        HttpResponseMessage response;
+        try
+        {
+            response = _http.GetAsync($"{_baseUrl}/auth/whoami").GetAwaiter().GetResult();
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new InvalidOperationException($"Failed to reach registry: {ex.Message}", ex);
+        }
+
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            throw new InvalidOperationException($"Not logged in. Run 'stash pkg login {_baseUrl}'.");
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            string reason = response.ReasonPhrase ?? string.Empty;
+            throw new InvalidOperationException($"Registry returned {(int)response.StatusCode}: {reason}");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("username", out var usernameProp))
+        {
+            throw new InvalidOperationException("Registry whoami response missing 'username' field.");
+        }
+
+        string? username = usernameProp.GetString();
+        string? email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
+        string? role = root.TryGetProperty("role", out var roleProp) ? roleProp.GetString() : null;
+
+        return new WhoamiInfo(username, email, role);
     }
 
     /// <summary>

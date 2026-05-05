@@ -298,6 +298,34 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .ToListAsync();
     }
 
+    /// <inheritdoc/>
+    public async Task<string> CreateUserBootstrappingAdminAsync(string username, string passwordHash)
+    {
+        using var tx = await _context.Database.BeginTransactionAsync();
+        var exists = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+        if (exists is not null)
+            throw new InvalidOperationException($"User '{username}' already exists.");
+
+        long count = await _context.Users.LongCountAsync();
+        string role = count == 0 ? "admin" : "user";
+        _context.Users.Add(new UserRecord
+        {
+            Username = username,
+            PasswordHash = passwordHash,
+            Role = role,
+            CreatedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+        await tx.CommitAsync();
+        return role;
+    }
+
+    /// <inheritdoc/>
+    public async Task<long> GetAdminCountAsync()
+    {
+        return await _context.Users.LongCountAsync(u => u.Role == "admin");
+    }
+
     // ── Token operations ──────────────────────────────────────────────────────
 
     /// <inheritdoc/>

@@ -8,4 +8,5 @@ public sealed class RegistryConfig
     public AuthConfig Auth { get; set; } = new();
     public SecurityConfig Security { get; set; } = new();
     public RateLimitingConfig RateLimiting { get; set; } = new();
+    public BootstrapConfig Bootstrap { get; set; } = new();
 }

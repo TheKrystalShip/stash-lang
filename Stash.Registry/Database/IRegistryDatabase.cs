@@ -184,6 +184,22 @@ public interface IRegistryDatabase
     /// <returns>A list of username strings.</returns>
     Task<List<string>> ListUsersAsync();
 
+    /// <summary>
+    /// Creates a new user, assigning role=admin if this is the first user in the DB,
+    /// otherwise role=user. The count and insert are performed inside a single transaction
+    /// to prevent race conditions on concurrent first-registration requests.
+    /// </summary>
+    /// <param name="username">The unique username.</param>
+    /// <param name="passwordHash">The pre-hashed password.</param>
+    /// <returns>The role assigned: "admin" or "user".</returns>
+    /// <exception cref="InvalidOperationException">Thrown if the username already exists.</exception>
+    Task<string> CreateUserBootstrappingAdminAsync(string username, string passwordHash);
+
+    /// <summary>
+    /// Returns the count of users whose role equals "admin".
+    /// </summary>
+    Task<long> GetAdminCountAsync();
+
     // Token operations
     /// <summary>
     /// Persists a new API token record.

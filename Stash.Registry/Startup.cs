@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Stash.Registry.Auth;
+using Stash.Registry.Bootstrap;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -204,6 +205,27 @@ public sealed class Startup
         {
             var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
             db.Initialize();
+        }
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+            var bootstrapLogger = app.Services.GetRequiredService<ILogger<AdminBootstrapper>>();
+            var bootstrapper = new AdminBootstrapper(db, _config, bootstrapLogger);
+            bootstrapper.RunAsync().GetAwaiter().GetResult();
+
+            if (!_config.Auth.RegistrationEnabled && string.IsNullOrEmpty(_config.Bootstrap.AdminPasswordEnv))
+            {
+                long adminCount = db.GetAdminCountAsync().GetAwaiter().GetResult();
+                if (adminCount == 0)
+                {
+                    var startupLogger = app.Services.GetRequiredService<ILogger<Startup>>();
+                    startupLogger.LogError(
+                        "Registration is disabled and no Bootstrap.AdminPasswordEnv is configured. "
+                        + "The registry has no admin and no path to create one. "
+                        + "Set Registry:Bootstrap:AdminPasswordEnv and the named env var, then restart.");
+                }
+            }
         }
 
         // Read BasePath from the live IConfiguration so that overrides applied
