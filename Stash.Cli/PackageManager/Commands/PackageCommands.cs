@@ -71,7 +71,7 @@ public static class PackageCommands
                     UpdateCommand.Execute(subArgs);
                     break;
                 case "outdated":
-                    OutdatedCommand.Execute(subArgs);
+                    Environment.ExitCode = OutdatedCommand.Execute(subArgs);
                     break;
                 case "publish":
                     PublishCommand.Execute(subArgs);

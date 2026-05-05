@@ -42,7 +42,7 @@ namespace Stash.Cli.PackageManager;
 /// </list>
 /// </para>
 /// </remarks>
-public sealed class RegistryClient : IPackageSource
+public sealed class RegistryClient : IPackageSource, IVersionLookup
 {
     /// <summary>The base URL of the registry, with any trailing slash removed.</summary>
     private readonly string _baseUrl;
@@ -223,6 +223,51 @@ public sealed class RegistryClient : IPackageSource
             }
         }
         return versions;
+    }
+
+    /// <summary>
+    /// Fetches both the published versions list and the registry's <c>latest</c> pointer
+    /// for a package in a single request.
+    /// </summary>
+    /// <returns>
+    /// Tuple of (versions, latest). <c>latest</c> is the registry's recommended version
+    /// (parsed from the response's <c>latest</c> field), or <c>null</c> when missing or
+    /// unparseable. Versions list is empty when the package is not found (HTTP 404).
+    /// </returns>
+    /// <exception cref="HttpRequestException">Thrown for non-404 HTTP error responses.</exception>
+    public (List<SemVer> Versions, SemVer? Latest) GetVersionsAndLatest(string packageName)
+    {
+        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return (new List<SemVer>(), null);
+        }
+
+        response.EnsureSuccessStatusCode();
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var doc = JsonDocument.Parse(json);
+
+        var versions = new List<SemVer>();
+        if (doc.RootElement.TryGetProperty("versions", out var versionsObj))
+        {
+            foreach (var prop in versionsObj.EnumerateObject())
+            {
+                var sv = SemVer.Parse(prop.Name);
+                if (sv != null)
+                {
+                    versions.Add(sv);
+                }
+            }
+        }
+
+        SemVer? latest = null;
+        if (doc.RootElement.TryGetProperty("latest", out var latestProp) && latestProp.ValueKind == JsonValueKind.String)
+        {
+            latest = SemVer.Parse(latestProp.GetString()!);
+        }
+
+        return (versions, latest);
     }
 
     /// <summary>

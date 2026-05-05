@@ -1,7 +1,9 @@
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Stash.Common;
+using Stash.Cli.PackageManager;
 using Stash.Cli.PackageManager.Commands;
+using Stash.Common;
 
 namespace Stash.Tests.Interpreting;
 
@@ -273,6 +275,22 @@ public class CliPackageCommandsTests : IDisposable
 
     // ── OutdatedCommand ───────────────────────────────────────────────────────
 
+    private sealed class StubVersionLookup : IVersionLookup
+    {
+        private readonly Dictionary<string, (List<SemVer> Versions, SemVer? Latest)> _data;
+
+        public StubVersionLookup(Dictionary<string, (List<SemVer> Versions, SemVer? Latest)> data)
+        {
+            _data = data;
+        }
+
+        public (List<SemVer> Versions, SemVer? Latest) GetVersionsAndLatest(string packageName)
+        {
+            if (_data.TryGetValue(packageName, out var v)) return v;
+            return (new List<SemVer>(), null);
+        }
+    }
+
     [Fact]
     public void Outdated_WithLockedDeps_ShowsTable()
     {
@@ -282,13 +300,20 @@ public class CliPackageCommandsTests : IDisposable
             ["pkg-a"] = ("1.2.0", "https://example.com/pkg-a-1.2.0.tar.gz")
         });
 
-        string output = CaptureStdOut(() => OutdatedCommand.Execute([]));
+        var manifest = PackageManifest.Load(_tempDir)!;
+        var lockFile = LockFile.Load(_tempDir);
+        var lookup = new StubVersionLookup(new()
+        {
+            ["pkg-a"] = (new List<SemVer> { SemVer.Parse("1.2.0")!, SemVer.Parse("1.3.0")! }, SemVer.Parse("1.3.0"))
+        });
+
+        string output = CaptureStdOut(() => OutdatedCommand.Run(manifest, lockFile, lookup));
 
         Assert.Contains("Package", output);
         Assert.Contains("Current", output);
         Assert.Contains("pkg-a", output);
         Assert.Contains("1.2.0", output);
-        Assert.Contains("^1.0.0", output);
+        Assert.Contains("1.3.0", output);
     }
 
     [Fact]
@@ -298,7 +323,7 @@ public class CliPackageCommandsTests : IDisposable
 
         string output = CaptureStdOut(() => OutdatedCommand.Execute([]));
 
-        Assert.Contains("No dependencies installed", output);
+        Assert.Contains("No dependencies declared", output);
     }
 
     // ── UpdateCommand ─────────────────────────────────────────────────────────
