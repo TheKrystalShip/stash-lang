@@ -68,6 +68,17 @@ public class Program
             return;
         }
 
+        try
+        {
+            RateLimitingConfigValidator.Validate(config.RateLimiting);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine($"stash-registry: configuration error: {ex.Message}");
+            Environment.Exit(1);
+            return;
+        }
+
         var startup = new Startup(config);
         startup.ConfigureServices(builder.Services);
 

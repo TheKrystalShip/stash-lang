@@ -87,81 +87,25 @@ The registry reads from `appsettings.json` in the current directory. To specify 
 dotnet run --project Stash.Registry/ -- /path/to/custom-config.json
 ```
 
+All registry settings live under the top-level `Registry` configuration section. When binding via environment variables, prefix each key with `Registry__` (e.g. `Registry__Server__Port=9000`).
+
 ### Full Default Configuration
 
-```json
-{
-  "Server": {
-    "Host": "0.0.0.0",
-    "Port": 8080,
-    "BasePath": "/api/v1",
-    "Tls": {
-      "Enabled": false,
-      "Cert": "",
-      "Key": ""
-    }
-  },
-  "Storage": {
-    "Type": "filesystem",
-    "Path": "data/packages",
-    "Bucket": "",
-    "Region": "",
-    "Endpoint": "",
-    "AccessKey": "",
-    "SecretKey": ""
-  },
-  "Database": {
-    "Type": "sqlite",
-    "Path": "data/registry.db",
-    "ConnectionString": ""
-  },
-  "Auth": {
-    "Type": "local",
-    "RegistrationEnabled": true,
-    "ApiTokenExpiry": "90d",
-    "AccessTokenExpiry": "1h",
-    "RefreshTokenExpiry": "90d",
-    "LdapServer": "",
-    "LdapBaseDn": "",
-    "LdapUserFilter": "",
-    "OidcAuthority": "",
-    "OidcClientId": "",
-    "OidcClientSecret": ""
-  },
-  "Security": {
-    "MaxPackageSize": "10MB",
-    "RequiredIntegrity": "sha256",
-    "UnpublishWindow": "72h"
-  },
-  "RateLimiting": {
-    "Enabled": true,
-    "Auth": {
-      "MaxAttempts": 10,
-      "WindowSeconds": 300,
-      "MaxPerHour": 60,
-      "MaxPerMinute": 10
-    },
-    "Publish": {
-      "MaxAttempts": 5,
-      "WindowSeconds": 300,
-      "MaxPerHour": 30,
-      "MaxPerMinute": 5
-    },
-    "Download": {
-      "MaxAttempts": 100,
-      "WindowSeconds": 300,
-      "MaxPerHour": 1000,
-      "MaxPerMinute": 120
-    },
-    "Search": {
-      "MaxAttempts": 50,
-      "WindowSeconds": 300,
-      "MaxPerHour": 500,
-      "MaxPerMinute": 60
-    }
-  }
-}
-```
+Check the [appsettings.json](appsettings.json) file for a full example.
+
+### Rate Limiting
+
+Rate limiting is configured under `Registry:RateLimiting`. When `Enabled` is `true`, every rule must have a positive `MaxAttempts` and `WindowSeconds` — startup will fail with a clear error otherwise.
+
+| Field            | Type    | Description                                                                                          |
+| ---------------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| Enabled          | bool    | Master switch. Defaults to `false`.                                                                  |
+| Auth             | rule    | Limits applied to login, registration, and token endpoints. Uses `MaxAttempts` over `WindowSeconds`. |
+| Publish          | rule    | Limits applied to package publish. Uses `MaxPerHour`.                                                |
+| Download         | rule    | Limits applied to package downloads. Uses `MaxPerMinute`.                                            |
+| Search           | rule    | Limits applied to search queries. Uses `MaxPerMinute`.                                               |
+
+Each rule supports `MaxAttempts` + `WindowSeconds` (sliding window, used by `Auth`), `MaxPerHour` (used by `Publish`), and `MaxPerMinute` (used by `Download` and `Search`).
 
 ### Server Configuration
 
@@ -169,7 +113,7 @@ dotnet run --project Stash.Registry/ -- /path/to/custom-config.json
 | ----------- | ------ | --------- | ----------------------- |
 | Host        | string | `0.0.0.0` | Bind address            |
 | Port        | int    | `8080`    | Listen port             |
-| BasePath    | string | `/api/v1` | API path prefix         |
+| BasePath    | string | `""`      | URL prefix when mounted behind a reverse proxy (e.g. `/registry`). Must start with `/` and not end with `/`. |
 | Tls.Enabled | bool   | `false`   | Enable HTTPS            |
 | Tls.Cert    | string | `""`      | Path to PEM certificate |
 | Tls.Key     | string | `""`      | Path to PEM private key |
@@ -219,12 +163,14 @@ To enable HTTPS directly on the registry (without a reverse proxy):
 
 ```json
 {
-  "Server": {
-    "Port": 443,
-    "Tls": {
-      "Enabled": true,
-      "Cert": "/path/to/cert.pem",
-      "Key": "/path/to/key.pem"
+  "Registry": {
+    "Server": {
+      "Port": 443,
+      "Tls": {
+        "Enabled": true,
+        "Cert": "/path/to/cert.pem",
+        "Key": "/path/to/key.pem"
+      }
     }
   }
 }
@@ -245,9 +191,11 @@ Switch from SQLite to PostgreSQL by setting the database type and connection str
 
 ```json
 {
-  "Database": {
-    "Type": "postgresql",
-    "ConnectionString": "Host=localhost;Port=5432;Database=stash_registry;Username=stash;Password=secret"
+  "Registry": {
+    "Database": {
+      "Type": "postgresql",
+      "ConnectionString": "Host=localhost;Port=5432;Database=stash_registry;Username=stash;Password=secret"
+    }
   }
 }
 ```
@@ -262,8 +210,10 @@ Without a signing key, a random key is generated at startup and tokens are inval
 
 ```json
 {
-  "Security": {
-    "JwtSigningKey": "your-secret-key-at-least-32-characters-long"
+  "Registry": {
+    "Security": {
+      "JwtSigningKey": "your-secret-key-at-least-32-characters-long"
+    }
   }
 }
 ```
@@ -274,8 +224,10 @@ For a private registry, prevent anyone from creating accounts:
 
 ```json
 {
-  "Auth": {
-    "RegistrationEnabled": false
+  "Registry": {
+    "Auth": {
+      "RegistrationEnabled": false
+    }
   }
 }
 ```
