@@ -88,6 +88,20 @@ public sealed class PackageInstaller
         var resolver = new DependencyResolver(source);
         var resolved = resolver.Resolve(manifest);
 
+        // Warn for each deprecated dependency discovered during resolution.
+        // The Deprecations dictionary is keyed by "name@version" so each pair
+        // warns at most once, even when the same dep appears transitively.
+        // Note: when the lock file is already up-to-date the resolver is skipped
+        // entirely (see above) — deprecation warnings are only emitted after a
+        // fresh resolve, not on repeat installs from an existing lock file.
+        foreach (var (key, message) in resolver.Deprecations)
+        {
+            int atIdx = key.LastIndexOf('@');
+            string nm = atIdx > 0 ? key.Substring(0, atIdx) : key;
+            string ver = atIdx > 0 ? key.Substring(atIdx + 1) : "";
+            Console.Error.WriteLine($"warning: {nm}@{ver} is deprecated: {message}");
+        }
+
         var newLockFile = new LockFile
         {
             LockVersion = 1,

@@ -339,4 +339,77 @@ public class CliPackageCommandsTests : IDisposable
 
         Assert.Contains("Usage:", output);
     }
+
+    // ── InfoCommand ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Info_PackageWithVersionDeprecation_RendersDeprecatedSuffixAndMessage()
+    {
+        // Uses InfoCommand.Render(json) directly — no registry server needed.
+        string json = """
+            {
+                "name": "my-pkg",
+                "latest": "1.1.0",
+                "versions": {
+                    "1.0.0": {
+                        "publishedAt": "2026-01-01",
+                        "deprecated": true,
+                        "deprecationMessage": "use 1.1.0 instead"
+                    },
+                    "1.1.0": {
+                        "publishedAt": "2026-02-01"
+                    }
+                }
+            }
+            """;
+
+        string output = CaptureStdOut(() => InfoCommand.Render(json));
+
+        Assert.Contains("(deprecated)", output);
+        Assert.Contains("deprecated: use 1.1.0 instead", output);
+        // Non-deprecated version should not have the suffix.
+        Assert.DoesNotContain("1.1.0" + "  (deprecated)", output);
+    }
+
+    [Fact]
+    public void Info_PackageWithPackageLevelDeprecation_RendersTopLevelDeprecation()
+    {
+        string json = """
+            {
+                "name": "old-pkg",
+                "latest": "1.0.0",
+                "deprecated": true,
+                "deprecationMessage": "this package is unmaintained",
+                "deprecationAlternative": "new-pkg",
+                "versions": {
+                    "1.0.0": { "publishedAt": "2025-01-01" }
+                }
+            }
+            """;
+
+        string output = CaptureStdOut(() => InfoCommand.Render(json));
+
+        Assert.Contains("DEPRECATED: this package is unmaintained", output);
+        Assert.Contains("Suggested alternative: new-pkg", output);
+    }
+
+    [Fact]
+    public void Info_NonDeprecatedPackage_NoDeprecationOutput()
+    {
+        string json = """
+            {
+                "name": "good-pkg",
+                "latest": "2.0.0",
+                "versions": {
+                    "2.0.0": { "publishedAt": "2026-03-01" }
+                }
+            }
+            """;
+
+        string output = CaptureStdOut(() => InfoCommand.Render(json));
+
+        Assert.DoesNotContain("(deprecated)", output);
+        Assert.DoesNotContain("DEPRECATED", output);
+        Assert.DoesNotContain("Suggested alternative", output);
+    }
 }

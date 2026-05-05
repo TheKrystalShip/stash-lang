@@ -61,11 +61,34 @@ public static class InfoCommand
             return;
         }
 
-        using var doc = JsonDocument.Parse(info);
+        Render(info);
+    }
+
+    /// <summary>
+    /// Renders the info output for a JSON string returned by the registry's
+    /// <c>GET /packages/{name}</c> endpoint.  Extracted for testability.
+    /// </summary>
+    /// <param name="json">The raw JSON response string.</param>
+    internal static void Render(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
 
         Console.WriteLine($"{GetString(root, "name")}");
         Console.WriteLine($"Latest: {GetString(root, "latest")}");
+
+        // Package-level deprecation
+        if (root.TryGetProperty("deprecated", out var pkgDep) && pkgDep.ValueKind == JsonValueKind.True)
+        {
+            string depMsg = GetString(root, "deprecationMessage");
+            Console.WriteLine($"DEPRECATED: {depMsg}");
+            string alt = GetString(root, "deprecationAlternative");
+            if (!string.IsNullOrEmpty(alt))
+            {
+                Console.WriteLine($"Suggested alternative: {alt}");
+            }
+        }
+
         if (root.TryGetProperty("description", out var desc) && desc.ValueKind == JsonValueKind.String)
         {
             Console.WriteLine($"Description: {desc.GetString()}");
@@ -110,7 +133,18 @@ public static class InfoCommand
                     publishedAt = pa.GetString() ?? "";
                 }
 
-                Console.WriteLine($"  {v.Name,-15} {publishedAt}");
+                bool isDep = v.Value.TryGetProperty("deprecated", out var dep) && dep.ValueKind == JsonValueKind.True;
+                string suffix = isDep ? "  (deprecated)" : "";
+                Console.WriteLine($"  {v.Name,-15} {publishedAt}{suffix}");
+
+                if (isDep && v.Value.TryGetProperty("deprecationMessage", out var dm) && dm.ValueKind == JsonValueKind.String)
+                {
+                    string? msg = dm.GetString();
+                    if (!string.IsNullOrEmpty(msg))
+                    {
+                        Console.WriteLine($"    deprecated: {msg}");
+                    }
+                }
             }
         }
 

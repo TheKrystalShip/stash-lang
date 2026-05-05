@@ -40,6 +40,9 @@ public class DependencyResolverTests
 
         public string? GetIntegrity(string packageName, SemVer version)
             => $"sha256-mock-{packageName}-{version}";
+
+        public (bool Deprecated, string? Message) GetDeprecation(string packageName, SemVer version)
+            => (false, null);
     }
 
     // ── Single Dependency ────────────────────────────────────────────────────

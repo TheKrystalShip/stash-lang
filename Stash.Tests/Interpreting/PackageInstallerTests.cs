@@ -250,8 +250,10 @@ public class PackageInstallerTests : IDisposable
     private class MockPackageSource : IPackageSource
     {
         private readonly Dictionary<string, List<(SemVer version, PackageManifest manifest)>> _packages = new();
+        private readonly Dictionary<string, (bool Deprecated, string? Message)> _deprecations = new(StringComparer.Ordinal);
 
-        public void AddPackage(string name, string version, Dictionary<string, string>? deps = null)
+        public void AddPackage(string name, string version, Dictionary<string, string>? deps = null,
+            bool deprecated = false, string? deprecationMessage = null)
         {
             if (!_packages.TryGetValue(name, out var list))
             {
@@ -259,6 +261,10 @@ public class PackageInstallerTests : IDisposable
                 _packages[name] = list;
             }
             list.Add((SemVer.Parse(version), new PackageManifest { Name = name, Version = version, Dependencies = deps }));
+            if (deprecated)
+            {
+                _deprecations[$"{name}@{version}"] = (true, deprecationMessage);
+            }
         }
 
         public List<SemVer> GetAvailableVersions(string name)
@@ -276,6 +282,9 @@ public class PackageInstallerTests : IDisposable
 
         public string? GetIntegrity(string name, SemVer version)
             => null;
+
+        public (bool Deprecated, string? Message) GetDeprecation(string name, SemVer version)
+            => _deprecations.TryGetValue($"{name}@{version}", out var info) ? info : (false, null);
     }
 
     public PackageInstallerTests()
@@ -810,5 +819,160 @@ public class IntegrityVerificationTests : IDisposable
 
             Assert.True(File.Exists(PackageCache.GetCachePath(_pkgName, "1.0.0")));
         }
+    }
+}
+
+// ── DeprecationWarningTests ───────────────────────────────────────────────────
+
+/// <summary>
+/// Tests that <see cref="PackageInstaller.Install"/> prints a warning to stderr
+/// for each deprecated dependency discovered during resolution.
+/// </summary>
+public class DeprecationWarningTests : IDisposable
+{
+    private readonly string _tempDir;
+
+    public DeprecationWarningTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), $"stash-depwarn-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, recursive: true);
+        }
+    }
+
+    // MockPackageSource with deprecation support (local to this test class)
+    private sealed class MockSource : IPackageSource
+    {
+        private readonly Dictionary<string, List<SemVer>> _versions = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, PackageManifest> _manifests = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, (bool Deprecated, string? Message)> _deprecations = new(StringComparer.Ordinal);
+
+        public void Add(string name, string version, bool deprecated = false, string? deprecationMessage = null,
+            Dictionary<string, string>? deps = null)
+        {
+            var sv = SemVer.Parse(version);
+            if (!_versions.TryGetValue(name, out var list))
+            {
+                list = new List<SemVer>();
+                _versions[name] = list;
+            }
+            list.Add(sv);
+            string key = $"{name}@{version}";
+            _manifests[key] = new PackageManifest { Name = name, Version = version, Dependencies = deps };
+            _deprecations[key] = (deprecated, deprecationMessage);
+        }
+
+        public List<SemVer> GetAvailableVersions(string n) =>
+            _versions.TryGetValue(n, out var l) ? l : new List<SemVer>();
+
+        public PackageManifest? GetManifest(string n, SemVer v) =>
+            _manifests.TryGetValue($"{n}@{v}", out var m) ? m : null;
+
+        public string GetResolvedUrl(string n, SemVer v) =>
+            $"https://registry.example.com/{n}/{v}.tar.gz";
+
+        public string? GetIntegrity(string n, SemVer v) => null;
+
+        public (bool Deprecated, string? Message) GetDeprecation(string n, SemVer v) =>
+            _deprecations.TryGetValue($"{n}@{v}", out var d) ? d : (false, null);
+    }
+
+    private static string CaptureStdErr(Action action)
+    {
+        var orig = Console.Error;
+        using var sw = new StringWriter();
+        Console.SetError(sw);
+        try { action(); }
+        finally { Console.SetError(orig); }
+        return sw.ToString();
+    }
+
+    private void WriteManifest(string projectDir, Dictionary<string, string> deps)
+    {
+        string depsJson = string.Join(", ", deps.Select(kv => $"\"{kv.Key}\": \"{kv.Value}\""));
+        File.WriteAllText(
+            Path.Combine(projectDir, "stash.json"),
+            $"{{\"name\":\"test\",\"version\":\"1.0.0\",\"dependencies\":{{{depsJson}}}}}");
+    }
+
+    private string CreateAndCachePackage(string pkgName, string version)
+    {
+        string srcDir = Path.Combine(_tempDir, $"src-{pkgName}-{version}");
+        Directory.CreateDirectory(srcDir);
+        File.WriteAllText(Path.Combine(srcDir, "main.stash"), $"// {pkgName}");
+        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        Tarball.Pack(srcDir, tarball);
+        PackageCache.Store(pkgName, version, tarball);
+        return tarball;
+    }
+
+    [Fact]
+    public void Install_OneDeprecatedDep_PrintsExactlyOneWarning()
+    {
+        string projectDir = Path.Combine(_tempDir, "proj-one");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, new Dictionary<string, string> { ["old-lib"] = "^1.0.0" });
+        CreateAndCachePackage("old-lib", "1.0.0");
+
+        var source = new MockSource();
+        source.Add("old-lib", "1.0.0", deprecated: true, deprecationMessage: "use new-lib instead");
+
+        string stderr = CaptureStdErr(() => PackageInstaller.Install(projectDir, source));
+
+        var warningLines = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(l => l.StartsWith("warning:", StringComparison.Ordinal))
+            .ToList();
+        Assert.Single(warningLines);
+        Assert.Equal("warning: old-lib@1.0.0 is deprecated: use new-lib instead", warningLines[0]);
+    }
+
+    [Fact]
+    public void Install_MultipleDeprecatedDeps_NoDuplicateWarnings()
+    {
+        string projectDir = Path.Combine(_tempDir, "proj-multi");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, new Dictionary<string, string>
+        {
+            ["alpha"] = "^1.0.0",
+            ["beta"] = "^2.0.0"
+        });
+        CreateAndCachePackage("alpha", "1.0.0");
+        CreateAndCachePackage("beta", "2.0.0");
+
+        var source = new MockSource();
+        source.Add("alpha", "1.0.0", deprecated: true, deprecationMessage: "alpha is old");
+        source.Add("beta", "2.0.0", deprecated: true, deprecationMessage: "beta is retired");
+
+        string stderr = CaptureStdErr(() => PackageInstaller.Install(projectDir, source));
+
+        var warningLines = stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(l => l.StartsWith("warning:", StringComparison.Ordinal))
+            .ToList();
+        // Exactly two warnings, one per package (no duplicates).
+        Assert.Equal(2, warningLines.Count);
+        Assert.Contains("warning: alpha@1.0.0 is deprecated: alpha is old", warningLines);
+        Assert.Contains("warning: beta@2.0.0 is deprecated: beta is retired", warningLines);
+    }
+
+    [Fact]
+    public void Install_NoDeprecatedDeps_NoWarningOutput()
+    {
+        string projectDir = Path.Combine(_tempDir, "proj-clean");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, new Dictionary<string, string> { ["clean-lib"] = "^3.0.0" });
+        CreateAndCachePackage("clean-lib", "3.0.0");
+
+        var source = new MockSource();
+        source.Add("clean-lib", "3.0.0", deprecated: false);
+
+        string stderr = CaptureStdErr(() => PackageInstaller.Install(projectDir, source));
+
+        Assert.DoesNotContain("warning:", stderr);
     }
 }

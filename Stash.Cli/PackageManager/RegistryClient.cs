@@ -351,6 +351,46 @@ public sealed class RegistryClient : IPackageSource
         return null;
     }
 
+    /// <summary>
+    /// Retrieves the deprecation status for a specific package version from the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /packages/{name}/{version}</c> and reads the <c>deprecated</c> and
+    /// <c>deprecationMessage</c> fields from the response JSON.
+    /// </remarks>
+    /// <param name="packageName">The name of the package.</param>
+    /// <param name="version">The version whose deprecation status is requested.</param>
+    /// <returns>
+    /// A tuple of (<c>Deprecated</c>, <c>Message</c>). Returns <c>(false, null)</c> when
+    /// the version is not deprecated, is not found (HTTP 404), or the field is absent.
+    /// </returns>
+    /// <exception cref="HttpRequestException">
+    /// Thrown for non-404 HTTP error responses.
+    /// </exception>
+    public (bool Deprecated, string? Message) GetDeprecation(string packageName, SemVer version)
+    {
+        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return (false, null);
+        }
+
+        response.EnsureSuccessStatusCode();
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        bool deprecated = root.TryGetProperty("deprecated", out var d) && d.ValueKind == JsonValueKind.True;
+        string? message = null;
+        if (root.TryGetProperty("deprecationMessage", out var m) && m.ValueKind == JsonValueKind.String)
+        {
+            message = m.GetString();
+        }
+
+        return (deprecated, message);
+    }
+
     // Registry-specific operations
 
     /// <summary>

@@ -50,6 +50,17 @@ public interface IPackageSource
     /// An integrity string (e.g. <c>sha256-…</c>), or <c>null</c> when unavailable.
     /// </returns>
     string? GetIntegrity(string packageName, SemVer version);
+
+    /// <summary>
+    /// Returns the deprecation status for a specific package version.
+    /// </summary>
+    /// <param name="packageName">The name of the package.</param>
+    /// <param name="version">The version whose deprecation status is requested.</param>
+    /// <returns>
+    /// A tuple of (<c>Deprecated</c>, <c>Message</c>). Returns <c>(false, null)</c> when
+    /// the version is not deprecated or the information is unavailable.
+    /// </returns>
+    (bool Deprecated, string? Message) GetDeprecation(string packageName, SemVer version);
 }
 
 /// <summary>
@@ -76,6 +87,13 @@ public sealed class DependencyResolver
 {
     /// <summary>The package source used to query versions and manifests.</summary>
     private readonly IPackageSource _source;
+
+    /// <summary>
+    /// Maps <c>"name@version"</c> to the deprecation message for each resolved package
+    /// version that the registry reported as deprecated. Populated by <see cref="Resolve"/>.
+    /// Each (name, version) pair appears at most once — the dictionary key enforces uniqueness.
+    /// </summary>
+    public Dictionary<string, string> Deprecations { get; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Initialises a new <see cref="DependencyResolver"/> that resolves packages
@@ -230,6 +248,14 @@ public sealed class DependencyResolver
                 Integrity = _source.GetIntegrity(pkgName, resolved),
                 Dependencies = depDeps
             };
+
+            var (isDeprecated, depMessage) = _source.GetDeprecation(pkgName, resolved);
+            if (isDeprecated)
+            {
+                Deprecations[$"{pkgName}@{resolved}"] = !string.IsNullOrEmpty(depMessage)
+                    ? depMessage!
+                    : "(no reason provided)";
+            }
         }
 
         // Verify transitive deps of resolved versions are all present
