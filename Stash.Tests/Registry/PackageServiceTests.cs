@@ -192,7 +192,7 @@ public sealed class PackageServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Publish_DuplicateVersion_Throws()
+    public async Task Publish_DuplicateVersion_ThrowsVersionConflict()
     {
         byte[] tarball1 = CreateTestTarball("dup-pkg", "1.0.0");
         using (var s1 = new MemoryStream(tarball1))
@@ -203,8 +203,12 @@ public sealed class PackageServiceTests : IDisposable
         byte[] tarball2 = CreateTestTarball("dup-pkg", "1.0.0");
         using var s2 = new MemoryStream(tarball2);
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () => await _service.Publish(s2, "alice", null));
-        Assert.Contains("immutable", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var ex = await Assert.ThrowsAsync<VersionConflictException>(async () => await _service.Publish(s2, "alice", null));
+        Assert.Equal("dup-pkg", ex.PackageName);
+        Assert.Equal("1.0.0", ex.Version);
+        // Verify the 409 controller path has a clear message (not a generic 400 string).
+        Assert.Contains("1.0.0", ex.Message);
+        Assert.Contains("dup-pkg", ex.Message);
     }
 
     [Fact]
@@ -366,5 +370,106 @@ public sealed class PackageServiceTests : IDisposable
 
         Assert.NotNull(result);
         Assert.True(result.Length > 0);
+    }
+
+    // ── Latest version semver correctness ────────────────────────────────────────
+
+    [Fact]
+    public async Task Publish_LowerSemverAfterHigher_LatestRemainsHigher()
+    {
+        using (var s = new MemoryStream(CreateTestTarball("semver-a", "2.0.0")))
+            await _service.Publish(s, "alice", null);
+
+        using (var s = new MemoryStream(CreateTestTarball("semver-a", "1.5.0")))
+            await _service.Publish(s, "alice", null);
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-a");
+        Assert.NotNull(pkg);
+        Assert.Equal("2.0.0", pkg.Latest);
+    }
+
+    [Fact]
+    public async Task Publish_HigherSemverAfterLower_LatestUpdates()
+    {
+        using (var s = new MemoryStream(CreateTestTarball("semver-b", "2.0.0")))
+            await _service.Publish(s, "alice", null);
+
+        using (var s = new MemoryStream(CreateTestTarball("semver-b", "2.1.0")))
+            await _service.Publish(s, "alice", null);
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-b");
+        Assert.NotNull(pkg);
+        Assert.Equal("2.1.0", pkg.Latest);
+    }
+
+    [Fact]
+    public async Task Publish_PrereleaseOnly_LatestIsPrerelease()
+    {
+        using (var s = new MemoryStream(CreateTestTarball("semver-c", "1.0.0-rc.1")))
+            await _service.Publish(s, "alice", null);
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-c");
+        Assert.NotNull(pkg);
+        Assert.Equal("1.0.0-rc.1", pkg.Latest);
+    }
+
+    [Fact]
+    public async Task Publish_StableAfterPrerelease_LatestPromotesToStable()
+    {
+        using (var s = new MemoryStream(CreateTestTarball("semver-d", "1.0.0-rc.1")))
+            await _service.Publish(s, "alice", null);
+
+        using (var s = new MemoryStream(CreateTestTarball("semver-d", "1.0.0")))
+            await _service.Publish(s, "alice", null);
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-d");
+        Assert.NotNull(pkg);
+        Assert.Equal("1.0.0", pkg.Latest);
+    }
+
+    [Fact]
+    public async Task Publish_PrereleaseAfterStable_LatestStaysStable()
+    {
+        using (var s = new MemoryStream(CreateTestTarball("semver-e", "1.0.0")))
+            await _service.Publish(s, "alice", null);
+
+        using (var s = new MemoryStream(CreateTestTarball("semver-e", "1.1.0-rc.1")))
+            await _service.Publish(s, "alice", null);
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-e");
+        Assert.NotNull(pkg);
+        Assert.Equal("1.0.0", pkg.Latest);
+    }
+
+    [Fact]
+    public async Task Unpublish_LatestVersion_RecomputesToNextHighestStable()
+    {
+        foreach (var ver in new[] { "1.0.0", "2.0.0", "3.0.0" })
+        {
+            using var s = new MemoryStream(CreateTestTarball("semver-f", ver));
+            await _service.Publish(s, "alice", null);
+        }
+
+        await _service.UnpublishAsync("semver-f", "3.0.0", "alice");
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-f");
+        Assert.NotNull(pkg);
+        Assert.Equal("2.0.0", pkg.Latest);
+    }
+
+    [Fact]
+    public async Task Unpublish_AllStable_PromotesPrereleaseToLatest()
+    {
+        using (var s = new MemoryStream(CreateTestTarball("semver-g", "1.0.0")))
+            await _service.Publish(s, "alice", null);
+
+        using (var s = new MemoryStream(CreateTestTarball("semver-g", "2.0.0-rc.1")))
+            await _service.Publish(s, "alice", null);
+
+        await _service.UnpublishAsync("semver-g", "1.0.0", "alice");
+
+        PackageRecord? pkg = await _db.GetPackageAsync("semver-g");
+        Assert.NotNull(pkg);
+        Assert.Equal("2.0.0-rc.1", pkg.Latest);
     }
 }

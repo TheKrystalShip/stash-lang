@@ -13,6 +13,20 @@ public sealed class ErrorResponse
 }
 
 /// <summary>
+/// Error response body returned when a publish request conflicts with an existing version (HTTP 409).
+/// </summary>
+public sealed class VersionConflictResponse
+{
+    /// <summary>Machine-readable error code. Always <c>"version_exists"</c>.</summary>
+    [JsonPropertyName("error")]
+    public string Error { get; set; } = "version_exists";
+
+    /// <summary>Human-readable description of the conflict.</summary>
+    [JsonPropertyName("message")]
+    public required string Message { get; set; }
+}
+
+/// <summary>
 /// Standard success response body used by endpoints that have no additional data to return.
 /// </summary>
 public sealed class SuccessResponse

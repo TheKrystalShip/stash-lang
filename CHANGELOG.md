@@ -116,6 +116,11 @@ All old names emit SA0830 (`DeprecatedBuiltInMember`) when used. See [Stdlib Nam
 
 - **Editor (TextMate grammar):** Identifiers, namespace members, struct types, and dot-property access now highlight correctly inside string interpolations (`$"{expr}"`, `"text ${expr}"`, triple-quoted variants, and `$(cmd ${expr})` command interpolations). Two independent bugs were fixed: (1) the TextMate grammar wrapped interpolation contents in a `string.*` parent scope, suppressing both inner scopes and semantic tokens — interpolation content now uses `meta.interpolation.expression.stash` and falls through to `$self`; (2) the LSP `SemanticTokensHandler` iterated only the outer token list, never visiting the inner tokens nested inside `InterpolatedString` / `CommandLiteral` tokens — it now recurses into them so identifiers inside `${…}` / `{…}` receive their semantic colors. **Theme migration:** the legacy `meta.interpolation.stash` and `meta.interpolation.command.stash` scopes are removed; themes that targeted them should switch to `meta.interpolation.expression.stash`.
 
+#### Package Registry
+
+- **`Latest` is now the highest semver, not the most recently published version.** Previously, publishing `1.5.0` after `2.0.0` (e.g. a back-port) would overwrite `Latest` to `1.5.0`. The registry now recomputes `Latest` from the full version list on every publish and unpublish, selecting the highest stable release; prereleases (e.g. `1.0.0-rc.1`) are only chosen when no stable release exists, matching npm `dist-tags.latest` semantics. Unpublishing the current latest now correctly demotes `Latest` to the next-highest remaining version.
+- **Duplicate publish returns HTTP `409 Conflict` instead of `400 Bad Request`** with a structured body `{ "error": "version_exists", "message": "Version X.Y.Z already exists for package <name>." }`. Matches RFC 9110, npm, and crates.io. CLIs that branch on status code can now distinguish a duplicate-version conflict from a malformed request.
+
 ### Added
 
 #### Persistent REPL History

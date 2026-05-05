@@ -531,8 +531,9 @@ Authorization: Bearer <token>
 
 | Status | Description                                                                        |
 | ------ | ---------------------------------------------------------------------------------- |
-| 400    | Missing manifest, no `.stash` files, integrity mismatch, or version already exists |
+| 400    | Missing manifest, no `.stash` files, or integrity mismatch                         |
 | 403    | Not a package owner                                                                |
+| 409    | Version already exists — body: `{ "error": "version_exists", "message": "..." }`   |
 | 429    | Rate limit exceeded                                                                |
 
 ---

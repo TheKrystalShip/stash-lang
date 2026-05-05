@@ -191,9 +191,11 @@ public class PackagesController : ControllerBase
     /// <returns>
     /// <c>201</c> with a <see cref="PublishResponse"/> containing the package name,
     /// version, and integrity hash,
-    /// <c>400</c> if the tarball is malformed or the version already exists,
+    /// <c>400</c> if the tarball is malformed (missing manifest, no <c>.stash</c> files,
+    /// integrity mismatch, etc.),
     /// <c>401</c> if unauthenticated,
-    /// or <c>403</c> if the user is not an owner of the package.
+    /// <c>403</c> if the user is not an owner of the package,
+    /// or <c>409</c> with a <see cref="VersionConflictResponse"/> if the version already exists.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
     [HttpPut("{name}")]
@@ -217,6 +219,10 @@ public class PackagesController : ControllerBase
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             await _auditService.LogPublishAsync(vr.PackageName, vr.Version, username, ip);
             return StatusCode(201, new PublishResponse { Package = vr.PackageName, Version = vr.Version, Integrity = vr.Integrity });
+        }
+        catch (VersionConflictException ex)
+        {
+            return Conflict(new VersionConflictResponse { Message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

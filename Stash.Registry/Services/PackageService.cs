@@ -72,8 +72,7 @@ public sealed class PackageService
 
         if (await _db.VersionExistsAsync(packageName, version))
         {
-            throw new InvalidOperationException(
-                $"Version {version} of '{packageName}' already exists. Versions are immutable.");
+            throw new VersionConflictException(packageName, version);
         }
 
         bool isNewPackage = !await _db.PackageExistsAsync(packageName);
@@ -124,7 +123,12 @@ public sealed class PackageService
 
         if (!isNewPackage)
         {
-            await _db.UpdatePackageLatestAsync(packageName, version);
+            List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
+            string? newLatest = SelectLatestVersion(allVersions);
+            if (newLatest is not null)
+            {
+                await _db.UpdatePackageLatestAsync(packageName, newLatest);
+            }
         }
 
         using var storeStream = new MemoryStream(tarballBytes);
@@ -159,14 +163,57 @@ public sealed class PackageService
         List<string> remaining = await _db.GetAllVersionsAsync(name);
         if (remaining.Count == 0)
         {
-            // No versions remain — could clean up package record in the future
+            // No versions remain — preserve existing behavior (package record retained, Latest left as-is).
         }
         else
         {
-            await _db.UpdatePackageLatestAsync(name, remaining[0]);
+            string? newLatest = SelectLatestVersion(remaining);
+            if (newLatest is not null)
+            {
+                await _db.UpdatePackageLatestAsync(name, newLatest);
+            }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Selects the highest-precedence version from the provided list using semver 2.0 ordering.
+    /// Stable releases always outrank prereleases — a prerelease is only chosen when no
+    /// stable version exists (matches npm's <c>dist-tags.latest</c> semantics). Versions
+    /// that fail to parse are ignored.
+    /// </summary>
+    /// <returns>The selected version string, or <c>null</c> when the list is empty / all unparseable.</returns>
+    private static string? SelectLatestVersion(IEnumerable<string> versions)
+    {
+        SemVer? bestStable = null;
+        string? bestStableStr = null;
+        SemVer? bestPre = null;
+        string? bestPreStr = null;
+
+        foreach (var v in versions)
+        {
+            if (!SemVer.TryParse(v, out var parsed) || parsed is null) continue;
+
+            if (parsed.IsPreRelease)
+            {
+                if (bestPre is null || parsed.CompareTo(bestPre) > 0)
+                {
+                    bestPre = parsed;
+                    bestPreStr = v;
+                }
+            }
+            else
+            {
+                if (bestStable is null || parsed.CompareTo(bestStable) > 0)
+                {
+                    bestStable = parsed;
+                    bestStableStr = v;
+                }
+            }
+        }
+
+        return bestStableStr ?? bestPreStr;
     }
 
     public async Task<PackageRecord?> GetPackageAsync(string name)
