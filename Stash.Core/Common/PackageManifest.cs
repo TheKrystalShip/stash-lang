@@ -227,8 +227,7 @@ public class PackageManifest
 
     /// <summary>
     /// Validates the manifest against the stricter requirements needed before publishing to a
-    /// registry, including the presence of <see cref="Name"/> and <see cref="Version"/> and the
-    /// absence of the <see cref="Private"/> flag.
+    /// registry, including the presence of <see cref="Name"/> and <see cref="Version"/>.
     /// </summary>
     /// <returns>
     /// A list of human-readable error messages. An empty list indicates the manifest is ready
@@ -254,11 +253,6 @@ public class PackageManifest
         else if (!SemVer.TryParse(Version, out _))
         {
             // already reported by Validate()
-        }
-
-        if (Private == true)
-        {
-            errors.Add("Package is marked as private.");
         }
 
         return errors;

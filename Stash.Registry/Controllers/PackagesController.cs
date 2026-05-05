@@ -203,7 +203,7 @@ public class PackagesController : ControllerBase
     /// <c>400</c> if the tarball is malformed (missing manifest, no <c>.stash</c> files,
     /// integrity mismatch, etc.),
     /// <c>401</c> if unauthenticated,
-    /// <c>403</c> if the user is not an owner of the package,
+    /// <c>403</c> if the user is not an owner of the package, or with a <see cref="PrivatePackageResponse"/> if the manifest declares <c>"private": true</c>,
     /// or <c>409</c> with a <see cref="VersionConflictResponse"/> if the version already exists.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
@@ -228,6 +228,10 @@ public class PackagesController : ControllerBase
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             await _auditService.LogPublishAsync(vr.PackageName, vr.Version, username, ip);
             return StatusCode(201, new PublishResponse { Package = vr.PackageName, Version = vr.Version, Integrity = vr.Integrity });
+        }
+        catch (PrivatePackageException ex)
+        {
+            return StatusCode(403, new PrivatePackageResponse { Message = ex.Message });
         }
         catch (VersionConflictException ex)
         {

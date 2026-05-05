@@ -402,13 +402,4 @@ public class PackageManifestTests
         Assert.Contains(errors, e => e.Contains("version"));
     }
 
-    [Fact]
-    public void ValidateForPublishing_PrivateTrue_ReturnsPrivateError()
-    {
-        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0", Private = true };
-
-        var errors = manifest.ValidateForPublishing();
-
-        Assert.Contains(errors, e => e.Contains("private"));
-    }
 }

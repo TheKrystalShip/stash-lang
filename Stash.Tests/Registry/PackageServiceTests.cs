@@ -43,7 +43,7 @@ public sealed class PackageServiceTests : IDisposable
         try { Directory.Delete(_storageDir, true); } catch { }
     }
 
-    private static byte[] CreateTestTarball(string name, string version, string? readme = null, Dictionary<string, string>? dependencies = null)
+    private static byte[] CreateTestTarball(string name, string version, string? readme = null, Dictionary<string, string>? dependencies = null, bool? isPrivate = null)
     {
         using var ms = new MemoryStream();
         using (var gz = new GZipStream(ms, CompressionLevel.Optimal, leaveOpen: true))
@@ -55,7 +55,8 @@ public sealed class PackageServiceTests : IDisposable
                 version = version,
                 description = "Test package",
                 license = "MIT",
-                dependencies = dependencies
+                dependencies = dependencies,
+                @private = isPrivate
             };
             string manifestJson = JsonSerializer.Serialize(manifest);
             byte[] manifestBytes = Encoding.UTF8.GetBytes(manifestJson);
@@ -493,5 +494,42 @@ public sealed class PackageServiceTests : IDisposable
         Assert.False(string.IsNullOrEmpty(vr.Integrity),
             "Publish must store a non-empty Integrity field so DownloadVersion can emit X-Integrity.");
         Assert.StartsWith("sha256-", vr.Integrity);
+    }
+
+    // ── Private package rejection ────────────────────────────────────────────
+
+    [Fact]
+    public async Task Publish_PrivateTrue_ThrowsPrivatePackageException()
+    {
+        byte[] tarball = CreateTestTarball("private-pkg", "1.0.0", isPrivate: true);
+        using var stream = new MemoryStream(tarball);
+
+        var ex = await Assert.ThrowsAsync<PrivatePackageException>(
+            () => _service.Publish(stream, "alice", null));
+        Assert.Equal("private-pkg", ex.PackageName);
+    }
+
+    [Fact]
+    public async Task Publish_PrivateTrue_DoesNotCreateDatabaseRow()
+    {
+        byte[] tarball = CreateTestTarball("private-pkg2", "1.0.0", isPrivate: true);
+        using var stream = new MemoryStream(tarball);
+
+        await Assert.ThrowsAsync<PrivatePackageException>(
+            () => _service.Publish(stream, "alice", null));
+
+        Assert.False(await _db.PackageExistsAsync("private-pkg2"));
+    }
+
+    [Fact]
+    public async Task Publish_PrivateFalse_Succeeds()
+    {
+        byte[] tarball = CreateTestTarball("public-pkg", "1.0.0", isPrivate: false);
+        using var stream = new MemoryStream(tarball);
+
+        VersionRecord vr = await _service.Publish(stream, "alice", null);
+
+        Assert.Equal("public-pkg", vr.PackageName);
+        Assert.Equal("1.0.0", vr.Version);
     }
 }

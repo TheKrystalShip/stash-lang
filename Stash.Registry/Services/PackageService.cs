@@ -6,6 +6,7 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Stash.Common;
 using Stash.Registry.Configuration;
 using Stash.Registry.Database;
@@ -19,12 +20,14 @@ public sealed class PackageService
     private readonly IRegistryDatabase _db;
     private readonly IPackageStorage _storage;
     private readonly RegistryConfig _config;
+    private readonly ILogger<PackageService> _logger;
 
-    public PackageService(IRegistryDatabase db, IPackageStorage storage, RegistryConfig config)
+    public PackageService(IRegistryDatabase db, IPackageStorage storage, RegistryConfig config, ILogger<PackageService>? logger = null)
     {
         _db = db;
         _storage = storage;
         _config = config;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<PackageService>.Instance;
     }
 
     public async Task<VersionRecord> Publish(Stream tarball, string username, string? clientIntegrity)
@@ -53,6 +56,15 @@ public sealed class PackageService
         {
             throw new InvalidOperationException(
                 "Invalid package manifest: " + string.Join("; ", errors));
+        }
+
+        if (manifest.Private == true)
+        {
+            string rejectedName = manifest.Name ?? "<unknown>";
+            _logger.LogInformation(
+                "Rejected publish of private package '{Package}' by user '{User}'.",
+                rejectedName, username);
+            throw new PrivatePackageException(rejectedName);
         }
 
         if (!HasStashFile(tarballBytes))
