@@ -3,14 +3,16 @@ using System;
 namespace Stash.Cli.PackageManager;
 
 /// <summary>
-/// Resolves the target registry URL for a CLI command from command-line flags or
-/// the user's persisted <see cref="UserConfig"/>.
+/// Resolves the target registry URL for a CLI command from command-line flags,
+/// the <c>STASH_REGISTRY_URL</c> environment variable, or the user's persisted
+/// <see cref="UserConfig"/>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The resolution order is:
 /// <list type="number">
 ///   <item><description>An explicit <c>--registry &lt;url&gt;</c> flag on the command line.</description></item>
+///   <item><description>The <c>STASH_REGISTRY_URL</c> environment variable.</description></item>
 ///   <item><description>The <see cref="UserConfig.DefaultRegistry"/> stored in <c>~/.stash/config.json</c>.</description></item>
 /// </list>
 /// </para>
@@ -24,16 +26,16 @@ public static class RegistryResolver
     /// <param name="args">The raw command-line argument array passed to the CLI entry point.</param>
     /// <param name="requireExplicit">
     /// When <c>true</c>, the method throws if <c>--registry</c> is not present on
-    /// the command line and does not fall back to the configured default.
+    /// the command line and does not fall back to the <c>STASH_REGISTRY_URL</c>
+    /// environment variable or the configured default.
     /// </param>
     /// <returns>
     /// A tuple of (<c>registryUrl</c>, <c>wasExplicit</c>) where <c>wasExplicit</c>
-    /// is <c>true</c> when the URL was sourced from the <c>--registry</c> flag rather
-    /// than from the user config.
+    /// is <c>true</c> only when the URL was sourced from the <c>--registry</c> flag.
     /// </returns>
     /// <exception cref="InvalidOperationException">
     /// Thrown when <paramref name="requireExplicit"/> is <c>true</c> and no
-    /// <c>--registry</c> flag is found, or when no default registry is configured.
+    /// <c>--registry</c> flag is found, or when no registry is configured at all.
     /// </exception>
     public static (string registryUrl, bool wasExplicit) Resolve(string[] args, bool requireExplicit = false)
     {
@@ -50,6 +52,13 @@ public static class RegistryResolver
             throw new InvalidOperationException("The --registry flag is required for this command.");
         }
 
+        string? envUrl = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
+        if (!string.IsNullOrEmpty(envUrl))
+        {
+            Console.WriteLine($"Registry: {envUrl}");
+            return (envUrl, false);
+        }
+
         UserConfig config = UserConfig.Load();
 
         if (!string.IsNullOrEmpty(config.DefaultRegistry))
@@ -58,7 +67,7 @@ public static class RegistryResolver
             return (config.DefaultRegistry, false);
         }
 
-        throw new InvalidOperationException("No default registry configured. Run 'stash pkg login --registry <url>' to set one.");
+        throw new InvalidOperationException("No registry configured. Run 'stash pkg login --registry <url>' or set the STASH_REGISTRY_URL environment variable.");
     }
 
     /// <summary>

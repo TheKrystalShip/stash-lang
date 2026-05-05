@@ -74,7 +74,7 @@ public static class DeprecateCommand
         }
 
         // Resolve auth
-        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
         string? token = cliToken ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
         RegistryEntry? entry = null;
         if (string.IsNullOrEmpty(token))
@@ -141,7 +141,7 @@ public static class DeprecateCommand
         string packageName = positionalArgs[0];
         string? version = positionalArgs.Count >= 2 ? positionalArgs[1] : null;
 
-        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
         string? token = cliToken ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
         RegistryEntry? entry = null;
         if (string.IsNullOrEmpty(token))

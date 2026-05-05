@@ -45,7 +45,7 @@ public static class PublishCommand
                 cliToken = args[++i];
             }
         }
-        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
 
         // Load and validate manifest
         string manifestPath = Path.Combine(Directory.GetCurrentDirectory(), "stash.json");

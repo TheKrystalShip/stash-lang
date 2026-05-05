@@ -143,55 +143,6 @@ public sealed class UserConfigTests : IDisposable
         Assert.Null(reloaded.DefaultRegistry);
     }
 
-    // ── ResolveRegistryUrl ───────────────────────────────────────────────
-
-    [Fact]
-    public void ResolveRegistryUrl_WithProvidedUrl_ReturnsProvidedUrl()
-    {
-        string result = UserConfig.ResolveRegistryUrl("https://my-registry.example.com");
-
-        Assert.Equal("https://my-registry.example.com", result);
-    }
-
-    [Fact]
-    public void ResolveRegistryUrl_WithEnvVar_ReturnsEnvUrl()
-    {
-        string? original = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
-        try
-        {
-            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", "https://ci.example.com");
-
-            string result = UserConfig.ResolveRegistryUrl(null);
-
-            Assert.Equal("https://ci.example.com", result);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", original);
-        }
-    }
-
-    [Fact]
-    public void ResolveRegistryUrl_WithNoInput_ReturnsDefault()
-    {
-        string? original = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
-        try
-        {
-            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", null);
-
-            string result = UserConfig.ResolveRegistryUrl(null);
-
-            // Falls back to config DefaultRegistry (if set) or the built-in constant.
-            // In a clean environment with no DefaultRegistry configured, this must be
-            // the built-in default URL.
-            Assert.False(string.IsNullOrEmpty(result));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", original);
-        }
-    }
-
     // ── ResolveToken ─────────────────────────────────────────────────────
 
     [Fact]
@@ -202,7 +153,7 @@ public sealed class UserConfigTests : IDisposable
         {
             Environment.SetEnvironmentVariable("STASH_TOKEN", "ci-token-xyz");
 
-            string? result = UserConfig.ResolveToken(UserConfig.DefaultRegistryUrl);
+            string? result = UserConfig.ResolveToken("https://registry.stash-lang.dev");
 
             Assert.Equal("ci-token-xyz", result);
         }

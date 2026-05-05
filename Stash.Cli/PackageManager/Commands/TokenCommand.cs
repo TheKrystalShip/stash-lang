@@ -48,7 +48,6 @@ public static class TokenCommand
         string? scope = null;
         string? description = null;
         string? expiresIn = null;
-        string? registryUrl = null;
         string? cliToken = null;
 
         for (int i = 0; i < args.Length; i++)
@@ -76,13 +75,6 @@ public static class TokenCommand
                     }
 
                     break;
-                case "--registry":
-                    if (i + 1 < args.Length)
-                    {
-                        registryUrl = args[++i];
-                    }
-
-                    break;
                 case "--token":
                     if (i + 1 < args.Length)
                     {
@@ -93,7 +85,7 @@ public static class TokenCommand
             }
         }
 
-        registryUrl = UserConfig.ResolveRegistryUrl(registryUrl);
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
         var client = ResolveClient(registryUrl, cliToken);
 
         var result = client.CreateToken(scope, description, expiresIn);
@@ -118,20 +110,12 @@ public static class TokenCommand
 
     private static void ListTokens(string[] args)
     {
-        string? registryUrl = null;
         string? cliToken = null;
 
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
             {
-                case "--registry":
-                    if (i + 1 < args.Length)
-                    {
-                        registryUrl = args[++i];
-                    }
-
-                    break;
                 case "--token":
                     if (i + 1 < args.Length)
                     {
@@ -142,7 +126,7 @@ public static class TokenCommand
             }
         }
 
-        registryUrl = UserConfig.ResolveRegistryUrl(registryUrl);
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
         var client = ResolveClient(registryUrl, cliToken);
 
         var result = client.ListTokens();
@@ -164,7 +148,6 @@ public static class TokenCommand
     private static void Revoke(string[] args)
     {
         string? tokenId = null;
-        string? registryUrl = null;
         string? cliToken = null;
 
         for (int i = 0; i < args.Length; i++)
@@ -174,7 +157,7 @@ public static class TokenCommand
                 case "--registry":
                     if (i + 1 < args.Length)
                     {
-                        registryUrl = args[++i];
+                        i++;
                     }
 
                     break;
@@ -200,7 +183,7 @@ public static class TokenCommand
             throw new InvalidOperationException("Token ID is required. Usage: stash pkg token revoke <tokenId>");
         }
 
-        registryUrl = UserConfig.ResolveRegistryUrl(registryUrl);
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
         var client = ResolveClient(registryUrl, cliToken);
 
         client.RevokeToken(tokenId);

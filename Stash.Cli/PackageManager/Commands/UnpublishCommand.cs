@@ -60,7 +60,7 @@ public static class UnpublishCommand
             throw new ArgumentException("Usage: stash pkg unpublish <name>@<version>");
         }
 
-        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
 
         int atIdx = spec.LastIndexOf('@');
         if (atIdx <= 0)

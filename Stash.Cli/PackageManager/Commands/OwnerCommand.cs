@@ -61,7 +61,7 @@ public static class OwnerCommand
         string action = positionalArgs[0];
         string packageName = positionalArgs[1];
 
-        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
+        var (registryUrl, _) = RegistryResolver.Resolve(args);
 
         // Resolve token — priority: --token flag > STASH_TOKEN env var > config file
         string? token = cliToken ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
