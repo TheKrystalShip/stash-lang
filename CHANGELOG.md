@@ -9,9 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+#### Package Manager
+
+- **Install atomicity (`stash pkg install <dep>`):** `stash.json` is no longer mutated before a successful install. The new dependency is written to disk only after resolution, download, extraction, and lock-file update all complete without error. A failed install (unreachable registry, missing package, integrity mismatch) leaves `stash.json` byte-identical to its pre-command state.
+- **Lock-file freshness:** `IsLockFileUpToDate` now detects two previously-missed staleness conditions:
+  - **Constraint mismatch** — a direct dep's manifest constraint was tightened (e.g. `^1.2.0` → `^2.0.0`) but the lock still pins an out-of-range version; `stash pkg install` now re-resolves and installs the correct version.
+  - **Orphan entries** — a dep removed from `stash.json` was left in the lock and on disk; `stash pkg install` now removes orphan lock entries and their extracted directories, printing `Removing orphan: <name>@<version>` to stderr for each one. Transitively-reachable packages (needed by a remaining dep) are correctly preserved.
+
 ### Added
 
-#### Compiler / Optimizer
+#### Registry
+
+- **Login response now includes `expiresIn`** — the `POST /api/v1/auth/login` response body includes an `expiresIn` field (seconds) alongside `expiresAt` for clients that prefer a relative lifetime.
+- **`EnsureTokenFresh` warns on failure** — when an automatic token refresh fails, the CLI now prints a `warning:` message to stderr identifying the cause (expired refresh token, server error, or network unreachable) instead of failing silently.
+
+### Changed
+
+#### Registry
+
+- **`accessToken` is now the canonical login field name** — `POST /api/v1/auth/login` now returns `accessToken` (matching the refresh endpoint). The `token` field is kept as a deprecated alias for one release for third-party tooling compatibility.
+- **`RegistrationEnabled` defaults to `false` (breaking change)** — `appsettings.json` and the C# default now ship with `RegistrationEnabled: false`. Self-hosters running a private registry no longer need to explicitly disable open registration. **Action required on upgrade:** self-hosters who relied on the previous `true` default must add `"Auth": { "RegistrationEnabled": true }` to their `appsettings.json` to restore open sign-up. The `appsettings.Development.json` override keeps the value `true` for local development.
+- **Registration-disabled 403 body is now structured** — when registration is disabled, `POST /api/v1/auth/register` returns `{ "error": "registration_disabled", "message": "User registration is disabled on this registry." }`.
+
+### Compiler / Optimizer
 
 - **Peephole expansion:** Five new fusion pattern groups (Patterns 6–11) extend the existing linear peephole optimizer in `ChunkBuilder`:
   - **Pattern 6** — `Move + InitConstGlobal`: eliminates the intermediate register from const-global initializations (analogous to the existing Pattern 5 for mutable globals).

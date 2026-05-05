@@ -976,3 +976,514 @@ public class DeprecationWarningTests : IDisposable
         Assert.DoesNotContain("warning:", stderr);
     }
 }
+
+// ── InstallAtomicityTests ─────────────────────────────────────────────────────
+
+/// <summary>
+/// Tests that <see cref="PackageInstaller.Install(string, IPackageSource, PackageManifest)"/>
+/// never mutates <c>stash.json</c> on disk — the caller (InstallCommand) is responsible for
+/// writing the manifest only after a successful install.
+/// </summary>
+public class InstallAtomicityTests : IDisposable
+{
+    private readonly string _tempDir;
+
+    public InstallAtomicityTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), $"stash-atomicity-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, recursive: true);
+        }
+    }
+
+    private static void WriteManifest(string projectDir, Dictionary<string, string>? deps = null)
+    {
+        string depsSection = deps == null || deps.Count == 0
+            ? ""
+            : ",\n  \"dependencies\": {" + string.Join(", ", deps.Select(kv => $"\"{kv.Key}\": \"{kv.Value}\"")) + "}";
+        File.WriteAllText(
+            Path.Combine(projectDir, "stash.json"),
+            $"{{\n  \"name\": \"test-project\",\n  \"version\": \"1.0.0\"{depsSection}\n}}\n");
+    }
+
+    private string CreateAndCachePackage(string pkgName, string version)
+    {
+        string srcDir = Path.Combine(_tempDir, $"src-{pkgName}-{version}");
+        Directory.CreateDirectory(srcDir);
+        File.WriteAllText(Path.Combine(srcDir, "main.stash"), $"// {pkgName} v{version}");
+        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        Tarball.Pack(srcDir, tarball);
+        PackageCache.Store(pkgName, version, tarball);
+        return tarball;
+    }
+
+    // Package source that throws InvalidOperationException on GetAvailableVersions.
+    private sealed class ThrowingPackageSource : IPackageSource
+    {
+        public List<SemVer> GetAvailableVersions(string packageName) =>
+            throw new InvalidOperationException($"Network failure resolving '{packageName}'");
+
+        public PackageManifest? GetManifest(string packageName, SemVer version) => null;
+        public string GetResolvedUrl(string packageName, SemVer version) => "";
+        public string? GetIntegrity(string packageName, SemVer version) => null;
+        public (bool Deprecated, string? Message) GetDeprecation(string packageName, SemVer version) => (false, null);
+    }
+
+    // Package source that returns an empty version list (simulates "package not found").
+    private sealed class NotFoundPackageSource : IPackageSource
+    {
+        public List<SemVer> GetAvailableVersions(string packageName) => new List<SemVer>();
+        public PackageManifest? GetManifest(string packageName, SemVer version) => null;
+        public string GetResolvedUrl(string packageName, SemVer version) => "";
+        public string? GetIntegrity(string packageName, SemVer version) => null;
+        public (bool Deprecated, string? Message) GetDeprecation(string packageName, SemVer version) => (false, null);
+    }
+
+    // Minimal working mock source.
+    private sealed class MockSource : IPackageSource
+    {
+        private readonly Dictionary<string, List<SemVer>> _versions = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, PackageManifest> _manifests = new(StringComparer.Ordinal);
+
+        public void Add(string name, string version)
+        {
+            var sv = SemVer.Parse(version);
+            if (!_versions.TryGetValue(name, out var list))
+            {
+                list = new List<SemVer>();
+                _versions[name] = list;
+            }
+            list.Add(sv);
+            _manifests[$"{name}@{version}"] = new PackageManifest { Name = name, Version = version };
+        }
+
+        public List<SemVer> GetAvailableVersions(string n) =>
+            _versions.TryGetValue(n, out var l) ? l : new List<SemVer>();
+
+        public PackageManifest? GetManifest(string n, SemVer v) =>
+            _manifests.TryGetValue($"{n}@{v}", out var m) ? m : null;
+
+        public string GetResolvedUrl(string n, SemVer v) =>
+            $"https://registry.example.com/{n}/{v}.tar.gz";
+
+        public string? GetIntegrity(string n, SemVer v) => null;
+        public (bool Deprecated, string? Message) GetDeprecation(string n, SemVer v) => (false, null);
+    }
+
+    [Fact]
+    public void InstallNew_NetworkFailure_ManifestUnchanged()
+    {
+        string projectDir = Path.Combine(_tempDir, "atomicity-netfail");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir); // no deps
+
+        string manifestBefore = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+
+        // Build in-memory manifest with new dep (simulating what InstallCommand would do).
+        var manifest = PackageManifest.Load(projectDir)!;
+        manifest.Dependencies = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["new-dep"] = "^1.0.0"
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            PackageInstaller.Install(projectDir, new ThrowingPackageSource(), manifest));
+
+        string manifestAfter = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+        Assert.Equal(manifestBefore, manifestAfter);
+    }
+
+    [Fact]
+    public void InstallNew_PackageNotFound_ManifestUnchanged()
+    {
+        string projectDir = Path.Combine(_tempDir, "atomicity-notfound");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir);
+
+        string manifestBefore = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+
+        var manifest = PackageManifest.Load(projectDir)!;
+        manifest.Dependencies = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["ghost-pkg"] = "^1.0.0"
+        };
+
+        // NotFoundPackageSource returns empty version lists → resolver throws.
+        Assert.Throws<InvalidOperationException>(() =>
+            PackageInstaller.Install(projectDir, new NotFoundPackageSource(), manifest));
+
+        string manifestAfter = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+        Assert.Equal(manifestBefore, manifestAfter);
+    }
+
+    [Fact]
+    public void InstallNew_Success_ManifestNotWrittenByInstaller()
+    {
+        // The installer itself must NOT write stash.json — that is InstallCommand's job.
+        string pkgName = $"atomic-pkg-{Guid.NewGuid():N}";
+        string projectDir = Path.Combine(_tempDir, "atomicity-success");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir); // no deps on disk
+
+        CreateAndCachePackage(pkgName, "1.0.0");
+
+        var source = new MockSource();
+        source.Add(pkgName, "1.0.0");
+
+        string manifestBefore = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+
+        var manifest = PackageManifest.Load(projectDir)!;
+        manifest.Dependencies = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [pkgName] = "^1.0.0"
+        };
+
+        // Should succeed — package is cached and source resolves it.
+        PackageInstaller.Install(projectDir, source, manifest);
+
+        // stash.json must be unchanged by the installer (caller writes it on success).
+        string manifestAfter = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+        Assert.Equal(manifestBefore, manifestAfter);
+
+        // But the package itself must be installed.
+        Assert.True(File.Exists(Path.Combine(projectDir, "stashes", pkgName, ".stash-version")));
+
+        PackageCache.ClearPackage(pkgName);
+    }
+
+    // Source that resolves a package successfully but advertises a wrong integrity
+    // value. This triggers the post-resolve integrity-check failure path inside
+    // InstallEntry, which used to leave stash-lock.json mutated.
+    private sealed class BadIntegritySource : IPackageSource
+    {
+        private readonly Dictionary<string, List<SemVer>> _versions = new(StringComparer.Ordinal);
+
+        public void Add(string name, string version)
+        {
+            var sv = SemVer.Parse(version);
+            if (!_versions.TryGetValue(name, out var list))
+            {
+                list = new List<SemVer>();
+                _versions[name] = list;
+            }
+            list.Add(sv);
+        }
+
+        public List<SemVer> GetAvailableVersions(string n) =>
+            _versions.TryGetValue(n, out var l) ? l : new List<SemVer>();
+
+        public PackageManifest? GetManifest(string n, SemVer v) =>
+            new PackageManifest { Name = n, Version = v.ToString() };
+
+        public string GetResolvedUrl(string n, SemVer v) =>
+            $"https://registry.example.com/{n}/{v}.tar.gz";
+
+        // Deliberately wrong integrity — never matches the cached tarball.
+        public string? GetIntegrity(string n, SemVer v) =>
+            "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+        public (bool Deprecated, string? Message) GetDeprecation(string n, SemVer v) => (false, null);
+    }
+
+    [Fact]
+    public void InstallNew_IntegrityMismatch_ManifestAndLockUnchanged()
+    {
+        // Acceptance criterion: a failed `stash pkg install <dep>` due to integrity
+        // mismatch must leave BOTH stash.json AND stash-lock.json byte-identical to
+        // their pre-command state. The earlier implementation wrote the new lock file
+        // before InstallFromLockFile ran, leaking a lock entry on extraction failure.
+        string pkgName = $"atomic-bad-{Guid.NewGuid():N}";
+        string projectDir = Path.Combine(_tempDir, "atomicity-integrity");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir);
+
+        CreateAndCachePackage(pkgName, "1.0.0");
+
+        string manifestBefore = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+        string lockPath = Path.Combine(projectDir, "stash-lock.json");
+        bool lockExistedBefore = File.Exists(lockPath);
+        string? lockBefore = lockExistedBefore ? File.ReadAllText(lockPath) : null;
+
+        var source = new BadIntegritySource();
+        source.Add(pkgName, "1.0.0");
+
+        var manifest = PackageManifest.Load(projectDir)!;
+        manifest.Dependencies = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [pkgName] = "^1.0.0"
+        };
+
+        Assert.Throws<InvalidOperationException>(() =>
+            PackageInstaller.Install(projectDir, source, manifest));
+
+        // stash.json untouched.
+        string manifestAfter = File.ReadAllText(Path.Combine(projectDir, "stash.json"));
+        Assert.Equal(manifestBefore, manifestAfter);
+
+        // stash-lock.json untouched: if it didn't exist before, it must not exist now;
+        // if it existed before, its bytes must be identical.
+        if (lockExistedBefore)
+        {
+            Assert.True(File.Exists(lockPath));
+            Assert.Equal(lockBefore, File.ReadAllText(lockPath));
+        }
+        else
+        {
+            Assert.False(File.Exists(lockPath));
+        }
+
+        PackageCache.ClearPackage(pkgName);
+    }
+}
+
+// ── LockFileFreshnessTests ────────────────────────────────────────────────────
+
+/// <summary>
+/// Tests for the lockfile freshness checks: orphan detection, constraint-mismatch
+/// detection, and the no-op fast path when nothing has changed.
+/// </summary>
+public class LockFileFreshnessTests : IDisposable
+{
+    private readonly string _tempDir;
+
+    public LockFileFreshnessTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), $"stash-freshness-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, recursive: true);
+        }
+    }
+
+    private static void WriteManifest(string projectDir, Dictionary<string, string>? deps = null)
+    {
+        string depsSection = deps == null || deps.Count == 0
+            ? ""
+            : ",\n  \"dependencies\": {" + string.Join(", ", deps.Select(kv => $"\"{kv.Key}\": \"{kv.Value}\"")) + "}";
+        File.WriteAllText(
+            Path.Combine(projectDir, "stash.json"),
+            $"{{\n  \"name\": \"test-project\",\n  \"version\": \"1.0.0\"{depsSection}\n}}\n");
+    }
+
+    private string CreateAndCachePackage(string pkgName, string version)
+    {
+        string srcDir = Path.Combine(_tempDir, $"src-{pkgName}-{version}");
+        Directory.CreateDirectory(srcDir);
+        File.WriteAllText(Path.Combine(srcDir, "main.stash"), $"// {pkgName} v{version}");
+        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        Tarball.Pack(srcDir, tarball);
+        PackageCache.Store(pkgName, version, tarball);
+        return tarball;
+    }
+
+    private sealed class MockSource : IPackageSource
+    {
+        private readonly Dictionary<string, List<SemVer>> _versions = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, PackageManifest> _manifests = new(StringComparer.Ordinal);
+
+        public int ResolveCallCount { get; private set; }
+
+        public void Add(string name, string version, Dictionary<string, string>? deps = null)
+        {
+            var sv = SemVer.Parse(version);
+            if (!_versions.TryGetValue(name, out var list))
+            {
+                list = new List<SemVer>();
+                _versions[name] = list;
+            }
+            list.Add(sv);
+            _manifests[$"{name}@{version}"] = new PackageManifest { Name = name, Version = version, Dependencies = deps };
+        }
+
+        public List<SemVer> GetAvailableVersions(string n)
+        {
+            ResolveCallCount++;
+            return _versions.TryGetValue(n, out var l) ? l : new List<SemVer>();
+        }
+
+        public PackageManifest? GetManifest(string n, SemVer v) =>
+            _manifests.TryGetValue($"{n}@{v}", out var m) ? m : null;
+
+        public string GetResolvedUrl(string n, SemVer v) =>
+            $"https://registry.example.com/{n}/{v}.tar.gz";
+
+        public string? GetIntegrity(string n, SemVer v) => null;
+        public (bool Deprecated, string? Message) GetDeprecation(string n, SemVer v) => (false, null);
+    }
+
+    [Fact]
+    public void Install_RemovesOrphanLockEntry_AndDirectory()
+    {
+        string orphanPkg = $"orphan-{Guid.NewGuid():N}";
+        string projectDir = Path.Combine(_tempDir, "orphan-test");
+        Directory.CreateDirectory(projectDir);
+        // Manifest no longer lists orphanPkg.
+        WriteManifest(projectDir, deps: null);
+
+        // Stale lock still has orphanPkg.
+        var oldLock = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [orphanPkg] = new LockFileEntry
+                {
+                    Version = "1.2.3",
+                    Resolved = "https://example.com/orphan-1.2.3.tar.gz"
+                }
+            }
+        };
+        oldLock.Save(projectDir);
+
+        // Simulate orphan already extracted on disk.
+        string orphanDir = Path.Combine(projectDir, "stashes", orphanPkg);
+        Directory.CreateDirectory(orphanDir);
+        File.WriteAllText(Path.Combine(orphanDir, ".stash-version"), "1.2.3");
+
+        // Source can resolve an empty dep set.
+        var source = new MockSource();
+
+        PackageInstaller.Install(projectDir, source);
+
+        var newLock = LockFile.Load(projectDir)!;
+        Assert.False(newLock.Resolved.ContainsKey(orphanPkg));
+        Assert.False(Directory.Exists(orphanDir));
+    }
+
+    [Fact]
+    public void Install_TransitiveDepReachable_StaysInLock()
+    {
+        // "a" depends on "b" transitively.  Manifest only lists "a".
+        // The lock must keep "b" because it is reachable through "a".
+        string pkgA = $"pkg-a-{Guid.NewGuid():N}";
+        string pkgB = $"pkg-b-{Guid.NewGuid():N}";
+        string projectDir = Path.Combine(_tempDir, "transitive-test");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, new Dictionary<string, string> { [pkgA] = "^1.0.0" });
+
+        CreateAndCachePackage(pkgA, "1.0.0");
+        CreateAndCachePackage(pkgB, "1.0.0");
+
+        var lockFile = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [pkgA] = new LockFileEntry
+                {
+                    Version = "1.0.0",
+                    Resolved = "https://example.com/a-1.0.0.tar.gz",
+                    Dependencies = new Dictionary<string, string> { [pkgB] = "^1.0.0" }
+                },
+                [pkgB] = new LockFileEntry
+                {
+                    Version = "1.0.0",
+                    Resolved = "https://example.com/b-1.0.0.tar.gz"
+                }
+            }
+        };
+        lockFile.Save(projectDir);
+
+        // No source — if resolution were triggered this would throw.
+        PackageInstaller.Install(projectDir);
+
+        var resultLock = LockFile.Load(projectDir)!;
+        Assert.True(resultLock.Resolved.ContainsKey(pkgA));
+        Assert.True(resultLock.Resolved.ContainsKey(pkgB));
+
+        PackageCache.ClearPackage(pkgA);
+        PackageCache.ClearPackage(pkgB);
+    }
+
+    [Fact]
+    public void Install_ConstraintUpgrade_ResolvesNewVersion()
+    {
+        string pkgName = $"upgrade-pkg-{Guid.NewGuid():N}";
+        string projectDir = Path.Combine(_tempDir, "constraint-upgrade");
+        Directory.CreateDirectory(projectDir);
+        // Manifest now requires ^2.0.0.
+        WriteManifest(projectDir, new Dictionary<string, string> { [pkgName] = "^2.0.0" });
+
+        CreateAndCachePackage(pkgName, "1.2.5");
+        CreateAndCachePackage(pkgName, "2.0.1");
+
+        // Stale lock has 1.2.5 — does not satisfy ^2.0.0.
+        var oldLock = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [pkgName] = new LockFileEntry
+                {
+                    Version = "1.2.5",
+                    Resolved = "https://example.com/pkg-1.2.5.tar.gz"
+                }
+            }
+        };
+        oldLock.Save(projectDir);
+
+        var source = new MockSource();
+        source.Add(pkgName, "1.2.5");
+        source.Add(pkgName, "2.0.1");
+
+        PackageInstaller.Install(projectDir, source);
+
+        var newLock = LockFile.Load(projectDir)!;
+        Assert.True(newLock.Resolved.TryGetValue(pkgName, out var entry));
+        Assert.Equal("2.0.1", entry.Version);
+
+        string versionMarker = Path.Combine(projectDir, "stashes", pkgName, ".stash-version");
+        Assert.True(File.Exists(versionMarker));
+        Assert.Equal("2.0.1", File.ReadAllText(versionMarker).Trim());
+
+        PackageCache.ClearPackage(pkgName);
+    }
+
+    [Fact]
+    public void Install_NoChanges_FastPath()
+    {
+        // Lock is fully up-to-date: constraint satisfied, no orphans.
+        // Passing null source proves that no resolution occurs.
+        string pkgName = $"fastpath-pkg-{Guid.NewGuid():N}";
+        string projectDir = Path.Combine(_tempDir, "fast-path");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, new Dictionary<string, string> { [pkgName] = "^1.0.0" });
+
+        CreateAndCachePackage(pkgName, "1.0.0");
+
+        var lockFile = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [pkgName] = new LockFileEntry
+                {
+                    Version = "1.0.0",
+                    Resolved = "https://example.com/fastpath-1.0.0.tar.gz"
+                }
+            }
+        };
+        lockFile.Save(projectDir);
+
+        // null source: Install would throw if it tried to resolve.
+        PackageInstaller.Install(projectDir);
+
+        // Package installed from lock, lock unchanged.
+        string versionMarker = Path.Combine(projectDir, "stashes", pkgName, ".stash-version");
+        Assert.True(File.Exists(versionMarker));
+        Assert.Equal("1.0.0", File.ReadAllText(versionMarker).Trim());
+
+        PackageCache.ClearPackage(pkgName);
+    }
+}

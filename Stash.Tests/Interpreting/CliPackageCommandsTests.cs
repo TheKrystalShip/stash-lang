@@ -153,40 +153,29 @@ public class CliPackageCommandsTests : IDisposable
     [Fact]
     public void Install_NameAtVersion_WrapsInCaretRange()
     {
-        WriteSimpleManifest();
-
-        CaptureStdOut(() => InstallCommand.Execute(["foo@1.2.0"]));
-
-        var manifest = PackageManifest.Load(_tempDir);
-        Assert.NotNull(manifest?.Dependencies);
-        Assert.True(manifest.Dependencies.ContainsKey("foo"));
-        Assert.Equal("^1.2.0", manifest.Dependencies["foo"]);
+        // Specifier parsing only — the install side-effect is no longer tested
+        // here because manifest writes are deferred until after a successful install
+        // (atomicity fix). See InstallAtomicityTests for end-to-end install behavior.
+        var (name, constraint) = InstallCommand.ParseSpecifier("foo@1.2.0");
+        Assert.Equal("foo", name);
+        Assert.Equal("^1.2.0", constraint);
     }
 
     [Fact]
     public void Install_NameOnly_UsesWildcard()
     {
-        WriteSimpleManifest();
-
-        CaptureStdOut(() => InstallCommand.Execute(["bar"]));
-
-        var manifest = PackageManifest.Load(_tempDir);
-        Assert.NotNull(manifest?.Dependencies);
-        Assert.Equal("*", manifest.Dependencies["bar"]);
+        var (name, constraint) = InstallCommand.ParseSpecifier("bar");
+        Assert.Equal("bar", name);
+        Assert.Equal("*", constraint);
     }
 
     [Fact]
     public void Install_GitSpecifier_ExtractsRepoName()
     {
-        WriteSimpleManifest();
-
         string specifier = "git:https://github.com/user/my-tool.git#v1.0.0";
-        CaptureStdOut(() => InstallCommand.Execute([specifier]));
-
-        var manifest = PackageManifest.Load(_tempDir);
-        Assert.NotNull(manifest?.Dependencies);
-        Assert.True(manifest.Dependencies.ContainsKey("my-tool"));
-        Assert.Equal(specifier, manifest.Dependencies["my-tool"]);
+        var (name, constraint) = InstallCommand.ParseSpecifier(specifier);
+        Assert.Equal("my-tool", name);
+        Assert.Equal(specifier, constraint);
     }
 
     // ── UninstallCommand ──────────────────────────────────────────────────────

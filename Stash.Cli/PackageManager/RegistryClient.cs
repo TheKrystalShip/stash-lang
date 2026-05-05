@@ -138,6 +138,14 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
 
             if (!response.IsSuccessStatusCode)
             {
+                if (response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    Console.Error.WriteLine("warning: token refresh failed (refresh token expired). Run 'stash pkg login' to re-authenticate.");
+                }
+                else if ((int)response.StatusCode >= 500)
+                {
+                    Console.Error.WriteLine($"warning: could not refresh token (registry returned {(int)response.StatusCode}). Continuing with existing token.");
+                }
                 return;
             }
 
@@ -185,9 +193,13 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
                 }
             }
         }
+        catch (HttpRequestException)
+        {
+            Console.Error.WriteLine("warning: could not refresh token (registry unreachable). Continuing with existing token.");
+        }
         catch
         {
-            // Refresh failed silently — the original token will be used
+            // Refresh failed — the original token will be used
         }
     }
 
@@ -480,7 +492,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         string? refreshToken = null;
         DateTime? refreshTokenExpiresAt = null;
 
-        if (root.TryGetProperty("token", out var t))
+        if (root.TryGetProperty("accessToken", out var t))
         {
             token = t.GetString();
         }

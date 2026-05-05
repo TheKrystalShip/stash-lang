@@ -72,6 +72,16 @@ public sealed class PackageInstaller
         var manifest = PackageManifest.Load(projectDir)
             ?? throw new InvalidOperationException($"No stash.json found in {projectDir}");
 
+        InstallCore(projectDir, source, manifest);
+    }
+
+    public static void Install(string projectDir, IPackageSource source, PackageManifest manifest)
+    {
+        InstallCore(projectDir, source, manifest);
+    }
+
+    private static void InstallCore(string projectDir, IPackageSource? source, PackageManifest manifest)
+    {
         var lockFile = LockFile.Load(projectDir);
 
         if (lockFile != null && IsLockFileUpToDate(manifest, lockFile))
@@ -108,9 +118,16 @@ public sealed class PackageInstaller
             Stash = manifest.Stash,
             Resolved = resolved
         };
-        newLockFile.Save(projectDir);
-
+        EmitLockFileDiagnostics(lockFile, newLockFile);
+        // Install BEFORE persisting the lock file so a download / integrity / extraction
+        // failure leaves stash-lock.json in its prior state. This keeps the lock file
+        // consistent with stash.json — InstallCommand defers the manifest write to after
+        // a successful Install, and we mirror that here for the lock. The reverse window
+        // (extraction succeeds but lock-file write fails — e.g. disk full) is documented
+        // as an accepted gap; a future `stash pkg verify` can detect drift.
+        RemoveOrphans(projectDir, lockFile, newLockFile);
         InstallFromLockFile(projectDir, newLockFile);
+        newLockFile.Save(projectDir);
     }
 
     /// <summary>
@@ -248,12 +265,120 @@ public sealed class PackageInstaller
     /// </returns>
     private static bool IsLockFileUpToDate(PackageManifest manifest, LockFile lockFile)
     {
-        if (manifest.Dependencies == null || manifest.Dependencies.Count == 0)
+        var directDeps = manifest.Dependencies;
+
+        if (directDeps == null || directDeps.Count == 0)
         {
             return lockFile.Resolved.Count == 0;
         }
 
-        return manifest.Dependencies.Keys.All(name => lockFile.Resolved.ContainsKey(name));
+        // Constraint mismatch: every direct dep must be present and its pinned
+        // version must satisfy the manifest's current constraint.
+        foreach (var (name, constraint) in directDeps)
+        {
+            if (!lockFile.Resolved.TryGetValue(name, out var entry))
+            {
+                return false;
+            }
+
+            // Git constraints bypass semver checking.
+            if (GitSource.IsGitSource(constraint))
+            {
+                continue;
+            }
+
+            if (SemVerRange.TryParse(constraint, out var range) && range != null
+                && SemVer.TryParse(entry.Version, out var pinned) && pinned != null)
+            {
+                if (!range.IsSatisfiedBy(pinned))
+                {
+                    return false;
+                }
+            }
+        }
+
+        // Orphan detection: BFS from direct deps through the lock's recorded
+        // transitive dependency edges. Any lock entry not reachable is an orphan.
+        var reachable = new HashSet<string>(StringComparer.Ordinal);
+        var queue = new Queue<string>();
+        foreach (string name in directDeps.Keys)
+        {
+            if (reachable.Add(name))
+            {
+                queue.Enqueue(name);
+            }
+        }
+
+        while (queue.Count > 0)
+        {
+            string current = queue.Dequeue();
+            if (!lockFile.Resolved.TryGetValue(current, out var lockEntry))
+            {
+                continue;
+            }
+
+            if (lockEntry.Dependencies != null)
+            {
+                foreach (string transitive in lockEntry.Dependencies.Keys)
+                {
+                    if (reachable.Add(transitive))
+                    {
+                        queue.Enqueue(transitive);
+                    }
+                }
+            }
+        }
+
+        foreach (string name in lockFile.Resolved.Keys)
+        {
+            if (!reachable.Contains(name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static void EmitLockFileDiagnostics(LockFile? oldLockFile, LockFile newLockFile)
+    {
+        if (oldLockFile == null)
+        {
+            return;
+        }
+
+        foreach (var (name, oldEntry) in oldLockFile.Resolved)
+        {
+            if (!newLockFile.Resolved.TryGetValue(name, out var newEntry))
+            {
+                Console.Error.WriteLine($"Removing orphan: {name}@{oldEntry.Version}");
+            }
+            else if (!string.Equals(oldEntry.Version, newEntry.Version, StringComparison.Ordinal))
+            {
+                Console.Error.WriteLine($"Updating {name}: {oldEntry.Version} \u2192 {newEntry.Version} (constraint changed)");
+            }
+        }
+    }
+
+    private static void RemoveOrphans(string projectDir, LockFile? oldLockFile, LockFile newLockFile)
+    {
+        if (oldLockFile == null)
+        {
+            return;
+        }
+
+        string stashesDir = Path.Combine(projectDir, "stashes");
+        foreach (string name in oldLockFile.Resolved.Keys)
+        {
+            if (!newLockFile.Resolved.ContainsKey(name))
+            {
+                string orphanDir = Path.Combine(stashesDir, name);
+                if (Directory.Exists(orphanDir))
+                {
+                    Directory.Delete(orphanDir, recursive: true);
+                }
+            }
+        }
     }
 
     /// <summary>

@@ -7,9 +7,14 @@ namespace Stash.Registry.Contracts;
 /// </summary>
 public sealed class ErrorResponse
 {
-    /// <summary>A human-readable message describing what went wrong.</summary>
+    /// <summary>A machine-readable error code or human-readable message describing what went wrong.</summary>
     [JsonPropertyName("error")]
     public required string Error { get; set; }
+
+    /// <summary>An optional human-readable description of the error. Omitted when null.</summary>
+    [JsonPropertyName("message")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Message { get; set; }
 }
 
 /// <summary>

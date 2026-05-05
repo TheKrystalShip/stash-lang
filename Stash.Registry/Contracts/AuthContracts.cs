@@ -24,12 +24,20 @@ public sealed class LoginRequest
 public sealed class LoginResponse
 {
     /// <summary>The short-lived access token to use in subsequent <c>Authorization</c> headers.</summary>
+    [JsonPropertyName("accessToken")]
+    public required string AccessToken { get; set; }
+
+    // DEPRECATED: read accessToken instead. Remove after next release.
     [JsonPropertyName("token")]
-    public required string Token { get; set; }
+    public string Token => AccessToken;
 
     /// <summary>The UTC date and time at which the access token expires.</summary>
     [JsonPropertyName("expiresAt")]
     public required DateTime ExpiresAt { get; set; }
+
+    /// <summary>Lifetime of the access token in seconds.</summary>
+    [JsonPropertyName("expiresIn")]
+    public int ExpiresIn { get; set; }
 
     /// <summary>The long-lived refresh token for obtaining new access tokens without re-authenticating.</summary>
     [JsonPropertyName("refreshToken")]

@@ -9,7 +9,7 @@ public sealed class AuthConfig
     public string Type { get; set; } = "local";
 
     /// <summary>Whether self-service user registration is enabled.</summary>
-    public bool RegistrationEnabled { get; set; } = true;
+    public bool RegistrationEnabled { get; set; } = false;
 
     /// <summary>
     /// Lifetime of manually created API tokens issued via <c>POST /auth/tokens</c>.

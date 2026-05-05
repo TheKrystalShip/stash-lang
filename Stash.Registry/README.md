@@ -30,28 +30,11 @@ The server creates the SQLite database and package storage directory automatical
 
 ## First-Time Setup
 
-### 1. Register an account
+> **Note:** Self-registration is **disabled by default** (`Auth:RegistrationEnabled: false`). For most deployments, seed the initial admin via the env-var bootstrap path described in step 1 below. To allow open sign-up instead, set `"Auth": { "RegistrationEnabled": true }` in `appsettings.json` before continuing — then the first user that registers via `POST /api/v1/auth/register` automatically becomes admin.
 
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "your-secure-password"}'
-```
+### 1. Seed the initial admin
 
-### 2. Login to get a token
-
-```bash
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "your-secure-password"}'
-# Returns: {"token": "eyJ...", "expiresAt": "..."}
-```
-
-### 3. Grant admin access
-
-The first registered user automatically becomes admin. Subsequent registrations are normal users.
-
-For automated deployments (Docker, CI), seed an admin via environment variable instead:
+For automated deployments (Docker, CI) — and the recommended path on a fresh install — seed an admin via environment variable:
 
 1. Set `Registry:Bootstrap:AdminUsername` and `Registry:Bootstrap:AdminPasswordEnv` in `appsettings.json`:
    ```json
@@ -82,7 +65,18 @@ curl -X POST http://localhost:8080/api/v1/admin/users \
   -d '{"username": "newadmin", "password": "secure-password", "role": "admin"}'
 ```
 
-### 4. Use with the Stash CLI
+### 2. Login to get a token
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin", "password": "your-secure-password"}'
+# Returns: {"accessToken": "eyJ...", "expiresAt": "...", "expiresIn": 3600, "refreshToken": "...", "token": "eyJ..."}
+```
+
+> The `token` field is a deprecated alias for `accessToken`, kept for one release for backwards compatibility with third-party tooling. New consumers should read `accessToken`.
+
+### 3. Use with the Stash CLI
 
 ```bash
 # Login from the Stash CLI
@@ -160,7 +154,7 @@ Each rule supports `MaxAttempts` + `WindowSeconds` (sliding window, used by `Aut
 | Property            | Type   | Default | Description                                                                                      |
 | ------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------ |
 | Type                | string | `local` | `local`, `ldap` (stub), or `oidc` (stub)                                                         |
-| RegistrationEnabled | bool   | `true`  | Allow self-registration                                                                          |
+| RegistrationEnabled | bool   | `false` | Allow self-registration. Defaults to **off** — self-hosted registries are private by default. Set to `true` in `appsettings.json` to allow open sign-up. Note: if you rely on first-registration to seed an admin, either enable registration temporarily or use the `Bootstrap.AdminPasswordEnv` env-var path. |
 | ApiTokenExpiry      | string | `90d`   | Lifetime of manually created API tokens (`POST /auth/tokens`). Accepts duration strings.         |
 | AccessTokenExpiry   | string | `1h`    | Lifetime of short-lived access tokens issued during login and refresh. Accepts duration strings. |
 | RefreshTokenExpiry  | string | `90d`   | Lifetime of long-lived refresh tokens issued during login. Accepts duration strings.             |

@@ -152,8 +152,9 @@ public class AuthController : ControllerBase
 
         return Ok(new LoginResponse
         {
-            Token = accessJwt,
+            AccessToken = accessJwt,
             ExpiresAt = accessExpiresAt,
+            ExpiresIn = (int)(accessExpiresAt - DateTime.UtcNow).TotalSeconds,
             RefreshToken = refreshTokenString,
             RefreshTokenExpiresAt = refreshExpiresAt
         });
@@ -180,7 +181,7 @@ public class AuthController : ControllerBase
     {
         if (!_config.Auth.RegistrationEnabled)
         {
-            return StatusCode(403, new ErrorResponse { Error = "Registration is disabled." });
+            return StatusCode(403, new ErrorResponse { Error = "registration_disabled", Message = "User registration is disabled on this registry." });
         }
 
         RegisterRequest? body;

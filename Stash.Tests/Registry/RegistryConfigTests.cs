@@ -70,7 +70,7 @@ public sealed class RegistryConfigTests : IDisposable
         Assert.Equal("filesystem", config.Storage.Type);
         Assert.Equal("sqlite", config.Database.Type);
         Assert.Equal("local", config.Auth.Type);
-        Assert.True(config.Auth.RegistrationEnabled);
+        Assert.False(config.Auth.RegistrationEnabled);
         Assert.Equal("10MB", config.Security.MaxPackageSize);
         Assert.Equal("72h", config.Security.UnpublishWindow);
     }

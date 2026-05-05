@@ -80,40 +80,21 @@ public static class InstallCommand
         }
 
         string specifier = positionalArgs[0];
-        string name;
-        string constraint;
+        var (name, constraint) = ParseSpecifier(specifier);
 
-        if (GitSource.IsGitSource(specifier))
+        // Build the updated manifest in-memory without writing to disk yet.
+        // The manifest write is deferred until after a successful install so that
+        // a network failure, missing package, or integrity mismatch leaves stash.json
+        // byte-identical to its pre-command state.
+        var manifest = PackageManifest.Load(projectDir);
+        if (manifest == null)
         {
-            var (url, _) = GitSource.ParseGitSource(specifier);
-            name = ExtractNameFromGitUrl(url);
-            constraint = specifier;
-        }
-        else
-        {
-            int atIndex = specifier.LastIndexOf('@');
-            if (atIndex > 0)
-            {
-                name = specifier.Substring(0, atIndex);
-                string versionPart = specifier.Substring(atIndex + 1);
-                if (SemVer.TryParse(versionPart, out _))
-                {
-                    constraint = $"^{versionPart}";
-                }
-                else
-                {
-                    constraint = versionPart;
-                }
-            }
-            else
-            {
-                name = specifier;
-                constraint = "*";
-            }
+            Console.Error.WriteLine("No stash.json found. Run 'stash pkg init' first.");
+            return;
         }
 
-        AddDependency(projectDir, name, constraint);
-        Console.WriteLine($"Added {name}@{constraint} to stash.json.");
+        manifest.Dependencies ??= new Dictionary<string, string>(StringComparer.Ordinal);
+        manifest.Dependencies[name] = constraint;
 
         try
         {
@@ -125,18 +106,53 @@ public static class InstallCommand
             PackageInstaller.SetAllowMissingIntegrity(allowMissingIntegrity);
             try
             {
-                PackageInstaller.Install(projectDir, source);
+                PackageInstaller.Install(projectDir, source, manifest);
             }
             finally
             {
                 PackageInstaller.SetAllowMissingIntegrity(false);
             }
+            // Install succeeded — now persist the new dependency to disk.
+            AddDependency(projectDir, name, constraint);
+            Console.WriteLine($"Added {name}@{constraint} to stash.json.");
             Console.WriteLine("Dependencies installed.");
         }
         catch (InvalidOperationException)
         {
             Console.Error.WriteLine("Run 'stash pkg install --registry <url>' to install dependencies.");
         }
+    }
+
+    /// <summary>
+    /// Parses a package specifier into a (name, constraint) pair.
+    /// </summary>
+    /// <remarks>
+    /// Recognises three forms: a Git source URL prefixed with <c>git:</c> (the full
+    /// specifier is preserved as the constraint, the name is extracted from the URL),
+    /// a versioned reference <c>&lt;name&gt;@&lt;version&gt;</c> (the version is
+    /// wrapped in a caret range when it is a valid SemVer, otherwise stored verbatim),
+    /// and a bare package name (constraint defaults to <c>*</c>).
+    /// </remarks>
+    internal static (string Name, string Constraint) ParseSpecifier(string specifier)
+    {
+        if (GitSource.IsGitSource(specifier))
+        {
+            var (url, _) = GitSource.ParseGitSource(specifier);
+            return (ExtractNameFromGitUrl(url), specifier);
+        }
+
+        int atIndex = specifier.LastIndexOf('@');
+        if (atIndex > 0)
+        {
+            string name = specifier.Substring(0, atIndex);
+            string versionPart = specifier.Substring(atIndex + 1);
+            string constraint = SemVer.TryParse(versionPart, out _)
+                ? $"^{versionPart}"
+                : versionPart;
+            return (name, constraint);
+        }
+
+        return (specifier, "*");
     }
 
     /// <summary>
