@@ -24,8 +24,7 @@ public static class PackageCache
     /// <returns>The absolute path to the <c>~/.stash/cache</c> directory.</returns>
     public static string GetCacheDir()
     {
-        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        string cacheDir = Path.Combine(home, ".stash", "cache");
+        string cacheDir = Path.Combine(StashHome.GetStashDir(), "cache");
         Directory.CreateDirectory(cacheDir);
         return cacheDir;
     }

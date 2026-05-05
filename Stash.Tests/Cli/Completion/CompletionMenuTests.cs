@@ -14,6 +14,9 @@ public class CompletionMenuTests
 {
     // ── Helper ────────────────────────────────────────────────────────────────
 
+    private static string NormalizeNewlines(string text)
+        => text.Replace("\r\n", "\n");
+
     private static string CaptureOutput(Action action)
     {
         var sw = new StringWriter();
@@ -48,7 +51,7 @@ public class CompletionMenuTests
 
         Assert.Contains("hello", output);
         // Should be just "hello" + newline, no extra whitespace columns
-        Assert.Equal("hello" + Environment.NewLine, output.TrimEnd('\n').TrimEnd('\r').Replace("\r\n", "\n") + "\n");
+        Assert.Equal("hello\n", NormalizeNewlines(output));
     }
 
     // ── Multi-column layout ───────────────────────────────────────────────────

@@ -8,7 +8,7 @@ public class PathBuiltInsTests : StashTestBase
     public void Normalize_ResolvesDotsToAbsolutePath()
     {
         var result = Run("let result = path.normalize(\"/foo/bar/../baz\");");
-        Assert.Equal("/foo/baz", result);
+        Assert.Equal(System.IO.Path.GetFullPath("/foo/bar/../baz"), result);
     }
 
     [Fact]

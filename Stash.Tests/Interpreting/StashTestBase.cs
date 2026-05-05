@@ -92,7 +92,7 @@ public abstract class StashTestBase
     protected static string RunCapturingOutput(string source)
     {
         var (chunk, vm) = CompileToVM(source);
-        var sw = new StringWriter();
+        var sw = new StringWriter { NewLine = "\n" };
         vm.Output = sw;
         vm.Execute(chunk);
         return sw.ToString();
@@ -101,7 +101,7 @@ public abstract class StashTestBase
     protected static string RunCapturingStderr(string source)
     {
         var (chunk, vm) = CompileToVM(source);
-        var sw = new StringWriter();
+        var sw = new StringWriter { NewLine = "\n" };
         vm.ErrorOutput = sw;
         vm.Execute(chunk);
         return sw.ToString();
@@ -128,7 +128,7 @@ public abstract class StashTestBase
         var (chunk, vm) = CompileToVM(source);
         if (currentFile is not null)
             vm.CurrentFile = currentFile;
-        var sw = new StringWriter();
+        var sw = new StringWriter { NewLine = "\n" };
         var reporter = new TapReporter(sw);
         vm.TestHarness = reporter;
         vm.Execute(chunk);
@@ -147,4 +147,5 @@ public abstract class StashTestBase
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return (chunk, vm);
     }
+
 }

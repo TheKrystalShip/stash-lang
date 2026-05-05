@@ -66,8 +66,24 @@ internal static class BootstrapExtractor
     /// </summary>
     public static string GetTargetDir() =>
         Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            GetHomeDirectory(),
             ".config", "stash", "prompt");
+
+    private static string GetHomeDirectory()
+    {
+        string? home = OperatingSystem.IsWindows()
+            ? Environment.GetEnvironmentVariable("USERPROFILE")
+            : Environment.GetEnvironmentVariable("HOME");
+
+        if (!string.IsNullOrWhiteSpace(home))
+            return home;
+
+        home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home))
+            return home;
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
 
     /// <summary>
     /// Returns <see langword="true"/> if extraction is required: the target

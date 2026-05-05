@@ -77,4 +77,5 @@ public abstract class BytecodeTestBase
         Chunk chunk = CompileSource(source, enableDce);
         return Disassembler.Disassemble(chunk);
     }
+
 }

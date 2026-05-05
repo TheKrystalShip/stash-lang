@@ -124,6 +124,10 @@ public class ImportResolver
     {
         var resolution = new ImportResolution();
         var documentDir = documentUri.IsFile ? Path.GetDirectoryName(documentUri.LocalPath) : null;
+        if (!string.IsNullOrEmpty(documentDir) && !Path.IsPathFullyQualified(documentDir))
+        {
+            documentDir = Path.GetFullPath(documentDir);
+        }
 
         if (documentDir == null)
         {

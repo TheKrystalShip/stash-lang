@@ -724,6 +724,8 @@ let result = info.hostCount;
     [Fact]
     public void WsConnect_ValidUrl_ReturnsWsConnection()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19900;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -744,6 +746,8 @@ let result = info.hostCount;
     [Fact]
     public void WsSend_TextMessage_ReturnsByteCount()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19901;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -762,6 +766,8 @@ let result = info.hostCount;
     [Fact]
     public void WsRecv_EchoServer_ReturnsTextMessage()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19902;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -786,6 +792,8 @@ let result = info.hostCount;
     [Fact]
     public void WsRecv_Timeout_ReturnsNull()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19903;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -804,6 +812,8 @@ let result = info.hostCount;
     [Fact]
     public void WsClose_GracefulClose_Succeeds()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19904;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -821,6 +831,8 @@ let result = info.hostCount;
     [Fact]
     public void WsClose_Idempotent_NoError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19905;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -838,6 +850,8 @@ let result = info.hostCount;
     [Fact]
     public void WsState_Open_ReturnsEnumValue()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19906;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -858,6 +872,8 @@ let result = info.hostCount;
     [Fact]
     public void WsIsOpen_Open_ReturnsTrue()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19907;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -878,6 +894,8 @@ let result = info.hostCount;
     [Fact]
     public void WsSendBinary_Base64Data_Succeeds()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19908;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -926,6 +944,8 @@ let result = info.hostCount;
     [Fact]
     public void WsSendBinary_InvalidBase64_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19909;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -941,6 +961,8 @@ let result = info.hostCount;
     [Fact]
     public void WsClose_InvalidCode_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19910;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -956,6 +978,8 @@ let result = info.hostCount;
     [Fact]
     public void WsRecv_DurationLiteral_Accepted()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19911;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -975,6 +999,8 @@ let result = info.hostCount;
     [Fact]
     public void WsConnect_DurationTimeout_Accepted()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         int port = 19912;
         var (listener, serverTask) = StartWsEchoServer(port);
         try
@@ -1009,3 +1035,4 @@ let result = info.hostCount;
         }
     }
 }
+

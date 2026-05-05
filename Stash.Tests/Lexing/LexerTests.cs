@@ -458,6 +458,17 @@ public class LexerTests
         Assert.Equal("escape\\slash", tokens[0].Literal);
     }
 
+    [Fact]
+    public void ScanTokens_UnknownEscape_PreservesBackslash()
+    {
+        var lexer = CreateLexer("\"C:\\Users\\stash\"");
+        var tokens = lexer.ScanTokens();
+
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("C:\\Users\\stash", tokens[0].Literal);
+        Assert.Empty(lexer.Errors);
+    }
+
     // ── 7. Unterminated string ──────────────────────────────────────────
 
     [Fact]

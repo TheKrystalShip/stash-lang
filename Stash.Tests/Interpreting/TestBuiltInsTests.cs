@@ -504,7 +504,7 @@ public class TestBuiltInsTests : StashTestBase
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        var sw = new StringWriter();
+        var sw = new StringWriter { NewLine = "\n" };
         vm.Output = sw;
         vm.Execute(chunk);
         Assert.Equal("test output\n", sw.ToString());

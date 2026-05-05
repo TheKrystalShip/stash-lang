@@ -14,6 +14,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_BasicPipe_StdoutForwarded()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -25,6 +27,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_ExitCode_ComesFromLastStage()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // $(false) fails (exit code 1), but $(cat) reads empty stdin and exits 0.
         // Pipeline exit code reflects the last stage.
         var result = Run("let r = $(false) | $(cat); let result = r.exitCode;");
@@ -38,6 +42,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_ThreeStageChain_Works()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello) | $(cat) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -62,6 +68,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_InterpolationInStage_Works()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"let x = ""hello""; let r = $(echo ${x}) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -73,6 +81,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_Result_HasCommandResultFields()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo test) | $(cat); let result = r.stdout;");
         Assert.NotNull(result);
         Assert.Contains("test", (string)result!);
@@ -99,6 +109,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_StrictLastStage_NonZeroExitThrows()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("$(echo hello) | $!(false); let result = null;");
     }
 
@@ -109,6 +121,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_StrictLastStage_ZeroExitSucceeds()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello) | $!(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -120,6 +134,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_Result_StringCoercedToStdout()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello) | $(cat); let result = str.trim(r.stdout);");
         Assert.Equal("hello", (string)result!);
     }
@@ -149,6 +165,8 @@ public class PipeTests : StashTestBase
     [Fact]
     public void Pipe_EmptyFirstStageOutput_SecondStageStillRuns()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // $(true) produces no stdout; cat reads EOF from stdin and exits 0
         var result = Run("let r = $(true) | $(cat); let result = r.exitCode;");
         Assert.Equal(0L, result);

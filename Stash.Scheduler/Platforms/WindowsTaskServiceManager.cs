@@ -342,7 +342,7 @@ internal sealed class WindowsTaskServiceManager : IServiceManager
     {
         string description = def.Description ?? $"Stash service: {def.Name}";
         string workingDir = def.WorkingDirectory
-            ?? Path.GetDirectoryName(resolvedScriptPath) ?? @"C:\";
+            ?? GetScriptDirectory(resolvedScriptPath) ?? @"C:\";
         string logPath = ServiceLogManager.GetCurrentLogPath(def.Name);
         bool isPeriodic = def.Schedule is not null;
 
@@ -433,6 +433,20 @@ internal sealed class WindowsTaskServiceManager : IServiceManager
                         new XElement(Ns + "Command", "cmd.exe"),
                         new XElement(Ns + "Arguments", commandArgs),
                         new XElement(Ns + "WorkingDirectory", workingDir)))));
+    }
+
+    private static string? GetScriptDirectory(string scriptPath)
+    {
+        if (scriptPath.Contains('/') && !scriptPath.Contains('\\'))
+        {
+            int lastSlash = scriptPath.LastIndexOf('/');
+            if (lastSlash > 0)
+                return scriptPath[..lastSlash];
+            if (lastSlash == 0)
+                return "/";
+        }
+
+        return Path.GetDirectoryName(scriptPath);
     }
 
     /// <summary>

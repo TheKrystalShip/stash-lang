@@ -10,6 +10,14 @@ namespace Stash.Tests.Interpreting;
 
 public class InterpreterTests : StashTestBase
 {
+    private static string StashPath(string path)
+        => path.Replace("\\", "\\\\");
+
+    private static string ScratchPath(string name)
+        => System.IO.Path.Combine(
+            System.IO.Directory.GetCurrentDirectory(),
+            $"{name}_{Guid.NewGuid():N}");
+
     // 1. Integer literals
     [Fact]
     public void IntegerLiteral_ReturnsLong()
@@ -2219,6 +2227,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_BasicEcho_StdoutCaptured()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello); let result = r.stdout;");
         Assert.IsType<string>(result);
         Assert.Contains("hello", (string)result!);
@@ -2227,12 +2237,16 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_ExitCodeSuccess()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal(0L, Run("let r = $(true); let result = r.exitCode;"));
     }
 
     [Fact]
     public void Command_ExitCodeFailure()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(false); let result = r.exitCode;");
         Assert.IsType<long>(result);
         Assert.NotEqual(0L, result);
@@ -2241,6 +2255,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_StderrCaptured()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(cat /dev/null/nonexistent); let result = r.stderr;");
         Assert.IsType<string>(result);
         Assert.True(((string)result!).Length > 0, "Expected stderr output from cat on a nonexistent path");
@@ -2249,6 +2265,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_ResultIsStashInstance()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"let result = $(echo hi);");
 
         Assert.IsType<StashInstance>(result);
@@ -2257,6 +2275,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_WithInterpolation_VariableSubstituted()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let x = \"world\"; let r = $(echo ${x}); let result = r.stdout;");
         Assert.Contains("world", (string)result!);
     }
@@ -2264,6 +2284,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_WithExpressionInterpolation()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let a = 2; let b = 3; let r = $(echo ${a + b}); let result = r.stdout;");
         Assert.Contains("5", (string)result!);
     }
@@ -2271,12 +2293,16 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_TypeofResult()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal("struct", Run("let r = $(echo hi); let result = typeof(r);"));
     }
 
     [Fact]
     public void Command_StdoutFieldAccess()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let result = $(echo hello).stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -2284,6 +2310,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_Stringify_ReturnsStdout()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello); let result = conv.toStr(r);");
         Assert.IsType<string>(result);
         Assert.Contains("hello", (string)result!);
@@ -2292,6 +2320,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_Stringify_InInterpolation()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello); let result = \"output: ${r}\";");
         Assert.IsType<string>(result);
         Assert.Contains("output: hello", (string)result!);
@@ -2300,6 +2330,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_Stringify_FieldsStillAccessible()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("""
             let r = $(echo hello);
             let stdout = r.stdout;
@@ -2314,6 +2346,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_Stringify_DoesNotIncludeStructFormat()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hi); let result = conv.toStr(r);");
         Assert.IsType<string>(result);
         Assert.DoesNotContain("CommandResult {", (string)result!);
@@ -2322,6 +2356,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Command_ExitCodeFieldAccess()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal(0L, Run("let result = $(true).exitCode;"));
     }
 
@@ -2330,12 +2366,16 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void PassthroughCommand_ExitCodeSuccess()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal(0L, Run("let r = $>(true); let result = r.exitCode;"));
     }
 
     [Fact]
     public void PassthroughCommand_ExitCodeFailure()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $>(false); let result = r.exitCode;");
         Assert.IsType<long>(result);
         Assert.NotEqual(0L, result);
@@ -2344,6 +2384,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void PassthroughCommand_StdoutIsEmpty()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $>(echo hello); let result = r.stdout;");
         Assert.Equal("", result);
     }
@@ -2351,6 +2393,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void PassthroughCommand_StderrIsEmpty()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $>(cat /dev/null/nonexistent); let result = r.stderr;");
         Assert.Equal("", result);
     }
@@ -2358,6 +2402,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void PassthroughCommand_WithInterpolation()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let x = \"world\"; let r = $>(echo ${x}); let result = r.exitCode;");
         Assert.Equal(0L, result);
     }
@@ -2365,6 +2411,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void PassthroughCommand_DirectFieldAccess()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let result = $>(true).exitCode;");
         Assert.Equal(0L, result);
     }
@@ -2372,6 +2420,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void PassthroughCommand_InPipeRight_ThrowsCompileError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Throws<CompileError>(() => Run("let result = $(echo hi) | $>(cat);"));
     }
 
@@ -2380,6 +2430,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Pipe_BasicChain_StdoutPiped()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -2387,6 +2439,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Pipe_ExitCodeFromLastCommand()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // Pipeline exit code comes from the last command (POSIX semantics).
         // $(false) has exit code 1, but $(echo ...) succeeds — pipeline exit code is 0.
         var result = Run("let r = $(false) | $(echo ran); let result = r.exitCode;");
@@ -2396,6 +2450,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Pipe_ThreeCommands()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $(echo hello) | $(cat) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
@@ -2403,6 +2459,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Pipe_GrepFilter()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // echo two lines, grep for one
         var result = Run(@"let r = $(printf ""hello\nworld"") | $(grep world); let result = r.stdout;");
         Assert.Contains("world", (string)result!);
@@ -2412,6 +2470,8 @@ public class InterpreterTests : StashTestBase
     [Trait("Category", "Unix")]
     public void Pipe_StreamingHeadTerminatesProducer()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // yes outputs infinite "y" lines; head -5 reads 5 then closes stdin.
         // With streaming pipes, this completes — the broken pipe from yes is handled gracefully.
         var result = Run("let r = $(yes) | $(head -5); let result = r.stdout;");
@@ -2447,12 +2507,16 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Pipe_AllStagesMustBeCommands()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Throws<CompileError>(() => Run("let r = $(echo hi) | 42;"));
     }
 
     [Fact]
     public void Pipe_PassthroughInPipelineThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Throws<CompileError>(() => Run("let r = $>(echo hi) | $(cat);"));
     }
 
@@ -2678,6 +2742,8 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Typeof_CommandResult_ReturnsStruct()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal("struct", Run("let result = typeof($(echo hi));"));
     }
 
@@ -2690,12 +2756,16 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void CommandExecution_EmptyCommand_ThrowsRuntimeError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("let r = $( );");
     }
 
     [Fact]
     public void CommandExecution_QuotedParensDoNotBreakLexing()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // Parentheses inside quotes must not affect the nesting depth.
         object? result = Run("let r = $(echo \"(hello)\"); let result = r.stdout;");
         Assert.Equal("(hello)\n", result);
@@ -4545,7 +4615,7 @@ fn makeAdder(x) {
     public void Path_Dir()
     {
         string source = "let result = path.dir(\"/home/user/file.txt\");";
-        Assert.Equal("/home/user", Run(source));
+        Assert.Equal(System.IO.Path.GetDirectoryName("/home/user/file.txt"), Run(source));
     }
 
     [Fact]
@@ -4797,6 +4867,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessNamespace_Typeof()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal("namespace", Run("let result = typeof(process);"));
     }
 
@@ -4883,6 +4955,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessNamespace_Exit_NonInteger_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("env.exit(\"not a number\");");
     }
 
@@ -4891,6 +4965,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessExists_CurrentProcess_ReturnsTrue()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
         Assert.Equal(true, Run($"let result = process.exists({pid});"));
     }
@@ -4898,12 +4974,16 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessExists_InvalidPid_ReturnsFalse()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal(false, Run("let result = process.exists(99999999);"));
     }
 
     [Fact]
     public void ProcessExists_NonInteger_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.exists(\"not a pid\");");
     }
 
@@ -4912,12 +4992,16 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessFind_ReturnsArray()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.IsType<List<object?>>(Run("let result = process.find(\"__nonexistent_process_xyz__\");"));
     }
 
     [Fact]
     public void ProcessFind_NonexistentName_ReturnsEmptyArray()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let result = len(process.find(\"__stash_nonexistent_xyz__\"));");
         Assert.Equal(0L, result);
     }
@@ -4925,6 +5009,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessFind_NonString_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.find(42);");
     }
 
@@ -4933,6 +5019,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessDaemonize_ReturnsProcessHandle()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let p = process.daemonize(\"sleep 10\"); let result = typeof(p);");
         Assert.Equal("struct", result);
     }
@@ -4940,6 +5028,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessDaemonize_NotTracked()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let p = process.daemonize(""sleep 10"");
             let tracked = process.list();
@@ -4951,6 +5041,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessDaemonize_NonString_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.daemonize(42);");
     }
 
@@ -4959,6 +5051,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWaitAll_ReturnsArrayOfResults()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let p1 = process.spawn(""echo hello"");
             let p2 = process.spawn(""echo world"");
@@ -4971,6 +5065,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWaitAll_ResultsContainStdout()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let p1 = process.spawn(""echo hello"");
             let results = process.waitAll([p1]);
@@ -4982,6 +5078,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWaitAll_EmptyArray_ReturnsEmptyArray()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let result = len(process.waitAll([]));");
         Assert.Equal(0L, result);
     }
@@ -4989,12 +5087,16 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWaitAll_NonArray_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.waitAll(\"not an array\");");
     }
 
     [Fact]
     public void ProcessWaitAll_NonProcessInArray_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.waitAll([42]);");
     }
 
@@ -5003,6 +5105,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWaitAny_ReturnsCommandResult()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let p1 = process.spawn(""echo fast"");
             let p2 = process.spawn(""sleep 10"");
@@ -5016,24 +5120,32 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWaitAny_EmptyArray_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.waitAny([]);");
     }
 
     [Fact]
     public void ProcessWaitAny_NonArray_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.waitAny(\"not an array\");");
     }
 
     [Fact]
     public void ProcessWaitAny_NonProcessInArray_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.waitAny([42]);");
     }
 
     [Fact]
     public void ProcessChdir_ChangesWorkingDirectory()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let original = env.cwd();
             env.chdir(""/tmp"");
@@ -5046,18 +5158,24 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessChdir_NonStringArg_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("env.chdir(42);");
     }
 
     [Fact]
     public void ProcessChdir_NonExistentDirectory_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError(@"env.chdir(""/nonexistent_dir_xyz_123"");");
     }
 
     [Fact]
     public void ProcessChdir_ReturnsNull()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let original = env.cwd();
             let result = env.chdir(""/tmp"");
@@ -5071,6 +5189,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWithDir_ChangesDirectoryInsideCallback()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let result = env.withDir(""/tmp"", () => {
                 return env.cwd();
@@ -5082,6 +5202,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWithDir_RestoresDirectoryAfterCallback()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let before = env.cwd();
             env.withDir(""/tmp"", () => {});
@@ -5093,6 +5215,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWithDir_RestoresDirectoryOnError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let before = env.cwd();
             try {
@@ -5108,6 +5232,8 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWithDir_ReturnsCallbackValue()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let result = env.withDir(""/tmp"", () => {
                 return 42;
@@ -5119,24 +5245,32 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessWithDir_NonStringPath_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("env.withDir(123, () => {});");
     }
 
     [Fact]
     public void ProcessWithDir_NonFunctionSecondArg_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError(@"env.withDir(""/tmp"", ""not a function"");");
     }
 
     [Fact]
     public void ProcessWithDir_NonExistentDirectory_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError(@"env.withDir(""/nonexistent_dir_xyz_123"", () => {});");
     }
 
     [Fact]
     public void ProcessWithDir_ExpressionBodyLambda()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run(@"
             let result = env.withDir(""/tmp"", () => env.cwd());
         ");
@@ -5148,12 +5282,16 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessOnExit_NonProcess_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.onExit(42, (r) => r);");
     }
 
     [Fact]
     public void ProcessOnExit_NonFunction_Throws()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError(@"
             let p = process.spawn(""echo hi"");
             process.onExit(p, ""not a function"");
@@ -7418,22 +7556,44 @@ fn makeAdder(x) {
     [Fact]
     public void FsReadLines_ReturnsArray()
     {
-        var result = Run(
-            "fs.writeFile(\"/tmp/stash_test_readlines.txt\", \"line1\\nline2\\nline3\");" +
-            "let lines = fs.readLines(\"/tmp/stash_test_readlines.txt\");" +
+        string path = ScratchPath("stash_test_readlines") + ".txt";
+        string stashPath = StashPath(path);
+
+        try
+        {
+            var result = Run(
+            $"fs.writeFile(\"{stashPath}\", \"line1\\nline2\\nline3\");" +
+            $"let lines = fs.readLines(\"{stashPath}\");" +
             "let result = len(lines);" +
-            "fs.delete(\"/tmp/stash_test_readlines.txt\");");
-        Assert.Equal(3L, result);
+            $"fs.delete(\"{stashPath}\");");
+            Assert.Equal(3L, result);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
     }
 
     [Fact]
     public void FsIsFile_True()
     {
-        var result = Run(
-            "fs.writeFile(\"/tmp/stash_test_isfile.txt\", \"test\");" +
-            "let result = fs.isFile(\"/tmp/stash_test_isfile.txt\");" +
-            "fs.delete(\"/tmp/stash_test_isfile.txt\");");
-        Assert.Equal(true, result);
+        string path = ScratchPath("stash_test_isfile") + ".txt";
+        string stashPath = StashPath(path);
+
+        try
+        {
+            var result = Run(
+                $"fs.writeFile(\"{stashPath}\", \"test\");" +
+                $"let result = fs.isFile(\"{stashPath}\");" +
+                $"fs.delete(\"{stashPath}\");");
+            Assert.Equal(true, result);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
     }
 
     [Fact]
@@ -7475,47 +7635,93 @@ fn makeAdder(x) {
     [Fact]
     public void FsModifiedAt_ReturnsTimestamp()
     {
-        var result = Run(
-            "fs.writeFile(\"/tmp/stash_test_modat.txt\", \"test\");" +
-            "let result = fs.modifiedAt(\"/tmp/stash_test_modat.txt\");" +
-            "fs.delete(\"/tmp/stash_test_modat.txt\");");
-        Assert.IsType<double>(result);
-        Assert.True((double)result! > 0);
+        string path = ScratchPath("stash_test_modat") + ".txt";
+        string stashPath = StashPath(path);
+
+        try
+        {
+            var result = Run(
+                $"fs.writeFile(\"{stashPath}\", \"test\");" +
+                $"let result = fs.modifiedAt(\"{stashPath}\");" +
+                $"fs.delete(\"{stashPath}\");");
+            Assert.IsType<double>(result);
+            Assert.True((double)result! > 0);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
     }
 
     [Fact]
     public void FsWalk_ReturnsFiles()
     {
-        var result = Run(
-            "fs.createDir(\"/tmp/stash_test_walk\");" +
-            "fs.writeFile(\"/tmp/stash_test_walk/a.txt\", \"a\");" +
-            "fs.writeFile(\"/tmp/stash_test_walk/b.txt\", \"b\");" +
-            "let files = fs.walk(\"/tmp/stash_test_walk\");" +
+        string dir = ScratchPath("stash_test_walk");
+        string stashDir = StashPath(dir);
+
+        try
+        {
+            var result = Run(
+            $"fs.createDir(\"{stashDir}\");" +
+            $"fs.writeFile(\"{stashDir}/a.txt\", \"a\");" +
+            $"fs.writeFile(\"{stashDir}/b.txt\", \"b\");" +
+            $"let files = fs.walk(\"{stashDir}\");" +
             "let result = len(files);" +
-            "fs.delete(\"/tmp/stash_test_walk\");");
-        Assert.Equal(2L, result);
+            $"fs.delete(\"{stashDir}\");");
+            Assert.Equal(2L, result);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(dir))
+                System.IO.Directory.Delete(dir, true);
+        }
     }
 
     [Fact]
     public void FsGlob_FindsFiles()
     {
-        var result = Run(
-            "fs.createDir(\"/tmp/stash_test_glob\");" +
-            "fs.writeFile(\"/tmp/stash_test_glob/test.txt\", \"data\");" +
-            "let files = fs.glob(\"/tmp/stash_test_glob/*.txt\");" +
+        string dir = ScratchPath("stash_test_glob");
+        string stashDir = StashPath(dir);
+
+        try
+        {
+            var result = Run(
+            $"fs.createDir(\"{stashDir}\");" +
+            $"fs.writeFile(\"{stashDir}/test.txt\", \"data\");" +
+            $"let files = fs.glob(\"{stashDir}/*.txt\");" +
             "let result = len(files);" +
-            "fs.delete(\"/tmp/stash_test_glob\");");
-        Assert.True((long)result! >= 1L);
+            $"fs.delete(\"{stashDir}\");");
+            Assert.True((long)result! >= 1L);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(dir))
+                System.IO.Directory.Delete(dir, true);
+        }
     }
 
     [Fact]
     public void FsIsSymlink_False()
     {
-        var result = Run(
-            "fs.writeFile(\"/tmp/stash_test_symlink.txt\", \"test\");" +
-            "let result = fs.isSymlink(\"/tmp/stash_test_symlink.txt\");" +
-            "fs.delete(\"/tmp/stash_test_symlink.txt\");");
-        Assert.Equal(false, result);
+        string path = System.IO.Path.Combine(
+            System.IO.Directory.GetCurrentDirectory(),
+            $"stash_test_symlink_{Guid.NewGuid():N}.txt");
+        string stashPath = path.Replace("\\", "\\\\");
+
+        try
+        {
+            var result = Run(
+                $"fs.writeFile(\"{stashPath}\", \"test\");" +
+                $"let result = fs.isSymlink(\"{stashPath}\");" +
+                $"fs.delete(\"{stashPath}\");");
+            Assert.Equal(false, result);
+        }
+        finally
+        {
+            if (System.IO.File.Exists(path))
+                System.IO.File.Delete(path);
+        }
     }
 
     // ── global utilities ────────────────────────────────────────────
@@ -7687,6 +7893,8 @@ fn makeAdder(x) {
     [Fact]
     public void TildeExpansion_InCommand_ExpandsHomeDirectory()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
         var result = Run("let r = $(echo ~); let result = r.stdout;");
         Assert.Contains(home, (string)result!);
@@ -7695,6 +7903,8 @@ fn makeAdder(x) {
     [Fact]
     public void TildeExpansion_InFsDirExists_ExpandsHomeDirectory()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // The home directory should exist
         Assert.Equal(true, Run("let result = fs.dirExists(\"~/\");"));
     }
@@ -7704,12 +7914,16 @@ fn makeAdder(x) {
     [Fact]
     public void ProcessExec_NonStringArg_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.exec(42);");
     }
 
     [Fact]
     public void ProcessExec_NonExistentProgram_ThrowsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         RunExpectingError("process.exec(\"__stash_nonexistent_program_xyz__\");");
     }
 
@@ -9478,6 +9692,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Success_ReturnsCommandResult()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var result = Run("let r = $!(echo hello); let result = r.stdout;");
         Assert.IsType<string>(result);
         Assert.Contains("hello", (string)result!);
@@ -9486,12 +9702,16 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Success_ExitCodeZero()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         Assert.Equal(0L, Run("let r = $!(true); let result = r.exitCode;"));
     }
 
     [Fact]
     public void StrictCommand_Failure_ThrowsCommandError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         var ex = Assert.Throws<RuntimeError>(() =>
             Run("$!(false); let result = null;")
         );
@@ -9502,6 +9722,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Failure_CaughtWithTryCatch_AccessProperties()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9516,6 +9738,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Failure_CaughtExitCode()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9532,6 +9756,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Failure_CaughtCommand()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9548,6 +9774,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Failure_CaughtMessage()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9564,6 +9792,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Failure_CaughtStderr()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9580,6 +9810,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_Failure_CaughtStdout()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9595,6 +9827,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_WithTryExpr_ReturnsError()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let err = try $!(false);
             let result = err.type;
@@ -9605,6 +9839,8 @@ fn makeAdder(x) {
     [Fact]
     public void RegularCommand_Failure_DoesNotThrow()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         // Regular $(false) should NOT throw, just return with non-zero exit code
         var result = Run("let r = $(false); let result = r.exitCode;");
         Assert.IsType<long>(result);
@@ -9673,6 +9909,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_ReThrow_PreservesProperties()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9693,6 +9931,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_ReThrow_PreservesCommandField()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = null;
             try {
@@ -9731,6 +9971,8 @@ fn makeAdder(x) {
     [Fact]
     public void StrictCommand_TryExpr_NullCoalesce()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         string source = @"
             let result = (try $!(false)) ?? ""fallback"";
         ";

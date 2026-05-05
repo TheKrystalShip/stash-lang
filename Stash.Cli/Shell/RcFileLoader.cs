@@ -37,10 +37,11 @@ internal static class RcFileLoader
         }
         catch { }
 
+        string? home = GetHomeDirectory();
+
         // ── Candidate 2: ~/.config/stash/init.stash ─────────────────────────
         try
         {
-            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (!string.IsNullOrEmpty(home))
             {
                 string configPath = Path.Combine(home, ".config", "stash", "init.stash");
@@ -53,7 +54,6 @@ internal static class RcFileLoader
         // ── Candidate 3: ~/.stashrc ──────────────────────────────────────────
         try
         {
-            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             if (!string.IsNullOrEmpty(home))
             {
                 string stashrcPath = Path.Combine(home, ".stashrc");
@@ -64,6 +64,23 @@ internal static class RcFileLoader
         catch { }
 
         return null;
+    }
+
+    private static string? GetHomeDirectory()
+    {
+        string? home = OperatingSystem.IsWindows()
+            ? Environment.GetEnvironmentVariable("USERPROFILE")
+            : Environment.GetEnvironmentVariable("HOME");
+
+        if (!string.IsNullOrWhiteSpace(home))
+            return home;
+
+        home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home))
+            return home;
+
+        home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return string.IsNullOrWhiteSpace(home) ? null : home;
     }
 
     /// <summary>

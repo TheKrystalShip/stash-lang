@@ -521,7 +521,7 @@ public class StashCheckTests
         string file = CreateTempStashFile("fn compute() { return 1; }");
         try
         {
-            int exitCode = Stash.Check.Program.Main(new[] { "--output", "/dev/null", file });
+            int exitCode = Stash.Check.Program.Main(new[] { "--output", NullDevicePath(), file });
             Assert.Equal(0, exitCode);
         }
         finally
@@ -536,7 +536,7 @@ public class StashCheckTests
         string file = CreateTempStashFile("break;");
         try
         {
-            int exitCode = Stash.Check.Program.Main(new[] { "--output", "/dev/null", file });
+            int exitCode = Stash.Check.Program.Main(new[] { "--output", NullDevicePath(), file });
             Assert.Equal(1, exitCode);
         }
         finally
@@ -544,6 +544,9 @@ public class StashCheckTests
             CleanupTempFile(file);
         }
     }
+
+    private static string NullDevicePath()
+        => OperatingSystem.IsWindows() ? "NUL" : "/dev/null";
 
     // ── Cleanup helper ───────────────────────────────────────────────
 

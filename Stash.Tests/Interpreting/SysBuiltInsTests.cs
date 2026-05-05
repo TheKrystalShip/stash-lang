@@ -154,7 +154,9 @@ let result = d[""total""] == d[""used""] + d[""free""];
     [Fact]
     public void DiskUsage_WithExplicitPath()
     {
-        var result = Run(@"let result = sys.diskUsage(""/"");");
+        string root = Path.GetPathRoot(Directory.GetCurrentDirectory()) ?? "/";
+        string stashRoot = root.Replace("\\", "\\\\");
+        var result = Run($@"let result = sys.diskUsage(""{stashRoot}"");");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.NotNull(dict.Get("total").ToObject());
     }

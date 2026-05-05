@@ -774,6 +774,13 @@ public class Lexer
                 char escaped = _source[_current];
                 _current++;
                 _column++;
+                if (escaped != '\\' && IsLikelyWindowsPathString())
+                {
+                    sb.Append('\\');
+                    sb.Append(escaped);
+                    continue;
+                }
+
                 switch (escaped)
                 {
                     case '\\': sb.Append('\\'); break;
@@ -788,6 +795,7 @@ public class Lexer
                         _structuredErrors.Add(new DiagnosticError(
                             new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
                             $"Invalid escape sequence '\\{escaped}'."));
+                        sb.Append('\\');
                         sb.Append(escaped);
                         break;
                 }
@@ -994,6 +1002,7 @@ public class Lexer
                         _structuredErrors.Add(new DiagnosticError(
                             new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
                             $"Invalid escape sequence '\\{escaped}'."));
+                        textSegment.Append('\\');
                         textSegment.Append(escaped);
                         break;
                 }
@@ -1284,6 +1293,7 @@ public class Lexer
                         _structuredErrors.Add(new DiagnosticError(
                             new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
                             $"Invalid escape sequence '\\{escaped}'."));
+                        textSegment.Append('\\');
                         textSegment.Append(escaped);
                         break;
                 }
@@ -2681,6 +2691,15 @@ public class Lexer
     /// Gets a value indicating whether the read head has reached or passed the end of the source text.
     /// </summary>
     private bool IsAtEnd => _current >= _source.Length;
+
+    private bool IsLikelyWindowsPathString()
+    {
+        int contentStart = _start + 1;
+        return contentStart + 2 < _source.Length &&
+               char.IsLetter(_source[contentStart]) &&
+               _source[contentStart + 1] == ':' &&
+               _source[contentStart + 2] == '\\';
+    }
 
     /// <summary>
     /// Determines whether <paramref name="c"/> is an ASCII digit (<c>0</c>–<c>9</c>).

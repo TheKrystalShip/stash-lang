@@ -333,7 +333,7 @@ internal sealed class LaunchdServiceManager : IServiceManager
         string label = GetLabel(def.Name);
         string logPath = ServiceLogManager.GetCurrentLogPath(def.Name);
         string workingDir = def.WorkingDirectory
-            ?? Path.GetDirectoryName(resolvedScriptPath) ?? "/";
+            ?? GetScriptDirectory(resolvedScriptPath) ?? "/";
         bool isPeriodic = def.Schedule is not null;
 
         var dictElements = new List<XNode>();
@@ -427,6 +427,20 @@ internal sealed class LaunchdServiceManager : IServiceManager
             new XElement("plist",
                 new XAttribute("version", "1.0"),
                 new XElement("dict", dictElements)));
+    }
+
+    private static string? GetScriptDirectory(string scriptPath)
+    {
+        if (scriptPath.Contains('/') && !scriptPath.Contains('\\'))
+        {
+            int lastSlash = scriptPath.LastIndexOf('/');
+            if (lastSlash > 0)
+                return scriptPath[..lastSlash];
+            if (lastSlash == 0)
+                return "/";
+        }
+
+        return Path.GetDirectoryName(scriptPath);
     }
 
     /// <summary>

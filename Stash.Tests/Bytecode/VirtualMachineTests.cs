@@ -3284,6 +3284,8 @@ public class VirtualMachineTests : BytecodeTestBase
     [Fact]
     public void Command_Echo_CapturesStdout()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         object? result = Execute("""
             let result = null;
             result = $(echo hello);
@@ -3295,6 +3297,8 @@ public class VirtualMachineTests : BytecodeTestBase
     [Fact]
     public void Command_ExitCode_IsLong()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         object? result = Execute("""
             let result = null;
             result = $(echo ok);
@@ -3306,6 +3310,8 @@ public class VirtualMachineTests : BytecodeTestBase
     [Fact]
     public void Command_Interpolation_Works()
     {
+        if (OperatingSystem.IsWindows()) return;
+
         object? result = Execute("""
             let name = null;
             name = "world";

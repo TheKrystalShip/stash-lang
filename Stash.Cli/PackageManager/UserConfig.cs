@@ -38,13 +38,12 @@ public sealed class UserConfig
     /// <summary>
     /// Absolute path to the <c>~/.stash</c> configuration directory.
     /// </summary>
-    private static readonly string _configDir = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".stash");
+    private static string ConfigDir => StashHome.GetStashDir();
 
     /// <summary>
     /// Absolute path to the configuration file (<c>~/.stash/config.json</c>).
     /// </summary>
-    private static readonly string _configPath = Path.Combine(_configDir, "config.json");
+    private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
 
     /// <summary>
     /// The built-in fallback registry URL used when no registry is specified via
@@ -73,12 +72,12 @@ public sealed class UserConfig
     /// <returns>The loaded <see cref="UserConfig"/>, or a new default instance.</returns>
     public static UserConfig Load()
     {
-        if (!File.Exists(_configPath))
+        if (!File.Exists(ConfigPath))
         {
             return new UserConfig();
         }
 
-        string json = File.ReadAllText(_configPath);
+        string json = File.ReadAllText(ConfigPath);
         var config = JsonSerializer.Deserialize(json, CliJsonContext.Default.UserConfig) ?? new UserConfig();
         config.CleanLegacyEntries();
         return config;
@@ -94,13 +93,13 @@ public sealed class UserConfig
     /// </remarks>
     public void Save()
     {
-        Directory.CreateDirectory(_configDir);
+        Directory.CreateDirectory(ConfigDir);
         string json = JsonSerializer.Serialize(this, CliJsonContext.Default.UserConfig);
-        File.WriteAllText(_configPath, json);
+        File.WriteAllText(ConfigPath, json);
 
         if (!OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(_configPath,
+            File.SetUnixFileMode(ConfigPath,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite);
         }
     }

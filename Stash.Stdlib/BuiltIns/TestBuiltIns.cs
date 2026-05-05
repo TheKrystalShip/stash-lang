@@ -252,6 +252,7 @@ public static class TestBuiltIns
             var callable = SvArgs.Callable(args, 0, "test.captureOutput");
             var previousOutput = ctx.Output;
             var sw = new StringWriter();
+            sw.NewLine = "\n";
             ctx.Output = sw;
             try
             {

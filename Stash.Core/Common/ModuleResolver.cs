@@ -39,37 +39,35 @@ public static class ModuleResolver
     /// </summary>
     public static string? FindProjectRoot(string startDir)
     {
-        string normalized = startDir.Replace('\\', '/');
+        string current = startDir;
+        string normalized = current.Replace('\\', '/');
 
         // If we're inside a stashes/ directory, jump to the parent of stashes/
         int stashesIdx = normalized.LastIndexOf("/stashes/", StringComparison.Ordinal);
-        string current;
         if (stashesIdx >= 0)
         {
-            current = normalized[..stashesIdx];
+            current = current[..stashesIdx];
         }
         else if (normalized.EndsWith("/stashes", StringComparison.Ordinal))
         {
-            current = normalized[..^"/stashes".Length];
-        }
-        else
-        {
-            current = normalized;
+            current = current[..^"/stashes".Length];
         }
 
         // Walk up looking for stash.json, skipping directories inside stashes/
         while (true)
         {
+            normalized = current.Replace('\\', '/');
+
             // Skip if this directory is inside a stashes/ tree
-            bool insideStashes = current.Contains("/stashes/", StringComparison.Ordinal) ||
-                                  current.EndsWith("/stashes", StringComparison.Ordinal);
+            bool insideStashes = normalized.Contains("/stashes/", StringComparison.Ordinal) ||
+                                  normalized.EndsWith("/stashes", StringComparison.Ordinal);
 
             if (!insideStashes)
             {
                 string manifestPath = Path.Combine(current, "stash.json");
                 if (File.Exists(manifestPath))
                 {
-                    return current;
+                    return Path.GetFullPath(current);
                 }
             }
 
@@ -79,7 +77,7 @@ public static class ModuleResolver
                 return null;
             }
 
-            current = parent.Replace('\\', '/');
+            current = parent;
         }
     }
 
@@ -119,13 +117,13 @@ public static class ModuleResolver
     {
         if (File.Exists(basePath))
         {
-            return basePath;
+            return Path.GetFullPath(basePath);
         }
 
         string withExtension = basePath + ".stash";
         if (File.Exists(withExtension))
         {
-            return withExtension;
+            return Path.GetFullPath(withExtension);
         }
 
         if (Directory.Exists(basePath))
@@ -133,7 +131,7 @@ public static class ModuleResolver
             string indexPath = Path.Combine(basePath, "index.stash");
             if (File.Exists(indexPath))
             {
-                return indexPath;
+                return Path.GetFullPath(indexPath);
             }
         }
 
@@ -190,7 +188,7 @@ public static class ModuleResolver
 
     private static string? ResolveInStashesDir(string root, string packageName, string? subpath)
     {
-        string packageDir = Path.Combine(root, "stashes", packageName);
+        string packageDir = Path.Combine(root, "stashes", packageName.Replace('/', Path.DirectorySeparatorChar));
         if (!Directory.Exists(packageDir))
         {
             return null;
@@ -203,7 +201,7 @@ public static class ModuleResolver
         }
         else
         {
-            return ResolveFilePath(Path.Combine(packageDir, subpath));
+            return ResolveFilePath(Path.Combine(packageDir, subpath.Replace('/', Path.DirectorySeparatorChar)));
         }
     }
 }

@@ -352,7 +352,19 @@ public sealed class AliasPersistenceTests : IDisposable
         {
             Environment.SetEnvironmentVariable("XDG_CONFIG_HOME", _tmpDir);
             string path = AliasPersistence.GetPath();
-            Assert.Equal(Path.Combine(_tmpDir, "stash", "aliases.stash"), path);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Equal(
+                    Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                        "stash",
+                        "aliases.stash"),
+                    path);
+            }
+            else
+            {
+                Assert.Equal(Path.Combine(_tmpDir, "stash", "aliases.stash"), path);
+            }
         }
         finally
         {

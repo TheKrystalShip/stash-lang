@@ -494,8 +494,9 @@ let result = arr.parMap(nums, (x) => x * x);
         string output = RunCapturingOutput(@"
 let tasks = [];
 for (let n in 0..10) {
+    let current = n;
     arr.push(tasks, task.run(() => {
-        io.println(""TASK_"" + conv.toStr(n) + ""_LINE"");
+        io.println(""TASK_"" + conv.toStr(current) + ""_LINE"");
     }));
 }
 task.awaitAll(tasks);

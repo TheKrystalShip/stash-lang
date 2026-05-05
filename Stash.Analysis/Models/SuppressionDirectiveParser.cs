@@ -102,7 +102,7 @@ public static partial class SuppressionDirectiveParser
         while (pos < text.Length)
         {
             // Skip whitespace and commas
-            while (pos < text.Length && (text[pos] == ' ' || text[pos] == ',' || text[pos] == '\t'))
+            while (pos < text.Length && (char.IsWhiteSpace(text[pos]) || text[pos] == ','))
                 pos++;
 
             if (pos >= text.Length) break;
@@ -112,7 +112,7 @@ public static partial class SuppressionDirectiveParser
             {
                 // Read until space, comma, or end
                 int start = pos;
-                while (pos < text.Length && text[pos] != ' ' && text[pos] != ',' && text[pos] != '\t')
+                while (pos < text.Length && !char.IsWhiteSpace(text[pos]) && text[pos] != ',')
                     pos++;
 
                 string candidate = text[start..pos];
@@ -146,7 +146,7 @@ public static partial class SuppressionDirectiveParser
 
                 // Read the non-SA token
                 int start = pos;
-                while (pos < text.Length && text[pos] != ' ' && text[pos] != ',' && text[pos] != '\t')
+                while (pos < text.Length && !char.IsWhiteSpace(text[pos]) && text[pos] != ',')
                     pos++;
 
                 string candidate = text[start..pos];

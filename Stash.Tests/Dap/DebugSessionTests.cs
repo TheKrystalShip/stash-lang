@@ -672,7 +672,7 @@ public class DebugSessionTests
         session.OnSourceLoaded("/path/to/script.stash");
         var sources = session.GetLoadedSources();
         Assert.Single(sources);
-        Assert.Equal("/path/to/script.stash", sources[0].Path);
+        Assert.Equal(Path.GetFullPath("/path/to/script.stash"), sources[0].Path);
         Assert.Equal("script.stash", sources[0].Name);
     }
 
