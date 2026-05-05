@@ -40,7 +40,7 @@ public class Program
                       Key settings (under "Registry" section):
                         Server.Host          Bind address (default: 0.0.0.0)
                         Server.Port          Listen port (default: 8080)
-                        Server.BasePath      URL base path (default: /)
+                        Server.BasePath      URL prefix when mounted behind a reverse proxy (default: none, e.g. "/registry")
                         Database.Type        Database type: sqlite, postgresql
                         Storage.Type         Package storage: filesystem, s3
                         Auth.Type            Authentication: local, ldap, oidc
@@ -56,6 +56,17 @@ public class Program
         var builder = WebApplication.CreateBuilder(remainingArgs);
 
         var config = builder.Configuration.GetSection("Registry").Get<RegistryConfig>() ?? new RegistryConfig();
+
+        try
+        {
+            config.Server.BasePath = BasePathValidator.Normalize(config.Server.BasePath);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine($"stash-registry: configuration error: {ex.Message}");
+            Environment.Exit(1);
+            return;
+        }
 
         var startup = new Startup(config);
         startup.ConfigureServices(builder.Services);

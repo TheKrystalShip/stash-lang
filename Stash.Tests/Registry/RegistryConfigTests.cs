@@ -66,7 +66,7 @@ public sealed class RegistryConfigTests : IDisposable
 
         Assert.Equal("0.0.0.0", config.Server.Host);
         Assert.Equal(8080, config.Server.Port);
-        Assert.Equal("/api/v1", config.Server.BasePath);
+        Assert.Equal("", config.Server.BasePath);
         Assert.Equal("filesystem", config.Storage.Type);
         Assert.Equal("sqlite", config.Database.Type);
         Assert.Equal("local", config.Auth.Type);

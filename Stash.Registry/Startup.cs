@@ -180,6 +180,7 @@ public sealed class Startup
     /// Pipeline (in order):
     /// <list type="number">
     ///   <item><description>Database initialisation — calls <see cref="Database.IRegistryDatabase.Initialize"/> in a transient scope.</description></item>
+    ///   <item><description><see cref="Microsoft.AspNetCore.Builder.UsePathBaseExtensions.UsePathBase"/> — applied only when <see cref="Configuration.ServerConfig.BasePath"/> is non-empty.</description></item>
     ///   <item><description><see cref="Middleware.RateLimitingMiddleware"/> — inserted only when <see cref="Configuration.RateLimitingConfig.Enabled"/> is <see langword="true"/>.</description></item>
     ///   <item><description>OpenAPI endpoint (<c>GET /openapi/v1.json</c>) — mapped only in the <c>Development</c> environment.</description></item>
     ///   <item><description>Routing, Authentication (JWT Bearer), Authorization.</description></item>
@@ -203,6 +204,17 @@ public sealed class Startup
         {
             var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
             db.Initialize();
+        }
+
+        // Read BasePath from the live IConfiguration so that overrides applied
+        // after Startup construction (e.g. integration test factories) are honoured.
+        var rawBasePath = !string.IsNullOrEmpty(_config.Server.BasePath)
+            ? _config.Server.BasePath
+            : app.Configuration["Registry:Server:BasePath"];
+        var basePath = BasePathValidator.Normalize(rawBasePath);
+        if (!string.IsNullOrEmpty(basePath))
+        {
+            app.UsePathBase(basePath);
         }
 
         if (_config.RateLimiting.Enabled)
