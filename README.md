@@ -416,7 +416,8 @@ See [docs/Registry — Package Registry.md](docs/Registry%20—%20Package%20Regi
 Stash can be embedded into any .NET application as a scripting engine. The `Stash.Bytecode` library exposes a clean `StashEngine` API:
 
 ```csharp
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Runtime;
 
 var engine = new StashEngine(StashCapabilities.None); // sandboxed
 

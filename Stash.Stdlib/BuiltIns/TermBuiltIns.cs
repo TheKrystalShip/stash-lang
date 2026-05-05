@@ -30,7 +30,7 @@ public static class TermBuiltIns
     /// <summary>
     /// Registers all <c>term</c> namespace functions and color constants into the global environment.
     /// </summary>
-    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
+    /// <param name="globals">The runtime environment to register functions in.</param>
     public static NamespaceDefinition Define()
     {
         var ns = new NamespaceBuilder("term");

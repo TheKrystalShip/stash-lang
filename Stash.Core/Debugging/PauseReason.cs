@@ -25,7 +25,7 @@ public enum PauseReason
     /// <summary>An external pause was requested by the debug client (DAP <c>pause</c> request or Ctrl+C in the CLI).</summary>
     Pause,
 
-    /// <summary>A <see cref="Stash.Interpreting.RuntimeError"/> was raised and <see cref="IDebugger.ShouldBreakOnException"/> returned <see langword="true"/>.</summary>
+    /// <summary>A <see cref="Stash.Runtime.RuntimeError"/> was raised and <see cref="IDebugger.ShouldBreakOnException"/> returned <see langword="true"/>.</summary>
     Exception,
 
     /// <summary>Execution paused at the very first statement because <see cref="IDebugger.StopOnEntry"/> is <see langword="true"/>.</summary>

@@ -1,22 +1,22 @@
 ---
-description: "Use when: working on the TAP test framework, test built-ins (test/describe/skip/assert), lifecycle hooks (beforeAll/afterAll/beforeEach/afterEach), TapReporter, test filtering, test discovery, or captureOutput. Covers Stash.Interpreter/Testing/ and TestBuiltIns."
-applyTo: "Stash.Interpreter/Testing/**"
+description: "Use when: working on the TAP test framework, test built-ins (test/describe/skip/assert), lifecycle hooks (beforeAll/afterAll/beforeEach/afterEach), TapReporter, test filtering, test discovery, or captureOutput. Covers Stash.Tap/ and Stash.Stdlib/BuiltIns/TestBuiltIns.cs."
+applyTo: "Stash.Tap/**, Stash.Stdlib/BuiltIns/TestBuiltIns.cs"
 ---
 
 # TAP Testing Framework Guidelines
 
-Stash includes a built-in TAP v14 test framework. Tests are regular Stash function calls (`test()`, `describe()`, `skip()`) — not special AST nodes. The harness attaches at interpreter startup via `--test` CLI flag. See `docs/TAP — Testing Infrastructure.md` for the full spec.
+Stash includes a built-in TAP v14 test framework. Tests are regular Stash function calls (`test.it()`, `test.describe()`, `test.skip()`) — not special AST nodes. The harness attaches at VM startup via `--test` CLI flag. See `docs/TAP — Testing Infrastructure.md` for the full spec.
 
 ## Architecture
 
 ```
-Stash.Interpreter/
-├── Testing/
-│   ├── ITestHarness.cs      → Interface: lifecycle callbacks (start/pass/fail/skip/discover)
-│   ├── TapReporter.cs       → TAP v14 output formatter with YAML diagnostics
-│   └── AssertionError.cs    → Structured assertion failure (expected/actual fields)
-└── Interpreting/BuiltIns/
-    └── TestBuiltIns.cs      → Registers test(), describe(), skip(), assert.*, hooks, captureOutput()
+Stash.Tap/
+└── TapReporter.cs           → TAP v14 output formatter with YAML diagnostics
+Stash.Core/Runtime/
+├── ITestHarness.cs          → Interface: lifecycle callbacks (start/pass/fail/skip/discover)
+└── AssertionError.cs        → Structured assertion failure (expected/actual fields)
+Stash.Stdlib/BuiltIns/
+└── TestBuiltIns.cs          → Registers test.it(), test.describe(), test.skip(), assert.*, hooks, captureOutput()
 ```
 
 **CLI integration** (`Stash.Cli/Program.cs`):

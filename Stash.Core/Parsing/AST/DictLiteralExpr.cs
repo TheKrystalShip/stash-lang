@@ -10,7 +10,7 @@ using Stash.Lexing;
 /// <remarks>
 /// Keys are identifier tokens resolved as string dictionary keys at runtime.
 /// An empty dict literal <c>{}</c> produces a node with an empty <see cref="Entries"/> list.
-/// At runtime, this evaluates to a <see cref="Stash.Interpreting.Types.StashDictionary"/>.
+/// At runtime, this evaluates to a <see cref="Stash.Runtime.Types.StashDictionary"/>.
 /// </remarks>
 public class DictLiteralExpr : Expr
 {

@@ -371,7 +371,7 @@ Build all components from the repository root:
 ```bash
 dotnet build Stash.Lsp/
 dotnet build Stash.Dap/
-dotnet build Stash.Interpreter/
+dotnet build Stash.Cli/
 ```
 
 ---
@@ -392,7 +392,7 @@ dotnet build Stash.Interpreter/
    ```bash
    dotnet build Stash.Lsp/
    dotnet build Stash.Dap/
-   dotnet build Stash.Interpreter/
+   dotnet build Stash.Cli/
    ```
 
 3. Symlink or copy the extension directory to `~/.vscode/extensions/`:

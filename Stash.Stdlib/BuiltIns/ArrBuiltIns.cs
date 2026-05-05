@@ -18,7 +18,7 @@ using static Stash.Stdlib.Registration.P;
 /// Provides functions including <c>arr.push</c>, <c>arr.pop</c>, <c>arr.map</c>,
 /// <c>arr.filter</c>, <c>arr.sort</c>, <c>arr.reduce</c>, and more.
 /// All functions are registered as <see cref="BuiltInFunction"/> instances on a
-/// <see cref="StashNamespace"/> in the global <see cref="Stash.Interpreting.Environment"/>.
+/// <see cref="StashNamespace"/> in the VM context.
 /// </para>
 /// </remarks>
 public static class ArrBuiltIns

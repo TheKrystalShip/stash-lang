@@ -22,7 +22,6 @@ LICENSE
 
 # Projects not needed to build Stash.Registry (which only depends on Stash.Core)
 Stash.Analysis/
-Stash.Interpreter/
 Stash.Cli/
 Stash.Lsp/
 Stash.Dap/

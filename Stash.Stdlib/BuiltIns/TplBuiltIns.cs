@@ -36,7 +36,7 @@ public static class TplBuiltIns
     /// <summary>
     /// Registers the <c>tpl</c> namespace and its three functions into <paramref name="globals"/>.
     /// </summary>
-    /// <param name="globals">The interpreter's global <see cref="Stash.Interpreting.Environment"/>.</param>
+    /// <param name="globals">The runtime environment to register functions in.</param>
     public static NamespaceDefinition Define()
     {
         var ns = new NamespaceBuilder("tpl");

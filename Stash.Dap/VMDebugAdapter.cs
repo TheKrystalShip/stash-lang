@@ -14,7 +14,7 @@ using DebugCallFrame = Stash.Debugging.CallFrame;
 /// <summary>
 /// Adapts a <see cref="VirtualMachine"/> to the <see cref="IDebugExecutor"/> interface
 /// expected by <see cref="DebugSession"/>. Uses VM-native bytecode compilation and
-/// execution for watch expression evaluation — no tree-walk interpreter dependency.
+/// execution for watch expression evaluation — depends only on Stash.Bytecode.
 /// </summary>
 internal sealed class VMDebugAdapter : IDebugExecutor
 {

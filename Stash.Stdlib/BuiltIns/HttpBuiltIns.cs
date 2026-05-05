@@ -39,7 +39,7 @@ public static class HttpBuiltIns
     /// <summary>
     /// Registers all <c>http</c> namespace functions into the global environment.
     /// </summary>
-    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
+    /// <param name="globals">The runtime environment to register functions in.</param>
     public static NamespaceDefinition Define()
     {
         var ns = new NamespaceBuilder("http");

@@ -11,7 +11,6 @@ using Stash.Common;
 /// expressions whose span covers multiple tokens.
 /// The <see cref="Accept{T}"/> method implements the Visitor pattern, dispatching to the
 /// appropriate method on <see cref="IExprVisitor{T}"/>. This allows the
-/// <see cref="Stash.Interpreting.Interpreter"/>, pretty-printers, or any future analysis
 /// pass to operate on the tree without modifying the node classes.
 /// </remarks>
 public abstract class Expr

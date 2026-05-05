@@ -28,7 +28,7 @@ Stash.Playground/
     └── js/stash-language.js         → Monarch tokenizer, themes, JS interop helpers
 ```
 
-**Dependencies:** `BlazorMonaco` 3.4.0 (Monaco Editor wrapper), `Stash.Core` + `Stash.Interpreter` project references.
+**Dependencies:** `BlazorMonaco` 3.4.0 (Monaco Editor wrapper), `Stash.Analysis`, `Stash.Bytecode`, `Stash.Core`, `Stash.Stdlib` project references.
 
 ## Sandbox Model
 

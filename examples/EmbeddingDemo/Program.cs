@@ -2,7 +2,8 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Collections.Generic;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Runtime;
 
 // ─── Embedding Demo ───
 // This shows how to embed the Stash scripting language in a C# application.

@@ -1,6 +1,6 @@
 ---
-description: "Use when: working on the TPL templating engine, template rendering, template lexer/parser, template filters, tpl.render/tpl.renderFile/tpl.compile built-ins, .tpl files, or template includes. Covers Stash.Interpreter/Interpreting/Templating/ and TplBuiltIns."
-applyTo: "Stash.Interpreter/Interpreting/Templating/**"
+description: "Use when: working on the TPL templating engine, template rendering, template lexer/parser, template filters, tpl.render/tpl.renderFile/tpl.compile built-ins, .tpl files, or template includes. Covers Stash.Tpl/ and Stash.Stdlib/BuiltIns/TplBuiltIns.cs."
+applyTo: "Stash.Tpl/**, Stash.Stdlib/BuiltIns/TplBuiltIns.cs"
 ---
 
 # TPL Templating Engine Guidelines
@@ -10,16 +10,15 @@ Stash includes a built-in templating engine with its own lexer/parser pipeline, 
 ## Architecture
 
 ```
-Stash.Interpreter/Interpreting/
-├── Templating/
-│   ├── TemplateAst.cs        → 8 record types (TextNode, OutputNode, IfNode, ForNode, etc.)
-│   ├── TemplateLexer.cs      → Two-pointer scanner for {{ }}, {% %}, {# #} delimiters
-│   ├── TemplateParser.cs     → Recursive-descent parser, nesting, filter parsing
-│   ├── TemplateRenderer.cs   → Tree-walk renderer, delegates expressions to Stash interpreter
-│   ├── TemplateFilters.cs    → 19 built-in filters (static registry)
-│   └── TemplateException.cs  → Template-specific error with line/column
-└── BuiltIns/
-    └── TplBuiltIns.cs        → Registers tpl.render, tpl.renderFile, tpl.compile
+Stash.Tpl/
+├── TemplateAst.cs        → 8 record types (TextNode, OutputNode, IfNode, ForNode, etc.)
+├── TemplateLexer.cs      → Two-pointer scanner for {{ }}, {% %}, {# #} delimiters
+├── TemplateParser.cs     → Recursive-descent parser, nesting, filter parsing
+├── TemplateRenderer.cs   → Tree-walk renderer over the template AST; expressions compile to Stash bytecode via VMTemplateEvaluator
+├── TemplateFilters.cs    → 19 built-in filters (static registry)
+└── TemplateException.cs  → Template-specific error with line/column
+Stash.Stdlib/BuiltIns/
+└── TplBuiltIns.cs        → Registers tpl.render, tpl.renderFile, tpl.compile
 ```
 
 ## Pipeline
@@ -28,7 +27,7 @@ Stash.Interpreter/Interpreting/
 Template String → TemplateLexer (tokenize) → TemplateParser (AST) → TemplateRenderer (walk + evaluate) → String
 ```
 
-Template expressions reuse the full Stash interpreter (`Interpreter.EvaluateString()`) — there is no separate expression language. This means templates can call built-in functions, use operators, access namespace members, etc.
+Template expressions are compiled to Stash bytecode via `VMTemplateEvaluator` (Stash.Bytecode/Runtime/VMTemplateEvaluator.cs). This means templates can call built-in functions, use operators, access namespace members, etc.
 
 ## tpl Namespace (TplBuiltIns.cs)
 

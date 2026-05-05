@@ -13,7 +13,7 @@ namespace Stash.Tests.Bytecode;
 /// Lex → Parse → Resolve → Compile → Execute pipeline.
 ///
 /// Architecture notes for top-level test code:
-///   - The tree-walk Resolver does NOT create a scope for top-level statements, so all top-level
+///   - The SemanticResolver does NOT create a scope for top-level statements, so all top-level
 ///     variable accesses get ResolvedDistance = -1 (global), while the Compiler always declares
 ///     them as locals. To bridge this gap we use the "globals seeding" pattern:
 ///       let x = null; x = 42;   (seeds _globals["x"] via StoreGlobal, then reads via LoadGlobal)
@@ -435,7 +435,7 @@ public class VirtualMachineTests : BytecodeTestBase
     public void Variable_NestedBlocks_CorrectScoping()
     {
         // Variables via globals seeding — block structure avoided due to dist=1 upvalue issue
-        // with the tree-walk Resolver. Tests that a + b = 30 works correctly.
+        // with the SemanticResolver. Tests that a + b = 30 works correctly.
         object? result = Execute("""
             let result = null; result = 0;
             let a = null; a = 10;

@@ -32,7 +32,7 @@ public static class TomlBuiltIns
     /// <summary>
     /// Registers all <c>toml</c> namespace functions into the global environment.
     /// </summary>
-    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
+    /// <param name="globals">The runtime environment to register functions in.</param>
     public static NamespaceDefinition Define()
     {
         var ns = new NamespaceBuilder("toml");

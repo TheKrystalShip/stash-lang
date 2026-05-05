@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Abstraction over an execution backend for debugger inspection.
-/// Implemented by <c>Interpreter</c> (tree-walk) and <c>VMDebugAdapter</c> (bytecode).
+/// Implemented by <c>VMDebugAdapter</c> (bytecode VM).
 /// Provides the operations that <c>DebugSession</c> needs from the running executor.
 /// </summary>
 public interface IDebugExecutor

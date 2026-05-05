@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// Abstraction over a variable scope for debugger inspection.
-/// Implemented by <c>Environment</c> (tree-walk) and VM frame adapters (bytecode).
+/// Implemented by VM frame adapters in <c>Stash.Bytecode</c>.
 /// </summary>
 public interface IDebugScope
 {

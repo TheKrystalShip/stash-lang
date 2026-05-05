@@ -12,7 +12,7 @@ namespace Stash.Bytecode;
 
 /// <summary>
 /// Static methods implementing Stash runtime operations for the bytecode VM.
-/// These exactly replicate the tree-walk interpreter's semantics.
+/// Implements Stash's runtime semantics for arithmetic, comparison, indexing, etc., shared by every VM dispatch path.
 /// </summary>
 internal static class RuntimeOps
 {

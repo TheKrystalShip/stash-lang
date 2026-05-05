@@ -16,7 +16,7 @@ Stash.Dap/
 └── Handlers/              → 18 thin DAP request handlers (delegate to DebugSession)
 ```
 
-**Dependencies:** `OmniSharp.Extensions.DebugAdapter.Server` v0.19.9, `Stash.Core`, `Stash.Interpreter` (project references).
+**Dependencies:** `OmniSharp.Extensions.DebugAdapter.Server` v0.19.9, `Stash.Bytecode`, `Stash.Core`, `Stash.Stdlib`, `Stash.Tap` (project references).
 
 ## DI Services
 
@@ -83,7 +83,7 @@ Register new handlers in `StashDebugServer.cs` via `.WithHandler<StashNewHandler
 
 ## DebugSession Architecture
 
-`DebugSession` implements `IDebugger` (defined in `Stash.Interpreter/Debugging/IDebugger.cs`) and manages all debug state.
+`DebugSession` implements `IDebugger` (defined in `Stash.Core/Debugging/IDebugger.cs`) and manages all debug state.
 
 ### Threading Model
 
@@ -141,7 +141,7 @@ DAP uses integer reference IDs for expandable objects. `DebugSession` allocates 
 - Intermediate frames → `CallFrame.LocalScope`
 - Script frame (id=0) → `_interpreter.Globals`
 
-## Supporting Types (Stash.Interpreter/Debugging/)
+## Supporting Types (Stash.Core/Debugging/)
 
 | Type          | Purpose                                                                  |
 | ------------- | ------------------------------------------------------------------------ |
