@@ -40,12 +40,18 @@ public static class InstallCommand
     {
         string projectDir = Directory.GetCurrentDirectory();
 
+        bool allowMissingIntegrity = args.Contains("--allow-missing-integrity");
+
         var positionalArgs = new List<string>();
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--registry" && i + 1 < args.Length)
             {
                 i++;
+            }
+            else if (args[i] == "--allow-missing-integrity")
+            {
+                // consumed above; skip
             }
             else
             {
@@ -60,7 +66,15 @@ public static class InstallCommand
             var entry = config.GetEntry(registryUrl);
             var source = new RegistryClient(registryUrl, entry?.Token, entry?.RefreshToken,
                 entry?.ExpiresAt, entry?.MachineId, registryUrl);
-            PackageInstaller.Install(projectDir, source);
+            PackageInstaller.SetAllowMissingIntegrity(allowMissingIntegrity);
+            try
+            {
+                PackageInstaller.Install(projectDir, source);
+            }
+            finally
+            {
+                PackageInstaller.SetAllowMissingIntegrity(false);
+            }
             Console.WriteLine("Dependencies installed.");
             return;
         }
@@ -108,7 +122,15 @@ public static class InstallCommand
             var entry = config.GetEntry(registryUrl);
             var source = new RegistryClient(registryUrl, entry?.Token, entry?.RefreshToken,
                 entry?.ExpiresAt, entry?.MachineId, registryUrl);
-            PackageInstaller.Install(projectDir, source);
+            PackageInstaller.SetAllowMissingIntegrity(allowMissingIntegrity);
+            try
+            {
+                PackageInstaller.Install(projectDir, source);
+            }
+            finally
+            {
+                PackageInstaller.SetAllowMissingIntegrity(false);
+            }
             Console.WriteLine("Dependencies installed.");
         }
         catch (InvalidOperationException)

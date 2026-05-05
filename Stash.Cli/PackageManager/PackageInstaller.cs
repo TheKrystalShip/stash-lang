@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Stash.Common;
@@ -36,6 +37,20 @@ public sealed class PackageInstaller
     /// to record the installed version string.
     /// </summary>
     private const string VersionMarkerFile = ".stash-version";
+
+    /// <summary>
+    /// When <c>true</c>, a missing <c>X-Integrity</c> response header on download is
+    /// treated as a warning rather than a hard failure.  Set via
+    /// <see cref="SetAllowMissingIntegrity"/> before calling <see cref="Install"/>.
+    /// </summary>
+    private static bool _allowMissingIntegrity;
+
+    /// <summary>
+    /// Controls whether a missing <c>X-Integrity</c> response header on tarball
+    /// download should be treated as a hard failure (default) or silently allowed.
+    /// </summary>
+    /// <param name="value"><c>true</c> to allow missing integrity headers; <c>false</c> to fail on them.</param>
+    internal static void SetAllowMissingIntegrity(bool value) => _allowMissingIntegrity = value;
 
     /// <summary>
     /// Installs all dependencies declared in <c>stash.json</c>, reusing the existing
@@ -310,10 +325,24 @@ public sealed class PackageInstaller
             if (tarballPath == null && resolvedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
             {
                 tarballPath = DownloadAndCache(packageName, entry.Version, resolvedUrl);
+                // Note: DownloadAndCache already verified against X-Integrity header.
             }
 
             if (tarballPath != null)
             {
+                // Verify cached tarball against lock-file integrity before extraction.
+                if (!string.IsNullOrEmpty(entry.Integrity))
+                {
+                    if (!PackageCache.VerifyCache(packageName, entry.Version, entry.Integrity))
+                    {
+                        string actual = LockFile.ComputeIntegrity(tarballPath);
+                        try { File.Delete(tarballPath); } catch { }
+                        throw new InvalidOperationException(
+                            $"Integrity check failed for {packageName}@{entry.Version}: cached tarball does not match lock file. " +
+                            $"Expected {entry.Integrity}, got {actual}. Refusing to install. Cache file deleted; try again.");
+                    }
+                }
+
                 Tarball.Extract(tarballPath, targetDir);
             }
             else
@@ -363,8 +392,8 @@ public sealed class PackageInstaller
     }
 
     /// <summary>
-    /// Downloads a package tarball from the given URL and stores it in
-    /// <see cref="PackageCache"/>.
+    /// Downloads a package tarball from the given URL, stores it in <see cref="PackageCache"/>,
+    /// and verifies the downloaded bytes against the <c>X-Integrity</c> response header.
     /// </summary>
     /// <param name="packageName">The name of the package being downloaded.</param>
     /// <param name="version">The version string used to derive the cache path.</param>
@@ -373,18 +402,58 @@ public sealed class PackageInstaller
     /// <exception cref="HttpRequestException">
     /// Thrown when the HTTP request fails or the server returns a non-success status code.
     /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the <c>X-Integrity</c> header is missing (and
+    /// <see cref="_allowMissingIntegrity"/> is <c>false</c>), or when the downloaded
+    /// bytes do not match the header value.
+    /// </exception>
     private static string DownloadAndCache(string packageName, string version, string downloadUrl)
     {
         using var http = new HttpClient();
-        using var response = http.GetAsync(downloadUrl).GetAwaiter().GetResult();
+        using var response = http.GetAsync(downloadUrl, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
         response.EnsureSuccessStatusCode();
+
+        string? expectedIntegrity = null;
+        if (response.Headers.TryGetValues("X-Integrity", out var values))
+        {
+            expectedIntegrity = values.FirstOrDefault();
+        }
 
         string cachePath = PackageCache.GetCachePath(packageName, version);
         Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
 
+        string actualIntegrity;
+        using (var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256))
         using (var fileStream = new FileStream(cachePath, FileMode.Create, FileAccess.Write))
+        using (var bodyStream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
         {
-            response.Content.ReadAsStreamAsync().GetAwaiter().GetResult().CopyTo(fileStream);
+            byte[] buffer = new byte[81920];
+            int read;
+            while ((read = bodyStream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                hasher.AppendData(buffer, 0, read);
+                fileStream.Write(buffer, 0, read);
+            }
+            fileStream.Flush();
+            actualIntegrity = "sha256-" + Convert.ToBase64String(hasher.GetHashAndReset());
+        }
+
+        // File handle is now closed; safe to delete on all platforms (including Windows).
+        if (expectedIntegrity == null)
+        {
+            if (!_allowMissingIntegrity)
+            {
+                try { File.Delete(cachePath); } catch { }
+                throw new InvalidOperationException(
+                    $"Integrity check failed for {packageName}@{version}: registry did not send an X-Integrity header. " +
+                    "Pass --allow-missing-integrity to install anyway (only use with trusted older registries).");
+            }
+        }
+        else if (!string.Equals(expectedIntegrity, actualIntegrity, StringComparison.Ordinal))
+        {
+            try { File.Delete(cachePath); } catch { }
+            throw new InvalidOperationException(
+                $"Integrity check failed for {packageName}@{version}: expected {expectedIntegrity}, got {actualIntegrity}. Refusing to install.");
         }
 
         return cachePath;

@@ -153,6 +153,9 @@ public class PackagesController : ControllerBase
     /// <remarks>
     /// Streams the compressed tarball from <see cref="IPackageStorage"/> with content
     /// type <c>application/gzip</c>. No authentication required.
+    /// When the version record has a non-empty <c>Integrity</c> field the response
+    /// includes an <c>X-Integrity</c> header (format <c>sha256-&lt;base64&gt;</c>)
+    /// that clients can use to verify the downloaded bytes.
     /// </remarks>
     /// <returns>
     /// <c>200</c> file stream on success,
@@ -163,7 +166,8 @@ public class PackagesController : ControllerBase
     public async Task<IActionResult> DownloadVersion(string name, string version)
     {
         string decodedName = Uri.UnescapeDataString(name);
-        if (!await _db.VersionExistsAsync(decodedName, version))
+        VersionRecord? versionRecord = await _db.GetPackageVersionAsync(decodedName, version);
+        if (versionRecord == null)
         {
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
         }
@@ -172,6 +176,11 @@ public class PackagesController : ControllerBase
         if (stream == null)
         {
             return NotFound(new ErrorResponse { Error = "Package tarball not found in storage." });
+        }
+
+        if (!string.IsNullOrEmpty(versionRecord.Integrity))
+        {
+            Response.Headers["X-Integrity"] = versionRecord.Integrity;
         }
 
         return File(stream, "application/gzip", $"{decodedName.Replace('/', '-')}-{version}.tgz");

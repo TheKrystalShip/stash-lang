@@ -472,4 +472,26 @@ public sealed class PackageServiceTests : IDisposable
         Assert.NotNull(pkg);
         Assert.Equal("2.0.0-rc.1", pkg.Latest);
     }
+
+    // ── X-Integrity stored on publish ─────────────────────────────────────────
+    //
+    // Controller-level testing of the X-Integrity response header on DownloadVersion
+    // requires an integration test with WebApplicationFactory<Program>, which is not
+    // set up in this project. The service-level test below verifies that Publish
+    // stores a non-empty Integrity field on the VersionRecord, which is the value
+    // that PackagesController.DownloadVersion reads and emits as the X-Integrity header.
+
+    [Fact]
+    public async Task Publish_StoresIntegrityOnVersionRecord()
+    {
+        byte[] tarball = CreateTestTarball("integrity-svc-pkg", "1.0.0");
+        using (var s = new MemoryStream(tarball))
+            await _service.Publish(s, "alice", null);
+
+        VersionRecord? vr = await _db.GetPackageVersionAsync("integrity-svc-pkg", "1.0.0");
+        Assert.NotNull(vr);
+        Assert.False(string.IsNullOrEmpty(vr.Integrity),
+            "Publish must store a non-empty Integrity field so DownloadVersion can emit X-Integrity.");
+        Assert.StartsWith("sha256-", vr.Integrity);
+    }
 }

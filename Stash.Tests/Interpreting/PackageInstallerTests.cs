@@ -1,5 +1,7 @@
 using System.Formats.Tar;
 using System.IO.Compression;
+using System.Net;
+using System.Security.Cryptography;
 using Stash.Common;
 using Stash.Cli.PackageManager;
 
@@ -449,5 +451,364 @@ public class PackageInstallerTests : IDisposable
         var manifest = PackageManifest.Load(projectDir)!;
         Assert.True(manifest.Dependencies?.ContainsKey(_pkgName) ?? false);
         Assert.Equal("^1.0.0", manifest.Dependencies![_pkgName]);
+    }
+}
+
+// ── IntegrityVerificationTests ────────────────────────────────────────────────
+
+/// <summary>
+/// Tests for lock-file integrity checking (cache path) and X-Integrity header
+/// verification (HTTP download path).
+///
+/// HTTP download tests use System.Net.HttpListener on a randomly chosen port.
+/// Cache-only tests exercise InstallEntry via InstallFromLockFile.
+/// </summary>
+public class IntegrityVerificationTests : IDisposable
+{
+    private readonly string _tempDir;
+    private readonly string _pkgName;
+
+    public IntegrityVerificationTests()
+    {
+        _pkgName = $"integrity-pkg-{Guid.NewGuid():N}";
+        _tempDir = Path.Combine(Path.GetTempPath(), $"stash-integrity-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        PackageInstaller.SetAllowMissingIntegrity(false);
+        PackageCache.ClearPackage(_pkgName);
+        if (Directory.Exists(_tempDir))
+        {
+            Directory.Delete(_tempDir, recursive: true);
+        }
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    private static void WriteManifest(string projectDir, string pkgName)
+    {
+        File.WriteAllText(
+            Path.Combine(projectDir, "stash.json"),
+            $"{{\"name\":\"test\",\"version\":\"1.0.0\",\"dependencies\":{{\"{pkgName}\":\"^1.0.0\"}}}}");
+    }
+
+    private string BuildTarball()
+    {
+        string srcDir = Path.Combine(_tempDir, "pkg-src");
+        Directory.CreateDirectory(srcDir);
+        File.WriteAllText(Path.Combine(srcDir, "main.stash"), "// integrity test package");
+
+        string tarball = Path.Combine(_tempDir, "pkg.tar.gz");
+        Tarball.Pack(srcDir, tarball);
+        return tarball;
+    }
+
+    /// <summary>
+    /// Starts a minimal HTTP server that responds to any GET with
+    /// <paramref name="tarballBytes"/> and an optional X-Integrity header.
+    /// Returns the base URL and an IDisposable that stops the listener.
+    /// </summary>
+    private static (string baseUrl, IDisposable server) StartTestServer(byte[] tarballBytes, string? integrityHeader)
+    {
+        // Find a free port by binding to port 0 and reading back the assigned port.
+        var tempListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        tempListener.Start();
+        int port = ((System.Net.IPEndPoint)tempListener.LocalEndpoint).Port;
+        tempListener.Stop();
+
+        string prefix = $"http://127.0.0.1:{port}/";
+        var listener = new HttpListener();
+        listener.Prefixes.Add(prefix);
+        listener.Start();
+
+        var cts = new System.Threading.CancellationTokenSource();
+        _ = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext ctx;
+                try { ctx = await listener.GetContextAsync(); }
+                catch (ObjectDisposedException) { break; }
+                catch (HttpListenerException) { break; }
+
+                ctx.Response.ContentType = "application/gzip";
+                ctx.Response.ContentLength64 = tarballBytes.Length;
+                if (integrityHeader != null)
+                {
+                    ctx.Response.Headers["X-Integrity"] = integrityHeader;
+                }
+                await ctx.Response.OutputStream.WriteAsync(tarballBytes);
+                ctx.Response.Close();
+            }
+        }, cts.Token);
+
+        var disposable = new ServerDisposable(listener, cts);
+        return (prefix.TrimEnd('/'), disposable);
+    }
+
+    private sealed class ServerDisposable : IDisposable
+    {
+        private readonly HttpListener _listener;
+        private readonly System.Threading.CancellationTokenSource _cts;
+
+        public ServerDisposable(HttpListener listener, System.Threading.CancellationTokenSource cts)
+        {
+            _listener = listener;
+            _cts = cts;
+        }
+
+        public void Dispose()
+        {
+            _cts.Cancel();
+            _listener.Stop();
+            _listener.Close();
+        }
+    }
+
+    private static string ComputeIntegrityFromBytes(byte[] bytes)
+    {
+        byte[] hash = SHA256.HashData(bytes);
+        return "sha256-" + Convert.ToBase64String(hash);
+    }
+
+    // ── cache integrity tests (no HTTP) ───────────────────────────────────────
+
+    [Fact]
+    public void InstallEntry_CachedTarballMatchesLockIntegrity_Extracts()
+    {
+        string tarball = BuildTarball();
+        PackageCache.Store(_pkgName, "1.0.0", tarball);
+        string integrity = LockFile.ComputeIntegrity(PackageCache.GetCachePath(_pkgName, "1.0.0"));
+
+        string projectDir = Path.Combine(_tempDir, "project-match");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, _pkgName);
+
+        var lockFile = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [_pkgName] = new LockFileEntry
+                {
+                    Version = "1.0.0",
+                    Resolved = "https://example.com/pkg.tar.gz",
+                    Integrity = integrity
+                }
+            }
+        };
+
+        PackageInstaller.InstallFromLockFile(projectDir, lockFile);
+
+        Assert.True(File.Exists(Path.Combine(projectDir, "stashes", _pkgName, ".stash-version")));
+    }
+
+    [Fact]
+    public void InstallEntry_CachedTarballMismatchesLockIntegrity_ThrowsAndDeletes()
+    {
+        string tarball = BuildTarball();
+        PackageCache.Store(_pkgName, "1.0.0", tarball);
+        string cachePath = PackageCache.GetCachePath(_pkgName, "1.0.0");
+        // Use a deliberately wrong integrity value.
+        string wrongIntegrity = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+        string projectDir = Path.Combine(_tempDir, "project-mismatch");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, _pkgName);
+
+        var lockFile = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [_pkgName] = new LockFileEntry
+                {
+                    Version = "1.0.0",
+                    Resolved = "https://example.com/pkg.tar.gz",
+                    Integrity = wrongIntegrity
+                }
+            }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PackageInstaller.InstallFromLockFile(projectDir, lockFile));
+        Assert.Contains("Integrity check failed", ex.Message);
+        Assert.Contains("Refusing to install", ex.Message);
+        // Cache file must be deleted after a mismatch.
+        Assert.False(File.Exists(cachePath));
+    }
+
+    [Fact]
+    public void InstallEntry_CachedTarballEmptyLockIntegrity_SkipsVerification()
+    {
+        string tarball = BuildTarball();
+        PackageCache.Store(_pkgName, "1.0.0", tarball);
+
+        string projectDir = Path.Combine(_tempDir, "project-nointegrity");
+        Directory.CreateDirectory(projectDir);
+        WriteManifest(projectDir, _pkgName);
+
+        var lockFile = new LockFile
+        {
+            LockVersion = 1,
+            Resolved = new Dictionary<string, LockFileEntry>
+            {
+                [_pkgName] = new LockFileEntry
+                {
+                    Version = "1.0.0",
+                    Resolved = "https://example.com/pkg.tar.gz",
+                    Integrity = null  // legacy — no check should occur
+                }
+            }
+        };
+
+        // Must not throw — verification is skipped when Integrity is null.
+        PackageInstaller.InstallFromLockFile(projectDir, lockFile);
+        Assert.True(File.Exists(Path.Combine(projectDir, "stashes", _pkgName, ".stash-version")));
+    }
+
+    // ── HTTP download integrity tests ─────────────────────────────────────────
+
+    [Fact]
+    public void DownloadAndCache_HeaderMatches_Succeeds()
+    {
+        string tarball = BuildTarball();
+        byte[] tarballBytes = File.ReadAllBytes(tarball);
+        string correctIntegrity = ComputeIntegrityFromBytes(tarballBytes);
+
+        var (baseUrl, server) = StartTestServer(tarballBytes, correctIntegrity);
+        using (server)
+        {
+            string projectDir = Path.Combine(_tempDir, "project-http-ok");
+            Directory.CreateDirectory(projectDir);
+            WriteManifest(projectDir, _pkgName);
+
+            var lockFile = new LockFile
+            {
+                LockVersion = 1,
+                Resolved = new Dictionary<string, LockFileEntry>
+                {
+                    [_pkgName] = new LockFileEntry
+                    {
+                        Version = "1.0.0",
+                        Resolved = $"{baseUrl}/pkg.tar.gz"
+                    }
+                }
+            };
+
+            PackageInstaller.InstallFromLockFile(projectDir, lockFile);
+            Assert.True(File.Exists(PackageCache.GetCachePath(_pkgName, "1.0.0")));
+        }
+    }
+
+    [Fact]
+    public void DownloadAndCache_HeaderMismatch_ThrowsAndDeletesCache()
+    {
+        string tarball = BuildTarball();
+        byte[] tarballBytes = File.ReadAllBytes(tarball);
+        string wrongIntegrity = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+        var (baseUrl, server) = StartTestServer(tarballBytes, wrongIntegrity);
+        using (server)
+        {
+            string projectDir = Path.Combine(_tempDir, "project-http-mismatch");
+            Directory.CreateDirectory(projectDir);
+            WriteManifest(projectDir, _pkgName);
+
+            var lockFile = new LockFile
+            {
+                LockVersion = 1,
+                Resolved = new Dictionary<string, LockFileEntry>
+                {
+                    [_pkgName] = new LockFileEntry
+                    {
+                        Version = "1.0.0",
+                        Resolved = $"{baseUrl}/pkg.tar.gz"
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                PackageInstaller.InstallFromLockFile(projectDir, lockFile));
+            Assert.Contains("Integrity check failed", ex.Message);
+            Assert.Contains("Refusing to install", ex.Message);
+            Assert.False(File.Exists(PackageCache.GetCachePath(_pkgName, "1.0.0")));
+        }
+    }
+
+    [Fact]
+    public void DownloadAndCache_MissingHeader_ThrowsByDefault()
+    {
+        string tarball = BuildTarball();
+        byte[] tarballBytes = File.ReadAllBytes(tarball);
+
+        var (baseUrl, server) = StartTestServer(tarballBytes, integrityHeader: null);
+        using (server)
+        {
+            string projectDir = Path.Combine(_tempDir, "project-http-noheader");
+            Directory.CreateDirectory(projectDir);
+            WriteManifest(projectDir, _pkgName);
+
+            var lockFile = new LockFile
+            {
+                LockVersion = 1,
+                Resolved = new Dictionary<string, LockFileEntry>
+                {
+                    [_pkgName] = new LockFileEntry
+                    {
+                        Version = "1.0.0",
+                        Resolved = $"{baseUrl}/pkg.tar.gz"
+                    }
+                }
+            };
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                PackageInstaller.InstallFromLockFile(projectDir, lockFile));
+            Assert.Contains("Integrity check failed", ex.Message);
+            Assert.Contains("X-Integrity", ex.Message);
+            Assert.False(File.Exists(PackageCache.GetCachePath(_pkgName, "1.0.0")));
+        }
+    }
+
+    [Fact]
+    public void DownloadAndCache_MissingHeaderWithAllowFlag_Succeeds()
+    {
+        string tarball = BuildTarball();
+        byte[] tarballBytes = File.ReadAllBytes(tarball);
+
+        var (baseUrl, server) = StartTestServer(tarballBytes, integrityHeader: null);
+        using (server)
+        {
+            string projectDir = Path.Combine(_tempDir, "project-http-allow");
+            Directory.CreateDirectory(projectDir);
+            WriteManifest(projectDir, _pkgName);
+
+            var lockFile = new LockFile
+            {
+                LockVersion = 1,
+                Resolved = new Dictionary<string, LockFileEntry>
+                {
+                    [_pkgName] = new LockFileEntry
+                    {
+                        Version = "1.0.0",
+                        Resolved = $"{baseUrl}/pkg.tar.gz"
+                    }
+                }
+            };
+
+            PackageInstaller.SetAllowMissingIntegrity(true);
+            try
+            {
+                PackageInstaller.InstallFromLockFile(projectDir, lockFile);
+            }
+            finally
+            {
+                PackageInstaller.SetAllowMissingIntegrity(false);
+            }
+
+            Assert.True(File.Exists(PackageCache.GetCachePath(_pkgName, "1.0.0")));
+        }
     }
 }
