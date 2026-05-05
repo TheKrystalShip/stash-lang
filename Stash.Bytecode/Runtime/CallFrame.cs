@@ -1,5 +1,6 @@
 namespace Stash.Bytecode;
 
+using System;
 using System.Collections.Generic;
 using Stash.Runtime;
 
@@ -35,4 +36,11 @@ internal struct CallFrame
 
     /// <summary>Deferred closures to execute at function exit (LIFO). Null when no defers registered.</summary>
     public List<StashValue>? Defers;
+
+    /// <summary>
+    /// Iterators (IDisposable) currently active on this frame, paired with their stack slot.
+    /// Disposed on early frame exit (return, exception, ExitException) so streaming
+    /// processes and other resource-holding iterators clean up reliably. Null when none.
+    /// </summary>
+    public List<(int Slot, IDisposable Disposable)>? ActiveIterators;
 }

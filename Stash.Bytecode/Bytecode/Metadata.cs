@@ -27,7 +27,7 @@ public sealed record ExtendMetadata(
     bool IsBuiltIn);
 
 /// <summary>Metadata for OP_COMMAND. Stored in the constant pool.</summary>
-public sealed record CommandMetadata(int PartCount, bool IsPassthrough, bool IsStrict);
+public sealed record CommandMetadata(int PartCount, bool IsPassthrough, bool IsStrict, bool IsStreaming = false);
 
 /// <summary>Metadata for OP_IMPORT. Stored in the constant pool.</summary>
 public sealed record ImportMetadata(string[] Names);

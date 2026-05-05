@@ -86,6 +86,9 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0708 = new("SA0708", "Backoff without delay", DiagnosticLevel.Information, "Commands", "'backoff' has no effect without a non-zero 'delay'.");
     public static readonly DiagnosticDescriptor SA0709 = new("SA0709", "Retry no throwable operations", DiagnosticLevel.Information, "Commands", "Retry body contains no operations that can throw. The retry block will always succeed on the first attempt.");
     public static readonly DiagnosticDescriptor SA0710 = new("SA0710", "Passthrough command in pipe chain", DiagnosticLevel.Error, "Commands", "A passthrough command ($>(...) or $!>(...)) cannot appear in a pipe chain. Piping requires capturing stdout, which is incompatible with passthrough I/O inheritance. Use $(cmd) or $!(cmd) in pipe chains.");
+    public static readonly DiagnosticDescriptor SA0711 = new("SA0711", "Streaming command mixed with non-streaming stage", DiagnosticLevel.Error, "Commands", "A streaming command ($<(...) or $!<(...)) cannot be mixed with non-streaming stages in the same pipe chain — the pipeline must be wholly streaming or wholly captured. Either wrap the entire chain in one $<(...) or use $(...) for every stage.");
+    public static readonly DiagnosticDescriptor SA0712 = new("SA0712", "Dual iteration requires streaming source", DiagnosticLevel.Error, "Commands", "The dual-iterator form 'for (let out, err in X)' requires X to be a streaming command ($<(...) or $!<(...)) or a dictionary. Captured commands and arrays do not support dual iteration.");
+    public static readonly DiagnosticDescriptor SA0713 = new("SA0713", "Streaming command never consumed", DiagnosticLevel.Warning, "Commands", "A streaming command handle is never iterated, never has '.lines()' / '.json()' / '.bytes()' / '.framed()' / '.wait()' called, and is not assigned anywhere it could be consumed. The child process will leak. Either consume it or use $(cmd) for fire-and-forget capture.");
 
     // ── SA08xx — Imports ─────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");
@@ -225,6 +228,9 @@ public static class DiagnosticDescriptors
         dict[SA0708.Code] = SA0708;
         dict[SA0709.Code] = SA0709;
         dict[SA0710.Code] = SA0710;
+        dict[SA0711.Code] = SA0711;
+        dict[SA0712.Code] = SA0712;
+        dict[SA0713.Code] = SA0713;
         dict[SA0801.Code] = SA0801;
         dict[SA0802.Code] = SA0802;
         dict[SA0804.Code] = SA0804;

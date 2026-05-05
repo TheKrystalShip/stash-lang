@@ -50,6 +50,18 @@ public sealed partial class VirtualMachine
 
         bool isPassthrough = (flags & 0x01) != 0;
         bool isStrict      = (flags & 0x02) != 0;
+        bool isStreaming   = (flags & 0x04) != 0;
+
+        if (isStreaming)
+        {
+            // Note: in-paren pipe chains like $<(a | b | c) are split by the lexer into
+            // separate streaming-command literals joined by Pipe tokens, then compiled to
+            // OpCode.StreamingPipeline. By the time we reach ExecuteCommand, the command
+            // string for a single-stage streaming literal contains no top-level pipe.
+            var streamHandle = ExecStreaming(program, arguments, command, isStrict, span);
+            _stack[@base + a] = StashValue.FromObj(streamHandle);
+            return;
+        }
 
         if (isPassthrough)
         {
@@ -241,6 +253,69 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteStreamingPipeline(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte stageCount = Instruction.GetB(inst);
+        byte partsBase = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        SourceSpan? span = GetCurrentSpan(ref frame);
+
+        // 1. Read B companion words from the instruction stream
+        var stageMetas = new (int PartCount, byte Flags)[stageCount];
+        for (int i = 0; i < stageCount; i++)
+        {
+            uint companion = frame.Chunk.Code[frame.IP++];
+            stageMetas[i] = ((int)((companion >> 8) & 0xFF), (byte)(companion & 0xFF));
+        }
+
+        // 2. Assemble stage descriptors from the parts register block
+        var stages = new List<PipeStage>(stageCount);
+        int regOffset = 0;
+        Span<char> stackBuf = stackalloc char[256];
+        var commandBuf = new System.Text.StringBuilder();
+        for (int i = 0; i < stageCount; i++)
+        {
+            var (partCount, flags) = stageMetas[i];
+
+            var vsb = new ValueStringBuilder(stackBuf);
+            for (int p = 0; p < partCount; p++)
+                vsb.Append(RuntimeOps.Stringify(_stack[@base + partsBase + regOffset + p]));
+            regOffset += partCount;
+
+            string command = _context.ExpandTilde(vsb.AsSpan().Trim().ToString());
+            vsb.Dispose();
+            if (string.IsNullOrEmpty(command))
+                throw new RuntimeError("Command cannot be empty in streaming pipe chain.", span);
+
+            if (commandBuf.Length > 0) commandBuf.Append(" | ");
+            commandBuf.Append(command);
+
+            var parsedStage = CommandParser.ParseWithQuotedFlags(command);
+            string program = parsedStage.Count > 0 ? parsedStage[0].Token : "";
+            var arguments = new List<string>(parsedStage.Count > 1 ? parsedStage.Count - 1 : 0);
+            var quotedFlags = new List<bool>(parsedStage.Count > 1 ? parsedStage.Count - 1 : 0);
+            for (int si = 1; si < parsedStage.Count; si++)
+            {
+                arguments.Add(parsedStage[si].Token);
+                quotedFlags.Add(parsedStage[si].WasQuoted);
+            }
+            ApplyTildeToArguments(arguments);
+            ApplyGlobExpansion(arguments, quotedFlags, span);
+            ApplyElevationIfActive(ref program, ref arguments);
+
+            stages.Add(new PipeStage(program, arguments, flags));
+        }
+
+        // 3. Pipeline-level strict flag is encoded on the LAST stage's flags byte (bit 0x01).
+        bool isStrict = (stageMetas[stageCount - 1].Flags & 0x01) != 0;
+
+        // 4. Spawn the pipeline; the last stage's stdout streams through the handle.
+        var handle = ExecStreamingPipeline(stages, isStrict, commandBuf.ToString(), span);
+        _stack[@base + a] = StashValue.FromObj(handle);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteRedirect(ref CallFrame frame, uint inst)
     {
         // ABC: Redirect R(A) stream (B=flags) to file R(C); result back in R(A)
@@ -308,4 +383,5 @@ public sealed partial class VirtualMachine
         string result = RuntimeOps.Interpolate(_stack, @base + a + 1 + partCount, partCount);
         _stack[@base + a] = StashValue.FromObj(result);
     }
+
 }

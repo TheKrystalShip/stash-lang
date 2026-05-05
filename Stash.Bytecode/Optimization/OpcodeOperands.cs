@@ -357,6 +357,7 @@ internal static class OpcodeOperands
             case OpCode.LockBegin:
             case OpCode.Retry:
             case OpCode.PipeChain:
+            case OpCode.StreamingPipeline:
             case OpCode.StructDecl:
             case OpCode.EnumDecl:
             case OpCode.IfaceDecl:
@@ -424,7 +425,7 @@ internal static class OpcodeOperands
     {
         OpCode.Call or OpCode.CallSpread or OpCode.CallBuiltIn
         or OpCode.Await
-        or OpCode.Command or OpCode.PipeChain
+        or OpCode.Command or OpCode.PipeChain or OpCode.StreamingPipeline
             => true,
         _ => false,
     };

@@ -23,6 +23,9 @@ public static class ErrorTypeRegistry
         StashErrorTypes.TimeoutError,
         StashErrorTypes.CommandError,
         StashErrorTypes.LockError,
+        StashErrorTypes.StateError,
+        StashErrorTypes.AliasError,
+        StashErrorTypes.CancellationError,
     };
 
     /// <summary>Returns true if the given type name is a known built-in error subtype.</summary>

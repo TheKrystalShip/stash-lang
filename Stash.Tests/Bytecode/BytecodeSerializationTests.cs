@@ -561,6 +561,26 @@ public class BytecodeSerializationTests
         Assert.Equal(3, result.PartCount);
         Assert.True(result.IsPassthrough);
         Assert.False(result.IsStrict);
+        Assert.False(result.IsStreaming);
+    }
+
+    [Fact]
+    public void RoundTrip_CommandMetadata_StreamingFlag_Preserved()
+    {
+        var builder = new ChunkBuilder();
+        var meta = new CommandMetadata(2, IsPassthrough: false, IsStrict: true, IsStreaming: true);
+        builder.AddConstant(meta);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        var result = Assert.IsType<CommandMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal(2, result.PartCount);
+        Assert.False(result.IsPassthrough);
+        Assert.True(result.IsStrict);
+        Assert.True(result.IsStreaming);
     }
 
     [Fact]

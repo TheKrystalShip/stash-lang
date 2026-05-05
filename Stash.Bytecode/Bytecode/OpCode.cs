@@ -256,6 +256,19 @@ public enum OpCode : byte
     // === Global Bindings ===
     /// <summary>Ax: Remove the global binding at slot Ax from the globals dictionary.</summary>
     UnsetGlobal = 98,
+
+    // === Iterator Cleanup ===
+    /// <summary>A: Dispose iterator at R(A) if IDisposable; clear R(A) to null. Used at for-in loop exits.</summary>
+    IterClose = 99,
+
+    // === Streaming Pipe Chains ===
+    /// <summary>
+    /// ABC + B companion words (one per stage): A=destReg, B=stageCount, C=partsBase.
+    /// Each companion word: bits 15-8 = partCount, bits 7-0 = flags (bit 0x01 = strict on the last stage).
+    /// Spawns all stages with intermediate stages captured-piped, exposes the last stage's stdout
+    /// via a multi-stage <see cref="Stash.Runtime.Types.StashStreamingProcess"/> handle.
+    /// </summary>
+    StreamingPipeline = 100,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

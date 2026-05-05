@@ -58,6 +58,7 @@ public sealed partial class VirtualMachine
                     {
                         RunFrameDefers(ref frame, ref suppressed);
                     }
+                    DisposeFrameIterators(ref frame);
                 }
 
                 _frameCount = 0;
@@ -87,6 +88,30 @@ public sealed partial class VirtualMachine
                 System.Environment.Exit(ex.ExitCode);
                 return null; // unreachable
             }
+            catch (OperationCanceledException)
+            {
+                // External cancellation (e.g. CLI Ctrl-C, programmatic CTS).
+                // ExecuteTimeout's own OCE catch already handles timeout-initiated OCEs and
+                // converts them to TimeoutError before they reach here. This catch only fires
+                // for OCEs originating from the outer _ct (external cancellation).
+                // Run defers + dispose iterators on every frame, then convert to CancellationError.
+                List<StashError>? suppressed = null;
+                for (int i = _frameCount - 1; i >= 0; i--)
+                {
+                    ref CallFrame frame = ref _frames[i];
+                    if (frame.Defers is { Count: > 0 })
+                        RunFrameDefers(ref frame, ref suppressed);
+                    DisposeFrameIterators(ref frame);
+                }
+                _frameCount = 0;
+                _sp = 0;
+                _exceptionHandlers.Clear();
+                var err = new RuntimeError("Operation cancelled.", null, StashErrorTypes.CancellationError)
+                {
+                    SuppressedErrors = suppressed
+                };
+                throw err;
+            }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
             {
                 ExceptionHandler handler = _exceptionHandlers[^1];
@@ -106,10 +131,17 @@ public sealed partial class VirtualMachine
                     {
                         RunFrameDefers(ref unwoundFrame, ref suppressed);
                     }
+                    DisposeFrameIterators(ref unwoundFrame);
                 }
 
                 // Close any upvalues in the unwound stack region before restoring
                 CloseUpvalues(handler.StackLevel);
+
+                // Dispose iterators on the handler frame whose slot is above the handler's
+                // saved stack level — these were allocated after the try/catch and would
+                // otherwise leak (e.g. a streaming process inside a try block).
+                ref CallFrame handlerFrameForCleanup = ref _frames[handler.FrameIndex];
+                DisposeFrameIterators(ref handlerFrameForCleanup, handler.StackLevel);
 
                 // Restore call stack and stack pointer to the handler's save point
                 _frameCount = handler.FrameIndex + 1;
@@ -377,7 +409,9 @@ public sealed partial class VirtualMachine
 
                     // Ultra-fast return: no debug, no captured locals (also covers defers —
                     // the compiler sets MayHaveCapturedLocals when emitting Defer opcodes)
-                    if (typeof(TDebugMode) == typeof(DebugOff) && !frame.Chunk.MayHaveCapturedLocals)
+                    if (typeof(TDebugMode) == typeof(DebugOff)
+                        && !frame.Chunk.MayHaveCapturedLocals
+                        && frame.ActiveIterators is null)
                     {
                         _frameCount--;
 
@@ -408,6 +442,7 @@ public sealed partial class VirtualMachine
                 case OpCode.ForLoop: ExecuteForLoop(ref frame, inst); break;
                 case OpCode.IterPrep: ExecuteIterPrep(ref frame, inst); break;
                 case OpCode.IterLoop: ExecuteIterLoop(ref frame, inst); break;
+                case OpCode.IterClose: ExecuteIterClose(ref frame, inst); break;
                 case OpCode.ForPrepII: ExecuteForPrepII(ref frame, inst); break;
                 case OpCode.ForLoopII: ExecuteForLoopII(ref frame, inst); break;
 
@@ -451,6 +486,7 @@ public sealed partial class VirtualMachine
                 // ==================== Shell Commands ====================
                 case OpCode.Command: ExecuteCommand(ref frame, inst); break;
                 case OpCode.PipeChain: ExecutePipeChain(ref frame, inst); break;
+                case OpCode.StreamingPipeline: ExecuteStreamingPipeline(ref frame, inst); break;
                 case OpCode.Redirect: ExecuteRedirect(ref frame, inst); break;
 
                 // ==================== Module Import ====================

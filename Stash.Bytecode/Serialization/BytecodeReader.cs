@@ -14,7 +14,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public static class BytecodeReader
 {
-    private const ushort FormatVersion         = 1;
+    private const ushort FormatVersion         = 2;
     private const byte   FlagHasDebugInfo      = 0x01;
     private const byte   FlagHasEmbeddedSource = 0x04;
     private const byte   FlagHasStdlibManifest = 0x08;
@@ -26,10 +26,10 @@ public static class BytecodeReader
     public static Chunk Read(Stream stream)
     {
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
-        byte flags = ReadAndValidateHeader(reader);
+        var (flags, version) = ReadAndValidateHeader(reader);
         bool hasDebugInfo = (flags & FlagHasDebugInfo) != 0;
         bool hasStdlibManifest = (flags & FlagHasStdlibManifest) != 0;
-        var chunk = ReadChunk(reader, hasDebugInfo);
+        var chunk = ReadChunk(reader, hasDebugInfo, version);
         if (hasStdlibManifest)
         {
             chunk.StdlibManifest = ReadStdlibManifest(reader);
@@ -86,7 +86,7 @@ public static class BytecodeReader
     {
         using var stream = File.OpenRead(filePath);
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
-        byte flags = ReadAndValidateHeader(reader);
+        var (flags, version) = ReadAndValidateHeader(reader);
         bool hasDebugInfo      = (flags & FlagHasDebugInfo) != 0;
         bool hasEmbeddedSource = (flags & FlagHasEmbeddedSource) != 0;
         bool hasStdlibManifest = (flags & FlagHasStdlibManifest) != 0;
@@ -95,7 +95,7 @@ public static class BytecodeReader
             return null;
 
         // Skip past the serialized chunk to reach the embedded source section.
-        ReadChunk(reader, hasDebugInfo);
+        ReadChunk(reader, hasDebugInfo, version);
 
         if (hasStdlibManifest)
             ReadStdlibManifest(reader); // skip past manifest to reach embedded source
@@ -114,9 +114,9 @@ public static class BytecodeReader
 
     /// <summary>
     /// Reads and validates the 32-byte .stashc file header.
-    /// Returns the flags byte.
+    /// Returns the flags byte and the format version.
     /// </summary>
-    private static byte ReadAndValidateHeader(BinaryReader reader)
+    private static (byte Flags, ushort Version) ReadAndValidateHeader(BinaryReader reader)
     {
         // Magic: "STBC" (0x53 0x54 0x42 0x43)
         byte b0 = reader.ReadByte();
@@ -128,7 +128,7 @@ public static class BytecodeReader
 
         // Format version (u16 LE)
         ushort version = reader.ReadUInt16();
-        if (version != FormatVersion)
+        if (version != 1 && version != FormatVersion)
             throw new InvalidDataException(
                 $"Unsupported .stashc format version {version} (expected {FormatVersion}).");
 
@@ -151,14 +151,14 @@ public static class BytecodeReader
         // Source SHA-256 prefix (16 bytes) — stored for cache invalidation, not validated here
         _ = reader.ReadBytes(16);
 
-        return flags;
+        return (flags, version);
     }
 
     // -------------------------------------------------------------------------
     // Private — chunk deserialization
     // -------------------------------------------------------------------------
 
-    private static Chunk ReadChunk(BinaryReader reader, bool hasDebugInfo)
+    private static Chunk ReadChunk(BinaryReader reader, bool hasDebugInfo, ushort formatVersion)
     {
         // Name (u16 length + UTF-8, 0xFFFF = null)
         string? name = ReadNullableString16(reader);
@@ -188,7 +188,7 @@ public static class BytecodeReader
         int constantCount = reader.ReadUInt16();
         StashValue[] constants = new StashValue[constantCount];
         for (int i = 0; i < constantCount; i++)
-            constants[i] = ReadConstant(reader, hasDebugInfo);
+            constants[i] = ReadConstant(reader, hasDebugInfo, formatVersion);
 
         // Upvalues (u8 count + (u8 index, u8 isLocal) pairs)
         int upvalueCount = reader.ReadByte();
@@ -315,7 +315,7 @@ public static class BytecodeReader
         return chunk;
     }
 
-    private static StashValue ReadConstant(BinaryReader reader, bool hasDebugInfo)
+    private static StashValue ReadConstant(BinaryReader reader, bool hasDebugInfo, ushort formatVersion)
     {
         byte tag = reader.ReadByte();
         return tag switch
@@ -325,8 +325,8 @@ public static class BytecodeReader
             2 => StashValue.FromInt(reader.ReadInt64()),
             3 => StashValue.FromFloat(BitConverter.Int64BitsToDouble(reader.ReadInt64())),
             4 => StashValue.FromObj(ReadString32(reader)),
-            5 => StashValue.FromObj(ReadChunk(reader, hasDebugInfo)),
-            6 => StashValue.FromObj(ReadCommandMetadata(reader)),
+            5 => StashValue.FromObj(ReadChunk(reader, hasDebugInfo, formatVersion)),
+            6 => StashValue.FromObj(ReadCommandMetadata(reader, formatVersion)),
             7 => StashValue.FromObj(ReadStructMetadata(reader)),
             8 => StashValue.FromObj(ReadEnumMetadata(reader)),
             9 => StashValue.FromObj(ReadInterfaceMetadata(reader)),
@@ -397,12 +397,15 @@ public static class BytecodeReader
         return values;
     }
 
-    private static CommandMetadata ReadCommandMetadata(BinaryReader reader)
+    private static CommandMetadata ReadCommandMetadata(BinaryReader reader, ushort formatVersion)
     {
         int partCount = reader.ReadUInt16();
         bool isPassthrough = reader.ReadByte() != 0;
         bool isStrict = reader.ReadByte() != 0;
-        return new CommandMetadata(partCount, isPassthrough, isStrict);
+        bool isStreaming = false;
+        if (formatVersion >= 2)
+            isStreaming = reader.ReadByte() != 0;
+        return new CommandMetadata(partCount, isPassthrough, isStrict, isStreaming);
     }
 
     private static StructMetadata ReadStructMetadata(BinaryReader reader)

@@ -2189,6 +2189,136 @@ try {
 
 The `$(...)` contract is unchanged — it continues to never throw.
 
+### Streaming Command Output
+
+Stash adds a third axis to the command sigil grid — **streaming** — alongside the existing capture/passthrough and lenient/strict axes. Streaming commands return a handle whose stdout can be iterated line-by-line in real time, with guaranteed child cleanup on every exit path. Use them for long-running producers like `tail -f`, `kubectl logs -f`, or `journalctl -f`.
+
+#### Sigil Grid
+
+|              | Capture (default) | Streaming (`<`) | Passthrough (`>`) |
+| ------------ | ----------------- | --------------- | ----------------- |
+| Lenient      | `$(cmd)`          | `$<(cmd)`       | `$>(cmd)`         |
+| Strict (`!`) | `$!(cmd)`         | `$!<(cmd)`      | `$!>(cmd)`        |
+
+The modifier order is `$` then optional `!` then optional direction marker (`<` or `>`) then `(`. The combinations `$<>(` and `$><(` do not exist — streaming and passthrough are mutually exclusive.
+
+#### The `StreamingProcess` Handle
+
+`$<(cmd)` evaluates immediately to a `StreamingProcess` handle — the process is spawned, but no output is consumed until you iterate or call a method.
+
+| Field      | Type      | Description                                                                |
+| ---------- | --------- | -------------------------------------------------------------------------- |
+| `pid`      | `int`     | OS process ID                                                              |
+| `exitCode` | `int?`    | `null` while running; populated after the child exits                      |
+| `signal`   | `Signal?` | `null` on clean exit; populated on signal-killed exit; `null` on Windows   |
+
+Methods:
+
+- `.kill(signal: Signal = Signal.Term)` — send a signal. PID-reuse-safe (no-op if already exited). On Windows only `Signal.Term` and `Signal.Kill` are supported; other signals throw `NotSupportedError`.
+- `.wait()` — block until the child exits.
+- `.lines()` — explicit iterator over stdout lines.
+- `.json()` — iterator over JSON values, one per line. Throws `ParseError` on malformed input.
+- `.bytes(size: int)` — iterator over fixed-size binary chunks.
+- `.framed(delim: string)` — iterator over delimiter-separated records.
+
+#### Iteration Forms
+
+```stash
+// 1. Single-var — stdout lines (stderr discarded)
+for (let line in $<(tail -f /var/log/nginx/access.log)) {
+    io.println(line);
+}
+
+// 2. Strict — throws CommandError on non-zero exit at natural completion
+for (let line in $!<(make build)) { io.println(line); }
+
+// 3. Dual — interleaved stdout / stderr (mirrors `for (k, v in dict)`)
+//    Exactly one of `out` / `err` is non-null per iteration.
+for (let out, err in $<(kubectl logs -f my-pod)) {
+    if (out != null) { handle(out); }
+    if (err != null) { log.warn("kubectl: ${err}"); }
+}
+
+// 4. Framing methods produce alternative iterables
+for (let event in $<(kubectl get pods -w -o json).json()) { ... }
+for (let chunk in $<(cat big.bin).bytes(4096))            { ... }
+for (let record in $<(some-cmd).framed("\0"))             { ... }
+
+// 5. Inspect handle after iteration
+let s = $<(make build);
+for (let line in s) { io.println(line); }
+io.println(s.exitCode);   // 0 on clean exit
+io.println(s.signal);     // null on clean exit
+```
+
+#### Cleanup Contract
+
+When iteration exits early — `break`, `return`, an uncaught exception, or `timeout` cancellation — the runtime sends `SIGTERM`, waits 5 seconds, then sends `SIGKILL`. File descriptors are closed and the child is reaped. **All early-exit causes use the same code path.**
+
+**Windows behavior:** Best-effort. There is no SIGTERM equivalent for arbitrary children, so the runtime calls `Process.Kill()` after the 5-second grace period. The `signal` field stays `null` on Windows when cleanup-killed.
+
+#### Single-Consumption Rule
+
+A `StreamingProcess` handle's iterator and stream content can be consumed exactly once. The following operations consume the handle:
+
+- Iterating it directly (`for (let line in s) { ... }`)
+- Calling `.lines()`, `.json()`, `.bytes(n)`, or `.framed(delim)` and iterating the returned wrapper
+- Calling `.wait()`
+
+A second consumption throws `StateError`. The fields `pid`, `exitCode`, `signal` and the methods `.kill()` / `.wait()` (subject to the rule above) remain accessible.
+
+#### Composition
+
+- **`timeout`:** Cancellation triggers the same SIGTERM → 5 s grace → SIGKILL cleanup as `break`, then `TimeoutError` propagates out of the `timeout` block. Cancellation latency is bounded at approximately 50 ms — the worst-case poll-tick before the blocking read observes the cancellation signal.
+- **External cancellation (Ctrl-C, programmatic `CancellationTokenSource`):** Also wires into the same cleanup contract. The child process is killed via SIGTERM → 5 s grace → SIGKILL; the error surfaces as `CancellationError` rather than `TimeoutError`.
+- **`secret`:** Stdout lines are not retroactively tainted. The command string remains redacted in error messages if it was built from a secret.
+
+#### Pipe Chains in Streaming Sigils
+
+`$<(stage1 | stage2 | ... | stageN)` and `$!<(stage1 | ... | stageN)` are first-class
+streaming pipelines. All stages spawn at iteration start; intermediate stages are
+captured-piped to the next stage's stdin via OS pipes; the **last stage's stdout** feeds
+the `StreamingProcess` handle line-by-line.
+
+```stash
+// Streams matching lines as `grep` produces them — no temp file, no shell wrap.
+for (let line in $<(cat huge.log | grep ERROR)) {
+    io.println(line);
+}
+
+// Strict mode: throws CommandError if the last stage exits non-zero at natural completion.
+$!<(make 2>&1 | tee build.log)
+```
+
+Semantics of a streaming pipeline:
+
+- **`s.pid`** is the **last stage's** PID (matching bash's `${PIPESTATUS[-1]}` and `$!`
+  for `cmd | tail`). The full PID array is exposed as **`s.pids`** for diagnostic logging.
+- **`s.exitCode`** is the **last stage's** exit code only. Intermediate-stage failures
+  are not surfaced (no `pipefail` semantics).
+- **`s.signal`** reflects the **last stage's** signal disposition.
+- **`$!<(...)` strict mode** throws `CommandError` only on a non-zero **last-stage** exit
+  at natural completion. Intermediate stages with non-zero exit codes do not throw, matching
+  `$!(stage1 | stage2)` behaviour.
+- **Stderr handling:** in single-var iteration `for (let line in s)`, every stage's stderr
+  is silently drained on per-stage tasks (preventing pipe-buffer deadlock). In dual-var
+  iteration `for (let out, err in s)`, every stage's stderr is interleaved into the
+  bounded channel in arrival order; stderr lines are not tagged by stage.
+- **Cleanup contract** applies to the whole pipeline. On early exit (break, return, throw,
+  iterator dispose) the runtime sends `SIGTERM` to **every stage**, waits 5 seconds, then
+  sends `SIGKILL` to any survivors. All FDs are closed and all stages are reaped. Order:
+  signal all → wait → kill survivors (not stage-by-stage, to minimise total termination
+  latency).
+- **`s.kill(signal)`** signals **every stage**, not just the last. Killing only the last
+  stage would leave intermediates alive (often hanging on a closed downstream pipe, but not
+  always — `cat /dev/zero | head -n 1` can outlive `head`). PID-reuse safety still applies:
+  `.kill()` is a no-op once `exitCode` is non-null.
+
+Mixed pipelines are not allowed: a single chain must be either wholly streaming
+(`$<(a | b | c)`) or wholly captured (`$(a | b | c)`). Mixing streaming and capture stages
+(`$<(a) | $(b)` or `$(a) | $<(b)`) is rejected as **SA0711** — the outer pipe would try
+to read a streaming handle as if it were a string.
+
 ### Pipes
 
 Pipelines can be written in two equivalent forms:

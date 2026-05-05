@@ -323,6 +323,13 @@ public class Lexer
                 {
                     ScanInterpolatedString(prefixed: true);
                 }
+                // Strict streaming command: $!<(...)
+                else if (_current + 2 < _source.Length && _source[_current] == '!' && _source[_current + 1] == '<' && _source[_current + 2] == '(')
+                {
+                    _current += 3;
+                    _column += 3;
+                    ScanCommandLiteral(strict: true, streaming: true);
+                }
                 // Strict passthrough command: $!>(...)
                 else if (_current + 2 < _source.Length && _source[_current] == '!' && _source[_current + 1] == '>' && _source[_current + 2] == '(')
                 {
@@ -336,6 +343,13 @@ public class Lexer
                     _current += 2;
                     _column += 2;
                     ScanCommandLiteral(strict: true);
+                }
+                // Streaming command: $<(...)
+                else if (_current + 1 < _source.Length && _source[_current] == '<' && _source[_current + 1] == '(')
+                {
+                    _current += 2;
+                    _column += 2;
+                    ScanCommandLiteral(streaming: true);
                 }
                 // Passthrough command: $>(...)
                 else if (_current + 1 < _source.Length && _source[_current] == '>' && _source[_current + 1] == '(')
@@ -1458,7 +1472,7 @@ public class Lexer
     /// embed Stash expressions. Parentheses are tracked for nesting so that subshells or
     /// grouped commands work correctly.
     /// </remarks>
-    private void ScanCommandLiteral(bool passthrough = false, bool strict = false)
+    private void ScanCommandLiteral(bool passthrough = false, bool strict = false, bool streaming = false)
     {
         var parts = new List<object>(); // string or List<Token>
         Span<char> textSegmentBuf = stackalloc char[256];
@@ -1470,20 +1484,26 @@ public class Lexer
         int segmentStartLine = _startLine;
         int segmentStartColumn = _startColumn;
 
-        TokenType cmdTokenType = (passthrough, strict) switch
+        TokenType cmdTokenType = (streaming, passthrough, strict) switch
         {
-            (true, true)   => TokenType.StrictPassthroughCommandLiteral,
-            (true, false)  => TokenType.PassthroughCommandLiteral,
-            (false, true)  => TokenType.StrictCommandLiteral,
-            (false, false) => TokenType.CommandLiteral,
+            (true,  false, true)  => TokenType.StrictStreamingCommandLiteral,
+            (true,  false, false) => TokenType.StreamingCommandLiteral,
+            (false, true,  true)  => TokenType.StrictPassthroughCommandLiteral,
+            (false, true,  false) => TokenType.PassthroughCommandLiteral,
+            (false, false, true)  => TokenType.StrictCommandLiteral,
+            (false, false, false) => TokenType.CommandLiteral,
+            _ => throw new System.InvalidOperationException("Invalid command literal mode combination"),
         };
 
-        string cmdPrefix = (passthrough, strict) switch
+        string cmdPrefix = (streaming, passthrough, strict) switch
         {
-            (true, true)   => "$!>(",
-            (true, false)  => "$>(",
-            (false, true)  => "$!(",
-            (false, false) => "$(",
+            (true,  false, true)  => "$!<(",
+            (true,  false, false) => "$<(",
+            (false, true,  true)  => "$!>(",
+            (false, true,  false) => "$>(",
+            (false, false, true)  => "$!(",
+            (false, false, false) => "$(",
+            _ => throw new System.InvalidOperationException("Invalid command literal mode combination"),
         };
 
         while (!IsAtEnd && depth > 0)

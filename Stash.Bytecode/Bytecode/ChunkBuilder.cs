@@ -657,6 +657,7 @@ public sealed class ChunkBuilder
                     companionWords.Add(i);
                     break;
                 case OpCode.PipeChain:
+                case OpCode.StreamingPipeline:
                 {
                     // B companion words follow (one per pipeline stage)
                     int stages = Instruction.GetB(inst);
@@ -734,7 +735,7 @@ public sealed class ChunkBuilder
 
                 // PipeChain: reads R(C)..R(C+totalParts-1) where totalParts is derived
                 // from companion words at i+1..i+B. Handle here where _code is accessible.
-                if (op == OpCode.PipeChain)
+                if (op == OpCode.PipeChain || op == OpCode.StreamingPipeline)
                 {
                     byte pipc = Instruction.GetC(inst);
                     int stages = Instruction.GetB(inst);
@@ -889,9 +890,9 @@ public sealed class ChunkBuilder
             case OpCode.TypedWrap:
             case OpCode.CheckNumeric:
             case OpCode.CatchMatch:
+            case OpCode.IterClose:
                 liveRegs.Add(a);
                 break;
-
             // ── Reads R(B) ────────────────────────────────────────────────
             case OpCode.Move:
             case OpCode.Neg:

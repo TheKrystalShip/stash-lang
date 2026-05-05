@@ -326,6 +326,13 @@ public sealed partial class VirtualMachine
         {
             if (_frameCount > savedFrameCount)
             {
+                // Dispose any iterators on frames being dropped due to unwinding.
+                // This covers OCE (timeout/external cancellation) and other non-RuntimeError
+                // exceptions whose frames would otherwise leak streaming process handles.
+                for (int i = _frameCount - 1; i >= savedFrameCount; i--)
+                {
+                    DisposeFrameIterators(ref _frames[i]);
+                }
                 CloseUpvalues(savedSp);
                 _frameCount = savedFrameCount;
             }
@@ -749,6 +756,11 @@ public sealed partial class VirtualMachine
             frame.Defers = null; // Prevent re-execution during exception unwinding
             retVal = ExecuteDefers<TDebugMode>(defers, baseSlot, frame.Chunk.MaxRegs, retVal);
         }
+
+        // Dispose any iterators still active on this frame (e.g., if the function
+        // returns from inside a for-in loop body before the loop's IterClose runs).
+        if (frame.ActiveIterators is { Count: > 0 })
+            DisposeFrameIterators(ref frame);
 
         _frameCount--;
 

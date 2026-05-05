@@ -52,8 +52,8 @@ function registerStashLanguage() {
                 // Line comments
                 [/\/\/.*$/, 'comment'],
 
-                // Command literals: $(...) and $>(...)
-                [/\$!?>?\(/, 'metatag', '@command'],
+                // Command literals: $(...), $!(...), $>(...), $!>(...), $<(...), $!<(...)
+                [/\$!?[<>]?\(/, 'metatag', '@command'],
 
                 // Triple-quoted interpolated strings: $"""..."""
                 [/\$"""/, 'string', '@tripleInterpolatedString'],

@@ -16,5 +16,7 @@ public static class StashErrorTypes
     public const string TimeoutError      = "TimeoutError";
     public const string CommandError      = "CommandError";
     public const string LockError         = "LockError";
-    public const string AliasError        = "AliasError";
+    public const string AliasError           = "AliasError";
+    public const string StateError           = "StateError";
+    public const string CancellationError    = "CancellationError";
 }

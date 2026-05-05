@@ -631,4 +631,132 @@ public sealed partial class VirtualMachine
             return false;
         }
     }
+
+    /// <summary>
+    /// Executes a multi-stage pipeline where intermediate stages are captured-piped to the next
+    /// stage's stdin and the LAST stage's stdout becomes the streaming source. Every stage's
+    /// stderr remains accessible to the returned <see cref="Stash.Runtime.Types.StashStreamingProcess"/>
+    /// handle for drain (single-mode) or interleave (dual-mode).
+    /// </summary>
+    internal Stash.Runtime.Types.StashStreamingProcess ExecStreamingPipeline(
+        List<PipeStage> stages,
+        bool isStrict,
+        string command,
+        SourceSpan? span)
+    {
+        int n = stages.Count;
+        if (n < 2)
+            throw new RuntimeError("Streaming pipeline requires at least 2 stages.", span, StashErrorTypes.CommandError);
+
+        var processes = new Process[n];
+        int started = 0;
+
+        try
+        {
+            // Start every stage. Intermediate stages: stdout redirected (feeds next stage's stdin).
+            // Last stage: stdout redirected (handed to StashStreamingProcess); stderr always
+            // redirected so the handle can drain or interleave it.
+            for (int i = 0; i < n; i++)
+            {
+                bool isLast = (i == n - 1);
+                var stage = stages[i];
+                var psi = new ProcessStartInfo
+                {
+                    FileName               = stage.Program,
+                    RedirectStandardOutput = true,  // last stage feeds the handle; others feed next stage
+                    RedirectStandardError  = true,  // every stage's stderr drained or interleaved
+                    RedirectStandardInput  = (i > 0),
+                    UseShellExecute        = false,
+                    CreateNoWindow         = true,
+                };
+                foreach (string arg in stage.Arguments)
+                    psi.ArgumentList.Add(arg);
+
+                try
+                {
+                    processes[i] = Process.Start(psi)
+                        ?? throw new RuntimeError($"pipeline stage {i} failed to spawn: process start returned null", span, StashErrorTypes.CommandError);
+                }
+                catch (RuntimeError) { throw; }
+                catch (Exception ex)
+                {
+                    throw new RuntimeError($"pipeline stage {i} failed to spawn: {ex.Message}", span, StashErrorTypes.CommandError);
+                }
+                started++;
+            }
+
+            // Pump tasks: stdout[i] → stdin[i+1] for intermediate stages.
+            // Fire-and-forget; the StashStreamingProcess takes ownership of cleanup.
+            for (int i = 0; i < n - 1; i++)
+            {
+                int idx = i;
+                StreamReader from = processes[i].StandardOutput;
+                StreamWriter to   = processes[i + 1].StandardInput;
+                _ = Task.Run(async () =>
+                {
+                    bool brokePipe = await PumpAsync(from, to, _ct).ConfigureAwait(false);
+                    if (brokePipe)
+                        _ = ShutdownUpstreamAsync(processes, idx, gracePeriodMs: 500);
+                }, _ct);
+            }
+
+            return new Stash.Runtime.Types.StashStreamingProcess(processes, command, isStrict, span, () => _context.CancellationToken);
+        }
+        catch (RuntimeError)
+        {
+            // Reap any stages that did start successfully before the failure.
+            for (int i = 0; i < started; i++)
+            {
+                try { if (!processes[i].HasExited) processes[i].Kill(entireProcessTree: true); } catch { }
+                try { processes[i].Dispose(); } catch { }
+            }
+            throw;
+        }
+        catch (Exception ex)
+        {
+            for (int i = 0; i < started; i++)
+            {
+                try { if (!processes[i].HasExited) processes[i].Kill(entireProcessTree: true); } catch { }
+                try { processes[i].Dispose(); } catch { }
+            }
+            throw new RuntimeError($"Failed to start streaming pipeline: {ex.Message}", span, StashErrorTypes.CommandError);
+        }
+    }
+
+    internal Stash.Runtime.Types.StashStreamingProcess ExecStreaming(
+        string program, List<string> arguments, string command, bool isStrict, SourceSpan? span)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = program,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = false,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            foreach (string arg in arguments)
+                psi.ArgumentList.Add(arg);
+
+            var process = Process.Start(psi)
+                ?? throw new RuntimeError($"Failed to start process: {command}", span, StashErrorTypes.CommandError);
+
+            return new Stash.Runtime.Types.StashStreamingProcess(process, command, isStrict, span, () => _context.CancellationToken);
+        }
+        catch (RuntimeError) { throw; }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            throw new RuntimeError(
+                $"Failed to start process '{program}': {ex.Message}",
+                span, StashErrorTypes.CommandError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError(
+                $"Failed to start streaming command: {ex.Message}",
+                span, StashErrorTypes.CommandError);
+        }
+    }
 }

@@ -263,6 +263,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         DispatchNodeRules(stmt);
 
+        // SA0712: dual-iterator form requires a streaming command or dictionary source.
+        if (stmt.IndexName != null)
+        {
+            if (stmt.Iterable is CommandExpr cmdIter && cmdIter.Mode != CommandMode.Stream)
+                _diagnostics.Add(DiagnosticDescriptors.SA0712.CreateDiagnostic(cmdIter.Span));
+            else if (stmt.Iterable is ArrayExpr arrIter)
+                _diagnostics.Add(DiagnosticDescriptors.SA0712.CreateDiagnostic(arrIter.Span));
+        }
+
         stmt.Iterable.Accept(this);
 
         _loopDepth++;
@@ -597,6 +606,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitExprStmt(ExprStmt stmt)
     {
         DispatchNodeRules(stmt);
+
+        // SA0713: bare streaming command statement — handle is dropped, process leaks.
+        if (stmt.Expression is CommandExpr cmd && cmd.Mode == CommandMode.Stream)
+            _diagnostics.Add(DiagnosticDescriptors.SA0713.CreateDiagnostic(cmd.Span));
+
         stmt.Expression.Accept(this);
         return null;
     }
@@ -856,11 +870,26 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         }
         stages.Insert(0, current); // leftmost non-pipe node
 
+        // Determine whether the chain is all-streaming. An all-streaming chain (every stage
+        // is a CommandExpr with Mode == Stream) is now a valid streaming pipeline and must
+        // not trigger SA0711. A mixed chain (some Stream, some Capture) is still nonsensical.
+        bool allStreaming = true;
+        foreach (var s in stages)
+        {
+            if (s is CommandExpr c && c.Mode == CommandMode.Stream) { /* ok */ }
+            else { allStreaming = false; break; }
+        }
+
         // Validate and visit each stage
         foreach (var stage in stages)
         {
-            if (stage is CommandExpr { IsPassthrough: true } cmd)
-                _diagnostics.Add(DiagnosticDescriptors.SA0710.CreateDiagnostic(cmd.Span));
+            if (stage is CommandExpr cmd)
+            {
+                if (cmd.Mode == CommandMode.Passthrough)
+                    _diagnostics.Add(DiagnosticDescriptors.SA0710.CreateDiagnostic(cmd.Span));
+                else if (cmd.Mode == CommandMode.Stream && !allStreaming)
+                    _diagnostics.Add(DiagnosticDescriptors.SA0711.CreateDiagnostic(cmd.Span));
+            }
 
             stage.Accept(this);
         }

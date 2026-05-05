@@ -332,6 +332,13 @@ public static class TaskBuiltIns
         {
             throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
         }
+        catch (AggregateException ae) when (ae.InnerException is RuntimeError re && re.ErrorType == StashErrorTypes.CancellationError)
+        {
+            // The child VM's outer dispatch loop converted the timeout-triggered OCE into
+            // a CancellationError. From the caller's perspective this is a timeout, not an
+            // external cancellation — re-tag it.
+            throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
+        }
         catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
         {
             throw re;

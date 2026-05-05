@@ -1610,7 +1610,8 @@ public class VirtualMachineTests : BytecodeTestBase
         var cts = new CancellationTokenSource();
         cts.CancelAfter(TimeSpan.FromMilliseconds(100));
         var vm = new VirtualMachine(ct: cts.Token);
-        Assert.Throws<OperationCanceledException>(() => vm.Execute(chunk));
+        var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        Assert.Equal(StashErrorTypes.CancellationError, ex.ErrorType);
     }
 
     // =========================================================================

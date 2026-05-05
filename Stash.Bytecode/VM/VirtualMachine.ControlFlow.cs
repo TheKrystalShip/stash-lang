@@ -613,6 +613,8 @@ public sealed partial class VirtualMachine
         {
             IVMIterator iterator = iterable.VMGetIterator(indexed);
             _stack[@base + a] = StashValue.FromObj(iterator);
+            if (iterator is IDisposable disposable)
+                (frame.ActiveIterators ??= new()).Add((@base + a, disposable));
             return;
         }
 
@@ -749,5 +751,51 @@ public sealed partial class VirtualMachine
         }
 
         throw new RuntimeError("Rethrow used outside of a catch block.", GetCurrentSpan(ref frame));
+    }
+
+    // ══════════════════════════ Iterator Cleanup ══════════════════════════
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteIterClose(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        int slot = frame.BaseSlot + a;
+        object? val = _stack[slot].AsObj;
+        if (val is IDisposable disp)
+        {
+            try { disp.Dispose(); } catch { /* swallow — already cleaning up */ }
+        }
+        _stack[slot] = StashValue.Null;
+
+        var list = frame.ActiveIterators;
+        if (list != null)
+        {
+            for (int i = list.Count - 1; i >= 0; i--)
+            {
+                if (list[i].Slot == slot) { list.RemoveAt(i); break; }
+            }
+        }
+    }
+
+    // ══════════════════════════ Frame Iterator Disposal ══════════════════════════
+
+    /// <summary>
+    /// Disposes any active iterators on the frame whose slot &gt;= <paramref name="minSlot"/>.
+    /// Used during exception unwinding (with the handler's StackLevel as minSlot) and on
+    /// frame exit (with 0 to dispose all). Errors from Dispose are swallowed.
+    /// </summary>
+    internal void DisposeFrameIterators(ref CallFrame frame, int minSlot = 0)
+    {
+        var list = frame.ActiveIterators;
+        if (list is null || list.Count == 0) return;
+        for (int i = list.Count - 1; i >= 0; i--)
+        {
+            if (list[i].Slot >= minSlot)
+            {
+                try { list[i].Disposable.Dispose(); } catch { }
+                list.RemoveAt(i);
+            }
+        }
+        if (list.Count == 0) frame.ActiveIterators = null;
     }
 }

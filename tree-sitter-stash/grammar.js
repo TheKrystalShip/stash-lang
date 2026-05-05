@@ -533,8 +533,10 @@ module.exports = grammar({
     command_expression: $ => choice(
       seq('$(', optional($.command_content), ')'),
       seq('$>(', optional($.command_content), ')'),
+      seq('$<(', optional($.command_content), ')'),
       seq('$!(', optional($.command_content), ')'),
       seq('$!>(', optional($.command_content), ')'),
+      seq('$!<(', optional($.command_content), ')'),
     ),
 
     // --- Collections ---

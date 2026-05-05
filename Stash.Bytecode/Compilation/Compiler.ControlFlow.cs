@@ -227,6 +227,12 @@ public sealed partial class Compiler
         _builder.PatchJump(iterCheck);
 
         PatchBreakJumps();
+
+        // Emit IterClose at the natural-exit / break-jump landing point so that
+        // any iterator implementing IDisposable (e.g., StashStreamingProcess) is
+        // cleaned up reliably. Return/throw paths are handled by frame unwind.
+        _builder.EmitA(OpCode.IterClose, iterableReg);
+
         EndScope();
         return null;
     }

@@ -2232,7 +2232,7 @@ public class Parser
             return ParseInterpolatedString(token);
         }
 
-        if (Match(TokenType.CommandLiteral, TokenType.PassthroughCommandLiteral, TokenType.StrictCommandLiteral, TokenType.StrictPassthroughCommandLiteral))
+        if (Match(TokenType.CommandLiteral, TokenType.PassthroughCommandLiteral, TokenType.StrictCommandLiteral, TokenType.StrictPassthroughCommandLiteral, TokenType.StreamingCommandLiteral, TokenType.StrictStreamingCommandLiteral))
         {
             Token token = Previous();
             return ParseCommandLiteral(token);
@@ -2971,8 +2971,12 @@ public class Parser
         }
 
         bool isPassthrough = token.Type is TokenType.PassthroughCommandLiteral or TokenType.StrictPassthroughCommandLiteral;
-        bool isStrict = token.Type is TokenType.StrictCommandLiteral or TokenType.StrictPassthroughCommandLiteral;
-        return new CommandExpr(exprParts, token.Span, isPassthrough, isStrict);
+        bool isStreaming = token.Type is TokenType.StreamingCommandLiteral or TokenType.StrictStreamingCommandLiteral;
+        bool isStrict = token.Type is TokenType.StrictCommandLiteral or TokenType.StrictPassthroughCommandLiteral or TokenType.StrictStreamingCommandLiteral;
+        CommandMode mode = isStreaming ? CommandMode.Stream
+                         : isPassthrough ? CommandMode.Passthrough
+                         : CommandMode.Capture;
+        return new CommandExpr(exprParts, token.Span, mode, isStrict);
     }
 
     // ── Helper methods ────────────────────────────────────────────

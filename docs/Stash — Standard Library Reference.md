@@ -76,8 +76,10 @@ Stash defines a set of built-in named error types. These types are available glo
 | `NotSupportedError` | `message: string`                                                                         | Feature not available on this platform              |
 | `TimeoutError`      | `message: string`                                                                         | Operation timed out                                 |
 | `CommandError`      | `message: string`, `exitCode: int`, `stderr: string`, `stdout: string`, `command: string` | Strict command (`$!(...)`) exited non-zero          |
+| `StateError`        | `message: string`                                                                         | Object is in an invalid state for the requested operation (e.g. consuming a `StreamingProcess` handle a second time) |
 | `AliasError`        | `message: string`, `aliasName: string?`, `detail: string?`                                | Invalid alias name, missing alias, or override conflict |
 | `LockError`         | `message: string`, `path: string`                                                         | File lock acquisition failed                        |
+| `CancellationError` | `message: string`                                                                         | External cancellation (Ctrl-C or programmatic `CancellationTokenSource`). Distinct from `TimeoutError` which is raised by `timeout` blocks. |
 
 ### Usage
 
@@ -2696,6 +2698,76 @@ let finalResult = process.wait(server);
 `process.onExit(proc, callback)` registers a callback function to run when a process exits. The callback receives a `CommandResult` as its single argument. Multiple callbacks can be registered for the same process. Callbacks are fired synchronously on the main thread when the process result is collected via `process.wait()`, `process.waitTimeout()`, `process.waitAll()`, or `process.waitAny()`. Returns `null`.
 
 If the process handle is detached via `process.detach()`, any registered callbacks are discarded.
+
+---
+
+## The `StreamingProcess` Handle
+
+`StreamingProcess` is a **built-in struct type** returned by the streaming command sigils `$<(cmd)` and `$!<(cmd)` (see the [Streaming Command Output](Stash%20%E2%80%94%20Language%20Specification.md#streaming-command-output) section of the Language Specification). It represents a child process whose stdout — and optionally stderr — is consumed line-by-line in real time.
+
+The handle implements `IVMIterable` and supports both single-variable iteration (lines) and dual-variable iteration (interleaved stdout / stderr).
+
+### Fields
+
+| Field      | Type      | Description                                                                                                                  |
+| ---------- | --------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `pid`      | `int`     | OS process ID. For pipeline forms `$<(a \| b \| c)` this is the **last stage's** PID (matches `${PIPESTATUS[-1]}`).          |
+| `pids`     | `int[]`   | Every stage's PID, in order. For single-stage handles, length 1; for pipelines, one entry per stage. Useful for diagnostics. |
+| `exitCode` | `int?`    | `null` while the child is running; populated after exit. For pipelines, the **last stage's** exit code only.                 |
+| `signal`   | `Signal?` | `null` on clean exit; populated on signal-killed exit; `null` on Windows. For pipelines, reflects the last stage.            |
+
+These fields remain accessible after the handle has been consumed.
+
+### Methods
+
+| Method                                       | Description                                                                                                  |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `.kill(signal: Signal = Signal.Term)`        | Send a signal to the child. PID-reuse-safe (no-op if already exited). Windows accepts only `Term` / `Kill`.  |
+| `.wait()`                                    | Block until the child exits.                                                                                 |
+| `.lines()`                                   | Returns an iterator over stdout lines (the same as iterating the handle directly).                           |
+| `.json()`                                    | Returns an iterator over JSON values (one per line). Throws `ParseError` on malformed input.                 |
+| `.bytes(size: int)`                          | Returns an iterator over fixed-size binary chunks of stdout.                                                 |
+| `.framed(delim: string)`                     | Returns an iterator over delimiter-separated records.                                                        |
+
+### Iteration Forms
+
+```stash
+// Single-var — stdout lines
+for (let line in $<(tail -f /var/log/syslog)) { io.println(line); }
+
+// Dual-var — interleaved stdout / stderr; one of `out`/`err` is null per iteration
+for (let out, err in $<(kubectl logs -f my-pod)) {
+    if (out != null) { handle(out); }
+    if (err != null) { log.warn(err); }
+}
+```
+
+### Single-Consumption Rule
+
+A handle's stream content can be consumed exactly once. The following operations consume the handle:
+
+- Iterating it directly (`for (let line in s) { ... }`)
+- Calling `.lines()`, `.json()`, `.bytes(n)`, or `.framed(delim)` and iterating the returned wrapper
+- Calling `.wait()`
+
+A second consumption throws `StateError`. The `pid`, `exitCode`, `signal` fields and the `.kill()` method remain accessible after consumption.
+
+### Cleanup Contract
+
+Iteration registers an implicit cleanup hook. On `break`, `return`, exception, or `timeout` cancellation, the runtime sends `SIGTERM`, waits 5 seconds, then sends `SIGKILL`. File descriptors are closed and the child is reaped. On Windows the runtime calls `Process.Kill()` after the 5-second grace; the `signal` field stays `null` in that case.
+
+For pipeline handles (`$<(a | b | c)`), the cleanup contract applies to **every stage**:
+the runtime signals all stages with `SIGTERM` first, waits up to 5 seconds for them to exit,
+then sends `SIGKILL` to any survivors. The order is signal-all → wait → kill-survivors (not
+stage-by-stage), to minimise total termination latency. Likewise, `.kill(signal)` sends the
+signal to every stage in the pipeline.
+
+### Errors
+
+- `StateError` — thrown on a second attempt to consume the handle.
+- `ParseError` — thrown by `.json()` on a malformed stdout line; the iteration aborts and cleanup runs.
+- `CommandError` — thrown only by the strict variant `$!<(cmd)` if the child exits with a non-zero exit code at natural completion.
+- `NotSupportedError` — thrown by `.kill(sig)` on Windows for any signal other than `Signal.Term` / `Signal.Kill`.
 
 ---
 

@@ -120,6 +120,7 @@ public sealed partial class Compiler
         byte flags = 0;
         if (expr.IsPassthrough) flags |= 0x01;
         if (expr.IsStrict)      flags |= 0x02;
+        if (expr.Mode == CommandMode.Stream) flags |= 0x04;
 
         _builder.EmitABC(OpCode.Command, baseReg, (byte)partCount, flags);
 
@@ -143,6 +144,12 @@ public sealed partial class Compiler
 
         // Flatten the left-associative pipe chain into a list of CommandExprs
         var stages = FlattenPipeChain(expr);
+
+        // Determine whether this is a streaming pipeline. A streaming pipeline is one whose
+        // operands all share Mode == Stream. The lexer produces this when the user writes
+        // $<(a | b | c) — every split stage inherits the same streaming sigil.
+        // Mixed streaming/capture chains are rejected (handled by FlattenPipeChain).
+        bool isStreamingPipeline = stages[0].Mode == CommandMode.Stream;
 
         // Compute merged parts per stage and validate
         var allMergedParts = new List<List<(Expr? originalExpr, string? folded)>>(stages.Count);
@@ -177,8 +184,9 @@ public sealed partial class Compiler
             }
         }
 
-        // Emit PipeChain instruction followed by B companion words
-        _builder.EmitABC(OpCode.PipeChain, dest, (byte)stages.Count, partsBase);
+        // Emit PipeChain or StreamingPipeline instruction followed by B companion words
+        OpCode pipelineOp = isStreamingPipeline ? OpCode.StreamingPipeline : OpCode.PipeChain;
+        _builder.EmitABC(pipelineOp, dest, (byte)stages.Count, partsBase);
         for (int si = 0; si < stages.Count; si++)
         {
             byte flags = stages[si].IsStrict ? (byte)0x01 : (byte)0x00;
@@ -210,6 +218,27 @@ public sealed partial class Compiler
         if (leftCmd.IsPassthrough)
             throw new CompileError("Passthrough command ($>(...) or $!>(...)) cannot appear in a pipe chain. Use $(cmd) or $!(cmd) instead.", leftCmd.Span);
         stages.Insert(0, leftCmd);
+
+        // Mixed-mode pipe chains are nonsensical: $<(a) piped into $(b) tries to read a
+        // streaming handle as a string. Either ALL stages stream, or NONE do.
+        bool anyStream = false, allStream = true;
+        foreach (var s in stages)
+        {
+            if (s.Mode == CommandMode.Stream) anyStream = true;
+            else allStream = false;
+        }
+        if (anyStream && !allStream)
+        {
+            // Find the first mismatched stage for the diagnostic location.
+            CommandMode first = stages[0].Mode;
+            foreach (var s in stages)
+            {
+                if (s.Mode != first)
+                    throw new CompileError(
+                        "mixed streaming and non-streaming command stages cannot appear in the same pipe chain — wrap the entire chain in a single $<(...) or use $(...)",
+                        s.Span);
+            }
+        }
         return stages;
     }
 }

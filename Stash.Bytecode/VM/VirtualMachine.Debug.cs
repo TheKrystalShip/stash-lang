@@ -130,6 +130,7 @@ public sealed partial class VirtualMachine
                     {
                         RunFrameDefers(ref frame, ref suppressed);
                     }
+                    DisposeFrameIterators(ref frame);
                 }
 
                 _frameCount = 0;
@@ -172,9 +173,12 @@ public sealed partial class VirtualMachine
                     {
                         RunFrameDefers(ref unwoundFrame, ref suppressed);
                     }
+                    DisposeFrameIterators(ref unwoundFrame);
                 }
 
                 CloseUpvalues(handler.StackLevel);
+                ref CallFrame handlerFrameForCleanupDbg = ref _frames[handler.FrameIndex];
+                DisposeFrameIterators(ref handlerFrameForCleanupDbg, handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
                 while (_debugCallStack.Count > handler.FrameIndex)
                 {

@@ -95,6 +95,7 @@ public sealed class BytecodeVerifier
                 // ── PipeChain: B=stageCount (not a register), C=partsBase; followed by B companion words ─
 
                 case OpCode.PipeChain:
+                case OpCode.StreamingPipeline:
                 {
                     // C is partsBase — a register that must be in bounds
                     CheckReg(errors, instrIdx, prefix, chunk, "C", c);
@@ -349,6 +350,12 @@ public sealed class BytecodeVerifier
                         AddError(errors, instrIdx, prefix, $"Opcode {op}: constant index Ax={ax} out of bounds (Constants.Length={chunk.Constants.Length}).");
                     break;
                 }
+
+                // ── IterClose: A = iterator register; B/C unused ────────────────────
+
+                case OpCode.IterClose:
+                    // A already validated by the general A-register check above.
+                    break;
             }
 
             lastInstrIdx = instrIdx;

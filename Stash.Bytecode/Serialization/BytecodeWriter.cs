@@ -18,7 +18,7 @@ public static class BytecodeWriter
     public const uint MagicBytes = 0x53544243;
 
     /// <summary>Current .stashc format version.</summary>
-    public const ushort FormatVersion = 1;
+    public const ushort FormatVersion = 2;
 
     /// <summary>
     /// File-level flags stored in the header byte.
@@ -282,6 +282,7 @@ public static class BytecodeWriter
                     writer.Write((ushort)cmd.PartCount);
                     writer.Write((byte)(cmd.IsPassthrough ? 1 : 0));
                     writer.Write((byte)(cmd.IsStrict ? 1 : 0));
+                    writer.Write((byte)(cmd.IsStreaming ? 1 : 0));
                 }
                 else if (obj is StructMetadata structMeta)
                 {

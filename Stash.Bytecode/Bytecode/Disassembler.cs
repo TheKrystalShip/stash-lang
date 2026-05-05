@@ -88,6 +88,7 @@ public static class Disassembler
         [OpCode.ForLoop]        = "for.loop",
         [OpCode.IterPrep]       = "iter.prep",
         [OpCode.IterLoop]       = "iter.loop",
+        [OpCode.IterClose]      = "iter.close",
         [OpCode.GetTable]       = "get.table",
         [OpCode.SetTable]       = "set.table",
         [OpCode.GetField]       = "get.field",
@@ -111,6 +112,7 @@ public static class Disassembler
         [OpCode.Extend]         = "extend",
         [OpCode.Command]        = "command",
         [OpCode.PipeChain]      = "pipe.chain",
+        [OpCode.StreamingPipeline] = "stream.pipe",
         [OpCode.Redirect]       = "redirect",
         [OpCode.Import]         = "import",
         [OpCode.ImportAs]       = "import.as",
@@ -303,8 +305,8 @@ public static class Disassembler
                 idx++;
             }
 
-            // PipeChain: skip and annotate B companion words (one per stage)
-            if (op == OpCode.PipeChain)
+            // PipeChain / StreamingPipeline: skip and annotate B companion words (one per stage)
+            if (op == OpCode.PipeChain || op == OpCode.StreamingPipeline)
             {
                 byte stageCount = Instruction.GetB(word);
                 for (int s = 0; s < stageCount; s++)
@@ -556,6 +558,7 @@ public static class Disassembler
             // Shell
             OpCode.Command     => ($"r{a}, {b}, {c}", null),
             OpCode.PipeChain   => ($"r{a}, {b} stages, r{c}", $"parts from r{c}"),
+            OpCode.StreamingPipeline => ($"r{a}, {b} stages, r{c}", $"streaming parts from r{c}"),
             OpCode.Redirect    => ($"r{a}, r{c}, {b}", null),
             OpCode.Interpolate => ($"r{a}, {b}", null),
 
@@ -615,7 +618,7 @@ public static class Disassembler
                 idx++; // skip companion word
             if (op == OpCode.CallBuiltIn)
                 idx++; // skip companion word
-            if (op == OpCode.PipeChain)
+            if (op == OpCode.PipeChain || op == OpCode.StreamingPipeline)
             {
                 byte stageCount = Instruction.GetB(word);
                 idx += stageCount; // skip companion words

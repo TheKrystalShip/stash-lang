@@ -239,6 +239,17 @@ public static class GlobalBuiltIns
             new("aliasName", "string?"),
             new("detail",    "string?"),
         ]);
+        b.Struct(StashErrorTypes.StateError, [
+            new("message", "string"),
+        ]);
+        b.Struct(StashErrorTypes.CancellationError, [
+            new("message", "string"),
+        ]);
+        b.Struct("StreamingProcess", [
+            new("pid",      "int"),
+            new("exitCode", "int?"),
+            new("signal",   "Signal?"),
+        ]);
 
         // Alias-related structs — registered here so LSP hover/completion knows their fields.
         b.Struct("SourceLoc", [

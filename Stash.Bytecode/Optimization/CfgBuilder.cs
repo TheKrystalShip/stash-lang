@@ -202,6 +202,7 @@ internal static class CfgBuilder
                     break;
 
                 case OpCode.PipeChain:
+                case OpCode.StreamingPipeline:
                 {
                     int stages = Instruction.GetB(inst);
                     for (int s = 1; s <= stages && i + s < code.Count; s++)
