@@ -1,5 +1,6 @@
 namespace Stash.Tests.Interpreting;
 
+[Collection("SystemCwdTests")]
 public class ProcessBuiltInsTests : TempDirectoryFixture
 {
     public ProcessBuiltInsTests() : base("stash_process_test") { }

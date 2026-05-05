@@ -14,6 +14,7 @@ namespace Stash.Tests.Cli;
 /// Tests for §12 RC file: path resolution (<see cref="RcFileLoader.FindRcFile"/>) and
 /// content loading (<see cref="RcFileLoader.Load"/>).
 /// </summary>
+[Collection("SystemCwdTests")]
 public sealed class RcFileLoaderTests : IDisposable
 {
     // ── Environment isolation ─────────────────────────────────────────────────

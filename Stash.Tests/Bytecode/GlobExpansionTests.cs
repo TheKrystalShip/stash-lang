@@ -16,6 +16,7 @@ namespace Stash.Tests.Bytecode;
 /// POSIX-only for integration tests (skip on Windows for v1 per spec §14.1).
 /// Each test saves and restores the process working directory so tests don't interfere.
 /// </summary>
+[Collection("SystemCwdTests")]
 public class GlobExpansionTests : StashTestBase
 {
     // =========================================================================
