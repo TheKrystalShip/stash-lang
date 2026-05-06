@@ -1,118 +1,91 @@
+namespace Stash.Stdlib.BuiltIns;
+
 using System;
 using Stash.Runtime;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
-
-namespace Stash.Stdlib.BuiltIns;
+using Stash.Stdlib.Abstractions;
+using Stash.Stdlib;
 
 /// <summary>
 /// Registers the 'path' namespace built-in functions.
 /// </summary>
-public static class PathBuiltIns
+[StashNamespace]
+public static partial class PathBuiltIns
 {
-    public static NamespaceDefinition Define()
+    /// <summary>Returns the absolute path for the given path string.</summary>
+    /// <param name="p">The path</param>
+    /// <returns>The absolute path</returns>
+    [StashFn]
+    public static string Abs(string p) => System.IO.Path.GetFullPath(p);
+
+    /// <summary>Returns the directory component of the path.</summary>
+    /// <param name="p">The path</param>
+    /// <returns>The directory portion</returns>
+    [StashFn]
+    public static string Dir(string p) => System.IO.Path.GetDirectoryName(p) ?? "";
+
+    /// <summary>Returns the filename (including extension) from the path.</summary>
+    /// <param name="p">The path</param>
+    /// <returns>The filename with extension</returns>
+    [StashFn]
+    public static string Base(string p) => System.IO.Path.GetFileName(p);
+
+    /// <summary>Returns the file extension including the dot.</summary>
+    /// <param name="p">The path</param>
+    /// <returns>The file extension</returns>
+    [StashFn]
+    public static string Ext(string p) => System.IO.Path.GetExtension(p);
+
+    /// <summary>Joins two or more path segments using the platform path separator.</summary>
+    /// <param name="a">The first path segment</param>
+    /// <param name="b">The second path segment</param>
+    /// <returns>The combined path</returns>
+    [StashFn]
+    public static string Join(string a, string b, params StashValue[] rest)
     {
-        // ── path namespace ───────────────────────────────────────────────
-        var ns = new NamespaceBuilder("path");
-
-        ns.Function("abs", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        var accumulated = System.IO.Path.Combine(a, b);
+        for (int i = 0; i < rest.Length; i++)
         {
-            var p = SvArgs.String(args, 0, "path.abs");
-
-            return StashValue.FromObj(System.IO.Path.GetFullPath(p));
-        },
-            returnType: "string",
-            documentation: "Returns the absolute path for the given path string.\n@param p The path\n@return The absolute path");
-
-        ns.Function("dir", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var p = SvArgs.String(args, 0, "path.dir");
-
-            return StashValue.FromObj(System.IO.Path.GetDirectoryName(p) ?? "");
-        },
-            returnType: "string",
-            documentation: "Returns the directory component of the path.\n@param p The path\n@return The directory portion");
-
-        ns.Function("base", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var p = SvArgs.String(args, 0, "path.base");
-
-            return StashValue.FromObj(System.IO.Path.GetFileName(p));
-        },
-            returnType: "string",
-            documentation: "Returns the filename (including extension) from the path.\n@param p The path\n@return The filename with extension");
-
-        ns.Function("ext", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var p = SvArgs.String(args, 0, "path.ext");
-
-            return StashValue.FromObj(System.IO.Path.GetExtension(p));
-        },
-            returnType: "string",
-            documentation: "Returns the file extension including the dot.\n@param p The path\n@return The file extension");
-
-        ns.Function("join", [Param("a", "string"), Param("b", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            if (args.Length < 2)
-                throw new RuntimeError("'path.join' requires at least 2 arguments.");
-            var accumulated = SvArgs.String(args, 0, "path.join");
-            for (int i = 1; i < args.Length; i++)
-                accumulated = System.IO.Path.Combine(accumulated, SvArgs.String(args, i, "path.join"));
-            return StashValue.FromObj(accumulated);
-        },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Joins two or more path segments using the platform path separator.\n@param a The first path segment\n@param b The second path segment\n@return The combined path");
-
-        ns.Function("name", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var p = SvArgs.String(args, 0, "path.name");
-
-            return StashValue.FromObj(System.IO.Path.GetFileNameWithoutExtension(p));
-        },
-            returnType: "string",
-            documentation: "Returns the filename without extension.\n@param p The path\n@return The filename without extension");
-
-        // ── Additional path utilities ────────────────────────────────────
-
-        ns.Function("normalize", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var p = SvArgs.String(args, 0, "path.normalize");
-
-            return StashValue.FromObj(System.IO.Path.GetFullPath(p));
-        },
-            returnType: "string",
-            documentation: "Normalizes the path by resolving '..' and '.' segments.\n@param p The path to normalize\n@return The normalized path");
-
-        ns.Function("isAbsolute", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var p = SvArgs.String(args, 0, "path.isAbsolute");
-
-            return StashValue.FromBool(System.IO.Path.IsPathRooted(p));
-        },
-            returnType: "bool",
-            documentation: "Returns true if the path is absolute, false otherwise.\n@param p The path\n@return Whether the path is absolute");
-
-        ns.Function("relative", [Param("from", "string"), Param("to", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var from = SvArgs.String(args, 0, "path.relative");
-            var to = SvArgs.String(args, 1, "path.relative");
-
-            var fromUri = new System.Uri(System.IO.Path.GetFullPath(from + System.IO.Path.DirectorySeparatorChar));
-            var toUri = new System.Uri(System.IO.Path.GetFullPath(to));
-            var relativeUri = fromUri.MakeRelativeUri(toUri);
-            return StashValue.FromObj(System.Uri.UnescapeDataString(relativeUri.ToString()));
-        },
-            returnType: "string",
-            documentation: "Returns the relative path from 'from' to 'to'.\n@param from The source path\n@param to The target path\n@return The relative path");
-
-        ns.Function("separator", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            return StashValue.FromObj(System.IO.Path.DirectorySeparatorChar.ToString());
-        },
-            returnType: "string",
-            documentation: "Returns the platform-specific path separator character.\n@return The path separator (e.g. '/' on Linux/macOS, '\\' on Windows)");
-
-        return ns.Build();
+            var sv = rest[i];
+            if (!(sv.IsObj && sv.AsObj is string seg))
+                throw new RuntimeError($"{SvArgs.Ordinal(i + 2)} argument to 'path.join' must be a string.");
+            accumulated = System.IO.Path.Combine(accumulated, seg);
+        }
+        return accumulated;
     }
+
+    /// <summary>Returns the filename without extension.</summary>
+    /// <param name="p">The path</param>
+    /// <returns>The filename without extension</returns>
+    [StashFn]
+    public static string Name(string p) => System.IO.Path.GetFileNameWithoutExtension(p);
+
+    /// <summary>Normalizes the path by resolving '..' and '.' segments.</summary>
+    /// <param name="p">The path to normalize</param>
+    /// <returns>The normalized path</returns>
+    [StashFn]
+    public static string Normalize(string p) => System.IO.Path.GetFullPath(p);
+
+    /// <summary>Returns true if the path is absolute, false otherwise.</summary>
+    /// <param name="p">The path</param>
+    /// <returns>Whether the path is absolute</returns>
+    [StashFn]
+    public static bool IsAbsolute(string p) => System.IO.Path.IsPathRooted(p);
+
+    /// <summary>Returns the relative path from 'from' to 'to'.</summary>
+    /// <param name="from">The source path</param>
+    /// <param name="to">The target path</param>
+    /// <returns>The relative path</returns>
+    [StashFn]
+    public static string Relative(string from, string to)
+    {
+        var fromUri = new System.Uri(System.IO.Path.GetFullPath(from + System.IO.Path.DirectorySeparatorChar));
+        var toUri = new System.Uri(System.IO.Path.GetFullPath(to));
+        var relativeUri = fromUri.MakeRelativeUri(toUri);
+        return System.Uri.UnescapeDataString(relativeUri.ToString());
+    }
+
+    /// <summary>Returns the platform-specific path separator character.</summary>
+    /// <returns>The path separator (e.g. '/' on Linux/macOS, '\' on Windows)</returns>
+    [StashFn]
+    public static string Separator() => System.IO.Path.DirectorySeparatorChar.ToString();
 }
