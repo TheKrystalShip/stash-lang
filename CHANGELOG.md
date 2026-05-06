@@ -54,6 +54,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RegistrationEnabled` defaults to `false` (breaking change)** — `appsettings.json` and the C# default now ship with `RegistrationEnabled: false`. Self-hosters running a private registry no longer need to explicitly disable open registration. **Action required on upgrade:** self-hosters who relied on the previous `true` default must add `"Auth": { "RegistrationEnabled": true }` to their `appsettings.json` to restore open sign-up. The `appsettings.Development.json` override keeps the value `true` for local development.
 - **Registration-disabled 403 body is now structured** — when registration is disabled, `POST /api/v1/auth/register` returns `{ "error": "registration_disabled", "message": "User registration is disabled on this registry." }`.
 
+### Internal
+
+- Added the `Stash.Stdlib.Generators` source generator project. Phase A foundation: attribute types in `Stash.Stdlib/Abstractions/`, the `StashNamespaceGenerator`, and a per-assembly generated registry merged into `StdlibDefinitions._registry`. No production namespaces are yet migrated; the generator is wired into `Stash.Stdlib`, `Stash.Tap`, `Stash.Tpl`, and `Stash.Tests` and produces an empty registry when no `[StashNamespace]` classes exist.
+
 ### Compiler / Optimizer
 
 - **Peephole expansion:** Five new fusion pattern groups (Patterns 6–11) extend the existing linear peephole optimizer in `ChunkBuilder`:

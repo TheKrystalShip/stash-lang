@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
     <ProjectReference Include="..\Stash.Scheduler\Stash.Scheduler.csproj" />
+    <ProjectReference Include="..\Stash.Stdlib.Generators\Stash.Stdlib.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

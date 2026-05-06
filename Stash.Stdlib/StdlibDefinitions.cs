@@ -17,7 +17,7 @@ public static class StdlibDefinitions
     /// Lambdas ensure types are resolved lazily — platform-incompatible types
     /// (e.g. Renci.SshNet in WASM) are never loaded when their capability is absent.
     /// </summary>
-    private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] _registry =
+    private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] LegacyRegistry =
     [
         (() => IoBuiltIns.Define(),       StashCapabilities.None),
         (() => ConvBuiltIns.Define(),     StashCapabilities.None),
@@ -66,6 +66,13 @@ public static class StdlibDefinitions
         (() => CompleteBuiltIns.Define(),  StashCapabilities.None),
         (() => AliasBuiltIns.Define(),     StashCapabilities.None),
     ];
+
+    /// <summary>
+    /// Combined registry: generator-emitted entries first, then hand-maintained legacy entries.
+    /// Migrated namespaces move from <see cref="LegacyRegistry"/> into the generated portion.
+    /// </summary>
+    private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] _registry =
+        GeneratedStdlibRegistry.All().Concat(LegacyRegistry).ToArray();
 
     private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();
     private static readonly ConcurrentDictionary<StashCapabilities, NamespaceDefinition> _globalsCache = new();

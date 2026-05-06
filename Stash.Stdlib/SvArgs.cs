@@ -94,6 +94,18 @@ public static class SvArgs
         throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte[].");
     }
 
+    /// <summary>
+    /// Extracts a raw <c>byte[]</c> from a <see cref="StashByteArray"/> argument.
+    /// Used by source-generator-marshalled built-ins whose C# parameter is <c>byte[]</c>.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static byte[] Buffer(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsObj && v.AsObj is StashByteArray ba) return ba.AsSpan().ToArray();
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a buffer.");
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object AnyArray(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
