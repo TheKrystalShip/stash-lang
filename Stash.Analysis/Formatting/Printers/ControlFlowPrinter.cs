@@ -1,5 +1,6 @@
 using System;
 using Stash.Analysis.Formatting.Rules;
+using Stash.Lexing;
 using Stash.Parsing.AST;
 
 namespace Stash.Analysis.Formatting.Printers;
@@ -332,6 +333,7 @@ internal static class ControlFlowPrinter
     internal static void PrintExprStmt(ExprStmt stmt, FormatContext ctx, Action<Expr> formatExpr)
     {
         formatExpr(stmt.Expression);
-        ctx.EmitToken(); // ;
+        if (ctx.NextIs(TokenType.Semicolon))
+            ctx.EmitToken(); // ;
     }
 }
