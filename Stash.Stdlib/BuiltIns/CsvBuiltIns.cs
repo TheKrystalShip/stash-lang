@@ -6,156 +6,142 @@ using System.IO;
 using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
 
-/// <summary>
-/// Registers the <c>csv</c> namespace built-in functions for RFC 4180 compliant CSV parsing and writing.
-/// </summary>
-public static class CsvBuiltIns
+[StashNamespace]
+public static partial class CsvBuiltIns
 {
-    public static NamespaceDefinition Define()
+    /// <summary>Options for CSV parsing and serialization.</summary>
+    [StashStruct]
+    public sealed record CsvOptions(
+        string Delimiter,
+        string Quote,
+        string Escape,
+        bool Header,
+        [property: StashField(Type = "array")] StashValue Columns);
+
+    /// <summary>Parses a CSV string into an array of arrays (default) or an array of dictionaries (when header:true or columns is set).</summary>
+    /// <param name="text">The CSV string to parse</param>
+    /// <param name="options">Optional CsvOptions struct</param>
+    /// <returns>Array of arrays or array of dictionaries</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("csv");
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("csv.parse: expected 1 or 2 arguments.");
 
-        // CsvOptions struct
-        ns.Struct("CsvOptions", [
-            new BuiltInField("delimiter", "string"),
-            new BuiltInField("quote", "string"),
-            new BuiltInField("escape", "string"),
-            new BuiltInField("header", "bool"),
-            new BuiltInField("columns", "array")
-        ]);
+        var text = SvArgs.String(args, 0, "csv.parse");
+        var opts = args.Length > 1 ? GetCsvOptions(args[1], "csv.parse") : DefaultOptions;
 
-        // csv.parse(text, options?) — Parse CSV string → array of arrays or array of dicts
-        ns.Function("parse", [Param("text", "string"), Param("options?", "CsvOptions")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("csv.parse: expected 1 or 2 arguments.");
+        var rows = ParseCsv(text, opts.Delimiter, opts.Quote, opts.Escape);
 
-                var text = SvArgs.String(args, 0, "csv.parse");
-                var opts = args.Length > 1 ? GetCsvOptions(args[1], "csv.parse") : DefaultOptions;
+        if (opts.Header || opts.Columns != null)
+            return StashValue.FromObj(BuildDictRows(rows, opts.Columns, "csv.parse"));
+        return StashValue.FromObj(BuildArrayRows(rows));
+    }
 
-                var rows = ParseCsv(text, opts.Delimiter, opts.Quote, opts.Escape);
 
-                if (opts.Header || opts.Columns != null)
-                {
-                    return StashValue.FromObj(BuildDictRows(rows, opts.Columns, "csv.parse"));
-                }
+    /// <summary>Converts an array of arrays or dictionaries to a CSV string.</summary>
+    /// <param name="data">Array of arrays or array of dictionaries</param>
+    /// <param name="options">Optional CsvOptions struct</param>
+    /// <returns>The CSV string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("csv.stringify: expected 1 or 2 arguments.");
 
-                return StashValue.FromObj(BuildArrayRows(rows));
-            },
-            returnType: "array",
-            isVariadic: true,
-            documentation: "Parses a CSV string into an array of arrays (default) or an array of dictionaries (when header:true or columns is set).\n@param text The CSV string to parse\n@param options Optional CsvOptions struct\n@return Array of arrays or array of dictionaries");
+        var opts = args.Length > 1 ? GetCsvOptions(args[1], "csv.stringify") : DefaultOptions;
 
-        // csv.stringify(data, options?) — Array of arrays/dicts → CSV string
-        ns.Function("stringify", [Param("data", "array"), Param("options?", "CsvOptions")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("csv.stringify: expected 1 or 2 arguments.");
+        var data = args[0];
+        if (data.IsNull)
+            throw new RuntimeError("csv.stringify: data must be an array.", errorType: StashErrorTypes.TypeError);
 
-                var opts = args.Length > 1 ? GetCsvOptions(args[1], "csv.stringify") : DefaultOptions;
+        if (data.ToObject() is not List<StashValue> rows)
+            throw new RuntimeError("csv.stringify: data must be an array.", errorType: StashErrorTypes.TypeError);
 
-                var data = args[0];
-                if (data.IsNull)
-                    throw new RuntimeError("csv.stringify: data must be an array.", errorType: StashErrorTypes.TypeError);
+        return StashValue.FromObj(StringifyCsv(rows, opts.Delimiter, opts.Quote, opts.Escape, opts.Header, opts.Columns));
+    }
 
-                if (data.ToObject() is not List<StashValue> rows)
-                    throw new RuntimeError("csv.stringify: data must be an array.", errorType: StashErrorTypes.TypeError);
+    /// <summary>Reads a CSV file and parses it into an array of arrays or dictionaries.</summary>
+    /// <param name="path">The path to the CSV file</param>
+    /// <param name="options">Optional CsvOptions struct</param>
+    /// <returns>Array of arrays or array of dictionaries</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue ParseFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("csv.parseFile: expected 1 or 2 arguments.");
 
-                return StashValue.FromObj(StringifyCsv(rows, opts.Delimiter, opts.Quote, opts.Escape, opts.Header, opts.Columns));
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Converts an array of arrays or dictionaries to a CSV string.\n@param data Array of arrays or array of dictionaries\n@param options Optional CsvOptions struct\n@return The CSV string");
+        var path = ctx.ExpandTilde(SvArgs.String(args, 0, "csv.parseFile"));
+        var opts = args.Length > 1 ? GetCsvOptions(args[1], "csv.parseFile") : DefaultOptions;
 
-        // csv.parseFile(path, options?) — Parse CSV file
-        ns.Function("parseFile", [Param("path", "string"), Param("options?", "CsvOptions")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("csv.parseFile: expected 1 or 2 arguments.");
+        if (!File.Exists(path))
+            throw new RuntimeError($"csv.parseFile: file not found: '{path}'", errorType: StashErrorTypes.IOError);
 
-                var path = ctx.ExpandTilde(SvArgs.String(args, 0, "csv.parseFile"));
-                var opts = args.Length > 1 ? GetCsvOptions(args[1], "csv.parseFile") : DefaultOptions;
+        string text;
+        try
+        {
+            text = File.ReadAllText(path);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"csv.parseFile: permission denied: '{path}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex) when (ex is not RuntimeError)
+        {
+            throw new RuntimeError($"csv.parseFile: failed to read file: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
 
-                if (!File.Exists(path))
-                    throw new RuntimeError($"csv.parseFile: file not found: '{path}'", errorType: StashErrorTypes.IOError);
+        var rows = ParseCsv(text, opts.Delimiter, opts.Quote, opts.Escape);
 
-                string text;
-                try
-                {
-                    text = File.ReadAllText(path);
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"csv.parseFile: permission denied: '{path}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex) when (ex is not RuntimeError)
-                {
-                    throw new RuntimeError($"csv.parseFile: failed to read file: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
+        if (opts.Header || opts.Columns != null)
+            return StashValue.FromObj(BuildDictRows(rows, opts.Columns, "csv.parseFile"));
+        return StashValue.FromObj(BuildArrayRows(rows));
+    }
 
-                var rows = ParseCsv(text, opts.Delimiter, opts.Quote, opts.Escape);
+    /// <summary>Writes an array of arrays or dictionaries to a CSV file.</summary>
+    /// <param name="path">The path to the output CSV file</param>
+    /// <param name="data">Array of arrays or array of dictionaries</param>
+    /// <param name="options">Optional CsvOptions struct</param>
+    /// <returns>The path to the written file</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue WriteFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("csv.writeFile: expected 2 or 3 arguments.");
 
-                if (opts.Header || opts.Columns != null)
-                {
-                    return StashValue.FromObj(BuildDictRows(rows, opts.Columns, "csv.parseFile"));
-                }
+        var path = ctx.ExpandTilde(SvArgs.String(args, 0, "csv.writeFile"));
+        var opts = args.Length > 2 ? GetCsvOptions(args[2], "csv.writeFile") : DefaultOptions;
 
-                return StashValue.FromObj(BuildArrayRows(rows));
-            },
-            returnType: "array",
-            isVariadic: true,
-            documentation: "Reads a CSV file and parses it into an array of arrays or dictionaries.\n@param path The path to the CSV file\n@param options Optional CsvOptions struct\n@return Array of arrays or array of dictionaries");
+        var data = args[1];
+        if (data.IsNull)
+            throw new RuntimeError("csv.writeFile: data must be an array.", errorType: StashErrorTypes.TypeError);
 
-        // csv.writeFile(path, data, options?) — Write CSV file
-        ns.Function("writeFile", [Param("path", "string"), Param("data", "array"), Param("options?", "CsvOptions")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 2 || args.Length > 3)
-                    throw new RuntimeError("csv.writeFile: expected 2 or 3 arguments.");
+        if (data.ToObject() is not List<StashValue> rows)
+            throw new RuntimeError("csv.writeFile: data must be an array.", errorType: StashErrorTypes.TypeError);
 
-                var path = ctx.ExpandTilde(SvArgs.String(args, 0, "csv.writeFile"));
-                var opts = args.Length > 2 ? GetCsvOptions(args[2], "csv.writeFile") : DefaultOptions;
+        var csv = StringifyCsv(rows, opts.Delimiter, opts.Quote, opts.Escape, opts.Header, opts.Columns);
 
-                var data = args[1];
-                if (data.IsNull)
-                    throw new RuntimeError("csv.writeFile: data must be an array.", errorType: StashErrorTypes.TypeError);
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+                Directory.CreateDirectory(dir);
 
-                if (data.ToObject() is not List<StashValue> rows)
-                    throw new RuntimeError("csv.writeFile: data must be an array.", errorType: StashErrorTypes.TypeError);
+            File.WriteAllText(path, csv, new UTF8Encoding(false));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"csv.writeFile: permission denied: '{path}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex) when (ex is not RuntimeError)
+        {
+            throw new RuntimeError($"csv.writeFile: failed to write file: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
 
-                var csv = StringifyCsv(rows, opts.Delimiter, opts.Quote, opts.Escape, opts.Header, opts.Columns);
-
-                try
-                {
-                    var dir = Path.GetDirectoryName(path);
-                    if (!string.IsNullOrEmpty(dir))
-                        Directory.CreateDirectory(dir);
-
-                    File.WriteAllText(path, csv, new UTF8Encoding(false));
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"csv.writeFile: permission denied: '{path}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex) when (ex is not RuntimeError)
-                {
-                    throw new RuntimeError($"csv.writeFile: failed to write file: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-
-                return StashValue.FromObj(path);
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Writes an array of arrays or dictionaries to a CSV file.\n@param path The path to the output CSV file\n@param data Array of arrays or array of dictionaries\n@param options Optional CsvOptions struct\n@return The path to the written file");
-
-        return ns.Build();
+        return StashValue.FromObj(path);
     }
 
     // ── Option extraction ─────────────────────────────────────────────────────

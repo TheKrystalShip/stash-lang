@@ -172,7 +172,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         }
 
         string stashName = nameOverride ?? NamingRules.ToCamelCase(method.Name);
-        if (NamingRules.HasConsecutiveUppercase(stashName))
+        // Skip GEN007 when Name= is explicitly provided; the developer is taking responsibility for the name.
+        if (nameOverride == null && NamingRules.HasConsecutiveUppercase(stashName))
         {
             diags.Add(Diagnostic.Create(Diagnostics.ConsecutiveUppercaseInName, loc, method.Name, stashName));
             return null;

@@ -7,84 +7,69 @@ using System.Text;
 using System.Text.Json;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
-/// <summary>
-/// Registers the <c>json</c> namespace built-in functions for JSON serialization and deserialization.
-/// </summary>
-public static class JsonBuiltIns
+[StashNamespace]
+public static partial class JsonBuiltIns
 {
-    public static NamespaceDefinition Define()
+    /// <summary>Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).</summary>
+    /// <param name="str">The JSON string to parse</param>
+    /// <returns>The parsed value</returns>
+    [StashFn(Raw = true, ReturnType = "any")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("json");
-
-        // json.parse(string) — Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).
-        ns.Function("parse", [Param("str", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        var s = SvArgs.String(args, 0, "json.parse");
+        try
         {
-            var s = SvArgs.String(args, 0, "json.parse");
-
-            try
-            {
-                using var doc = JsonDocument.Parse(s);
-                return StashValue.FromObject(ConvertElement(doc.RootElement));
-            }
-            catch (JsonException e)
-            {
-                throw new RuntimeError("json.parse: invalid JSON — " + e.Message, errorType: StashErrorTypes.ParseError);
-            }
-        },
-            documentation: "Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).\n@param str The JSON string to parse\n@return The parsed value");
-
-        // json.stringify(value, indent?) — Serializes a Stash value to a JSON string.
-        ns.Function("stringify", [Param("value"), Param("indent", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            using var doc = JsonDocument.Parse(s);
+            return StashValue.FromObject(ConvertElement(doc.RootElement));
+        }
+        catch (JsonException e)
         {
-            if (args.Length < 1 || args.Length > 2)
-                throw new RuntimeError("'json.stringify' requires 1 or 2 arguments.");
-            int indentWidth = 0;
-            if (args.Length == 2)
-                indentWidth = (int)SvArgs.Long(args, 1, "json.stringify");
-            if (indentWidth > 0)
-                return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
-            return StashValue.FromObj(StringifyValue(args[0].ToObject()));
-        },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Converts a Stash value to a JSON string. When indent is 0 or omitted, outputs compact JSON; when positive, outputs pretty-printed JSON with that many spaces of indentation.\n@param value The value to serialize\n@param indent Number of spaces for indentation (optional, default 0 for compact)\n@return The JSON string representation");
+            throw new RuntimeError("json.parse: invalid JSON — " + e.Message, errorType: StashErrorTypes.ParseError);
+        }
+    }
 
-        // json.pretty(value, indent?) — Serializes a Stash value to an indented, human-readable JSON string.
-        ns.Function("pretty", [Param("value"), Param("indent", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            if (args.Length < 1 || args.Length > 2)
-                throw new RuntimeError("'json.pretty' requires 1 or 2 arguments.");
-            int indentWidth = 2;
-            if (args.Length == 2)
-                indentWidth = (int)SvArgs.Long(args, 1, "json.pretty");
+    /// <summary>Converts a Stash value to a JSON string. When indent is 0 or omitted, outputs compact JSON; when positive, outputs pretty-printed JSON with that many spaces of indentation.</summary>
+    /// <param name="value">The value to serialize</param>
+    /// <param name="indent">Number of spaces for indentation (optional, default 0 for compact)</param>
+    /// <returns>The JSON string representation</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("'json.stringify' requires 1 or 2 arguments.");
+        int indentWidth = 0;
+        if (args.Length == 2)
+            indentWidth = (int)SvArgs.Long(args, 1, "json.stringify");
+        if (indentWidth > 0)
             return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
-        },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Converts a Stash value to a formatted JSON string with indentation. Defaults to 2 spaces.\n@param value The value to serialize\n@param indent Number of spaces for indentation (optional, default 2)\n@return The pretty-printed JSON string");
+        return StashValue.FromObj(StringifyValue(args[0].ToObject()));
+    }
 
-        // json.valid(string) — Returns true if the given string is valid JSON, false otherwise.
-        ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var s = SvArgs.String(args, 0, "json.valid");
+    /// <summary>Converts a Stash value to a formatted JSON string with indentation. Defaults to 2 spaces.</summary>
+    /// <param name="value">The value to serialize</param>
+    /// <param name="indent">Number of spaces for indentation (optional, default 2)</param>
+    /// <returns>The pretty-printed JSON string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Pretty(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("'json.pretty' requires 1 or 2 arguments.");
+        int indentWidth = 2;
+        if (args.Length == 2)
+            indentWidth = (int)SvArgs.Long(args, 1, "json.pretty");
+        return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
+    }
 
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(s);
-                return StashValue.True;
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                return StashValue.False;
-            }
-        },
-            returnType: "bool",
-            documentation: "Checks whether a string is valid JSON without parsing it into a value.\n@param text The string to validate\n@return true if the string is valid JSON");
-
-        return ns.Build();
+    /// <summary>Checks whether a string is valid JSON without parsing it into a value.</summary>
+    /// <param name="text">The string to validate</param>
+    /// <returns>true if the string is valid JSON</returns>
+    [StashFn]
+    public static bool Valid(string text)
+    {
+        try { using var doc = JsonDocument.Parse(text); return true; }
+        catch (JsonException) { return false; }
     }
 
     /// <summary>Recursively converts a <see cref="System.Text.Json.JsonElement"/> to a Stash runtime value.</summary>

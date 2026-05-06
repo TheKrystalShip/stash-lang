@@ -8,11 +8,11 @@ using System.Text;
 using System.Text.Json;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>Registers the <c>log</c> namespace providing structured logging with levels, timestamps, and text/JSON output.</summary>
-public static class LogBuiltIns
+[StashNamespace]
+public static partial class LogBuiltIns
 {
     // ── Level constants ───────────────────────────────────────────────────────
 
@@ -26,102 +26,103 @@ public static class LogBuiltIns
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    public static NamespaceDefinition Define()
+    /// <summary>Logs a message at DEBUG level. Suppressed unless log level is set to 'debug'.</summary>
+    /// <param name="message">The log message</param>
+    /// <param name="data">Optional extra fields (dict) or a scalar value</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Debug(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("log");
+        Emit(ctx, LevelDebug, args);
+        return StashValue.Null;
+    }
 
-        ns.Function("debug", [Param("message", "string"), Param("data", "any")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                Emit(ctx, LevelDebug, args);
-                return StashValue.Null;
-            },
-            isVariadic: true,
-            returnType: "null",
-            documentation: "Logs a message at DEBUG level. Suppressed unless log level is set to 'debug'.\n@param message The log message\n@param data Optional extra fields (dict) or a scalar value\n@return null");
+    /// <summary>Logs a message at INFO level.</summary>
+    /// <param name="message">The log message</param>
+    /// <param name="data">Optional extra fields (dict) or a scalar value</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Info(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        Emit(ctx, LevelInfo, args);
+        return StashValue.Null;
+    }
 
-        ns.Function("info", [Param("message", "string"), Param("data", "any")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                Emit(ctx, LevelInfo, args);
-                return StashValue.Null;
-            },
-            isVariadic: true,
-            returnType: "null",
-            documentation: "Logs a message at INFO level.\n@param message The log message\n@param data Optional extra fields (dict) or a scalar value\n@return null");
+    /// <summary>Logs a message at WARN level.</summary>
+    /// <param name="message">The log message</param>
+    /// <param name="data">Optional extra fields (dict) or a scalar value</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Warn(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        Emit(ctx, LevelWarn, args);
+        return StashValue.Null;
+    }
 
-        ns.Function("warn", [Param("message", "string"), Param("data", "any")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                Emit(ctx, LevelWarn, args);
-                return StashValue.Null;
-            },
-            isVariadic: true,
-            returnType: "null",
-            documentation: "Logs a message at WARN level.\n@param message The log message\n@param data Optional extra fields (dict) or a scalar value\n@return null");
+    /// <summary>Logs a message at ERROR level.</summary>
+    /// <param name="message">The log message</param>
+    /// <param name="data">Optional extra fields (dict) or a scalar value</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Error(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        Emit(ctx, LevelError, args);
+        return StashValue.Null;
+    }
 
-        ns.Function("error", [Param("message", "string"), Param("data", "any")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                Emit(ctx, LevelError, args);
-                return StashValue.Null;
-            },
-            isVariadic: true,
-            returnType: "null",
-            documentation: "Logs a message at ERROR level.\n@param message The log message\n@param data Optional extra fields (dict) or a scalar value\n@return null");
+    /// <summary>Sets the minimum log level. Messages below this level are suppressed.</summary>
+    /// <param name="level">One of: 'debug', 'info', 'warn', 'error'</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue SetLevel(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var level = SvArgs.String(args, 0, "log.setLevel");
+        int parsed = ParseLevel(level);
+        ctx.LoggerState.Level = parsed;
+        return StashValue.Null;
+    }
 
-        ns.Function("setLevel", [Param("level", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                var level = SvArgs.String(args, 0, "log.setLevel");
-                int parsed = ParseLevel(level);
-                ctx.LoggerState.Level = parsed;
-                return StashValue.Null;
-            },
-            returnType: "null",
-            documentation: "Sets the minimum log level. Messages below this level are suppressed.\n@param level One of: 'debug', 'info', 'warn', 'error'\n@return null");
+    /// <summary>Sets the output format.</summary>
+    /// <param name="format">'text' (default) or 'json'</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue SetFormat(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var format = SvArgs.String(args, 0, "log.setFormat");
+        if (format != "text" && format != "json")
+            throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.", errorType: StashErrorTypes.ValueError);
+        ctx.LoggerState.Format = format;
+        return StashValue.Null;
+    }
 
-        ns.Function("setFormat", [Param("format", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                var format = SvArgs.String(args, 0, "log.setFormat");
-                if (format != "text" && format != "json")
-                    throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.", errorType: StashErrorTypes.ValueError);
-                ctx.LoggerState.Format = format;
-                return StashValue.Null;
-            },
-            returnType: "null",
-            documentation: "Sets the output format.\n@param format 'text' (default) or 'json'\n@return null");
+    /// <summary>Sets the log output destination.</summary>
+    /// <param name="target">'stdout', 'stderr', or a file path</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue SetOutput(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var target = SvArgs.String(args, 0, "log.setOutput");
+        if (target != "stdout" && target != "stderr")
+        {
+            try { ctx.LoggerState.SetFileOutput(target); }
+            catch (Exception ex) { throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}", errorType: StashErrorTypes.IOError); }
+        }
+        else
+        {
+            ctx.LoggerState.ClearFileOutput();
+            ctx.LoggerState.Output = target;
+        }
+        return StashValue.Null;
+    }
 
-        ns.Function("setOutput", [Param("target", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                var target = SvArgs.String(args, 0, "log.setOutput");
-                if (target != "stdout" && target != "stderr")
-                {
-                    try { ctx.LoggerState.SetFileOutput(target); }
-                    catch (Exception ex) { throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}", errorType: StashErrorTypes.IOError); }
-                }
-                else
-                {
-                    ctx.LoggerState.ClearFileOutput();
-                    ctx.LoggerState.Output = target;
-                }
-                return StashValue.Null;
-            },
-            returnType: "null",
-            documentation: "Sets the log output destination.\n@param target 'stdout', 'stderr', or a file path\n@return null");
-
-        ns.Function("withFields", [Param("fields", "dict")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                var fields = SvArgs.Dict(args, 0, "log.withFields");
-                return StashValue.FromObj(BuildScopedLogger(fields));
-            },
-            returnType: "dict",
-            documentation: "Returns a scoped logger dict with preset fields merged into every log entry.\n@param fields A dictionary of fields to attach to all log messages\n@return A logger dict with debug/info/warn/error methods");
-
-        return ns.Build();
+    /// <summary>Returns a scoped logger dict with preset fields merged into every log entry.</summary>
+    /// <param name="fields">A dictionary of fields to attach to all log messages</param>
+    /// <returns>A logger dict with debug/info/warn/error methods</returns>
+    [StashFn(Raw = true, ReturnType = "dict")]
+    private static StashValue WithFields(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var fields = SvArgs.Dict(args, 0, "log.withFields");
+        return StashValue.FromObj(BuildScopedLogger(fields));
     }
 
     // ── Core emit logic ───────────────────────────────────────────────────────
@@ -143,7 +144,6 @@ public static class LogBuiltIns
 
         string message = SvArgs.String(args, 0, LevelNamesJson[level]);
 
-        // Collect extra fields
         StashDictionary? dataDict = null;
         string? dataScalar = null;
 
@@ -212,7 +212,6 @@ public static class LogBuiltIns
             sb.Append(' ');
             sb.Append(k);
             sb.Append('=');
-            // Quote values with spaces
             if (v.Contains(' ') || v.Contains('"'))
             {
                 sb.Append('"');
@@ -335,7 +334,6 @@ public static class LogBuiltIns
                 dataScalar = RuntimeValues.Stringify(dataArg.ToObject());
         }
 
-        // Merge preset fields with data dict
         StashDictionary? merged = MergeFields(presetFields, dataDict);
 
         string line = format == "json"
