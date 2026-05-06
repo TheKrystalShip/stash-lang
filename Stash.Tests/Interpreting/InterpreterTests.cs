@@ -2754,11 +2754,18 @@ public class InterpreterTests : StashTestBase
     }
 
     [Fact]
-    public void CommandExecution_EmptyCommand_ThrowsRuntimeError()
+    public void CommandExecution_EmptyCommand_ThrowsError()
     {
         if (OperatingSystem.IsWindows()) return;
 
-        RunExpectingError("let r = $( );");
+        // Phase B: empty commands are now caught at compile time (CompileError),
+        // not at runtime. ThrowsAny covers both compile-time and runtime errors.
+        var lexer = new Lexer("let r = $( );", "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        Assert.ThrowsAny<Exception>(() => Compiler.Compile(stmts));
     }
 
     [Fact]

@@ -2319,6 +2319,121 @@ Mixed pipelines are not allowed: a single chain must be either wholly streaming
 (`$<(a) | $(b)` or `$(a) | $<(b)`) is rejected as **SA0711** — the outer pipe would try
 to read a streaming handle as if it were a string.
 
+### Safe Shell Interpolation
+
+All six `$(...)`-family sigils desugar at **compile time** into calls to the stdlib functions `process.exec` and `process.pipeline`. The standard library is the single source of truth for command execution; the `$(...)` surface syntax is purely a convenient shorthand.
+
+#### Desugaring Table
+
+| Source                                      | Desugars to                                                                         |
+| ------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `$(ls -la)`                                 | `process.exec("ls", ["-la"], ExecOptions{})`                                        |
+| `$(ls -la ${dir})`                          | `process.exec("ls", ["-la", dir], ExecOptions{})`                                   |
+| `$(ls ${...flags} ${dir})`                  | `process.exec("ls", [...flags, dir], ExecOptions{})`                                |
+| `$!(make build)`                            | `process.exec("make", ["build"], ExecOptions{ strict: true })`                      |
+| `$>(apt install -y ${pkg})`                 | `process.exec("apt", ["install", "-y", pkg], ExecOptions{ mode: ExecMode.Passthrough })` |
+| `$<(tail -f ${log})`                        | `process.exec("tail", ["-f", log], ExecOptions{ mode: ExecMode.Stream })`           |
+| `$(grep ${pat} \| wc -l)`                   | `process.pipeline([PipelineStage{ program: "grep", args: [pat] }, PipelineStage{ program: "wc", args: ["-l"] }], ExecOptions{})` |
+| `$(make build > ${out})`                    | `process.exec("make", ["build"], ExecOptions{ redirect: RedirectSpec{ target: out } })` |
+
+The desugaring is performed by the compiler, not the VM. The existing sigil syntax — with all its modes, pipes, redirects, and strict variants — is preserved unchanged at the surface level.
+
+#### Tokenization Rule
+
+**Literal source text** inside `$(...)` is tokenized at compile time using a whitespace-and-quote-aware splitter. Source-level quotes group literal tokens and are then stripped:
+
+```stash
+$(grep "hello world" file.txt)
+// program = "grep", args = ["hello world", "file.txt"]
+// "hello world" → single token (quotes stripped at compile time)
+```
+
+**Interpolation slots are atomic argv entries.** A `${expr}` slot becomes exactly one argument regardless of the value's content. The runtime never re-tokenizes an interpolated value:
+
+```stash
+let userInput = "; rm -rf ~";
+$(ls ${userInput});
+// program = "ls", args = ["; rm -rf ~"]   ← single literal arg, ~ NOT expanded
+```
+
+#### Glob and Tilde Apply Only to Literal Tokens
+
+Glob (`*`, `?`, `[...]`) and tilde (`~`) expansion apply only to argv entries that originated from **literal source text**. They never apply to interpolated values.
+
+| Source                              | Result                                                   |
+| ----------------------------------- | -------------------------------------------------------- |
+| `$(ls *.log)`                       | Glob runs (literal token)                                |
+| `let p = "*.log"; $(ls ${p})`       | No glob — `ls` receives literal `"*.log"`                |
+| `$(ls ~)` / `$(ls ~/Downloads)`     | Tilde runs (literal token)                               |
+| `let p = "~/Downloads"; $(ls ${p})` | No tilde — `ls` receives literal `"~/Downloads"`         |
+
+To glob or tilde-expand a runtime value, call the explicit helpers:
+
+```stash
+let p = "*.log";
+$(ls ${...fs.glob(p)});        // explicit glob expansion
+
+let home = "~/.config";
+$(cat ${path.expand(home)});   // explicit tilde expansion
+```
+
+#### Array Splatting
+
+When an interpolation value is an **array**, its elements are spliced into the argv list as separate entries. Both implicit (`${arr}`) and explicit (`${...arr}`) splat work; the explicit form is preferred and prompted by SA0816:
+
+```stash
+let flags = ["-la", "--color=always"];
+$(ls ${...flags} /tmp);
+// program = "ls", args = ["-la", "--color=always", "/tmp"]
+
+let kubectl = ["kubectl", "--context=prod", "--namespace=app"];
+$(${...kubectl} get pods);
+// program = "kubectl", args = ["--context=prod", "--namespace=app", "get", "pods"]
+```
+
+Scalars (`string`, `int`, `bool`, etc.) become a single argv element via standard stringification.
+
+#### Glued Slots
+
+A literal-adjacent slot (`--name=${user}`) concatenates at runtime into one argv entry. Arrays in glued slots are stringified rather than splatted:
+
+```stash
+let user = "alice";
+$(echo --name=${user});
+// args = ["--name=alice"]
+
+let tags = ["a", "b"];
+$(echo --tags=${tags});
+// args = ["--tags=a,b"]   (array stringified)
+```
+
+#### Program-Name Slot
+
+The first slot — whether literal or interpolated — is a single literal program name. No tokenization occurs on a string value; arrays splat normally:
+
+```stash
+let tool = "ls";         $(${tool})           // program = "ls"
+let tool = "ls -la";    $(${tool})           // tries to exec binary named "ls -la" — fails
+let cmd = ["ls", "-la"]; $(${...cmd})        // program = "ls", args = ["-la"]
+```
+
+#### Migration Guide
+
+> **Breaking change.** Interpolated values inside `$(...)` are now passed as **single literal argv entries**. They are no longer split on whitespace, glob-expanded, or tilde-expanded. Source-level quotes around an interpolation slot (`"${x}"`) are now inert.
+
+| Before (old semantics)                               | After (new semantics — safe form)                           |
+| ---------------------------------------------------- | ----------------------------------------------------------- |
+| `let opts = "-la /tmp"; $(ls ${opts})`               | `$(ls ${...str.split(opts, " ")})`                         |
+| `let p = "*.log"; $(ls ${p})`                        | `$(ls ${...fs.glob(p)})`                                   |
+| `let p = "~/foo"; $(cat ${p})`                       | `$(cat ${path.expand(p)})`                                 |
+| `let cmd = "git status"; $(${cmd})`                  | `let cmd = ["git", "status"]; $(${...cmd})`                |
+
+The analyzer emits **SA0817** (Warning) for likely-broken sites where it can detect them statically.
+
+#### Interaction With Existing Features
+
+All six sigils, strict mode (`$!`), passthrough (`$>`), streaming (`$<`), pipe chains, and redirects continue to work identically at the source level — their behavior is unchanged; only the implementation mechanism (now routing through `process.exec` / `process.pipeline`) differs.
+
 ### Pipes
 
 Pipelines can be written in two equivalent forms:

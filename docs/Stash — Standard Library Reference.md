@@ -2330,32 +2330,161 @@ Stash provides built-in process management through the `process` namespace, enab
 
 ### Philosophy
 
-Synchronous command execution via `$(...)` is the right default — run a command, get the result. But scripting often requires launching a process that runs alongside the script: a development server, a file watcher, a background worker. The `process` namespace provides **explicit, tracked** background process management. Every spawned process is tracked by default and cleaned up on script exit unless explicitly detached.
+`$(...)` is the right default for synchronous command execution — run a command, get the result. At the implementation level, `$(...)` and its five sigil variants desugar at compile time into calls to `process.exec` and `process.pipeline` (see [Safe Shell Interpolation](Stash%20%E2%80%94%20Language%20Specification.md#safe-shell-interpolation)). The `process` namespace also provides **explicit, tracked** background process management for long-running services, parallel workloads, and process orchestration.
 
 ### Quick Reference
 
-| Function                         | Description                                                           |
-| -------------------------------- | --------------------------------------------------------------------- |
-| `process.spawn(cmd)`             | Launch a background process, returns a `Process` handle               |
-| `process.wait(proc)`             | Block until a process exits, returns `CommandResult`                  |
-| `process.waitTimeout(proc, ms)`  | Wait with timeout; returns `CommandResult` or `null` if timed out     |
-| `process.kill(proc)`             | Send SIGTERM to a process                                             |
-| `process.isAlive(proc)`          | Check if a process is still running (returns `bool`)                  |
-| `process.signal(proc, sig)`      | Send an arbitrary signal to a process                                 |
-| `process.pid(proc)`              | Get the OS process ID                                                 |
-| `process.detach(proc)`           | Detach a process so it survives script exit                           |
-| `process.list()`                 | List all tracked (spawned) process handles                            |
-| `process.read(proc)`             | Read available stdout from a running process (non-blocking)           |
-| `process.write(proc, data)`      | Write to a running process's stdin                                    |
-| `process.onExit(proc, callback)` | Register a callback to run when a process exits                       |
-| `process.daemonize(cmd)`         | Launch a command as a daemon (not tracked, survives script exit)      |
-| `process.find(name)`             | Find system processes by name, returns array of `Process` handles     |
-| `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)              |
-| `process.waitAll(procs)`         | Wait for all processes in an array to exit                            |
-| `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                      |
-| `process.historyList()`          | Return the in-memory REPL history as an `array<string>`               |
-| `process.historyClear()`         | Clear the in-memory history and truncate the history file             |
-| `process.historyAdd(line)`       | Append a line to the in-memory history (and persist to file)          |
+| Function                                     | Description                                                           |
+| -------------------------------------------- | --------------------------------------------------------------------- |
+| `process.exec(program, args, opts?)`         | Execute a command; returns `CommandResult` or `StreamingProcess`      |
+| `process.pipeline(stages, opts?)`            | Execute a pipe chain; returns `CommandResult` or `StreamingProcess`   |
+| `process.replace(cmd)`                       | Replace the current process image (POSIX `execvp` / Windows spawn-exit) |
+| `process.spawn(cmd)`                         | Launch a background process, returns a `Process` handle               |
+| `process.wait(proc)`                         | Block until a process exits, returns `CommandResult`                  |
+| `process.waitTimeout(proc, ms)`              | Wait with timeout; returns `CommandResult` or `null` if timed out     |
+| `process.kill(proc)`                         | Send SIGTERM to a process                                             |
+| `process.isAlive(proc)`                      | Check if a process is still running (returns `bool`)                  |
+| `process.signal(proc, sig)`                  | Send an arbitrary signal to a process                                 |
+| `process.pid(proc)`                          | Get the OS process ID                                                 |
+| `process.detach(proc)`                       | Detach a process so it survives script exit                           |
+| `process.list()`                             | List all tracked (spawned) process handles                            |
+| `process.read(proc)`                         | Read available stdout from a running process (non-blocking)           |
+| `process.write(proc, data)`                  | Write to a running process's stdin                                    |
+| `process.onExit(proc, callback)`             | Register a callback to run when a process exits                       |
+| `process.daemonize(cmd)`                     | Launch a command as a daemon (not tracked, survives script exit)      |
+| `process.find(name)`                         | Find system processes by name, returns array of `Process` handles     |
+| `process.exists(pid)`                        | Check if a system process exists by PID (returns `bool`)              |
+| `process.waitAll(procs)`                     | Wait for all processes in an array to exit                            |
+| `process.waitAny(procs)`                     | Wait for the first of multiple processes to exit                      |
+| `process.historyList()`                      | Return the in-memory REPL history as an `array<string>`               |
+| `process.historyClear()`                     | Clear the in-memory history and truncate the history file             |
+| `process.historyAdd(line)`                   | Append a line to the in-memory history (and persist to file)          |
+
+### `process.exec(program: string, args: array, opts: ExecOptions? = null) -> CommandResult | StreamingProcess`
+
+The low-level command execution primitive. All `$(...)` sigil variants desugar into this function at compile time.
+
+**Parameters:**
+
+| Parameter | Type          | Description                                                                           |
+| --------- | ------------- | ------------------------------------------------------------------------------------- |
+| `program` | `string`      | The binary to execute. Resolved via `PATH`. Never passed to a shell.                 |
+| `args`    | `array`       | Argv elements. Each element is stringified; arrays within `args` are not recursively splatted here (splatting is done by the compiler when lowering `$(...)` syntax). |
+| `opts`    | `ExecOptions?` | Execution options. Pass `null` or omit for defaults (capture, lenient).              |
+
+**Modes (via `opts.mode`):**
+
+| Mode                    | Behavior                                                                  | Returns           |
+| ----------------------- | ------------------------------------------------------------------------- | ----------------- |
+| `ExecMode.Capture`      | Stdout and stderr are buffered and returned in `CommandResult`.           | `CommandResult`   |
+| `ExecMode.Passthrough`  | Child inherits stdin/stdout/stderr from the script process.               | `CommandResult`   |
+| `ExecMode.Stream`       | Returns a `StreamingProcess` handle for real-time line iteration.         | `StreamingProcess` |
+
+When `opts.strict` is `true` and the exit code is non-zero, `process.exec` throws `CommandError` (except in Stream mode, where it throws at natural iteration end).
+
+**Examples:**
+
+```stash
+// Capture mode (default)
+let r = process.exec("ls", ["-la"]);
+io.println(r.stdout);
+io.println(r.exitCode);
+
+// Strict mode — throws CommandError on failure
+let r = process.exec("make", ["build"], ExecOptions{ strict: true });
+
+// Passthrough mode
+process.exec("apt", ["install", "-y", "nginx"], ExecOptions{ mode: ExecMode.Passthrough });
+
+// Stream mode
+let s = process.exec("tail", ["-f", "/var/log/syslog"], ExecOptions{ mode: ExecMode.Stream });
+for (let line in s) {
+    io.println(line);
+}
+
+// Environment and working directory
+let r = process.exec("make", [], ExecOptions{
+    cwd: "/opt/myapp",
+    env: dict.merge(env.all(), { "BUILD_MODE": "release" })
+});
+```
+
+### `process.pipeline(stages: array<PipelineStage>, opts: ExecOptions? = null) -> CommandResult | StreamingProcess`
+
+Execute a multi-stage pipe chain. All inline-pipe `$(cmd1 | cmd2 | cmd3)` expressions desugar into this function.
+
+Each element of `stages` is a `PipelineStage` struct. Stages are connected via OS-level pipes; all start concurrently. The **last stage's** `exitCode`, `stdout`, and `stderr` are returned. Intermediate-stage failures are not surfaced (no `pipefail` semantics).
+
+`ExecMode.Passthrough` is rejected for pipeline calls (pipes require captured I/O between stages).
+
+```stash
+// Equivalent to: $(grep "error" /var/log/app.log | wc -l)
+let r = process.pipeline([
+    PipelineStage{ program: "grep", args: ["error", "/var/log/app.log"] },
+    PipelineStage{ program: "wc",   args: ["-l"] }
+]);
+io.println(r.stdout);   // line count
+
+// Strict pipeline — throws if last stage exits non-zero
+let r = process.pipeline(
+    [PipelineStage{ program: "make", args: [] }, PipelineStage{ program: "tee", args: ["build.log"] }],
+    ExecOptions{ strict: true }
+);
+```
+
+### `process.replace(command: string)`
+
+Replace the current process image with the given command (POSIX `execvp` semantics on Linux/macOS; Windows launches the command and exits immediately). On success this function **never returns** — the Stash script is gone.
+
+The `command` string is tokenized by the same compile-time whitespace splitter used for `$(...)` literal text.
+
+> **Renamed from `process.exec(command_string)`.** The old single-string overload has been replaced by `process.exec(program, args, opts?)`. There is no deprecated alias because the signatures are incompatible.
+
+```stash
+// Hand off to a long-running server without keeping the Stash process in memory.
+process.replace("nginx -g 'daemon off;'");
+```
+
+### Built-in Types for `process.exec` / `process.pipeline`
+
+#### `ExecMode` Enum
+
+Controls how a command's stdio is handled.
+
+| Member                    | Description                                                               |
+| ------------------------- | ------------------------------------------------------------------------- |
+| `ExecMode.Capture`        | Stdout and stderr are buffered and returned in `CommandResult` (default). |
+| `ExecMode.Passthrough`    | Child inherits stdin/stdout/stderr from the parent process.               |
+| `ExecMode.Stream`         | Returns a `StreamingProcess` handle for real-time iteration.              |
+
+#### `ExecOptions` Struct
+
+| Field      | Type           | Default            | Description                                                    |
+| ---------- | -------------- | ------------------ | -------------------------------------------------------------- |
+| `mode`     | `ExecMode`     | `ExecMode.Capture` | I/O mode.                                                      |
+| `strict`   | `bool`         | `false`            | Throw `CommandError` on non-zero exit.                         |
+| `redirect` | `RedirectSpec?` | `null`             | Output redirection spec (populated by `>`, `>>`, `2>` syntax). |
+| `cwd`      | `string?`      | `null`             | Working directory for the child process. `null` = inherit.     |
+| `env`      | `dict?`        | `null`             | Environment dictionary. `null` = inherit parent environment.   |
+
+#### `RedirectSpec` Struct
+
+Populated by the compiler when source-level `>`, `>>`, `2>`, or `&>` redirections appear inside `$(...)`.
+
+| Field    | Type     | Description                                                        |
+| -------- | -------- | ------------------------------------------------------------------ |
+| `stream` | `string` | Stream to redirect: `"stdout"`, `"stderr"`, or `"both"`.           |
+| `target` | `string` | Destination file path.                                             |
+| `append` | `bool`   | `false` = overwrite (`>`), `true` = append (`>>`).                 |
+
+#### `PipelineStage` Struct
+
+One stage in a `process.pipeline` call.
+
+| Field     | Type     | Description                            |
+| --------- | -------- | -------------------------------------- |
+| `program` | `string` | The binary to execute.                 |
+| `args`    | `array`  | Argv elements for this stage.          |
 
 ### `process.chdir(path)` *(deprecated — use `env.chdir`)*
 

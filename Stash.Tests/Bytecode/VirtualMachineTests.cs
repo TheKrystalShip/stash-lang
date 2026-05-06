@@ -3287,7 +3287,7 @@ public class VirtualMachineTests : BytecodeTestBase
     {
         if (OperatingSystem.IsWindows()) return;
 
-        object? result = Execute("""
+        object? result = ExecuteWithStdlib("""
             let result = null;
             result = $(echo hello);
             return result.stdout;
@@ -3300,7 +3300,7 @@ public class VirtualMachineTests : BytecodeTestBase
     {
         if (OperatingSystem.IsWindows()) return;
 
-        object? result = Execute("""
+        object? result = ExecuteWithStdlib("""
             let result = null;
             result = $(echo ok);
             return result.exitCode;
@@ -3313,7 +3313,7 @@ public class VirtualMachineTests : BytecodeTestBase
     {
         if (OperatingSystem.IsWindows()) return;
 
-        object? result = Execute("""
+        object? result = ExecuteWithStdlib("""
             let name = null;
             name = "world";
             let result = null;

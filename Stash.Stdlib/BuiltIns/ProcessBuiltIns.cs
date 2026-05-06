@@ -3,11 +3,13 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
@@ -77,15 +79,16 @@ public static class ProcessBuiltIns
             documentation: "Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code. Defaults to 0\n@return Does not return — exits the process",
             deprecation: new DeprecationInfo("env.exit"));
 
-        // process.exec(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
-        ns.Function("exec", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // process.replace(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
+        // TODO Phase D: changelog — process.exec(string) renamed to process.replace(string); new process.exec(program, args, opts?) added
+        ns.Function("replace", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (ctx.EmbeddedMode)
             {
-                throw new RuntimeError("'process.exec' is not available in embedded mode.", errorType: StashErrorTypes.NotSupportedError);
+                throw new RuntimeError("'process.replace' is not available in embedded mode.", errorType: StashErrorTypes.NotSupportedError);
             }
 
-            var command = SvArgs.String(args, 0, "process.exec");
+            var command = SvArgs.String(args, 0, "process.replace");
 
             var (program, arguments) = CommandParser.Parse(command);
 
@@ -126,7 +129,7 @@ public static class ProcessBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (System.Exception ex)
                 {
-                    throw new RuntimeError($"process.exec failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+                    throw new RuntimeError($"process.replace failed: {ex.Message}", errorType: StashErrorTypes.IOError);
                 }
             }
             else
@@ -136,13 +139,101 @@ public static class ProcessBuiltIns
 
                 // If we get here, execvp failed
                 int errno = Marshal.GetLastPInvokeError();
-                throw new RuntimeError($"process.exec failed: execvp returned {result} (errno {errno}).", errorType: StashErrorTypes.IOError);
+                throw new RuntimeError($"process.replace failed: execvp returned {result} (errno {errno}).", errorType: StashErrorTypes.IOError);
             }
 
             return StashValue.Null; // unreachable
         },
             returnType: "null",
-            documentation: "Replaces the current process image with the given command (Unix execvp). On Windows, starts the process with inherited I/O and exits with its exit code. Does not return on success.\n@param command The command and arguments to execute\n@return Does not return — replaces the process");
+            documentation: "Replaces the current process image with the given command (Unix execvp / Windows spawn-and-exit). Does not return on success.\n@param command The command and arguments to execute\n@return Does not return — replaces the process");
+
+        // process.exec(program, args, opts?) — Runs program with an explicit argv array. Returns a CommandResult (or StreamingProcess in Stream mode).
+        // This is the safe, injection-resistant API: the caller supplies a pre-tokenised argument list.
+        // The $(…) sigil desugars to this function in Phase B.
+        ns.Function("exec", [Param("program", "string"), Param("args", "array"), Param("opts", "ExecOptions?")],
+        static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            // Phase B: program may be an array when the first argv slot is an array-typed
+            // interpolation (e.g. $(${cmd}) where cmd=["ls","-la"]). In that case the first
+            // element is the program name and the rest are prepended to the explicit args.
+            string program;
+            List<string> extraLeading = new();
+
+            var arg0 = args[0];
+            if (arg0.IsObj && arg0.AsObj is List<StashValue> programArray)
+            {
+                if (programArray.Count == 0)
+                    throw new RuntimeError("process.exec: program array cannot be empty.", errorType: StashErrorTypes.ValueError);
+                program = StringifyArg(programArray[0]);
+                for (int pi = 1; pi < programArray.Count; pi++)
+                    extraLeading.Add(StringifyArg(programArray[pi]));
+            }
+            else
+            {
+                program = SvArgs.String(args, 0, "process.exec");
+            }
+
+            if (string.IsNullOrEmpty(program))
+                throw new RuntimeError("process.exec: 'program' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+
+            if (args.Length < 2 || args[1].IsNull || !(args[1].IsObj && args[1].AsObj is List<StashValue>))
+                throw new RuntimeError("process.exec: 'args' must be an array.", errorType: StashErrorTypes.TypeError);
+
+            var rawArgs = (List<StashValue>)args[1].AsObj!;
+            var argv = ResolveArgv(rawArgs, "process.exec");
+
+            if (extraLeading.Count > 0)
+            {
+                extraLeading.AddRange(argv);
+                argv = extraLeading;
+            }
+
+            var opts = args.Length >= 3 ? ParseExecOptions(args[2], "process.exec") : ExecOptionsData.Default;
+
+            string label = argv.Count > 0
+                ? $"{program} {string.Join(" ", argv)}"
+                : program;
+
+            return ExecuteExec(ctx, program, argv, opts, label);
+        },
+            returnType: "CommandResult | StreamingProcess",
+            isVariadic: true,
+            documentation: "Runs a program with an explicit argv array. Unlike `$(…)`, no shell tokenisation or glob expansion is applied to the args — they are passed verbatim.\n@param program The executable name or path\n@param args Array of argument strings\n@param opts Optional ExecOptions controlling mode, strict, redirect, cwd, env\n@return A CommandResult (stdout, stderr, exitCode) in Capture/Passthrough mode, or a StreamingProcess in Stream mode");
+
+        // process.pipeline(stages, opts?) — Runs a multi-stage pipeline from an array of PipelineStage structs.
+        ns.Function("pipeline", [Param("stages", "array"), Param("opts", "ExecOptions?")],
+        static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args[0].IsNull || !(args[0].IsObj && args[0].AsObj is List<StashValue>))
+                throw new RuntimeError("process.pipeline: 'stages' must be a non-empty array.", errorType: StashErrorTypes.TypeError);
+
+            var rawStages = (List<StashValue>)args[0].AsObj!;
+            if (rawStages.Count == 0)
+                throw new RuntimeError("process.pipeline: 'stages' must contain at least one stage.", errorType: StashErrorTypes.ValueError);
+
+            var opts = args.Length >= 2 ? ParseExecOptions(args[1], "process.pipeline") : ExecOptionsData.Default;
+
+            if (opts.Mode == ExecModeEnum.Passthrough)
+                throw new RuntimeError("process.pipeline: Passthrough mode is not allowed in pipelines. Use Capture or Stream.", errorType: StashErrorTypes.ValueError);
+
+            // Parse each stage.
+            var stages = new List<(string Program, List<string> Argv)>(rawStages.Count);
+            var commandBuf = new System.Text.StringBuilder();
+            for (int i = 0; i < rawStages.Count; i++)
+            {
+                var (stageProgram, stageArgv) = ParsePipelineStage(rawStages[i], i, "process.pipeline");
+                stages.Add((stageProgram, stageArgv));
+                if (commandBuf.Length > 0) commandBuf.Append(" | ");
+                commandBuf.Append(stageProgram);
+                foreach (string a in stageArgv) { commandBuf.Append(' '); commandBuf.Append(a); }
+            }
+            string commandLabel = commandBuf.ToString();
+
+            return ExecutePipeline(ctx, stages, opts, commandLabel);
+        },
+            returnType: "CommandResult | StreamingProcess",
+            isVariadic: true,
+            documentation: "Runs a multi-stage pipeline from an array of PipelineStage values. Each stage specifies program and args explicitly — no shell tokenisation applied.\n@param stages Array of PipelineStage values (each with program and args fields)\n@param opts Optional ExecOptions controlling mode, strict, redirect\n@return A CommandResult in Capture mode, or a StreamingProcess in Stream mode");
 
         // process.spawn(command) — Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output.
         ns.Function("spawn", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -843,5 +934,765 @@ public static class ProcessBuiltIns
                 catch { /* Errors in onExit callbacks are non-fatal */ }
             }
         }
+    }
+
+    // ── process.exec / process.pipeline helpers ──────────────────────────────
+
+    /// <summary>Execution mode decoded from ExecOptions.</summary>
+    private enum ExecModeEnum { Capture, Passthrough, Stream }
+
+    /// <summary>Decoded ExecOptions bag.</summary>
+    private sealed record ExecOptionsData(
+        ExecModeEnum Mode,
+        bool Strict,
+        List<RedirectData>? Redirects,
+        string? Cwd,
+        Dictionary<string, string>? Env)
+    {
+        public static readonly ExecOptionsData Default = new(ExecModeEnum.Capture, false, null, null, null);
+    }
+
+    /// <summary>Decoded RedirectSpec bag.</summary>
+    private sealed record RedirectData(string Stream, string Target, bool Append);
+
+    /// <summary>
+    /// Resolve a raw StashValue args list into a flat <see cref="List{String}"/> of argv entries.
+    /// Handles:
+    /// <list type="bullet">
+    ///   <item>null → TypeError</item>
+    ///   <item><see cref="StashLiteralArg"/> → tilde-expand, pass verbatim (glob expansion requires Phase B wiring)</item>
+    ///   <item>array → recursively flatten one level into argv entries</item>
+    ///   <item>scalar → stringify</item>
+    /// </list>
+    /// </summary>
+    private static List<string> ResolveArgv(List<StashValue> rawArgs, string callerName)
+    {
+        var argv = new List<string>(rawArgs.Count);
+        foreach (var arg in rawArgs)
+            ResolveArgvElement(arg, argv, callerName, depth: 0);
+        return argv;
+    }
+
+    private static void ResolveArgvElement(StashValue arg, List<string> argv, string callerName, int depth)
+    {
+        if (arg.IsNull)
+            throw new RuntimeError($"{callerName}: argv element cannot be null.", errorType: StashErrorTypes.TypeError);
+
+        object? obj = arg.IsObj ? arg.AsObj : null;
+
+        if (obj is Stash.Runtime.Types.StashLiteralArg litArg)
+        {
+            // Tilde expansion on start of unquoted tokens.
+            string text = litArg.ShouldExpand ? ApplyTilde(litArg.Text) : litArg.Text;
+            // Glob expansion is wired in Phase B via ShellExpansion.GlobExpandHandler.
+            // For Phase A: fallback to literal text (no glob matching from API layer).
+            if (litArg.ShouldExpand && Stash.Runtime.ShellExpansion.GlobExpandHandler is { } globHandler)
+            {
+                var matches = globHandler(text, System.Environment.CurrentDirectory);
+                if (matches.Count == 0)
+                    argv.Add(text); // no match — keep literal (same as bash nullglob off)
+                else
+                    argv.AddRange(matches);
+            }
+            else
+            {
+                argv.Add(text);
+            }
+            return;
+        }
+
+        if (obj is List<StashValue> nested && depth == 0)
+        {
+            // One level of array splat.
+            foreach (var elem in nested)
+                ResolveArgvElement(elem, argv, callerName, depth: 1);
+            return;
+        }
+
+        // Scalar: stringify.
+        argv.Add(StringifyArg(arg));
+    }
+
+    private static string StringifyArg(StashValue v)
+    {
+        if (v.IsNull) return "";
+        if (v.IsBool) return v.AsBool ? "true" : "false";
+        if (v.IsInt) return v.AsInt.ToString();
+        if (v.IsFloat) return v.AsFloat.ToString("G");
+        if (v.IsByte) return v.AsByte.ToString();
+        object? obj = v.AsObj;
+        return obj switch
+        {
+            string s => s,
+            IVMStringifiable str => str.VMToString(),
+            _ => obj?.ToString() ?? ""
+        };
+    }
+
+    private static void ApplyCwdAndEnv(ProcessStartInfo psi, string? cwd, Dictionary<string, string>? env)
+    {
+        if (cwd is not null)
+            psi.WorkingDirectory = cwd;
+
+        if (env is not null)
+        {
+            // Replace, do not merge — caller is expected to dict.merge(env.all(), ...) if they want inheritance.
+            psi.Environment.Clear();
+            foreach (var kvp in env)
+                psi.Environment[kvp.Key] = kvp.Value;
+        }
+    }
+
+    private static string ApplyTilde(string s)
+    {
+        string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        if (s == "~") return home;
+        if (s.StartsWith("~/", StringComparison.Ordinal) || s.StartsWith("~\\", StringComparison.Ordinal))
+            return System.IO.Path.Combine(home, s[2..]);
+        return s;
+    }
+
+    /// <summary>Parse a raw <see cref="StashValue"/> into an <see cref="ExecOptionsData"/>.</summary>
+    private static ExecOptionsData ParseExecOptions(StashValue raw, string callerName)
+    {
+        if (raw.IsNull) return ExecOptionsData.Default;
+
+        if (!raw.IsObj)
+            throw new RuntimeError($"{callerName}: 'opts' must be an ExecOptions struct or dict, got {raw.Tag}.", errorType: StashErrorTypes.TypeError);
+
+        object? obj = raw.AsObj;
+
+        ExecModeEnum mode = ExecModeEnum.Capture;
+        bool strict = false;
+        List<RedirectData>? redirects = null;
+        string? cwd = null;
+        Dictionary<string, string>? env = null;
+
+        if (obj is StashInstance inst)
+        {
+            // Typed ExecOptions struct
+            if (inst.VMTryGetField("mode", out StashValue modeField, null) && !modeField.IsNull)
+                mode = ParseExecMode(modeField, callerName);
+
+            if (inst.VMTryGetField("strict", out StashValue strictField, null) && strictField.IsBool)
+                strict = strictField.AsBool;
+
+            if (inst.VMTryGetField("redirect", out StashValue redirectField, null) && !redirectField.IsNull)
+                redirects = ParseRedirectList(redirectField, callerName);
+
+            if (inst.VMTryGetField("cwd", out StashValue cwdField, null) && cwdField.IsObj && cwdField.AsObj is string cwdStr)
+                cwd = cwdStr;
+
+            if (inst.VMTryGetField("env", out StashValue envField, null) && !envField.IsNull)
+                env = ParseEnvDict(envField, callerName);
+        }
+        else if (obj is StashDictionary dict)
+        {
+            // Untyped dict — flexible fallback (also used by the lowered compiler output)
+            if (dict.Has("mode"))
+            {
+                var modeVal = dict.Get("mode");
+                if (!modeVal.IsNull) mode = ParseExecMode(modeVal, callerName);
+            }
+            if (dict.Has("strict"))
+            {
+                var strictVal = dict.Get("strict");
+                if (strictVal.IsBool) strict = strictVal.AsBool;
+            }
+            if (dict.Has("redirect"))
+            {
+                var redirectVal = dict.Get("redirect");
+                if (!redirectVal.IsNull) redirects = ParseRedirectList(redirectVal, callerName);
+            }
+            if (dict.Has("cwd"))
+            {
+                var cwdVal = dict.Get("cwd");
+                if (cwdVal.IsObj && cwdVal.AsObj is string cwdStr) cwd = cwdStr;
+            }
+            if (dict.Has("env"))
+            {
+                var envVal = dict.Get("env");
+                if (!envVal.IsNull) env = ParseEnvDict(envVal, callerName);
+            }
+        }
+        else
+        {
+            throw new RuntimeError($"{callerName}: 'opts' must be an ExecOptions struct or dict.", errorType: StashErrorTypes.TypeError);
+        }
+
+        return new ExecOptionsData(mode, strict, redirects, cwd, env);
+    }
+
+    /// <summary>
+    /// Parses a redirect field value that may be either a single RedirectSpec dict/struct or
+    /// an array of RedirectSpec dicts/structs (produced by multi-redirect lowering in Phase B).
+    /// </summary>
+    private static List<RedirectData> ParseRedirectList(StashValue val, string callerName)
+    {
+        if (val.IsObj && val.AsObj is List<StashValue> arr)
+        {
+            var list = new List<RedirectData>(arr.Count);
+            foreach (var item in arr)
+                list.Add(ParseRedirectSpec(item, callerName));
+            return list;
+        }
+        // Single redirect.
+        return new List<RedirectData>(1) { ParseRedirectSpec(val, callerName) };
+    }
+
+    private static ExecModeEnum ParseExecMode(StashValue val, string callerName)
+    {
+        if (val.IsObj)
+        {
+            object? obj = val.AsObj;
+            if (obj is StashEnumValue ev && ev.TypeName == "ExecMode")
+            {
+                return ev.MemberName switch
+                {
+                    "Capture"     => ExecModeEnum.Capture,
+                    "Passthrough" => ExecModeEnum.Passthrough,
+                    "Stream"      => ExecModeEnum.Stream,
+                    _ => throw new RuntimeError($"{callerName}: Unknown ExecMode member '{ev.MemberName}'.", errorType: StashErrorTypes.ValueError)
+                };
+            }
+            if (obj is string modeStr)
+            {
+                return modeStr switch
+                {
+                    "Capture"     => ExecModeEnum.Capture,
+                    "Passthrough" => ExecModeEnum.Passthrough,
+                    "Stream"      => ExecModeEnum.Stream,
+                    _ => throw new RuntimeError($"{callerName}: Unknown ExecMode string '{modeStr}'. Expected 'Capture', 'Passthrough', or 'Stream'.", errorType: StashErrorTypes.ValueError)
+                };
+            }
+        }
+        throw new RuntimeError($"{callerName}: 'mode' must be an ExecMode enum value or string.", errorType: StashErrorTypes.TypeError);
+    }
+
+    private static RedirectData ParseRedirectSpec(StashValue val, string callerName)
+    {
+        string stream = "stdout";
+        string target = "";
+        bool append = false;
+
+        if (!val.IsObj)
+            throw new RuntimeError($"{callerName}: 'redirect' must be a RedirectSpec struct or dict.", errorType: StashErrorTypes.TypeError);
+
+        object? obj = val.AsObj;
+        if (obj is StashInstance inst)
+        {
+            if (inst.VMTryGetField("stream", out StashValue sv2, null) && sv2.IsObj && sv2.AsObj is string s)
+                stream = s;
+
+            if (inst.VMTryGetField("target", out StashValue tv, null) && tv.IsObj && tv.AsObj is string t)
+                target = t;
+
+            if (inst.VMTryGetField("append", out StashValue av, null) && av.IsBool)
+                append = av.AsBool;
+        }
+        else if (obj is StashDictionary dict)
+        {
+            if (dict.Has("stream")) { var v = dict.Get("stream"); if (v.IsObj && v.AsObj is string s) stream = s; }
+            if (dict.Has("target")) { var v = dict.Get("target"); if (v.IsObj && v.AsObj is string t) target = t; }
+            if (dict.Has("append")) { var v = dict.Get("append"); if (v.IsBool) append = v.AsBool; }
+        }
+        else
+        {
+            throw new RuntimeError($"{callerName}: 'redirect' must be a RedirectSpec struct or dict.", errorType: StashErrorTypes.TypeError);
+        }
+
+        if (string.IsNullOrEmpty(target))
+            throw new RuntimeError($"{callerName}: RedirectSpec 'target' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+
+        if (stream is not ("stdout" or "stderr" or "all"))
+            throw new RuntimeError($"{callerName}: RedirectSpec 'stream' must be \"stdout\", \"stderr\", or \"all\".", errorType: StashErrorTypes.ValueError);
+
+        return new RedirectData(stream, target, append);
+    }
+
+    private static Dictionary<string, string>? ParseEnvDict(StashValue val, string callerName)
+    {
+        if (!val.IsObj || val.AsObj is not StashDictionary dict)
+            throw new RuntimeError($"{callerName}: 'env' must be a dict.", errorType: StashErrorTypes.TypeError);
+
+        var result = new Dictionary<string, string>();
+        foreach (var kvp in dict.GetAllEntries())
+            result[kvp.Key.ToString()!] = StringifyArg(kvp.Value);
+        return result;
+    }
+
+    private static (string Program, List<string> Argv) ParsePipelineStage(StashValue raw, int index, string callerName)
+    {
+        string program = "";
+        List<StashValue> rawArgs = new();
+
+        if (raw.IsObj)
+        {
+            object? obj = raw.AsObj;
+            if (obj is StashInstance inst)
+            {
+                if (inst.VMTryGetField("program", out StashValue pf, null) && pf.IsObj && pf.AsObj is string p)
+                    program = p;
+
+                if (inst.VMTryGetField("args", out StashValue af, null) && af.IsObj && af.AsObj is List<StashValue> a)
+                    rawArgs = a;
+            }
+            else if (obj is StashDictionary dict)
+            {
+                if (dict.Has("program")) { var v = dict.Get("program"); if (v.IsObj && v.AsObj is string p) program = p; }
+                if (dict.Has("args")) { var v = dict.Get("args"); if (v.IsObj && v.AsObj is List<StashValue> a) rawArgs = a; }
+            }
+        }
+
+        if (string.IsNullOrEmpty(program))
+            throw new RuntimeError($"{callerName}: stage[{index}] 'program' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+
+        return (program, ResolveArgv(rawArgs, callerName));
+    }
+
+    /// <summary>Core dispatcher for process.exec — applies opts and chooses the execution path.</summary>
+    private static StashValue ExecuteExec(
+        IInterpreterContext ctx, string program, List<string> argv, ExecOptionsData opts, string commandLabel)
+    {
+        if (opts.Mode == ExecModeEnum.Stream && opts.Redirects is not null)
+            throw new RuntimeError(
+                "process.exec: 'redirect' is not supported with Stream mode.",
+                errorType: StashErrorTypes.ValueError);
+
+        switch (opts.Mode)
+        {
+            case ExecModeEnum.Stream:
+            {
+                var handle = SpawnStreaming(program, argv, commandLabel, opts.Strict, ctx.CancellationToken, opts.Cwd, opts.Env);
+                return StashValue.FromObj(handle);
+            }
+            case ExecModeEnum.Passthrough:
+            {
+                var (_, _, exitCode) = ExecPassthroughDirect(program, argv, ctx.CancellationToken, opts.Cwd, opts.Env);
+                if (opts.Strict && exitCode != 0)
+                    ThrowCommandError(commandLabel, exitCode, "", "");
+                return StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", exitCode));
+            }
+            default: // Capture
+            {
+                var (stdout, stderr, exitCode) = ExecCapturedDirect(program, argv, ctx.CancellationToken, opts.Cwd, opts.Env);
+                if (opts.Strict && exitCode != 0)
+                    ThrowCommandError(commandLabel, exitCode, stderr, stdout);
+
+                // Apply each redirect in order.
+                if (opts.Redirects is { } redirs)
+                    foreach (var redir in redirs)
+                        ApplyRedirect(stdout, stderr, redir);
+
+                return StashValue.FromObj(RuntimeValues.CreateCommandResult(stdout, stderr, exitCode));
+            }
+        }
+    }
+
+    /// <summary>Core dispatcher for process.pipeline.</summary>
+    private static StashValue ExecutePipeline(
+        IInterpreterContext ctx,
+        List<(string Program, List<string> Argv)> stages,
+        ExecOptionsData opts,
+        string commandLabel)
+    {
+        if (opts.Mode == ExecModeEnum.Stream)
+        {
+            var handle = SpawnPipelineStreaming(stages, commandLabel, opts.Strict, ctx.CancellationToken, opts.Cwd, opts.Env);
+            return StashValue.FromObj(handle);
+        }
+
+        // Capture mode (Passthrough rejected by caller)
+        var (stdout, stderr, exitCode) = ExecPipelineCaptured(stages, ctx.CancellationToken, opts.Cwd, opts.Env);
+        if (opts.Strict && exitCode != 0)
+            ThrowCommandError(commandLabel, exitCode, stderr, stdout);
+
+        if (opts.Redirects is { } redirs2)
+            foreach (var redir in redirs2)
+                ApplyRedirect(stdout, stderr, redir);
+
+        return StashValue.FromObj(RuntimeValues.CreateCommandResult(stdout, stderr, exitCode));
+    }
+
+    private static (string Stdout, string Stderr, long ExitCode) ExecCapturedDirect(
+        string program, List<string> arguments, CancellationToken ct,
+        string? cwd = null, Dictionary<string, string>? env = null)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = program,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = false,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string arg in arguments)
+            psi.ArgumentList.Add(arg);
+        ApplyCwdAndEnv(psi, cwd, env);
+
+        System.Diagnostics.Process process;
+        try
+        {
+            process = System.Diagnostics.Process.Start(psi)
+                ?? throw new RuntimeError($"process.exec: failed to start '{program}'.", errorType: StashErrorTypes.CommandError);
+        }
+        catch (RuntimeError) { throw; }
+        catch (System.Exception ex)
+        {
+            throw new RuntimeError($"process.exec: failed to start '{program}': {ex.Message}", errorType: StashErrorTypes.CommandError);
+        }
+
+        using (process)
+        {
+            var stdoutTask = System.Threading.Tasks.Task.Run(() => process.StandardOutput.ReadToEnd());
+            var stderrTask = System.Threading.Tasks.Task.Run(() => process.StandardError.ReadToEnd());
+
+            try
+            {
+                process.WaitForExitAsync(ct).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                try { System.Threading.Tasks.Task.WaitAll(stdoutTask, stderrTask); } catch { }
+                throw;
+            }
+
+            System.Threading.Tasks.Task.WaitAll(stdoutTask, stderrTask);
+            return (stdoutTask.Result, stderrTask.Result, (long)process.ExitCode);
+        }
+    }
+
+    private static (string Stdout, string Stderr, long ExitCode) ExecPassthroughDirect(
+        string program, List<string> arguments, CancellationToken ct,
+        string? cwd = null, Dictionary<string, string>? env = null)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = program,
+            RedirectStandardOutput = false,
+            RedirectStandardError = false,
+            RedirectStandardInput = false,
+            UseShellExecute = false,
+            CreateNoWindow = false,
+        };
+        foreach (string arg in arguments)
+            psi.ArgumentList.Add(arg);
+        ApplyCwdAndEnv(psi, cwd, env);
+
+        System.Diagnostics.Process process;
+        try
+        {
+            process = System.Diagnostics.Process.Start(psi)
+                ?? throw new RuntimeError($"process.exec: failed to start '{program}' in passthrough mode.", errorType: StashErrorTypes.CommandError);
+        }
+        catch (RuntimeError) { throw; }
+        catch (System.Exception ex)
+        {
+            throw new RuntimeError($"process.exec: failed to start '{program}': {ex.Message}", errorType: StashErrorTypes.CommandError);
+        }
+
+        using (process)
+        {
+            try
+            {
+                process.WaitForExitAsync(ct).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                throw;
+            }
+            return ("", "", (long)process.ExitCode);
+        }
+    }
+
+    private static Stash.Runtime.Types.StashStreamingProcess SpawnStreaming(
+        string program, List<string> arguments, string commandLabel, bool isStrict, CancellationToken ct,
+        string? cwd = null, Dictionary<string, string>? env = null)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = program,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = false,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        foreach (string arg in arguments)
+            psi.ArgumentList.Add(arg);
+        ApplyCwdAndEnv(psi, cwd, env);
+
+        System.Diagnostics.Process process;
+        try
+        {
+            process = System.Diagnostics.Process.Start(psi)
+                ?? throw new RuntimeError($"process.exec: failed to start '{program}' in stream mode.", errorType: StashErrorTypes.CommandError);
+        }
+        catch (RuntimeError) { throw; }
+        catch (System.Exception ex)
+        {
+            throw new RuntimeError($"process.exec: failed to start '{program}' in stream mode: {ex.Message}", errorType: StashErrorTypes.CommandError);
+        }
+
+        // Capture the token at construction time; close over it for the ctProvider delegate.
+        return new Stash.Runtime.Types.StashStreamingProcess(process, commandLabel, isStrict, null, () => ct);
+    }
+
+    private static (string Stdout, string Stderr, long ExitCode) ExecPipelineCaptured(
+        List<(string Program, List<string> Argv)> stages, CancellationToken ct,
+        string? cwd = null, Dictionary<string, string>? env = null)
+    {
+        int n = stages.Count;
+        var processes = new System.Diagnostics.Process[n];
+        int started = 0;
+
+        try
+        {
+            for (int i = 0; i < n; i++)
+            {
+                bool isLast = (i == n - 1);
+                var (prog, argv) = stages[i];
+                var psi = new ProcessStartInfo
+                {
+                    FileName = prog,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    RedirectStandardInput = (i > 0),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                foreach (string arg in argv)
+                    psi.ArgumentList.Add(arg);
+                ApplyCwdAndEnv(psi, cwd, env);
+
+                try
+                {
+                    processes[i] = System.Diagnostics.Process.Start(psi)
+                        ?? throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start.", errorType: StashErrorTypes.CommandError);
+                }
+                catch (RuntimeError) { throw; }
+                catch (System.Exception ex)
+                {
+                    throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start: {ex.Message}", errorType: StashErrorTypes.CommandError);
+                }
+                started++;
+            }
+
+            // Drain stderr for all stages in parallel.
+            var stderrTasks = new System.Threading.Tasks.Task<string>[n];
+            for (int i = 0; i < n; i++)
+            {
+                int idx = i;
+                stderrTasks[i] = System.Threading.Tasks.Task.Run(
+                    async () => await processes[idx].StandardError.ReadToEndAsync(ct).ConfigureAwait(false), ct);
+            }
+
+            // Pump stdout[i] → stdin[i+1] for intermediate stages.
+            // On broken pipe (downstream exited early), close the upstream read end so the
+            // upstream process gets SIGPIPE and terminates promptly instead of hanging.
+            var pumpTasks = new System.Threading.Tasks.Task[n - 1];
+            for (int i = 0; i < n - 1; i++)
+            {
+                var from = processes[i].StandardOutput;
+                var to = processes[i + 1].StandardInput;
+                int pumpIdx = i;
+                pumpTasks[i] = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    char[] buf = new char[8192];
+                    int read;
+                    try
+                    {
+                        while ((read = await from.ReadAsync(buf.AsMemory(), ct).ConfigureAwait(false)) > 0)
+                        {
+                            await to.WriteAsync(buf.AsMemory(0, read), ct).ConfigureAwait(false);
+                            await to.FlushAsync(ct).ConfigureAwait(false);
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        // Downstream closed its stdin (broken pipe). Close the read end of the
+                        // upstream pipe so the upstream process receives SIGPIPE and terminates.
+                        try { from.Close(); } catch { }
+                    }
+                    catch (OperationCanceledException) { }
+                    finally { try { to.Close(); } catch { } }
+                }, ct);
+            }
+
+            // Capture last stage stdout.
+            var stdoutTask = System.Threading.Tasks.Task.Run(
+                async () => await processes[n - 1].StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false), ct);
+
+            // Wait for all processes.
+            var waitTasks = new System.Threading.Tasks.Task[n];
+            for (int i = 0; i < n; i++)
+            {
+                int idx = i;
+                waitTasks[i] = processes[idx].WaitForExitAsync(ct);
+            }
+
+            try
+            {
+                System.Threading.Tasks.Task.WaitAll(waitTasks, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                for (int i = 0; i < started; i++)
+                    try { processes[i].Kill(entireProcessTree: true); } catch { }
+                try { System.Threading.Tasks.Task.WaitAll(pumpTasks); } catch { }
+                try { System.Threading.Tasks.Task.WaitAll(stderrTasks); } catch { }
+                try { stdoutTask.Wait(); } catch { }
+                throw;
+            }
+
+            try { System.Threading.Tasks.Task.WaitAll(pumpTasks); } catch { }
+            System.Threading.Tasks.Task.WaitAll(stderrTasks);
+            stdoutTask.Wait();
+
+            string stdout = stdoutTask.Result;
+            string stderr = stderrTasks[n - 1].Result;
+            long exitCode = (long)processes[n - 1].ExitCode;
+            return (stdout, stderr, exitCode);
+        }
+        catch (RuntimeError) { throw; }
+        catch (OperationCanceledException) { throw; }
+        catch (System.Exception ex)
+        {
+            throw new RuntimeError($"process.pipeline: execution failed: {ex.Message}", errorType: StashErrorTypes.CommandError);
+        }
+        finally
+        {
+            for (int i = 0; i < started; i++)
+                try { processes[i].Dispose(); } catch { }
+        }
+    }
+
+    private static Stash.Runtime.Types.StashStreamingProcess SpawnPipelineStreaming(
+        List<(string Program, List<string> Argv)> stages,
+        string commandLabel,
+        bool isStrict,
+        CancellationToken ct,
+        string? cwd = null,
+        Dictionary<string, string>? env = null)
+    {
+        int n = stages.Count;
+        var processes = new System.Diagnostics.Process[n];
+        int started = 0;
+
+        try
+        {
+            for (int i = 0; i < n; i++)
+            {
+                var (prog, argv) = stages[i];
+                var psi = new ProcessStartInfo
+                {
+                    FileName = prog,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    RedirectStandardInput = (i > 0),
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                };
+                foreach (string arg in argv)
+                    psi.ArgumentList.Add(arg);
+                ApplyCwdAndEnv(psi, cwd, env);
+
+                try
+                {
+                    processes[i] = System.Diagnostics.Process.Start(psi)
+                        ?? throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start.", errorType: StashErrorTypes.CommandError);
+                }
+                catch (RuntimeError) { throw; }
+                catch (System.Exception ex)
+                {
+                    throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start: {ex.Message}", errorType: StashErrorTypes.CommandError);
+                }
+                started++;
+            }
+
+            // Pump intermediate stages: stdout[i] → stdin[i+1], fire-and-forget.
+            for (int i = 0; i < n - 1; i++)
+            {
+                var from = processes[i].StandardOutput;
+                var to = processes[i + 1].StandardInput;
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    char[] buf = new char[8192];
+                    int read;
+                    try
+                    {
+                        while ((read = await from.ReadAsync(buf.AsMemory(), ct).ConfigureAwait(false)) > 0)
+                        {
+                            await to.WriteAsync(buf.AsMemory(0, read), ct).ConfigureAwait(false);
+                            await to.FlushAsync(ct).ConfigureAwait(false);
+                        }
+                    }
+                    catch (IOException) { }
+                    catch (OperationCanceledException) { }
+                    finally { try { to.Close(); } catch { } }
+                }, ct);
+            }
+
+            // StashStreamingProcess takes ownership of all stages.
+            return new Stash.Runtime.Types.StashStreamingProcess(processes, commandLabel, isStrict, null, () => ct);
+        }
+        catch (RuntimeError)
+        {
+            for (int i = 0; i < started; i++)
+            {
+                try { if (!processes[i].HasExited) processes[i].Kill(entireProcessTree: true); } catch { }
+                try { processes[i].Dispose(); } catch { }
+            }
+            throw;
+        }
+        catch (System.Exception ex)
+        {
+            for (int i = 0; i < started; i++)
+            {
+                try { if (!processes[i].HasExited) processes[i].Kill(entireProcessTree: true); } catch { }
+                try { processes[i].Dispose(); } catch { }
+            }
+            throw new RuntimeError($"process.pipeline: failed to start pipeline: {ex.Message}", errorType: StashErrorTypes.CommandError);
+        }
+    }
+
+    private static void ApplyRedirect(string stdout, string stderr, RedirectData redir)
+    {
+        string content = redir.Stream switch
+        {
+            "stderr" => stderr,
+            "all"    => stdout + stderr,
+            _        => stdout  // "stdout"
+        };
+        try
+        {
+            if (redir.Append)
+                System.IO.File.AppendAllText(redir.Target, content);
+            else
+                System.IO.File.WriteAllText(redir.Target, content);
+        }
+        catch (System.Exception ex)
+        {
+            throw new RuntimeError($"process.exec: redirect to '{redir.Target}' failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    private static void ThrowCommandError(string command, long exitCode, string stderr, string stdout)
+    {
+        throw new RuntimeError(
+            $"Command failed with exit code {exitCode}: {command}",
+            errorType: StashErrorTypes.CommandError)
+        {
+            Properties = new Dictionary<string, object?>
+            {
+                ["exitCode"] = exitCode,
+                ["stderr"]   = stderr,
+                ["stdout"]   = stdout,
+                ["command"]  = command,
+            }
+        };
     }
 }

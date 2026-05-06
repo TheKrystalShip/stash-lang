@@ -216,6 +216,25 @@ public static class GlobalBuiltIns
         // Enums
         b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);
         b.Enum("Signal", ["Hup", "Int", "Quit", "Kill", "Usr1", "Usr2", "Term"]);
+        b.Enum("ExecMode", ["Capture", "Passthrough", "Stream"]);
+
+        // Command execution structs — registered here so the VM and LSP know their fields.
+        b.Struct("ExecOptions", [
+            new("mode",     "ExecMode?"),
+            new("strict",   "bool"),
+            new("redirect", "RedirectSpec?"),
+            new("cwd",      "string?"),
+            new("env",      "dict?"),
+        ]);
+        b.Struct("RedirectSpec", [
+            new("stream", "string"),
+            new("target", "string"),
+            new("append", "bool"),
+        ]);
+        b.Struct("PipelineStage", [
+            new("program", "string"),
+            new("args",    "array"),
+        ]);
 
         // Typed error structs — registered here so the VM can instantiate them via
         // struct-init literals (e.g. `throw ValueError { message: "x" }`).

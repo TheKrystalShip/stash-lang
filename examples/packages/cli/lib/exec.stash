@@ -9,11 +9,11 @@
 /// @param args The arguments string to pass to the tool
 /// @return Dict with ok (bool), stdout, stderr, exitCode
 fn exec(tool, args = "") {
-    let cmd = tool;
+    let argv = [];
     if (args != "") {
-        cmd = tool + " " + args;
+        argv = str.split(args, " ");
     }
-    let result = $(${cmd});
+    let result = process.exec(tool, argv);
     return {
         ok: result.exitCode == 0,
         stdout: result.stdout,

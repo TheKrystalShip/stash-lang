@@ -5,6 +5,7 @@ using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Bytecode;
 
@@ -66,6 +67,18 @@ public abstract class BytecodeTestBase
     {
         Chunk chunk = CompileSource(source);
         var vm = new VirtualMachine();
+        return Normalize(vm.Execute(chunk));
+    }
+
+    /// <summary>
+    /// Execute source with the full stdlib globals (process, arr, str, …) registered.
+    /// Required for any test that uses command expressions, since Phase B lowers them
+    /// to <c>process.exec</c> / <c>process.pipeline</c> calls.
+    /// </summary>
+    protected static object? ExecuteWithStdlib(string source)
+    {
+        Chunk chunk = CompileSource(source);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return Normalize(vm.Execute(chunk));
     }
 

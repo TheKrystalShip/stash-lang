@@ -14,7 +14,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public static class BytecodeReader
 {
-    private const ushort FormatVersion         = 2;
+    private const ushort FormatVersion         = 3;
     private const byte   FlagHasDebugInfo      = 0x01;
     private const byte   FlagHasEmbeddedSource = 0x04;
     private const byte   FlagHasStdlibManifest = 0x08;
@@ -128,7 +128,7 @@ public static class BytecodeReader
 
         // Format version (u16 LE)
         ushort version = reader.ReadUInt16();
-        if (version != 1 && version != FormatVersion)
+        if (version != 1 && version != 2 && version != FormatVersion)
             throw new InvalidDataException(
                 $"Unsupported .stashc format version {version} (expected {FormatVersion}).");
 
@@ -338,6 +338,7 @@ public static class BytecodeReader
             15 => StashValue.FromObj(ReadStructInitMetadata(reader)),
             16 => StashValue.FromByte(reader.ReadByte()),
             17 => StashValue.FromObj(ReadLockMetadata(reader)),
+            18 => StashValue.FromObj(ReadLiteralArgMetadata(reader)),
             _ => throw new InvalidDataException($"Unknown constant tag {tag} in .stashc constant pool.")
         };
     }
@@ -406,6 +407,13 @@ public static class BytecodeReader
         if (formatVersion >= 2)
             isStreaming = reader.ReadByte() != 0;
         return new CommandMetadata(partCount, isPassthrough, isStrict, isStreaming);
+    }
+
+    private static Stash.Runtime.Types.StashLiteralArg ReadLiteralArgMetadata(BinaryReader reader)
+    {
+        string text = ReadString32(reader);
+        bool shouldExpand = reader.ReadByte() != 0;
+        return new Stash.Runtime.Types.StashLiteralArg(text, shouldExpand);
     }
 
     private static StructMetadata ReadStructMetadata(BinaryReader reader)

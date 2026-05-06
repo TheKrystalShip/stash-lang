@@ -132,6 +132,29 @@ public class Parser
         }
     }
 
+    /// <summary>
+    /// Parses a command-interpolation slot expression (used for <c>${...}</c> slots inside
+    /// command literals). If the token stream begins with <c>...</c>, consumes it and wraps
+    /// the inner expression in a <see cref="SpreadExpr"/> for explicit array spread.
+    /// </summary>
+    public Expr ParseCommandSlotExpr()
+    {
+        try
+        {
+            if (Match(TokenType.DotDotDot))
+            {
+                Token op = Previous();
+                Expr inner = Expression();
+                return new SpreadExpr(op, inner, MakeSpan(op.Span, inner.Span));
+            }
+            return Expression();
+        }
+        catch (ParseError)
+        {
+            return new LiteralExpr(null, Peek().Span);
+        }
+    }
+
     // ── Declaration / Statement parsing ────────────────────────────
 
     /// <summary>
@@ -2956,7 +2979,7 @@ public class Parser
                 innerTokens.Add(new Token(TokenType.Eof, "", null, token.Span));
 
                 var innerParser = new Parser(innerTokens);
-                Expr expr = innerParser.Parse();
+                Expr expr = innerParser.ParseCommandSlotExpr();
 
                 if (innerParser.Errors.Count > 0)
                 {

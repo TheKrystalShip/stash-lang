@@ -610,18 +610,52 @@ partial class Compiler
 
     public object? VisitRedirectExpr(RedirectExpr expr)
     {
-        byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
-        byte exprReg = CompileExpr(expr.Expression);
-        byte targetReg = CompileExpr(expr.Target);
-        byte flags = (byte)expr.Stream;
-        if (expr.Append)
-            flags |= 0x04;
-        _builder.EmitABC(OpCode.Redirect, exprReg, flags, targetReg);
-        if (exprReg != dest)
-            _builder.EmitAB(OpCode.Move, dest, exprReg);
-        _scope.FreeTemp(targetReg);
-        _scope.FreeTemp(exprReg);
+        byte dest = _destReg;
+
+        // Walk the redirect chain, collecting RedirectEntry records (outermost first).
+        var redirects = new List<RedirectEntry>();
+        Expr current = expr;
+        while (current is RedirectExpr r)
+        {
+            redirects.Add(new RedirectEntry(r.Stream, r.Target, r.Append));
+            current = r.Expression;
+        }
+
+        // current is now the innermost non-redirect expression.
+        if (current is CommandExpr cmdExpr)
+        {
+            var plan = AnalyzeCommandParts(cmdExpr.Parts);
+            EmitProcessExecCall(dest, plan.Program, plan.Args,
+                cmdExpr.IsStrict, cmdExpr.IsPassthrough, cmdExpr.Mode, redirects);
+        }
+        else if (current is PipeExpr pipeExpr)
+        {
+            var stages = FlattenPipeChain(pipeExpr);
+            bool isStreaming = stages[0].Mode == CommandMode.Stream;
+            bool lastStrict  = stages[stages.Count - 1].IsStrict;
+            EmitProcessPipelineCall(dest, stages, isStreaming, lastStrict, redirects);
+        }
+        else
+        {
+            // Fallback: compile the inner expression normally, then apply redirect
+            // via the legacy Redirect opcode. Should not occur in practice.
+            byte exprReg = CompileExpr(current);
+            // Compile and apply each redirect in reverse order (innermost first).
+            for (int i = redirects.Count - 1; i >= 0; i--)
+            {
+                var red = redirects[i];
+                byte targetReg = CompileExpr(red.Target);
+                byte flags = (byte)red.Stream;
+                if (red.Append) flags |= 0x04;
+                _builder.EmitABC(OpCode.Redirect, exprReg, flags, targetReg);
+                _scope.FreeTemp(targetReg);
+            }
+            if (exprReg != dest)
+                _builder.EmitAB(OpCode.Move, dest, exprReg);
+            _scope.FreeTemp(exprReg);
+        }
+
         return null;
     }
 

@@ -866,4 +866,96 @@ public class BytecodeSerializationTests
         ms.Position = 0;
         Assert.Throws<InvalidDataException>(() => BytecodeReader.Read(ms));
     }
+
+    // =========================================================================
+    // StashLiteralArg round-trip (Phase A constant tag 18)
+    // =========================================================================
+
+    [Fact]
+    public void RoundTrip_LiteralArg_ShouldExpandTrue_Preserved()
+    {
+        var builder = new ChunkBuilder();
+        var litArg = new Stash.Runtime.Types.StashLiteralArg("~/docs/*.txt", shouldExpand: true);
+        builder.AddConstant(litArg);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<Stash.Runtime.Types.StashLiteralArg>(restored.Constants[0].AsObj);
+        Assert.Equal("~/docs/*.txt", result.Text);
+        Assert.True(result.ShouldExpand);
+    }
+
+    [Fact]
+    public void RoundTrip_LiteralArg_ShouldExpandFalse_Preserved()
+    {
+        var builder = new ChunkBuilder();
+        var litArg = new Stash.Runtime.Types.StashLiteralArg("hello world", shouldExpand: false);
+        builder.AddConstant(litArg);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<Stash.Runtime.Types.StashLiteralArg>(restored.Constants[0].AsObj);
+        Assert.Equal("hello world", result.Text);
+        Assert.False(result.ShouldExpand);
+    }
+
+    [Fact]
+    public void RoundTrip_LiteralArg_EmptyText_Preserved()
+    {
+        var builder = new ChunkBuilder();
+        var litArg = new Stash.Runtime.Types.StashLiteralArg("", shouldExpand: false);
+        builder.AddConstant(litArg);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<Stash.Runtime.Types.StashLiteralArg>(restored.Constants[0].AsObj);
+        Assert.Equal("", result.Text);
+        Assert.False(result.ShouldExpand);
+    }
+
+    [Fact]
+    public void RoundTrip_LiteralArg_Deduplication_Works()
+    {
+        // Adding the same LiteralArg twice should produce one constant entry.
+        var builder = new ChunkBuilder();
+        var litA = new Stash.Runtime.Types.StashLiteralArg("*.txt", shouldExpand: true);
+        var litB = new Stash.Runtime.Types.StashLiteralArg("*.txt", shouldExpand: true);
+        ushort idx1 = builder.AddConstant(litA);
+        ushort idx2 = builder.AddConstant(litB);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
+        Chunk original = builder.Build();
+
+        Assert.Equal(idx1, idx2);
+        Assert.Single(original.Constants);
+    }
+
+    [Fact]
+    public void RoundTrip_LiteralArg_DifferentExpandFlag_TwoEntries()
+    {
+        // Same text, different ShouldExpand: distinct constants.
+        var builder = new ChunkBuilder();
+        var litA = new Stash.Runtime.Types.StashLiteralArg("*.txt", shouldExpand: true);
+        var litB = new Stash.Runtime.Types.StashLiteralArg("*.txt", shouldExpand: false);
+        ushort idx1 = builder.AddConstant(litA);
+        ushort idx2 = builder.AddConstant(litB);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
+        Chunk original = builder.Build();
+
+        Assert.NotEqual(idx1, idx2);
+        Assert.Equal(2, original.Constants.Length);
+    }
 }

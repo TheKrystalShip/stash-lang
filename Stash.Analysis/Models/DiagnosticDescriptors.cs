@@ -116,6 +116,28 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0813 = new("SA0813", "Unbounded lock wait", DiagnosticLevel.Information, "Locks", "This 'lock' block has no 'wait' option and is not enclosed in a 'timeout' block. It will wait indefinitely if another process holds the lock.");
     public static readonly DiagnosticDescriptor SA0814 = new("SA0814", "Non-blocking lock without try", DiagnosticLevel.Warning, "Locks", "This 'lock' block uses 'wait: 0s' but is not enclosed in 'try'. A LockError will be unhandled if the lock is already held.");
 
+    // ── SA0815–SA0817 — Commands (safe-shell interpolation) ──────────────
+    public static readonly DiagnosticDescriptor SA0815 =
+        new("SA0815",
+            "Redundant quotes around interpolation slot",
+            DiagnosticLevel.Warning,
+            "Commands",
+            "Redundant quotes around interpolation slot '{0}'. Under safe-shell-interpolation semantics, '\"{0}\"' is identical to '{0}'. The quotes had a security purpose under the old semantics; remove them.");
+
+    public static readonly DiagnosticDescriptor SA0816 =
+        new("SA0816",
+            "Implicit array splat in command",
+            DiagnosticLevel.Information,
+            "Commands",
+            "Implicit array splat in command interpolation: '{0}'. Prefer explicit '{{...{0}}}' to make the splat behavior visible.");
+
+    public static readonly DiagnosticDescriptor SA0817 =
+        new("SA0817",
+            "Likely-broken whitespace string interpolation",
+            DiagnosticLevel.Warning,
+            "Commands",
+            "Likely-broken migration: '{0}' is a string with embedded whitespace, but is being interpolated as a single command argument. Under the old semantics this would split into multiple args; under the new safe semantics it becomes one literal arg. Use 'str.split({0}, \" \")' with explicit splat ('{{...}}') if you intended to pass multiple args.");
+
     // ── SA082x — Glob expansion ───────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0820 =
         new("SA0820",
@@ -239,6 +261,9 @@ public static class DiagnosticDescriptors
         dict[SA0812.Code] = SA0812;
         dict[SA0813.Code] = SA0813;
         dict[SA0814.Code] = SA0814;
+        dict[SA0815.Code] = SA0815;
+        dict[SA0816.Code] = SA0816;
+        dict[SA0817.Code] = SA0817;
         dict[SA0820.Code] = SA0820;
         dict[SA0821.Code] = SA0821;
         dict[SA0830.Code] = SA0830;

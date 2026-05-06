@@ -26,6 +26,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _lockDepth;
     private readonly Dictionary<string, int> _activeLockPaths = new();
     private readonly bool _isRepl;
+    private readonly Dictionary<string, Expr> _varInitializers = new();
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
@@ -303,6 +304,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
         DispatchNodeRules(stmt);
+        if (stmt.Initializer != null)
+            _varInitializers[stmt.Name.Lexeme] = stmt.Initializer;
         stmt.Initializer?.Accept(this);
         return null;
     }
@@ -310,6 +313,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
         DispatchNodeRules(stmt);
+        _varInitializers[stmt.Name.Lexeme] = stmt.Initializer;
         stmt.Initializer.Accept(this);
         return null;
     }
@@ -774,6 +778,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitCommandExpr(CommandExpr expr)
     {
         DispatchNodeRules(expr);
+        CheckSafeShellInterpolationRules(expr);
         foreach (var part in expr.Parts)
         {
             // SA0820: warn about unquoted glob metacharacters in literal command text
@@ -783,6 +788,88 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             part.Accept(this);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Checks SA0815 (redundant quotes), SA0816 (implicit array splat), and SA0817
+    /// (whitespace-string migration) on the interpolation slots of a command expression.
+    /// </summary>
+    private void CheckSafeShellInterpolationRules(CommandExpr expr)
+    {
+        var parts = expr.Parts;
+        for (int i = 0; i < parts.Count; i++)
+        {
+            if (parts[i] is LiteralExpr) continue;  // only examine interpolation parts
+
+            var interpExpr = parts[i];
+
+            // SA0815: redundant surrounding quotes around interpolation slot
+            if (i > 0 && parts[i - 1] is LiteralExpr leftLit && leftLit.Value is string leftText
+                && leftText.Length > 0)
+            {
+                char q = leftText[leftText.Length - 1];
+                if (q is '"' or '\'')
+                {
+                    if (i + 1 < parts.Count && parts[i + 1] is LiteralExpr rightLit
+                        && rightLit.Value is string rightText
+                        && rightText.Length > 0 && rightText[0] == q)
+                    {
+                        string label815 = interpExpr is IdentifierExpr id815 ? id815.Name.Lexeme : "expression";
+                        _diagnostics.Add(DiagnosticDescriptors.SA0815.CreateDiagnostic(interpExpr.Span, label815));
+                    }
+                }
+            }
+
+            // SA0816: implicit array splat (only when not already an explicit SpreadExpr)
+            if (interpExpr is not SpreadExpr)
+            {
+                bool isArraySlot = interpExpr is ArrayExpr;
+                if (!isArraySlot && interpExpr is IdentifierExpr id816
+                    && _varInitializers.TryGetValue(id816.Name.Lexeme, out var init816)
+                    && init816 is ArrayExpr)
+                {
+                    isArraySlot = true;
+                }
+
+                if (isArraySlot)
+                {
+                    string label816 = interpExpr is IdentifierExpr id816b ? id816b.Name.Lexeme : "array literal";
+                    _diagnostics.Add(DiagnosticDescriptors.SA0816.CreateDiagnostic(interpExpr.Span, label816));
+                }
+            }
+
+            // SA0817: string with internal whitespace interpolated as a single arg (migration risk)
+            if (interpExpr is IdentifierExpr id817
+                && _varInitializers.TryGetValue(id817.Name.Lexeme, out var init817)
+                && init817 is LiteralExpr { Value: string strVal }
+                && HasInternalWhitespace(strVal))
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0817.CreateDiagnostic(interpExpr.Span, id817.Name.Lexeme));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="s"/> contains whitespace that is
+    /// flanked by non-whitespace on both sides (i.e. internal whitespace, not just leading/trailing).
+    /// </summary>
+    private static bool HasInternalWhitespace(string s)
+    {
+        bool sawNonWs = false;
+        bool sawWsAfterNonWs = false;
+        foreach (char c in s)
+        {
+            if (!char.IsWhiteSpace(c))
+            {
+                if (sawWsAfterNonWs) return true;
+                sawNonWs = true;
+            }
+            else if (sawNonWs)
+            {
+                sawWsAfterNonWs = true;
+            }
+        }
+        return false;
     }
 
     /// <summary>

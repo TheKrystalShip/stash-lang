@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Parsing.AST;
@@ -94,109 +95,23 @@ public sealed partial class Compiler
 
     public object? VisitCommandExpr(CommandExpr expr)
     {
-        byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
-
-        // OPT: Merge consecutive constant parts (same as interpolated strings)
-        var mergedParts = MergeInterpolationParts(expr.Parts);
-        int partCount = mergedParts.Count;
-        byte baseReg = _scope.ReserveRegs(1 + partCount);
-
-        for (int i = 0; i < partCount; i++)
-        {
-            byte partReg = (byte)(baseReg + 1 + i);
-            var (originalExpr, folded) = mergedParts[i];
-            if (folded is not null)
-            {
-                ushort idx = _builder.AddConstant(folded);
-                _builder.EmitABx(OpCode.LoadK, partReg, idx);
-            }
-            else
-            {
-                CompileExprTo(originalExpr!, partReg);
-            }
-        }
-
-        byte flags = 0;
-        if (expr.IsPassthrough) flags |= 0x01;
-        if (expr.IsStrict)      flags |= 0x02;
-        if (expr.Mode == CommandMode.Stream) flags |= 0x04;
-
-        _builder.EmitABC(OpCode.Command, baseReg, (byte)partCount, flags);
-
-        if (baseReg != dest)
-        {
-            _builder.EmitAB(OpCode.Move, dest, baseReg);
-            _scope.FreeTempFrom(baseReg);
-        }
-        else if (partCount > 0)
-        {
-            _scope.FreeTempFrom((byte)(baseReg + 1));
-        }
-
+        byte dest = _destReg;
+        var plan = AnalyzeCommandParts(expr.Parts);
+        EmitProcessExecCall(dest, plan.Program, plan.Args,
+            expr.IsStrict, expr.IsPassthrough, expr.Mode,
+            Array.Empty<RedirectEntry>());
         return null;
     }
 
     public object? VisitPipeExpr(PipeExpr expr)
     {
-        byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
-
-        // Flatten the left-associative pipe chain into a list of CommandExprs
+        byte dest = _destReg;
         var stages = FlattenPipeChain(expr);
-
-        // Determine whether this is a streaming pipeline. A streaming pipeline is one whose
-        // operands all share Mode == Stream. The lexer produces this when the user writes
-        // $<(a | b | c) — every split stage inherits the same streaming sigil.
-        // Mixed streaming/capture chains are rejected (handled by FlattenPipeChain).
-        bool isStreamingPipeline = stages[0].Mode == CommandMode.Stream;
-
-        // Compute merged parts per stage and validate
-        var allMergedParts = new List<List<(Expr? originalExpr, string? folded)>>(stages.Count);
-        int totalParts = 0;
-        foreach (var stage in stages)
-        {
-            var merged = MergeInterpolationParts(stage.Parts);
-            allMergedParts.Add(merged);
-            totalParts += merged.Count;
-        }
-
-        // Reserve a contiguous block for all parts across all stages
-        // (use at least 1 to avoid zero-size reservation issues)
-        byte partsBase = _scope.ReserveRegs(totalParts > 0 ? totalParts : 1);
-
-        // Compile all parts into the register block
-        int regOffset = 0;
-        for (int si = 0; si < stages.Count; si++)
-        {
-            foreach (var (originalExpr, folded) in allMergedParts[si])
-            {
-                byte partReg = (byte)(partsBase + regOffset++);
-                if (folded is not null)
-                {
-                    ushort idx = _builder.AddConstant(folded);
-                    _builder.EmitABx(OpCode.LoadK, partReg, idx);
-                }
-                else
-                {
-                    CompileExprTo(originalExpr!, partReg);
-                }
-            }
-        }
-
-        // Emit PipeChain or StreamingPipeline instruction followed by B companion words
-        OpCode pipelineOp = isStreamingPipeline ? OpCode.StreamingPipeline : OpCode.PipeChain;
-        _builder.EmitABC(pipelineOp, dest, (byte)stages.Count, partsBase);
-        for (int si = 0; si < stages.Count; si++)
-        {
-            byte flags = stages[si].IsStrict ? (byte)0x01 : (byte)0x00;
-            uint companion = ((uint)allMergedParts[si].Count << 8) | flags;
-            _builder.EmitRaw(companion);
-        }
-
-        // Free the parts register block
-        _scope.FreeTempFrom(partsBase);
-
+        bool isStreaming = stages[0].Mode == CommandMode.Stream;
+        bool lastStrict  = stages[stages.Count - 1].IsStrict;
+        EmitProcessPipelineCall(dest, stages, isStreaming, lastStrict, Array.Empty<RedirectEntry>());
         return null;
     }
 

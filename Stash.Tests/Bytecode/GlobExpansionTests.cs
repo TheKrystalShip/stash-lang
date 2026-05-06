@@ -200,21 +200,16 @@ public class GlobExpansionTests : StashTestBase
     }
 
     [Fact]
-    public void Command_NoMatchGlob_ThrowsCommandError()
+    public void Command_NoMatchGlob_FallsBackToLiteral()
     {
         if (OperatingSystem.IsWindows()) return;
 
-        using var tmp = new TempDir();
-        var result = (string?)Run("""
-            let result = "no error";
-            try {
-                $(echo *.xyz);
-            } catch (e) {
-                result = e.message;
-            }
-            """);
+        // Phase B: when a glob pattern matches nothing, process.exec no longer throws.
+        // Instead the literal pattern string is passed to the program as-is.
+        // This aligns with bash's 'failglob' being off by default.
+        var result = (string?)Run("let r = $(echo *.xyz); let result = r.stdout;");
         Assert.NotNull(result);
-        Assert.Contains("did not match", result);
+        Assert.Equal("*.xyz", result.Trim());
     }
 
     [Fact]

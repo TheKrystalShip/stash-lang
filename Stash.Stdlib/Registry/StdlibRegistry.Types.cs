@@ -108,5 +108,9 @@ public static partial class StdlibRegistry
         ["RetryOptions"] = new("RetryOptions", "Options for `retry` blocks. Fields: `delay` (duration), `backoff` (Backoff), `maxDelay` (duration), `jitter` (bool), `timeout` (duration), `on` (array of error type names)."),
         ["RetryContext"] = new("RetryContext", "Attempt context available inside `retry` blocks via `attempt`. Fields: `current` (int), `max` (int), `remaining` (int), `elapsed` (duration), `errors` (array)."),
         ["Backoff"] = new("Backoff", "Backoff strategy enum for `retry` blocks. Members: `Fixed`, `Linear`, `Exponential`."),
+        ["ExecMode"] = new("ExecMode", "Execution mode enum for `process.exec` and `process.pipeline`. Members: `Capture` (collect stdout/stderr), `Passthrough` (inherit terminal I/O), `Stream` (return a StreamingProcess handle)."),
+        ["ExecOptions"] = new("ExecOptions", "Options for `process.exec` and `process.pipeline`. Fields: `mode` (ExecMode?), `strict` (bool), `redirect` (RedirectSpec?), `cwd` (string?), `env` (dict?)."),
+        ["RedirectSpec"] = new("RedirectSpec", "Output redirect specification for `process.exec`. Fields: `stream` (\"stdout\"|\"stderr\"|\"all\"), `target` (destination file path), `append` (bool — append vs. overwrite)."),
+        ["PipelineStage"] = new("PipelineStage", "One stage in a `process.pipeline` call. Fields: `program` (string), `args` (array)."),
     }.ToFrozenDictionary();
 }

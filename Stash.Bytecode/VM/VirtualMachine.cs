@@ -85,6 +85,14 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     private int[]? _lastDebugLinePerFrame;
     private int _loopCheckCounter;
 
+    // Wire GlobExpandHandler once for the whole process so that process.exec can
+    // apply glob expansion to unquoted StashLiteralArg tokens emitted by Phase B.
+    static VirtualMachine()
+    {
+        Stash.Runtime.ShellExpansion.GlobExpandHandler = static (pattern, _) =>
+            GlobExpander.Expand(pattern);
+    }
+
     public VirtualMachine(Dictionary<string, StashValue>? globals = null, CancellationToken ct = default)
     {
         _stack = ArrayPool<StashValue>.Shared.Rent(DefaultStackSize);

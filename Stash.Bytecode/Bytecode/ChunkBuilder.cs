@@ -144,6 +144,12 @@ public sealed class ChunkBuilder
     /// <summary>Add an object constant (metadata records, etc.).</summary>
     public ushort AddConstant(object value) => AddConstant(StashValue.FromObj(value));
 
+    /// <summary>
+    /// Add a <see cref="Stash.Runtime.Types.StashLiteralArg"/> constant, deduplicating by
+    /// (text, shouldExpand) via the type's <see cref="object.Equals"/> implementation.
+    /// </summary>
+    public ushort AddConstant(Stash.Runtime.Types.StashLiteralArg litArg) => AddConstant(StashValue.FromObj(litArg));
+
     // ==================================================================
     // Upvalues
     // ==================================================================

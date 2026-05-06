@@ -18,7 +18,7 @@ public static class BytecodeWriter
     public const uint MagicBytes = 0x53544243;
 
     /// <summary>Current .stashc format version.</summary>
-    public const ushort FormatVersion = 2;
+    public const ushort FormatVersion = 3;
 
     /// <summary>
     /// File-level flags stored in the header byte.
@@ -364,6 +364,14 @@ public static class BytecodeWriter
                     writer.Write((int)lockMeta.OptionCount);
                     writer.Write((byte)(lockMeta.HasWait ? 1 : 0));
                     writer.Write((byte)(lockMeta.HasStale ? 1 : 0));
+                }
+                else if (obj is Stash.Runtime.Types.StashLiteralArg litArg)
+                {
+                    writer.Write((byte)18);
+                    byte[] textBytes = Encoding.UTF8.GetBytes(litArg.Text);
+                    writer.Write((uint)textBytes.Length);
+                    writer.Write(textBytes);
+                    writer.Write((byte)(litArg.ShouldExpand ? 1 : 0));
                 }
                 else
                 {

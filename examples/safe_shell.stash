@@ -1,0 +1,122 @@
+#!/usr/bin/env stash
+
+// examples/safe_shell.stash
+//
+// Demonstrates the Safe Shell Interpolation model: all $(...) sigils desugar
+// at compile time into process.exec / process.pipeline calls. Interpolation
+// slots are always atomic argv entries — never split, never glob-expanded,
+// never tilde-expanded.
+//
+// Run with: dotnet run --project Stash.Cli/ -- examples/safe_shell.stash
+
+// ---------------------------------------------------------------------------
+// 1. Literal command — whitespace-and-quote tokenized at compile time.
+// ---------------------------------------------------------------------------
+io.println("=== 1. Literal command ===");
+let r1 = $(echo hello world);
+// program = "echo", args = ["hello", "world"]
+io.println(str.trim(r1.stdout));  // "hello world"
+
+// ---------------------------------------------------------------------------
+// 2. Injection safety — user-controlled value is never tokenized.
+// ---------------------------------------------------------------------------
+io.println("\n=== 2. Injection safety ===");
+let evil = "; rm -rf /";
+// stash-disable-next-line SA0817 — intentional demo: whitespace string is one verbatim arg (injection-safe)
+let r2 = $(echo ${evil});
+// args = ["; rm -rf /"]  — single literal argv entry, no shell, no harm
+io.println(str.trim(r2.stdout));  // "; rm -rf /"
+
+// ---------------------------------------------------------------------------
+// 3. Array splat (${...arr}) — passes each element as a separate argv entry.
+// ---------------------------------------------------------------------------
+io.println("\n=== 3. Array splat ===");
+let flags = ["-l", "examples/safe_shell.stash"];
+let r3 = $(ls ${...flags});
+// program = "ls", args = ["-l", "examples/safe_shell.stash"]
+io.println(str.trim(r3.stdout));
+
+// ---------------------------------------------------------------------------
+// 4. Array in program slot — first element becomes the program name.
+// ---------------------------------------------------------------------------
+io.println("\n=== 4. Array in program slot ===");
+let kc = ["printf", "%s\\n"];
+let r4 = $(${kc} hello);
+// program = "printf" (first element), args = ["%s\n", "hello"]
+io.println(str.trim(r4.stdout));  // "hello"
+
+// ---------------------------------------------------------------------------
+// 5. Glued slot — literal + interpolation concatenate into one argv entry.
+// ---------------------------------------------------------------------------
+io.println("\n=== 5. Glued slot ===");
+let user = "alice";
+let r5 = $(echo --name=${user});
+// args = ["--name=alice"]
+io.println(str.trim(r5.stdout));  // "--name=alice"
+
+// ---------------------------------------------------------------------------
+// 6. Glob — applies only to literal source tokens, never to interpolated values.
+// ---------------------------------------------------------------------------
+io.println("\n=== 6. Glob on literal token ===");
+let r6 = $(ls examples/*.stash);
+let count = len(str.split(str.trim(r6.stdout), "\n"));
+io.println("Found ${count} .stash files via literal glob");
+
+io.println("\n=== 6b. No glob on interpolated value ===");
+let pat = "*.stash";
+let r6b = $(ls ${pat});
+// "*.stash" is passed VERBATIM — ls looks for a file literally named "*.stash"
+io.println("ls exit code: ${r6b.exitCode}");  // non-zero (file not found)
+
+// ---------------------------------------------------------------------------
+// 7. Tilde — applies only to literal source tokens, never to interpolated values.
+// ---------------------------------------------------------------------------
+io.println("\n=== 7. Tilde on literal token ===");
+let r7 = $(ls ~);
+// program = "ls", args = [<expanded $HOME>]  (tilde applied at compile time)
+io.println("home listing exit code: ${r7.exitCode}");
+
+io.println("\n=== 7b. No tilde on interpolated value ===");
+let home = "~/.config";
+let r7b = $(ls ${home});
+// "~/.config" is passed VERBATIM — ls looks for "~/.config" as a literal path
+io.println("ls exit code: ${r7b.exitCode}");  // non-zero (no such path)
+
+// ---------------------------------------------------------------------------
+// 8. Direct stdlib call — process.exec with ExecOptions.
+// ---------------------------------------------------------------------------
+io.println("\n=== 8. Direct process.exec call ===");
+let r8 = process.exec("ls", ["-la", "examples/safe_shell.stash"]);
+io.println("exit code: ${r8.exitCode}");
+let first_line = str.split(str.trim(r8.stdout), "\n")[0];
+io.println(first_line);
+
+// ---------------------------------------------------------------------------
+// 9. process.pipeline — equivalent to $(printf ... | grep ...).
+// ---------------------------------------------------------------------------
+io.println("\n=== 9. process.pipeline ===");
+let r9 = process.pipeline([
+    PipelineStage{ program: "printf", args: ["%s\n%s\n%s\n", "apple", "banana", "cherry"] },
+    PipelineStage{ program: "grep",   args: ["an"] }
+]);
+io.println(str.trim(r9.stdout));  // "banana"
+
+// ---------------------------------------------------------------------------
+// 10. Migration examples — old patterns vs. new patterns.
+// ---------------------------------------------------------------------------
+io.println("\n=== 10. Migration: whitespace-split ===");
+// Old (broken under new semantics): $(ls ${opts}) where opts = "-l examples/"
+let opts = "-l examples/safe_shell.stash";
+// AFTER: split into an array, then pass as ${...arr} (explicit spread)
+let optArr = str.split(opts, " ");
+let r10 = $(ls ${...optArr});
+io.println("exit code: ${r10.exitCode}");  // 0
+
+io.println("\n=== 11. Migration: program-name array ===");
+// Old (broken): let cmd = "printf hello"; $(${cmd})
+// AFTER: array form — first element is the program, rest are args
+let cmd = ["printf", "%s\\n", "hello"];
+let r11 = $(${cmd});
+io.println(str.trim(r11.stdout));  // "hello"
+
+io.println("\nAll demos complete.");
