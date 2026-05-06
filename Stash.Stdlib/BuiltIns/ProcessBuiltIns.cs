@@ -11,31 +11,15 @@ using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
 
 /// <summary>
 /// Registers the <c>process</c> namespace built-in functions for process management.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Provides functions for spawning, managing, and communicating with child processes:
-/// <c>process.exec</c>, <c>process.spawn</c>, <c>process.wait</c>, <c>process.waitTimeout</c>,
-/// <c>process.waitAll</c>, <c>process.waitAny</c>, <c>process.kill</c>, <c>process.signal</c>,
-/// <c>process.pid</c>, <c>process.isAlive</c>, <c>process.read</c>, <c>process.write</c>,
-/// <c>process.onExit</c>, <c>process.daemonize</c>, <c>process.detach</c>, <c>process.list</c>,
-/// <c>process.find</c>, <c>process.exists</c>, <c>process.chdir</c>, <c>process.withDir</c>,
-/// and <c>process.exit</c>.
-/// </para>
-/// <para>
-/// Also exposes POSIX signal constants: <c>SIGHUP</c>, <c>SIGINT</c>, <c>SIGQUIT</c>,
-/// <c>SIGKILL</c>, <c>SIGUSR1</c>, <c>SIGUSR2</c>, and <c>SIGTERM</c>.
-/// This namespace is only registered when the <see cref="StashCapabilities.Process"/>
-/// capability is enabled.
-/// </para>
-/// </remarks>
-public static class ProcessBuiltIns
+[StashNamespace(Capability = StashCapabilities.Process)]
+public static partial class ProcessBuiltIns
 {
     /// <summary>Set by Stash.Cli on REPL startup. Returns a snapshot of the current in-memory history. Null means persistence disabled.</summary>
     public static Func<IReadOnlyList<string>>? HistoryListProvider;
@@ -46,672 +30,772 @@ public static class ProcessBuiltIns
     /// <summary>Set by Stash.Cli on REPL startup. Appends an entry to in-memory + on-disk history (subject to dedup and leading-space rules). Null means persistence disabled.</summary>
     public static Action<string>? HistoryAddHandler;
 
-    /// <summary>
-    /// Registers all <c>process</c> namespace functions into the global environment.
-    /// </summary>
-    /// <param name="globals">The global <see cref="Environment"/> to register functions in.</param>
-    public static NamespaceDefinition Define()
+    // ── Signal constants (deprecated — use Signal.X instead) ─────────────────
+
+    /// <summary>POSIX SIGHUP signal number (1). Deprecated — use Signal.Hup.</summary>
+    [StashConst, StashDeprecated("Signal.Hup")]
+    public const long SIGHUP = 1L;
+
+    /// <summary>POSIX SIGINT signal number (2). Deprecated — use Signal.Int.</summary>
+    [StashConst, StashDeprecated("Signal.Int")]
+    public const long SIGINT = 2L;
+
+    /// <summary>POSIX SIGQUIT signal number (3). Deprecated — use Signal.Quit.</summary>
+    [StashConst, StashDeprecated("Signal.Quit")]
+    public const long SIGQUIT = 3L;
+
+    /// <summary>POSIX SIGKILL signal number (9). Deprecated — use Signal.Kill.</summary>
+    [StashConst, StashDeprecated("Signal.Kill")]
+    public const long SIGKILL = 9L;
+
+    /// <summary>POSIX SIGUSR1 signal number (10). Deprecated — use Signal.Usr1.</summary>
+    [StashConst, StashDeprecated("Signal.Usr1")]
+    public const long SIGUSR1 = 10L;
+
+    /// <summary>POSIX SIGUSR2 signal number (12). Deprecated — use Signal.Usr2.</summary>
+    [StashConst, StashDeprecated("Signal.Usr2")]
+    public const long SIGUSR2 = 12L;
+
+    /// <summary>POSIX SIGTERM signal number (15). Deprecated — use Signal.Term.</summary>
+    [StashConst, StashDeprecated("Signal.Term")]
+    public const long SIGTERM = 15L;
+
+    // ── Struct declarations ───────────────────────────────────────────────────
+
+    /// <summary>Result of a process execution.</summary>
+    [StashStruct]
+    public sealed record CommandResult(string Stdout, string Stderr, long ExitCode);
+
+    /// <summary>A handle to a spawned child process.</summary>
+    [StashStruct(Name = "Process")]
+    public sealed record ProcessInfo(long Pid, string Command);
+
+    // ── Functions ─────────────────────────────────────────────────────────────
+
+    /// <summary>Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.</summary>
+    /// <param name="code">(optional) The exit code. Defaults to 0</param>
+    /// <returns>Does not return — exits the process</returns>
+    [StashFn(Raw = true), StashDeprecated("env.exit")]
+    private static StashValue Exit(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        // ── process namespace ────────────────────────────────────────────────
-        var ns = new NamespaceBuilder("process");
-        ns.RequiresCapability(StashCapabilities.Process);
+        long code = args.Length > 0 ? SvArgs.Long(args, 0, "process.exit") : 0L;
+        GlobalBuiltIns.EmitExitImpl(ctx, code);
+        return StashValue.Null;
+    }
 
-        // Signal constants — POSIX signal numbers for use with process.signal().
-        ns.Constant("SIGHUP",  (long)1,  "int", "1",  deprecation: new DeprecationInfo("Signal.Hup"));
-        ns.Constant("SIGINT",  (long)2,  "int", "2",  deprecation: new DeprecationInfo("Signal.Int"));
-        ns.Constant("SIGQUIT", (long)3,  "int", "3",  deprecation: new DeprecationInfo("Signal.Quit"));
-        ns.Constant("SIGKILL", (long)9,  "int", "9",  deprecation: new DeprecationInfo("Signal.Kill"));
-        ns.Constant("SIGUSR1", (long)10, "int", "10", deprecation: new DeprecationInfo("Signal.Usr1"));
-        ns.Constant("SIGUSR2", (long)12, "int", "12", deprecation: new DeprecationInfo("Signal.Usr2"));
-        ns.Constant("SIGTERM", (long)15, "int", "15", deprecation: new DeprecationInfo("Signal.Term"));
-
-        // process.exit(code?) — Exits the process with the given integer exit code (default 0).
-        // Defer-aware: all pending defer blocks on the call stack are run before termination.
-        // Catch-immune: no Stash try/catch clause can intercept this.
-        ns.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+    /// <summary>Replaces the current process image with the given command (Unix execvp / Windows spawn-and-exit). Does not return on success.</summary>
+    /// <param name="command">The command and arguments to execute</param>
+    /// <returns>Does not return — replaces the process</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Replace(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (ctx.EmbeddedMode)
         {
-            long code = args.Length > 0 ? SvArgs.Long(args, 0, "process.exit") : 0L;
-            GlobalBuiltIns.EmitExitImpl(ctx, code);
-            return StashValue.Null;
-        },
-            returnType: "null",
-            isVariadic: true,
-            documentation: "Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code. Defaults to 0\n@return Does not return — exits the process",
-            deprecation: new DeprecationInfo("env.exit"));
+            throw new RuntimeError("'process.replace' is not available in embedded mode.", errorType: StashErrorTypes.NotSupportedError);
+        }
 
-        // process.replace(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
-        // TODO Phase D: changelog — process.exec(string) renamed to process.replace(string); new process.exec(program, args, opts?) added
-        ns.Function("replace", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        var command = SvArgs.String(args, 0, "process.replace");
+
+        var (program, arguments) = CommandParser.Parse(command);
+
+        // Clean up tracked processes before replacing the process image
+        ctx.CleanupTrackedProcesses();
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            if (ctx.EmbeddedMode)
-            {
-                throw new RuntimeError("'process.replace' is not available in embedded mode.", errorType: StashErrorTypes.NotSupportedError);
-            }
-
-            var command = SvArgs.String(args, 0, "process.replace");
-
-            var (program, arguments) = CommandParser.Parse(command);
-
-            // Clean up tracked processes before replacing the process image
-            ctx.CleanupTrackedProcesses();
-
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                // Windows has no execvp — start the process with inherited I/O and exit
-                var psi = new ProcessStartInfo
-                {
-                    FileName = program,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = false,
-                    RedirectStandardError = false,
-                    RedirectStandardInput = false,
-                };
-                foreach (var arg in arguments)
-                {
-                    psi.ArgumentList.Add(arg);
-                }
-
-                try
-                {
-                    using var child = System.Diagnostics.Process.Start(psi)
-                        ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
-                    try
-                    {
-                        child.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
-                    }
-                    catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested)
-                    {
-                        try { child.Kill(entireProcessTree: true); } catch { }
-                        throw;
-                    }
-                    System.Environment.Exit(child.ExitCode);
-                }
-                catch (RuntimeError) { throw; }
-                catch (System.Exception ex)
-                {
-                    throw new RuntimeError($"process.replace failed: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            }
-            else
-            {
-                // Unix: true exec — replaces the current process image
-                int result = UnixSignal.Exec(program, arguments.ToArray());
-
-                // If we get here, execvp failed
-                int errno = Marshal.GetLastPInvokeError();
-                throw new RuntimeError($"process.replace failed: execvp returned {result} (errno {errno}).", errorType: StashErrorTypes.IOError);
-            }
-
-            return StashValue.Null; // unreachable
-        },
-            returnType: "null",
-            documentation: "Replaces the current process image with the given command (Unix execvp / Windows spawn-and-exit). Does not return on success.\n@param command The command and arguments to execute\n@return Does not return — replaces the process");
-
-        // process.exec(program, args, opts?) — Runs program with an explicit argv array. Returns a CommandResult (or StreamingProcess in Stream mode).
-        // This is the safe, injection-resistant API: the caller supplies a pre-tokenised argument list.
-        // The $(…) sigil desugars to this function in Phase B.
-        ns.Function("exec", [Param("program", "string"), Param("args", "array"), Param("opts", "ExecOptions?")],
-        static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            // Phase B: program may be an array when the first argv slot is an array-typed
-            // interpolation (e.g. $(${cmd}) where cmd=["ls","-la"]). In that case the first
-            // element is the program name and the rest are prepended to the explicit args.
-            string program;
-            List<string> extraLeading = new();
-
-            var arg0 = args[0];
-            if (arg0.IsObj && arg0.AsObj is List<StashValue> programArray)
-            {
-                if (programArray.Count == 0)
-                    throw new RuntimeError("process.exec: program array cannot be empty.", errorType: StashErrorTypes.ValueError);
-                program = StringifyArg(programArray[0]);
-                for (int pi = 1; pi < programArray.Count; pi++)
-                    extraLeading.Add(StringifyArg(programArray[pi]));
-            }
-            else
-            {
-                program = SvArgs.String(args, 0, "process.exec");
-            }
-
-            if (string.IsNullOrEmpty(program))
-                throw new RuntimeError("process.exec: 'program' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
-
-            if (args.Length < 2 || args[1].IsNull || !(args[1].IsObj && args[1].AsObj is List<StashValue>))
-                throw new RuntimeError("process.exec: 'args' must be an array.", errorType: StashErrorTypes.TypeError);
-
-            var rawArgs = (List<StashValue>)args[1].AsObj!;
-            var argv = ResolveArgv(rawArgs, "process.exec");
-
-            if (extraLeading.Count > 0)
-            {
-                extraLeading.AddRange(argv);
-                argv = extraLeading;
-            }
-
-            var opts = args.Length >= 3 ? ParseExecOptions(args[2], "process.exec") : ExecOptionsData.Default;
-
-            string label = argv.Count > 0
-                ? $"{program} {string.Join(" ", argv)}"
-                : program;
-
-            return ExecuteExec(ctx, program, argv, opts, label);
-        },
-            returnType: "CommandResult | StreamingProcess",
-            isVariadic: true,
-            documentation: "Runs a program with an explicit argv array. Unlike `$(…)`, no shell tokenisation or glob expansion is applied to the args — they are passed verbatim.\n@param program The executable name or path\n@param args Array of argument strings\n@param opts Optional ExecOptions controlling mode, strict, redirect, cwd, env\n@return A CommandResult (stdout, stderr, exitCode) in Capture/Passthrough mode, or a StreamingProcess in Stream mode");
-
-        // process.pipeline(stages, opts?) — Runs a multi-stage pipeline from an array of PipelineStage structs.
-        ns.Function("pipeline", [Param("stages", "array"), Param("opts", "ExecOptions?")],
-        static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            if (args.Length < 1 || args[0].IsNull || !(args[0].IsObj && args[0].AsObj is List<StashValue>))
-                throw new RuntimeError("process.pipeline: 'stages' must be a non-empty array.", errorType: StashErrorTypes.TypeError);
-
-            var rawStages = (List<StashValue>)args[0].AsObj!;
-            if (rawStages.Count == 0)
-                throw new RuntimeError("process.pipeline: 'stages' must contain at least one stage.", errorType: StashErrorTypes.ValueError);
-
-            var opts = args.Length >= 2 ? ParseExecOptions(args[1], "process.pipeline") : ExecOptionsData.Default;
-
-            if (opts.Mode == ExecModeEnum.Passthrough)
-                throw new RuntimeError("process.pipeline: Passthrough mode is not allowed in pipelines. Use Capture or Stream.", errorType: StashErrorTypes.ValueError);
-
-            // Parse each stage.
-            var stages = new List<(string Program, List<string> Argv)>(rawStages.Count);
-            var commandBuf = new System.Text.StringBuilder();
-            for (int i = 0; i < rawStages.Count; i++)
-            {
-                var (stageProgram, stageArgv) = ParsePipelineStage(rawStages[i], i, "process.pipeline");
-                stages.Add((stageProgram, stageArgv));
-                if (commandBuf.Length > 0) commandBuf.Append(" | ");
-                commandBuf.Append(stageProgram);
-                foreach (string a in stageArgv) { commandBuf.Append(' '); commandBuf.Append(a); }
-            }
-            string commandLabel = commandBuf.ToString();
-
-            return ExecutePipeline(ctx, stages, opts, commandLabel);
-        },
-            returnType: "CommandResult | StreamingProcess",
-            isVariadic: true,
-            documentation: "Runs a multi-stage pipeline from an array of PipelineStage values. Each stage specifies program and args explicitly — no shell tokenisation applied.\n@param stages Array of PipelineStage values (each with program and args fields)\n@param opts Optional ExecOptions controlling mode, strict, redirect\n@return A CommandResult in Capture mode, or a StreamingProcess in Stream mode");
-
-        // process.spawn(command) — Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output.
-        ns.Function("spawn", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var command = SvArgs.String(args, 0, "process.spawn");
-
-            var (program, arguments) = CommandParser.Parse(command);
+            // Windows has no execvp — start the process with inherited I/O and exit
             var psi = new ProcessStartInfo
             {
                 FileName = program,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
                 UseShellExecute = false,
-                CreateNoWindow = true
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                RedirectStandardInput = false,
             };
             foreach (var arg in arguments)
             {
                 psi.ArgumentList.Add(arg);
             }
 
-            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
-            var fields = new Dictionary<string, StashValue>
+            try
             {
-                ["pid"] = StashValue.FromInt((long)osProcess.Id),
-                ["command"] = StashValue.FromObj(command)
-            };
-            var handle = new StashInstance("Process", fields);
-            ctx.TrackedProcesses.Add((handle, osProcess));
-            return StashValue.FromObj(handle);
-        },
-            returnType: "Process",
-            documentation: "Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output and the exit code.\n@param command The command and arguments to spawn\n@return A Process handle");
-
-        // process.wait(handle) — Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.
-        ns.Function("wait", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+                using var child = System.Diagnostics.Process.Start(psi)
+                    ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
+                try
+                {
+                    child.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
+                }
+                catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested)
+                {
+                    try { child.Kill(entireProcessTree: true); } catch { }
+                    throw;
+                }
+                System.Environment.Exit(child.ExitCode);
+            }
+            catch (RuntimeError) { throw; }
+            catch (System.Exception ex)
+            {
+                throw new RuntimeError($"process.replace failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+            }
+        }
+        else
         {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.wait");
+            // Unix: true exec — replaces the current process image
+            int result = UnixSignal.Exec(program, arguments.ToArray());
+
+            // If we get here, execvp failed
+            int errno = Marshal.GetLastPInvokeError();
+            throw new RuntimeError($"process.replace failed: execvp returned {result} (errno {errno}).", errorType: StashErrorTypes.IOError);
+        }
+
+        return StashValue.Null; // unreachable
+    }
+
+    /// <summary>Runs a program with an explicit argv array. Unlike `$(…)`, no shell tokenisation or glob expansion is applied to the args — they are passed verbatim.</summary>
+    /// <param name="program">The executable name or path</param>
+    /// <param name="args">Array of argument strings</param>
+    /// <param name="opts">Optional ExecOptions controlling mode, strict, redirect, cwd, env</param>
+    /// <returns>A CommandResult (stdout, stderr, exitCode) in Capture/Passthrough mode, or a StreamingProcess in Stream mode</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Exec(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        // Phase B: program may be an array when the first argv slot is an array-typed
+        // interpolation (e.g. $(${cmd}) where cmd=["ls","-la"]). In that case the first
+        // element is the program name and the rest are prepended to the explicit args.
+        string program;
+        List<string> extraLeading = new();
+
+        var arg0 = args[0];
+        if (arg0.IsObj && arg0.AsObj is List<StashValue> programArray)
+        {
+            if (programArray.Count == 0)
+                throw new RuntimeError("process.exec: program array cannot be empty.", errorType: StashErrorTypes.ValueError);
+            program = StringifyArg(programArray[0]);
+            for (int pi = 1; pi < programArray.Count; pi++)
+                extraLeading.Add(StringifyArg(programArray[pi]));
+        }
+        else
+        {
+            program = SvArgs.String(args, 0, "process.exec");
+        }
+
+        if (string.IsNullOrEmpty(program))
+            throw new RuntimeError("process.exec: 'program' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+
+        if (args.Length < 2 || args[1].IsNull || !(args[1].IsObj && args[1].AsObj is List<StashValue>))
+            throw new RuntimeError("process.exec: 'args' must be an array.", errorType: StashErrorTypes.TypeError);
+
+        var rawArgs = (List<StashValue>)args[1].AsObj!;
+        var argv = ResolveArgv(rawArgs, "process.exec");
+
+        if (extraLeading.Count > 0)
+        {
+            extraLeading.AddRange(argv);
+            argv = extraLeading;
+        }
+
+        var opts = args.Length >= 3 ? ParseExecOptions(args[2], "process.exec") : ExecOptionsData.Default;
+
+        string label = argv.Count > 0
+            ? $"{program} {string.Join(" ", argv)}"
+            : program;
+
+        return ExecuteExec(ctx, program, argv, opts, label);
+    }
+
+    /// <summary>Runs a multi-stage pipeline from an array of PipelineStage values. Each stage specifies program and args explicitly — no shell tokenisation applied.</summary>
+    /// <param name="stages">Array of PipelineStage values (each with program and args fields)</param>
+    /// <param name="opts">Optional ExecOptions controlling mode, strict, redirect</param>
+    /// <returns>A CommandResult in Capture mode, or a StreamingProcess in Stream mode</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Pipeline(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args[0].IsNull || !(args[0].IsObj && args[0].AsObj is List<StashValue>))
+            throw new RuntimeError("process.pipeline: 'stages' must be a non-empty array.", errorType: StashErrorTypes.TypeError);
+
+        var rawStages = (List<StashValue>)args[0].AsObj!;
+        if (rawStages.Count == 0)
+            throw new RuntimeError("process.pipeline: 'stages' must contain at least one stage.", errorType: StashErrorTypes.ValueError);
+
+        var opts = args.Length >= 2 ? ParseExecOptions(args[1], "process.pipeline") : ExecOptionsData.Default;
+
+        if (opts.Mode == ExecModeEnum.Passthrough)
+            throw new RuntimeError("process.pipeline: Passthrough mode is not allowed in pipelines. Use Capture or Stream.", errorType: StashErrorTypes.ValueError);
+
+        // Parse each stage.
+        var stages = new List<(string Program, List<string> Argv)>(rawStages.Count);
+        var commandBuf = new System.Text.StringBuilder();
+        for (int i = 0; i < rawStages.Count; i++)
+        {
+            var (stageProgram, stageArgv) = ParsePipelineStage(rawStages[i], i, "process.pipeline");
+            stages.Add((stageProgram, stageArgv));
+            if (commandBuf.Length > 0) commandBuf.Append(" | ");
+            commandBuf.Append(stageProgram);
+            foreach (string a in stageArgv) { commandBuf.Append(' '); commandBuf.Append(a); }
+        }
+        string commandLabel = commandBuf.ToString();
+
+        return ExecutePipeline(ctx, stages, opts, commandLabel);
+    }
+
+    /// <summary>Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output and the exit code.</summary>
+    /// <param name="command">The command and arguments to spawn</param>
+    /// <returns>A Process handle</returns>
+    [StashFn(Raw = true, ReturnType = "Process")]
+    private static StashValue Spawn(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var command = SvArgs.String(args, 0, "process.spawn");
+
+        var (program, arguments) = CommandParser.Parse(command);
+        var psi = new ProcessStartInfo
+        {
+            FileName = program,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in arguments)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
+        var fields = new Dictionary<string, StashValue>
+        {
+            ["pid"] = StashValue.FromInt((long)osProcess.Id),
+            ["command"] = StashValue.FromObj(command)
+        };
+        var handle = new StashInstance("Process", fields);
+        ctx.TrackedProcesses.Add((handle, osProcess));
+        return StashValue.FromObj(handle);
+    }
+
+    /// <summary>Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <returns>A CommandResult with stdout, stderr, and exitCode</returns>
+    [StashFn(Raw = true, ReturnType = "CommandResult")]
+    private static StashValue Wait(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.wait");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null)
+        {
+            // Already waited — return cached result if available
+            if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
+            {
+                return StashValue.FromObj(cached);
+            }
+
+            return StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", -1));
+        }
+
+        var osProcess = entry.Process;
+        var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+        var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+        try
+        {
+            osProcess.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested)
+        {
+            try { osProcess.Kill(entireProcessTree: true); } catch { }
+            throw;
+        }
+        Task.WaitAll(new[] { stdoutTask, stderrTask }, ctx.CancellationToken);
+
+        var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+        // Remove from tracking and dispose the OS process handle
+        int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+        if (idx >= 0)
+        {
+            ctx.TrackedProcesses.RemoveAt(idx);
+        }
+        try { osProcess.Dispose(); }
+        catch { /* Best-effort disposal */ }
+
+        // Cache the result so subsequent wait() calls return the same data
+        ctx.ProcessWaitCache[handle] = result;
+        FireExitCallbacks(ctx, handle, result);
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Waits up to the given number of milliseconds for a process to exit. Returns a CommandResult on success, or null if the timeout expires.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="ms">Maximum wait time in milliseconds</param>
+    /// <returns>A CommandResult, or null if timed out</returns>
+    [StashFn(Raw = true)]
+    private static StashValue WaitTimeout(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.waitTimeout");
+        var ms = SvArgs.Long(args, 1, "process.waitTimeout");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null)
+        {
+            return StashValue.Null;
+        }
+
+        var osProcess = entry.Process;
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+            cts.CancelAfter((int)ms);
+            osProcess.WaitForExitAsync(cts.Token).GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException) when (!ctx.CancellationToken.IsCancellationRequested)
+        {
+            return StashValue.Null; // our own CancelAfter fired — timed out
+        }
+
+        var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+        var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+        Task.WaitAll(new[] { stdoutTask, stderrTask }, ctx.CancellationToken);
+
+        var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+        // Remove from tracking and dispose the OS process handle
+        int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+        if (idx >= 0)
+        {
+            ctx.TrackedProcesses.RemoveAt(idx);
+        }
+        try { osProcess.Dispose(); }
+        catch { /* Best-effort disposal */ }
+
+        ctx.ProcessWaitCache[handle] = result;
+        FireExitCallbacks(ctx, handle, result);
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <returns>True if the signal was sent, false if the process was not running</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Kill(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.kill");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null || entry.Process.HasExited)
+        {
+            return StashValue.FromBool(false);
+        }
+
+        try
+        {
+            entry.Process.Kill(false); // SIGTERM on Unix, TerminateProcess on Windows
+            return StashValue.FromBool(true);
+        }
+        catch
+        {
+            return StashValue.FromBool(false);
+        }
+    }
+
+    /// <summary>Returns true if the process is still running, false if it has exited.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <returns>True if the process is running</returns>
+    [StashFn(Raw = true)]
+    private static StashValue IsAlive(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.isAlive");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null)
+        {
+            return StashValue.FromBool(false);
+        }
+
+        try { return StashValue.FromBool(!entry.Process.HasExited); }
+        catch { return StashValue.FromBool(false); }
+    }
+
+    /// <summary>Returns the OS process ID for a spawned Process handle.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <returns>The integer process ID</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Pid(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.pid");
+
+        return handle.GetField("pid", null);
+    }
+
+    /// <summary>Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL, etc. as signal number constants. Returns true on success.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="signum">The POSIX signal number (1–64)</param>
+    /// <returns>True if the signal was sent successfully</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Signal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.signal");
+
+        long sig;
+        var sigArg = args[1];
+        if (sigArg.IsObj && sigArg.AsObj is StashEnumValue ev && ev.TypeName == "Signal")
+        {
+            if (!GlobalBuiltIns.SignalNumbers.TryGetValue(ev.MemberName, out sig))
+            {
+                throw new RuntimeError($"Unknown Signal member '{ev.MemberName}'.", errorType: StashErrorTypes.ValueError);
+            }
+        }
+        else
+        {
+            sig = SvArgs.Long(args, 1, "process.signal");
+        }
+
+        if (sig < 1 || sig > 64)
+        {
+            throw new RuntimeError($"Signal number must be between 1 and 64, got {sig}.", errorType: StashErrorTypes.ValueError);
+        }
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null || entry.Process.HasExited)
+        {
+            return StashValue.FromBool(false);
+        }
+
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Windows: map common signals to Process API
+                if (sig == 9 /* SIGKILL */ || sig == 15 /* SIGTERM */)
+                {
+                    entry.Process.Kill(sig == 9);
+                    return StashValue.FromBool(true);
+                }
+
+                // Other signals have no Windows equivalent — terminate as best effort
+                entry.Process.Kill(false);
+                return StashValue.FromBool(true);
+            }
+            else
+            {
+                // Unix: use the kill() syscall via P/Invoke for arbitrary signals
+                int result = UnixSignal.Kill(entry.Process.Id, (int)sig);
+                return StashValue.FromBool(result == 0);
+            }
+        }
+        catch
+        {
+            return StashValue.FromBool(false);
+        }
+    }
+
+    /// <summary>Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.</summary>
+    /// <param name="handle">The Process handle to detach</param>
+    /// <returns>True if the handle was found and removed</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Detach(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.detach");
+
+        int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+        if (idx >= 0)
+        {
+            ctx.TrackedProcesses.RemoveAt(idx);
+            ctx.ProcessExitCallbacks.Remove(handle);
+            return StashValue.FromBool(true);
+        }
+
+        return StashValue.FromBool(false);
+    }
+
+    /// <summary>Returns an array of all Process handles currently tracked by this script.</summary>
+    /// <returns>An array of Process handles</returns>
+    [StashFn(Raw = true)]
+    private static StashValue List(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var result = new List<StashValue>();
+        foreach (var (handle, _) in ctx.TrackedProcesses)
+        {
+            result.Add(StashValue.FromObj(handle));
+        }
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <returns>A string chunk, or null if no data is available</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Read(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.read");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null)
+        {
+            return StashValue.Null;
+        }
+
+        try
+        {
+            var stream = entry.Process.StandardOutput;
+            if (stream.Peek() == -1)
+            {
+                return StashValue.Null;
+            }
+
+            var buffer = new char[4096];
+            int read = stream.Read(buffer, 0, buffer.Length);
+            return read > 0 ? StashValue.FromObj(new string(buffer, 0, read)) : StashValue.Null;
+        }
+        catch
+        {
+            return StashValue.Null;
+        }
+    }
+
+    /// <summary>Writes a string to a process's stdin. Returns true on success, false if the process has already exited.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="data">The string data to write to stdin</param>
+    /// <returns>True if written successfully</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Write(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.write");
+        var data = SvArgs.String(args, 1, "process.write");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null || entry.Process.HasExited)
+        {
+            return StashValue.FromBool(false);
+        }
+
+        try
+        {
+            entry.Process.StandardInput.Write(data);
+            entry.Process.StandardInput.Flush();
+            return StashValue.FromBool(true);
+        }
+        catch
+        {
+            return StashValue.FromBool(false);
+        }
+    }
+
+    /// <summary>Registers a callback function to be called when the process exits. The callback receives a CommandResult as its argument.</summary>
+    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="callback">A function that accepts a CommandResult</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true)]
+    private static StashValue OnExit(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var handle = SvArgs.Instance(args, 0, "Process", "process.onExit");
+        var callback = SvArgs.Callable(args, 1, "process.onExit");
+
+        if (callback.MinArity > 1)
+        {
+            throw new RuntimeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).", errorType: StashErrorTypes.TypeError);
+        }
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null)
+        {
+            return StashValue.Null;
+        }
+
+        if (!ctx.ProcessExitCallbacks.TryGetValue(handle, out var callbacks))
+        {
+            callbacks = new List<IStashCallable>();
+            ctx.ProcessExitCallbacks[handle] = callbacks;
+        }
+
+        callbacks.Add(callback);
+        return StashValue.Null;
+    }
+
+    /// <summary>Starts a process fully detached from the script with no stdio redirection. The process is not tracked and survives script exit.</summary>
+    /// <param name="command">The command and arguments to daemonize</param>
+    /// <returns>A Process handle for the detached process</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Daemonize(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var command = SvArgs.String(args, 0, "process.daemonize");
+
+        var (program, arguments) = CommandParser.Parse(command);
+        var psi = new ProcessStartInfo
+        {
+            FileName = program,
+            RedirectStandardOutput = false,
+            RedirectStandardError = false,
+            RedirectStandardInput = false,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        foreach (var arg in arguments)
+        {
+            psi.ArgumentList.Add(arg);
+        }
+
+        var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to daemonize process.", errorType: StashErrorTypes.IOError);
+
+        var fields = new Dictionary<string, StashValue>
+        {
+            ["pid"] = StashValue.FromInt((long)osProcess.Id),
+            ["command"] = StashValue.FromObj(command)
+        };
+        var handle = new StashInstance("Process", fields);
+
+        // Daemonized processes are NOT tracked — they survive script exit
+        return StashValue.FromObj(handle);
+    }
+
+    /// <summary>Returns an array of Process handles for all OS processes matching the given name.</summary>
+    /// <param name="name">The process name to search for</param>
+    /// <returns>An array of matching Process handles</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Find(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var name = SvArgs.String(args, 0, "process.find");
+
+        var result = new List<StashValue>();
+        try
+        {
+            var processes = System.Diagnostics.Process.GetProcessesByName(name);
+            foreach (var p in processes)
+            {
+                using (p)
+                {
+                    var fields = new Dictionary<string, StashValue>
+                    {
+                        ["pid"] = StashValue.FromInt((long)p.Id),
+                        ["command"] = StashValue.FromObj(name)
+                    };
+                    result.Add(StashValue.FromObj(new StashInstance("Process", fields)));
+                }
+            }
+        }
+        catch
+        {
+            // Permission issues or other OS errors — return empty array
+        }
+
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Returns true if an OS process with the given PID is currently running.</summary>
+    /// <param name="pid">The OS process ID to check</param>
+    /// <returns>True if the process exists and is running</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Exists(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var pid = SvArgs.Long(args, 0, "process.exists");
+
+        try
+        {
+            var p = System.Diagnostics.Process.GetProcessById((int)pid);
+            bool alive = !p.HasExited;
+            p.Dispose();
+            return StashValue.FromBool(alive);
+        }
+        catch
+        {
+            return StashValue.FromBool(false);
+        }
+    }
+
+    /// <summary>Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order as the input.</summary>
+    /// <param name="handles">An array of Process handles</param>
+    /// <returns>An array of CommandResult values</returns>
+    [StashFn(Raw = true)]
+    private static StashValue WaitAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var procs = SvArgs.StashList(args, 0, "process.waitAll");
+
+        var results = new List<StashValue>();
+        foreach (StashValue item in procs)
+        {
+            if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("All elements in 'process.waitAll' array must be Process handles.", errorType: StashErrorTypes.TypeError);
+            }
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null)
             {
-                // Already waited — return cached result if available
+                if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
+                {
+                    results.Add(StashValue.FromObj(cached));
+                }
+                else
+                {
+                    results.Add(StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", -1)));
+                }
+                continue;
+            }
+
+            var osProcess = entry.Process;
+            var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+            osProcess.WaitForExit();
+            Task.WaitAll(stdoutTask, stderrTask);
+
+            var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+            int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+            if (idx >= 0)
+            {
+                ctx.TrackedProcesses.RemoveAt(idx);
+            }
+            try { osProcess.Dispose(); }
+            catch { /* Best-effort disposal */ }
+
+            ctx.ProcessWaitCache[handle] = result;
+            FireExitCallbacks(ctx, handle, result);
+            results.Add(StashValue.FromObj(result));
+        }
+
+        return StashValue.FromObj(results);
+    }
+
+    /// <summary>Waits until any process in the array exits. Returns the CommandResult of the first process to finish.</summary>
+    /// <param name="handles">A non-empty array of Process handles</param>
+    /// <returns>The CommandResult of the first process to exit</returns>
+    [StashFn(Raw = true)]
+    private static StashValue WaitAny(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var procs = SvArgs.StashList(args, 0, "process.waitAny");
+
+        if (procs.Count == 0)
+        {
+            throw new RuntimeError("'process.waitAny' requires a non-empty array.", errorType: StashErrorTypes.ValueError);
+        }
+
+        // Validate all handles first
+        var entries = new List<(StashInstance Handle, System.Diagnostics.Process? OsProcess)>();
+        foreach (StashValue item in procs)
+        {
+            if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("All elements in 'process.waitAny' array must be Process handles.", errorType: StashErrorTypes.TypeError);
+            }
+
+            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            entries.Add((handle, entry.Process));
+        }
+
+        // Check if any have already exited
+        foreach (var (handle, osProcess) in entries)
+        {
+            if (osProcess is null)
+            {
                 if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
                 {
                     return StashValue.FromObj(cached);
                 }
-
                 return StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", -1));
             }
 
-            var osProcess = entry.Process;
-            var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
-            var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
-            try
+            if (osProcess.HasExited)
             {
-                osProcess.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
-            }
-            catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested)
-            {
-                try { osProcess.Kill(entireProcessTree: true); } catch { }
-                throw;
-            }
-            Task.WaitAll(new[] { stdoutTask, stderrTask }, ctx.CancellationToken);
-
-            var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
-
-            // Remove from tracking and dispose the OS process handle
-            int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
-            if (idx >= 0)
-            {
-                ctx.TrackedProcesses.RemoveAt(idx);
-            }
-            try { osProcess.Dispose(); }
-            catch { /* Best-effort disposal */ }
-
-            // Cache the result so subsequent wait() calls return the same data
-            ctx.ProcessWaitCache[handle] = result;
-            FireExitCallbacks(ctx, handle, result);
-            return StashValue.FromObj(result);
-        },
-            returnType: "CommandResult",
-            documentation: "Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.\n@param handle The Process handle returned by process.spawn()\n@return A CommandResult with stdout, stderr, and exitCode");
-
-        // process.waitTimeout(handle, ms) — Waits up to the given milliseconds for a process to exit. Returns a CommandResult or null if timed out.
-        ns.Function("waitTimeout", [Param("handle", "Process"), Param("ms", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.waitTimeout");
-            var ms = SvArgs.Long(args, 1, "process.waitTimeout");
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null)
-            {
-                return StashValue.Null;
-            }
-
-            var osProcess = entry.Process;
-            try
-            {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
-                cts.CancelAfter((int)ms);
-                osProcess.WaitForExitAsync(cts.Token).GetAwaiter().GetResult();
-            }
-            catch (OperationCanceledException) when (!ctx.CancellationToken.IsCancellationRequested)
-            {
-                return StashValue.Null; // our own CancelAfter fired — timed out
-            }
-
-            var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
-            var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
-            Task.WaitAll(new[] { stdoutTask, stderrTask }, ctx.CancellationToken);
-
-            var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
-
-            // Remove from tracking and dispose the OS process handle
-            int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
-            if (idx >= 0)
-            {
-                ctx.TrackedProcesses.RemoveAt(idx);
-            }
-            try { osProcess.Dispose(); }
-            catch { /* Best-effort disposal */ }
-
-            ctx.ProcessWaitCache[handle] = result;
-            FireExitCallbacks(ctx, handle, result);
-            return StashValue.FromObj(result);
-        },
-            returnType: "CommandResult",
-            documentation: "Waits up to the given number of milliseconds for a process to exit. Returns a CommandResult on success, or null if the timeout expires.\n@param handle The Process handle returned by process.spawn()\n@param ms Maximum wait time in milliseconds\n@return A CommandResult, or null if timed out");
-
-        // process.kill(handle) — Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success.
-        ns.Function("kill", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.kill");
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null || entry.Process.HasExited)
-            {
-                return StashValue.FromBool(false);
-            }
-
-            try
-            {
-                entry.Process.Kill(false); // SIGTERM on Unix, TerminateProcess on Windows
-                return StashValue.FromBool(true);
-            }
-            catch
-            {
-                return StashValue.FromBool(false);
-            }
-        },
-            returnType: "bool",
-            documentation: "Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.\n@param handle The Process handle returned by process.spawn()\n@return True if the signal was sent, false if the process was not running");
-
-        // process.isAlive(handle) — Returns true if the process is still running, false if it has exited.
-        ns.Function("isAlive", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.isAlive");
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null)
-            {
-                return StashValue.FromBool(false);
-            }
-
-            try { return StashValue.FromBool(!entry.Process.HasExited); }
-            catch { return StashValue.FromBool(false); }
-        },
-            returnType: "bool",
-            documentation: "Returns true if the process is still running, false if it has exited.\n@param handle The Process handle returned by process.spawn()\n@return True if the process is running");
-
-        // process.pid(handle) — Returns the OS process ID (integer) for a spawned Process handle.
-        ns.Function("pid", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.pid");
-
-            return handle.GetField("pid", null);
-        },
-            returnType: "int",
-            documentation: "Returns the OS process ID for a spawned Process handle.\n@param handle The Process handle returned by process.spawn()\n@return The integer process ID");
-
-        // process.signal(handle, signum) — Sends a POSIX signal (integer) to a running process. Use process.SIGTERM etc. as constants. Returns true on success.
-        ns.Function("signal", [Param("handle", "Process"), Param("signum", "Signal | int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.signal");
-
-            long sig;
-            var sigArg = args[1];
-            if (sigArg.IsObj && sigArg.AsObj is StashEnumValue ev && ev.TypeName == "Signal")
-            {
-                if (!GlobalBuiltIns.SignalNumbers.TryGetValue(ev.MemberName, out sig))
-                {
-                    throw new RuntimeError($"Unknown Signal member '{ev.MemberName}'.", errorType: StashErrorTypes.ValueError);
-                }
-            }
-            else
-            {
-                sig = SvArgs.Long(args, 1, "process.signal");
-            }
-
-            if (sig < 1 || sig > 64)
-            {
-                throw new RuntimeError($"Signal number must be between 1 and 64, got {sig}.", errorType: StashErrorTypes.ValueError);
-            }
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null || entry.Process.HasExited)
-            {
-                return StashValue.FromBool(false);
-            }
-
-            try
-            {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                {
-                    // Windows: map common signals to Process API
-                    if (sig == 9 /* SIGKILL */ || sig == 15 /* SIGTERM */)
-                    {
-                        entry.Process.Kill(sig == 9);
-                        return StashValue.FromBool(true);
-                    }
-
-                    // Other signals have no Windows equivalent — terminate as best effort
-                    entry.Process.Kill(false);
-                    return StashValue.FromBool(true);
-                }
-                else
-                {
-                    // Unix: use the kill() syscall via P/Invoke for arbitrary signals
-                    int result = UnixSignal.Kill(entry.Process.Id, (int)sig);
-                    return StashValue.FromBool(result == 0);
-                }
-            }
-            catch
-            {
-                return StashValue.FromBool(false);
-            }
-        },
-            returnType: "bool",
-            documentation: "Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL, etc. as signal number constants. Returns true on success.\n@param handle The Process handle returned by process.spawn()\n@param signum The POSIX signal number (1–64)\n@return True if the signal was sent successfully");
-
-        // process.detach(handle) — Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit.
-        ns.Function("detach", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.detach");
-
-            int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
-            if (idx >= 0)
-            {
-                ctx.TrackedProcesses.RemoveAt(idx);
-                ctx.ProcessExitCallbacks.Remove(handle);
-                return StashValue.FromBool(true);
-            }
-
-            return StashValue.FromBool(false);
-        },
-            returnType: "bool",
-            documentation: "Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.\n@param handle The Process handle to detach\n@return True if the handle was found and removed");
-
-        // process.list() — Returns an array of all currently tracked Process handles spawned by this script.
-        ns.Function("list", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-        {
-            var result = new List<StashValue>();
-            foreach (var (handle, _) in ctx.TrackedProcesses)
-            {
-                result.Add(StashValue.FromObj(handle));
-            }
-            return StashValue.FromObj(result);
-        },
-            returnType: "array",
-            documentation: "Returns an array of all Process handles currently tracked by this script.\n@return An array of Process handles");
-
-        // process.read(handle) — Non-blocking read from a process's stdout. Returns a string chunk or null if no data is available.
-        ns.Function("read", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.read");
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null)
-            {
-                return StashValue.Null;
-            }
-
-            try
-            {
-                var stream = entry.Process.StandardOutput;
-                if (stream.Peek() == -1)
-                {
-                    return StashValue.Null;
-                }
-
-                var buffer = new char[4096];
-                int read = stream.Read(buffer, 0, buffer.Length);
-                return read > 0 ? StashValue.FromObj(new string(buffer, 0, read)) : StashValue.Null;
-            }
-            catch
-            {
-                return StashValue.Null;
-            }
-        },
-            returnType: "string",
-            documentation: "Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.\n@param handle The Process handle returned by process.spawn()\n@return A string chunk, or null if no data is available");
-
-        // process.write(handle, data) — Writes a string to a process's stdin. Returns true on success, false if the process has exited.
-        ns.Function("write", [Param("handle", "Process"), Param("data", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.write");
-            var data = SvArgs.String(args, 1, "process.write");
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null || entry.Process.HasExited)
-            {
-                return StashValue.FromBool(false);
-            }
-
-            try
-            {
-                entry.Process.StandardInput.Write(data);
-                entry.Process.StandardInput.Flush();
-                return StashValue.FromBool(true);
-            }
-            catch
-            {
-                return StashValue.FromBool(false);
-            }
-        },
-            returnType: "bool",
-            documentation: "Writes a string to a process's stdin. Returns true on success, false if the process has already exited.\n@param handle The Process handle returned by process.spawn()\n@param data The string data to write to stdin\n@return True if written successfully");
-
-        // ── Future Extensions ─────────────────────────────────────────
-
-        // process.onExit(handle, callback) — Registers a callback function to be called when the process exits. Callback receives a CommandResult.
-        ns.Function("onExit", [Param("handle", "Process"), Param("callback", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var handle = SvArgs.Instance(args, 0, "Process", "process.onExit");
-            var callback = SvArgs.Callable(args, 1, "process.onExit");
-
-            if (callback.MinArity > 1)
-            {
-                throw new RuntimeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).", errorType: StashErrorTypes.TypeError);
-            }
-
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-            if (entry.Process is null)
-            {
-                return StashValue.Null;
-            }
-
-            if (!ctx.ProcessExitCallbacks.TryGetValue(handle, out var callbacks))
-            {
-                callbacks = new List<IStashCallable>();
-                ctx.ProcessExitCallbacks[handle] = callbacks;
-            }
-
-            callbacks.Add(callback);
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Registers a callback function to be called when the process exits. The callback receives a CommandResult as its argument.\n@param handle The Process handle returned by process.spawn()\n@param callback A function that accepts a CommandResult\n@return null");
-
-        // process.daemonize(command) — Starts a process fully detached from the script (no stdio redirection). Returns a Process handle; the process is NOT tracked and survives script exit.
-        ns.Function("daemonize", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var command = SvArgs.String(args, 0, "process.daemonize");
-
-            var (program, arguments) = CommandParser.Parse(command);
-            var psi = new ProcessStartInfo
-            {
-                FileName = program,
-                RedirectStandardOutput = false,
-                RedirectStandardError = false,
-                RedirectStandardInput = false,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            foreach (var arg in arguments)
-            {
-                psi.ArgumentList.Add(arg);
-            }
-
-            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to daemonize process.", errorType: StashErrorTypes.IOError);
-
-            var fields = new Dictionary<string, StashValue>
-            {
-                ["pid"] = StashValue.FromInt((long)osProcess.Id),
-                ["command"] = StashValue.FromObj(command)
-            };
-            var handle = new StashInstance("Process", fields);
-
-            // Daemonized processes are NOT tracked — they survive script exit
-            return StashValue.FromObj(handle);
-        },
-            returnType: "Process",
-            documentation: "Starts a process fully detached from the script with no stdio redirection. The process is not tracked and survives script exit.\n@param command The command and arguments to daemonize\n@return A Process handle for the detached process");
-
-        // process.find(name) — Returns an array of Process handles for all OS processes matching the given name.
-        ns.Function("find", [Param("name", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var name = SvArgs.String(args, 0, "process.find");
-
-            var result = new List<StashValue>();
-            try
-            {
-                var processes = System.Diagnostics.Process.GetProcessesByName(name);
-                foreach (var p in processes)
-                {
-                    using (p)
-                    {
-                        var fields = new Dictionary<string, StashValue>
-                        {
-                            ["pid"] = StashValue.FromInt((long)p.Id),
-                            ["command"] = StashValue.FromObj(name)
-                        };
-                        result.Add(StashValue.FromObj(new StashInstance("Process", fields)));
-                    }
-                }
-            }
-            catch
-            {
-                // Permission issues or other OS errors — return empty array
-            }
-
-            return StashValue.FromObj(result);
-        },
-            returnType: "array",
-            documentation: "Returns an array of Process handles for all OS processes matching the given name.\n@param name The process name to search for\n@return An array of matching Process handles");
-
-        // process.exists(pid) — Returns true if a process with the given OS PID is currently running.
-        ns.Function("exists", [Param("pid", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var pid = SvArgs.Long(args, 0, "process.exists");
-
-            try
-            {
-                var p = System.Diagnostics.Process.GetProcessById((int)pid);
-                bool alive = !p.HasExited;
-                p.Dispose();
-                return StashValue.FromBool(alive);
-            }
-            catch
-            {
-                return StashValue.FromBool(false);
-            }
-        },
-            returnType: "bool",
-            documentation: "Returns true if an OS process with the given PID is currently running.\n@param pid The OS process ID to check\n@return True if the process exists and is running");
-
-        // process.waitAll(handles) — Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order.
-        ns.Function("waitAll", [Param("handles", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var procs = SvArgs.StashList(args, 0, "process.waitAll");
-
-            var results = new List<StashValue>();
-            foreach (StashValue item in procs)
-            {
-                if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
-                {
-                    throw new RuntimeError("All elements in 'process.waitAll' array must be Process handles.", errorType: StashErrorTypes.TypeError);
-                }
-
-                var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-                if (entry.Process is null)
-                {
-                    if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
-                    {
-                        results.Add(StashValue.FromObj(cached));
-                    }
-                    else
-                    {
-                        results.Add(StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", -1)));
-                    }
-                    continue;
-                }
-
-                var osProcess = entry.Process;
                 var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
                 var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
-                osProcess.WaitForExit();
                 Task.WaitAll(stdoutTask, stderrTask);
 
                 var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
@@ -726,50 +810,16 @@ public static class ProcessBuiltIns
 
                 ctx.ProcessWaitCache[handle] = result;
                 FireExitCallbacks(ctx, handle, result);
-                results.Add(StashValue.FromObj(result));
+                return StashValue.FromObj(result);
             }
+        }
 
-            return StashValue.FromObj(results);
-        },
-            returnType: "array",
-            documentation: "Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order as the input.\n@param handles An array of Process handles\n@return An array of CommandResult values");
-
-        // process.waitAny(handles) — Waits until any process in the array exits. Returns the CommandResult of the first process to finish.
-        ns.Function("waitAny", [Param("handles", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // Poll until one exits
+        while (true)
         {
-            var procs = SvArgs.StashList(args, 0, "process.waitAny");
-
-            if (procs.Count == 0)
-            {
-                throw new RuntimeError("'process.waitAny' requires a non-empty array.", errorType: StashErrorTypes.ValueError);
-            }
-
-            // Validate all handles first
-            var entries = new List<(StashInstance Handle, System.Diagnostics.Process? OsProcess)>();
-            foreach (StashValue item in procs)
-            {
-                if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
-                {
-                    throw new RuntimeError("All elements in 'process.waitAny' array must be Process handles.", errorType: StashErrorTypes.TypeError);
-                }
-
-                var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
-                entries.Add((handle, entry.Process));
-            }
-
-            // Check if any have already exited
             foreach (var (handle, osProcess) in entries)
             {
-                if (osProcess is null)
-                {
-                    if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
-                    {
-                        return StashValue.FromObj(cached);
-                    }
-                    return StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", -1));
-                }
-
-                if (osProcess.HasExited)
+                if (osProcess is not null && osProcess.HasExited)
                 {
                     var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
                     var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
@@ -791,130 +841,88 @@ public static class ProcessBuiltIns
                 }
             }
 
-            // Poll until one exits
-            while (true)
-            {
-                foreach (var (handle, osProcess) in entries)
-                {
-                    if (osProcess is not null && osProcess.HasExited)
-                    {
-                        var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
-                        var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
-                        Task.WaitAll(stdoutTask, stderrTask);
-
-                        var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
-
-                        int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
-                        if (idx >= 0)
-                        {
-                            ctx.TrackedProcesses.RemoveAt(idx);
-                        }
-                        try { osProcess.Dispose(); }
-                        catch { /* Best-effort disposal */ }
-
-                        ctx.ProcessWaitCache[handle] = result;
-                        FireExitCallbacks(ctx, handle, result);
-                        return StashValue.FromObj(result);
-                    }
-                }
-
-                Thread.Sleep(50); // Poll every 50ms
-            }
-        },
-            returnType: "CommandResult",
-            documentation: "Waits until any process in the array exits. Returns the CommandResult of the first process to finish.\n@param handles A non-empty array of Process handles\n@return The CommandResult of the first process to exit");
-
-        // process.chdir(path) — Changes the current working directory and pushes it onto the directory stack.
-        ns.Function("chdir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            CurrentProcessImpl.Chdir(ctx, args, "process.chdir"),
-            returnType: "null",
-            documentation: "Changes the current working directory to the given path and pushes it onto the directory stack.\n@param path The directory path to change to\n@return null",
-            deprecation: new DeprecationInfo("env.chdir"));
-
-        // process.popDir() — Pops the top of the directory stack, restores the previous directory, and returns the popped path.
-        ns.Function("popDir", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-            CurrentProcessImpl.PopDir(ctx, _args, "process.popDir"),
-            returnType: "string",
-            documentation: "Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path.\nThrows CommandError if the stack is at its root entry.\n@return The directory path that was popped",
-            deprecation: new DeprecationInfo("env.popDir"));
-
-        // process.dirStack() — Returns a copy of the directory stack, oldest entry first.
-        ns.Function("dirStack", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-            CurrentProcessImpl.DirStack(ctx, _args, "process.dirStack"),
-            returnType: "array",
-            documentation: "Returns a copy of the directory stack, oldest entry first.\n@return An array of directory path strings",
-            deprecation: new DeprecationInfo("env.dirStack"));
-
-        // process.dirStackDepth() — Returns the number of entries in the directory stack.
-        ns.Function("dirStackDepth", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
-            CurrentProcessImpl.DirStackDepth(ctx, _args, "process.dirStackDepth"),
-            returnType: "int",
-            documentation: "Returns the number of entries in the directory stack.\n@return The depth as an integer",
-            deprecation: new DeprecationInfo("env.dirStackDepth"));
-
-        // process.withDir(path, fn) — Temporarily changes the working directory to path, calls fn(), then restores the original directory. Returns fn's return value.
-        ns.Function("withDir", [Param("path", "string"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            CurrentProcessImpl.WithDir(ctx, args, "process.withDir"),
-            returnType: "any",
-            documentation: "Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.\n@param path The directory to temporarily change to\n@param fn The function to execute in the new directory\n@return The return value of fn",
-            deprecation: new DeprecationInfo("env.withDir"));
-
-        ns.Struct("CommandResult", [
-            new BuiltInField("stdout", "string"),
-            new BuiltInField("stderr", "string"),
-            new BuiltInField("exitCode", "int"),
-        ]);
-        ns.Struct("Process", [
-            new BuiltInField("pid", "int"),
-            new BuiltInField("command", "string"),
-        ]);
-
-        // process.lastExitCode() — Returns the exit code of the most recently executed bare command.
-        ns.Function("lastExitCode", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            return StashValue.FromInt((long)ctx.GetLastExitCode());
-        },
-            returnType: "int",
-            documentation: "Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.\n@return The exit code as an integer",
-            deprecation: new DeprecationInfo("shell.lastExitCode"));
-
-        // process.historyList() — Returns a shallow copy of the in-memory REPL history, oldest-first.
-        ns.Function("historyList", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var snap = HistoryListProvider?.Invoke();
-            var list = new List<StashValue>(snap?.Count ?? 0);
-            if (snap != null)
-            {
-                foreach (var s in snap) list.Add(StashValue.FromObj(s));
-            }
-            return StashValue.FromObj(list);
-        },
-            returnType: "array",
-            documentation: "Returns the REPL command history as an array of strings, oldest-first. Each entry is one logical command line (multi-line entries contain embedded newlines). Returns an empty array when persistence is disabled or in non-interactive script mode.\n@return Array of history entries");
-
-        // process.historyClear() — Clears in-memory history and truncates the on-disk file.
-        ns.Function("historyClear", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            HistoryClearHandler?.Invoke();
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Clears the REPL command history both in memory and on disk (preserving the file header). No-op when persistence is disabled.\n@return null");
-
-        // process.historyAdd(line) — Programmatically add an entry to the REPL history.
-        ns.Function("historyAdd", [Param("line", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            var line = SvArgs.String(args, 0, "process.historyAdd");
-            if (string.IsNullOrWhiteSpace(line))
-                throw new RuntimeError("process.historyAdd: line must not be empty or whitespace-only.", errorType: StashErrorTypes.ValueError);
-            HistoryAddHandler?.Invoke(line);
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Adds the given line to the REPL command history. Subject to the same dedup and leading-space-skip rules as user input. Throws ValueError if line is empty or whitespace-only. No-op when persistence is disabled.\n@param line The command line to append\n@return null");
-
-        return ns.Build();
+            Thread.Sleep(50); // Poll every 50ms
+        }
     }
+
+    /// <summary>Changes the current working directory to the given path and pushes it onto the directory stack.</summary>
+    /// <param name="path">The directory path to change to</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true), StashDeprecated("env.chdir")]
+    private static StashValue Chdir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.Chdir(ctx, args, "process.chdir");
+
+    /// <summary>Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.</summary>
+    /// <returns>The directory path that was popped</returns>
+    [StashFn(Raw = true), StashDeprecated("env.popDir")]
+    private static StashValue PopDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.PopDir(ctx, args, "process.popDir");
+
+    /// <summary>Returns a copy of the directory stack, oldest entry first.</summary>
+    /// <returns>An array of directory path strings</returns>
+    [StashFn(Raw = true), StashDeprecated("env.dirStack")]
+    private static StashValue DirStack(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.DirStack(ctx, args, "process.dirStack");
+
+    /// <summary>Returns the number of entries in the directory stack.</summary>
+    /// <returns>The depth as an integer</returns>
+    [StashFn(Raw = true), StashDeprecated("env.dirStackDepth")]
+    private static StashValue DirStackDepth(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.DirStackDepth(ctx, args, "process.dirStackDepth");
+
+    /// <summary>Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.</summary>
+    /// <param name="path">The directory to temporarily change to</param>
+    /// <param name="fn">The function to execute in the new directory</param>
+    /// <returns>The return value of fn</returns>
+    [StashFn(Raw = true), StashDeprecated("env.withDir")]
+    private static StashValue WithDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.WithDir(ctx, args, "process.withDir");
+
+    /// <summary>Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.</summary>
+    /// <returns>The exit code as an integer</returns>
+    [StashFn(Raw = true), StashDeprecated("shell.lastExitCode")]
+    private static StashValue LastExitCode(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        return StashValue.FromInt((long)ctx.GetLastExitCode());
+    }
+
+    /// <summary>Returns the REPL command history as an array of strings, oldest-first. Each entry is one logical command line (multi-line entries contain embedded newlines). Returns an empty array when persistence is disabled or in non-interactive script mode.</summary>
+    /// <returns>Array of history entries</returns>
+    [StashFn(Raw = true)]
+    private static StashValue HistoryList(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var snap = HistoryListProvider?.Invoke();
+        var list = new List<StashValue>(snap?.Count ?? 0);
+        if (snap != null)
+        {
+            foreach (var s in snap) list.Add(StashValue.FromObj(s));
+        }
+        return StashValue.FromObj(list);
+    }
+
+    /// <summary>Clears the REPL command history both in memory and on disk (preserving the file header). No-op when persistence is disabled.</summary>
+    /// <returns>null</returns>
+    [StashFn(Raw = true)]
+    private static StashValue HistoryClear(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        HistoryClearHandler?.Invoke();
+        return StashValue.Null;
+    }
+
+    /// <summary>Adds the given line to the REPL command history. Subject to the same dedup and leading-space-skip rules as user input. Throws ValueError if line is empty or whitespace-only. No-op when persistence is disabled.</summary>
+    /// <param name="line">The command line to append</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true)]
+    private static StashValue HistoryAdd(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var line = SvArgs.String(args, 0, "process.historyAdd");
+        if (string.IsNullOrWhiteSpace(line))
+            throw new RuntimeError("process.historyAdd: line must not be empty or whitespace-only.", errorType: StashErrorTypes.ValueError);
+        HistoryAddHandler?.Invoke(line);
+        return StashValue.Null;
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
 
     /// <summary>
     /// Fires any pending onExit callbacks for a process that has exited.

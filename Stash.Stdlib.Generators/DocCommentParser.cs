@@ -90,6 +90,22 @@ internal static class DocCommentParser
         return names;
     }
 
+    /// <summary>Returns param names in document order (for Raw function arity metadata).</summary>
+    public static List<string> GetDocumentedParamList(string? xml)
+    {
+        var names = new List<string>();
+        if (string.IsNullOrWhiteSpace(xml)) return names;
+        XElement root;
+        try { root = XElement.Parse(xml!); }
+        catch { return names; }
+        foreach (var p in root.Elements("param"))
+        {
+            var n = p.Attribute("name")?.Value;
+            if (!string.IsNullOrEmpty(n)) names.Add(n!);
+        }
+        return names;
+    }
+
     public static bool HasSummary(string? xml)
     {
         if (string.IsNullOrWhiteSpace(xml)) return false;

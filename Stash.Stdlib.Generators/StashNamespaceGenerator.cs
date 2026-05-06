@@ -210,9 +210,16 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                     "raw method must have signature (IInterpreterContext, ReadOnlySpan<StashValue>) -> StashValue", method.Name));
                 return null;
             }
-            return new FunctionModel(method.Name, stashName, true, "passthrough", "any", true, false,
-                EquatableArray<ParameterModel>.Empty,
-                DocCommentParser.Parse(method.GetDocumentationCommentXml()),
+            // Build a param list from XML <param> tags for metadata purposes.
+            // Raw handlers validate arg counts internally, so mark isVariadic=true to bypass
+            // the VM's built-in arity check.
+            var rawDocXml = method.GetDocumentationCommentXml();
+            var rawParams = DocCommentParser.GetDocumentedParamList(rawDocXml);
+            var rawPms = rawParams.ConvertAll(name =>
+                new ParameterModel(name, name, "Stash.Runtime.StashValue", "any", "", false, null, false, false));
+            return new FunctionModel(method.Name, stashName, true, "passthrough", returnTypeOverride ?? "any", true, true,
+                rawPms.Count == 0 ? EquatableArray<ParameterModel>.Empty : new EquatableArray<ParameterModel>(rawPms.ToArray()),
+                DocCommentParser.Parse(rawDocXml),
                 ReadDeprecation(method));
         }
 
@@ -235,14 +242,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         {
             var p = ps[i];
 
-            // params StashValue[]
-            if (p.IsParams && p.Type is IArrayTypeSymbol ats && ats.ElementType.ToDisplayString() == "Stash.Runtime.StashValue")
-            {
-                isVariadic = true;
-                pms.Add(new ParameterModel(p.Name, p.Name, p.Type.ToDisplayString(), "...any", "", false, null, false, true));
-                continue;
-            }
-
+            // Read [StashParam] attribute first so variadic branch can use the name override.
             string? typeOverride = null;
             string? paramNameOverride = null;
             var pAttr = p.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == ParamAttr);
@@ -253,6 +253,14 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                     if (na.Key == "Name" && na.Value.Value is string ns) paramNameOverride = ns;
                     if (na.Key == "Type" && na.Value.Value is string ts) typeOverride = ts;
                 }
+            }
+
+            // params StashValue[] — type override is not meaningful here (always "...any"); name override is honoured.
+            if (p.IsParams && p.Type is IArrayTypeSymbol ats && ats.ElementType.ToDisplayString() == "Stash.Runtime.StashValue")
+            {
+                isVariadic = true;
+                pms.Add(new ParameterModel(p.Name, paramNameOverride ?? p.Name, p.Type.ToDisplayString(), "...any", "", false, null, false, true));
+                continue;
             }
 
             // Reserved-word check (C# uses @ prefix; symbol name strips it).
