@@ -34,7 +34,6 @@ public static class StdlibDefinitions
         (() => ReBuiltIns.Define(),       StashCapabilities.None),
         (() => AssertBuiltIns.Define(),   StashCapabilities.None),
         (() => TestBuiltIns.Define(),     StashCapabilities.None),
-        (() => MathBuiltIns.Define(),     StashCapabilities.None),
         (() => TimeBuiltIns.Define(),     StashCapabilities.None),
         (() => JsonBuiltIns.Define(),     StashCapabilities.None),
         (() => CsvBuiltIns.Define(),      StashCapabilities.None),

@@ -183,4 +183,14 @@ public class MathBuiltInsTests : StashTestBase
     {
         Assert.Equal(2.0, Run("let result = math.sqrt(4);"));
     }
+
+    // ── variadic ordinal regression ───────────────────────────────────────────
+
+    [Fact]
+    public void Min_ThirdArg_NotNumber_ErrorMentionsThird()
+    {
+        var ex = Assert.Throws<Stash.Runtime.RuntimeError>(() => Run(@"math.min(1, 2, ""x"");"));
+        Assert.Contains("Third argument", ex.Message);
+        Assert.Contains("math.min", ex.Message);
+    }
 }

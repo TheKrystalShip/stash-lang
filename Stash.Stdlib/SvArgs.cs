@@ -217,7 +217,7 @@ public static class SvArgs
         return args[index];
     }
 
-    private static string Ordinal(int index)
+    internal static string Ordinal(int index)
     {
         return index switch
         {

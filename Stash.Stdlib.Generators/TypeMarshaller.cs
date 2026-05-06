@@ -18,9 +18,14 @@ internal static class TypeMarshaller
 
     public static Mapping? Map(ITypeSymbol type, string? typeOverride)
     {
-        // Type override path — currently only "number" → SvArgs.Numeric on a double parameter.
+        // Type override path — currently only "number" → SvArgs.Numeric on a double parameter,
+        // or passthrough when the underlying parameter type is StashValue (so the body can
+        // inspect IsInt/IsFloat to preserve int-ness).
         if (typeOverride == "number")
         {
+            string fn = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty);
+            if (fn == "Stash.Runtime.StashValue")
+                return new Mapping("number", "{ARGS}[{INDEX}]");
             return new Mapping("number", "global::Stash.Stdlib.SvArgs.Numeric({ARGS}, {INDEX}, \"{FUNC}\")");
         }
 

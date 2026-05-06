@@ -210,6 +210,12 @@ internal static class CodeEmitter
 
     private static string ResolveCSharpTypeForLocal(ParameterModel p)
     {
+        // If the underlying C# type is StashValue, always declare the local as StashValue —
+        // this covers the passthrough case where a [StashParam(Type="number")] is applied to a
+        // StashValue parameter so the body can preserve int-ness.
+        if (p.CSharpTypeFullName == "Stash.Runtime.StashValue")
+            return "global::Stash.Runtime.StashValue";
+
         // Prefer the C# type that matches the extractor return for ergonomic body invocation.
         switch (p.StashTypeLabel)
         {

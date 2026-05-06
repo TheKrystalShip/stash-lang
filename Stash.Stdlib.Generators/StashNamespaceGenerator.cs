@@ -160,12 +160,14 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         var fnAttr = method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == FnAttr);
         string? nameOverride = null;
         bool raw = false;
+        string? returnTypeOverride = null;
         if (fnAttr is not null)
         {
             foreach (var na in fnAttr.NamedArguments)
             {
                 if (na.Key == "Name" && na.Value.Value is string s) nameOverride = s;
                 if (na.Key == "Raw" && na.Value.Value is bool b) raw = b;
+                if (na.Key == "ReturnType" && na.Value.Value is string rt) returnTypeOverride = rt;
             }
         }
 
@@ -221,6 +223,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             diags.Add(Diagnostic.Create(Diagnostics.UnsupportedReturnType, loc, method.ReturnType.ToDisplayString(), method.Name));
             return null;
         }
+        if (returnTypeOverride is not null) returnStash = returnTypeOverride;
 
         // Parameters
         bool isVariadic = false;

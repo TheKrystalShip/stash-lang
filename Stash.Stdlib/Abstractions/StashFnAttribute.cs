@@ -26,4 +26,12 @@ public sealed class StashFnAttribute : Attribute
 
     /// <summary>If <c>true</c>, skips auto-marshalling. The method body becomes the <c>DirectHandler</c> as-is.</summary>
     public bool Raw { get; set; }
+
+    /// <summary>
+    /// Optional override for the inferred Stash return-type label. Use this for polymorphic
+    /// functions whose body returns <c>StashValue</c> (default label <c>"any"</c>) but should
+    /// advertise a more specific Stash type (e.g. <c>"number"</c>, <c>"int"</c>). The wrapping
+    /// of the returned C# value stays based on the actual C# return type.
+    /// </summary>
+    public string? ReturnType { get; set; }
 }
