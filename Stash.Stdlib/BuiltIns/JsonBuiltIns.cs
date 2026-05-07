@@ -15,13 +15,12 @@ public static partial class JsonBuiltIns
     /// <summary>Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).</summary>
     /// <param name="str">The JSON string to parse</param>
     /// <returns>The parsed value</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Parse(string str)
     {
-        var s = SvArgs.String(args, 0, "json.parse");
         try
         {
-            using var doc = JsonDocument.Parse(s);
+            using var doc = JsonDocument.Parse(str);
             return StashValue.FromObject(ConvertElement(doc.RootElement));
         }
         catch (JsonException e)
@@ -34,32 +33,22 @@ public static partial class JsonBuiltIns
     /// <param name="value">The value to serialize</param>
     /// <param name="indent">Number of spaces for indentation (optional, default 0 for compact)</param>
     /// <returns>The JSON string representation</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Stringify(StashValue value, [StashParam(Type = "number")] double indent = 0)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'json.stringify' requires 1 or 2 arguments.");
-        int indentWidth = 0;
-        if (args.Length == 2)
-            indentWidth = (int)SvArgs.Long(args, 1, "json.stringify");
-        if (indentWidth > 0)
-            return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
-        return StashValue.FromObj(StringifyValue(args[0].ToObject()));
+        if (indent > 0)
+            return PrettyValue(value.ToObject(), 0, (int)indent);
+        return StringifyValue(value.ToObject());
     }
 
     /// <summary>Converts a Stash value to a formatted JSON string with indentation. Defaults to 2 spaces.</summary>
     /// <param name="value">The value to serialize</param>
     /// <param name="indent">Number of spaces for indentation (optional, default 2)</param>
     /// <returns>The pretty-printed JSON string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Pretty(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Pretty(StashValue value, [StashParam(Type = "number")] double indent = 2)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'json.pretty' requires 1 or 2 arguments.");
-        int indentWidth = 2;
-        if (args.Length == 2)
-            indentWidth = (int)SvArgs.Long(args, 1, "json.pretty");
-        return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
+        return PrettyValue(value.ToObject(), 0, (int)indent);
     }
 
     /// <summary>Checks whether a string is valid JSON without parsing it into a value.</summary>

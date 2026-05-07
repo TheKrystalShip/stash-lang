@@ -30,78 +30,69 @@ public static partial class LogBuiltIns
     /// <param name="message">The log message</param>
     /// <param name="data">Optional extra fields (dict) or a scalar value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Debug(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Debug(IInterpreterContext ctx, string message, params StashValue[] data)
     {
-        Emit(ctx, LevelDebug, args);
-        return StashValue.Null;
+        EmitTyped(ctx, LevelDebug, message, data);
     }
 
     /// <summary>Logs a message at INFO level.</summary>
     /// <param name="message">The log message</param>
     /// <param name="data">Optional extra fields (dict) or a scalar value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Info(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Info(IInterpreterContext ctx, string message, params StashValue[] data)
     {
-        Emit(ctx, LevelInfo, args);
-        return StashValue.Null;
+        EmitTyped(ctx, LevelInfo, message, data);
     }
 
     /// <summary>Logs a message at WARN level.</summary>
     /// <param name="message">The log message</param>
     /// <param name="data">Optional extra fields (dict) or a scalar value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Warn(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Warn(IInterpreterContext ctx, string message, params StashValue[] data)
     {
-        Emit(ctx, LevelWarn, args);
-        return StashValue.Null;
+        EmitTyped(ctx, LevelWarn, message, data);
     }
 
     /// <summary>Logs a message at ERROR level.</summary>
     /// <param name="message">The log message</param>
     /// <param name="data">Optional extra fields (dict) or a scalar value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Error(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Error(IInterpreterContext ctx, string message, params StashValue[] data)
     {
-        Emit(ctx, LevelError, args);
-        return StashValue.Null;
+        EmitTyped(ctx, LevelError, message, data);
     }
 
     /// <summary>Sets the minimum log level. Messages below this level are suppressed.</summary>
     /// <param name="level">One of: 'debug', 'info', 'warn', 'error'</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SetLevel(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void SetLevel(IInterpreterContext ctx, string level)
     {
-        var level = SvArgs.String(args, 0, "log.setLevel");
         int parsed = ParseLevel(level);
         ctx.LoggerState.Level = parsed;
-        return StashValue.Null;
     }
 
     /// <summary>Sets the output format.</summary>
     /// <param name="format">'text' (default) or 'json'</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SetFormat(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void SetFormat(IInterpreterContext ctx, string format)
     {
-        var format = SvArgs.String(args, 0, "log.setFormat");
         if (format != "text" && format != "json")
             throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.", errorType: StashErrorTypes.ValueError);
         ctx.LoggerState.Format = format;
-        return StashValue.Null;
     }
 
     /// <summary>Sets the log output destination.</summary>
     /// <param name="target">'stdout', 'stderr', or a file path</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SetOutput(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void SetOutput(IInterpreterContext ctx, string target)
     {
-        var target = SvArgs.String(args, 0, "log.setOutput");
         if (target != "stdout" && target != "stderr")
         {
             try { ctx.LoggerState.SetFileOutput(target); }
@@ -112,20 +103,54 @@ public static partial class LogBuiltIns
             ctx.LoggerState.ClearFileOutput();
             ctx.LoggerState.Output = target;
         }
-        return StashValue.Null;
     }
 
     /// <summary>Returns a scoped logger dict with preset fields merged into every log entry.</summary>
     /// <param name="fields">A dictionary of fields to attach to all log messages</param>
     /// <returns>A logger dict with debug/info/warn/error methods</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue WithFields(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary WithFields(StashDictionary fields)
     {
-        var fields = SvArgs.Dict(args, 0, "log.withFields");
-        return StashValue.FromObj(BuildScopedLogger(fields));
+        return BuildScopedLogger(fields);
     }
 
     // ── Core emit logic ───────────────────────────────────────────────────────
+
+    private static void EmitTyped(IInterpreterContext ctx, int level, string message, StashValue[] data,
+        StashDictionary? presetFields = null)
+    {
+        var state = ctx.LoggerState;
+        int currentLevel = state.Level;
+        string format = state.Format;
+        string output = state.Output;
+        TextWriter? fileWriter = state.FileWriter;
+
+        if (level < currentLevel)
+            return;
+
+        StashDictionary? dataDict = null;
+        string? dataScalar = null;
+
+        if (data.Length >= 1)
+        {
+            var dataArg = data[0];
+            if (dataArg.IsObj && dataArg.AsObj is StashDictionary d)
+                dataDict = d;
+            else if (!dataArg.IsNull)
+                dataScalar = RuntimeValues.Stringify(dataArg.ToObject());
+        }
+
+        string line = format == "json"
+            ? FormatJson(level, message, presetFields, dataDict, dataScalar)
+            : FormatText(level, message, presetFields, dataDict, dataScalar);
+
+        TextWriter writer = GetWriter(ctx, output, fileWriter);
+        writer.WriteLine(line);
+
+        string channel = output == "stdout" ? "stdout" : "stderr";
+        if (fileWriter is null)
+            ctx.NotifyOutput(channel, line + "\n");
+    }
 
     internal static void Emit(IInterpreterContext ctx, int level, ReadOnlySpan<StashValue> args,
         StashDictionary? presetFields = null)

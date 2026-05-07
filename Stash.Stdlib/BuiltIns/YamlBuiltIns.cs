@@ -16,15 +16,13 @@ public static partial class YamlBuiltIns
     /// <summary>Parses a YAML string into a Stash value (dict, array, or scalar).</summary>
     /// <param name="text">The YAML string</param>
     /// <returns>Parsed value</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Parse(string text)
     {
-        var s = SvArgs.String(args, 0, "yaml.parse");
-
         try
         {
             var opts = new YamlSerializerOptions();
-            object? raw = YamlSerializer.Deserialize<object>(s, opts);
+            object? raw = YamlSerializer.Deserialize<object>(text, opts);
             return StashValue.FromObject(ConvertFromYaml(raw));
         }
         catch (Exception e) when (e is not RuntimeError)
@@ -36,14 +34,14 @@ public static partial class YamlBuiltIns
     /// <summary>Serializes a Stash value to a YAML string.</summary>
     /// <param name="value">The value to serialize</param>
     /// <returns>YAML string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Stringify(StashValue value)
     {
         try
         {
-            object? native = ConvertToYaml(args[0].ToObject());
+            object? native = ConvertToYaml(value.ToObject());
             var opts = new YamlSerializerOptions();
-            return StashValue.FromObj(YamlSerializer.Serialize(native, native?.GetType() ?? typeof(object), opts));
+            return YamlSerializer.Serialize(native, native?.GetType() ?? typeof(object), opts);
         }
         catch (SharpYaml.YamlException e)
         {
@@ -54,20 +52,18 @@ public static partial class YamlBuiltIns
     /// <summary>Returns true if the string is valid YAML, false otherwise.</summary>
     /// <param name="text">The YAML string to validate</param>
     /// <returns>true if valid YAML</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Valid(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Valid(string text)
     {
-        var s = SvArgs.String(args, 0, "yaml.valid");
-
         try
         {
             var opts = new YamlSerializerOptions();
-            YamlSerializer.Deserialize<object>(s, opts);
-            return StashValue.True;
+            YamlSerializer.Deserialize<object>(text, opts);
+            return true;
         }
         catch (SharpYaml.YamlException)
         {
-            return StashValue.False;
+            return false;
         }
     }
 

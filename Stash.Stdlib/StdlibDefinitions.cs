@@ -13,20 +13,13 @@ using Stash.Stdlib.Registration;
 public static class StdlibDefinitions
 {
     /// <summary>
-    /// Registry of all namespace factories with their required capabilities.
-    /// Lambdas ensure types are resolved lazily — platform-incompatible types
-    /// (e.g. Renci.SshNet in WASM) are never loaded when their capability is absent.
-    /// </summary>
-    private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] LegacyRegistry =
-    [
-    ];
-
-    /// <summary>
-    /// Combined registry: generator-emitted entries first, then hand-maintained legacy entries.
-    /// Migrated namespaces move from <see cref="LegacyRegistry"/> into the generated portion.
+    /// Registry of all namespace factories with their required capabilities, sourced
+    /// from the generator-emitted <see cref="GeneratedStdlibRegistry"/>. Lambdas ensure
+    /// types are resolved lazily — platform-incompatible types (e.g. Renci.SshNet in WASM)
+    /// are never loaded when their capability is absent.
     /// </summary>
     private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] _registry =
-        GeneratedStdlibRegistry.All().Concat(LegacyRegistry).ToArray();
+        GeneratedStdlibRegistry.All().ToArray();
 
     private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();
     private static readonly ConcurrentDictionary<StashCapabilities, NamespaceDefinition> _globalsCache = new();

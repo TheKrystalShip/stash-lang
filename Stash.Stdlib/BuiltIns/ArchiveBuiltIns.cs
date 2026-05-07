@@ -117,15 +117,12 @@ public static partial class ArchiveBuiltIns
     /// <param name="outputDir">The directory to extract files into</param>
     /// <param name="options">Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)</param>
     /// <returns>An array of extracted file paths</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Unzip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Unzip(IInterpreterContext ctx, string archivePath, string outputDir, StashValue options = default)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("archive.unzip: expected 2 or 3 arguments.");
-
-        var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.unzip"));
-        var outputDir = ctx.ExpandTilde(SvArgs.String(args, 1, "archive.unzip"));
-        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.unzip") : DefaultOptions;
+        archivePath = ctx.ExpandTilde(archivePath);
+        outputDir = ctx.ExpandTilde(outputDir);
+        var opts = !options.IsNull ? GetArchiveOptions(options, "archive.unzip") : DefaultOptions;
 
         if (!File.Exists(archivePath))
             throw new RuntimeError($"archive.unzip: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
@@ -135,7 +132,7 @@ public static partial class ArchiveBuiltIns
             Directory.CreateDirectory(outputDir);
             var outputDirFull = Path.GetFullPath(outputDir);
             var extractedFiles = new List<StashValue>();
-            var filterRegex = !string.IsNullOrEmpty(options.Filter) ? GlobToRegex(options.Filter) : null;
+            var filterRegex = !string.IsNullOrEmpty(opts.Filter) ? GlobToRegex(opts.Filter) : null;
 
             using var archive = ZipFile.OpenRead(archivePath);
             foreach (var entry in archive.Entries)
@@ -148,7 +145,7 @@ public static partial class ArchiveBuiltIns
                 if (filterRegex != null && !filterRegex.IsMatch(entry.FullName))
                     continue;
 
-                var destPath = options.PreservePaths
+                var destPath = opts.PreservePaths
                     ? Path.Combine(outputDir, entry.FullName)
                     : Path.Combine(outputDir, entry.Name);
 
@@ -157,18 +154,18 @@ public static partial class ArchiveBuiltIns
                 if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
                     throw new RuntimeError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'", errorType: StashErrorTypes.ValueError);
 
-                if (File.Exists(destPath) && !options.Overwrite)
+                if (File.Exists(destPath) && !opts.Overwrite)
                     throw new RuntimeError($"archive.unzip: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
 
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir))
                     Directory.CreateDirectory(destDir);
 
-                entry.ExtractToFile(destPath, options.Overwrite);
+                entry.ExtractToFile(destPath, opts.Overwrite);
                 extractedFiles.Add(StashValue.FromObj(destPath));
             }
 
-            return StashValue.FromObj(extractedFiles);
+            return extractedFiles;
         }
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
@@ -190,25 +187,22 @@ public static partial class ArchiveBuiltIns
     /// <param name="inputPaths">A single path or array of paths to include in the archive</param>
     /// <param name="options">Optional ArchiveOptions struct with compressionLevel (for .tar.gz), overwrite, preservePaths</param>
     /// <returns>The path to the created archive</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Tar(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Tar(IInterpreterContext ctx, string outputPath, StashValue inputPaths, StashValue options = default)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("archive.tar: expected 2 or 3 arguments.");
+        outputPath = ctx.ExpandTilde(outputPath);
+        var paths = GetInputPaths(inputPaths, ctx, "archive.tar");
+        var opts = !options.IsNull ? GetArchiveOptions(options, "archive.tar") : DefaultOptions;
 
-        var outputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.tar"));
-        var inputPaths = GetInputPaths(args[1], ctx, "archive.tar");
-        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.tar") : DefaultOptions;
-
-        if (inputPaths.Count == 0)
+        if (paths.Count == 0)
             throw new RuntimeError("archive.tar: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
 
         // Check for existing file
-        if (File.Exists(outputPath) && !options.Overwrite)
+        if (File.Exists(outputPath) && !opts.Overwrite)
             throw new RuntimeError($"archive.tar: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
 
         // Validate input paths exist
-        foreach (var p in inputPaths)
+        foreach (var p in paths)
         {
             if (!File.Exists(p) && !Directory.Exists(p))
                 throw new RuntimeError($"archive.tar: file not found: '{p}'", errorType: StashErrorTypes.IOError);
@@ -231,7 +225,7 @@ public static partial class ArchiveBuiltIns
 
             if (useGzip)
             {
-                var gzipLevel = options.CompressionLevel switch
+                var gzipLevel = opts.CompressionLevel switch
                 {
                     0 => CompressionLevel.NoCompression,
                     >= 1 and <= 3 => CompressionLevel.Fastest,
@@ -247,7 +241,7 @@ public static partial class ArchiveBuiltIns
             {
                 using var tarWriter = new TarWriter(tarStream, TarEntryFormat.Pax, leaveOpen: false);
 
-                foreach (var inputPath in inputPaths)
+                foreach (var inputPath in paths)
                 {
                     if (File.Exists(inputPath))
                     {
@@ -261,7 +255,7 @@ public static partial class ArchiveBuiltIns
                     }
                     else if (Directory.Exists(inputPath))
                     {
-                        AddDirectoryToTar(tarWriter, inputPath, options.PreservePaths);
+                        AddDirectoryToTar(tarWriter, inputPath, opts.PreservePaths);
                     }
                 }
             }
@@ -270,7 +264,7 @@ public static partial class ArchiveBuiltIns
                 gzipStream?.Dispose();
             }
 
-            return StashValue.FromObj(outputPath);
+            return outputPath;
         }
         catch (RuntimeError) { throw; }
         catch (UnauthorizedAccessException)

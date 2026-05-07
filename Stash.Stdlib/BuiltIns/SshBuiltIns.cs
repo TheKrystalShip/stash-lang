@@ -53,6 +53,7 @@ public static partial class SshBuiltIns
     /// <summary>Connects to an SSH server and returns an SshConnection instance.</summary>
     /// <param name="options">Options dict with host, port (default 22), username, and password or privateKey</param>
     /// <returns>An SshConnection struct with host, port, and username fields</returns>
+    // Raw = true: options dict has required fields with conditional validation (host, username, password/privateKey).
     [StashFn(Raw = true, ReturnType = "SshConnection")]
     private static StashValue Connect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -132,11 +133,10 @@ public static partial class SshBuiltIns
     /// <param name="conn">The SSH connection</param>
     /// <param name="command">The command to execute</param>
     /// <returns>A CommandResult struct with stdout, stderr, and exitCode</returns>
-    [StashFn(Raw = true, ReturnType = "CommandResult")]
-    private static StashValue Exec(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "CommandResult")]
+    private static StashValue Exec(StashValue conn, string command)
     {
-        SshClient client = GetClient(args[0].ToObject(), "ssh.exec");
-        var command = SvArgs.String(args, 1, "ssh.exec");
+        SshClient client = GetClient(conn.ToObject(), "ssh.exec");
 
         try
         {
@@ -153,11 +153,10 @@ public static partial class SshBuiltIns
     /// <param name="conn">The SSH connection</param>
     /// <param name="commands">An array of command strings to execute</param>
     /// <returns>An array of CommandResult structs with stdout, stderr, and exitCode</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue ExecAll(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> ExecAll(StashValue conn, List<StashValue> commands)
     {
-        SshClient client = GetClient(args[0].ToObject(), "ssh.execAll");
-        var commands = SvArgs.StashList(args, 1, "ssh.execAll");
+        SshClient client = GetClient(conn.ToObject(), "ssh.execAll");
 
         try
         {
@@ -172,7 +171,7 @@ public static partial class SshBuiltIns
                 SshCommand sshCmd = client.RunCommand(cmd);
                 results.Add(StashValue.FromObj(RuntimeValues.CreateCommandResult(sshCmd.Result ?? "", sshCmd.Error ?? "", (long)(sshCmd.ExitStatus ?? -1))));
             }
-            return StashValue.FromObj(results);
+            return results;
         }
         catch (SshException e)
         {
@@ -184,11 +183,10 @@ public static partial class SshBuiltIns
     /// <param name="conn">The SSH connection</param>
     /// <param name="commands">An array of command strings to run in the shell</param>
     /// <returns>The combined shell output as a string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Shell(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string Shell(IInterpreterContext ctx, StashValue conn, List<StashValue> commands)
     {
-        SshClient client = GetClient(args[0].ToObject(), "ssh.shell");
-        var commands = SvArgs.StashList(args, 1, "ssh.shell");
+        SshClient client = GetClient(conn.ToObject(), "ssh.shell");
 
         try
         {
@@ -214,7 +212,7 @@ public static partial class SshBuiltIns
             {
                 Thread.Sleep(500);
             }
-            return StashValue.FromObj(stream.Read());
+            return stream.Read();
         }
         catch (SshException e)
         {
@@ -225,10 +223,10 @@ public static partial class SshBuiltIns
     /// <summary>Closes the SSH connection and releases all resources.</summary>
     /// <param name="conn">The SSH connection to close</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Close(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Close(StashValue conn)
     {
-        SshClient client = GetClient(args[0].ToObject(), "ssh.close");
+        SshClient client = GetClient(conn.ToObject(), "ssh.close");
 
         try
         {
@@ -242,24 +240,23 @@ public static partial class SshBuiltIns
         {
             throw new RuntimeError($"ssh.close: {e.Message}", errorType: StashErrorTypes.IOError);
         }
-
-        return StashValue.Null;
     }
 
     /// <summary>Returns true if the SSH connection is still active.</summary>
     /// <param name="conn">The SSH connection to check</param>
     /// <returns>true if connected, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue IsConnected(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool IsConnected(StashValue conn)
     {
-        SshClient client = GetClient(args[0].ToObject(), "ssh.isConnected");
-        return StashValue.FromBool(client.IsConnected);
+        SshClient client = GetClient(conn.ToObject(), "ssh.isConnected");
+        return client.IsConnected;
     }
 
     /// <summary>Creates an SSH port-forwarding tunnel and returns an SshTunnel instance.</summary>
     /// <param name="conn">The SSH connection</param>
     /// <param name="options">Options dict with localPort (default 0 for auto), remoteHost, and remotePort</param>
     /// <returns>An SshTunnel struct with localPort, remoteHost, and remotePort fields</returns>
+    // Raw = true: options dict has required fields with conditional validation (remoteHost, remotePort).
     [StashFn(Raw = true, ReturnType = "SshTunnel")]
     private static StashValue Tunnel(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -307,10 +304,11 @@ public static partial class SshBuiltIns
     /// <summary>Closes an SSH port-forwarding tunnel.</summary>
     /// <param name="tunnel">The SshTunnel instance to close</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue CloseTunnel(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void CloseTunnel(StashValue tunnel)
     {
-        var inst = SvArgs.Instance(args, 0, "SshTunnel", "ssh.closeTunnel");
+        if (tunnel.ToObject() is not StashInstance inst || inst.TypeName != "SshTunnel")
+            throw new RuntimeError("First argument to 'ssh.closeTunnel' must be an SshTunnel.", errorType: StashErrorTypes.TypeError);
 
         if (!_tunnels.TryGetValue(inst, out ForwardedPortLocal? forward))
         {
@@ -331,8 +329,6 @@ public static partial class SshBuiltIns
         {
             throw new RuntimeError($"ssh.closeTunnel: {e.Message}", errorType: StashErrorTypes.IOError);
         }
-
-        return StashValue.Null;
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

@@ -18,43 +18,43 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to modify</param>
     /// <param name="value">The value to append</param>
     /// <returns>null</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // SvArgs.StashList materializes typed arrays into a new list, so mutations would not
-    // affect the original. The typed-array fast-path must execute before any materialization.
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Push(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Push(IInterpreterContext ctx, StashValue array, StashValue value)
     {
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taPush)
+        if (array.IsObj && array.AsObj is StashTypedArray taPush)
         {
-            taPush.Add(args[1]);
-            return StashValue.Null;
+            taPush.Add(value);
+            return;
         }
-        SvArgs.StashList(args, 0, "arr.push").Add(args[1]);
-        return StashValue.Null;
+        if (array.IsObj && array.AsObj is List<StashValue> list)
+        {
+            list.Add(value);
+            return;
+        }
+        throw new RuntimeError("First argument to 'arr.push' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Removes and returns the last element of the array. Throws if empty.</summary>
     /// <param name="array">The array to pop from</param>
     /// <returns>The removed last element</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Pop(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Pop(IInterpreterContext ctx, StashValue array)
     {
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taPop)
+        if (array.IsObj && array.AsObj is StashTypedArray taPop)
         {
             if (taPop.Count == 0)
                 throw new RuntimeError("Cannot pop from an empty array.", errorType: StashErrorTypes.ValueError);
             return taPop.RemoveLast();
         }
-        var list = SvArgs.StashList(args, 0, "arr.pop");
-        if (list.Count == 0)
-            throw new RuntimeError("Cannot pop from an empty array.", errorType: StashErrorTypes.ValueError);
-        var last = list[list.Count - 1];
-        list.RemoveAt(list.Count - 1);
-        return last;
+        if (array.IsObj && array.AsObj is List<StashValue> list)
+        {
+            if (list.Count == 0)
+                throw new RuntimeError("Cannot pop from an empty array.", errorType: StashErrorTypes.ValueError);
+            var last = list[list.Count - 1];
+            list.RemoveAt(list.Count - 1);
+            return last;
+        }
+        throw new RuntimeError("First argument to 'arr.pop' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Returns the last element without removing it. Throws if empty.</summary>
@@ -73,107 +73,106 @@ public static partial class ArrBuiltIns
     /// <param name="index">The position to insert at</param>
     /// <param name="value">The value to insert</param>
     /// <returns>null</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Insert(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Insert(IInterpreterContext ctx, StashValue array, long index, StashValue value)
     {
-        var idx = SvArgs.Long(args, 1, "arr.insert");
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taInsert)
+        if (array.IsObj && array.AsObj is StashTypedArray taInsert)
         {
-            int i = (int)(idx < 0 ? idx + taInsert.Count : idx);
+            int i = (int)(index < 0 ? index + taInsert.Count : index);
             if (i < 0 || i > taInsert.Count)
-                throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.", errorType: StashErrorTypes.IndexError);
-            taInsert.Insert(i, args[2]);
-            return StashValue.Null;
+                throw new RuntimeError($"Index {index} is out of bounds for 'arr.insert'.", errorType: StashErrorTypes.IndexError);
+            taInsert.Insert(i, value);
+            return;
         }
-        var list = SvArgs.StashList(args, 0, "arr.insert");
-        if (idx < 0 || idx > list.Count)
-            throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.", errorType: StashErrorTypes.IndexError);
-        list.Insert((int)idx, args[2]);
-        return StashValue.Null;
+        if (array.IsObj && array.AsObj is List<StashValue> list)
+        {
+            if (index < 0 || index > list.Count)
+                throw new RuntimeError($"Index {index} is out of bounds for 'arr.insert'.", errorType: StashErrorTypes.IndexError);
+            list.Insert((int)index, value);
+            return;
+        }
+        throw new RuntimeError("First argument to 'arr.insert' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Removes and returns the element at the specified index.</summary>
     /// <param name="array">The array to modify</param>
     /// <param name="index">The index of the element to remove</param>
     /// <returns>The removed element</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue RemoveAt(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue RemoveAt(IInterpreterContext ctx, StashValue array, long index)
     {
-        var idx = SvArgs.Long(args, 1, "arr.removeAt");
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taRemoveAt)
+        if (array.IsObj && array.AsObj is StashTypedArray taRemoveAt)
         {
-            int i = (int)(idx < 0 ? idx + taRemoveAt.Count : idx);
+            int i = (int)(index < 0 ? index + taRemoveAt.Count : index);
             taRemoveAt.CheckBounds(i, "removeAt");
             StashValue removed = taRemoveAt.Get(i);
             taRemoveAt.RemoveAt(i);
             return removed;
         }
-        var list = SvArgs.StashList(args, 0, "arr.removeAt");
-        if (idx < 0 || idx >= list.Count)
-            throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.", errorType: StashErrorTypes.IndexError);
-        var removedVal = list[(int)idx];
-        list.RemoveAt((int)idx);
-        return removedVal;
+        if (array.IsObj && array.AsObj is List<StashValue> list)
+        {
+            if (index < 0 || index >= list.Count)
+                throw new RuntimeError($"Index {index} is out of bounds for 'arr.removeAt'.", errorType: StashErrorTypes.IndexError);
+            var removedVal = list[(int)index];
+            list.RemoveAt((int)index);
+            return removedVal;
+        }
+        throw new RuntimeError("First argument to 'arr.removeAt' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Removes the first occurrence of a value from the array. Returns true if found and removed.</summary>
     /// <param name="array">The array to modify</param>
     /// <param name="value">The value to remove</param>
     /// <returns>true if the value was found and removed, false otherwise</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Remove(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Remove(IInterpreterContext ctx, StashValue array, StashValue value)
     {
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taRemove)
+        if (array.IsObj && array.AsObj is StashTypedArray taRemove)
         {
-            object? target = args[1].ToObject();
+            object? target = value.ToObject();
             for (int i = 0; i < taRemove.Count; i++)
             {
                 if (RuntimeValues.IsEqual(taRemove.Get(i).ToObject(), target))
                 {
                     taRemove.RemoveAt(i);
-                    return StashValue.True;
+                    return true;
                 }
             }
-            return StashValue.False;
+            return false;
         }
-        var list = SvArgs.StashList(args, 0, "arr.remove");
-        var value = args[1].ToObject();
-        for (int i = 0; i < list.Count; i++)
+        if (array.IsObj && array.AsObj is List<StashValue> list)
         {
-            if (RuntimeValues.IsEqual(list[i].ToObject(), value))
+            var target2 = value.ToObject();
+            for (int i = 0; i < list.Count; i++)
             {
-                list.RemoveAt(i);
-                return StashValue.True;
+                if (RuntimeValues.IsEqual(list[i].ToObject(), target2))
+                {
+                    list.RemoveAt(i);
+                    return true;
+                }
             }
+            return false;
         }
-        return StashValue.False;
+        throw new RuntimeError("First argument to 'arr.remove' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Removes all elements from the array. Mutates the original array.</summary>
     /// <param name="array">The array to clear</param>
     /// <returns>null</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Clear(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Clear(IInterpreterContext ctx, StashValue array)
     {
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taClear)
+        if (array.IsObj && array.AsObj is StashTypedArray taClear)
         {
             taClear.Clear();
-            return StashValue.Null;
+            return;
         }
-        SvArgs.StashList(args, 0, "arr.clear").Clear();
-        return StashValue.Null;
+        if (array.IsObj && array.AsObj is List<StashValue> list)
+        {
+            list.Clear();
+            return;
+        }
+        throw new RuntimeError("First argument to 'arr.clear' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Returns true if the array contains the specified value.</summary>
@@ -316,13 +315,10 @@ public static partial class ArrBuiltIns
     /// <summary>Reverses the array in place. Mutates the original array.</summary>
     /// <param name="array">The array to reverse</param>
     /// <returns>null</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Reverse(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Reverse(IInterpreterContext ctx, StashValue array)
     {
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taReverse)
+        if (array.IsObj && array.AsObj is StashTypedArray taReverse)
         {
             for (int i = 0, j = taReverse.Count - 1; i < j; i++, j--)
             {
@@ -330,10 +326,14 @@ public static partial class ArrBuiltIns
                 taReverse.Set(i, taReverse.Get(j));
                 taReverse.Set(j, tmp);
             }
-            return StashValue.Null;
+            return;
         }
-        SvArgs.StashList(args, 0, "arr.reverse").Reverse();
-        return StashValue.Null;
+        if (array.IsObj && array.AsObj is List<StashValue> list)
+        {
+            list.Reverse();
+            return;
+        }
+        throw new RuntimeError("First argument to 'arr.reverse' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Sorts the array in place. When comparator is provided, it receives two elements and must return a negative number (a less than b), zero (a == b), or positive number (a greater than b).</summary>
@@ -866,13 +866,10 @@ public static partial class ArrBuiltIns
     /// <summary>Randomly reorders the array in place using Fisher-Yates. Mutates the original array.</summary>
     /// <param name="array">The array to shuffle</param>
     /// <returns>null</returns>
-    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
-    // See Push comment above.
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Shuffle(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Shuffle(IInterpreterContext ctx, StashValue array)
     {
-        StashValue arrVal = args[0];
-        if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taShuffle)
+        if (array.IsObj && array.AsObj is StashTypedArray taShuffle)
         {
             var rng = new Random();
             for (int i = taShuffle.Count - 1; i > 0; i--)
@@ -882,16 +879,19 @@ public static partial class ArrBuiltIns
                 taShuffle.Set(i, taShuffle.Get(j));
                 taShuffle.Set(j, tmp);
             }
-            return StashValue.Null;
+            return;
         }
-        var list = SvArgs.StashList(args, 0, "arr.shuffle");
-        var rng2 = new Random();
-        for (int i = list.Count - 1; i > 0; i--)
+        if (array.IsObj && array.AsObj is List<StashValue> list)
         {
-            int j = rng2.Next(i + 1);
-            (list[i], list[j]) = (list[j], list[i]);
+            var rng = new Random();
+            for (int i = list.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (list[i], list[j]) = (list[j], list[i]);
+            }
+            return;
         }
-        return StashValue.Null;
+        throw new RuntimeError("First argument to 'arr.shuffle' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>Returns a new array with the first n elements.</summary>

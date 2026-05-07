@@ -22,20 +22,18 @@ public static partial class TomlBuiltIns
     /// <summary>Parses a TOML string into a Stash dictionary.</summary>
     /// <param name="text">The TOML string</param>
     /// <returns>Parsed dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Parse(string text)
     {
-        var s = SvArgs.String(args, 0, "toml.parse");
-
         try
         {
-            var table = TomlSerializer.Deserialize<TomlTable>(s);
+            var table = TomlSerializer.Deserialize<TomlTable>(text);
             if (table is null)
             {
-                return StashValue.FromObj(new StashDictionary());
+                return new StashDictionary();
             }
 
-            return StashValue.FromObj(ConvertTable(table));
+            return ConvertTable(table);
         }
         catch (TomlException e)
         {
@@ -46,15 +44,13 @@ public static partial class TomlBuiltIns
     /// <summary>Serializes a Stash dictionary to a TOML string.</summary>
     /// <param name="data">The dictionary to serialize</param>
     /// <returns>TOML string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Stringify(StashDictionary data)
     {
-        var dict = SvArgs.Dict(args, 0, "toml.stringify");
-
         try
         {
-            var table = ConvertDictToTomlTable(dict);
-            return StashValue.FromObj(TomlSerializer.Serialize<TomlTable>(table));
+            var table = ConvertDictToTomlTable(data);
+            return TomlSerializer.Serialize<TomlTable>(table);
         }
         catch (TomlException e)
         {
@@ -65,19 +61,17 @@ public static partial class TomlBuiltIns
     /// <summary>Returns true if the string is valid TOML, false otherwise.</summary>
     /// <param name="text">The TOML string to validate</param>
     /// <returns>true if valid TOML</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Valid(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Valid(string text)
     {
-        var s = SvArgs.String(args, 0, "toml.valid");
-
         try
         {
-            TomlSerializer.Deserialize<TomlTable>(s);
-            return StashValue.True;
+            TomlSerializer.Deserialize<TomlTable>(text);
+            return true;
         }
         catch (TomlException)
         {
-            return StashValue.False;
+            return false;
         }
     }
 

@@ -8,7 +8,8 @@ using Stash.Runtime.Types;
 
 /// <summary>
 /// StashValue-native argument extraction helpers for DirectHandler built-ins.
-/// Mirrors <see cref="Args"/> but operates on ReadOnlySpan&lt;StashValue&gt; — zero boxing.
+/// Operates on ReadOnlySpan&lt;StashValue&gt; — zero boxing. Used both by hand-written
+/// raw built-ins and by the bodies emitted by the source generator.
 /// </summary>
 public static class SvArgs
 {

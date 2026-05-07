@@ -753,11 +753,11 @@ public static partial class FsBuiltIns
     /// <summary>Sets file permissions from a FilePermissions struct. On Unix, sets full rwx bits for owner/group/others. On Windows, controls the read-only attribute based on owner write permission.</summary>
     /// <param name="path">The file path to modify.</param>
     /// <param name="permissions">A FilePermissions struct with owner, group, and others fields.</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SetPermissions(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void SetPermissions(IInterpreterContext ctx, string path, StashValue permissions)
     {
-        var path = SvArgs.String(args, 0, "fs.setPermissions");
-        var perms = SvArgs.Instance(args, 1, "FilePermissions", "fs.setPermissions");
+        if (permissions.ToObject() is not StashInstance perms || perms.TypeName != "FilePermissions")
+            throw new RuntimeError("Second argument to 'fs.setPermissions' must be a FilePermissions.", errorType: StashErrorTypes.TypeError);
         path = ctx.ExpandTilde(path);
 
         try
@@ -813,7 +813,6 @@ public static partial class FsBuiltIns
         catch (RuntimeError) { throw; }
         catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.</summary>
@@ -889,11 +888,9 @@ public static partial class FsBuiltIns
     /// <summary>Sets or clears the executable permission on a file. On Unix, toggles the user execute bit (adds on true, clears all execute bits on false). On Windows, this is a no-op since executability is determined by file extension.</summary>
     /// <param name="path">The file path to modify.</param>
     /// <param name="executable">True to make executable, false to remove execute permission.</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SetExecutable(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void SetExecutable(IInterpreterContext ctx, string path, bool executable)
     {
-        var path = SvArgs.String(args, 0, "fs.setExecutable");
-        var executable = SvArgs.Bool(args, 1, "fs.setExecutable");
         path = ctx.ExpandTilde(path);
 
         try
@@ -922,7 +919,6 @@ public static partial class FsBuiltIns
         catch (RuntimeError) { throw; }
         catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Watches a file or directory for changes and invokes a callback for each event. Returns a Watcher handle that can be passed to fs.unwatch() to stop watching.</summary>
@@ -1023,10 +1019,11 @@ public static partial class FsBuiltIns
 
     /// <summary>Stops a file watcher previously created by fs.watch(). Disposes the underlying OS watcher and removes it from tracking. Calling fs.unwatch() on an already-stopped watcher is a no-op.</summary>
     /// <param name="watcher">The Watcher handle returned by fs.watch().</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Unwatch(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Unwatch(IInterpreterContext ctx, StashValue watcher)
     {
-        var handle = SvArgs.Instance(args, 0, "Watcher", "fs.unwatch");
+        if (watcher.ToObject() is not StashInstance handle || handle.TypeName != "Watcher")
+            throw new RuntimeError("First argument to 'fs.unwatch' must be a Watcher.", errorType: StashErrorTypes.TypeError);
 
         if (_activeWatchers.TryRemove(handle, out WatcherState? state))
         {
@@ -1035,17 +1032,14 @@ public static partial class FsBuiltIns
 
         // Remove from tracked list (best-effort -- may not be in this context's list)
         ctx.TrackedWatchers.RemoveAll(e => ReferenceEquals(e.Handle, handle));
-
-        return StashValue.Null;
     }
 
     /// <summary>Reads the entire contents of a file as a byte array.</summary>
     /// <param name="path">The file path</param>
     /// <returns>The file contents as byte[]</returns>
-    [StashFn(Raw = true, ReturnType = "byte[]")]
-    private static StashValue ReadBytes(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "byte[]")]
+    private static StashValue ReadBytes(IInterpreterContext ctx, string path)
     {
-        string path = SvArgs.String(args, 0, "fs.readBytes");
         path = ctx.ExpandTilde(path);
         try
         {
@@ -1060,41 +1054,35 @@ public static partial class FsBuiltIns
     /// <summary>Writes raw bytes to a file, creating or overwriting it.</summary>
     /// <param name="path">The file path</param>
     /// <param name="data">The byte array to write</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue WriteBytes(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void WriteBytes(IInterpreterContext ctx, string path, byte[] data)
     {
-        string path = SvArgs.String(args, 0, "fs.writeBytes");
         path = ctx.ExpandTilde(path);
-        StashByteArray ba = SvArgs.ByteArray(args, 1, "fs.writeBytes");
         try
         {
-            System.IO.File.WriteAllBytes(path, ba.AsSpan().ToArray());
+            System.IO.File.WriteAllBytes(path, data);
         }
         catch (System.IO.IOException e)
         {
             throw new RuntimeError($"Cannot write file '{path}': {e.Message}", errorType: StashErrorTypes.IOError);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Appends raw bytes to a file.</summary>
     /// <param name="path">The file path</param>
     /// <param name="data">The byte array to append</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue AppendBytes(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void AppendBytes(IInterpreterContext ctx, string path, byte[] data)
     {
-        string path = SvArgs.String(args, 0, "fs.appendBytes");
         path = ctx.ExpandTilde(path);
-        StashByteArray ba = SvArgs.ByteArray(args, 1, "fs.appendBytes");
         try
         {
             using var stream = new System.IO.FileStream(path, System.IO.FileMode.Append, System.IO.FileAccess.Write);
-            stream.Write(ba.AsSpan());
+            stream.Write(data);
         }
         catch (System.IO.IOException e)
         {
             throw new RuntimeError($"Cannot append to file '{path}': {e.Message}", errorType: StashErrorTypes.IOError);
         }
-        return StashValue.Null;
     }
 }
