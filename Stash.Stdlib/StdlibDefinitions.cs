@@ -19,22 +19,11 @@ public static class StdlibDefinitions
     /// </summary>
     private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] LegacyRegistry =
     [
-        (() => IoBuiltIns.Define(),       StashCapabilities.None),
-        (() => EnvBuiltIns.Define(),      StashCapabilities.Environment),
-        (() => PromptBuiltIns.Define(),   StashCapabilities.None),
-        (() => ArrBuiltIns.Define(),      StashCapabilities.None),
-        (() => DictBuiltIns.Define(),     StashCapabilities.None),
+
         (() => StrBuiltIns.Define(),      StashCapabilities.None),
-        (() => ReBuiltIns.Define(),       StashCapabilities.None),
         (() => HttpBuiltIns.Define(),     StashCapabilities.Network),
-        (() => IniBuiltIns.Define(),      StashCapabilities.None),
-        (() => XmlBuiltIns.Define(),      StashCapabilities.None),
-        (() => YamlBuiltIns.Define(),     StashCapabilities.None),
-        (() => TomlBuiltIns.Define(),     StashCapabilities.None),
-        (() => ConfigBuiltIns.Define(),   StashCapabilities.None),
         (() => SysBuiltIns.Define(),      StashCapabilities.None),
         (() => SignalBuiltIns.Define(),   StashCapabilities.None),
-        (() => NetBuiltIns.Define(),      StashCapabilities.Network),
     ];
 
     /// <summary>

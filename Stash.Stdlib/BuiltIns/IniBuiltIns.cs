@@ -6,46 +6,41 @@ using System.Globalization;
 using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>ini</c> namespace built-in functions for INI format parsing and serialization.
 /// </summary>
-public static class IniBuiltIns
+[StashNamespace]
+public static partial class IniBuiltIns
 {
-    public static NamespaceDefinition Define()
+    /// <summary>Parses INI-formatted text into a dictionary. Sections become nested dictionaries.</summary>
+    /// <param name="text">The INI text to parse</param>
+    /// <returns>A dictionary representing the INI structure</returns>
+    [StashFn(Raw = true, ReturnType = "dict")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("ini");
+        var s = SvArgs.String(args, 0, "ini.parse");
 
-        // ini.parse(string) — Parses an INI-format string into a dict. Section headers become nested dicts.
-        ns.Function("parse", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            var s = SvArgs.String(args, 0, "ini.parse");
-
-            try
-            {
-                return StashValue.FromObj(ParseIni(s));
-            }
-            catch (Exception e) when (e is not RuntimeError)
-            {
-                throw new RuntimeError("ini.parse: failed to parse INI — " + e.Message, errorType: StashErrorTypes.ParseError);
-            }
-        },
-            returnType: "dict",
-            documentation: "Parses INI-formatted text into a dictionary. Sections become nested dictionaries.\n@param text The INI text to parse\n@return A dictionary representing the INI structure");
-
-        // ini.stringify(dict) — Serializes a dict to an INI-format string. Nested dicts become section headers.
-        ns.Function("stringify", [Param("data", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            return StashValue.FromObj(ParseIni(s));
+        }
+        catch (Exception e) when (e is not RuntimeError)
         {
-            var dict = SvArgs.Dict(args, 0, "ini.stringify");
+            throw new RuntimeError("ini.parse: failed to parse INI — " + e.Message, errorType: StashErrorTypes.ParseError);
+        }
+    }
 
-            return StashValue.FromObj(StringifyIni(dict));
-        },
-            returnType: "string",
-            documentation: "Converts a dictionary to INI-formatted text.\n@param data The dictionary to serialize\n@return The INI text representation");
+    /// <summary>Converts a dictionary to INI-formatted text.</summary>
+    /// <param name="data">The dictionary to serialize</param>
+    /// <returns>The INI text representation</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var dict = SvArgs.Dict(args, 0, "ini.stringify");
 
-        return ns.Build();
+        return StashValue.FromObj(StringifyIni(dict));
     }
 
     /// <summary>Parses an INI-format string into a <see cref="StashDictionary"/>. Section headers create nested dictionaries.</summary>

@@ -9,477 +9,453 @@ using System.Net.Sockets;
 using System.Threading;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
-public static class NetBuiltIns
+/// <summary>
+/// Registers the <c>net</c> namespace built-in functions for network operations and subnet utilities.
+/// </summary>
+[StashNamespace(Capability = StashCapabilities.Network)]
+public static partial class NetBuiltIns
 {
-    public static NamespaceDefinition Define()
+    // ── Structs ──────────────────────────────────────────────────────────────
+
+    /// <summary>Subnet details returned by net.subnetInfo.</summary>
+    [StashStruct(Name = "SubnetInfo")]
+    public sealed record SubnetInfoResult(
+        [property: StashField(Type = "ip")] StashIpAddress? Network,
+        [property: StashField(Type = "ip")] StashIpAddress? Broadcast,
+        [property: StashField(Type = "ip")] StashIpAddress? Mask,
+        [property: StashField(Type = "ip")] StashIpAddress? Wildcard,
+        long HostCount,
+        [property: StashField(Type = "ip")] StashIpAddress? FirstHost,
+        [property: StashField(Type = "ip")] StashIpAddress? LastHost);
+
+    /// <summary>Result of a ping operation.</summary>
+    [StashStruct]
+    public sealed record PingResult(bool Alive, double Latency, long Ttl);
+
+    /// <summary>Information about a network interface.</summary>
+    [StashStruct]
+    public sealed record InterfaceInfo(
+        string Name,
+        [property: StashField(Type = "ip")] StashIpAddress? Ip,
+        [property: StashField(Type = "ip")] StashIpAddress? Ipv6,
+        string Mac,
+        [property: StashField(Type = "ip")] StashIpAddress? Gateway,
+        [property: StashField(Type = "ip")] StashIpAddress? Subnet,
+        string Status,
+        string Type,
+        bool Up);
+
+    /// <summary>A TCP connection handle.</summary>
+    [StashStruct]
+    public sealed record TcpConnection(string Host, long Port, long LocalPort);
+
+    /// <summary>A received UDP datagram.</summary>
+    [StashStruct]
+    public sealed record UdpMessage(string Data, string Host, long Port);
+
+    /// <summary>An MX record returned by net.resolveMx.</summary>
+    [StashStruct]
+    public sealed record MxRecord(long Priority, string Exchange);
+
+    /// <summary>A WebSocket connection handle.</summary>
+    [StashStruct]
+    public sealed record WsConnection(string Url, string Protocol);
+
+    /// <summary>A received WebSocket message.</summary>
+    [StashStruct]
+    public sealed record WsMessage(string Data, string Type, bool Close);
+
+    /// <summary>Options for net.tcpConnect / net.tcpConnectAsync.</summary>
+    [StashStruct]
+    public sealed record TcpConnectOptions(long TimeoutMs, bool Tls, bool NoDelay, bool KeepAlive, bool TlsVerify, string TlsSni);
+
+    /// <summary>Options for net.tcpRecv / net.tcpRecvAsync.</summary>
+    [StashStruct]
+    public sealed record TcpRecvOptions(long MaxBytes, long TimeoutMs);
+
+    /// <summary>A TCP server handle returned by net.tcpListenAsync.</summary>
+    [StashStruct]
+    public sealed record TcpServer(long Port, bool Active);
+
+    // ── Enums ──────────────────────────────────────────────────────────────────
+
+    /// <summary>The state of a WebSocket connection.</summary>
+    [StashEnum]
+    public enum WsConnectionState { Connecting, Open, Closing, Closed }
+
+    /// <summary>The state of a TCP connection.</summary>
+    [StashEnum]
+    public enum TcpConnectionState { Open, Closed }
+
+    // ── Network utility functions ──────────────────────────────────────────────────────────
+
+
+    /// <summary>Returns subnet details for a CIDR IP address.</summary>
+    /// <param name="ip">The CIDR IP address.</param>
+    [StashFn(Raw = true, ReturnType = "SubnetInfo")]
+    private static StashValue SubnetInfo(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("net");
-        ns.RequiresCapability(StashCapabilities.Network);
+        var ip = SvArgs.IpAddress(args, 0, "net.subnetInfo");
+        if (ip.PrefixLength is null)
+            throw new RuntimeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: StashErrorTypes.TypeError);
 
-        // net.subnetInfo(ip) — Returns subnet details for a CIDR IP address.
-        ns.Function("subnetInfo", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        var (maskBytes, networkBytes, broadcastBytes, wildcardBytes) = ComputeSubnetComponents(ip);
+        long hostCount = ComputeHostCount(ip);
+
+        int prefix = ip.PrefixLength.Value;
+        int hostBits = (ip.Version == 4 ? 32 : 128) - prefix;
+
+        byte[] firstHostBytes = (byte[])networkBytes.Clone();
+        byte[] lastHostBytes = (byte[])broadcastBytes.Clone();
+        if (ip.Version == 4 && hostBits > 1)
         {
-            var ip = SvArgs.IpAddress(args, 0, "net.subnetInfo");
-            if (ip.PrefixLength is null)
-                throw new RuntimeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: StashErrorTypes.TypeError);
+            firstHostBytes[^1] += 1;
+            lastHostBytes[^1] -= 1;
+        }
 
-            var (maskBytes, networkBytes, broadcastBytes, wildcardBytes) = ComputeSubnetComponents(ip);
-            long hostCount = ComputeHostCount(ip);
+        var mask = new StashIpAddress(maskBytes, null);
+        var wildcard = new StashIpAddress(wildcardBytes, null);
+        var network = new StashIpAddress(networkBytes, prefix);
+        var broadcast = new StashIpAddress(broadcastBytes, null);
+        var firstHost = new StashIpAddress(firstHostBytes, null);
+        var lastHost = new StashIpAddress(lastHostBytes, null);
 
-            int prefix = ip.PrefixLength.Value;
-            int hostBits = (ip.Version == 4 ? 32 : 128) - prefix;
-
-            byte[] firstHostBytes = (byte[])networkBytes.Clone();
-            byte[] lastHostBytes = (byte[])broadcastBytes.Clone();
-            if (ip.Version == 4 && hostBits > 1)
-            {
-                firstHostBytes[^1] += 1;
-                lastHostBytes[^1] -= 1;
-            }
-
-            var mask = new StashIpAddress(maskBytes, null);
-            var wildcard = new StashIpAddress(wildcardBytes, null);
-            var network = new StashIpAddress(networkBytes, prefix);
-            var broadcast = new StashIpAddress(broadcastBytes, null);
-            var firstHost = new StashIpAddress(firstHostBytes, null);
-            var lastHost = new StashIpAddress(lastHostBytes, null);
-
-            return StashValue.FromObj(new StashInstance("SubnetInfo", new Dictionary<string, StashValue>
-            {
-                ["network"] = StashValue.FromObj(network),
-                ["broadcast"] = StashValue.FromObj(broadcast),
-                ["mask"] = StashValue.FromObj(mask),
-                ["wildcard"] = StashValue.FromObj(wildcard),
-                ["hostCount"] = StashValue.FromInt(hostCount),
-                ["firstHost"] = StashValue.FromObj(firstHost),
-                ["lastHost"] = StashValue.FromObj(lastHost),
-            }));
-        }, returnType: "SubnetInfo", documentation: "Returns subnet details for a CIDR IP address.");
-
-        // net.mask(ip) — Returns the subnet mask for a CIDR IP address.
-        ns.Function("mask", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        return StashValue.FromObj(new StashInstance("SubnetInfo", new Dictionary<string, StashValue>
         {
-            var ip = SvArgs.IpAddress(args, 0, "net.mask");
-            var (maskBytes, _, _, _) = ComputeSubnetComponents(ip, "net.mask");
-            return StashValue.FromObj(new StashIpAddress(maskBytes, null));
-        }, returnType: "ip", documentation: "Returns the subnet mask for a CIDR IP address.");
-
-        // net.network(ip) — Returns the network address for a CIDR IP address.
-        ns.Function("network", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var ip = SvArgs.IpAddress(args, 0, "net.network");
-            var (_, networkBytes, _, _) = ComputeSubnetComponents(ip, "net.network");
-            return StashValue.FromObj(new StashIpAddress(networkBytes, ip.PrefixLength!.Value));
-        }, returnType: "ip", documentation: "Returns the network address for a CIDR IP address.");
-
-        // net.broadcast(ip) — Returns the broadcast address for a CIDR IP address.
-        ns.Function("broadcast", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var ip = SvArgs.IpAddress(args, 0, "net.broadcast");
-            var (_, _, broadcastBytes, _) = ComputeSubnetComponents(ip, "net.broadcast");
-            return StashValue.FromObj(new StashIpAddress(broadcastBytes, null));
-        }, returnType: "ip", documentation: "Returns the broadcast address for a CIDR IP address.");
-
-        // net.hostCount(ip) — Returns the number of usable host addresses in a CIDR subnet.
-        ns.Function("hostCount", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var ip = SvArgs.IpAddress(args, 0, "net.hostCount");
-            ComputeSubnetComponents(ip, "net.hostCount"); // validates PrefixLength
-            return StashValue.FromInt(ComputeHostCount(ip));
-        }, returnType: "int", documentation: "Returns the number of usable host addresses in a CIDR subnet.");
-
-        // net.resolve(hostname) — Deprecated. Use dns.resolve.
-        ns.Function("resolve", [Param("hostname", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolve(ctx, args, "net.resolve"),
-            returnType: "ip",
-            documentation: "Deprecated. Use dns.resolve.",
-            deprecation: new DeprecationInfo("dns.resolve"));
-
-        // net.resolveAll(hostname) — Deprecated. Use dns.resolveAll.
-        ns.Function("resolveAll", [Param("hostname", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolveAll(ctx, args, "net.resolveAll"),
-            returnType: "array",
-            documentation: "Deprecated. Use dns.resolveAll.",
-            deprecation: new DeprecationInfo("dns.resolveAll"));
-
-        // net.reverseLookup(ip) — Deprecated. Use dns.reverseLookup.
-        ns.Function("reverseLookup", [Param("ip", "ip")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsReverseLookup(ctx, args, "net.reverseLookup"),
-            returnType: "string",
-            documentation: "Deprecated. Use dns.reverseLookup.",
-            deprecation: new DeprecationInfo("dns.reverseLookup"));
-
-        // net.ping(host) — Sends an ICMP ping to a host and returns the result.
-        ns.Function("ping", [Param("host", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var host = SvArgs.IpAddress(args, 0, "net.ping");
-            using var pinger = new Ping();
-            try
-            {
-                PingReply reply = pinger.Send(host.Address, 5000);
-                return StashValue.FromObj(new StashInstance("PingResult", new Dictionary<string, StashValue>
-                {
-                    ["alive"] = StashValue.FromBool(reply.Status == IPStatus.Success),
-                    ["latency"] = StashValue.FromFloat((double)reply.RoundtripTime),
-                    ["ttl"] = StashValue.FromInt(reply.Status == IPStatus.Success ? (long)(reply.Options?.Ttl ?? 0) : 0L),
-                }));
-            }
-            catch (PingException)
-            {
-                return StashValue.FromObj(new StashInstance("PingResult", new Dictionary<string, StashValue>
-                {
-                    ["alive"] = StashValue.False,
-                    ["latency"] = StashValue.FromFloat(0.0),
-                    ["ttl"] = StashValue.Zero,
-                }));
-            }
-        }, returnType: "PingResult", documentation: "Sends an ICMP ping to a host and returns the result. On Linux, requires root or CAP_NET_RAW capability.\n@param host The IP address to ping.\n@return A PingResult with alive, latency, and ttl fields.");
-
-        // net.isPortOpen(host, port, ?timeout) — Checks if a TCP port is open on a host.
-        ns.Function("isPortOpen", [Param("host", "string|ip"), Param("port", "int"), Param("timeout", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            if (args.Length < 2 || args.Length > 3)
-                throw new RuntimeError("net.isPortOpen: expected 2 or 3 arguments.");
-            object? hostArg = args[0].ToObject();
-            var port = SvArgs.Long(args, 1, "net.isPortOpen");
-            if (port < 1 || port > 65535)
-                throw new RuntimeError("Port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
-            int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, "net.isPortOpen") : 3000;
-
-            try
-            {
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
-                cts.CancelAfter(timeout);
-                using var client = new TcpClient();
-                if (hostArg is StashIpAddress ip)
-                    client.ConnectAsync(ip.Address, (int)port, cts.Token).GetAwaiter().GetResult();
-                else if (hostArg is string hostname)
-                    client.ConnectAsync(hostname, (int)port, cts.Token).GetAwaiter().GetResult();
-                else
-                    throw new RuntimeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.", errorType: StashErrorTypes.TypeError);
-                return StashValue.FromBool(client.Connected);
-            }
-            catch (RuntimeError) { throw; }
-            catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
-            catch
-            {
-                return StashValue.False;
-            }
-        }, returnType: "bool", documentation: "Checks if a TCP port is open on a host.\n@param host The IP address or hostname string to check.\n@param port The port number (1-65535).\n@param timeout Optional timeout in milliseconds (default 3000).");
-
-        // net.interfaces() — Returns information about all network interfaces.
-        ns.Function("interfaces", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-            StashValue.FromObj(BuildInterfaceList(NetworkInterface.GetAllNetworkInterfaces())),
-            returnType: "array", documentation: "Returns information about all network interfaces.\n@return An array of InterfaceInfo structs.");
-
-        // net.interface(name) — Returns information about a specific network interface.
-        ns.Function("interface", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            var name = SvArgs.String(args, 0, "net.interface");
-            var match = NetworkInterface.GetAllNetworkInterfaces()
-                .FirstOrDefault(ni => ni.Name == name);
-            if (match is null)
-                throw new RuntimeError($"Network interface '{name}' not found.", errorType: StashErrorTypes.IOError);
-            return StashValue.FromObj(BuildInterfaceList([match])[0]);
-        }, returnType: "InterfaceInfo", documentation: "Returns information about a specific network interface.\n@param name The interface name (e.g., \"eth0\", \"wlan0\").\n@return An InterfaceInfo struct.");
-
-        // net.tcpConnect(host, port, ?timeout) — Deprecated. Use tcp.connect.
-        ns.Function("tcpConnect", [Param("host", "string"), Param("port", "int"), Param("timeout", "int")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpConnect(ctx, args, "net.tcpConnect"),
-            returnType: "TcpConnection", isVariadic: true,
-            documentation: "Deprecated. Use tcp.connect.",
-            deprecation: new DeprecationInfo("tcp.connect"));
-
-        // net.tcpSend(conn, data) — Deprecated. Use tcp.send.
-        ns.Function("tcpSend", [Param("conn", "TcpConnection"), Param("data", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpSend(ctx, args, "net.tcpSend"),
-            returnType: "int",
-            documentation: "Deprecated. Use tcp.send.",
-            deprecation: new DeprecationInfo("tcp.send"));
-
-        // net.tcpRecv(conn, ?maxBytes) — Deprecated. Use tcp.recv.
-        ns.Function("tcpRecv", [Param("conn", "TcpConnection"), Param("maxBytes", "int")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpRecv(ctx, args, "net.tcpRecv"),
-            returnType: "string", isVariadic: true,
-            documentation: "Deprecated. Use tcp.recv.",
-            deprecation: new DeprecationInfo("tcp.recv"));
-
-        // net.tcpClose(conn) — Deprecated. Use tcp.close.
-        ns.Function("tcpClose", [Param("conn", "TcpConnection")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpClose(ctx, args, "net.tcpClose"),
-            returnType: "null",
-            documentation: "Deprecated. Use tcp.close.",
-            deprecation: new DeprecationInfo("tcp.close"));
-
-        // net.tcpListen(port, handler) — Deprecated. Use tcp.listen.
-        ns.Function("tcpListen", [Param("port", "int"), Param("handler", "function")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpListen(ctx, args, "net.tcpListen"),
-            returnType: "null",
-            documentation: "Deprecated. Use tcp.listen.",
-            deprecation: new DeprecationInfo("tcp.listen"));
-
-        // net.udpSend(host, port, data) — Deprecated. Use udp.send.
-        ns.Function("udpSend", [Param("host", "string"), Param("port", "int"), Param("data", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.UdpSend(ctx, args, "net.udpSend"),
-            returnType: "int",
-            documentation: "Deprecated. Use udp.send.",
-            deprecation: new DeprecationInfo("udp.send"));
-
-        // net.udpRecv(port, ?timeout) — Deprecated. Use udp.recv.
-        ns.Function("udpRecv", [Param("port", "int"), Param("timeout", "int")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.UdpRecv(ctx, args, "net.udpRecv"),
-            returnType: "UdpMessage", isVariadic: true,
-            documentation: "Deprecated. Use udp.recv.",
-            deprecation: new DeprecationInfo("udp.recv"));
-
-        // net.resolveMx(domain) — Deprecated. Use dns.resolveMx.
-        ns.Function("resolveMx", [Param("domain", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolveMx(ctx, args, "net.resolveMx"),
-            returnType: "array",
-            documentation: "Deprecated. Use dns.resolveMx.",
-            deprecation: new DeprecationInfo("dns.resolveMx"));
-
-        // net.resolveTxt(domain) — Deprecated. Use dns.resolveTxt.
-        ns.Function("resolveTxt", [Param("domain", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolveTxt(ctx, args, "net.resolveTxt"),
-            returnType: "array",
-            documentation: "Deprecated. Use dns.resolveTxt.",
-            deprecation: new DeprecationInfo("dns.resolveTxt"));
-
-        // net.wsConnect(url, ?options) — Deprecated. Use ws.connect.
-        ns.Function("wsConnect", [Param("url", "string"), Param("options", "dict")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsConnect(ctx, args, "net.wsConnect"),
-            returnType: "WsConnection", isVariadic: true,
-            documentation: "Deprecated. Use ws.connect.",
-            deprecation: new DeprecationInfo("ws.connect"));
-
-        // net.wsSend(conn, data) — Deprecated. Use ws.send.
-        ns.Function("wsSend", [Param("conn", "WsConnection"), Param("data", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsSend(ctx, args, "net.wsSend"),
-            returnType: "int",
-            documentation: "Deprecated. Use ws.send.",
-            deprecation: new DeprecationInfo("ws.send"));
-
-        // net.wsSendBinary(conn, data) — Deprecated. Use ws.sendBinary.
-        ns.Function("wsSendBinary", [Param("conn", "WsConnection"), Param("data", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsSendBinary(ctx, args, "net.wsSendBinary"),
-            returnType: "int",
-            documentation: "Deprecated. Use ws.sendBinary.",
-            deprecation: new DeprecationInfo("ws.sendBinary"));
-
-        // net.wsRecv(conn, ?timeout) — Deprecated. Use ws.recv.
-        ns.Function("wsRecv", [Param("conn", "WsConnection"), Param("timeout", "duration")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsRecv(ctx, args, "net.wsRecv"),
-            returnType: "WsMessage", isVariadic: true,
-            documentation: "Deprecated. Use ws.recv.",
-            deprecation: new DeprecationInfo("ws.recv"));
-
-        // net.wsClose(conn, ?code, ?reason) — Deprecated. Use ws.close.
-        ns.Function("wsClose", [Param("conn", "WsConnection"), Param("code", "int"), Param("reason", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsClose(ctx, args, "net.wsClose"),
-            returnType: "null", isVariadic: true,
-            documentation: "Deprecated. Use ws.close.",
-            deprecation: new DeprecationInfo("ws.close"));
-
-        // net.wsState(conn) — Deprecated. Use ws.state.
-        ns.Function("wsState", [Param("conn", "WsConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsState(ctx, args, "net.wsState"),
-            returnType: "WsConnectionState",
-            documentation: "Deprecated. Use ws.state.",
-            deprecation: new DeprecationInfo("ws.state"));
-
-        // net.wsIsOpen(conn) — Deprecated. Use ws.isOpen.
-        ns.Function("wsIsOpen", [Param("conn", "WsConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.WsIsOpen(ctx, args, "net.wsIsOpen"),
-            returnType: "bool",
-            documentation: "Deprecated. Use ws.isOpen.",
-            deprecation: new DeprecationInfo("ws.isOpen"));
-
-        // net.tcpConnectAsync(host, port, ?options) — Deprecated. Use tcp.connectAsync.
-        ns.Function("tcpConnectAsync", [Param("host", "string"), Param("port", "int"), Param("options", "TcpConnectOptions")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpConnectAsync(ctx, args, "net.tcpConnectAsync"),
-            returnType: "TcpConnection", isVariadic: true,
-            documentation: "Deprecated. Use tcp.connectAsync.",
-            deprecation: new DeprecationInfo("tcp.connectAsync"));
-
-        // net.tcpSendAsync(conn, data) — Deprecated. Use tcp.sendAsync.
-        ns.Function("tcpSendAsync", [Param("conn", "TcpConnection"), Param("data", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpSendAsync(ctx, args, "net.tcpSendAsync"),
-            returnType: "int",
-            documentation: "Deprecated. Use tcp.sendAsync.",
-            deprecation: new DeprecationInfo("tcp.sendAsync"));
-
-        // net.tcpSendBytesAsync(conn, data) — Deprecated. Use tcp.sendBytesAsync.
-        ns.Function("tcpSendBytesAsync", [Param("conn", "TcpConnection"), Param("data", "byte[]")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpSendBytesAsync(ctx, args, "net.tcpSendBytesAsync"),
-            returnType: "int",
-            documentation: "Deprecated. Use tcp.sendBytesAsync.",
-            deprecation: new DeprecationInfo("tcp.sendBytesAsync"));
-
-        // net.tcpRecvAsync(conn, ?options) — Deprecated. Use tcp.recvAsync.
-        ns.Function("tcpRecvAsync", [Param("conn", "TcpConnection"), Param("options", "TcpRecvOptions")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpRecvAsync(ctx, args, "net.tcpRecvAsync"),
-            returnType: "string", isVariadic: true,
-            documentation: "Deprecated. Use tcp.recvAsync.",
-            deprecation: new DeprecationInfo("tcp.recvAsync"));
-
-        // net.tcpRecvBytesAsync(conn, ?options) — Deprecated. Use tcp.recvBytesAsync.
-        ns.Function("tcpRecvBytesAsync", [Param("conn", "TcpConnection"), Param("options", "TcpRecvOptions")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpRecvBytesAsync(ctx, args, "net.tcpRecvBytesAsync"),
-            returnType: "byte[]", isVariadic: true,
-            documentation: "Deprecated. Use tcp.recvBytesAsync.",
-            deprecation: new DeprecationInfo("tcp.recvBytesAsync"));
-
-        // net.tcpCloseAsync(conn) — Deprecated. Use tcp.closeAsync.
-        ns.Function("tcpCloseAsync", [Param("conn", "TcpConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpCloseAsync(ctx, args, "net.tcpCloseAsync"),
-            returnType: "null",
-            documentation: "Deprecated. Use tcp.closeAsync.",
-            deprecation: new DeprecationInfo("tcp.closeAsync"));
-
-        // net.tcpIsOpen(conn) — Deprecated. Use tcp.isOpen.
-        ns.Function("tcpIsOpen", [Param("conn", "TcpConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpIsOpen(ctx, args, "net.tcpIsOpen"),
-            returnType: "bool",
-            documentation: "Deprecated. Use tcp.isOpen.",
-            deprecation: new DeprecationInfo("tcp.isOpen"));
-
-        // net.tcpState(conn) — Deprecated. Use tcp.state.
-        ns.Function("tcpState", [Param("conn", "TcpConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpState(ctx, args, "net.tcpState"),
-            returnType: "TcpConnectionState",
-            documentation: "Deprecated. Use tcp.state.",
-            deprecation: new DeprecationInfo("tcp.state"));
-
-        // net.tcpListenAsync(port, handler) — Deprecated. Use tcp.listenAsync.
-        ns.Function("tcpListenAsync", [Param("port", "int"), Param("handler", "function")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpListenAsync(ctx, args, "net.tcpListenAsync"),
-            returnType: "TcpServer",
-            documentation: "Deprecated. Use tcp.listenAsync.",
-            deprecation: new DeprecationInfo("tcp.listenAsync"));
-
-        // net.tcpServerClose(server) — Deprecated. Use tcp.serverClose.
-        ns.Function("tcpServerClose", [Param("server", "TcpServer")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpServerClose(ctx, args, "net.tcpServerClose"),
-            returnType: "null",
-            documentation: "Deprecated. Use tcp.serverClose.",
-            deprecation: new DeprecationInfo("tcp.serverClose"));
-
-        // Struct definitions
-        ns.Struct("SubnetInfo", [
-            new BuiltInField("network", "ip"),
-            new BuiltInField("broadcast", "ip"),
-            new BuiltInField("mask", "ip"),
-            new BuiltInField("wildcard", "ip"),
-            new BuiltInField("hostCount", "int"),
-            new BuiltInField("firstHost", "ip"),
-            new BuiltInField("lastHost", "ip"),
-        ]);
-
-        ns.Struct("PingResult", [
-            new BuiltInField("alive", "bool"),
-            new BuiltInField("latency", "float"),
-            new BuiltInField("ttl", "int"),
-        ]);
-
-        ns.Struct("InterfaceInfo", [
-            new BuiltInField("name", "string"),
-            new BuiltInField("ip", "ip"),
-            new BuiltInField("ipv6", "ip"),
-            new BuiltInField("mac", "string"),
-            new BuiltInField("gateway", "ip"),
-            new BuiltInField("subnet", "ip"),
-            new BuiltInField("status", "string"),
-            new BuiltInField("type", "string"),
-            new BuiltInField("up", "bool"),
-        ]);
-
-        ns.Struct("TcpConnection", [
-            new BuiltInField("host", "string"),
-            new BuiltInField("port", "int"),
-            new BuiltInField("localPort", "int"),
-        ]);
-
-        ns.Struct("UdpMessage", [
-            new BuiltInField("data", "string"),
-            new BuiltInField("host", "string"),
-            new BuiltInField("port", "int"),
-        ]);
-
-        ns.Struct("MxRecord", [
-            new BuiltInField("priority", "int"),
-            new BuiltInField("exchange", "string"),
-        ]);
-
-        ns.Struct("WsConnection", [
-            new BuiltInField("url", "string"),
-            new BuiltInField("protocol", "string"),
-        ]);
-
-        ns.Struct("WsMessage", [
-            new BuiltInField("data", "string"),
-            new BuiltInField("type", "string"),
-            new BuiltInField("close", "bool"),
-        ]);
-
-        ns.Struct("TcpConnectOptions", [
-            new BuiltInField("timeoutMs", "int"),
-            new BuiltInField("tls", "bool"),
-            new BuiltInField("noDelay", "bool"),
-            new BuiltInField("keepAlive", "bool"),
-            new BuiltInField("tlsVerify", "bool"),
-            new BuiltInField("tlsSni", "string"),
-        ]);
-
-        ns.Struct("TcpRecvOptions", [
-            new BuiltInField("maxBytes", "int"),
-            new BuiltInField("timeoutMs", "int"),
-        ]);
-
-        ns.Struct("TcpServer", [
-            new BuiltInField("port", "int"),
-            new BuiltInField("active", "bool"),
-        ]);
-
-        ns.Enum("WsConnectionState", ["Connecting", "Open", "Closing", "Closed"]);
-
-        ns.Enum("TcpConnectionState", ["Open", "Closed"]);
-
-        return ns.Build();
+            ["network"] = StashValue.FromObj(network),
+            ["broadcast"] = StashValue.FromObj(broadcast),
+            ["mask"] = StashValue.FromObj(mask),
+            ["wildcard"] = StashValue.FromObj(wildcard),
+            ["hostCount"] = StashValue.FromInt(hostCount),
+            ["firstHost"] = StashValue.FromObj(firstHost),
+            ["lastHost"] = StashValue.FromObj(lastHost),
+        }));
     }
+
+
+    /// <summary>Returns the subnet mask for a CIDR IP address.</summary>
+    /// <param name="ip">The CIDR IP address.</param>
+    [StashFn(Raw = true, ReturnType = "ip")]
+    private static StashValue Mask(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var ip = SvArgs.IpAddress(args, 0, "net.mask");
+        var (maskBytes, _, _, _) = ComputeSubnetComponents(ip, "net.mask");
+        return StashValue.FromObj(new StashIpAddress(maskBytes, null));
+    }
+
+
+    /// <summary>Returns the network address for a CIDR IP address.</summary>
+    /// <param name="ip">The CIDR IP address.</param>
+    [StashFn(Raw = true, ReturnType = "ip")]
+    private static StashValue Network(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var ip = SvArgs.IpAddress(args, 0, "net.network");
+        var (_, networkBytes, _, _) = ComputeSubnetComponents(ip, "net.network");
+        return StashValue.FromObj(new StashIpAddress(networkBytes, ip.PrefixLength!.Value));
+    }
+
+
+    /// <summary>Returns the broadcast address for a CIDR IP address.</summary>
+    /// <param name="ip">The CIDR IP address.</param>
+    [StashFn(Raw = true, ReturnType = "ip")]
+    private static StashValue Broadcast(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var ip = SvArgs.IpAddress(args, 0, "net.broadcast");
+        var (_, _, broadcastBytes, _) = ComputeSubnetComponents(ip, "net.broadcast");
+        return StashValue.FromObj(new StashIpAddress(broadcastBytes, null));
+    }
+
+
+    /// <summary>Returns the number of usable host addresses in a CIDR subnet.</summary>
+    /// <param name="ip">The CIDR IP address.</param>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue HostCount(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var ip = SvArgs.IpAddress(args, 0, "net.hostCount");
+        ComputeSubnetComponents(ip, "net.hostCount"); // validates PrefixLength
+        return StashValue.FromInt(ComputeHostCount(ip));
+    }
+
+
+    /// <summary>Deprecated. Use dns.resolve.</summary>
+    [StashFn(Raw = true, ReturnType = "ip")]
+    [StashDeprecated("dns.resolve")]
+    private static StashValue Resolve(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolve(ctx, args, "net.resolve");
+
+
+    /// <summary>Deprecated. Use dns.resolveAll.</summary>
+    [StashFn(Raw = true, ReturnType = "array")]
+    [StashDeprecated("dns.resolveAll")]
+    private static StashValue ResolveAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolveAll(ctx, args, "net.resolveAll");
+
+
+    /// <summary>Deprecated. Use dns.reverseLookup.</summary>
+    [StashFn(Raw = true, ReturnType = "string")]
+    [StashDeprecated("dns.reverseLookup")]
+    private static StashValue ReverseLookup(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsReverseLookup(ctx, args, "net.reverseLookup");
+
+
+    /// <summary>Sends an ICMP ping to a host and returns the result.</summary>
+    /// <param name="host">The IP address to ping.</param>
+    [StashFn(Raw = true, ReturnType = "PingResult")]
+    private static StashValue Ping(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var host = SvArgs.IpAddress(args, 0, "net.ping");
+        using var pinger = new Ping();
+        try
+        {
+            PingReply reply = pinger.Send(host.Address, 5000);
+            return StashValue.FromObj(new StashInstance("PingResult", new Dictionary<string, StashValue>
+            {
+                ["alive"] = StashValue.FromBool(reply.Status == IPStatus.Success),
+                ["latency"] = StashValue.FromFloat((double)reply.RoundtripTime),
+                ["ttl"] = StashValue.FromInt(reply.Status == IPStatus.Success ? (long)(reply.Options?.Ttl ?? 0) : 0L),
+            }));
+        }
+        catch (PingException)
+        {
+            return StashValue.FromObj(new StashInstance("PingResult", new Dictionary<string, StashValue>
+            {
+                ["alive"] = StashValue.False,
+                ["latency"] = StashValue.FromFloat(0.0),
+                ["ttl"] = StashValue.Zero,
+            }));
+        }
+    }
+
+
+    /// <summary>Checks if a TCP port is open on a host.</summary>
+    /// <param name="host">The IP address or hostname string to check.</param>
+    /// <param name="port">The port number (1-65535).</param>
+    /// <param name="timeout">Optional timeout in milliseconds (default 3000).</param>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue IsPortOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("net.isPortOpen: expected 2 or 3 arguments.");
+        object? hostArg = args[0].ToObject();
+        var port = SvArgs.Long(args, 1, "net.isPortOpen");
+        if (port < 1 || port > 65535)
+            throw new RuntimeError("Port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+        int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, "net.isPortOpen") : 3000;
+
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+            cts.CancelAfter(timeout);
+            using var client = new TcpClient();
+            if (hostArg is StashIpAddress ip)
+                client.ConnectAsync(ip.Address, (int)port, cts.Token).GetAwaiter().GetResult();
+            else if (hostArg is string hostname)
+                client.ConnectAsync(hostname, (int)port, cts.Token).GetAwaiter().GetResult();
+            else
+                throw new RuntimeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.", errorType: StashErrorTypes.TypeError);
+            return StashValue.FromBool(client.Connected);
+        }
+        catch (RuntimeError) { throw; }
+        catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
+        catch
+        {
+            return StashValue.False;
+        }
+    }
+
+
+    /// <summary>Returns information about all network interfaces.</summary>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Interfaces(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+        => StashValue.FromObj(BuildInterfaceList(NetworkInterface.GetAllNetworkInterfaces()));
+
+
+    /// <summary>Returns information about a specific network interface.</summary>
+    /// <param name="name">The interface name (e.g., "eth0", "wlan0").</param>
+    [StashFn(Raw = true, ReturnType = "InterfaceInfo", Name = "interface")]
+    private static StashValue Interface(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var name = SvArgs.String(args, 0, "net.interface");
+        var match = NetworkInterface.GetAllNetworkInterfaces()
+            .FirstOrDefault(ni => ni.Name == name);
+        if (match is null)
+            throw new RuntimeError($"Network interface '{name}' not found.", errorType: StashErrorTypes.IOError);
+        return StashValue.FromObj(BuildInterfaceList([match])[0]);
+    }
+
+    // ── Deprecated DNS aliases ─────────────────────────────────────────────────────────
+
+
+    // ── Deprecated TCP aliases ─────────────────────────────────────────────────────────
+
+    /// <summary>Deprecated. Use tcp.connect.</summary>
+    [StashFn(Raw = true, ReturnType = "TcpConnection")]
+    [StashDeprecated("tcp.connect")]
+    private static StashValue TcpConnect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpConnect(ctx, args, "net.tcpConnect");
+
+    /// <summary>Deprecated. Use tcp.send.</summary>
+    [StashFn(Raw = true, ReturnType = "int")]
+    [StashDeprecated("tcp.send")]
+    private static StashValue TcpSend(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpSend(ctx, args, "net.tcpSend");
+
+    /// <summary>Deprecated. Use tcp.recv.</summary>
+    [StashFn(Raw = true, ReturnType = "string")]
+    [StashDeprecated("tcp.recv")]
+    private static StashValue TcpRecv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpRecv(ctx, args, "net.tcpRecv");
+
+    /// <summary>Deprecated. Use tcp.close.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    [StashDeprecated("tcp.close")]
+    private static StashValue TcpClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpClose(ctx, args, "net.tcpClose");
+
+    /// <summary>Deprecated. Use tcp.listen.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    [StashDeprecated("tcp.listen")]
+    private static StashValue TcpListen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpListen(ctx, args, "net.tcpListen");
+
+
+    // ── Deprecated UDP aliases ─────────────────────────────────────────────────────────
+
+    /// <summary>Deprecated. Use udp.send.</summary>
+    [StashFn(Raw = true, ReturnType = "int")]
+    [StashDeprecated("udp.send")]
+    private static StashValue UdpSend(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.UdpSend(ctx, args, "net.udpSend");
+
+    /// <summary>Deprecated. Use udp.recv.</summary>
+    [StashFn(Raw = true, ReturnType = "UdpMessage")]
+    [StashDeprecated("udp.recv")]
+    private static StashValue UdpRecv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.UdpRecv(ctx, args, "net.udpRecv");
+
+
+    /// <summary>Deprecated. Use dns.resolveMx.</summary>
+    [StashFn(Raw = true, ReturnType = "array")]
+    [StashDeprecated("dns.resolveMx")]
+    private static StashValue ResolveMx(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolveMx(ctx, args, "net.resolveMx");
+
+    /// <summary>Deprecated. Use dns.resolveTxt.</summary>
+    [StashFn(Raw = true, ReturnType = "array")]
+    [StashDeprecated("dns.resolveTxt")]
+    private static StashValue ResolveTxt(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolveTxt(ctx, args, "net.resolveTxt");
+
+
+    // ── Deprecated WebSocket aliases ─────────────────────────────────────────────────────────
+
+    /// <summary>Deprecated. Use ws.connect.</summary>
+    [StashFn(Raw = true, ReturnType = "WsConnection")]
+    [StashDeprecated("ws.connect")]
+    private static StashValue WsConnect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsConnect(ctx, args, "net.wsConnect");
+
+    /// <summary>Deprecated. Use ws.send.</summary>
+    [StashFn(Raw = true, ReturnType = "int")]
+    [StashDeprecated("ws.send")]
+    private static StashValue WsSend(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsSend(ctx, args, "net.wsSend");
+
+    /// <summary>Deprecated. Use ws.sendBinary.</summary>
+    [StashFn(Raw = true, ReturnType = "int")]
+    [StashDeprecated("ws.sendBinary")]
+    private static StashValue WsSendBinary(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsSendBinary(ctx, args, "net.wsSendBinary");
+
+    /// <summary>Deprecated. Use ws.recv.</summary>
+    [StashFn(Raw = true, ReturnType = "WsMessage")]
+    [StashDeprecated("ws.recv")]
+    private static StashValue WsRecv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsRecv(ctx, args, "net.wsRecv");
+
+    /// <summary>Deprecated. Use ws.close.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    [StashDeprecated("ws.close")]
+    private static StashValue WsClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsClose(ctx, args, "net.wsClose");
+
+    /// <summary>Deprecated. Use ws.state.</summary>
+    [StashFn(Raw = true, ReturnType = "WsConnectionState")]
+    [StashDeprecated("ws.state")]
+    private static StashValue WsState(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsState(ctx, args, "net.wsState");
+
+    /// <summary>Deprecated. Use ws.isOpen.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    [StashDeprecated("ws.isOpen")]
+    private static StashValue WsIsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.WsIsOpen(ctx, args, "net.wsIsOpen");
+
+
+    /// <summary>Deprecated. Use tcp.connectAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "TcpConnection")]
+    [StashDeprecated("tcp.connectAsync")]
+    private static StashValue TcpConnectAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpConnectAsync(ctx, args, "net.tcpConnectAsync");
+
+    /// <summary>Deprecated. Use tcp.sendAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "int")]
+    [StashDeprecated("tcp.sendAsync")]
+    private static StashValue TcpSendAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpSendAsync(ctx, args, "net.tcpSendAsync");
+
+    /// <summary>Deprecated. Use tcp.sendBytesAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "int")]
+    [StashDeprecated("tcp.sendBytesAsync")]
+    private static StashValue TcpSendBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpSendBytesAsync(ctx, args, "net.tcpSendBytesAsync");
+
+    /// <summary>Deprecated. Use tcp.recvAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "string")]
+    [StashDeprecated("tcp.recvAsync")]
+    private static StashValue TcpRecvAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpRecvAsync(ctx, args, "net.tcpRecvAsync");
+
+    /// <summary>Deprecated. Use tcp.recvBytesAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "byte[]")]
+    [StashDeprecated("tcp.recvBytesAsync")]
+    private static StashValue TcpRecvBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpRecvBytesAsync(ctx, args, "net.tcpRecvBytesAsync");
+
+    /// <summary>Deprecated. Use tcp.closeAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    [StashDeprecated("tcp.closeAsync")]
+    private static StashValue TcpCloseAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpCloseAsync(ctx, args, "net.tcpCloseAsync");
+
+    /// <summary>Deprecated. Use tcp.isOpen.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    [StashDeprecated("tcp.isOpen")]
+    private static StashValue TcpIsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpIsOpen(ctx, args, "net.tcpIsOpen");
+
+    /// <summary>Deprecated. Use tcp.state.</summary>
+    [StashFn(Raw = true, ReturnType = "TcpConnectionState")]
+    [StashDeprecated("tcp.state")]
+    private static StashValue TcpState(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpState(ctx, args, "net.tcpState");
+
+    /// <summary>Deprecated. Use tcp.listenAsync.</summary>
+    [StashFn(Raw = true, ReturnType = "TcpServer")]
+    [StashDeprecated("tcp.listenAsync")]
+    private static StashValue TcpListenAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpListenAsync(ctx, args, "net.tcpListenAsync");
+
+    /// <summary>Deprecated. Use tcp.serverClose.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    [StashDeprecated("tcp.serverClose")]
+    private static StashValue TcpServerClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpServerClose(ctx, args, "net.tcpServerClose");
+
+    // ── Private helpers ─────────────────────────────────────────────────────────────────────────────
+
 
     private static (byte[] MaskBytes, byte[] NetworkBytes, byte[] BroadcastBytes, byte[] WildcardBytes) ComputeSubnetComponents(StashIpAddress ip, string funcName = "net.subnetInfo")
     {

@@ -8,247 +8,236 @@ using System.Xml.Linq;
 using System.Xml.XPath;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>xml</c> namespace built-in functions for XML parsing, serialization, and querying.
 /// </summary>
-public static class XmlBuiltIns
+[StashNamespace]
+public static partial class XmlBuiltIns
 {
-    public static NamespaceDefinition Define()
+    // ── Struct declarations ───────────────────────────────────────────────────
+
+    /// <summary>An XML node with tag, attributes, text content, and child nodes.</summary>
+    [StashStruct]
+    public sealed record XmlNode(string Tag, StashDictionary Attrs, string Text, List<StashValue> Children);
+
+    /// <summary>Options for XML parsing.</summary>
+    [StashStruct]
+    public sealed record XmlParseOptions(bool PreserveWhitespace);
+
+    /// <summary>Options for XML serialization.</summary>
+    [StashStruct]
+    public sealed record XmlStringifyOptions(long Indent, bool Declaration, string Encoding);
+
+    // ── Functions ─────────────────────────────────────────────────────────────
+
+    /// <summary>Parses an XML string into an XmlNode tree.</summary>
+    /// <param name="text">XML string to parse</param>
+    /// <param name="options">Optional XmlParseOptions struct</param>
+    /// <returns>Root XmlNode</returns>
+    [StashFn(Raw = true, ReturnType = "XmlNode")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("xml");
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("xml.parse: expected 1 or 2 arguments.");
 
-        // XmlNode struct
-        ns.Struct("XmlNode", [
-            new BuiltInField("tag",      "string"),
-            new BuiltInField("attrs",    "dict"),
-            new BuiltInField("text",     "string"),
-            new BuiltInField("children", "array"),
-        ]);
+        string text = SvArgs.String(args, 0, "xml.parse");
+        bool preserveWhitespace = false;
 
-        // XmlParseOptions struct
-        ns.Struct("XmlParseOptions", [
-            new BuiltInField("preserveWhitespace", "bool"),
-        ]);
+        if (args.Length > 1 && !args[1].IsNull)
+        {
+            if (args[1].AsObj is not StashInstance opts)
+                throw new RuntimeError("xml.parse: options must be an XmlParseOptions struct.", errorType: StashErrorTypes.TypeError);
 
-        // XmlStringifyOptions struct
-        ns.Struct("XmlStringifyOptions", [
-            new BuiltInField("indent",      "int"),
-            new BuiltInField("declaration", "bool"),
-            new BuiltInField("encoding",    "string"),
-        ]);
-
-        // xml.parse(text, options?) → XmlNode
-        ns.Function("parse", [Param("text", "string"), Param("options?", "XmlParseOptions")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            var pwVal = opts.GetField("preserveWhitespace", null);
+            if (!pwVal.IsNull)
             {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("xml.parse: expected 1 or 2 arguments.");
+                if (!pwVal.IsBool)
+                    throw new RuntimeError("xml.parse: preserveWhitespace must be a boolean.", errorType: StashErrorTypes.TypeError);
+                preserveWhitespace = pwVal.AsBool;
+            }
+        }
 
-                string text = SvArgs.String(args, 0, "xml.parse");
-                bool preserveWhitespace = false;
+        try
+        {
+            var loadOptions = preserveWhitespace ? LoadOptions.PreserveWhitespace : LoadOptions.None;
+            var doc = XDocument.Parse(text, loadOptions);
+            if (doc.Root is null)
+                throw new RuntimeError("xml.parse: document has no root element.");
+            return StashValue.FromObj(XElementToNode(doc.Root, preserveWhitespace));
+        }
+        catch (XmlException ex)
+        {
+            throw new RuntimeError($"xml.parse: invalid XML — {ex.LineNumber},{ex.LinePosition}: {ex.Message}");
+        }
+        catch (RuntimeError) { throw; }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"xml.parse: failed to parse XML — {ex.Message}");
+        }
+    }
 
-                if (args.Length > 1 && !args[1].IsNull)
-                {
-                    if (args[1].AsObj is not StashInstance opts)
-                        throw new RuntimeError("xml.parse: options must be an XmlParseOptions struct.", errorType: StashErrorTypes.TypeError);
+    /// <summary>Serializes an XmlNode tree to an XML string.</summary>
+    /// <param name="node">Root XmlNode</param>
+    /// <param name="options">Optional XmlStringifyOptions struct</param>
+    /// <returns>XML string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("xml.stringify: expected 1 or 2 arguments.");
 
-                    var pwVal = opts.GetField("preserveWhitespace", null);
-                    if (!pwVal.IsNull)
-                    {
-                        if (!pwVal.IsBool)
-                            throw new RuntimeError("xml.parse: preserveWhitespace must be a boolean.", errorType: StashErrorTypes.TypeError);
-                        preserveWhitespace = pwVal.AsBool;
-                    }
-                }
+        if (args[0].AsObj is not StashInstance nodeInst)
+            throw new RuntimeError("xml.stringify: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
 
-                try
-                {
-                    var loadOptions = preserveWhitespace ? LoadOptions.PreserveWhitespace : LoadOptions.None;
-                    var doc = XDocument.Parse(text, loadOptions);
-                    if (doc.Root is null)
-                        throw new RuntimeError("xml.parse: document has no root element.");
-                    return StashValue.FromObj(XElementToNode(doc.Root, preserveWhitespace));
-                }
-                catch (XmlException ex)
-                {
-                    throw new RuntimeError($"xml.parse: invalid XML — {ex.LineNumber},{ex.LinePosition}: {ex.Message}");
-                }
-                catch (RuntimeError) { throw; }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"xml.parse: failed to parse XML — {ex.Message}");
-                }
-            },
-            returnType: "XmlNode",
-            isVariadic: true,
-            documentation: "Parses an XML string into an XmlNode tree.\n@param text XML string to parse\n@param options Optional XmlParseOptions struct\n@return Root XmlNode");
+        int indent = 2;
+        bool declaration = false;
+        string encoding = "UTF-8";
 
-        // xml.stringify(node, options?) → string
-        ns.Function("stringify", [Param("node", "XmlNode"), Param("options?", "XmlStringifyOptions")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        if (args.Length > 1 && !args[1].IsNull)
+        {
+            if (args[1].AsObj is not StashInstance opts)
+                throw new RuntimeError("xml.stringify: options must be an XmlStringifyOptions struct.", errorType: StashErrorTypes.TypeError);
+
+            var indentVal = opts.GetField("indent", null);
+            if (!indentVal.IsNull)
             {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("xml.stringify: expected 1 or 2 arguments.");
+                if (!indentVal.IsInt)
+                    throw new RuntimeError("xml.stringify: indent must be an integer.", errorType: StashErrorTypes.TypeError);
+                indent = (int)indentVal.AsInt;
+            }
 
-                if (args[0].AsObj is not StashInstance nodeInst)
-                    throw new RuntimeError("xml.stringify: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
-
-                int indent = 2;
-                bool declaration = false;
-                string encoding = "UTF-8";
-
-                if (args.Length > 1 && !args[1].IsNull)
-                {
-                    if (args[1].AsObj is not StashInstance opts)
-                        throw new RuntimeError("xml.stringify: options must be an XmlStringifyOptions struct.", errorType: StashErrorTypes.TypeError);
-
-                    var indentVal = opts.GetField("indent", null);
-                    if (!indentVal.IsNull)
-                    {
-                        if (!indentVal.IsInt)
-                            throw new RuntimeError("xml.stringify: indent must be an integer.", errorType: StashErrorTypes.TypeError);
-                        indent = (int)indentVal.AsInt;
-                    }
-
-                    var declVal = opts.GetField("declaration", null);
-                    if (!declVal.IsNull)
-                    {
-                        if (!declVal.IsBool)
-                            throw new RuntimeError("xml.stringify: declaration must be a boolean.", errorType: StashErrorTypes.TypeError);
-                        declaration = declVal.AsBool;
-                    }
-
-                    var encVal = opts.GetField("encoding", null);
-                    if (!encVal.IsNull)
-                    {
-                        if (encVal.AsObj is not string encStr)
-                            throw new RuntimeError("xml.stringify: encoding must be a string.", errorType: StashErrorTypes.TypeError);
-                        encoding = encStr;
-                    }
-                }
-
-                try
-                {
-                    var element = NodeToXElement(nodeInst);
-                    var sb = new StringBuilder();
-                    var settings = new XmlWriterSettings
-                    {
-                        Indent = indent > 0,
-                        IndentChars = new string(' ', Math.Max(0, indent)),
-                        OmitXmlDeclaration = !declaration,
-                        Encoding = Encoding.UTF8,
-                    };
-
-                    using (var writer = XmlWriter.Create(sb, settings))
-                    {
-                        element.WriteTo(writer);
-                    }
-
-                    string xml = sb.ToString();
-
-                    // If declaration requested, patch in the user-specified encoding name
-                    if (declaration && !encoding.Equals("UTF-8", StringComparison.OrdinalIgnoreCase))
-                        xml = xml.Replace("encoding=\"utf-8\"", $"encoding=\"{encoding}\"", StringComparison.OrdinalIgnoreCase);
-
-                    return StashValue.FromObj(xml);
-                }
-                catch (RuntimeError) { throw; }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"xml.stringify: failed — {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Serializes an XmlNode tree to an XML string.\n@param node Root XmlNode\n@param options Optional XmlStringifyOptions struct\n@return XML string");
-
-        // xml.valid(text) → bool
-        ns.Function("valid", [Param("text", "string")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            var declVal = opts.GetField("declaration", null);
+            if (!declVal.IsNull)
             {
-                string text = SvArgs.String(args, 0, "xml.valid");
-                if (string.IsNullOrEmpty(text)) return StashValue.False;
+                if (!declVal.IsBool)
+                    throw new RuntimeError("xml.stringify: declaration must be a boolean.", errorType: StashErrorTypes.TypeError);
+                declaration = declVal.AsBool;
+            }
 
-                try
-                {
-                    XDocument.Parse(text);
-                    return StashValue.True;
-                }
-                catch
-                {
-                    return StashValue.False;
-                }
-            },
-            returnType: "bool",
-            documentation: "Checks if a string is valid, well-formed XML.\n@param text String to validate\n@return true if valid XML, false otherwise");
-
-        // xml.query(root, xpath) → array
-        ns.Function("query", [Param("root", "XmlNode"), Param("xpath", "string")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            var encVal = opts.GetField("encoding", null);
+            if (!encVal.IsNull)
             {
-                if (args.Length != 2)
-                    throw new RuntimeError("xml.query: expected 2 arguments.");
+                if (encVal.AsObj is not string encStr)
+                    throw new RuntimeError("xml.stringify: encoding must be a string.", errorType: StashErrorTypes.TypeError);
+                encoding = encStr;
+            }
+        }
 
-                if (args[0].AsObj is not StashInstance nodeInst)
-                    throw new RuntimeError("xml.query: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
+        try
+        {
+            var element = NodeToXElement(nodeInst);
+            var sb = new StringBuilder();
+            var settings = new XmlWriterSettings
+            {
+                Indent = indent > 0,
+                IndentChars = new string(' ', Math.Max(0, indent)),
+                OmitXmlDeclaration = !declaration,
+                Encoding = Encoding.UTF8,
+            };
 
-                string xpath = SvArgs.String(args, 1, "xml.query");
-                var results = new List<StashValue>();
+            using (var writer = XmlWriter.Create(sb, settings))
+            {
+                element.WriteTo(writer);
+            }
 
-                try
+            string xml = sb.ToString();
+
+            // If declaration requested, patch in the user-specified encoding name
+            if (declaration && !encoding.Equals("UTF-8", StringComparison.OrdinalIgnoreCase))
+                xml = xml.Replace("encoding=\"utf-8\"", $"encoding=\"{encoding}\"", StringComparison.OrdinalIgnoreCase);
+
+            return StashValue.FromObj(xml);
+        }
+        catch (RuntimeError) { throw; }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"xml.stringify: failed — {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    /// <summary>Checks if a string is valid, well-formed XML.</summary>
+    /// <param name="text">String to validate</param>
+    /// <returns>true if valid XML, false otherwise</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Valid(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        string text = SvArgs.String(args, 0, "xml.valid");
+        if (string.IsNullOrEmpty(text)) return StashValue.False;
+
+        try
+        {
+            XDocument.Parse(text);
+            return StashValue.True;
+        }
+        catch
+        {
+            return StashValue.False;
+        }
+    }
+
+    /// <summary>Queries an XmlNode tree using an XPath expression.</summary>
+    /// <param name="root">Root XmlNode</param>
+    /// <param name="xpath">XPath expression</param>
+    /// <returns>Array of matching XmlNode or string values</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Query(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length != 2)
+            throw new RuntimeError("xml.query: expected 2 arguments.");
+
+        if (args[0].AsObj is not StashInstance nodeInst)
+            throw new RuntimeError("xml.query: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
+
+        string xpath = SvArgs.String(args, 1, "xml.query");
+        var results = new List<StashValue>();
+
+        try
+        {
+            var element = NodeToXElement(nodeInst);
+            var evaluated = element.XPathEvaluate(xpath);
+
+            if (evaluated is IEnumerable<object> objs)
+            {
+                foreach (object obj in objs)
                 {
-                    var element = NodeToXElement(nodeInst);
-                    var evaluated = element.XPathEvaluate(xpath);
-
-                    if (evaluated is IEnumerable<object> objs)
-                    {
-                        foreach (object obj in objs)
-                        {
-                            if (obj is XElement el)
-                                results.Add(StashValue.FromObj(XElementToNode(el, false)));
-                            else if (obj is XAttribute attr)
-                                results.Add(StashValue.FromObj(attr.Value));
-                            else if (obj is XText txt)
-                                results.Add(StashValue.FromObj(txt.Value));
-                            else if (obj is XCData cdata)
-                                results.Add(StashValue.FromObj(cdata.Value));
-                            else
-                                results.Add(StashValue.FromObj(obj?.ToString() ?? ""));
-                        }
-                    }
-                    else if (evaluated is string str)
-                    {
-                        results.Add(StashValue.FromObj(str));
-                    }
-                    else if (evaluated is bool b)
-                    {
-                        results.Add(StashValue.FromBool(b));
-                    }
-                    else if (evaluated is double d)
-                    {
-                        results.Add(StashValue.FromFloat(d));
-                    }
-
-                    return StashValue.FromObj(results);
+                    if (obj is XElement el)
+                        results.Add(StashValue.FromObj(XElementToNode(el, false)));
+                    else if (obj is XAttribute attr)
+                        results.Add(StashValue.FromObj(attr.Value));
+                    else if (obj is XText txt)
+                        results.Add(StashValue.FromObj(txt.Value));
+                    else if (obj is XCData cdata)
+                        results.Add(StashValue.FromObj(cdata.Value));
+                    else
+                        results.Add(StashValue.FromObj(obj?.ToString() ?? ""));
                 }
-                catch (XPathException ex)
-                {
-                    throw new RuntimeError($"xml.query: invalid XPath expression — {ex.Message}", errorType: StashErrorTypes.ParseError);
-                }
-                catch (RuntimeError) { throw; }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"xml.query: failed — {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "array",
-            documentation: "Queries an XmlNode tree using an XPath expression.\n@param root Root XmlNode\n@param xpath XPath expression\n@return Array of matching XmlNode or string values");
+            }
+            else if (evaluated is string str)
+            {
+                results.Add(StashValue.FromObj(str));
+            }
+            else if (evaluated is bool b)
+            {
+                results.Add(StashValue.FromBool(b));
+            }
+            else if (evaluated is double d)
+            {
+                results.Add(StashValue.FromFloat(d));
+            }
 
-        return ns.Build();
+            return StashValue.FromObj(results);
+        }
+        catch (XPathException ex)
+        {
+            throw new RuntimeError($"xml.query: invalid XPath expression — {ex.Message}", errorType: StashErrorTypes.ParseError);
+        }
+        catch (RuntimeError) { throw; }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"xml.query: failed — {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -6,97 +6,79 @@ using Tomlyn;
 using Tomlyn.Model;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 using System;
 
 /// <summary>
 /// Registers the <c>toml</c> namespace built-in functions for TOML serialization and deserialization.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Provides functions for working with TOML data: <c>toml.parse</c>, <c>toml.stringify</c>,
-/// and <c>toml.valid</c>.
-/// </para>
-/// <para>
-/// TOML tables are represented as <see cref="StashDictionary"/> instances and TOML arrays
-/// as <c>List&lt;object?&gt;</c> values in the Stash runtime.
-/// </para>
-/// </remarks>
 [UnconditionalSuppressMessage("Trimming", "IL2026:RequiresUnreferencedCode",
     Justification = "Only deserializes to TomlTable — Tomlyn's own concrete model type; no reflection needed")]
 [UnconditionalSuppressMessage("AOT", "IL3050:RequiresDynamicCode",
     Justification = "Only deserializes to TomlTable — Tomlyn's own concrete model type; no reflection needed")]
-public static class TomlBuiltIns
+[StashNamespace]
+public static partial class TomlBuiltIns
 {
-    /// <summary>
-    /// Registers all <c>toml</c> namespace functions into the global environment.
-    /// </summary>
-    /// <param name="globals">The runtime environment to register functions in.</param>
-    public static NamespaceDefinition Define()
+    /// <summary>Parses a TOML string into a Stash dictionary.</summary>
+    /// <param name="text">The TOML string</param>
+    /// <returns>Parsed dictionary</returns>
+    [StashFn(Raw = true, ReturnType = "dict")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("toml");
+        var s = SvArgs.String(args, 0, "toml.parse");
 
-        // toml.parse(string) — Parses a TOML string into a Stash dict.
-        ns.Function("parse", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            var s = SvArgs.String(args, 0, "toml.parse");
-
-            try
+            var table = TomlSerializer.Deserialize<TomlTable>(s);
+            if (table is null)
             {
-                var table = TomlSerializer.Deserialize<TomlTable>(s);
-                if (table is null)
-                {
-                    return StashValue.FromObj(new StashDictionary());
-                }
-
-                return StashValue.FromObj(ConvertTable(table));
+                return StashValue.FromObj(new StashDictionary());
             }
-            catch (TomlException e)
-            {
-                throw new RuntimeError("toml.parse: invalid TOML — " + e.Message, errorType: StashErrorTypes.ParseError);
-            }
-        },
-            returnType: "dict",
-            documentation: "Parses a TOML string into a Stash dictionary.\n@param text The TOML string\n@return Parsed dictionary");
 
-        // toml.stringify(dict) — Serializes a Stash dict to a TOML string.
-        ns.Function("stringify", [Param("data", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            return StashValue.FromObj(ConvertTable(table));
+        }
+        catch (TomlException e)
         {
-            var dict = SvArgs.Dict(args, 0, "toml.stringify");
+            throw new RuntimeError("toml.parse: invalid TOML — " + e.Message, errorType: StashErrorTypes.ParseError);
+        }
+    }
 
-            try
-            {
-                var table = ConvertDictToTomlTable(dict);
-                return StashValue.FromObj(TomlSerializer.Serialize<TomlTable>(table));
-            }
-            catch (TomlException e)
-            {
-                throw new RuntimeError("toml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
-            }
-        },
-            returnType: "string",
-            documentation: "Serializes a Stash dictionary to a TOML string.\n@param data The dictionary to serialize\n@return TOML string");
+    /// <summary>Serializes a Stash dictionary to a TOML string.</summary>
+    /// <param name="data">The dictionary to serialize</param>
+    /// <returns>TOML string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var dict = SvArgs.Dict(args, 0, "toml.stringify");
 
-        // toml.valid(string) — Returns true if the string is valid TOML, false otherwise.
-        ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            var s = SvArgs.String(args, 0, "toml.valid");
+            var table = ConvertDictToTomlTable(dict);
+            return StashValue.FromObj(TomlSerializer.Serialize<TomlTable>(table));
+        }
+        catch (TomlException e)
+        {
+            throw new RuntimeError("toml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
+        }
+    }
 
-            try
-            {
-                TomlSerializer.Deserialize<TomlTable>(s);
-                return StashValue.True;
-            }
-            catch (TomlException)
-            {
-                return StashValue.False;
-            }
-        },
-            returnType: "bool",
-            documentation: "Returns true if the string is valid TOML, false otherwise.\n@param text The TOML string to validate\n@return true if valid TOML");
+    /// <summary>Returns true if the string is valid TOML, false otherwise.</summary>
+    /// <param name="text">The TOML string to validate</param>
+    /// <returns>true if valid TOML</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Valid(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var s = SvArgs.String(args, 0, "toml.valid");
 
-        return ns.Build();
+        try
+        {
+            TomlSerializer.Deserialize<TomlTable>(s);
+            return StashValue.True;
+        }
+        catch (TomlException)
+        {
+            return StashValue.False;
+        }
     }
 
     /// <summary>Parses a TOML string into a <see cref="StashDictionary"/>.</summary>

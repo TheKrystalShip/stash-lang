@@ -5,88 +5,70 @@ using System.Collections.Generic;
 using SharpYaml;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>yaml</c> namespace built-in functions for YAML serialization and deserialization.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Provides functions for working with YAML data: <c>yaml.parse</c>, <c>yaml.stringify</c>,
-/// and <c>yaml.valid</c>.
-/// </para>
-/// <para>
-/// YAML mappings are represented as <see cref="StashDictionary"/> instances and YAML sequences
-/// as <c>List&lt;object?&gt;</c> values in the Stash runtime.
-/// </para>
-/// </remarks>
-public static class YamlBuiltIns
+[StashNamespace]
+public static partial class YamlBuiltIns
 {
-    /// <summary>
-    /// Registers all <c>yaml</c> namespace functions into the global environment.
-    /// </summary>
-    /// <param name="globals">The runtime environment to register functions in.</param>
-    public static NamespaceDefinition Define()
+    /// <summary>Parses a YAML string into a Stash value (dict, array, or scalar).</summary>
+    /// <param name="text">The YAML string</param>
+    /// <returns>Parsed value</returns>
+    [StashFn(Raw = true, ReturnType = "any")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("yaml");
+        var s = SvArgs.String(args, 0, "yaml.parse");
 
-        // yaml.parse(string) — Parses a YAML string into a Stash value (dict, array, string, number, bool, or null).
-        ns.Function("parse", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            var s = SvArgs.String(args, 0, "yaml.parse");
-
-            try
-            {
-                var opts = new YamlSerializerOptions();
-                object? raw = YamlSerializer.Deserialize<object>(s, opts);
-                return StashValue.FromObject(ConvertFromYaml(raw));
-            }
-            catch (Exception e) when (e is not RuntimeError)
-            {
-                throw new RuntimeError("yaml.parse: invalid YAML — " + e.Message, errorType: StashErrorTypes.ParseError);
-            }
-        },
-            returnType: "any",
-            documentation: "Parses a YAML string into a Stash value (dict, array, or scalar).\n@param text The YAML string\n@return Parsed value");
-
-        // yaml.stringify(value) — Serializes a Stash value to a YAML string.
-        ns.Function("stringify", [Param("value", "any")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            var opts = new YamlSerializerOptions();
+            object? raw = YamlSerializer.Deserialize<object>(s, opts);
+            return StashValue.FromObject(ConvertFromYaml(raw));
+        }
+        catch (Exception e) when (e is not RuntimeError)
         {
-            try
-            {
-                object? native = ConvertToYaml(args[0].ToObject());
-                var opts = new YamlSerializerOptions();
-                return StashValue.FromObj(YamlSerializer.Serialize(native, native?.GetType() ?? typeof(object), opts));
-            }
-            catch (SharpYaml.YamlException e)
-            {
-                throw new RuntimeError("yaml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
-            }
-        },
-            returnType: "string",
-            documentation: "Serializes a Stash value to a YAML string.\n@param value The value to serialize\n@return YAML string");
+            throw new RuntimeError("yaml.parse: invalid YAML — " + e.Message, errorType: StashErrorTypes.ParseError);
+        }
+    }
 
-        // yaml.valid(string) — Returns true if the given string is valid YAML, false otherwise.
-        ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+    /// <summary>Serializes a Stash value to a YAML string.</summary>
+    /// <param name="value">The value to serialize</param>
+    /// <returns>YAML string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        try
         {
-            var s = SvArgs.String(args, 0, "yaml.valid");
+            object? native = ConvertToYaml(args[0].ToObject());
+            var opts = new YamlSerializerOptions();
+            return StashValue.FromObj(YamlSerializer.Serialize(native, native?.GetType() ?? typeof(object), opts));
+        }
+        catch (SharpYaml.YamlException e)
+        {
+            throw new RuntimeError("yaml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
+        }
+    }
 
-            try
-            {
-                var opts = new YamlSerializerOptions();
-                YamlSerializer.Deserialize<object>(s, opts);
-                return StashValue.True;
-            }
-            catch (SharpYaml.YamlException)
-            {
-                return StashValue.False;
-            }
-        },
-            returnType: "bool",
-            documentation: "Returns true if the string is valid YAML, false otherwise.\n@param text The YAML string to validate\n@return true if valid YAML");
+    /// <summary>Returns true if the string is valid YAML, false otherwise.</summary>
+    /// <param name="text">The YAML string to validate</param>
+    /// <returns>true if valid YAML</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Valid(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var s = SvArgs.String(args, 0, "yaml.valid");
 
-        return ns.Build();
+        try
+        {
+            var opts = new YamlSerializerOptions();
+            YamlSerializer.Deserialize<object>(s, opts);
+            return StashValue.True;
+        }
+        catch (SharpYaml.YamlException)
+        {
+            return StashValue.False;
+        }
     }
 
     /// <summary>Parses a YAML string into a Stash runtime value.</summary>

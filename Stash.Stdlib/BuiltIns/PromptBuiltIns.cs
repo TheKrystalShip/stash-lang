@@ -5,8 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>prompt</c> namespace built-in functions for REPL prompt customization.
@@ -25,7 +24,8 @@ using static Stash.Stdlib.Registration.P;
 /// sessions. The renderer and REPL wiring are provided in later phases.
 /// </para>
 /// </remarks>
-public static class PromptBuiltIns
+[StashNamespace]
+public static partial class PromptBuiltIns
 {
     // ---------------------------------------------------------------------------
     // Per-process prompt state (static, single-REPL assumption)
@@ -82,220 +82,199 @@ public static class PromptBuiltIns
     /// </summary>
     public static bool ShellModeActive { get; set; }
 
-    /// <summary>
-    /// Registers all <c>prompt</c> namespace functions.
-    /// </summary>
-    public static NamespaceDefinition Define()
+    /// <summary>Registers a custom prompt render function. The function receives one argument (a PromptContext struct) and must return a string.</summary>
+    /// <param name="fn">A callable that accepts a PromptContext and returns a string</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Set(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("prompt");
+        var callable = ValidateCallable(args, 0, "prompt.set");
+        _promptFn = callable;
+        return StashValue.Null;
+    }
 
-        // prompt.set(fn) — Registers a custom prompt render function.
-        ns.Function("set", [Param("fn", "function")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+    /// <summary>Registers a custom continuation prompt render function shown when the user has entered a partial multi-line expression.</summary>
+    /// <param name="fn">A callable that accepts a PromptContext and returns a string</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue SetContinuation(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var callable = ValidateCallable(args, 0, "prompt.setContinuation");
+        _continuationFn = callable;
+        return StashValue.Null;
+    }
+
+    /// <summary>Removes the custom prompt render function registered with prompt.set, reverting to the built-in default 'stash> ' prompt.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Reset(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        _promptFn = null;
+        return StashValue.Null;
+    }
+
+    /// <summary>Removes the custom continuation prompt render function registered with prompt.setContinuation, reverting to the built-in default.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue ResetContinuation(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        _continuationFn = null;
+        return StashValue.Null;
+    }
+
+    /// <summary>Builds and returns a PromptContext snapshot capturing the current working directory, user, hostname, time, last exit code, prompt line number, shell mode, and host color.</summary>
+    /// <returns>A PromptContext struct instance</returns>
+    [StashFn(Raw = true, ReturnType = "PromptContext")]
+    private static StashValue Context(IInterpreterContext ctx, ReadOnlySpan<StashValue> _)
+    {
+        return StashValue.FromObj(BuildPromptContext(ctx));
+    }
+
+    /// <summary>Invokes the registered prompt render function with the current PromptContext and returns the resulting string. Falls back to 'stash> ' if no function is registered.</summary>
+    /// <returns>The rendered prompt string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Render(IInterpreterContext ctx, ReadOnlySpan<StashValue> _)
+    {
+        if (_renderingThread)
+            return StashValue.FromObj("stash> ");
+        IStashCallable? fn = _promptFn ?? ConventionFnResolver?.Invoke("prompt");
+        if (fn is null)
+            return StashValue.FromObj("stash> ");
+        _renderingThread = true;
+        try
         {
-            var callable = ValidateCallable(args, 0, "prompt.set");
-            _promptFn = callable;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Registers a custom prompt render function. The function receives one argument (a PromptContext struct) and must return a string. The function may be variadic (arity -1) or accept exactly one required parameter.\n@param fn A callable that accepts a PromptContext and returns a string\n@return null");
-
-        // prompt.setContinuation(fn) — Registers a custom continuation prompt render function.
-        ns.Function("setContinuation", [Param("fn", "function")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            var ctxInstance = BuildPromptContext(ctx);
+            StashValue result = ctx.InvokeCallbackDirect(fn, [StashValue.FromObj(ctxInstance)]);
+            if (result.ToObject() is string s)
+                return StashValue.FromObj(s);
+            string typeName = result.ToObject()?.GetType().Name ?? "null";
+            throw new RuntimeError(
+                $"prompt.render: user prompt fn returned {typeName}, expected string.",
+                null,
+                StashErrorTypes.TypeError);
+        }
+        finally
         {
-            var callable = ValidateCallable(args, 0, "prompt.setContinuation");
-            _continuationFn = callable;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Registers a custom continuation prompt render function shown when the user has entered a partial multi-line expression. Receives one argument (a PromptContext struct) and must return a string.\n@param fn A callable that accepts a PromptContext and returns a string\n@return null");
+            _renderingThread = false;
+        }
+    }
 
-        // prompt.reset() — Removes the registered prompt function, reverting to the default.
-        ns.Function("reset", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            _promptFn = null;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Removes the custom prompt render function registered with prompt.set, reverting to the built-in default 'stash> ' prompt.\n@return null");
+    /// <summary>Returns the currently registered prompt color palette (set via prompt.setPalette), or null if no palette has been configured.</summary>
+    /// <returns>The palette value, or null</returns>
+    [StashFn(Raw = true)]
+    private static StashValue Palette(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        return _palette;
+    }
 
-        // prompt.resetContinuation() — Removes the registered continuation prompt function.
-        ns.Function("resetContinuation", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            _continuationFn = null;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Removes the custom continuation prompt render function registered with prompt.setContinuation, reverting to the built-in default.\n@return null");
+    /// <summary>Stores a palette value that the prompt render function can retrieve via prompt.palette(). No validation is performed.</summary>
+    /// <param name="palette">Any value representing the color palette</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue SetPalette(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        _palette = args[0];
+        return StashValue.Null;
+    }
 
-        // prompt.context() — Builds and returns a PromptContext snapshot of the current environment.
-        ns.Function("context", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
-        {
-            return StashValue.FromObj(BuildPromptContext(ctx));
-        },
-            returnType: "PromptContext",
-            documentation: "Builds and returns a PromptContext snapshot capturing the current working directory, user, hostname, time, last exit code, prompt line number, shell mode, and host color. The git field is null in Phase 1 (available after Phase 6).\n@return A PromptContext struct instance");
+    /// <summary>Returns the path to the user-level prompt bootstrap directory (~/.config/stash/prompt).</summary>
+    /// <returns>The absolute path to the prompt bootstrap directory</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue BootstrapDir(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        string dir = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".config", "stash", "prompt");
+        return StashValue.FromObj(dir);
+    }
 
-        // prompt.render() — Invokes the registered prompt function and returns the rendered string.
-        // Per spec §8, prompt.render() is the explicit debugging path: it does NOT swallow
-        // exceptions thrown by the user's prompt fn. Instead it propagates them so the user
-        // can see what their fn is doing wrong. The REPL's own renderer (PromptRenderer) does
-        // the catch-and-fallback dance — prompt.render() does not.
-        ns.Function("render", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
-        {
-            // Re-entry guard \u2014 prevents stack overflow if the prompt fn recurses into render().
-            if (_renderingThread)
-                return StashValue.FromObj("stash> ");
+    /// <summary>Re-extracts the prompt bootstrap scripts from embedded resources and reloads them into the REPL VM.</summary>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue ResetBootstrap(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        ResetBootstrapHandler?.Invoke();
+        return StashValue.Null;
+    }
 
-            // Discovery order (spec \u00a74.3): explicit registration > convention global > default.
-            IStashCallable? fn = _promptFn ?? ConventionFnResolver?.Invoke("prompt");
+    /// <summary>Registers a Palette value under the given name in the theme registry.</summary>
+    /// <param name="name">Theme name</param>
+    /// <param name="palette">A Palette struct instance</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue ThemeRegister(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "prompt.themeRegister");
+        _themes[name] = args[1];
+        return StashValue.Null;
+    }
 
-            if (fn is null)
-                return StashValue.FromObj("stash> ");
+    /// <summary>Activates a registered theme palette by name, making it available via prompt.palette(). Throws ValueError if the name is not registered.</summary>
+    /// <param name="name">The registered theme name</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue ThemeUse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "prompt.themeUse");
+        if (!_themes.TryGetValue(name, out StashValue palette))
+            throw new RuntimeError(
+                $"prompt.themeUse: unknown theme '{name}'. Available: {string.Join(", ", _themes.Keys)}",
+                null, StashErrorTypes.ValueError);
+        _palette = palette;
+        _currentTheme = name;
+        return StashValue.Null;
+    }
 
-            _renderingThread = true;
-            try
-            {
-                var ctxInstance = BuildPromptContext(ctx);
-                StashValue result = ctx.InvokeCallbackDirect(fn, [StashValue.FromObj(ctxInstance)]);
+    /// <summary>Returns the name of the currently active theme, or an empty string if no theme has been activated.</summary>
+    /// <returns>Theme name string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue ThemeCurrent(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        return StashValue.FromObj(_currentTheme);
+    }
 
-                if (result.ToObject() is string s)
-                    return StashValue.FromObj(s);
+    /// <summary>Returns a sorted array of all registered theme names.</summary>
+    /// <returns>string[]</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue ThemeList(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        var keys = new System.Collections.Generic.List<string>(_themes.Keys);
+        keys.Sort(StringComparer.Ordinal);
+        var result = new System.Collections.Generic.List<StashValue>(keys.Count);
+        foreach (string k in keys)
+            result.Add(StashValue.FromObj(k));
+        return StashValue.FromObj(result);
+    }
 
-                string typeName = result.ToObject()?.GetType().Name ?? "null";
-                throw new RuntimeError(
-                    $"prompt.render: user prompt fn returned {typeName}, expected string.",
-                    null,
-                    StashErrorTypes.TypeError);
-            }
-            finally
-            {
-                _renderingThread = false;
-            }
-        },
-            returnType: "string",
-            documentation: "Invokes the registered prompt render function with the current PromptContext and returns the resulting string. Falls back to 'stash> ' if no function is registered or if the function throws.\n@return The rendered prompt string");
+    /// <summary>Registers a starter prompt function under the given name. The function must accept exactly one argument (PromptContext).</summary>
+    /// <param name="name">Starter name</param>
+    /// <param name="fn">A callable that accepts a PromptContext and returns a string</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue RegisterStarter(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "prompt.registerStarter");
+        var callable = ValidateCallable(args, 1, "prompt.registerStarter");
+        _starters[name] = callable;
+        return StashValue.Null;
+    }
 
-        // prompt.palette() — Returns the currently registered prompt color palette, or null.
-        ns.Function("palette", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            return _palette;
-        },
-            documentation: "Returns the currently registered prompt color palette (set via prompt.setPalette), or null if no palette has been configured.\n@return The palette value, or null");
+    /// <summary>Activates a registered starter prompt function by name, making it the active prompt renderer. Throws ValueError if the name is not registered.</summary>
+    /// <param name="name">The registered starter name</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue UseStarter(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "prompt.useStarter");
+        if (!_starters.TryGetValue(name, out IStashCallable? callable))
+            throw new RuntimeError(
+                $"prompt.useStarter: unknown starter '{name}'. Available: {string.Join(", ", _starters.Keys)}",
+                null, StashErrorTypes.ValueError);
+        _promptFn = callable;
+        return StashValue.Null;
+    }
 
-        // prompt.setPalette(palette) — Stores a palette value for use by the prompt render function.
-        ns.Function("setPalette", [Param("palette", "any")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            _palette = args[0];
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Stores a palette value that the prompt render function can retrieve via prompt.palette(). No validation is performed — the Stash-level prompt library is responsible for enforcing the palette shape.\n@param palette Any value representing the color palette\n@return null");
-
-        // prompt.bootstrapDir() — Returns the path where prompt bootstrap scripts are discovered.
-        ns.Function("bootstrapDir", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            string dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".config", "stash", "prompt");
-            return StashValue.FromObj(dir);
-        },
-            returnType: "string",
-            documentation: "Returns the path to the user-level prompt bootstrap directory (~/.config/stash/prompt). Theme packages are loaded from subdirectories of this path.\n@return The absolute path to the prompt bootstrap directory");
-
-        // prompt.resetBootstrap() — Re-extracts and reloads the bootstrap scripts.
-        ns.Function("resetBootstrap", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            ResetBootstrapHandler?.Invoke();
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Re-extracts the prompt bootstrap scripts from embedded resources and reloads them into the REPL VM. Useful after a Stash upgrade or if the bootstrap directory was accidentally modified.\n@return null");
-
-        // prompt.themeRegister(name, palette) — Stores a palette in the theme registry.
-        ns.Function("themeRegister", [Param("name", "string"), Param("palette", "any")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            string name = SvArgs.String(args, 0, "prompt.themeRegister");
-            _themes[name] = args[1];
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Registers a Palette value under the given name in the theme registry. Called by bundled theme files (e.g. themes/nord.stash). No shape validation is performed.\n@param name Theme name\n@param palette A Palette struct instance\n@return null");
-
-        // prompt.themeUse(name) — Activates a registered theme by name.
-        ns.Function("themeUse", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            string name = SvArgs.String(args, 0, "prompt.themeUse");
-            if (!_themes.TryGetValue(name, out StashValue palette))
-                throw new RuntimeError(
-                    $"prompt.themeUse: unknown theme '{name}'. Available: {string.Join(", ", _themes.Keys)}",
-                    null, StashErrorTypes.ValueError);
-            _palette = palette;
-            _currentTheme = name;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Activates a registered theme palette by name, making it available via prompt.palette(). Throws ValueError if the name is not registered.\n@param name The registered theme name\n@return null");
-
-        // prompt.themeCurrent() — Returns the name of the active theme.
-        ns.Function("themeCurrent", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            return StashValue.FromObj(_currentTheme);
-        },
-            returnType: "string",
-            documentation: "Returns the name of the currently active theme, or an empty string if no theme has been activated.\n@return Theme name string");
-
-        // prompt.themeList() — Returns a sorted list of registered theme names.
-        ns.Function("themeList", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            var keys = new System.Collections.Generic.List<string>(_themes.Keys);
-            keys.Sort(StringComparer.Ordinal);
-            var result = new System.Collections.Generic.List<StashValue>(keys.Count);
-            foreach (string k in keys)
-                result.Add(StashValue.FromObj(k));
-            return StashValue.FromObj(result);
-        },
-            returnType: "array",
-            documentation: "Returns a sorted array of all registered theme names.\n@return string[]");
-
-        // prompt.registerStarter(name, fn) — Stores a starter prompt fn in the registry.
-        ns.Function("registerStarter", [Param("name", "string"), Param("fn", "function")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            string name = SvArgs.String(args, 0, "prompt.registerStarter");
-            var callable = ValidateCallable(args, 1, "prompt.registerStarter");
-            _starters[name] = callable;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Registers a starter prompt function under the given name. The function must accept exactly one argument (PromptContext). Called by bundled starter files.\n@param name Starter name\n@param fn A callable that accepts a PromptContext and returns a string\n@return null");
-
-        // prompt.useStarter(name) — Activates a registered starter prompt fn.
-        ns.Function("useStarter", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            string name = SvArgs.String(args, 0, "prompt.useStarter");
-            if (!_starters.TryGetValue(name, out IStashCallable? callable))
-                throw new RuntimeError(
-                    $"prompt.useStarter: unknown starter '{name}'. Available: {string.Join(", ", _starters.Keys)}",
-                    null, StashErrorTypes.ValueError);
-            _promptFn = callable;
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Activates a registered starter prompt function by name, making it the active prompt renderer. Throws ValueError if the name is not registered.\n@param name The registered starter name\n@return null");
-
-        // prompt.listStarters() — Returns a sorted list of registered starter names.
-        ns.Function("listStarters", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
-        {
-            var keys = new System.Collections.Generic.List<string>(_starters.Keys);
-            keys.Sort(StringComparer.Ordinal);
-            var result = new System.Collections.Generic.List<StashValue>(keys.Count);
-            foreach (string k in keys)
-                result.Add(StashValue.FromObj(k));
-            return StashValue.FromObj(result);
-        },
-            returnType: "array",
-            documentation: "Returns a sorted array of all registered starter prompt names.\n@return string[]");
-
-        return ns.Build();
+    /// <summary>Returns a sorted array of all registered starter prompt names.</summary>
+    /// <returns>string[]</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue ListStarters(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    {
+        var keys = new System.Collections.Generic.List<string>(_starters.Keys);
+        keys.Sort(StringComparer.Ordinal);
+        var result = new System.Collections.Generic.List<StashValue>(keys.Count);
+        foreach (string k in keys)
+            result.Add(StashValue.FromObj(k));
+        return StashValue.FromObj(result);
     }
 
     // ---------------------------------------------------------------------------

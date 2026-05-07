@@ -4,98 +4,93 @@ using System;
 using System.IO;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>config</c> namespace providing unified configuration file reading and writing
 /// across formats (read, write, parse, stringify). Supports JSON, INI, YAML, and TOML formats.
 /// </summary>
-public static class ConfigBuiltIns
+[StashNamespace]
+public static partial class ConfigBuiltIns
 {
-    /// <summary>
-    /// Registers the <c>config</c> namespace and all its functions into the global environment.
-    /// </summary>
-    /// <param name="globals">The global environment to register into.</param>
-    public static NamespaceDefinition Define()
+    /// <summary>Reads and parses a config file. Format is auto-detected from extension if omitted.</summary>
+    /// <param name="path">The file path</param>
+    /// <param name="format">Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <returns>Parsed dictionary</returns>
+    [StashFn(Raw = true, ReturnType = "dict")]
+    private static StashValue Read(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("config");
+        if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'config.read' expects 1 or 2 arguments.");
+        var path = SvArgs.String(args, 0, "config.read");
 
-        // config.read(path, format?) — Reads a config file from disk and parses it. Format is auto-detected from extension if omitted. Supports "json" and "ini".
-        ns.Function("read", [Param("path", "string"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        var format = args.Length == 2
+            ? SvArgs.String(args, 1, "config.read")
+            : DetectFormat(path);
+
+        string text;
+        try
         {
-            if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'config.read' expects 1 or 2 arguments.");
-            var path = SvArgs.String(args, 0, "config.read");
-
-            var format = args.Length == 2
-                ? SvArgs.String(args, 1, "config.read")
-                : DetectFormat(path);
-
-            string text;
-            try
-            {
-                text = File.ReadAllText(path);
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeError("config.read: " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-
-            return StashValue.FromObject(ParseByFormat(text, format, "config.read"));
-        },
-            returnType: "dict",
-            isVariadic: true,
-            documentation: "Reads and parses a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param format Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'\n@return Parsed dictionary");
-
-        // config.write(path, data, format?) — Serializes data and writes it to a config file. Format is auto-detected from extension if omitted. Supports "json" and "ini".
-        ns.Function("write", [Param("path", "string"), Param("data", "any"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            text = File.ReadAllText(path);
+        }
+        catch (IOException e)
         {
-            if (args.Length < 2 || args.Length > 3) throw new RuntimeError("'config.write' expects 2 or 3 arguments.");
-            var path = SvArgs.String(args, 0, "config.write");
+            throw new RuntimeError("config.read: " + e.Message, errorType: StashErrorTypes.IOError);
+        }
 
-            var format = args.Length == 3
-                ? SvArgs.String(args, 2, "config.write")
-                : DetectFormat(path);
+        return StashValue.FromObject(ParseByFormat(text, format, "config.read"));
+    }
 
-            var text = StringifyByFormat(args[1].ToObject(), format, "config.write");
+    /// <summary>Serializes data and writes it to a config file. Format is auto-detected from extension if omitted.</summary>
+    /// <param name="path">The file path</param>
+    /// <param name="data">The data to write</param>
+    /// <param name="format">Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    [StashFn(Raw = true, ReturnType = "void")]
+    private static StashValue Write(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3) throw new RuntimeError("'config.write' expects 2 or 3 arguments.");
+        var path = SvArgs.String(args, 0, "config.write");
 
-            try
-            {
-                File.WriteAllText(path, text);
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeError("config.write: " + e.Message, errorType: StashErrorTypes.IOError);
-            }
+        var format = args.Length == 3
+            ? SvArgs.String(args, 2, "config.write")
+            : DetectFormat(path);
 
-            return StashValue.Null;
-        },
-            returnType: "void",
-            isVariadic: true,
-            documentation: "Serializes data and writes it to a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param data The data to write\n@param format Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'");
+        var text = StringifyByFormat(args[1].ToObject(), format, "config.write");
 
-        // config.parse(text, format) — Parses a config string in the given format ("json" or "ini"). Returns a dict.
-        ns.Function("parse", [Param("text", "string"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            var text = SvArgs.String(args, 0, "config.parse");
-            var format = SvArgs.String(args, 1, "config.parse");
-
-            return StashValue.FromObject(ParseByFormat(text, format, "config.parse"));
-        },
-            returnType: "dict",
-            documentation: "Parses a config string in the given format.\n@param text The config text\n@param format The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'\n@return Parsed dictionary");
-
-        // config.stringify(data, format) — Serializes a Stash value to the given config format string ("json" or "ini"). Returns a string.
-        ns.Function("stringify", [Param("data", "any"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            File.WriteAllText(path, text);
+        }
+        catch (IOException e)
         {
-            var format = SvArgs.String(args, 1, "config.stringify");
+            throw new RuntimeError("config.write: " + e.Message, errorType: StashErrorTypes.IOError);
+        }
 
-            return StashValue.FromObj(StringifyByFormat(args[0].ToObject(), format, "config.stringify"));
-        },
-            returnType: "string",
-            documentation: "Serializes a value to the given config format.\n@param data The value to serialize\n@param format The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'\n@return Config string");
+        return StashValue.Null;
+    }
 
-        return ns.Build();
+    /// <summary>Parses a config string in the given format.</summary>
+    /// <param name="text">The config text</param>
+    /// <param name="format">The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <returns>Parsed dictionary</returns>
+    [StashFn(Raw = true, ReturnType = "dict")]
+    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var text = SvArgs.String(args, 0, "config.parse");
+        var format = SvArgs.String(args, 1, "config.parse");
+
+        return StashValue.FromObject(ParseByFormat(text, format, "config.parse"));
+    }
+
+    /// <summary>Serializes a value to the given config format.</summary>
+    /// <param name="data">The value to serialize</param>
+    /// <param name="format">The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <returns>Config string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        var format = SvArgs.String(args, 1, "config.stringify");
+
+        return StashValue.FromObj(StringifyByFormat(args[0].ToObject(), format, "config.stringify"));
     }
 
     /// <summary>Detects the configuration format from a file extension (.json, .ini, .cfg, .conf, .properties, .yaml, .yml, .toml).</summary>
