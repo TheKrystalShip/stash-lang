@@ -291,15 +291,15 @@ public static partial class ArchiveBuiltIns
     /// <param name="outputDir">The directory to extract files into</param>
     /// <param name="options">Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)</param>
     /// <returns>An array of extracted file paths</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Untar(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Untar(IInterpreterContext ctx, string archivePath, string outputDir, params StashValue[] rest)
     {
-        if (args.Length < 2 || args.Length > 3)
+        if (rest.Length > 1)
             throw new RuntimeError("archive.untar: expected 2 or 3 arguments.");
 
-        var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.untar"));
-        var outputDir = ctx.ExpandTilde(SvArgs.String(args, 1, "archive.untar"));
-        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.untar") : DefaultOptions;
+        archivePath = ctx.ExpandTilde(archivePath);
+        outputDir = ctx.ExpandTilde(outputDir);
+        var options = rest.Length > 0 ? GetArchiveOptions(rest[0], "archive.untar") : DefaultOptions;
 
         if (!File.Exists(archivePath))
             throw new RuntimeError($"archive.untar: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
@@ -364,7 +364,7 @@ public static partial class ArchiveBuiltIns
                     tarStream.Dispose();
             }
 
-            return StashValue.FromObj(extractedFiles);
+            return extractedFiles;
         }
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
@@ -385,19 +385,19 @@ public static partial class ArchiveBuiltIns
     /// <param name="inputPath">The file to compress</param>
     /// <param name="outputPath">Optional output path (defaults to inputPath + ".gz")</param>
     /// <returns>The path to the compressed file</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Gzip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Gzip(IInterpreterContext ctx, string inputPath, params StashValue[] rest)
     {
-        if (args.Length < 1 || args.Length > 2)
+        if (rest.Length > 1)
             throw new RuntimeError("archive.gzip: expected 1 or 2 arguments.");
 
-        var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gzip"));
+        inputPath = ctx.ExpandTilde(inputPath);
 
         if (!File.Exists(inputPath))
             throw new RuntimeError($"archive.gzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
 
-        var outputPath = args.Length > 1 && !args[1].IsNull
-            ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gzip"))
+        var outputPath = rest.Length > 0 && !rest[0].IsNull
+            ? ctx.ExpandTilde(SvArgs.String(rest, 0, "archive.gzip"))
             : inputPath + ".gz";
 
         try
@@ -407,7 +407,7 @@ public static partial class ArchiveBuiltIns
             using var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal);
             inputStream.CopyTo(gzipStream);
 
-            return StashValue.FromObj(outputPath);
+            return outputPath;
         }
         catch (RuntimeError) { throw; }
         catch (UnauthorizedAccessException)
@@ -424,19 +424,19 @@ public static partial class ArchiveBuiltIns
     /// <param name="inputPath">The gzip file to decompress</param>
     /// <param name="outputPath">Optional output path (defaults to inputPath without .gz extension)</param>
     /// <returns>The path to the decompressed file</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Gunzip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Gunzip(IInterpreterContext ctx, string inputPath, params StashValue[] rest)
     {
-        if (args.Length < 1 || args.Length > 2)
+        if (rest.Length > 1)
             throw new RuntimeError("archive.gunzip: expected 1 or 2 arguments.");
 
-        var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gunzip"));
+        inputPath = ctx.ExpandTilde(inputPath);
 
         if (!File.Exists(inputPath))
             throw new RuntimeError($"archive.gunzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
 
-        var outputPath = args.Length > 1 && !args[1].IsNull
-            ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gunzip"))
+        var outputPath = rest.Length > 0 && !rest[0].IsNull
+            ? ctx.ExpandTilde(SvArgs.String(rest, 0, "archive.gunzip"))
             : inputPath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
                 ? inputPath[..^3]
                 : inputPath + ".out";
@@ -455,7 +455,7 @@ public static partial class ArchiveBuiltIns
             using var outputStream = File.Create(outputPath);
             gzipStream.CopyTo(outputStream);
 
-            return StashValue.FromObj(outputPath);
+            return outputPath;
         }
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
@@ -475,13 +475,10 @@ public static partial class ArchiveBuiltIns
     /// <summary>Lists the contents of a ZIP or TAR archive without extracting.</summary>
     /// <param name="archivePath">The path to the archive file</param>
     /// <returns>An array of ArchiveEntry structs with name, size, isDirectory, modifiedAt</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue List(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> List(IInterpreterContext ctx, string archivePath)
     {
-        if (args.Length != 1)
-            throw new RuntimeError("archive.list: expected 1 argument.");
-
-        var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.list"));
+        archivePath = ctx.ExpandTilde(archivePath);
 
         if (!File.Exists(archivePath))
             throw new RuntimeError($"archive.list: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
@@ -547,7 +544,7 @@ public static partial class ArchiveBuiltIns
                 throw new RuntimeError($"archive.list: unsupported archive format: '{archivePath}'", errorType: StashErrorTypes.ValueError);
             }
 
-            return StashValue.FromObj(entries);
+            return entries;
         }
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)

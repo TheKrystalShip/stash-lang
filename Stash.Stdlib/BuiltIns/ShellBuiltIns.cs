@@ -17,9 +17,9 @@ public static partial class ShellBuiltIns
 {
     /// <summary>Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.</summary>
     /// <returns>The exit code as an integer</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue LastExitCode(IInterpreterContext ctx, ReadOnlySpan<StashValue> _args)
+    [StashFn(ReturnType = "int")]
+    private static long LastExitCode(IInterpreterContext ctx)
     {
-        return StashValue.FromInt((long)ctx.GetLastExitCode());
+        return (long)ctx.GetLastExitCode();
     }
 }

@@ -235,62 +235,51 @@ public static partial class FsBuiltIns
     /// <summary>Returns true if a file exists at the given path.</summary>
     /// <param name="path">The file path to check.</param>
     /// <returns>True if the file exists, false otherwise.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Exists(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Exists(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.exists");
         path = ctx.ExpandTilde(path);
-
-        return StashValue.FromBool(System.IO.File.Exists(path));
+        return System.IO.File.Exists(path);
     }
 
     /// <summary>Returns true if a directory exists at the given path.</summary>
     /// <param name="path">The directory path to check.</param>
     /// <returns>True if the directory exists, false otherwise.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue DirExists(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool DirExists(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.dirExists");
         path = ctx.ExpandTilde(path);
-
-        return StashValue.FromBool(System.IO.Directory.Exists(path));
+        return System.IO.Directory.Exists(path);
     }
 
     /// <summary>Returns true if either a file or directory exists at the given path.</summary>
     /// <param name="path">The path to check.</param>
     /// <returns>True if a file or directory exists at the path, false otherwise.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue PathExists(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool PathExists(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.pathExists");
         path = ctx.ExpandTilde(path);
-
-        return StashValue.FromBool(System.IO.File.Exists(path) || System.IO.Directory.Exists(path));
+        return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
     }
 
     /// <summary>Creates a directory and all necessary parent directories. No-ops if the directory already exists.</summary>
     /// <param name="path">The directory path to create.</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue CreateDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void CreateDir(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.createDir");
         path = ctx.ExpandTilde(path);
-
         try { System.IO.Directory.CreateDirectory(path); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Deletes a file or recursively deletes a directory at the given path. Throws if the path does not exist.</summary>
     /// <param name="path">The file or directory path to delete.</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Delete(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Delete(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.delete");
         path = ctx.ExpandTilde(path);
-
         try
         {
             if (System.IO.File.Exists(path))
@@ -307,7 +296,6 @@ public static partial class FsBuiltIns
             }
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot delete '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Copies a file from src to dst. Returns null.</summary>
@@ -363,13 +351,11 @@ public static partial class FsBuiltIns
     /// <summary>Returns the size of a file in bytes.</summary>
     /// <param name="path">The file path.</param>
     /// <returns>The file size in bytes as an integer.</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Size(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static long Size(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.size");
         path = ctx.ExpandTilde(path);
-
-        try { return StashValue.FromInt(new System.IO.FileInfo(path).Length); }
+        try { return new System.IO.FileInfo(path).Length; }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
     }
 
@@ -418,19 +404,17 @@ public static partial class FsBuiltIns
     /// <summary>Reads a file and returns an array of lines.</summary>
     /// <param name="path">The file path to read.</param>
     /// <returns>An array of strings, one per line.</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue ReadLines(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static List<StashValue> ReadLines(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.readLines");
         path = ctx.ExpandTilde(path);
-
         try
         {
             var lines = System.IO.File.ReadAllLines(path);
             var result = new List<StashValue>(lines.Length);
             foreach (var line in lines)
                 result.Add(StashValue.FromObj(line));
-            return StashValue.FromObj(result);
+            return result;
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
     }
@@ -438,12 +422,10 @@ public static partial class FsBuiltIns
     /// <summary>Returns an array of file paths matching the glob pattern.</summary>
     /// <param name="pattern">The glob pattern (e.g. "src/**/*.cs").</param>
     /// <returns>An array of matching file path strings.</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Glob(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static List<StashValue> Glob(IInterpreterContext ctx, string pattern)
     {
-        var pattern = SvArgs.String(args, 0, "fs.glob");
         pattern = ctx.ExpandTilde(pattern);
-
         try
         {
             string dir = System.IO.Path.GetDirectoryName(pattern) ?? ".";
@@ -462,7 +444,7 @@ public static partial class FsBuiltIns
             var result = new List<StashValue>(files.Length);
             foreach (var f in files)
                 result.Add(StashValue.FromObj(f));
-            return StashValue.FromObj(result);
+            return result;
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"fs.glob failed: {e.Message}", errorType: StashErrorTypes.IOError); }
     }
@@ -470,78 +452,70 @@ public static partial class FsBuiltIns
     /// <summary>Returns true if the path points to a regular file.</summary>
     /// <param name="path">The path to check.</param>
     /// <returns>True if the path is an existing regular file.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue IsFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool IsFile(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.isFile");
         path = ctx.ExpandTilde(path);
-
-        return StashValue.FromBool(System.IO.File.Exists(path));
+        return System.IO.File.Exists(path);
     }
 
     /// <summary>Returns true if the path points to a directory.</summary>
     /// <param name="path">The path to check.</param>
     /// <returns>True if the path is an existing directory.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue IsDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool IsDir(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.isDir");
         path = ctx.ExpandTilde(path);
-
-        return StashValue.FromBool(System.IO.Directory.Exists(path));
+        return System.IO.Directory.Exists(path);
     }
 
     /// <summary>Returns true if the path points to a symbolic link.</summary>
     /// <param name="path">The path to check.</param>
     /// <returns>True if the path is an existing symbolic link.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue IsSymlink(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool IsSymlink(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.isSymlink");
         path = ctx.ExpandTilde(path);
-
         try
         {
             var info = new System.IO.FileInfo(path);
-            return StashValue.FromBool(info.Exists && info.Attributes.HasFlag(System.IO.FileAttributes.ReparsePoint));
+            return info.Exists && info.Attributes.HasFlag(System.IO.FileAttributes.ReparsePoint);
         }
         catch (System.IO.IOException)
         {
-            return StashValue.FromBool(false);
+            return false;
         }
     }
 
     /// <summary>Creates a temporary file and returns its path.</summary>
     /// <returns>The path to the newly created temporary file.</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue TempFile(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    [StashFn]
+    private static string TempFile(IInterpreterContext _)
     {
-        return StashValue.FromObj(System.IO.Path.GetTempFileName());
+        return System.IO.Path.GetTempFileName();
     }
 
     /// <summary>Creates a temporary directory and returns its path.</summary>
     /// <returns>The path to the newly created temporary directory.</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue TempDir(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    [StashFn]
+    private static string TempDir(IInterpreterContext _)
     {
         string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName());
         System.IO.Directory.CreateDirectory(dir);
-        return StashValue.FromObj(dir);
+        return dir;
     }
 
     /// <summary>Returns the last modification time of a file as a Unix timestamp (seconds since epoch).</summary>
     /// <param name="path">The file path.</param>
     /// <returns>The last modified time as a float (seconds since Unix epoch).</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue ModifiedAt(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static double ModifiedAt(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.modifiedAt");
         path = ctx.ExpandTilde(path);
-
         try
         {
             var info = new System.IO.FileInfo(path);
-            return StashValue.FromFloat((double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
+            return (double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0;
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get modified time for '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
     }
@@ -549,19 +523,17 @@ public static partial class FsBuiltIns
     /// <summary>Recursively lists all files under the given directory path.</summary>
     /// <param name="path">The directory path to walk.</param>
     /// <returns>An array of file path strings for all files found recursively.</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Walk(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static List<StashValue> Walk(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.walk");
         path = ctx.ExpandTilde(path);
-
         try
         {
             var files = System.IO.Directory.GetFiles(path, "*", System.IO.SearchOption.AllDirectories);
             var result = new List<StashValue>(files.Length);
             foreach (var f in files)
                 result.Add(StashValue.FromObj(f));
-            return StashValue.FromObj(result);
+            return result;
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}", errorType: StashErrorTypes.IOError); }
     }
@@ -569,71 +541,65 @@ public static partial class FsBuiltIns
     /// <summary>Returns true if the file at the given path is readable by the current process.</summary>
     /// <param name="path">The file path to check.</param>
     /// <returns>True if the file exists and is readable.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Readable(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Readable(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.readable");
         path = ctx.ExpandTilde(path);
-
         try
         {
             if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
             {
-                return StashValue.FromBool(false);
+                return false;
             }
 
             using var stream = System.IO.File.OpenRead(path);
-            return StashValue.FromBool(true);
+            return true;
         }
-        catch (System.UnauthorizedAccessException) { return StashValue.FromBool(false); }
-        catch (System.IO.IOException) { return StashValue.FromBool(false); }
+        catch (System.UnauthorizedAccessException) { return false; }
+        catch (System.IO.IOException) { return false; }
     }
 
     /// <summary>Returns true if the file at the given path is writable by the current process.</summary>
     /// <param name="path">The file path to check.</param>
     /// <returns>True if the file exists and is writable.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Writable(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Writable(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.writable");
         path = ctx.ExpandTilde(path);
-
         try
         {
             if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
             {
-                return StashValue.FromBool(false);
+                return false;
             }
 
             if (System.IO.File.Exists(path))
             {
                 using var stream = System.IO.File.OpenWrite(path);
-                return StashValue.FromBool(true);
+                return true;
             }
             // For directories, check by attempting to create a temp file
             var testFile = System.IO.Path.Combine(path, System.IO.Path.GetRandomFileName());
             using (System.IO.File.Create(testFile)) { }
             System.IO.File.Delete(testFile);
-            return StashValue.FromBool(true);
+            return true;
         }
-        catch (System.UnauthorizedAccessException) { return StashValue.FromBool(false); }
-        catch (System.IO.IOException) { return StashValue.FromBool(false); }
+        catch (System.UnauthorizedAccessException) { return false; }
+        catch (System.IO.IOException) { return false; }
     }
 
     /// <summary>Returns true if the file at the given path is executable. On Unix, checks execute permission bits. On Windows, checks file extension.</summary>
     /// <param name="path">The file path to check.</param>
     /// <returns>True if the file exists and is executable.</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Executable(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Executable(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.executable");
         path = ctx.ExpandTilde(path);
-
         try
         {
             if (!System.IO.File.Exists(path))
             {
-                return StashValue.FromBool(false);
+                return false;
             }
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
@@ -641,29 +607,27 @@ public static partial class FsBuiltIns
             {
                 // On Windows, check file extension
                 var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-                return StashValue.FromBool(ext is ".exe" or ".cmd" or ".bat" or ".com" or ".ps1");
+                return ext is ".exe" or ".cmd" or ".bat" or ".com" or ".ps1";
             }
             else
             {
                 // On Unix, check executable permission via file mode
                 var mode = System.IO.File.GetUnixFileMode(path);
-                return StashValue.FromBool((mode & (System.IO.UnixFileMode.UserExecute |
+                return (mode & (System.IO.UnixFileMode.UserExecute |
                                 System.IO.UnixFileMode.GroupExecute |
-                                System.IO.UnixFileMode.OtherExecute)) != 0);
+                                System.IO.UnixFileMode.OtherExecute)) != 0;
             }
         }
-        catch (System.IO.IOException) { return StashValue.FromBool(false); }
+        catch (System.IO.IOException) { return false; }
     }
 
     /// <summary>Creates an empty file at the given path, or updates its last-modified time if it already exists.</summary>
     /// <param name="path">The file path to create or touch.</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue CreateFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void CreateFile(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.createFile");
         path = ctx.ExpandTilde(path);
-
         try
         {
             if (System.IO.File.Exists(path))
@@ -676,7 +640,6 @@ public static partial class FsBuiltIns
             }
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Creates a symbolic link at linkPath pointing to target.</summary>

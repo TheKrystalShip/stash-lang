@@ -7,9 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>http</c> namespace built-in functions for HTTP client operations.
@@ -26,8 +24,19 @@ using static Stash.Stdlib.Registration.P;
 /// <see cref="StashCapabilities.Network"/> capability is enabled.
 /// </para>
 /// </remarks>
-public static class HttpBuiltIns
+[StashNamespace(Capability = StashCapabilities.Network)]
+public static partial class HttpBuiltIns
 {
+    /// <summary>HTTP response with status code, body, and headers.</summary>
+    [StashStruct]
+    public sealed record HttpResponse
+    {
+        public long Status { get; init; }
+        public string Body { get; init; } = "";
+        [StashField(Type = "dict")]
+        public StashDictionary Headers { get; init; } = new();
+    }
+
     /// <summary>
     /// Shared HTTP client instance with a 30-second timeout. Reused across all requests for connection pooling.
     /// </summary>
@@ -36,306 +45,315 @@ public static class HttpBuiltIns
         Timeout = TimeSpan.FromSeconds(30)
     };
 
-    /// <summary>
-    /// Registers all <c>http</c> namespace functions into the global environment.
-    /// </summary>
-    /// <param name="globals">The runtime environment to register functions in.</param>
-    public static NamespaceDefinition Define()
+    /// <summary>Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
+    /// <param name="url">The URL to send the GET request to</param>
+    /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
+    /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Get(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("http");
-        ns.RequiresCapability(StashCapabilities.Network);
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("'http.get' requires 1 or 2 arguments.");
+        var url = SvArgs.String(args, 0, "http.get");
 
-        // http.get(url[, options]) — Sends an HTTP GET request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("get", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ValidateUrl(url, "http.get");
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        var timeout = ApplyOptions(request, args, 1, "http.get");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
+
+        try
         {
-            if (args.Length < 1 || args.Length > 2)
-                throw new RuntimeError("'http.get' requires 1 or 2 arguments.");
-            var url = SvArgs.String(args, 0, "http.get");
-
-            ValidateUrl(url, "http.get");
-
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            var timeout = ApplyOptions(request, args, 1, "http.get");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
-
-            try
-            {
-                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.get: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.get: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the GET request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
-
-        // http.post(url, body[, options]) — Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("post", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
         {
-            if (args.Length < 2 || args.Length > 3)
-                throw new RuntimeError("'http.post' requires 2 or 3 arguments.");
-            var url = SvArgs.String(args, 0, "http.post");
-            var body = SvArgs.String(args, 1, "http.post");
-
-            ValidateUrl(url, "http.post");
-
-            var request = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
-            };
-            var timeout = ApplyOptions(request, args, 2, "http.post");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
-
-            try
-            {
-                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.post: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.post: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the POST request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
-
-        // http.put(url, body[, options]) — Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("put", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            throw new RuntimeError("http.get: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
         {
-            if (args.Length < 2 || args.Length > 3)
-                throw new RuntimeError("'http.put' requires 2 or 3 arguments.");
-            var url = SvArgs.String(args, 0, "http.put");
-            var body = SvArgs.String(args, 1, "http.put");
+            throw new RuntimeError("http.get: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
 
-            ValidateUrl(url, "http.put");
+    /// <summary>Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
+    /// <param name="url">The URL to send the POST request to</param>
+    /// <param name="body">The request body string (typically JSON)</param>
+    /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
+    /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Post(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("'http.post' requires 2 or 3 arguments.");
+        var url = SvArgs.String(args, 0, "http.post");
+        var body = SvArgs.String(args, 1, "http.post");
 
-            var request = new HttpRequestMessage(HttpMethod.Put, url)
-            {
-                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
-            };
-            var timeout = ApplyOptions(request, args, 2, "http.put");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
+        ValidateUrl(url, "http.post");
 
-            try
-            {
-                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.put: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.put: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the PUT request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
-
-        // http.delete(url[, options]) — Sends an HTTP DELETE request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("delete", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            if (args.Length < 1 || args.Length > 2)
-                throw new RuntimeError("'http.delete' requires 1 or 2 arguments.");
-            var url = SvArgs.String(args, 0, "http.delete");
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        };
+        var timeout = ApplyOptions(request, args, 2, "http.post");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
 
-            ValidateUrl(url, "http.delete");
-
-            var request = new HttpRequestMessage(HttpMethod.Delete, url);
-            var timeout = ApplyOptions(request, args, 1, "http.delete");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
-
-            try
-            {
-                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.delete: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.delete: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the DELETE request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
-
-        // http.head(url[, options]) — Sends an HTTP HEAD request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct with an empty body.
-        ns.Function("head", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            if (args.Length < 1 || args.Length > 2)
-                throw new RuntimeError("'http.head' requires 1 or 2 arguments.");
-            var url = SvArgs.String(args, 0, "http.head");
-
-            ValidateUrl(url, "http.head");
-
-            var request = new HttpRequestMessage(HttpMethod.Head, url);
-            var timeout = ApplyOptions(request, args, 1, "http.head");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
-
-            try
-            {
-                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.head: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.head: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP HEAD request and returns the response status and headers.\n@param url The URL to request\n@param options Optional request options (headers, timeout)\n@return HttpResponse with status, headers, and empty body");
-
-        // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
-        ns.Function("request", [Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
         {
-            var options = SvArgs.Dict(args, 0, "http.request");
-
-            var urlVal = options.Get("url").ToObject();
-            if (urlVal is not string url)
-            {
-                throw new RuntimeError("http.request: 'url' must be a string.", errorType: StashErrorTypes.TypeError);
-            }
-
-            ValidateUrl(url, "http.request");
-
-            var methodVal = options.Get("method").ToObject();
-            var methodStr = methodVal is string m ? m.ToUpperInvariant() : "GET";
-
-            var requestMessage = new HttpRequestMessage(new HttpMethod(methodStr), url);
-
-            var headersVal = options.Get("headers").ToObject();
-            if (headersVal is StashDictionary headersDict)
-            {
-                foreach (var key in headersDict.RawKeys())
-                {
-                    var keyStr = RuntimeValues.Stringify(key);
-                    var valStr = RuntimeValues.Stringify(headersDict.Get(key).ToObject());
-                    requestMessage.Headers.TryAddWithoutValidation(keyStr, valStr);
-                }
-            }
-
-            var bodyVal = options.Get("body").ToObject();
-            if (bodyVal is string bodyStr)
-            {
-                requestMessage.Content = new StringContent(bodyStr, System.Text.Encoding.UTF8, "application/json");
-            }
-
-            try
-            {
-                var response = _client.SendAsync(requestMessage, ctx.CancellationToken).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.request: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.request: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse",
-        documentation: "Sends a custom HTTP request. The options dict must include 'url' (string) and optionally 'method' (string, default GET), 'headers' (dict), and 'body' (string). Returns an HttpResponse struct with status, body, and headers fields.\n@param options A dict with request options: url, method, headers, body\n@return An HttpResponse struct with status, body, and headers");
-
-        // http.patch(url, body[, options]) — Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("patch", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            throw new RuntimeError("http.post: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
         {
-            if (args.Length < 2 || args.Length > 3)
-                throw new RuntimeError("'http.patch' requires 2 or 3 arguments.");
-            var url = SvArgs.String(args, 0, "http.patch");
-            var body = SvArgs.String(args, 1, "http.patch");
+            throw new RuntimeError("http.post: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
 
-            ValidateUrl(url, "http.patch");
+    /// <summary>Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
+    /// <param name="url">The URL to send the PUT request to</param>
+    /// <param name="body">The request body string (typically JSON)</param>
+    /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
+    /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Put(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("'http.put' requires 2 or 3 arguments.");
+        var url = SvArgs.String(args, 0, "http.put");
+        var body = SvArgs.String(args, 1, "http.put");
 
-            var request = new HttpRequestMessage(HttpMethod.Patch, url)
-            {
-                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
-            };
-            var timeout = ApplyOptions(request, args, 2, "http.patch");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
+        ValidateUrl(url, "http.put");
 
-            try
-            {
-                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
-                return StashValue.FromObj(MakeResponse(response));
-            }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.patch: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.patch: request timed out.", errorType: StashErrorTypes.TimeoutError);
-            }
-        }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the PATCH request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
-
-        // http.download(url, path[, options]) — Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns null.
-        ns.Function("download", [Param("url", "string"), Param("path", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        var request = new HttpRequestMessage(HttpMethod.Put, url)
         {
-            if (args.Length < 2 || args.Length > 3)
-                throw new RuntimeError("'http.download' requires 2 or 3 arguments.");
-            var url = SvArgs.String(args, 0, "http.download");
-            var path = SvArgs.String(args, 1, "http.download");
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        };
+        var timeout = ApplyOptions(request, args, 2, "http.put");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
 
-            ValidateUrl(url, "http.download");
-            path = ctx.ExpandTilde(path);
+        try
+        {
+            var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
+        {
+            throw new RuntimeError("http.put: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new RuntimeError("http.put: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
 
-            var request = new HttpRequestMessage(HttpMethod.Get, url);
-            var timeout = ApplyOptions(request, args, 2, "http.download");
-            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
-            var requestCt = cts?.Token ?? ctx.CancellationToken;
+    /// <summary>Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
+    /// <param name="url">The URL to send the DELETE request to</param>
+    /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
+    /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Delete(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("'http.delete' requires 1 or 2 arguments.");
+        var url = SvArgs.String(args, 0, "http.delete");
 
-            try
+        ValidateUrl(url, "http.delete");
+
+        var request = new HttpRequestMessage(HttpMethod.Delete, url);
+        var timeout = ApplyOptions(request, args, 1, "http.delete");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
+
+        try
+        {
+            var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
+        {
+            throw new RuntimeError("http.delete: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new RuntimeError("http.delete: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
+
+    /// <summary>Sends an HTTP HEAD request and returns the response status and headers.</summary>
+    /// <param name="url">The URL to request</param>
+    /// <param name="options">Optional request options (headers, timeout)</param>
+    /// <returns>HttpResponse with status, headers, and empty body</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Head(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("'http.head' requires 1 or 2 arguments.");
+        var url = SvArgs.String(args, 0, "http.head");
+
+        ValidateUrl(url, "http.head");
+
+        var request = new HttpRequestMessage(HttpMethod.Head, url);
+        var timeout = ApplyOptions(request, args, 1, "http.head");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
+
+        try
+        {
+            var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
+        {
+            throw new RuntimeError("http.head: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new RuntimeError("http.head: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
+
+    /// <summary>Sends a custom HTTP request. The options dict must include 'url' (string) and optionally 'method' (string, default GET), 'headers' (dict), and 'body' (string). Returns an HttpResponse struct with status, body, and headers fields.</summary>
+    /// <param name="options">A dict with request options: url, method, headers, body</param>
+    /// <returns>An HttpResponse struct with status, body, and headers</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Request(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var options = SvArgs.Dict(args, 0, "http.request");
+
+        var urlVal = options.Get("url").ToObject();
+        if (urlVal is not string url)
+        {
+            throw new RuntimeError("http.request: 'url' must be a string.", errorType: StashErrorTypes.TypeError);
+        }
+
+        ValidateUrl(url, "http.request");
+
+        var methodVal = options.Get("method").ToObject();
+        var methodStr = methodVal is string m ? m.ToUpperInvariant() : "GET";
+
+        var requestMessage = new HttpRequestMessage(new HttpMethod(methodStr), url);
+
+        var headersVal = options.Get("headers").ToObject();
+        if (headersVal is StashDictionary headersDict)
+        {
+            foreach (var key in headersDict.RawKeys())
             {
-                using var response = _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestCt).GetAwaiter().GetResult();
-                response.EnsureSuccessStatusCode();
-                using var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
-                using var fileStream = System.IO.File.Create(path);
-                stream.CopyTo(fileStream);
+                var keyStr = RuntimeValues.Stringify(key);
+                var valStr = RuntimeValues.Stringify(headersDict.Get(key).ToObject());
+                requestMessage.Headers.TryAddWithoutValidation(keyStr, valStr);
             }
-            catch (HttpRequestException e)
-            {
-                throw new RuntimeError("http.download: request failed — " + e.Message);
-            }
-            catch (TaskCanceledException)
-            {
-                throw new RuntimeError("http.download: request timed out.");
-            }
-            catch (System.IO.IOException e)
-            {
-                try { System.IO.File.Delete(path); } catch { }
-                throw new RuntimeError($"http.download: cannot write file '{path}': {e.Message}");
-            }
-            return StashValue.Null;
-        }, isVariadic: true,
-        documentation: "Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns null.\n@param url The URL to download from\n@param path The local file path to write the downloaded content to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return null");
+        }
 
-        ns.Struct("HttpResponse", [
-            new BuiltInField("status", "int"),
-            new BuiltInField("body", "string"),
-            new BuiltInField("headers", "dict"),
-        ]);
+        var bodyVal = options.Get("body").ToObject();
+        if (bodyVal is string bodyStr)
+        {
+            requestMessage.Content = new StringContent(bodyStr, System.Text.Encoding.UTF8, "application/json");
+        }
 
-        return ns.Build();
+        try
+        {
+            var response = _client.SendAsync(requestMessage, ctx.CancellationToken).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
+        {
+            throw new RuntimeError("http.request: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new RuntimeError("http.request: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
+
+    /// <summary>Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
+    /// <param name="url">The URL to send the PATCH request to</param>
+    /// <param name="body">The request body string (typically JSON)</param>
+    /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
+    /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
+    [StashFn(Raw = true, ReturnType = "HttpResponse")]
+    private static StashValue Patch(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("'http.patch' requires 2 or 3 arguments.");
+        var url = SvArgs.String(args, 0, "http.patch");
+        var body = SvArgs.String(args, 1, "http.patch");
+
+        ValidateUrl(url, "http.patch");
+
+        var request = new HttpRequestMessage(HttpMethod.Patch, url)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+        };
+        var timeout = ApplyOptions(request, args, 2, "http.patch");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
+
+        try
+        {
+            var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+            return StashValue.FromObj(MakeResponse(response));
+        }
+        catch (HttpRequestException e)
+        {
+            throw new RuntimeError("http.patch: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new RuntimeError("http.patch: request timed out.", errorType: StashErrorTypes.TimeoutError);
+        }
+    }
+
+    /// <summary>Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns null.</summary>
+    /// <param name="url">The URL to download from</param>
+    /// <param name="path">The local file path to write the downloaded content to</param>
+    /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Download(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("'http.download' requires 2 or 3 arguments.");
+        var url = SvArgs.String(args, 0, "http.download");
+        var path = SvArgs.String(args, 1, "http.download");
+
+        ValidateUrl(url, "http.download");
+        path = ctx.ExpandTilde(path);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, url);
+        var timeout = ApplyOptions(request, args, 2, "http.download");
+        using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+        var requestCt = cts?.Token ?? ctx.CancellationToken;
+
+        try
+        {
+            using var response = _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestCt).GetAwaiter().GetResult();
+            response.EnsureSuccessStatusCode();
+            using var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+            using var fileStream = System.IO.File.Create(path);
+            stream.CopyTo(fileStream);
+        }
+        catch (HttpRequestException e)
+        {
+            throw new RuntimeError("http.download: request failed \u2014 " + e.Message);
+        }
+        catch (TaskCanceledException)
+        {
+            throw new RuntimeError("http.download: request timed out.");
+        }
+        catch (System.IO.IOException e)
+        {
+            try { System.IO.File.Delete(path); } catch { }
+            throw new RuntimeError($"http.download: cannot write file '{path}': {e.Message}");
+        }
+        return StashValue.Null;
     }
 
     /// <summary>

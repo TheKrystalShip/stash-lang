@@ -40,10 +40,9 @@ public static partial class TimeBuiltIns
 
     /// <summary>Suspends execution for the given number of seconds.</summary>
     /// <param name="seconds">The duration to sleep (float or int)</param>
-    [StashFn(Raw = true, ReturnType = "void")]
-    private static StashValue Sleep(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static void Sleep(IInterpreterContext ctx, [StashParam(Type = "number")] double seconds)
     {
-        double seconds = SvArgs.Numeric(args, 0, "time.sleep");
         int ms = (int)(seconds * 1000);
         if (ctx.CancellationToken.CanBeCanceled)
         {
@@ -54,39 +53,34 @@ public static partial class TimeBuiltIns
         {
             Thread.Sleep(ms);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Formats a Unix timestamp using a .NET format string.</summary>
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="format">.NET format string</param>
     /// <returns>Formatted date/time string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Format(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static string Format([StashParam(Type = "number")] double timestamp, string format)
     {
-        double seconds = SvArgs.Numeric(args, 0, "time.format");
-        var fmt = SvArgs.String(args, 1, "time.format");
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(seconds * 1000));
-        return StashValue.FromObj(dto.ToString(fmt, CultureInfo.InvariantCulture));
+        var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp * 1000));
+        return dto.ToString(format, CultureInfo.InvariantCulture);
     }
 
     /// <summary>Parses a date string using a .NET format string. Returns a Unix timestamp.</summary>
     /// <param name="str">The date string</param>
     /// <param name="format">The .NET format</param>
     /// <returns>Unix timestamp as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static double Parse(string str, string format)
     {
-        var str = SvArgs.String(args, 0, "time.parse");
-        var fmt = SvArgs.String(args, 1, "time.parse");
         try
         {
-            var dto = DateTimeOffset.ParseExact(str, fmt, CultureInfo.InvariantCulture);
-            return StashValue.FromFloat(dto.ToUnixTimeMilliseconds() / 1000.0);
+            var dto = DateTimeOffset.ParseExact(str, format, CultureInfo.InvariantCulture);
+            return dto.ToUnixTimeMilliseconds() / 1000.0;
         }
         catch (FormatException)
         {
-            throw new RuntimeError($"'time.parse' could not parse \"{str}\" with format \"{fmt}\".", errorType: StashErrorTypes.ParseError);
+            throw new RuntimeError($"'time.parse' could not parse \"{str}\" with format \"{format}\".", errorType: StashErrorTypes.ParseError);
         }
     }
 
@@ -113,96 +107,88 @@ public static partial class TimeBuiltIns
     /// <summary>Returns the UTC year of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Year as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Year(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long Year(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.year", args);
-        return StashValue.FromInt((long)dt.Year);
+        return (long)dt.Year;
     }
 
     /// <summary>Returns the UTC month (1-12) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Month as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Month(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long Month(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.month", args);
-        return StashValue.FromInt((long)dt.Month);
+        return (long)dt.Month;
     }
 
     /// <summary>Returns the UTC day of month (1-31) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Day as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Day(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long Day(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.day", args);
-        return StashValue.FromInt((long)dt.Day);
+        return (long)dt.Day;
     }
 
     /// <summary>Returns the UTC hour (0-23) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Hour as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Hour(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long Hour(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.hour", args);
-        return StashValue.FromInt((long)dt.Hour);
+        return (long)dt.Hour;
     }
 
     /// <summary>Returns the UTC minute (0-59) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Minute as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Minute(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long Minute(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.minute", args);
-        return StashValue.FromInt((long)dt.Minute);
+        return (long)dt.Minute;
     }
 
     /// <summary>Returns the UTC second (0-59) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Second as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Second(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long Second(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.second", args);
-        return StashValue.FromInt((long)dt.Second);
+        return (long)dt.Second;
     }
 
     /// <summary>Returns the UTC day of week as lowercase string (e.g. 'monday') of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Day of week string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue DayOfWeek(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static string DayOfWeek(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.dayOfWeek", args);
-        return StashValue.FromObj(dt.DayOfWeek.ToString().ToLowerInvariant());
+        return dt.DayOfWeek.ToString().ToLowerInvariant();
     }
 
     /// <summary>Adds seconds to a Unix timestamp and returns the new timestamp.</summary>
     /// <param name="timestamp">The base timestamp</param>
     /// <param name="seconds">Number of seconds to add</param>
     /// <returns>New timestamp as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Add(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double ts = SvArgs.Numeric(args, 0, "time.add");
-        double seconds = SvArgs.Numeric(args, 1, "time.add");
-        return StashValue.FromFloat(ts + seconds);
-    }
+    [StashFn]
+    public static double Add([StashParam(Type = "number")] double timestamp, [StashParam(Type = "number")] double seconds)
+        => timestamp + seconds;
 
     /// <summary>Returns the absolute difference in seconds between two Unix timestamps.</summary>
     /// <param name="timestamp1">First timestamp</param>
     /// <param name="timestamp2">Second timestamp</param>
     /// <returns>Absolute difference in seconds</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Diff(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double ts1 = SvArgs.Numeric(args, 0, "time.diff");
-        double ts2 = SvArgs.Numeric(args, 1, "time.diff");
-        return StashValue.FromFloat(Math.Abs(ts1 - ts2));
-    }
+    [StashFn]
+    public static double Diff([StashParam(Type = "number")] double timestamp1, [StashParam(Type = "number")] double timestamp2)
+        => Math.Abs(timestamp1 - timestamp2);
 
     // ── Timezone Functions ───────────────────────────────────────────────────
 
@@ -210,12 +196,10 @@ public static partial class TimeBuiltIns
     /// <param name="timestamp">Unix seconds (UTC)</param>
     /// <param name="timezone">IANA or Windows timezone ID</param>
     /// <returns>Offset-adjusted Unix timestamp as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue ToTimezone(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static double ToTimezone([StashParam(Type = "number")] double timestamp, string timezone)
     {
-        double ts = SvArgs.Numeric(args, 0, "time.toTimezone");
-        var timezone = SvArgs.String(args, 1, "time.toTimezone");
-        var utcDto = DateTimeOffset.FromUnixTimeMilliseconds((long)(ts * 1000));
+        var utcDto = DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp * 1000));
         TimeZoneInfo tz;
         try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezone); }
         catch (TimeZoneNotFoundException)
@@ -223,18 +207,16 @@ public static partial class TimeBuiltIns
             throw new RuntimeError($"'time.toTimezone' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: StashErrorTypes.ValueError);
         }
         var offset = tz.GetUtcOffset(utcDto.UtcDateTime);
-        return StashValue.FromFloat(ts + offset.TotalSeconds);
+        return timestamp + offset.TotalSeconds;
     }
 
     /// <summary>Interprets a timestamp as local time in the given timezone and returns the UTC equivalent.</summary>
     /// <param name="timestamp">Unix seconds (local time)</param>
     /// <param name="timezone">IANA or Windows timezone ID</param>
     /// <returns>UTC Unix timestamp as float</returns>
-    [StashFn(Name = "toUTC", Raw = true, ReturnType = "float")]
-    private static StashValue ToUTC(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "toUTC")]
+    public static double ToUTC([StashParam(Type = "number")] double timestamp, string timezone)
     {
-        double ts = SvArgs.Numeric(args, 0, "time.toUTC");
-        var timezone = SvArgs.String(args, 1, "time.toUTC");
         TimeZoneInfo tz;
         try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezone); }
         catch (TimeZoneNotFoundException)
@@ -242,10 +224,10 @@ public static partial class TimeBuiltIns
             throw new RuntimeError($"'time.toUTC' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: StashErrorTypes.ValueError);
         }
         var localAsUnspecified = DateTime.SpecifyKind(
-            DateTimeOffset.FromUnixTimeMilliseconds((long)(ts * 1000)).UtcDateTime,
+            DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp * 1000)).UtcDateTime,
             DateTimeKind.Unspecified);
         var offset = tz.GetUtcOffset(localAsUnspecified);
-        return StashValue.FromFloat(ts - offset.TotalSeconds);
+        return timestamp - offset.TotalSeconds;
     }
 
     /// <summary>Returns the local system timezone ID.</summary>
@@ -256,31 +238,25 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns an array of all available timezone IDs.</summary>
     /// <returns>Array of timezone ID strings</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Timezones(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        var list = TimeZoneInfo.GetSystemTimeZones().Select(z => StashValue.FromObj(z.Id)).ToList();
-        return StashValue.FromObj(list);
-    }
+    [StashFn]
+    public static List<StashValue> Timezones()
+        => TimeZoneInfo.GetSystemTimeZones().Select(z => StashValue.FromObj(z.Id)).ToList();
 
     /// <summary>Returns the UTC offset in hours for a timezone at a specific timestamp.</summary>
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="timezone">IANA or Windows timezone ID</param>
     /// <returns>UTC offset in hours (e.g. -5.0 for EST, 5.5 for IST)</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Offset(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static double Offset([StashParam(Type = "number")] double timestamp, string timezone)
     {
-        double ts = SvArgs.Numeric(args, 0, "time.offset");
-        var timezone = SvArgs.String(args, 1, "time.offset");
-        var utcDto = DateTimeOffset.FromUnixTimeMilliseconds((long)(ts * 1000));
+        var utcDto = DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp * 1000));
         TimeZoneInfo tz;
         try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezone); }
         catch (TimeZoneNotFoundException)
         {
             throw new RuntimeError($"'time.offset' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: StashErrorTypes.ValueError);
         }
-        var offset = tz.GetUtcOffset(utcDto.UtcDateTime);
-        return StashValue.FromFloat(offset.TotalHours);
+        return tz.GetUtcOffset(utcDto.UtcDateTime).TotalHours;
     }
 
     // ── Duration Convenience Helpers ─────────────────────────────────────────
@@ -288,52 +264,32 @@ public static partial class TimeBuiltIns
     /// <summary>Returns n seconds (identity, for consistency). Useful with time.add().</summary>
     /// <param name="n">Number of seconds</param>
     /// <returns>n as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Seconds(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double n = SvArgs.Numeric(args, 0, "time.seconds");
-        return StashValue.FromFloat(n);
-    }
+    [StashFn]
+    public static double Seconds([StashParam(Type = "number")] double n) => n;
 
     /// <summary>Returns the number of seconds in n minutes.</summary>
     /// <param name="n">Number of minutes</param>
     /// <returns>Seconds as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Minutes(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double n = SvArgs.Numeric(args, 0, "time.minutes");
-        return StashValue.FromFloat(n * 60.0);
-    }
+    [StashFn]
+    public static double Minutes([StashParam(Type = "number")] double n) => n * 60.0;
 
     /// <summary>Returns the number of seconds in n hours.</summary>
     /// <param name="n">Number of hours</param>
     /// <returns>Seconds as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Hours(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double n = SvArgs.Numeric(args, 0, "time.hours");
-        return StashValue.FromFloat(n * 3600.0);
-    }
+    [StashFn]
+    public static double Hours([StashParam(Type = "number")] double n) => n * 3600.0;
 
     /// <summary>Returns the number of seconds in n days.</summary>
     /// <param name="n">Number of days</param>
     /// <returns>Seconds as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Days(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double n = SvArgs.Numeric(args, 0, "time.days");
-        return StashValue.FromFloat(n * 86400.0);
-    }
+    [StashFn]
+    public static double Days([StashParam(Type = "number")] double n) => n * 86400.0;
 
     /// <summary>Returns the number of seconds in n weeks.</summary>
     /// <param name="n">Number of weeks</param>
     /// <returns>Seconds as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Weeks(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-    {
-        double n = SvArgs.Numeric(args, 0, "time.weeks");
-        return StashValue.FromFloat(n * 604800.0);
-    }
+    [StashFn]
+    public static double Weeks([StashParam(Type = "number")] double n) => n * 604800.0;
 
     // ── Utility Functions ────────────────────────────────────────────────────
 
@@ -341,12 +297,10 @@ public static partial class TimeBuiltIns
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="unit">One of: year, month, day, hour, minute</param>
     /// <returns>Start-of-unit Unix timestamp as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue StartOf(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static double StartOf([StashParam(Type = "number")] double timestamp, string unit)
     {
-        double ts = SvArgs.Numeric(args, 0, "time.startOf");
-        var unit = SvArgs.String(args, 1, "time.startOf");
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(ts * 1000));
+        var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp * 1000));
         DateTimeOffset result = unit switch
         {
             "year"   => new DateTimeOffset(dto.Year, 1, 1, 0, 0, 0, TimeSpan.Zero),
@@ -356,19 +310,17 @@ public static partial class TimeBuiltIns
             "minute" => new DateTimeOffset(dto.Year, dto.Month, dto.Day, dto.Hour, dto.Minute, 0, TimeSpan.Zero),
             _ => throw new RuntimeError($"'time.startOf' unknown unit '{unit}'. Use: year, month, day, hour, minute", errorType: StashErrorTypes.ValueError),
         };
-        return StashValue.FromFloat(result.ToUnixTimeMilliseconds() / 1000.0);
+        return result.ToUnixTimeMilliseconds() / 1000.0;
     }
 
     /// <summary>Returns the timestamp at the end of the given unit (last millisecond, UTC).</summary>
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="unit">One of: year, month, day, hour, minute</param>
     /// <returns>End-of-unit Unix timestamp as float</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue EndOf(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static double EndOf([StashParam(Type = "number")] double timestamp, string unit)
     {
-        double ts = SvArgs.Numeric(args, 0, "time.endOf");
-        var unit = SvArgs.String(args, 1, "time.endOf");
-        var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(ts * 1000));
+        var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(timestamp * 1000));
         DateTimeOffset result = unit switch
         {
             "year"   => new DateTimeOffset(dto.Year, 12, 31, 23, 59, 59, 999, TimeSpan.Zero),
@@ -378,27 +330,27 @@ public static partial class TimeBuiltIns
             "minute" => new DateTimeOffset(dto.Year, dto.Month, dto.Day, dto.Hour, dto.Minute, 59, 999, TimeSpan.Zero),
             _ => throw new RuntimeError($"'time.endOf' unknown unit '{unit}'. Use: year, month, day, hour, minute", errorType: StashErrorTypes.ValueError),
         };
-        return StashValue.FromFloat(result.ToUnixTimeMilliseconds() / 1000.0);
+        return result.ToUnixTimeMilliseconds() / 1000.0;
     }
 
     /// <summary>Returns whether the year of a timestamp is a leap year (defaults to current year).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>true if leap year</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue IsLeapYear(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static bool IsLeapYear(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.isLeapYear", args);
-        return StashValue.FromBool(DateTime.IsLeapYear(dt.Year));
+        return DateTime.IsLeapYear(dt.Year);
     }
 
     /// <summary>Returns the number of days in the month of a timestamp (defaults to current month).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
     /// <returns>Days in month as int</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue DaysInMonth(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long DaysInMonth(params StashValue[] args)
     {
         var dt = GetDateTimeFromArgs("time.daysInMonth", args);
-        return StashValue.FromInt((long)DateTime.DaysInMonth(dt.Year, dt.Month));
+        return (long)DateTime.DaysInMonth(dt.Year, dt.Month);
     }
 
     private static DateTimeOffset GetDateTimeFromArgs(string funcName, ReadOnlySpan<StashValue> args)

@@ -267,22 +267,21 @@ public static partial class NetBuiltIns
 
 
     /// <summary>Returns information about all network interfaces.</summary>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Interfaces(IInterpreterContext _, ReadOnlySpan<StashValue> args)
-        => StashValue.FromObj(BuildInterfaceList(NetworkInterface.GetAllNetworkInterfaces()));
+    [StashFn]
+    private static List<StashValue> Interfaces()
+        => BuildInterfaceList(NetworkInterface.GetAllNetworkInterfaces());
 
 
     /// <summary>Returns information about a specific network interface.</summary>
     /// <param name="name">The interface name (e.g., "eth0", "wlan0").</param>
-    [StashFn(Raw = true, ReturnType = "InterfaceInfo", Name = "interface")]
-    private static StashValue Interface(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "InterfaceInfo", Name = "interface")]
+    private static StashValue Interface(string name)
     {
-        var name = SvArgs.String(args, 0, "net.interface");
         var match = NetworkInterface.GetAllNetworkInterfaces()
             .FirstOrDefault(ni => ni.Name == name);
         if (match is null)
             throw new RuntimeError($"Network interface '{name}' not found.", errorType: StashErrorTypes.IOError);
-        return StashValue.FromObj(BuildInterfaceList([match])[0]);
+        return BuildInterfaceList([match])[0];
     }
 
     // ── Deprecated DNS aliases ─────────────────────────────────────────────────────────

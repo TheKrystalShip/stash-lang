@@ -113,13 +113,11 @@ public static partial class CryptoBuiltIns
     /// <param name="n">The number of random bytes to generate (must be > 0)</param>
     /// <param name="encoding">Optional output encoding: "hex", "base64", or "raw". If omitted, returns byte[]</param>
     /// <returns>A byte[] or encoded string depending on arguments</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue RandomBytes(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue RandomBytes(long n, [StashParam(Name = "encoding")] params StashValue[] rest)
     {
-        if (args.Length < 1 || args.Length > 2)
+        if (rest.Length > 1)
             throw new RuntimeError("'crypto.randomBytes' requires 1 or 2 arguments.");
-
-        long n = SvArgs.Long(args, 0, "crypto.randomBytes");
 
         if (n <= 0)
             throw new RuntimeError("Argument to 'crypto.randomBytes' must be greater than 0.", errorType: StashErrorTypes.ValueError);
@@ -129,10 +127,10 @@ public static partial class CryptoBuiltIns
 
         byte[] bytes = RandomNumberGenerator.GetBytes((int)n);
 
-        if (args.Length == 1)
+        if (rest.Length == 0)
             return StashValue.FromObj(new StashByteArray(bytes));
 
-        string encoding = SvArgs.String(args, 1, "crypto.randomBytes");
+        string encoding = SvArgs.String(rest, 0, "crypto.randomBytes");
         string result = encoding.ToLowerInvariant() switch
         {
             "hex"    => HashToHex(bytes),
@@ -220,22 +218,21 @@ public static partial class CryptoBuiltIns
     /// <param name="key">A 32-byte (256-bit) key as a hex string or byte[]</param>
     /// <param name="options">Reserved for future use (optional)</param>
     /// <returns>A dictionary with fields: ciphertext (hex), iv (hex), tag (hex)</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Encrypt(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashValue Encrypt(StashValue data, StashValue key, params StashValue[] rest)
     {
-        if (args.Length < 2 || args.Length > 3)
+        if (rest.Length > 1)
             throw new RuntimeError("'crypto.encrypt' expects 2 or 3 arguments.");
 
         byte[] plaintext;
-        StashValue dataArg = args[0];
-        if (dataArg.IsObj && dataArg.AsObj is string dataStr)
+        if (data.IsObj && data.AsObj is string dataStr)
             plaintext = Encoding.UTF8.GetBytes(dataStr);
-        else if (dataArg.IsObj && dataArg.AsObj is StashByteArray dataBa)
+        else if (data.IsObj && data.AsObj is StashByteArray dataBa)
             plaintext = dataBa.AsSpan().ToArray();
         else
             throw new RuntimeError("1st argument to 'crypto.encrypt' must be a string or byte[].", errorType: StashErrorTypes.TypeError);
 
-        byte[] keyBytes = ExtractKeyBytes(args[1], "crypto.encrypt");
+        byte[] keyBytes = ExtractKeyBytes(key, "crypto.encrypt");
 
         if (keyBytes.Length != 32)
             throw new RuntimeError($"'crypto.encrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.", errorType: StashErrorTypes.ValueError);
@@ -259,13 +256,13 @@ public static partial class CryptoBuiltIns
     /// <param name="key">The 32-byte (256-bit) decryption key as a hex string or byte[]</param>
     /// <param name="options">Reserved for future use (optional)</param>
     /// <returns>The decrypted plaintext string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Decrypt(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Decrypt(StashValue ciphertext, StashValue key, params StashValue[] rest)
     {
-        if (args.Length < 2 || args.Length > 3)
+        if (rest.Length > 1)
             throw new RuntimeError("'crypto.decrypt' expects 2 or 3 arguments.");
 
-        byte[] keyBytes = ExtractKeyBytes(args[1], "crypto.decrypt");
+        byte[] keyBytes = ExtractKeyBytes(key, "crypto.decrypt");
 
         if (keyBytes.Length != 32)
             throw new RuntimeError($"'crypto.decrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.", errorType: StashErrorTypes.ValueError);
@@ -274,8 +271,7 @@ public static partial class CryptoBuiltIns
         byte[] ivBytes;
         byte[] tagBytes;
 
-        StashValue ctArg = args[0];
-        if (ctArg.IsObj && ctArg.AsObj is StashDictionary ctDict)
+        if (ciphertext.IsObj && ciphertext.AsObj is StashDictionary ctDict)
         {
             StashValue ctVal = ctDict.Get("ciphertext");
             StashValue ivVal = ctDict.Get("iv");
@@ -292,7 +288,7 @@ public static partial class CryptoBuiltIns
             ivBytes = HexToBytes(ivHexField, "crypto.decrypt");
             tagBytes = HexToBytes(tagHexField, "crypto.decrypt");
         }
-        else if (ctArg.IsObj && ctArg.AsObj is string combinedHex)
+        else if (ciphertext.IsObj && ciphertext.AsObj is string combinedHex)
         {
             if (combinedHex.Length < 56)
                 throw new RuntimeError("'crypto.decrypt' combined hex string is too short (must encode at least iv + tag).", errorType: StashErrorTypes.ValueError);
@@ -316,7 +312,7 @@ public static partial class CryptoBuiltIns
             throw new RuntimeError("'crypto.decrypt' failed: authentication tag verification failed.", errorType: StashErrorTypes.ValueError);
         }
 
-        return StashValue.FromObj(Encoding.UTF8.GetString(plaintext));
+        return Encoding.UTF8.GetString(plaintext);
     }
 
     private static byte[] ExtractKeyBytes(StashValue keyArg, string funcName)

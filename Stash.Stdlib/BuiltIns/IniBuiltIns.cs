@@ -17,14 +17,12 @@ public static partial class IniBuiltIns
     /// <summary>Parses INI-formatted text into a dictionary. Sections become nested dictionaries.</summary>
     /// <param name="text">The INI text to parse</param>
     /// <returns>A dictionary representing the INI structure</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Parse(string text)
     {
-        var s = SvArgs.String(args, 0, "ini.parse");
-
         try
         {
-            return StashValue.FromObj(ParseIni(s));
+            return ParseIni(text);
         }
         catch (Exception e) when (e is not RuntimeError)
         {
@@ -35,12 +33,10 @@ public static partial class IniBuiltIns
     /// <summary>Converts a dictionary to INI-formatted text.</summary>
     /// <param name="data">The dictionary to serialize</param>
     /// <returns>The INI text representation</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Stringify(StashDictionary data)
     {
-        var dict = SvArgs.Dict(args, 0, "ini.stringify");
-
-        return StashValue.FromObj(StringifyIni(dict));
+        return StringifyIni(data);
     }
 
     /// <summary>Parses an INI-format string into a <see cref="StashDictionary"/>. Section headers create nested dictionaries.</summary>
