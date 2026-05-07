@@ -29,8 +29,8 @@ public static partial class PkgBuiltIns
 {
     /// <summary>Returns package metadata from the nearest stash.json manifest as a dict, or null if no manifest is found.</summary>
     /// <returns>A dict with fields such as name, version, description, author, license, dependencies, etc.</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Info(IInterpreterContext ctx, ReadOnlySpan<StashValue> _args)
+    [StashFn(ReturnType = "dict")]
+    private static StashValue Info(IInterpreterContext ctx)
     {
         string? projectRoot = FindProjectRoot(ctx);
         if (projectRoot == null)
@@ -136,8 +136,8 @@ public static partial class PkgBuiltIns
 
     /// <summary>Returns the version string from the nearest stash.json manifest, or null if not set.</summary>
     /// <returns>The version string, or null</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Version(IInterpreterContext ctx, ReadOnlySpan<StashValue> _args)
+    [StashFn(ReturnType = "string")]
+    private static StashValue Version(IInterpreterContext ctx)
     {
         string? projectRoot = FindProjectRoot(ctx);
         if (projectRoot == null)
@@ -151,8 +151,8 @@ public static partial class PkgBuiltIns
 
     /// <summary>Returns a dict of dependency name→version pairs from stash.lock (or stash.json if no lock file exists), or null if none are found.</summary>
     /// <returns>A dict mapping dependency name strings to their resolved version strings, or null</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Dependencies(IInterpreterContext ctx, ReadOnlySpan<StashValue> _args)
+    [StashFn(ReturnType = "dict")]
+    private static StashValue Dependencies(IInterpreterContext ctx)
     {
         string? projectRoot = FindProjectRoot(ctx);
         if (projectRoot == null)
@@ -187,8 +187,8 @@ public static partial class PkgBuiltIns
 
     /// <summary>Returns the root directory path of the current package (the directory containing stash.json), or null if not found.</summary>
     /// <returns>The absolute path to the package root, or null</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Root(IInterpreterContext ctx, ReadOnlySpan<StashValue> _args)
+    [StashFn(ReturnType = "string")]
+    private static StashValue Root(IInterpreterContext ctx)
     {
         string? root = FindProjectRoot(ctx);
         return root is not null ? StashValue.FromObj(root) : StashValue.Null;

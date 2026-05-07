@@ -49,17 +49,13 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to send the GET request to</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Get(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Get(IInterpreterContext ctx, string url, params StashValue[] options)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'http.get' requires 1 or 2 arguments.");
-        var url = SvArgs.String(args, 0, "http.get");
-
         ValidateUrl(url, "http.get");
 
         var request = new HttpRequestMessage(HttpMethod.Get, url);
-        var timeout = ApplyOptions(request, args, 1, "http.get");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.get");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -70,7 +66,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.get: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.get: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -83,21 +79,16 @@ public static partial class HttpBuiltIns
     /// <param name="body">The request body string (typically JSON)</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Post(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Post(IInterpreterContext ctx, string url, string body, params StashValue[] options)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'http.post' requires 2 or 3 arguments.");
-        var url = SvArgs.String(args, 0, "http.post");
-        var body = SvArgs.String(args, 1, "http.post");
-
         ValidateUrl(url, "http.post");
 
         var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
         };
-        var timeout = ApplyOptions(request, args, 2, "http.post");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.post");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -108,7 +99,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.post: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.post: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -121,21 +112,16 @@ public static partial class HttpBuiltIns
     /// <param name="body">The request body string (typically JSON)</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Put(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Put(IInterpreterContext ctx, string url, string body, params StashValue[] options)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'http.put' requires 2 or 3 arguments.");
-        var url = SvArgs.String(args, 0, "http.put");
-        var body = SvArgs.String(args, 1, "http.put");
-
         ValidateUrl(url, "http.put");
 
         var request = new HttpRequestMessage(HttpMethod.Put, url)
         {
             Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
         };
-        var timeout = ApplyOptions(request, args, 2, "http.put");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.put");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -146,7 +132,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.put: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.put: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -158,17 +144,13 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to send the DELETE request to</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Delete(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Delete(IInterpreterContext ctx, string url, params StashValue[] options)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'http.delete' requires 1 or 2 arguments.");
-        var url = SvArgs.String(args, 0, "http.delete");
-
         ValidateUrl(url, "http.delete");
 
         var request = new HttpRequestMessage(HttpMethod.Delete, url);
-        var timeout = ApplyOptions(request, args, 1, "http.delete");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.delete");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -179,7 +161,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.delete: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.delete: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -191,17 +173,13 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to request</param>
     /// <param name="options">Optional request options (headers, timeout)</param>
     /// <returns>HttpResponse with status, headers, and empty body</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Head(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Head(IInterpreterContext ctx, string url, params StashValue[] options)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'http.head' requires 1 or 2 arguments.");
-        var url = SvArgs.String(args, 0, "http.head");
-
         ValidateUrl(url, "http.head");
 
         var request = new HttpRequestMessage(HttpMethod.Head, url);
-        var timeout = ApplyOptions(request, args, 1, "http.head");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.head");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -212,7 +190,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.head: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.head: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -223,11 +201,9 @@ public static partial class HttpBuiltIns
     /// <summary>Sends a custom HTTP request. The options dict must include 'url' (string) and optionally 'method' (string, default GET), 'headers' (dict), and 'body' (string). Returns an HttpResponse struct with status, body, and headers fields.</summary>
     /// <param name="options">A dict with request options: url, method, headers, body</param>
     /// <returns>An HttpResponse struct with status, body, and headers</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Request(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Request(IInterpreterContext ctx, StashDictionary options)
     {
-        var options = SvArgs.Dict(args, 0, "http.request");
-
         var urlVal = options.Get("url").ToObject();
         if (urlVal is not string url)
         {
@@ -265,7 +241,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.request: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.request: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -278,21 +254,16 @@ public static partial class HttpBuiltIns
     /// <param name="body">The request body string (typically JSON)</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
-    [StashFn(Raw = true, ReturnType = "HttpResponse")]
-    private static StashValue Patch(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "HttpResponse")]
+    private static StashValue Patch(IInterpreterContext ctx, string url, string body, params StashValue[] options)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'http.patch' requires 2 or 3 arguments.");
-        var url = SvArgs.String(args, 0, "http.patch");
-        var body = SvArgs.String(args, 1, "http.patch");
-
         ValidateUrl(url, "http.patch");
 
         var request = new HttpRequestMessage(HttpMethod.Patch, url)
         {
             Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
         };
-        var timeout = ApplyOptions(request, args, 2, "http.patch");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.patch");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -303,7 +274,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.patch: request failed \u2014 " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new RuntimeError("http.patch: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
         }
         catch (TaskCanceledException)
         {
@@ -316,19 +287,14 @@ public static partial class HttpBuiltIns
     /// <param name="path">The local file path to write the downloaded content to</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Download(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Download(IInterpreterContext ctx, string url, string path, params StashValue[] options)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'http.download' requires 2 or 3 arguments.");
-        var url = SvArgs.String(args, 0, "http.download");
-        var path = SvArgs.String(args, 1, "http.download");
-
         ValidateUrl(url, "http.download");
         path = ctx.ExpandTilde(path);
 
         var request = new HttpRequestMessage(HttpMethod.Get, url);
-        var timeout = ApplyOptions(request, args, 2, "http.download");
+        var timeout = ApplyOptionsValue(request, options.Length > 0 ? options[0] : StashValue.Null, "http.download");
         using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
         var requestCt = cts?.Token ?? ctx.CancellationToken;
 
@@ -342,7 +308,7 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.download: request failed \u2014 " + e.Message);
+            throw new RuntimeError("http.download: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
@@ -353,18 +319,18 @@ public static partial class HttpBuiltIns
             try { System.IO.File.Delete(path); } catch { }
             throw new RuntimeError($"http.download: cannot write file '{path}': {e.Message}");
         }
-        return StashValue.Null;
     }
 
     /// <summary>
-    /// Extracts the optional <c>options</c> dict from <paramref name="args"/> at <paramref name="optionsIndex"/>,
+    /// Extracts an optional <c>options</c> dict from a single <see cref="StashValue"/>,
     /// applies any <c>headers</c> to the request message, and returns the requested timeout if provided.
     /// </summary>
-    private static TimeSpan? ApplyOptions(HttpRequestMessage request, ReadOnlySpan<StashValue> args, int optionsIndex, string funcName)
+    private static TimeSpan? ApplyOptionsValue(HttpRequestMessage request, StashValue optionsVal, string funcName)
     {
-        if (args.Length <= optionsIndex) return null;
+        if (optionsVal.IsNull) return null;
 
-        var options = SvArgs.Dict(args, optionsIndex, funcName);
+        if (optionsVal.ToObject() is not StashDictionary options)
+            throw new RuntimeError($"{funcName}: options must be a dict.", errorType: StashErrorTypes.TypeError);
 
         var headersVal = options.Get("headers").ToObject();
         if (headersVal is StashDictionary headersDict)

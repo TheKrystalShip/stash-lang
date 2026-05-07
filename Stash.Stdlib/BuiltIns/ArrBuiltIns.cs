@@ -18,6 +18,9 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to modify</param>
     /// <param name="value">The value to append</param>
     /// <returns>null</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // SvArgs.StashList materializes typed arrays into a new list, so mutations would not
+    // affect the original. The typed-array fast-path must execute before any materialization.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Push(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -34,6 +37,8 @@ public static partial class ArrBuiltIns
     /// <summary>Removes and returns the last element of the array. Throws if empty.</summary>
     /// <param name="array">The array to pop from</param>
     /// <returns>The removed last element</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "any")]
     private static StashValue Pop(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -55,13 +60,12 @@ public static partial class ArrBuiltIns
     /// <summary>Returns the last element without removing it. Throws if empty.</summary>
     /// <param name="array">The array to peek</param>
     /// <returns>The last element</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Peek(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Peek(IInterpreterContext ctx, List<StashValue> array)
     {
-        var list = SvArgs.StashList(args, 0, "arr.peek");
-        if (list.Count == 0)
+        if (array.Count == 0)
             throw new RuntimeError("Cannot peek an empty array.", errorType: StashErrorTypes.ValueError);
-        return list[list.Count - 1];
+        return array[array.Count - 1];
     }
 
     /// <summary>Inserts a value at the specified index. Supports negative indexing for typed arrays.</summary>
@@ -69,6 +73,8 @@ public static partial class ArrBuiltIns
     /// <param name="index">The position to insert at</param>
     /// <param name="value">The value to insert</param>
     /// <returns>null</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Insert(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -93,6 +99,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to modify</param>
     /// <param name="index">The index of the element to remove</param>
     /// <returns>The removed element</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "any")]
     private static StashValue RemoveAt(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -118,6 +126,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to modify</param>
     /// <param name="value">The value to remove</param>
     /// <returns>true if the value was found and removed, false otherwise</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "bool")]
     private static StashValue Remove(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -151,6 +161,8 @@ public static partial class ArrBuiltIns
     /// <summary>Removes all elements from the array. Mutates the original array.</summary>
     /// <param name="array">The array to clear</param>
     /// <returns>null</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Clear(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -168,17 +180,16 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to search</param>
     /// <param name="value">The value to look for</param>
     /// <returns>true if the value exists in the array, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Contains(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Contains(IInterpreterContext ctx, List<StashValue> array, StashValue value)
     {
-        var list = SvArgs.StashList(args, 0, "arr.contains");
-        var value = args[1].ToObject();
-        foreach (var item in list)
+        var target = value.ToObject();
+        foreach (var item in array)
         {
-            if (RuntimeValues.IsEqual(item.ToObject(), value))
-                return StashValue.True;
+            if (RuntimeValues.IsEqual(item.ToObject(), target))
+                return true;
         }
-        return StashValue.False;
+        return false;
     }
 
     /// <summary>Returns true if the array contains the given value. Optional startIndex (default 0) sets the starting search position.</summary>
@@ -186,21 +197,18 @@ public static partial class ArrBuiltIns
     /// <param name="value">The value to look for</param>
     /// <param name="startIndex">The index to start searching from (default 0; negative counts from end)</param>
     /// <returns>true if the value is found at or after startIndex, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Includes(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Includes(IInterpreterContext ctx, List<StashValue> array, StashValue value, long startIndex = 0)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'arr.includes' requires 2 or 3 arguments.");
-        var list = SvArgs.StashList(args, 0, "arr.includes");
-        var value = args[1].ToObject();
-        int start = args.Length == 3 ? (int)SvArgs.Long(args, 2, "arr.includes") : 0;
-        if (start < 0) start = Math.Max(0, list.Count + start);
-        for (int i = start; i < list.Count; i++)
+        int start = (int)startIndex;
+        if (start < 0) start = Math.Max(0, array.Count + start);
+        var target = value.ToObject();
+        for (int i = start; i < array.Count; i++)
         {
-            if (RuntimeValues.IsEqual(list[i].ToObject(), value))
-                return StashValue.True;
+            if (RuntimeValues.IsEqual(array[i].ToObject(), target))
+                return true;
         }
-        return StashValue.False;
+        return false;
     }
 
     /// <summary>Returns the index of the first occurrence of value in the array. Optional startIndex (default 0) sets the starting search position. Returns -1 if not found.</summary>
@@ -208,21 +216,18 @@ public static partial class ArrBuiltIns
     /// <param name="value">The value to look for</param>
     /// <param name="startIndex">The index to start searching from (default 0; negative counts from end)</param>
     /// <returns>The index of the first match at or after startIndex, or -1 if not found</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue IndexOf(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "int")]
+    private static long IndexOf(IInterpreterContext ctx, List<StashValue> array, StashValue value, long startIndex = 0)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'arr.indexOf' requires 2 or 3 arguments.");
-        var list = SvArgs.StashList(args, 0, "arr.indexOf");
-        var value = args[1].ToObject();
-        int start = args.Length == 3 ? (int)SvArgs.Long(args, 2, "arr.indexOf") : 0;
-        if (start < 0) start = Math.Max(0, list.Count + start);
-        for (int i = start; i < list.Count; i++)
+        int start = (int)startIndex;
+        if (start < 0) start = Math.Max(0, array.Count + start);
+        var target = value.ToObject();
+        for (int i = start; i < array.Count; i++)
         {
-            if (RuntimeValues.IsEqual(list[i].ToObject(), value))
-                return StashValue.FromInt((long)i);
+            if (RuntimeValues.IsEqual(array[i].ToObject(), target))
+                return (long)i;
         }
-        return StashValue.FromInt(-1L);
+        return -1L;
     }
 
     /// <summary>Returns the index of the last occurrence of value in the array, searching backwards from the end (or from startIndex if provided). Returns -1 if not found.</summary>
@@ -230,6 +235,8 @@ public static partial class ArrBuiltIns
     /// <param name="value">The value to look for</param>
     /// <param name="startIndex">The index to start searching backwards from (default is last element; negative counts from end)</param>
     /// <returns>The index of the last match, or -1 if not found</returns>
+    // Raw = true: the default for startIndex depends on the array length (list.Count - 1),
+    // which cannot be expressed as a C# constant default value.
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue LastIndexOf(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -253,6 +260,9 @@ public static partial class ArrBuiltIns
     /// <param name="start">The start index (inclusive)</param>
     /// <param name="end">The end index (exclusive)</param>
     /// <returns>A new array with the specified range of elements</returns>
+    // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
+    // returned array. The typed form would receive a materialized List<StashValue> and
+    // the element type information would be lost.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Slice(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -273,6 +283,8 @@ public static partial class ArrBuiltIns
     /// <param name="a">The first array</param>
     /// <param name="b">The second array</param>
     /// <returns>A new array containing all elements from a followed by all elements from b</returns>
+    // Raw = true: inspects both args[0] and args[1] for StashTypedArray to preserve element
+    // type in the returned array when both inputs share the same type.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Concat(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -292,22 +304,20 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array whose elements to join</param>
     /// <param name="separator">The string to place between elements (default ",")</param>
     /// <returns>A string of all elements concatenated with the separator</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Join(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Join(IInterpreterContext ctx, List<StashValue> array, string separator = ",")
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'arr.join' requires 1 or 2 arguments.");
-        var list = SvArgs.StashList(args, 0, "arr.join");
-        string sep = args.Length == 2 ? SvArgs.String(args, 1, "arr.join") : ",";
-        var parts = new string[list.Count];
-        for (int i = 0; i < list.Count; i++)
-            parts[i] = RuntimeValues.Stringify(list[i].ToObject());
-        return StashValue.FromObj(string.Join(sep, parts));
+        var parts = new string[array.Count];
+        for (int i = 0; i < array.Count; i++)
+            parts[i] = RuntimeValues.Stringify(array[i].ToObject());
+        return string.Join(separator, parts);
     }
 
     /// <summary>Reverses the array in place. Mutates the original array.</summary>
     /// <param name="array">The array to reverse</param>
     /// <returns>null</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Reverse(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -330,6 +340,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to sort in place</param>
     /// <param name="comparator">A function(a, b) returning negative, zero, or positive to define sort order</param>
     /// <returns>null (the array is sorted in place)</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically,
+    // and has an optional callable parameter. See Push comment above.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Sort(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -415,24 +427,25 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its transformed value</param>
     /// <returns>A new array of transformed elements</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Map(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Map(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.map");
-        var fn = SvArgs.Callable(args, 1, "arr.map");
-        var result = new List<StashValue>(list.Count);
-        foreach (StashValue item in list)
+        var result = new List<StashValue>(array.Count);
+        foreach (StashValue item in array)
         {
             StashValue mapped = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
             result.Add(mapped);
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns a new array containing only elements for which fn returns truthy.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>A new array of elements where fn returned truthy</returns>
+    // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
+    // returned array. The typed form would receive a materialized List<StashValue> and
+    // the element type information would be lost.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Filter(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -456,22 +469,22 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to iterate</param>
     /// <param name="fn">A function that receives each element</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue ForEach(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void ForEach(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.forEach");
-        var fn = SvArgs.Callable(args, 1, "arr.forEach");
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
         }
-        return StashValue.Null;
     }
 
     /// <summary>Like map, but executes the function in parallel across elements.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its transformed value</param>
     /// <returns>A new array of transformed elements</returns>
+    // Raw = true: passes raw args span to ExecuteParMap which also reads optional
+    // maxConcurrency from args[2]. The variadic handling doesn't map cleanly to the
+    // typed form's params StashValue[] (which would shift the index).
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue ParMap(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -484,6 +497,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>A new array of elements where fn returned truthy</returns>
+    // Raw = true: passes raw args span to ExecuteParFilter which also reads optional
+    // maxConcurrency from args[2]. See ParMap comment above.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue ParFilter(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -496,6 +511,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to iterate</param>
     /// <param name="fn">A function that receives each element</param>
     /// <returns>null</returns>
+    // Raw = true: passes raw args span to ExecuteParForEach which also reads optional
+    // maxConcurrency from args[2]. See ParMap comment above.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue ParForEach(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -508,12 +525,10 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to search</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>The first matching element, or null</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Find(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Find(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.find");
-        var fn = SvArgs.Callable(args, 1, "arr.find");
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
             {
@@ -528,13 +543,11 @@ public static partial class ArrBuiltIns
     /// <param name="fn">A function that receives the accumulator and current element, and returns the new accumulator</param>
     /// <param name="initial">The initial accumulator value</param>
     /// <returns>The final accumulated value</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Reduce(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Reduce(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn, StashValue initial)
     {
-        var list = SvArgs.StashList(args, 0, "arr.reduce");
-        var fn = SvArgs.Callable(args, 1, "arr.reduce");
-        StashValue accumulator = args[2];
-        foreach (StashValue item in list)
+        StashValue accumulator = initial;
+        foreach (StashValue item in array)
         {
             accumulator = ctx.InvokeCallbackDirect(fn, new StashValue[] { accumulator, item });
         }
@@ -545,6 +558,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns the key used for uniqueness comparison</param>
     /// <returns>A new array with duplicate elements removed</returns>
+    // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
+    // returned array, and has an optional callable parameter.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Unique(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -601,67 +616,57 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to test</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>true if any element satisfies the predicate, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Any(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Any(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.any");
-        var fn = SvArgs.Callable(args, 1, "arr.any");
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
             {
-                return StashValue.True;
+                return true;
             }
         }
-        return StashValue.False;
+        return false;
     }
 
     /// <summary>Returns true if fn returns truthy for every element.</summary>
     /// <param name="array">The array to test</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>true if all elements satisfy the predicate, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Every(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Every(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.every");
-        var fn = SvArgs.Callable(args, 1, "arr.every");
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             if (!RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
             {
-                return StashValue.False;
+                return false;
             }
         }
-        return StashValue.True;
+        return true;
     }
 
     /// <summary>Returns a new array with nested arrays flattened. Optional depth (default 1) controls how many levels to flatten; use -1 to flatten completely.</summary>
     /// <param name="array">The source array containing potentially nested arrays</param>
     /// <param name="depth">How many levels of nesting to flatten (default 1; use -1 for full recursion)</param>
     /// <returns>A new array with nested arrays flattened to the specified depth</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Flat(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Flat(IInterpreterContext ctx, List<StashValue> array, long depth = 1)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'arr.flat' requires 1 or 2 arguments.");
-        var list = SvArgs.StashList(args, 0, "arr.flat");
-        int depth = args.Length == 2 ? (int)SvArgs.Long(args, 1, "arr.flat") : 1;
         var result = new List<StashValue>();
-        FlattenInto(list, result, depth);
-        return StashValue.FromObj(result);
+        FlattenInto(array, result, (int)depth);
+        return result;
     }
 
     /// <summary>Maps each element with fn, then flattens one level if the result is an array.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns a value or array</param>
     /// <returns>A new flattened array of mapped elements</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue FlatMap(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> FlatMap(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.flatMap");
-        var fn = SvArgs.Callable(args, 1, "arr.flatMap");
         var result = new List<StashValue>();
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             StashValue mapped = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
             if (mapped.ToObject() is List<StashValue> svInner)
@@ -673,52 +678,51 @@ public static partial class ArrBuiltIns
                 result.Add(mapped);
             }
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns the index of the first element for which fn returns truthy, or -1 if none found.</summary>
     /// <param name="array">The array to search</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>The index of the first matching element, or -1</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue FindIndex(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "int")]
+    private static long FindIndex(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.findIndex");
-        var fn = SvArgs.Callable(args, 1, "arr.findIndex");
-        for (int i = 0; i < list.Count; i++)
+        for (int i = 0; i < array.Count; i++)
         {
-            if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { list[i] }).ToObject()))
+            if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { array[i] }).ToObject()))
             {
-                return StashValue.FromInt(i);
+                return (long)i;
             }
         }
-        return StashValue.FromInt(-1);
+        return -1L;
     }
 
     /// <summary>Returns the number of elements for which fn returns truthy.</summary>
     /// <param name="array">The array to count</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>The count of elements satisfying the predicate</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Count(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "int")]
+    private static long Count(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.count");
-        var fn = SvArgs.Callable(args, 1, "arr.count");
         long count = 0;
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
             {
                 count++;
             }
         }
-        return StashValue.FromInt(count);
+        return count;
     }
 
     /// <summary>Returns a new array sorted by the key returned by fn.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its sort key</param>
     /// <returns>A new sorted array</returns>
+    // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
+    // returned array. The typed form would receive a materialized List<StashValue> and
+    // the element type information would be lost.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue SortBy(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -748,13 +752,11 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its group key</param>
     /// <returns>A dictionary mapping keys to arrays of elements with that key</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue GroupBy(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary GroupBy(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.groupBy");
-        var fn = SvArgs.Callable(args, 1, "arr.groupBy");
         var result = new StashDictionary();
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             var key = RuntimeValues.Stringify(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject());
             var existing = result.Get(key);
@@ -767,20 +769,19 @@ public static partial class ArrBuiltIns
                 result.Set(key, StashValue.FromObj(new List<StashValue> { item }));
             }
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns the sum of all elements. All elements must be numbers.</summary>
     /// <param name="array">The array of numbers to sum</param>
     /// <returns>The sum of all elements</returns>
-    [StashFn(Raw = true, ReturnType = "number")]
-    private static StashValue Sum(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "number")]
+    private static StashValue Sum(IInterpreterContext ctx, List<StashValue> array)
     {
-        var list = SvArgs.StashList(args, 0, "arr.sum");
         long longTotal = 0;
         double doubleTotal = 0;
         bool hasFloat = false;
-        foreach (var item in list)
+        foreach (var item in array)
         {
             var v = item.ToObject();
             if (v is long l) longTotal += l;
@@ -793,15 +794,14 @@ public static partial class ArrBuiltIns
     /// <summary>Returns the smallest element. All elements must be numbers. Array must not be empty.</summary>
     /// <param name="array">The array of numbers</param>
     /// <returns>The smallest element</returns>
-    [StashFn(Raw = true, ReturnType = "number")]
-    private static StashValue Min(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "number")]
+    private static StashValue Min(IInterpreterContext ctx, List<StashValue> array)
     {
-        var list = SvArgs.StashList(args, 0, "arr.min");
-        if (list.Count == 0)
+        if (array.Count == 0)
             throw new RuntimeError("'arr.min' requires a non-empty array.", errorType: StashErrorTypes.ValueError);
         double min = double.MaxValue;
         bool hasFloat = false;
-        foreach (var item in list)
+        foreach (var item in array)
         {
             var v = item.ToObject();
             if (v is long l) { if (l < min) min = l; }
@@ -814,15 +814,14 @@ public static partial class ArrBuiltIns
     /// <summary>Returns the largest element. All elements must be numbers. Array must not be empty.</summary>
     /// <param name="array">The array of numbers</param>
     /// <returns>The largest element</returns>
-    [StashFn(Raw = true, ReturnType = "number")]
-    private static StashValue Max(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "number")]
+    private static StashValue Max(IInterpreterContext ctx, List<StashValue> array)
     {
-        var list = SvArgs.StashList(args, 0, "arr.max");
-        if (list.Count == 0)
+        if (array.Count == 0)
             throw new RuntimeError("'arr.max' requires a non-empty array.", errorType: StashErrorTypes.ValueError);
         double max = double.MinValue;
         bool hasFloat = false;
-        foreach (var item in list)
+        foreach (var item in array)
         {
             var v = item.ToObject();
             if (v is long l) { if (l > max) max = l; }
@@ -836,41 +835,39 @@ public static partial class ArrBuiltIns
     /// <param name="a">The first array</param>
     /// <param name="b">The second array</param>
     /// <returns>A new array of two-element pairs</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Zip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Zip(IInterpreterContext ctx, List<StashValue> a, List<StashValue> b)
     {
-        var a = SvArgs.StashList(args, 0, "arr.zip");
-        var b = SvArgs.StashList(args, 1, "arr.zip");
         int len = Math.Min(a.Count, b.Count);
         var result = new List<StashValue>(len);
         for (int i = 0; i < len; i++)
             result.Add(StashValue.FromObj(new List<StashValue> { a[i], b[i] }));
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Splits the array into sub-arrays of the given size.</summary>
     /// <param name="array">The source array</param>
     /// <param name="size">The maximum size of each chunk</param>
     /// <returns>A new array of chunk arrays</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Chunk(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Chunk(IInterpreterContext ctx, List<StashValue> array, long size)
     {
-        var list = SvArgs.StashList(args, 0, "arr.chunk");
-        var size = SvArgs.Long(args, 1, "arr.chunk");
         if (size <= 0)
             throw new RuntimeError("'arr.chunk' size must be > 0.", errorType: StashErrorTypes.ValueError);
         var result = new List<StashValue>();
-        for (int i = 0; i < list.Count; i += (int)size)
+        for (int i = 0; i < array.Count; i += (int)size)
         {
-            int chunkSize = Math.Min((int)size, list.Count - i);
-            result.Add(StashValue.FromObj(list.GetRange(i, chunkSize)));
+            int chunkSize = Math.Min((int)size, array.Count - i);
+            result.Add(StashValue.FromObj(array.GetRange(i, chunkSize)));
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Randomly reorders the array in place using Fisher-Yates. Mutates the original array.</summary>
     /// <param name="array">The array to shuffle</param>
     /// <returns>null</returns>
+    // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically.
+    // See Push comment above.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Shuffle(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -901,6 +898,9 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="n">The number of elements to take</param>
     /// <returns>A new array containing the first n elements</returns>
+    // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
+    // returned array. The typed form would receive a materialized List<StashValue> and
+    // the element type information would be lost.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Take(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -918,6 +918,9 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="n">The number of elements to skip</param>
     /// <returns>A new array with the first n elements omitted</returns>
+    // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
+    // returned array. The typed form would receive a materialized List<StashValue> and
+    // the element type information would be lost.
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Drop(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -935,14 +938,12 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="fn">A predicate function that receives each element</param>
     /// <returns>A two-element array: [matching, nonMatching]</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Partition(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Partition(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var list = SvArgs.StashList(args, 0, "arr.partition");
-        var fn = SvArgs.Callable(args, 1, "arr.partition");
         var matching = new List<StashValue>();
         var nonMatching = new List<StashValue>();
-        foreach (StashValue item in list)
+        foreach (StashValue item in array)
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
             {
@@ -953,18 +954,16 @@ public static partial class ArrBuiltIns
                 nonMatching.Add(item);
             }
         }
-        return StashValue.FromObj(new List<StashValue> { StashValue.FromObj(matching), StashValue.FromObj(nonMatching) });
+        return new List<StashValue> { StashValue.FromObj(matching), StashValue.FromObj(nonMatching) };
     }
 
     /// <summary>Creates a typed array from a generic array. Validates all elements match the specified type.</summary>
     /// <param name="source">The source array to convert</param>
     /// <param name="elementType">The element type: "int", "float", "string", or "bool"</param>
     /// <returns>A new typed array</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Typed(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static StashValue Typed(IInterpreterContext ctx, List<StashValue> source, string elementType)
     {
-        List<StashValue> source = SvArgs.StashList(args, 0, "arr.typed");
-        string elementType = SvArgs.String(args, 1, "arr.typed");
         StashTypedArray result = StashTypedArray.Create(elementType, source);
         return StashValue.FromObj(result);
     }
@@ -972,6 +971,8 @@ public static partial class ArrBuiltIns
     /// <summary>Converts a typed array to a generic array.</summary>
     /// <param name="source">The typed array to convert</param>
     /// <returns>A new generic array with the same elements</returns>
+    // Raw = true: requires SvArgs.TypedArray extraction which is not in the typed parameter
+    // type table. The function only accepts typed arrays (not plain lists).
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue Untyped(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -985,6 +986,8 @@ public static partial class ArrBuiltIns
     /// <summary>Returns the element type name of a typed array, or null for generic arrays.</summary>
     /// <param name="source">The array to inspect</param>
     /// <returns>The element type ("int", "float", "string", "bool") or null</returns>
+    // Raw = true: accepts both typed and generic arrays, returning null for generic arrays.
+    // The typed form would require StashValue passthrough and identical body logic.
     [StashFn(Raw = true, ReturnType = "string")]
     private static StashValue ElementType(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -998,11 +1001,9 @@ public static partial class ArrBuiltIns
     /// <param name="elementType">The element type: "int", "float", "string", or "bool"</param>
     /// <param name="size">The number of elements (zero-initialized)</param>
     /// <returns>A new typed array</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Create(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static StashValue Create(IInterpreterContext ctx, string elementType, long size)
     {
-        string elementType = SvArgs.String(args, 0, "arr.create");
-        long size = SvArgs.Long(args, 1, "arr.create");
         if (size < 0) throw new RuntimeError("Array size cannot be negative.", errorType: StashErrorTypes.ValueError);
         StashTypedArray result = StashTypedArray.CreateWithCapacity(elementType, (int)size);
         return StashValue.FromObj(result);
@@ -1012,12 +1013,10 @@ public static partial class ArrBuiltIns
     /// <param name="elementType">The element type: "int", "float", "string", or "bool"</param>
     /// <param name="size">The number of elements (zero-initialized)</param>
     /// <returns>A new typed array</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
+    [StashFn(ReturnType = "array")]
     [StashDeprecated("arr.create")]
-    private static StashValue New(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    private static StashValue New(IInterpreterContext ctx, string elementType, long size)
     {
-        string elementType = SvArgs.String(args, 0, "arr.new");
-        long size = SvArgs.Long(args, 1, "arr.new");
         if (size < 0) throw new RuntimeError("Array size cannot be negative.", errorType: StashErrorTypes.ValueError);
         StashTypedArray result = StashTypedArray.CreateWithCapacity(elementType, (int)size);
         return StashValue.FromObj(result);

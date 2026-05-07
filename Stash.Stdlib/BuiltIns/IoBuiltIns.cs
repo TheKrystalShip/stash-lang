@@ -13,62 +13,58 @@ using Stash.Stdlib.Abstractions;
 public static partial class IoBuiltIns
 {
     /// <summary>Prints a value followed by a newline to standard output.</summary>
-    /// <param name="value">The value to print</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Println(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    /// <param name="rest">The optional value to print</param>
+    [StashFn(ReturnType = "null")]
+    private static void Println(IInterpreterContext ctx, params StashValue[] rest)
     {
-        if (args.Length > 1)
+        if (rest.Length > 1)
             throw new RuntimeError("'io.println' expects 0 or 1 arguments.");
-        string text = args.Length == 1 ? RuntimeValues.Stringify(args[0].ToObject()) : "";
+        string text = rest.Length == 1 ? RuntimeValues.Stringify(rest[0].ToObject()) : "";
         ctx.Output.WriteLine(text);
         ctx.NotifyOutput("stdout", text + "\n");
-        return StashValue.Null;
     }
 
     /// <summary>Prints a value to standard output without a trailing newline.</summary>
     /// <param name="value">The value to print</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Print(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Print(IInterpreterContext ctx, StashValue value)
     {
-        string text = RuntimeValues.Stringify(args[0].ToObject());
+        string text = RuntimeValues.Stringify(value.ToObject());
         ctx.Output.Write(text);
         ctx.NotifyOutput("stdout", text);
-        return StashValue.Null;
     }
 
     /// <summary>Prints a value followed by a newline to standard error.</summary>
     /// <param name="value">The value to print</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Eprintln(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Eprintln(IInterpreterContext ctx, StashValue value)
     {
-        string text = RuntimeValues.Stringify(args[0].ToObject());
+        string text = RuntimeValues.Stringify(value.ToObject());
         ctx.ErrorOutput.WriteLine(text);
         ctx.NotifyOutput("stderr", text + "\n");
-        return StashValue.Null;
     }
 
     /// <summary>Prints a value to standard error without a trailing newline.</summary>
     /// <param name="value">The value to print</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Eprint(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Eprint(IInterpreterContext ctx, StashValue value)
     {
-        string text = RuntimeValues.Stringify(args[0].ToObject());
+        string text = RuntimeValues.Stringify(value.ToObject());
         ctx.ErrorOutput.Write(text);
         ctx.NotifyOutput("stderr", text);
-        return StashValue.Null;
     }
 
     /// <summary>Displays a prompt and reads a line of input from the user.</summary>
-    /// <param name="prompt">Optional prompt text to display before reading input</param>
+    /// <param name="rest">Optional prompt text to display before reading input</param>
     /// <returns>The line of text entered by the user, or null on end of input</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue ReadLine(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static StashValue ReadLine(IInterpreterContext ctx, params StashValue[] rest)
     {
-        if (args.Length > 1)
+        if (rest.Length > 1)
             throw new RuntimeError("'io.readLine' expects 0 or 1 arguments.");
-        if (args.Length == 1)
+        if (rest.Length == 1)
         {
-            string prompt = RuntimeValues.Stringify(args[0].ToObject());
+            string prompt = RuntimeValues.Stringify(rest[0].ToObject());
             ctx.Output.Write(prompt);
         }
         var result = ctx.Input.ReadLine();
@@ -77,45 +73,45 @@ public static partial class IoBuiltIns
 
     /// <summary>Prompts the user for a yes/no confirmation.</summary>
     /// <param name="prompt">The prompt text to display</param>
-    /// <param name="default">Optional default value: true shows [Y/n] (Enter = yes), false shows [y/N] (Enter = no)</param>
+    /// <param name="rest">Optional default value: true shows [Y/n] (Enter = yes), false shows [y/N] (Enter = no)</param>
     /// <returns>true if the user answered yes, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Confirm(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Confirm(IInterpreterContext ctx, StashValue prompt, params StashValue[] rest)
     {
-        if (args.Length < 1 || args.Length > 2)
+        if (rest.Length > 1)
             throw new RuntimeError("'io.confirm' requires 1 or 2 arguments.");
-        string prompt = RuntimeValues.Stringify(args[0].ToObject());
+        string promptText = RuntimeValues.Stringify(prompt.ToObject());
         bool? defaultValue = null;
-        if (args.Length == 2)
-            defaultValue = SvArgs.Bool(args, 1, "io.confirm");
+        if (rest.Length == 1)
+            defaultValue = SvArgs.Bool(new[] { rest[0] }, 0, "io.confirm");
         string hint = defaultValue switch
         {
             true  => "[Y/n]",
             false => "[y/N]",
             null  => "[y/N]"
         };
-        ctx.Output.Write(prompt + " " + hint + " ");
+        ctx.Output.Write(promptText + " " + hint + " ");
         ctx.Output.Flush();
         string? response = ctx.Input.ReadLine();
         if (response == null)
-            return StashValue.FromBool(defaultValue ?? false);
+            return defaultValue ?? false;
         response = response.Trim().ToLowerInvariant();
         if (response == "")
-            return StashValue.FromBool(defaultValue ?? false);
-        return StashValue.FromBool(response == "y" || response == "yes");
+            return defaultValue ?? false;
+        return response == "y" || response == "yes";
     }
 
     /// <summary>Reads a password from stdin without echoing typed characters. Returns a secret.</summary>
-    /// <param name="prompt">Optional prompt text to display before reading</param>
+    /// <param name="rest">Optional prompt text to display before reading</param>
     /// <returns>The entered password wrapped in a secret value</returns>
-    [StashFn(Raw = true, ReturnType = "secret")]
-    private static StashValue ReadPassword(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "secret")]
+    private static StashValue ReadPassword(IInterpreterContext ctx, params StashValue[] rest)
     {
-        if (args.Length > 1)
+        if (rest.Length > 1)
             throw new RuntimeError("'io.readPassword' expects 0 or 1 arguments.");
-        if (args.Length == 1 && !args[0].IsNull)
+        if (rest.Length == 1 && !rest[0].IsNull)
         {
-            string prompt = SvArgs.String(args, 0, "io.readPassword");
+            string prompt = SvArgs.String(new[] { rest[0] }, 0, "io.readPassword");
             ctx.Output.Write(prompt);
             ctx.NotifyOutput("stdout", prompt);
         }

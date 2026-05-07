@@ -176,28 +176,22 @@ public static partial class FsBuiltIns
     /// <summary>Reads the entire contents of a file as a string. Throws on I/O error.</summary>
     /// <param name="path">The file path to read.</param>
     /// <param name="encoding">Optional encoding name (default "utf-8"). Supported: "utf-8", "ascii", "latin1", "utf-16", "utf-32".</param>
-    [StashFn(Raw = true)]
-    private static StashValue ReadFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string ReadFile(IInterpreterContext ctx, string path, string? encoding = null)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'fs.readFile' requires 1 or 2 arguments.");
-        var path = SvArgs.String(args, 0, "fs.readFile");
         path = ctx.ExpandTilde(path);
-        var enc = Encoding.UTF8;
-        if (args.Length == 2)
+        var enc = encoding switch
         {
-            enc = SvArgs.String(args, 1, "fs.readFile") switch
-            {
-                "utf-8"   => Encoding.UTF8,
-                "ascii"   => Encoding.ASCII,
-                "latin1"  => Encoding.Latin1,
-                "utf-16"  => Encoding.Unicode,
-                "utf-32"  => Encoding.UTF32,
-                var e     => throw new RuntimeError($"fs.readFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".", errorType: StashErrorTypes.ValueError),
-            };
-        }
+            null      => Encoding.UTF8,
+            "utf-8"   => Encoding.UTF8,
+            "ascii"   => Encoding.ASCII,
+            "latin1"  => Encoding.Latin1,
+            "utf-16"  => Encoding.Unicode,
+            "utf-32"  => Encoding.UTF32,
+            var e     => throw new RuntimeError($"fs.readFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".", errorType: StashErrorTypes.ValueError),
+        };
 
-        try { return StashValue.FromObj(System.IO.File.ReadAllText(path, enc)); }
+        try { return System.IO.File.ReadAllText(path, enc); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
     }
 
@@ -205,31 +199,23 @@ public static partial class FsBuiltIns
     /// <param name="path">The file path to write.</param>
     /// <param name="content">The string content to write.</param>
     /// <param name="encoding">Optional encoding name (default "utf-8"). Supported: "utf-8", "ascii", "latin1", "utf-16", "utf-32".</param>
-    [StashFn(Raw = true)]
-    private static StashValue WriteFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void WriteFile(IInterpreterContext ctx, string path, string content, string? encoding = null)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'fs.writeFile' requires 2 or 3 arguments.");
-        var path = SvArgs.String(args, 0, "fs.writeFile");
-        var content = SvArgs.String(args, 1, "fs.writeFile");
         path = ctx.ExpandTilde(path);
-        var enc = Encoding.UTF8;
-        if (args.Length == 3)
+        var enc = encoding switch
         {
-            enc = SvArgs.String(args, 2, "fs.writeFile") switch
-            {
-                "utf-8"   => Encoding.UTF8,
-                "ascii"   => Encoding.ASCII,
-                "latin1"  => Encoding.Latin1,
-                "utf-16"  => Encoding.Unicode,
-                "utf-32"  => Encoding.UTF32,
-                var e     => throw new RuntimeError($"fs.writeFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".", errorType: StashErrorTypes.ValueError),
-            };
-        }
+            null      => Encoding.UTF8,
+            "utf-8"   => Encoding.UTF8,
+            "ascii"   => Encoding.ASCII,
+            "latin1"  => Encoding.Latin1,
+            "utf-16"  => Encoding.Unicode,
+            "utf-32"  => Encoding.UTF32,
+            var e     => throw new RuntimeError($"fs.writeFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".", errorType: StashErrorTypes.ValueError),
+        };
 
         try { System.IO.File.WriteAllText(path, content, enc); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Returns true if a file exists at the given path.</summary>
@@ -302,50 +288,34 @@ public static partial class FsBuiltIns
     /// <param name="src">The source file path.</param>
     /// <param name="dst">The destination file path.</param>
     /// <param name="overwrite">Optional bool (default true). When false and dst already exists, throws an error.</param>
-    [StashFn(Raw = true)]
-    private static StashValue Copy(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Copy(IInterpreterContext ctx, string src, string dst, bool overwrite = true)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'fs.copy' requires 2 or 3 arguments.");
-        var src = SvArgs.String(args, 0, "fs.copy");
-        var dst = SvArgs.String(args, 1, "fs.copy");
         src = ctx.ExpandTilde(src);
         dst = ctx.ExpandTilde(dst);
-        bool overwrite = true;
-        if (args.Length == 3)
-            overwrite = SvArgs.Bool(args, 2, "fs.copy");
 
         if (!overwrite && System.IO.File.Exists(dst))
             throw new RuntimeError($"fs.copy: destination '{dst}' already exists. Pass overwrite: true to replace it.", errorType: StashErrorTypes.IOError);
 
         try { System.IO.File.Copy(src, dst, overwrite); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Moves or renames a file from src to dst. Returns null.</summary>
     /// <param name="src">The source file path.</param>
     /// <param name="dst">The destination file path.</param>
     /// <param name="overwrite">Optional bool (default true). When false and dst already exists, throws an error.</param>
-    [StashFn(Raw = true)]
-    private static StashValue Move(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Move(IInterpreterContext ctx, string src, string dst, bool overwrite = true)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'fs.move' requires 2 or 3 arguments.");
-        var src = SvArgs.String(args, 0, "fs.move");
-        var dst = SvArgs.String(args, 1, "fs.move");
         src = ctx.ExpandTilde(src);
         dst = ctx.ExpandTilde(dst);
-        bool overwrite = true;
-        if (args.Length == 3)
-            overwrite = SvArgs.Bool(args, 2, "fs.move");
 
         if (!overwrite && System.IO.File.Exists(dst))
             throw new RuntimeError($"fs.move: destination '{dst}' already exists. Pass overwrite: true to replace it.", errorType: StashErrorTypes.IOError);
 
         try { System.IO.File.Move(src, dst, overwrite); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Returns the size of a file in bytes.</summary>
@@ -362,25 +332,22 @@ public static partial class FsBuiltIns
     /// <summary>Returns an array of file and directory paths directly inside the given directory.</summary>
     /// <param name="path">The directory path to list.</param>
     /// <param name="filter">Optional glob pattern (e.g. "*.txt") to filter results. When omitted, all entries are returned.</param>
-    [StashFn(Raw = true)]
-    private static StashValue ListDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static List<StashValue> ListDir(IInterpreterContext ctx, string path, string? filter = null)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'fs.listDir' requires 1 or 2 arguments.");
-        var path = SvArgs.String(args, 0, "fs.listDir");
         path = ctx.ExpandTilde(path);
-        string filter = args.Length == 2 ? SvArgs.String(args, 1, "fs.listDir") : "*";
+        string actualFilter = filter ?? "*";
 
         try
         {
-            var entries = System.IO.Directory.GetFileSystemEntries(path, filter);
+            var entries = System.IO.Directory.GetFileSystemEntries(path, actualFilter);
             var result = new List<StashValue>(entries.Length);
             foreach (var entry in entries)
             {
                 result.Add(StashValue.FromObj(entry));
             }
 
-            return StashValue.FromObj(result);
+            return result;
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
     }
@@ -389,16 +356,13 @@ public static partial class FsBuiltIns
     /// <param name="path">The file path to append to.</param>
     /// <param name="content">The string content to append.</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue AppendFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void AppendFile(IInterpreterContext ctx, string path, string content)
     {
-        var path = SvArgs.String(args, 0, "fs.appendFile");
-        var content = SvArgs.String(args, 1, "fs.appendFile");
         path = ctx.ExpandTilde(path);
 
         try { System.IO.File.AppendAllText(path, content); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Reads a file and returns an array of lines.</summary>
@@ -646,11 +610,9 @@ public static partial class FsBuiltIns
     /// <param name="target">The target path the symlink will point to.</param>
     /// <param name="linkPath">The path where the symbolic link will be created.</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Symlink(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Symlink(IInterpreterContext ctx, string target, string linkPath)
     {
-        var target = SvArgs.String(args, 0, "fs.symlink");
-        var linkPath = SvArgs.String(args, 1, "fs.symlink");
         target = ctx.ExpandTilde(target);
         linkPath = ctx.ExpandTilde(linkPath);
 
@@ -659,16 +621,14 @@ public static partial class FsBuiltIns
             System.IO.File.CreateSymbolicLink(linkPath, target);
         }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create symlink '{linkPath}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Returns a dictionary with file metadata including size, isFile, isDir, isSymlink, modified, created, and name.</summary>
     /// <param name="path">The file or directory path.</param>
     /// <returns>A dictionary with keys: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Stat(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashValue Stat(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.stat");
         path = ctx.ExpandTilde(path);
 
         try
@@ -699,10 +659,9 @@ public static partial class FsBuiltIns
     /// <summary>Returns a FilePermissions struct describing the read/write/execute permissions for owner, group, and others.</summary>
     /// <param name="path">The path to inspect.</param>
     /// <returns>A FilePermissions struct with owner, group, and others fields (each a FilePermission with read, write, execute bools).</returns>
-    [StashFn(Raw = true, ReturnType = "FilePermissions")]
-    private static StashValue GetPermissions(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "FilePermissions")]
+    private static StashValue GetPermissions(IInterpreterContext ctx, string path)
     {
-        var path = SvArgs.String(args, 0, "fs.getPermissions");
         path = ctx.ExpandTilde(path);
 
         try
@@ -860,11 +819,9 @@ public static partial class FsBuiltIns
     /// <summary>Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.</summary>
     /// <param name="path">The file path to modify.</param>
     /// <param name="readOnly">True to make the file read-only, false to make it writable.</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SetReadOnly(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void SetReadOnly(IInterpreterContext ctx, string path, bool readOnly)
     {
-        var path = SvArgs.String(args, 0, "fs.setReadOnly");
-        var readOnly = SvArgs.Bool(args, 1, "fs.setReadOnly");
         path = ctx.ExpandTilde(path);
 
         try
@@ -907,22 +864,15 @@ public static partial class FsBuiltIns
         catch (RuntimeError) { throw; }
         catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
         catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        return StashValue.Null;
     }
 
     /// <summary>Changes the owner and group of a file or directory. Unix only.</summary>
     /// <param name="path">The file or directory path</param>
     /// <param name="uid">New owner user ID (-1 to leave unchanged)</param>
     /// <param name="gid">New owner group ID (-1 to leave unchanged)</param>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Chown(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Chown(IInterpreterContext ctx, string path, long uid, long gid)
     {
-        if (args.Length != 3)
-            throw new RuntimeError("fs.chown: expected 3 arguments (path, uid, gid).");
-
-        string path = SvArgs.String(args, 0, "fs.chown");
-        long uid = SvArgs.Long(args, 1, "fs.chown");
-        long gid = SvArgs.Long(args, 2, "fs.chown");
         path = ctx.ExpandTilde(path);
 
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
@@ -934,7 +884,6 @@ public static partial class FsBuiltIns
         }
 
         ChownFile(path, (int)uid, (int)gid);
-        return StashValue.Null;
     }
 
     /// <summary>Sets or clears the executable permission on a file. On Unix, toggles the user execute bit (adds on true, clears all execute bits on false). On Windows, this is a no-op since executability is determined by file extension.</summary>

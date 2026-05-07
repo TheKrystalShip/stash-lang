@@ -36,18 +36,14 @@ public static partial class XmlBuiltIns
     /// <param name="text">XML string to parse</param>
     /// <param name="options">Optional XmlParseOptions struct</param>
     /// <returns>Root XmlNode</returns>
-    [StashFn(Raw = true, ReturnType = "XmlNode")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "XmlNode")]
+    private static StashValue Parse(string text, StashValue options = default)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("xml.parse: expected 1 or 2 arguments.");
-
-        string text = SvArgs.String(args, 0, "xml.parse");
         bool preserveWhitespace = false;
 
-        if (args.Length > 1 && !args[1].IsNull)
+        if (!options.IsNull)
         {
-            if (args[1].AsObj is not StashInstance opts)
+            if (options.AsObj is not StashInstance opts)
                 throw new RuntimeError("xml.parse: options must be an XmlParseOptions struct.", errorType: StashErrorTypes.TypeError);
 
             var pwVal = opts.GetField("preserveWhitespace", null);
@@ -82,22 +78,19 @@ public static partial class XmlBuiltIns
     /// <param name="node">Root XmlNode</param>
     /// <param name="options">Optional XmlStringifyOptions struct</param>
     /// <returns>XML string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string Stringify(StashValue node, StashValue options = default)
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("xml.stringify: expected 1 or 2 arguments.");
-
-        if (args[0].AsObj is not StashInstance nodeInst)
+        if (node.AsObj is not StashInstance nodeInst)
             throw new RuntimeError("xml.stringify: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
 
         int indent = 2;
         bool declaration = false;
         string encoding = "UTF-8";
 
-        if (args.Length > 1 && !args[1].IsNull)
+        if (!options.IsNull)
         {
-            if (args[1].AsObj is not StashInstance opts)
+            if (options.AsObj is not StashInstance opts)
                 throw new RuntimeError("xml.stringify: options must be an XmlStringifyOptions struct.", errorType: StashErrorTypes.TypeError);
 
             var indentVal = opts.GetField("indent", null);
@@ -148,7 +141,7 @@ public static partial class XmlBuiltIns
             if (declaration && !encoding.Equals("UTF-8", StringComparison.OrdinalIgnoreCase))
                 xml = xml.Replace("encoding=\"utf-8\"", $"encoding=\"{encoding}\"", StringComparison.OrdinalIgnoreCase);
 
-            return StashValue.FromObj(xml);
+            return xml;
         }
         catch (RuntimeError) { throw; }
         catch (Exception ex)
@@ -160,20 +153,19 @@ public static partial class XmlBuiltIns
     /// <summary>Checks if a string is valid, well-formed XML.</summary>
     /// <param name="text">String to validate</param>
     /// <returns>true if valid XML, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Valid(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Valid(string text)
     {
-        string text = SvArgs.String(args, 0, "xml.valid");
-        if (string.IsNullOrEmpty(text)) return StashValue.False;
+        if (string.IsNullOrEmpty(text)) return false;
 
         try
         {
             XDocument.Parse(text);
-            return StashValue.True;
+            return true;
         }
         catch
         {
-            return StashValue.False;
+            return false;
         }
     }
 
@@ -181,16 +173,12 @@ public static partial class XmlBuiltIns
     /// <param name="root">Root XmlNode</param>
     /// <param name="xpath">XPath expression</param>
     /// <returns>Array of matching XmlNode or string values</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Query(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Query(StashValue root, string xpath)
     {
-        if (args.Length != 2)
-            throw new RuntimeError("xml.query: expected 2 arguments.");
-
-        if (args[0].AsObj is not StashInstance nodeInst)
+        if (root.AsObj is not StashInstance nodeInst)
             throw new RuntimeError("xml.query: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
 
-        string xpath = SvArgs.String(args, 1, "xml.query");
         var results = new List<StashValue>();
 
         try
@@ -227,7 +215,7 @@ public static partial class XmlBuiltIns
                 results.Add(StashValue.FromFloat(d));
             }
 
-            return StashValue.FromObj(results);
+            return results;
         }
         catch (XPathException ex)
         {

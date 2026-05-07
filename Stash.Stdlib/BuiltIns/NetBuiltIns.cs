@@ -94,6 +94,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns subnet details for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "SubnetInfo")]
     private static StashValue SubnetInfo(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -137,6 +138,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the subnet mask for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "ip")]
     private static StashValue Mask(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -148,6 +150,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the network address for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "ip")]
     private static StashValue Network(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -159,6 +162,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the broadcast address for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "ip")]
     private static StashValue Broadcast(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -170,6 +174,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the number of usable host addresses in a CIDR subnet.</summary>
     /// <param name="ip">The CIDR IP address.</param>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue HostCount(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -180,20 +185,29 @@ public static partial class NetBuiltIns
 
 
     /// <summary>Deprecated. Use dns.resolve.</summary>
-    [StashFn(Raw = true, ReturnType = "ip")]
+    /// <param name="hostname">The hostname to resolve.</param>
+    [StashFn(ReturnType = "ip")]
     [StashDeprecated("dns.resolve")]
-    private static StashValue Resolve(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.DnsResolve(ctx, args, "net.resolve");
+    private static StashValue Resolve(IInterpreterContext ctx, string hostname)
+    {
+        StashValue[] args = [StashValue.FromObj(hostname)];
+        return NetSocketImpl.DnsResolve(ctx, args, "net.resolve");
+    }
 
 
     /// <summary>Deprecated. Use dns.resolveAll.</summary>
-    [StashFn(Raw = true, ReturnType = "array")]
+    /// <param name="hostname">The hostname to resolve.</param>
+    [StashFn(ReturnType = "array")]
     [StashDeprecated("dns.resolveAll")]
-    private static StashValue ResolveAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.DnsResolveAll(ctx, args, "net.resolveAll");
+    private static StashValue ResolveAll(IInterpreterContext ctx, string hostname)
+    {
+        StashValue[] args = [StashValue.FromObj(hostname)];
+        return NetSocketImpl.DnsResolveAll(ctx, args, "net.resolveAll");
+    }
 
 
     /// <summary>Deprecated. Use dns.reverseLookup.</summary>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "string")]
     [StashDeprecated("dns.reverseLookup")]
     private static StashValue ReverseLookup(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
@@ -202,6 +216,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Sends an ICMP ping to a host and returns the result.</summary>
     /// <param name="host">The IP address to ping.</param>
+    // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "PingResult")]
     private static StashValue Ping(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -233,6 +248,7 @@ public static partial class NetBuiltIns
     /// <param name="host">The IP address or hostname string to check.</param>
     /// <param name="port">The port number (1-65535).</param>
     /// <param name="timeout">Optional timeout in milliseconds (default 3000).</param>
+    // Raw = true: first argument is polymorphic (StashIpAddress or string), not expressible as a single typed param.
     [StashFn(Raw = true, ReturnType = "bool")]
     private static StashValue IsPortOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -290,30 +306,35 @@ public static partial class NetBuiltIns
     // ── Deprecated TCP aliases ─────────────────────────────────────────────────────────
 
     /// <summary>Deprecated. Use tcp.connect.</summary>
+    // Raw = true: requires StashInstance (TcpConnection) polymorphism, not in typed table.
     [StashFn(Raw = true, ReturnType = "TcpConnection")]
     [StashDeprecated("tcp.connect")]
     private static StashValue TcpConnect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpConnect(ctx, args, "net.tcpConnect");
 
     /// <summary>Deprecated. Use tcp.send.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("tcp.send")]
     private static StashValue TcpSend(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpSend(ctx, args, "net.tcpSend");
 
     /// <summary>Deprecated. Use tcp.recv.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "string")]
     [StashDeprecated("tcp.recv")]
     private static StashValue TcpRecv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpRecv(ctx, args, "net.tcpRecv");
 
     /// <summary>Deprecated. Use tcp.close.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.close")]
     private static StashValue TcpClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpClose(ctx, args, "net.tcpClose");
 
     /// <summary>Deprecated. Use tcp.listen.</summary>
+    // Raw = true: requires IStashCallable handler arg with StashInstance result — mixed types.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.listen")]
     private static StashValue TcpListen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
@@ -323,70 +344,96 @@ public static partial class NetBuiltIns
     // ── Deprecated UDP aliases ─────────────────────────────────────────────────────────
 
     /// <summary>Deprecated. Use udp.send.</summary>
-    [StashFn(Raw = true, ReturnType = "int")]
+    /// <param name="host">The destination hostname or IP address.</param>
+    /// <param name="port">The destination port (1-65535).</param>
+    /// <param name="data">The string data to send.</param>
+    [StashFn]
     [StashDeprecated("udp.send")]
-    private static StashValue UdpSend(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.UdpSend(ctx, args, "net.udpSend");
+    private static long UdpSend(IInterpreterContext ctx, string host, long port, string data)
+    {
+        StashValue[] args = [StashValue.FromObj(host), StashValue.FromInt(port), StashValue.FromObj(data)];
+        return NetSocketImpl.UdpSend(ctx, args, "net.udpSend").AsInt;
+    }
 
     /// <summary>Deprecated. Use udp.recv.</summary>
-    [StashFn(Raw = true, ReturnType = "UdpMessage")]
+    /// <param name="port">The port to listen on (1-65535).</param>
+    /// <param name="timeout">Optional timeout in milliseconds (default 5000).</param>
+    [StashFn(ReturnType = "UdpMessage")]
     [StashDeprecated("udp.recv")]
-    private static StashValue UdpRecv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.UdpRecv(ctx, args, "net.udpRecv");
+    private static StashValue UdpRecv(IInterpreterContext ctx, long port, long timeout = 5000)
+    {
+        StashValue[] args = [StashValue.FromInt(port), StashValue.FromInt(timeout)];
+        return NetSocketImpl.UdpRecv(ctx, args, "net.udpRecv");
+    }
 
 
     /// <summary>Deprecated. Use dns.resolveMx.</summary>
-    [StashFn(Raw = true, ReturnType = "array")]
+    /// <param name="domain">The domain to query.</param>
+    [StashFn(ReturnType = "array")]
     [StashDeprecated("dns.resolveMx")]
-    private static StashValue ResolveMx(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.DnsResolveMx(ctx, args, "net.resolveMx");
+    private static StashValue ResolveMx(IInterpreterContext ctx, string domain)
+    {
+        StashValue[] args = [StashValue.FromObj(domain)];
+        return NetSocketImpl.DnsResolveMx(ctx, args, "net.resolveMx");
+    }
 
     /// <summary>Deprecated. Use dns.resolveTxt.</summary>
-    [StashFn(Raw = true, ReturnType = "array")]
+    /// <param name="domain">The domain to query.</param>
+    [StashFn(ReturnType = "array")]
     [StashDeprecated("dns.resolveTxt")]
-    private static StashValue ResolveTxt(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.DnsResolveTxt(ctx, args, "net.resolveTxt");
+    private static StashValue ResolveTxt(IInterpreterContext ctx, string domain)
+    {
+        StashValue[] args = [StashValue.FromObj(domain)];
+        return NetSocketImpl.DnsResolveTxt(ctx, args, "net.resolveTxt");
+    }
 
 
     // ── Deprecated WebSocket aliases ─────────────────────────────────────────────────────────
 
     /// <summary>Deprecated. Use ws.connect.</summary>
+    // Raw = true: returns StashFuture — async returns are out of scope for Phase A.
     [StashFn(Raw = true, ReturnType = "WsConnection")]
     [StashDeprecated("ws.connect")]
     private static StashValue WsConnect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsConnect(ctx, args, "net.wsConnect");
 
     /// <summary>Deprecated. Use ws.send.</summary>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("ws.send")]
     private static StashValue WsSend(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsSend(ctx, args, "net.wsSend");
 
     /// <summary>Deprecated. Use ws.sendBinary.</summary>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("ws.sendBinary")]
     private static StashValue WsSendBinary(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsSendBinary(ctx, args, "net.wsSendBinary");
 
     /// <summary>Deprecated. Use ws.recv.</summary>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "WsMessage")]
     [StashDeprecated("ws.recv")]
     private static StashValue WsRecv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsRecv(ctx, args, "net.wsRecv");
 
     /// <summary>Deprecated. Use ws.close.</summary>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("ws.close")]
     private static StashValue WsClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsClose(ctx, args, "net.wsClose");
 
     /// <summary>Deprecated. Use ws.state.</summary>
+    // Raw = true: first arg is StashInstance (WsConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "WsConnectionState")]
     [StashDeprecated("ws.state")]
     private static StashValue WsState(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsState(ctx, args, "net.wsState");
 
     /// <summary>Deprecated. Use ws.isOpen.</summary>
+    // Raw = true: first arg is StashInstance (WsConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "bool")]
     [StashDeprecated("ws.isOpen")]
     private static StashValue WsIsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
@@ -394,60 +441,70 @@ public static partial class NetBuiltIns
 
 
     /// <summary>Deprecated. Use tcp.connectAsync.</summary>
+    // Raw = true: returns StashFuture — async returns are out of scope for Phase A.
     [StashFn(Raw = true, ReturnType = "TcpConnection")]
     [StashDeprecated("tcp.connectAsync")]
     private static StashValue TcpConnectAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpConnectAsync(ctx, args, "net.tcpConnectAsync");
 
     /// <summary>Deprecated. Use tcp.sendAsync.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("tcp.sendAsync")]
     private static StashValue TcpSendAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpSendAsync(ctx, args, "net.tcpSendAsync");
 
     /// <summary>Deprecated. Use tcp.sendBytesAsync.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("tcp.sendBytesAsync")]
     private static StashValue TcpSendBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpSendBytesAsync(ctx, args, "net.tcpSendBytesAsync");
 
     /// <summary>Deprecated. Use tcp.recvAsync.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "string")]
     [StashDeprecated("tcp.recvAsync")]
     private static StashValue TcpRecvAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpRecvAsync(ctx, args, "net.tcpRecvAsync");
 
     /// <summary>Deprecated. Use tcp.recvBytesAsync.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "byte[]")]
     [StashDeprecated("tcp.recvBytesAsync")]
     private static StashValue TcpRecvBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpRecvBytesAsync(ctx, args, "net.tcpRecvBytesAsync");
 
     /// <summary>Deprecated. Use tcp.closeAsync.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.closeAsync")]
     private static StashValue TcpCloseAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpCloseAsync(ctx, args, "net.tcpCloseAsync");
 
     /// <summary>Deprecated. Use tcp.isOpen.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "bool")]
     [StashDeprecated("tcp.isOpen")]
     private static StashValue TcpIsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpIsOpen(ctx, args, "net.tcpIsOpen");
 
     /// <summary>Deprecated. Use tcp.state.</summary>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "TcpConnectionState")]
     [StashDeprecated("tcp.state")]
     private static StashValue TcpState(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpState(ctx, args, "net.tcpState");
 
     /// <summary>Deprecated. Use tcp.listenAsync.</summary>
+    // Raw = true: returns StashFuture wrapping StashInstance (TcpServer) — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "TcpServer")]
     [StashDeprecated("tcp.listenAsync")]
     private static StashValue TcpListenAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpListenAsync(ctx, args, "net.tcpListenAsync");
 
     /// <summary>Deprecated. Use tcp.serverClose.</summary>
+    // Raw = true: first arg is StashInstance (TcpServer), not in typed table.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.serverClose")]
     private static StashValue TcpServerClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)

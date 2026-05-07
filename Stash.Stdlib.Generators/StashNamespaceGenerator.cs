@@ -312,6 +312,15 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             diags.Add(Diagnostic.Create(Diagnostics.MissingSummaryDoc, loc, method.Name));
         }
 
+        // Optional parameters require variadic marshalling so the VM doesn't reject
+        // under-argued calls; the emitted body already supplies defaults for missing args.
+        bool hasOptional = false;
+        foreach (var pm in pms)
+        {
+            if (pm.HasDefaultValue) { hasOptional = true; break; }
+        }
+        if (hasOptional) isVariadic = true;
+
         return new FunctionModel(
             method.Name,
             stashName,
@@ -443,7 +452,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
 
     private static string LiteralFor(object? value, ITypeSymbol type)
     {
-        if (value is null) return "null";
+        if (value is null) return type.IsValueType ? "default" : "null";
         switch (value)
         {
             case string s: return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";

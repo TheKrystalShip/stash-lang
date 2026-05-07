@@ -15,27 +15,24 @@ public static partial class DictBuiltIns
 {
     /// <summary>Creates and returns a new empty dictionary.</summary>
     /// <returns>An empty dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue New(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary New()
     {
-        return StashValue.FromObj(new StashDictionary());
+        return new StashDictionary();
     }
 
     /// <summary>Returns the value for key, or null if not found. If a default is provided it is returned instead of null for missing keys.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key</param>
-    /// <param name="default">Optional default value when key is missing</param>
+    /// <param name="rest">Optional default value when key is missing</param>
     /// <returns>The value, default, or null</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Get(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Get(StashDictionary dict, StashValue key, params StashValue[] rest)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'dict.get' requires 2 or 3 arguments.");
-        var d = SvArgs.Dict(args, 0, "dict.get");
-        var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
-        var result = d.Get(key);
-        if (result.IsNull && args.Length == 3)
-            return args[2];
+        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        var result = dict.Get(keyObj);
+        if (result.IsNull && rest.Length > 0)
+            return rest[0];
         return result;
     }
 
@@ -43,150 +40,127 @@ public static partial class DictBuiltIns
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key</param>
     /// <param name="value">The value to set</param>
-    [StashFn(Raw = true, ReturnType = "void")]
-    private static StashValue Set(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "void")]
+    private static void Set(StashDictionary dict, StashValue key, StashValue value)
     {
-        var d = SvArgs.Dict(args, 0, "dict.set");
-        var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
-        d.Set(key, args[2]);
-        return StashValue.Null;
+        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        dict.Set(keyObj, value);
     }
 
     /// <summary>Returns true if the dictionary contains the key.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key to check</param>
     /// <returns>true if the key exists</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Has(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Has(StashDictionary dict, StashValue key)
     {
-        var d = SvArgs.Dict(args, 0, "dict.has");
-        var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
-        return StashValue.FromBool(d.Has(key));
+        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        return dict.Has(keyObj);
     }
 
     /// <summary>Removes a key from the dictionary. Returns true if it existed.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key to remove</param>
     /// <returns>true if the key was removed</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Remove(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Remove(StashDictionary dict, StashValue key)
     {
-        var d = SvArgs.Dict(args, 0, "dict.remove");
-        var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
-        return StashValue.FromBool(d.Remove(key));
+        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        return dict.Remove(keyObj);
     }
 
     /// <summary>Removes all entries from the dictionary.</summary>
     /// <param name="dict">The dictionary to clear</param>
-    [StashFn(Raw = true, ReturnType = "void")]
-    private static StashValue Clear(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "void")]
+    private static void Clear(StashDictionary dict)
     {
-        SvArgs.Dict(args, 0, "dict.clear").Clear();
-        return StashValue.Null;
+        dict.Clear();
     }
 
     /// <summary>Returns an array of all keys in the dictionary.</summary>
     /// <param name="dict">The dictionary</param>
     /// <returns>Array of keys</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Keys(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Keys(StashDictionary dict)
     {
-        var d = SvArgs.Dict(args, 0, "dict.keys");
-        return StashValue.FromObj(d.Keys());
+        return dict.Keys();
     }
 
     /// <summary>Returns an array of all values in the dictionary.</summary>
     /// <param name="dict">The dictionary</param>
     /// <returns>Array of values</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Values(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Values(StashDictionary dict)
     {
-        var d = SvArgs.Dict(args, 0, "dict.values");
-        return StashValue.FromObj(d.Values());
+        return dict.Values();
     }
 
     /// <summary>Returns the number of entries in the dictionary.</summary>
     /// <param name="dict">The dictionary</param>
     /// <returns>Entry count</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Size(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "int")]
+    private static long Size(StashDictionary dict)
     {
-        var d = SvArgs.Dict(args, 0, "dict.size");
-        return StashValue.FromInt((long)d.Count);
+        return (long)dict.Count;
     }
 
     /// <summary>Returns an array of [key, value] pairs for each entry.</summary>
     /// <param name="dict">The dictionary</param>
     /// <returns>Array of [key, value] pairs</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Pairs(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Pairs(StashDictionary dict)
     {
-        var d = SvArgs.Dict(args, 0, "dict.pairs");
-        return StashValue.FromObj(d.Pairs());
+        return dict.Pairs();
     }
 
     /// <summary>Calls fn(key, value) for each entry. Returns null.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="fn">The callback function</param>
-    [StashFn(Raw = true, ReturnType = "void")]
-    private static StashValue ForEach(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "void")]
+    private static void ForEach(IInterpreterContext ctx, StashDictionary dict, IStashCallable fn)
     {
-        var d = SvArgs.Dict(args, 0, "dict.forEach");
-        var fn = SvArgs.Callable(args, 1, "dict.forEach");
-
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value });
         }
-        return StashValue.Null;
     }
 
     /// <summary>Returns a new dictionary merging dict1 and dict2. dict2 keys take precedence. When deep is true, nested dicts are merged recursively.</summary>
     /// <param name="dict1">The base dictionary</param>
     /// <param name="dict2">The overriding dictionary</param>
-    /// <param name="deep">Optional boolean; when true performs a deep recursive merge</param>
+    /// <param name="rest">Optional boolean; when true performs a deep recursive merge</param>
     /// <returns>Merged dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Merge(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Merge(StashDictionary dict1, StashDictionary dict2, params StashValue[] rest)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("'dict.merge' requires 2 or 3 arguments.");
-        var d1 = SvArgs.Dict(args, 0, "dict.merge");
-        var d2 = SvArgs.Dict(args, 1, "dict.merge");
-        bool deep = args.Length == 3 && SvArgs.Bool(args, 2, "dict.merge");
-        return StashValue.FromObj(MergeInternal(d1, d2, deep));
+        bool deep = rest.Length > 0 && rest[0].IsBool && rest[0].AsBool;
+        return MergeInternal(dict1, dict2, deep);
     }
 
     /// <summary>Returns a new dictionary with each value transformed by fn(key, value).</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="fn">The mapping function</param>
     /// <returns>Transformed dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Map(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Map(IInterpreterContext ctx, StashDictionary dict, IStashCallable fn)
     {
-        var d = SvArgs.Dict(args, 0, "dict.map");
-        var fn = SvArgs.Callable(args, 1, "dict.map");
-
         var result = new StashDictionary();
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             result.Set(entry.Key, ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }));
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns a new dictionary with only entries where fn(key, value) is truthy.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="fn">The filter function</param>
     /// <returns>Filtered dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Filter(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Filter(IInterpreterContext ctx, StashDictionary dict, IStashCallable fn)
     {
-        var d = SvArgs.Dict(args, 0, "dict.filter");
-        var fn = SvArgs.Callable(args, 1, "dict.filter");
-
         var result = new StashDictionary();
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             var keep = ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value });
             if (RuntimeValues.IsTruthy(keep.ToObject()))
@@ -194,16 +168,15 @@ public static partial class DictBuiltIns
                 result.Set(entry.Key, entry.Value);
             }
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Constructs a dictionary from an array of [key, value] pairs.</summary>
     /// <param name="pairs">Array of [key, value] pairs</param>
     /// <returns>New dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue FromPairs(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary FromPairs(List<StashValue> pairs)
     {
-        var pairs = SvArgs.StashList(args, 0, "dict.fromPairs");
         var result = new StashDictionary();
         foreach (var pairSv in pairs)
         {
@@ -222,42 +195,38 @@ public static partial class DictBuiltIns
             if (key is null) throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.", errorType: StashErrorTypes.TypeError);
             result.Set(key, val);
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns a new dictionary with only the specified keys.</summary>
     /// <param name="dict">The source dictionary</param>
     /// <param name="keys">Array of keys to include</param>
     /// <returns>New dictionary with picked keys</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Pick(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Pick(StashDictionary dict, List<StashValue> keys)
     {
-        var d = SvArgs.Dict(args, 0, "dict.pick");
-        var keys = SvArgs.StashList(args, 1, "dict.pick");
         var result = new StashDictionary();
         foreach (var keySv in keys)
         {
             var key = keySv.ToObject();
-            if (key != null && d.Has(key))
-                result.Set(key, d.Get(key));
+            if (key != null && dict.Has(key))
+                result.Set(key, dict.Get(key));
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns a new dictionary excluding the specified keys.</summary>
     /// <param name="dict">The source dictionary</param>
     /// <param name="keys">Array of keys to omit</param>
     /// <returns>New dictionary without omitted keys</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Omit(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Omit(StashDictionary dict, List<StashValue> keys)
     {
-        var d = SvArgs.Dict(args, 0, "dict.omit");
-        var keysToOmit = SvArgs.StashList(args, 1, "dict.omit");
         var result = new StashDictionary();
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             bool omit = false;
-            foreach (var keySv in keysToOmit)
+            foreach (var keySv in keys)
             {
                 var k = keySv.ToObject();
                 if (k != null && RuntimeValues.IsEqual(entry.Key, k))
@@ -268,77 +237,66 @@ public static partial class DictBuiltIns
             }
             if (!omit) result.Set(entry.Key, entry.Value);
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns a new dictionary merging defaults with dict. Dict values take precedence.</summary>
     /// <param name="dict">The priority dictionary</param>
     /// <param name="defaults">The defaults dictionary</param>
     /// <returns>Merged dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Defaults(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashDictionary Defaults(StashDictionary dict, StashDictionary defaults)
     {
-        var d = SvArgs.Dict(args, 0, "dict.defaults");
-        var defaults = SvArgs.Dict(args, 1, "dict.defaults");
         var result = new StashDictionary();
         foreach (var entry in defaults.RawEntries())
             result.Set(entry.Key, entry.Value);
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
             result.Set(entry.Key, entry.Value);
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Returns true if fn(key, value) returns truthy for at least one entry.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="fn">The predicate function</param>
     /// <returns>true if any entry matches</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Any(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Any(IInterpreterContext ctx, StashDictionary dict, IStashCallable fn)
     {
-        var d = SvArgs.Dict(args, 0, "dict.any");
-        var fn = SvArgs.Callable(args, 1, "dict.any");
-
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
             {
-                return StashValue.True;
+                return true;
             }
         }
-        return StashValue.False;
+        return false;
     }
 
     /// <summary>Returns true if fn(key, value) returns truthy for every entry.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="fn">The predicate function</param>
     /// <returns>true if all entries match</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Every(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "bool")]
+    private static bool Every(IInterpreterContext ctx, StashDictionary dict, IStashCallable fn)
     {
-        var d = SvArgs.Dict(args, 0, "dict.every");
-        var fn = SvArgs.Callable(args, 1, "dict.every");
-
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             if (!RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
             {
-                return StashValue.False;
+                return false;
             }
         }
-        return StashValue.True;
+        return true;
     }
 
     /// <summary>Returns the first [key, value] pair for which fn(key, value) is truthy, or null.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="fn">The predicate function</param>
     /// <returns>[key, value] pair or null</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Find(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static StashValue Find(IInterpreterContext ctx, StashDictionary dict, IStashCallable fn)
     {
-        var d = SvArgs.Dict(args, 0, "dict.find");
-        var fn = SvArgs.Callable(args, 1, "dict.find");
-
-        foreach (var entry in d.RawEntries())
+        foreach (var entry in dict.RawEntries())
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
             {

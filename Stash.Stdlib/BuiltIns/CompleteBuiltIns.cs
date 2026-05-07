@@ -60,79 +60,60 @@ public static partial class CompleteBuiltIns
     /// <param name="name">The command name to register a completer for</param>
     /// <param name="fn">A callable that accepts a CompletionContext and returns an array</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Register(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Register(string name, IStashCallable fn)
     {
-        string name = SvArgs.String(args, 0, "complete.register");
-        object? fnObj = args[1].ToObject();
-        if (fnObj is not IStashCallable callable)
-        {
-            throw new RuntimeError(
-                $"'complete.register' requires a callable as the second argument.",
-                null,
-                StashErrorTypes.TypeError);
-        }
-
-        RegisterHandler?.Invoke(name, callable);
-        return StashValue.Null;
+        RegisterHandler?.Invoke(name, fn);
     }
 
     /// <summary>Removes the custom completer registered for the given command name.</summary>
     /// <param name="name">The command name whose completer should be removed</param>
     /// <returns>true if a completer was registered and removed, false otherwise</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Unregister(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Unregister(string name)
     {
-        string name = SvArgs.String(args, 0, "complete.unregister");
         if (UnregisterHandler is null)
-            return StashValue.False;
-        return StashValue.FromBool(UnregisterHandler(name));
+            return false;
+        return UnregisterHandler(name);
     }
 
     /// <summary>Returns a lexicographically sorted array of all currently registered command names.</summary>
     /// <returns>array&lt;string&gt;</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Registered(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Registered()
     {
         if (RegisteredHandler is null)
-            return StashValue.FromObj(new List<StashValue>());
+            return new List<StashValue>();
 
         string[] names = RegisteredHandler();
         var result = new List<StashValue>(names.Length);
         foreach (string n in names)
             result.Add(StashValue.FromObj(n));
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Programmatically runs the tab-completion engine on the given line and cursor position. cursor = -1 means end-of-line. Returns a CompletionResult struct.</summary>
     /// <param name="line">The buffer string to complete</param>
     /// <param name="cursor">Cursor position (character/UTF-16 code unit index); -1 means end of line</param>
     /// <returns>CompletionResult struct with replace_start, replace_end, candidates, common_prefix</returns>
-    [StashFn(Raw = true, ReturnType = "CompletionResult")]
-    private static StashValue Suggest(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "CompletionResult")]
+    private static StashValue Suggest(string line, long cursor = -1)
     {
-        string line = SvArgs.String(args, 0, "complete.suggest");
-        int cursor = args.Length > 1 && !args[1].IsNull
-            ? (int)SvArgs.Long(args, 1, "complete.suggest")
-            : -1;
-
-        if (cursor < 0)
-            cursor = line.Length;
+        int cursorInt = cursor < 0 ? line.Length : (int)cursor;
 
         if (SuggestHandler is not null)
-            return StashValue.FromObj(SuggestHandler(line, cursor));
+            return StashValue.FromObj(SuggestHandler(line, cursorInt));
 
-        return StashValue.FromObj(EmptyCompletionResult(cursor));
+        return StashValue.FromObj(EmptyCompletionResult(cursorInt));
     }
 
     /// <summary>Helper for custom completers. Runs the default PathCompleter on the given CompletionContext and returns the candidate file path strings. Use this inside complete.register callbacks to augment file completion.</summary>
     /// <param name="ctx">A CompletionContext struct (passed to the completer function)</param>
     /// <returns>array&lt;string&gt; of file/directory paths</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue Paths(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> Paths(StashValue ctx)
     {
-        object? ctxObj = args[0].ToObject();
-        if (ctxObj is not StashInstance ctxInst || ctxInst.TypeName != "CompletionContext")
+        if (ctx.ToObject() is not StashInstance ctxInst || ctxInst.TypeName != "CompletionContext")
         {
             throw new RuntimeError(
                 "'complete.paths' requires a CompletionContext struct argument.",
@@ -141,13 +122,13 @@ public static partial class CompleteBuiltIns
         }
 
         if (PathHelperHandler is null)
-            return StashValue.FromObj(new List<StashValue>());
+            return new List<StashValue>();
 
         string[] paths = PathHelperHandler(ctxInst);
         var result = new List<StashValue>(paths.Length);
         foreach (string p in paths)
             result.Add(StashValue.FromObj(p));
-        return StashValue.FromObj(result);
+        return result;
     }
 
     // ── Testing helpers ──────────────────────────────────────────────────────

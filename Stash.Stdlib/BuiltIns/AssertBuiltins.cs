@@ -17,147 +17,138 @@ public static partial class AssertBuiltIns
     /// <param name="actual">The actual value</param>
     /// <param name="expected">The expected value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Equal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Equal(IInterpreterContext ctx, StashValue actual, StashValue expected)
     {
-        object? actual = args[0].ToObject();
-        object? expected = args[1].ToObject();
-        if (!RuntimeValues.IsEqual(actual, expected))
+        object? actualObj = actual.ToObject();
+        object? expectedObj = expected.ToObject();
+        if (!RuntimeValues.IsEqual(actualObj, expectedObj))
         {
-            string msg = $"assert.equal failed: expected {RuntimeValues.Stringify(expected)} but got {RuntimeValues.Stringify(actual)}";
-            throw new AssertionError(msg, expected, actual, ctx.CurrentSpan);
+            string msg = $"assert.equal failed: expected {RuntimeValues.Stringify(expectedObj)} but got {RuntimeValues.Stringify(actualObj)}";
+            throw new AssertionError(msg, expectedObj, actualObj, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that actual does not equal expected. Throws AssertionError if they are equal.</summary>
     /// <param name="actual">The actual value</param>
     /// <param name="expected">The value to compare against</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue NotEqual(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void NotEqual(IInterpreterContext ctx, StashValue actual, StashValue expected)
     {
-        object? actual = args[0].ToObject();
-        object? expected = args[1].ToObject();
-        if (RuntimeValues.IsEqual(actual, expected))
+        object? actualObj = actual.ToObject();
+        object? expectedObj = expected.ToObject();
+        if (RuntimeValues.IsEqual(actualObj, expectedObj))
         {
-            string msg = $"assert.notEqual failed: expected values to differ but both are {RuntimeValues.Stringify(actual)}";
-            throw new AssertionError(msg, expected, actual, ctx.CurrentSpan);
+            string msg = $"assert.notEqual failed: expected values to differ but both are {RuntimeValues.Stringify(actualObj)}";
+            throw new AssertionError(msg, expectedObj, actualObj, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that the value is truthy. Throws AssertionError if falsy.</summary>
     /// <param name="value">The value to check</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue True(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void True(IInterpreterContext ctx, StashValue value)
     {
-        object? val = args[0].ToObject();
+        object? val = value.ToObject();
         if (!RuntimeValues.IsTruthy(val))
         {
             string msg = $"assert.true failed: expected truthy value but got {RuntimeValues.Stringify(val)}";
             throw new AssertionError(msg, true, val, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that the value is falsy. Throws AssertionError if truthy.</summary>
     /// <param name="value">The value to check</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue False(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void False(IInterpreterContext ctx, StashValue value)
     {
-        object? val = args[0].ToObject();
+        object? val = value.ToObject();
         if (RuntimeValues.IsTruthy(val))
         {
             string msg = $"assert.false failed: expected falsy value but got {RuntimeValues.Stringify(val)}";
             throw new AssertionError(msg, false, val, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that the value is null. Throws AssertionError if not null.</summary>
     /// <param name="value">The value to check</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Null(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "null")]
+    private static void IsNull(IInterpreterContext ctx, StashValue value)
     {
-        if (!args[0].IsNull)
+        if (!value.IsNull)
         {
-            object? val = args[0].ToObject();
+            object? val = value.ToObject();
             string msg = $"assert.null failed: expected null but got {RuntimeValues.Stringify(val)}";
             throw new AssertionError(msg, null, val, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that the value is not null. Throws AssertionError if null.</summary>
     /// <param name="value">The value to check</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue NotNull(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void NotNull(IInterpreterContext ctx, StashValue value)
     {
-        if (args[0].IsNull)
+        if (value.IsNull)
         {
             string msg = "assert.notNull failed: expected non-null value but got null";
             throw new AssertionError(msg, "non-null", null, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that a is greater than b. Throws AssertionError if not.</summary>
     /// <param name="a">The left-hand value</param>
     /// <param name="b">The right-hand value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Greater(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Greater(IInterpreterContext ctx, StashValue a, StashValue b)
     {
-        double a = SvArgs.Numeric(args, 0, "assert.greater");
-        double b = SvArgs.Numeric(args, 1, "assert.greater");
-        if (!(a > b))
+        double aNum = ToNumeric(a, "a", "assert.greater");
+        double bNum = ToNumeric(b, "b", "assert.greater");
+        if (!(aNum > bNum))
         {
-            object? aObj = args[0].ToObject();
-            object? bObj = args[1].ToObject();
+            object? aObj = a.ToObject();
+            object? bObj = b.ToObject();
             string msg = $"assert.greater failed: expected {RuntimeValues.Stringify(aObj)} > {RuntimeValues.Stringify(bObj)}";
             throw new AssertionError(msg, $"> {RuntimeValues.Stringify(bObj)}", aObj, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that a is less than b. Throws AssertionError if not.</summary>
     /// <param name="a">The left-hand value</param>
     /// <param name="b">The right-hand value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Less(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Less(IInterpreterContext ctx, StashValue a, StashValue b)
     {
-        double a = SvArgs.Numeric(args, 0, "assert.less");
-        double b = SvArgs.Numeric(args, 1, "assert.less");
-        if (!(a < b))
+        double aNum = ToNumeric(a, "a", "assert.less");
+        double bNum = ToNumeric(b, "b", "assert.less");
+        if (!(aNum < bNum))
         {
-            object? aObj = args[0].ToObject();
-            object? bObj = args[1].ToObject();
+            object? aObj = a.ToObject();
+            object? bObj = b.ToObject();
             string msg = $"assert.less failed: expected {RuntimeValues.Stringify(aObj)} < {RuntimeValues.Stringify(bObj)}";
             throw new AssertionError(msg, $"< {RuntimeValues.Stringify(bObj)}", aObj, ctx.CurrentSpan);
         }
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that fn throws an error when called. Returns the error message if it throws.</summary>
     /// <param name="fn">The function to invoke</param>
     /// <returns>The error message thrown by fn</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Throws(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Throws(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "assert.throws");
         try
         {
-            ctx.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty);
+            ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
         }
         catch (RuntimeError ex)
         {
-            return StashValue.FromObj(ex.Message);
+            return ex.Message;
         }
         string msg = "assert.throws failed: expected function to throw but it did not";
         throw new AssertionError(msg, "error", "no error", ctx.CurrentSpan);
@@ -166,6 +157,7 @@ public static partial class AssertBuiltIns
     /// <summary>Immediately fails the test with an optional message.</summary>
     /// <param name="message">Optional failure message</param>
     /// <returns>never</returns>
+    // Raw = true: 'message' is optional and may be any type; typed form can't express "optional any" cleanly.
     [StashFn(Raw = true, ReturnType = "never")]
     private static StashValue Fail(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -177,12 +169,9 @@ public static partial class AssertBuiltIns
     /// <param name="actual">The actual value</param>
     /// <param name="expected">The expected value</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue DeepEqual(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void DeepEqual(IInterpreterContext ctx, StashValue actual, StashValue expected)
     {
-        StashValue actual = args[0];
-        StashValue expected = args[1];
-
         var (equal, failPath, expectedStr, actualStr) = DeepEquals(actual, expected, "");
 
         if (!equal)
@@ -191,8 +180,6 @@ public static partial class AssertBuiltIns
             string msg = $"assert.deepEqual failed{pathInfo}\n  Expected: {expectedStr}\n  Actual:   {actualStr}";
             throw new AssertionError(msg, expected.ToObject(), actual.ToObject(), ctx.CurrentSpan);
         }
-
-        return StashValue.Null;
     }
 
     /// <summary>Asserts that actual is within delta of expected. Throws AssertionError if the absolute difference exceeds delta.</summary>
@@ -200,24 +187,29 @@ public static partial class AssertBuiltIns
     /// <param name="expected">The expected value</param>
     /// <param name="delta">The maximum allowed difference (must be non-negative)</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue CloseTo(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void CloseTo(IInterpreterContext ctx, StashValue actual, StashValue expected, StashValue delta)
     {
-        double actual = SvArgs.Numeric(args, 0, "assert.closeTo");
-        double expected = SvArgs.Numeric(args, 1, "assert.closeTo");
-        double delta = SvArgs.Numeric(args, 2, "assert.closeTo");
+        double actualNum = ToNumeric(actual, "actual", "assert.closeTo");
+        double expectedNum = ToNumeric(expected, "expected", "assert.closeTo");
+        double deltaNum = ToNumeric(delta, "delta", "assert.closeTo");
 
-        if (delta < 0)
+        if (deltaNum < 0)
             throw new RuntimeError("assert.closeTo: delta must be non-negative.");
 
-        double diff = Math.Abs(actual - expected);
-        if (diff > delta)
+        double diff = Math.Abs(actualNum - expectedNum);
+        if (diff > deltaNum)
         {
-            string msg = $"assert.closeTo failed: expected {actual} to be within {delta} of {expected} (difference: {diff})";
-            throw new AssertionError(msg, expected, actual, ctx.CurrentSpan);
+            string msg = $"assert.closeTo failed: expected {actualNum} to be within {deltaNum} of {expectedNum} (difference: {diff})";
+            throw new AssertionError(msg, expectedNum, actualNum, ctx.CurrentSpan);
         }
+    }
 
-        return StashValue.Null;
+    private static double ToNumeric(StashValue v, string paramName, string funcName)
+    {
+        if (v.IsFloat) return v.AsFloat;
+        if (v.IsInt) return (double)v.AsInt;
+        throw new RuntimeError($"Argument '{paramName}' to '{funcName}' must be a number.", errorType: StashErrorTypes.TypeError);
     }
 
     private static (bool Equal, string FailPath, string? ExpStr, string? ActStr)

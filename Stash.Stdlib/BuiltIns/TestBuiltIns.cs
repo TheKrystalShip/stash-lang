@@ -20,11 +20,9 @@ public static partial class TestBuiltIns
     /// <param name="name">The test case name</param>
     /// <param name="fn">The test body function</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue It(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "it")]
+    private static void It(IInterpreterContext ctx, string name, IStashCallable fn)
     {
-        var name = SvArgs.String(args, 0, "test.it");
-        var body = SvArgs.Callable(args, 1, "test.it");
         var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
         // Build the fully qualified test name from describe context
@@ -36,7 +34,7 @@ public static partial class TestBuiltIns
             bool matches = ctx.TestFilter.Any(f => fullName.StartsWith(f));
             if (!matches)
             {
-                return StashValue.Null; // Silent — filtered-out tests emit nothing
+                return; // Silent — filtered-out tests emit nothing
             }
         }
 
@@ -44,31 +42,29 @@ public static partial class TestBuiltIns
         if (ctx.DiscoveryMode)
         {
             ctx.TestHarness?.OnTestDiscovered(fullName, span);
-            return StashValue.Null;
+            return;
         }
 
         // If exclusive mode is active (any test.only was called), skip this test
         if (ctx.HasExclusiveTests)
         {
             ctx.TestHarness?.OnTestSkip(fullName, "test.only active");
-            return StashValue.Null;
+            return;
         }
 
-        return RunTest(ctx, fullName, body, span);
+        RunTest(ctx, fullName, fn, span);
     }
 
     /// <summary>Defines and executes an exclusive test case. When one or more test.only() calls exist, all test.it() calls are silently skipped.</summary>
     /// <param name="name">The test case name</param>
     /// <param name="fn">The test body function</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Only(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Only(IInterpreterContext ctx, string name, IStashCallable fn)
     {
         // Mark exclusive mode — subsequent test.it calls will be skipped
         ctx.HasExclusiveTests = true;
 
-        var name = SvArgs.String(args, 0, "test.only");
-        var body = SvArgs.Callable(args, 1, "test.only");
         var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
         string fullName = BuildFullName(ctx, ctx.CurrentDescribe, name);
@@ -79,7 +75,7 @@ public static partial class TestBuiltIns
             bool matches = ctx.TestFilter.Any(f => fullName.StartsWith(f));
             if (!matches)
             {
-                return StashValue.Null;
+                return;
             }
         }
 
@@ -87,21 +83,19 @@ public static partial class TestBuiltIns
         if (ctx.DiscoveryMode)
         {
             ctx.TestHarness?.OnTestDiscovered(fullName, span);
-            return StashValue.Null;
+            return;
         }
 
-        return RunTest(ctx, fullName, body, span);
+        RunTest(ctx, fullName, fn, span);
     }
 
     /// <summary>Defines a skipped test case that will not be executed.</summary>
     /// <param name="name">The test case name</param>
     /// <param name="fn">The test body function (not executed)</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Skip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Skip(IInterpreterContext ctx, string name, IStashCallable fn)
     {
-        var name = SvArgs.String(args, 0, "test.skip");
-        SvArgs.Callable(args, 1, "test.skip");
         string fullName = BuildFullName(ctx, ctx.CurrentDescribe, name);
 
         // Check test filter
@@ -110,7 +104,7 @@ public static partial class TestBuiltIns
             bool matches = ctx.TestFilter.Any(f => fullName.StartsWith(f));
             if (!matches)
             {
-                return StashValue.Null;
+                return;
             }
         }
 
@@ -119,22 +113,19 @@ public static partial class TestBuiltIns
         {
             var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
             ctx.TestHarness?.OnTestDiscovered(fullName, span);
-            return StashValue.Null;
+            return;
         }
 
         ctx.TestHarness?.OnTestSkip(fullName, "skipped");
-        return StashValue.Null;
     }
 
     /// <summary>Groups related test cases under a named description block.</summary>
     /// <param name="name">The description block name</param>
     /// <param name="fn">The function containing test cases</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Describe(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Describe(IInterpreterContext ctx, string name, IStashCallable fn)
     {
-        var name = SvArgs.String(args, 0, "test.describe");
-        var body = SvArgs.Callable(args, 1, "test.describe");
         var harness = ctx.TestHarness;
 
         // Build the fully qualified suite name from nested describes
@@ -148,7 +139,7 @@ public static partial class TestBuiltIns
             bool anyMatch = ctx.TestFilter.Any(f => f.StartsWith(fullName) || fullName.StartsWith(f));
             if (!anyMatch)
             {
-                return StashValue.Null; // Skip entire describe block
+                return; // Skip entire describe block
             }
         }
 
@@ -168,7 +159,7 @@ public static partial class TestBuiltIns
 
         try
         {
-            ctx.InvokeCallbackDirect(body, ReadOnlySpan<StashValue>.Empty);
+            ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
         }
         finally
         {
@@ -190,90 +181,79 @@ public static partial class TestBuiltIns
             harness?.OnSuiteEnd(fullName, passed, failed, skipped);
             ctx.CurrentDescribe = previousDescribe;
         }
-
-        return StashValue.Null;
     }
 
     /// <summary>Registers a setup function to run once before all tests in the current describe block.</summary>
     /// <param name="fn">The setup function</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue BeforeAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void BeforeAll(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "test.beforeAll");
         if (ctx.BeforeEachHooks.Count == 0)
         {
             throw new RuntimeError("test.beforeAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
         }
-        ctx.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty);
-        return StashValue.Null;
+        ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
     }
 
     /// <summary>Registers a teardown function to run once after all tests in the current describe block.</summary>
     /// <param name="fn">The teardown function</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue AfterAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void AfterAll(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "test.afterAll");
         if (ctx.AfterAllHooks.Count == 0)
         {
             throw new RuntimeError("test.afterAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
         }
-        ctx.AfterAllHooks[^1].Add(callable);
-        return StashValue.Null;
+        ctx.AfterAllHooks[^1].Add(fn);
     }
 
     /// <summary>Registers a setup function to run before each test case in the current describe block.</summary>
     /// <param name="fn">The setup function</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue BeforeEach(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void BeforeEach(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "test.beforeEach");
         if (ctx.BeforeEachHooks.Count == 0)
         {
             throw new RuntimeError("test.beforeEach() must be used inside a test.describe() block.", ctx.CurrentSpan);
         }
-        ctx.BeforeEachHooks[^1].Add(callable);
-        return StashValue.Null;
+        ctx.BeforeEachHooks[^1].Add(fn);
     }
 
     /// <summary>Registers a teardown function to run after each test case in the current describe block.</summary>
     /// <param name="fn">The teardown function</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true)]
-    private static StashValue AfterEach(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void AfterEach(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "test.afterEach");
         if (ctx.AfterEachHooks.Count == 0)
         {
             throw new RuntimeError("test.afterEach() must be used inside a test.describe() block.", ctx.CurrentSpan);
         }
-        ctx.AfterEachHooks[^1].Add(callable);
-        return StashValue.Null;
+        ctx.AfterEachHooks[^1].Add(fn);
     }
 
     /// <summary>Executes fn while capturing all printed output, then returns the captured text.</summary>
     /// <param name="fn">The function to execute</param>
     /// <returns>The captured output as a string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue CaptureOutput(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string CaptureOutput(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "test.captureOutput");
         var previousOutput = ctx.Output;
         var sw = new StringWriter();
         sw.NewLine = "\n";
         ctx.Output = sw;
         try
         {
-            ctx.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty);
+            ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
         }
         finally
         {
             ctx.Output = previousOutput;
         }
-        return StashValue.FromObj(sw.ToString());
+        return sw.ToString();
     }
 
     private static string BuildFullName(IInterpreterContext ctx, string? currentDescribe, string testName)

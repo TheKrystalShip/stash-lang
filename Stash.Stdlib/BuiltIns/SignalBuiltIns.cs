@@ -16,6 +16,7 @@ public static partial class SignalBuiltIns
     /// <param name="signal">A Signal enum value (e.g., Signal.Term)</param>
     /// <param name="handler">A function to invoke when the signal is received</param>
     /// <returns>null</returns>
+    // Raw: signal arg is a StashEnumValue inspected inside SignalImpl
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue On(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -26,10 +27,10 @@ public static partial class SignalBuiltIns
     /// If no handler was registered for the signal, this is a no-op.</summary>
     /// <param name="signal">A Signal enum value (e.g., Signal.Term)</param>
     /// <returns>null</returns>
+    // Raw: signal arg is a StashEnumValue inspected inside SignalImpl
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Off(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
         return SignalImpl.OffSignal(ctx, args, "signal.off");
     }
 }
-

@@ -47,25 +47,22 @@ public static partial class ArchiveBuiltIns
     /// <param name="inputPaths">A single path or array of paths to include in the archive</param>
     /// <param name="options">Optional ArchiveOptions struct with compressionLevel (0-9), overwrite, preservePaths, filter</param>
     /// <returns>The path to the created archive</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Zip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string Zip(IInterpreterContext ctx, string outputPath, StashValue inputPaths, StashValue options = default)
     {
-        if (args.Length < 2 || args.Length > 3)
-            throw new RuntimeError("archive.zip: expected 2 or 3 arguments.");
+        outputPath = ctx.ExpandTilde(outputPath);
+        var paths = GetInputPaths(inputPaths, ctx, "archive.zip");
+        var opts = !options.IsNull ? GetArchiveOptions(options, "archive.zip") : DefaultOptions;
 
-        var outputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.zip"));
-        var inputPaths = GetInputPaths(args[1], ctx, "archive.zip");
-        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.zip") : DefaultOptions;
-
-        if (inputPaths.Count == 0)
+        if (paths.Count == 0)
             throw new RuntimeError("archive.zip: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
 
         // Check for existing file
-        if (File.Exists(outputPath) && !options.Overwrite)
+        if (File.Exists(outputPath) && !opts.Overwrite)
             throw new RuntimeError($"archive.zip: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
 
         // Validate input paths exist
-        foreach (var p in inputPaths)
+        foreach (var p in paths)
         {
             if (!File.Exists(p) && !Directory.Exists(p))
                 throw new RuntimeError($"archive.zip: file not found: '{p}'", errorType: StashErrorTypes.IOError);
@@ -73,7 +70,7 @@ public static partial class ArchiveBuiltIns
 
         try
         {
-            var compressionLevel = options.CompressionLevel switch
+            var compressionLevel = opts.CompressionLevel switch
             {
                 0 => CompressionLevel.NoCompression,
                 >= 1 and <= 3 => CompressionLevel.Fastest,
@@ -88,7 +85,7 @@ public static partial class ArchiveBuiltIns
 
             using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
 
-            foreach (var inputPath in inputPaths)
+            foreach (var inputPath in paths)
             {
                 if (File.Exists(inputPath))
                 {
@@ -98,11 +95,11 @@ public static partial class ArchiveBuiltIns
                 }
                 else if (Directory.Exists(inputPath))
                 {
-                    AddDirectoryToZip(archive, inputPath, options.PreservePaths, compressionLevel);
+                    AddDirectoryToZip(archive, inputPath, opts.PreservePaths, compressionLevel);
                 }
             }
 
-            return StashValue.FromObj(outputPath);
+            return outputPath;
         }
         catch (RuntimeError) { throw; }
         catch (UnauthorizedAccessException)

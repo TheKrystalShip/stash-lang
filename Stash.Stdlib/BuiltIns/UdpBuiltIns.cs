@@ -20,15 +20,21 @@ public static partial class UdpBuiltIns
     /// <param name="port">The destination port (1-65535).</param>
     /// <param name="data">The string data to send.</param>
     /// <returns>The number of bytes sent.</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Send(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.UdpSend(ctx, args, "udp.send");
+    [StashFn]
+    private static long Send(IInterpreterContext ctx, string host, long port, string data)
+    {
+        StashValue[] args = [StashValue.FromObj(host), StashValue.FromInt(port), StashValue.FromObj(data)];
+        return NetSocketImpl.UdpSend(ctx, args, "udp.send").AsInt;
+    }
 
     /// <summary>Listens on a UDP port and receives one datagram.</summary>
     /// <param name="port">The port to listen on (1-65535).</param>
     /// <param name="timeout">Optional timeout in milliseconds (default 5000).</param>
     /// <returns>A UdpMessage struct with data, host, and port fields.</returns>
-    [StashFn(Raw = true, ReturnType = "UdpMessage")]
-    private static StashValue Recv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-        => NetSocketImpl.UdpRecv(ctx, args, "udp.recv");
+    [StashFn(ReturnType = "UdpMessage")]
+    private static StashValue Recv(IInterpreterContext ctx, long port, long timeout = 5000)
+    {
+        StashValue[] args = [StashValue.FromInt(port), StashValue.FromInt(timeout)];
+        return NetSocketImpl.UdpRecv(ctx, args, "udp.recv");
+    }
 }

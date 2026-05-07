@@ -23,11 +23,9 @@ public static partial class TaskBuiltIns
     /// <summary>Runs a function asynchronously in a new task and returns a Future. Use task.await() to wait for the result.</summary>
     /// <param name="fn">The function to run asynchronously</param>
     /// <returns>A Future representing the running task</returns>
-    [StashFn(Raw = true, ReturnType = "Future")]
-    private static StashValue Run(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "Future")]
+    private static StashValue Run(IInterpreterContext ctx, IStashCallable fn)
     {
-        var callable = SvArgs.Callable(args, 0, "task.run");
-
         var cts = ctx.CancellationToken.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken)
             : new CancellationTokenSource();
@@ -37,7 +35,7 @@ public static partial class TaskBuiltIns
             IInterpreterContext child = ctx.Fork(cts.Token);
             try
             {
-                return child.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty).ToObject();
+                return child.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty).ToObject();
             }
             finally
             {
@@ -51,10 +49,10 @@ public static partial class TaskBuiltIns
     /// <summary>Waits for a Future to complete and returns its result. Throws if the task failed.</summary>
     /// <param name="task">The Future to await</param>
     /// <returns>The result value of the task</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Await(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Await(IInterpreterContext ctx, StashValue task)
     {
-        var future = SvArgs.Future(args, 0, "task.await");
+        var future = GetFuture(task, "task.await");
 
         return StashValue.FromObject(future.GetResult());
     }
@@ -62,13 +60,11 @@ public static partial class TaskBuiltIns
     /// <summary>Waits for all Futures in the array to complete. Returns an array of results in the same order. Failed tasks become error values.</summary>
     /// <param name="tasks">An array of Futures</param>
     /// <returns>An array of result values</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue AwaitAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static StashValue AwaitAll(IInterpreterContext ctx, List<StashValue> tasks)
     {
-        var items = SvArgs.StashList(args, 0, "task.awaitAll");
-
-        var futures = new List<StashFuture>(items.Count);
-        foreach (StashValue item in items)
+        var futures = new List<StashFuture>(tasks.Count);
+        foreach (StashValue item in tasks)
         {
             if (item.ToObject() is not StashFuture future)
             {
@@ -112,18 +108,16 @@ public static partial class TaskBuiltIns
     /// <summary>Waits for the first Future in the array to complete. Returns its result and cancels all remaining tasks.</summary>
     /// <param name="tasks">A non-empty array of Futures</param>
     /// <returns>The result of the first completed Future</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue AwaitAny(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue AwaitAny(IInterpreterContext ctx, List<StashValue> tasks)
     {
-        var items = SvArgs.StashList(args, 0, "task.awaitAny");
-
-        if (items.Count == 0)
+        if (tasks.Count == 0)
         {
             throw new RuntimeError("task.awaitAny() expects a non-empty list.");
         }
 
-        var futures = new List<StashFuture>(items.Count);
-        foreach (StashValue item in items)
+        var futures = new List<StashFuture>(tasks.Count);
+        foreach (StashValue item in tasks)
         {
             if (item.ToObject() is not StashFuture future)
             {
@@ -133,8 +127,8 @@ public static partial class TaskBuiltIns
             futures.Add(future);
         }
 
-        var tasks = futures.ConvertAll(f => (Task)f.DotNetTask);
-        int idx = Task.WaitAny(tasks.ToArray());
+        var dotnetTasks = futures.ConvertAll(f => (Task)f.DotNetTask);
+        int idx = Task.WaitAny(dotnetTasks.ToArray());
         StashFuture completed = futures[idx];
 
         // Cancel remaining futures
@@ -152,10 +146,10 @@ public static partial class TaskBuiltIns
     /// <summary>Returns the current status of a Future as a Status enum value: Running, Completed, Failed, or Cancelled.</summary>
     /// <param name="task">The Future to check</param>
     /// <returns>The task status enum value</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Status(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static StashValue Status(IInterpreterContext ctx, StashValue task)
     {
-        var future = SvArgs.Future(args, 0, "task.status");
+        var future = GetFuture(task, "task.status");
 
         string statusStr = future.Status; // "Running", "Completed", "Failed", "Cancelled"
         return StashValue.FromObject(_taskStatusEnum.GetMember(statusStr));
@@ -164,40 +158,36 @@ public static partial class TaskBuiltIns
     /// <summary>Requests cancellation of a running Future. The task may not stop immediately.</summary>
     /// <param name="task">The Future to cancel</param>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Cancel(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "null")]
+    private static void Cancel(IInterpreterContext ctx, StashValue task)
     {
-        var future = SvArgs.Future(args, 0, "task.cancel");
-
+        var future = GetFuture(task, "task.cancel");
         future.Cancel();
-        return StashValue.Null;
     }
 
     /// <summary>Returns a new Future that resolves when all Futures in the array complete. Plain values are wrapped in completed Futures.</summary>
     /// <param name="tasks">An array of Futures or plain values</param>
     /// <returns>A Future that resolves to an array of all results</returns>
-    [StashFn(Raw = true, ReturnType = "Future")]
-    private static StashValue All(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "Future")]
+    private static StashValue All(IInterpreterContext ctx, List<StashValue> tasks)
     {
-        var items = SvArgs.StashList(args, 0, "task.all");
-
-        if (items.Count == 0)
+        if (tasks.Count == 0)
         {
             return StashValue.FromObj(StashFuture.Resolved(new List<StashValue>()));
         }
 
         // Collect all .NET tasks
-        var tasks = new List<Task<object?>>(items.Count);
-        foreach (StashValue item in items)
+        var dotnetTasks = new List<Task<object?>>(tasks.Count);
+        foreach (StashValue item in tasks)
         {
             if (item.ToObject() is StashFuture future)
             {
-                tasks.Add(future.DotNetTask);
+                dotnetTasks.Add(future.DotNetTask);
             }
             else
             {
                 // Plain value — wrap in completed task
-                tasks.Add(Task.FromResult(item.ToObject()));
+                dotnetTasks.Add(Task.FromResult(item.ToObject()));
             }
         }
 
@@ -206,9 +196,9 @@ public static partial class TaskBuiltIns
             : new CancellationTokenSource();
         var combinedTask = Task.Run(async () =>
         {
-            await Task.WhenAll(tasks);
-            var results = new List<StashValue>(tasks.Count);
-            foreach (var t in tasks)
+            await Task.WhenAll(dotnetTasks);
+            var results = new List<StashValue>(dotnetTasks.Count);
+            foreach (var t in dotnetTasks)
             {
                 results.Add(StashValue.FromObject(t.Result));
             }
@@ -221,26 +211,24 @@ public static partial class TaskBuiltIns
     /// <summary>Returns a new Future that resolves when the first Future in the array completes. Requires a non-empty array.</summary>
     /// <param name="tasks">A non-empty array of Futures</param>
     /// <returns>A Future that resolves to the first completed value</returns>
-    [StashFn(Raw = true, ReturnType = "Future")]
-    private static StashValue Race(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "Future")]
+    private static StashValue Race(IInterpreterContext ctx, List<StashValue> tasks)
     {
-        var items = SvArgs.StashList(args, 0, "task.race");
-
-        if (items.Count == 0)
+        if (tasks.Count == 0)
         {
             throw new RuntimeError("task.race() expects a non-empty array.");
         }
 
-        var tasks = new List<Task<object?>>(items.Count);
-        foreach (StashValue item in items)
+        var dotnetTasks = new List<Task<object?>>(tasks.Count);
+        foreach (StashValue item in tasks)
         {
             if (item.ToObject() is StashFuture future)
             {
-                tasks.Add(future.DotNetTask);
+                dotnetTasks.Add(future.DotNetTask);
             }
             else
             {
-                tasks.Add(Task.FromResult(item.ToObject()));
+                dotnetTasks.Add(Task.FromResult(item.ToObject()));
             }
         }
 
@@ -249,7 +237,7 @@ public static partial class TaskBuiltIns
             : new CancellationTokenSource();
         var raceTask = Task.Run(async () =>
         {
-            Task<object?> winner = await Task.WhenAny(tasks);
+            Task<object?> winner = await Task.WhenAny(dotnetTasks);
             return await winner;
         });
 
@@ -259,6 +247,7 @@ public static partial class TaskBuiltIns
     /// <summary>Returns an already-resolved Future wrapping the given value.</summary>
     /// <param name="value">The value to resolve</param>
     /// <returns>A completed Future wrapping the value</returns>
+    // Raw = true: 'value' is optional (0 or 1 args); typed form can't express truly optional StashValue.
     [StashFn(Raw = true, ReturnType = "Future")]
     private static StashValue Resolve(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -268,11 +257,9 @@ public static partial class TaskBuiltIns
     /// <summary>Returns a Future that completes after the given number of seconds.</summary>
     /// <param name="seconds">The delay duration in seconds</param>
     /// <returns>A Future that resolves to null after the delay</returns>
-    [StashFn(Raw = true, ReturnType = "Future")]
-    private static StashValue Delay(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "Future")]
+    private static StashValue Delay(IInterpreterContext ctx, double seconds)
     {
-        var seconds = SvArgs.Numeric(args, 0, "task.delay");
-
         int ms = (int)(seconds * 1000);
         var cts = new CancellationTokenSource();
         var delayTask = Task.Run(async () =>
@@ -288,12 +275,9 @@ public static partial class TaskBuiltIns
     /// <param name="ms">Timeout in milliseconds</param>
     /// <param name="fn">The function to execute</param>
     /// <returns>The function's return value</returns>
-    [StashFn(Raw = true, ReturnType = "any")]
-    private static StashValue Timeout(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "any")]
+    private static StashValue Timeout(IInterpreterContext ctx, [StashParam(Type = "number")] double ms, IStashCallable fn)
     {
-        double ms = SvArgs.Numeric(args, 0, "task.timeout");
-        var callable = SvArgs.Callable(args, 1, "task.timeout");
-
         int timeoutMs = (int)ms;
         var cts = new CancellationTokenSource(timeoutMs);
 
@@ -302,7 +286,7 @@ public static partial class TaskBuiltIns
             IInterpreterContext child = ctx.Fork(cts.Token);
             try
             {
-                return child.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty).ToObject();
+                return child.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty).ToObject();
             }
             finally
             {
@@ -350,5 +334,10 @@ public static partial class TaskBuiltIns
             throw new RuntimeError(ae.InnerException.Message);
         }
     }
-}
 
+    private static StashFuture GetFuture(StashValue v, string funcName)
+    {
+        if (v.IsObj && v.AsObj is StashFuture f) return f;
+        throw new RuntimeError($"First argument to '{funcName}' must be a future.");
+    }
+}

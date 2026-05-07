@@ -41,27 +41,25 @@ public static partial class TermBuiltIns
     /// <summary>Wraps text in ANSI escape codes for terminal color.</summary>
     /// <param name="text">The text to colorize</param>
     /// <param name="color">Foreground color: ANSI name ("red", "brightcyan"), 256-color SGR fragment ("38;5;81"), 24-bit hex ("#RRGGBB"), or empty string for none</param>
-    /// <param name="bgColor">Optional background color in the same accepted forms</param>
+    /// <param name="rest">Optional background color in the same accepted forms</param>
     /// <returns>The ANSI-styled string (or text unchanged if both colors are empty)</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Color(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Color(string text, string color, params StashValue[] rest)
     {
-        if (args.Length < 2 || args.Length > 3)
+        if (rest.Length > 1)
             throw new RuntimeError("'term.color' requires 2 or 3 arguments.");
 
-        var text = SvArgs.String(args, 0, "term.color");
-        var color = SvArgs.String(args, 1, "term.color");
         string? fgCode = ResolveColorCode(color, isBackground: false, "term.color");
 
         string? bgCode = null;
-        if (args.Length == 3)
+        if (rest.Length == 1)
         {
-            var bgColor = SvArgs.String(args, 2, "term.color");
+            var bgColor = SvArgs.String(rest, 0, "term.color");
             bgCode = ResolveColorCode(bgColor, isBackground: true, "term.color");
         }
 
         if (fgCode is null && bgCode is null)
-            return StashValue.FromObj(text);
+            return text;
 
         string codes = (fgCode, bgCode) switch
         {
@@ -70,7 +68,7 @@ public static partial class TermBuiltIns
             (null, not null)     => bgCode!,
             _                    => "" // unreachable
         };
-        return StashValue.FromObj($"\x1b[{codes}m{text}\x1b[0m");
+        return $"\x1b[{codes}m{text}\x1b[0m";
     }
 
     /// <summary>Returns the text wrapped in ANSI bold formatting.</summary>
@@ -159,26 +157,24 @@ public static partial class TermBuiltIns
 
     /// <summary>Clears the terminal screen.</summary>
     /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Clear(IInterpreterContext ctx, ReadOnlySpan<StashValue> _args)
+    [StashFn(ReturnType = "null")]
+    private static void Clear(IInterpreterContext ctx)
     {
         ctx.Output.Write("\x1b[2J\x1b[H");
-        return StashValue.Null;
     }
 
     /// <summary>Formats data as an ASCII table with the given headers and rows.</summary>
     /// <param name="rows">A 2D array of values to render as table rows</param>
-    /// <param name="headers">Optional array of column header strings</param>
+    /// <param name="rest">Optional array of column header strings</param>
     /// <returns>A formatted ASCII table string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Table(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static string Table(List<StashValue> rows, params StashValue[] rest)
     {
-        if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'term.table' expects 1 or 2 arguments.");
-        var rows = SvArgs.StashList(args, 0, "term.table");
+        if (rest.Length > 1) throw new RuntimeError("'term.table' expects 1 or 2 arguments.");
         List<StashValue>? headers = null;
-        if (args.Length == 2)
+        if (rest.Length == 1)
         {
-            var headersObj = args[1].ToObject();
+            var headersObj = rest[0].ToObject();
             if (headersObj is List<StashValue> h) headers = h;
         }
         var allRows = new List<string[]>();
@@ -191,7 +187,7 @@ public static partial class TermBuiltIns
             else
                 throw new RuntimeError("Each row in 'term.table' must be an array.");
         }
-        if (allRows.Count == 0) return StashValue.FromObj("");
+        if (allRows.Count == 0) return "";
         int colCount = allRows.Max(r => r.Length);
         var widths = new int[colCount];
         foreach (var row in allRows)
@@ -216,7 +212,7 @@ public static partial class TermBuiltIns
                 sb.AppendLine(separator);
         }
         sb.Append(separator);
-        return StashValue.FromObj(sb.ToString());
+        return sb.ToString();
     }
 
     private static string? ResolveColorCode(string color, bool isBackground, string callerName)

@@ -36,6 +36,7 @@ public static partial class TcpBuiltIns
     /// <param name="port">The port number (1-65535).</param>
     /// <param name="timeout">Optional timeout in milliseconds (default 5000).</param>
     /// <returns>A TcpConnection struct.</returns>
+    // Raw = true: returns StashInstance (TcpConnection) stored in ConditionalWeakTable — cannot express as typed return.
     [StashFn(Raw = true, ReturnType = "TcpConnection")]
     private static StashValue Connect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpConnect(ctx, args, "tcp.connect");
@@ -44,6 +45,7 @@ public static partial class TcpBuiltIns
     /// <param name="conn">The TcpConnection.</param>
     /// <param name="data">The string data to send.</param>
     /// <returns>The number of bytes sent.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue Send(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpSend(ctx, args, "tcp.send");
@@ -52,12 +54,14 @@ public static partial class TcpBuiltIns
     /// <param name="conn">The TcpConnection.</param>
     /// <param name="maxBytes">Optional maximum bytes to read (default 4096).</param>
     /// <returns>The received data as a string.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "string")]
     private static StashValue Recv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpRecv(ctx, args, "tcp.recv");
 
     /// <summary>Closes a TCP connection and releases its resources.</summary>
     /// <param name="conn">The TcpConnection to close.</param>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Close(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpClose(ctx, args, "tcp.close");
@@ -65,6 +69,7 @@ public static partial class TcpBuiltIns
     /// <summary>Starts a TCP listener on a port, accepts one connection, invokes the handler with a TcpConnection, then stops.</summary>
     /// <param name="port">The port to listen on (1-65535).</param>
     /// <param name="handler">A function that receives the TcpConnection.</param>
+    // Raw = true: requires IStashCallable handler arg with StashInstance result — mixed types.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Listen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpListen(ctx, args, "tcp.listen");
@@ -74,6 +79,7 @@ public static partial class TcpBuiltIns
     /// <param name="port">The port number (1-65535).</param>
     /// <param name="options">Optional TcpConnectOptions struct.</param>
     /// <returns>A Future resolving to a TcpConnection.</returns>
+    // Raw = true: returns StashFuture — async returns are out of scope for Phase A.
     [StashFn(Raw = true, ReturnType = "TcpConnection")]
     private static StashValue ConnectAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpConnectAsync(ctx, args, "tcp.connectAsync");
@@ -82,6 +88,7 @@ public static partial class TcpBuiltIns
     /// <param name="conn">The TcpConnection.</param>
     /// <param name="data">The string data to send.</param>
     /// <returns>A Future resolving to the number of bytes sent.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue SendAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpSendAsync(ctx, args, "tcp.sendAsync");
@@ -90,6 +97,7 @@ public static partial class TcpBuiltIns
     /// <param name="conn">The TcpConnection.</param>
     /// <param name="data">The byte[] data to send.</param>
     /// <returns>A Future resolving to the number of bytes sent.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue SendBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpSendBytesAsync(ctx, args, "tcp.sendBytesAsync");
@@ -98,6 +106,7 @@ public static partial class TcpBuiltIns
     /// <param name="conn">The TcpConnection.</param>
     /// <param name="options">Optional TcpRecvOptions struct with maxBytes and timeout.</param>
     /// <returns>A Future resolving to a string, or null on timeout.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "string")]
     private static StashValue RecvAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpRecvAsync(ctx, args, "tcp.recvAsync");
@@ -106,6 +115,7 @@ public static partial class TcpBuiltIns
     /// <param name="conn">The TcpConnection.</param>
     /// <param name="options">Optional TcpRecvOptions struct with maxBytes and timeout.</param>
     /// <returns>A Future resolving to a byte[], or null on timeout.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "byte[]")]
     private static StashValue RecvBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpRecvBytesAsync(ctx, args, "tcp.recvBytesAsync");
@@ -113,6 +123,7 @@ public static partial class TcpBuiltIns
     /// <summary>Async. Gracefully closes a TCP connection.</summary>
     /// <param name="conn">The TcpConnection to close.</param>
     /// <returns>A Future resolving to null.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue CloseAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpCloseAsync(ctx, args, "tcp.closeAsync");
@@ -120,6 +131,7 @@ public static partial class TcpBuiltIns
     /// <summary>Returns true if the TCP connection is open.</summary>
     /// <param name="conn">The TcpConnection.</param>
     /// <returns>True if the connection is open.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "bool")]
     private static StashValue IsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpIsOpen(ctx, args, "tcp.isOpen");
@@ -127,6 +139,7 @@ public static partial class TcpBuiltIns
     /// <summary>Returns the current connection state of a TCP connection.</summary>
     /// <param name="conn">The TcpConnection.</param>
     /// <returns>A TcpConnectionState enum value.</returns>
+    // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "TcpConnectionState")]
     private static StashValue State(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpState(ctx, args, "tcp.state");
@@ -135,12 +148,14 @@ public static partial class TcpBuiltIns
     /// <param name="port">The port to listen on (1-65535, or 0 for auto).</param>
     /// <param name="handler">A function that receives each TcpConnection.</param>
     /// <returns>A Future resolving to a TcpServer handle.</returns>
+    // Raw = true: returns StashFuture wrapping StashInstance (TcpServer) — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "TcpServer")]
     private static StashValue ListenAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpListenAsync(ctx, args, "tcp.listenAsync");
 
     /// <summary>Stops a TCP server and closes the listener.</summary>
     /// <param name="server">The TcpServer handle to stop.</param>
+    // Raw = true: first arg is StashInstance (TcpServer), not in typed table.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue ServerClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.TcpServerClose(ctx, args, "tcp.serverClose");

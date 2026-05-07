@@ -17,15 +17,10 @@ public static partial class ConfigBuiltIns
     /// <param name="path">The file path</param>
     /// <param name="format">Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
     /// <returns>Parsed dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Read(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashValue Read(string path, string? format = null)
     {
-        if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'config.read' expects 1 or 2 arguments.");
-        var path = SvArgs.String(args, 0, "config.read");
-
-        var format = args.Length == 2
-            ? SvArgs.String(args, 1, "config.read")
-            : DetectFormat(path);
+        var resolvedFormat = format ?? DetectFormat(path);
 
         string text;
         try
@@ -37,24 +32,18 @@ public static partial class ConfigBuiltIns
             throw new RuntimeError("config.read: " + e.Message, errorType: StashErrorTypes.IOError);
         }
 
-        return StashValue.FromObject(ParseByFormat(text, format, "config.read"));
+        return StashValue.FromObject(ParseByFormat(text, resolvedFormat, "config.read"));
     }
 
     /// <summary>Serializes data and writes it to a config file. Format is auto-detected from extension if omitted.</summary>
     /// <param name="path">The file path</param>
     /// <param name="data">The data to write</param>
     /// <param name="format">Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
-    [StashFn(Raw = true, ReturnType = "void")]
-    private static StashValue Write(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static void Write(string path, StashValue data, string? format = null)
     {
-        if (args.Length < 2 || args.Length > 3) throw new RuntimeError("'config.write' expects 2 or 3 arguments.");
-        var path = SvArgs.String(args, 0, "config.write");
-
-        var format = args.Length == 3
-            ? SvArgs.String(args, 2, "config.write")
-            : DetectFormat(path);
-
-        var text = StringifyByFormat(args[1].ToObject(), format, "config.write");
+        var resolvedFormat = format ?? DetectFormat(path);
+        var text = StringifyByFormat(data.ToObject(), resolvedFormat, "config.write");
 
         try
         {
@@ -64,20 +53,15 @@ public static partial class ConfigBuiltIns
         {
             throw new RuntimeError("config.write: " + e.Message, errorType: StashErrorTypes.IOError);
         }
-
-        return StashValue.Null;
     }
 
     /// <summary>Parses a config string in the given format.</summary>
     /// <param name="text">The config text</param>
     /// <param name="format">The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
     /// <returns>Parsed dictionary</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue Parse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "dict")]
+    private static StashValue Parse(string text, string format)
     {
-        var text = SvArgs.String(args, 0, "config.parse");
-        var format = SvArgs.String(args, 1, "config.parse");
-
         return StashValue.FromObject(ParseByFormat(text, format, "config.parse"));
     }
 
@@ -85,12 +69,10 @@ public static partial class ConfigBuiltIns
     /// <param name="data">The value to serialize</param>
     /// <param name="format">The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
     /// <returns>Config string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Stringify(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string Stringify(StashValue data, string format)
     {
-        var format = SvArgs.String(args, 1, "config.stringify");
-
-        return StashValue.FromObj(StringifyByFormat(args[0].ToObject(), format, "config.stringify"));
+        return StringifyByFormat(data.ToObject(), format, "config.stringify");
     }
 
     /// <summary>Detects the configuration format from a file extension (.json, .ini, .cfg, .conf, .properties, .yaml, .yml, .toml).</summary>

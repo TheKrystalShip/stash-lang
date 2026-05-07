@@ -19,11 +19,9 @@ public static partial class BufBuiltIns
     /// <param name="s">The string to encode</param>
     /// <param name="encoding">The encoding to use (optional: utf-8, ascii, latin1, utf-16, utf-32)</param>
     /// <returns>A byte array containing the encoded bytes</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue From(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue From(string s, string encoding = "utf-8")
     {
-        string s = SvArgs.String(args, 0, "buf.from");
-        string encoding = args.Length >= 2 ? SvArgs.String(args, 1, "buf.from") : "utf-8";
         System.Text.Encoding enc = encoding switch
         {
             "utf-8" or "utf8" => System.Text.Encoding.UTF8,
@@ -39,10 +37,9 @@ public static partial class BufBuiltIns
     /// <summary>Decodes a hexadecimal string to a byte array.</summary>
     /// <param name="hex">The hex string to decode</param>
     /// <returns>A byte array</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue FromHex(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue FromHex(string hex)
     {
-        string hex = SvArgs.String(args, 0, "buf.fromHex");
         if (hex.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
             hex = hex[2..];
         try
@@ -58,10 +55,9 @@ public static partial class BufBuiltIns
     /// <summary>Decodes a base64 string to a byte array.</summary>
     /// <param name="b64">The base64 string to decode</param>
     /// <returns>A byte array</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue FromBase64(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue FromBase64(string b64)
     {
-        string b64 = SvArgs.String(args, 0, "buf.fromBase64");
         try
         {
             return StashValue.FromObj(new StashByteArray(Convert.FromBase64String(b64)));
@@ -76,30 +72,26 @@ public static partial class BufBuiltIns
     /// <param name="size">The number of bytes</param>
     /// <param name="fill">Optional byte value to fill with (default: 0)</param>
     /// <returns>A new byte array</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue Alloc(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue Alloc(long size, byte fill = 0)
     {
-        int size = (int)SvArgs.Long(args, 0, "buf.alloc");
         if (size < 0) throw new RuntimeError($"buf.alloc: size must be non-negative, got {size}.", errorType: StashErrorTypes.ValueError);
-        byte[] data = new byte[size];
-        if (args.Length >= 2)
-        {
-            byte fill = SvArgs.Byte(args, 1, "buf.alloc");
+        byte[] data = new byte[(int)size];
+        if (fill != 0)
             Array.Fill(data, fill);
-        }
         return StashValue.FromObj(new StashByteArray(data));
     }
 
     /// <summary>Creates a byte array from individual byte values.</summary>
     /// <param name="values">The byte values (0-255)</param>
     /// <returns>A new byte array</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue Of(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue Of(params StashValue[] values)
     {
-        byte[] data = new byte[args.Length];
-        for (int i = 0; i < args.Length; i++)
+        byte[] data = new byte[values.Length];
+        for (int i = 0; i < values.Length; i++)
         {
-            StashValue v = args[i];
+            StashValue v = values[i];
             if (v.IsByte)
                 data[i] = v.AsByte;
             else if (v.IsInt)
@@ -121,11 +113,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array to decode</param>
     /// <param name="encoding">The encoding to use (optional)</param>
     /// <returns>The decoded string</returns>
-    [StashFn(Raw = true, Name = "toString")]
-    private static StashValue BufToString(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "toString")]
+    private static string BufToString(byte[] data, string encoding = "utf-8")
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.toString");
-        string encoding = args.Length >= 2 ? SvArgs.String(args, 1, "buf.toString") : "utf-8";
         System.Text.Encoding enc = encoding switch
         {
             "utf-8" or "utf8" => System.Text.Encoding.UTF8,
@@ -135,31 +125,29 @@ public static partial class BufBuiltIns
             "utf-32" or "utf32" => System.Text.Encoding.UTF32,
             _ => throw new RuntimeError($"buf.toString: unsupported encoding '{encoding}'.", errorType: StashErrorTypes.ValueError)
         };
-        return StashValue.FromObj(enc.GetString(ba.AsSpan()));
+        return enc.GetString(data);
     }
 
     /// <summary>Encodes a byte array as a lowercase hexadecimal string.</summary>
     /// <param name="data">The byte array</param>
     /// <returns>The hex string</returns>
-    [StashFn(Raw = true)]
-    private static StashValue ToHex(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string ToHex(byte[] data)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.toHex");
-        return StashValue.FromObj(Convert.ToHexString(ba.AsSpan()).ToLowerInvariant());
+        return Convert.ToHexString(data).ToLowerInvariant();
     }
 
     /// <summary>Encodes a byte array as a base64 string.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="urlSafe">Use URL-safe variant (optional)</param>
     /// <returns>The base64 string</returns>
-    [StashFn(Raw = true)]
-    private static StashValue ToBase64(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string ToBase64(byte[] data, bool urlSafe = false)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.toBase64");
-        string encoded = Convert.ToBase64String(ba.AsSpan());
-        if (args.Length >= 2 && SvArgs.Bool(args, 1, "buf.toBase64"))
+        string encoded = Convert.ToBase64String(data);
+        if (urlSafe)
             encoded = encoded.Replace('+', '-').Replace('/', '_').TrimEnd('=');
-        return StashValue.FromObj(encoded);
+        return encoded;
     }
 
     // --- Inspection ---
@@ -167,24 +155,24 @@ public static partial class BufBuiltIns
     /// <summary>Returns the number of bytes in a byte array.</summary>
     /// <param name="data">The byte array</param>
     /// <returns>The number of bytes</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Len(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static long Len(byte[] data)
     {
-        return StashValue.FromInt(SvArgs.ByteArray(args, 0, "buf.len").Count);
+        return (long)data.Length;
     }
 
     /// <summary>Reads a byte at the given index. Supports negative indexing.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="index">The index to read</param>
     /// <returns>The byte value</returns>
-    [StashFn(Raw = true)]
-    private static StashValue Get(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static StashValue Get(byte[] data, long index)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.get");
-        int index = (int)SvArgs.Long(args, 1, "buf.get");
-        index = ba.ResolveIndex(index);
-        ba.CheckBounds(index, "buf.get");
-        return ba.Get(index);
+        int idx = (int)index;
+        if (idx < 0) idx += data.Length;
+        if (idx < 0 || idx >= data.Length)
+            throw new RuntimeError($"Index {idx} out of bounds for byte[] of length {data.Length}.");
+        return StashValue.FromByte(data[idx]);
     }
 
     /// <summary>Finds the first occurrence of a byte or byte subsequence.</summary>
@@ -193,6 +181,7 @@ public static partial class BufBuiltIns
     /// <param name="from">Starting index (optional)</param>
     /// <returns>The index, or -1 if not found</returns>
     [StashFn(Raw = true)]
+    // Raw = true: search arg is polymorphic (byte, int, or StashByteArray); cannot express in typed form
     private static StashValue IndexOf(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.indexOf");
@@ -221,6 +210,7 @@ public static partial class BufBuiltIns
     /// <param name="search">The byte or byte[] to find</param>
     /// <returns>true if found</returns>
     [StashFn(Raw = true)]
+    // Raw = true: search arg is polymorphic (byte, int, or StashByteArray); cannot express in typed form
     private static StashValue Includes(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.includes");
@@ -243,12 +233,10 @@ public static partial class BufBuiltIns
     /// <param name="a">First byte array</param>
     /// <param name="b">Second byte array</param>
     /// <returns>true if contents are identical</returns>
-    [StashFn(Raw = true, Name = "equals")]
-    private static StashValue BufEquals(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "equals")]
+    private static bool BufEquals(byte[] a, byte[] b)
     {
-        StashByteArray a = SvArgs.ByteArray(args, 0, "buf.equals");
-        StashByteArray b = SvArgs.ByteArray(args, 1, "buf.equals");
-        return StashValue.FromBool(System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(a.AsSpan(), b.AsSpan()));
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(a, b);
     }
 
     // --- Manipulation ---
@@ -258,40 +246,39 @@ public static partial class BufBuiltIns
     /// <param name="start">Start index (optional, default 0)</param>
     /// <param name="end">End index exclusive (optional, default length)</param>
     /// <returns>A new byte array</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue Slice(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue Slice(byte[] data, long start = 0, long end = long.MinValue)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.slice");
-        int len = ba.Count;
-        int start = args.Length >= 2 ? (int)SvArgs.Long(args, 1, "buf.slice") : 0;
-        int end = args.Length >= 3 ? (int)SvArgs.Long(args, 2, "buf.slice") : len;
-        if (start < 0) start = Math.Max(0, len + start);
-        if (end < 0) end = Math.Max(0, len + end);
-        start = Math.Min(start, len);
-        end = Math.Min(end, len);
-        if (start >= end) return StashValue.FromObj(new StashByteArray(Array.Empty<byte>()));
-        return StashValue.FromObj(new StashByteArray(ba.AsSpan().Slice(start, end - start).ToArray()));
+        int len = data.Length;
+        int s = (int)start;
+        int e = end == long.MinValue ? len : (int)end;
+        if (s < 0) s = Math.Max(0, len + s);
+        if (e < 0) e = Math.Max(0, len + e);
+        s = Math.Min(s, len);
+        e = Math.Min(e, len);
+        if (s >= e) return StashValue.FromObj(new StashByteArray(Array.Empty<byte>()));
+        return StashValue.FromObj(new StashByteArray(data.AsSpan(s, e - s).ToArray()));
     }
 
     /// <summary>Concatenates multiple byte arrays into one.</summary>
     /// <param name="arrays">The byte arrays to concatenate</param>
     /// <returns>A new byte array containing all bytes</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue Concat(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue Concat(params StashValue[] arrays)
     {
         int totalLen = 0;
-        for (int i = 0; i < args.Length; i++)
+        for (int i = 0; i < arrays.Length; i++)
         {
-            if (args[i].IsObj && args[i].AsObj is StashByteArray ba)
+            if (arrays[i].IsObj && arrays[i].AsObj is StashByteArray ba)
                 totalLen += ba.Count;
             else
                 throw new RuntimeError($"Argument {i + 1} to 'buf.concat' must be a byte[].", errorType: StashErrorTypes.TypeError);
         }
         byte[] result = new byte[totalLen];
         int offset = 0;
-        for (int i = 0; i < args.Length; i++)
+        for (int i = 0; i < arrays.Length; i++)
         {
-            StashByteArray ba = (StashByteArray)args[i].AsObj!;
+            StashByteArray ba = (StashByteArray)arrays[i].AsObj!;
             ba.AsSpan().CopyTo(result.AsSpan(offset));
             offset += ba.Count;
         }
@@ -306,6 +293,7 @@ public static partial class BufBuiltIns
     /// <param name="srcEnd">End index in source (optional, default length)</param>
     /// <returns>The number of bytes copied</returns>
     [StashFn(Raw = true)]
+    // Raw = true: mutates the destination StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue Copy(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray src = SvArgs.ByteArray(args, 0, "buf.copy");
@@ -332,6 +320,7 @@ public static partial class BufBuiltIns
     /// <param name="end">End index (optional)</param>
     /// <returns>The same byte array</returns>
     [StashFn(Raw = true, ReturnType = "buffer")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray() and returns the live object; typed byte[] would be a detached copy
     private static StashValue Fill(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.fill");
@@ -352,11 +341,10 @@ public static partial class BufBuiltIns
     /// <summary>Returns a reversed copy of a byte array.</summary>
     /// <param name="data">The byte array</param>
     /// <returns>A new reversed byte array</returns>
-    [StashFn(Raw = true, ReturnType = "buffer")]
-    private static StashValue Reverse(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "buffer")]
+    private static StashValue Reverse(byte[] data)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.reverse");
-        byte[] copy = ba.AsSpan().ToArray();
+        byte[] copy = (byte[])data.Clone();
         Array.Reverse(copy);
         return StashValue.FromObj(new StashByteArray(copy));
     }
@@ -367,208 +355,192 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true)]
-    private static StashValue ReadUint8(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static long ReadUint8(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readUint8");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readUint8");
-        CheckReadBounds(ba, offset, 1, "buf.readUint8");
-        return StashValue.FromInt(ba.AsSpan()[offset]);
+        int off = (int)offset;
+        CheckReadBounds(data, off, 1, "buf.readUint8");
+        return data[off];
     }
 
     /// <summary>Reads an unsigned 16-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readUint16BE")]
-    private static StashValue ReadUint16BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readUint16BE")]
+    private static long ReadUint16BE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readUint16BE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readUint16BE");
-        CheckReadBounds(ba, offset, 2, "buf.readUint16BE");
-        return StashValue.FromInt(BinaryPrimitives.ReadUInt16BigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 2, "buf.readUint16BE");
+        return BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads an unsigned 16-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readUint16LE")]
-    private static StashValue ReadUint16LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readUint16LE")]
+    private static long ReadUint16LE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readUint16LE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readUint16LE");
-        CheckReadBounds(ba, offset, 2, "buf.readUint16LE");
-        return StashValue.FromInt(BinaryPrimitives.ReadUInt16LittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 2, "buf.readUint16LE");
+        return BinaryPrimitives.ReadUInt16LittleEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads an unsigned 32-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readUint32BE")]
-    private static StashValue ReadUint32BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readUint32BE")]
+    private static long ReadUint32BE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readUint32BE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readUint32BE");
-        CheckReadBounds(ba, offset, 4, "buf.readUint32BE");
-        return StashValue.FromInt(BinaryPrimitives.ReadUInt32BigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 4, "buf.readUint32BE");
+        return BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads an unsigned 32-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readUint32LE")]
-    private static StashValue ReadUint32LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readUint32LE")]
+    private static long ReadUint32LE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readUint32LE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readUint32LE");
-        CheckReadBounds(ba, offset, 4, "buf.readUint32LE");
-        return StashValue.FromInt(BinaryPrimitives.ReadUInt32LittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 4, "buf.readUint32LE");
+        return BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a signed 8-bit integer at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true)]
-    private static StashValue ReadInt8(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static long ReadInt8(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt8");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt8");
-        CheckReadBounds(ba, offset, 1, "buf.readInt8");
-        return StashValue.FromInt((sbyte)ba.AsSpan()[offset]);
+        int off = (int)offset;
+        CheckReadBounds(data, off, 1, "buf.readInt8");
+        return (sbyte)data[off];
     }
 
     /// <summary>Reads a signed 16-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readInt16BE")]
-    private static StashValue ReadInt16BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readInt16BE")]
+    private static long ReadInt16BE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt16BE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt16BE");
-        CheckReadBounds(ba, offset, 2, "buf.readInt16BE");
-        return StashValue.FromInt(BinaryPrimitives.ReadInt16BigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 2, "buf.readInt16BE");
+        return BinaryPrimitives.ReadInt16BigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a signed 16-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readInt16LE")]
-    private static StashValue ReadInt16LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readInt16LE")]
+    private static long ReadInt16LE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt16LE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt16LE");
-        CheckReadBounds(ba, offset, 2, "buf.readInt16LE");
-        return StashValue.FromInt(BinaryPrimitives.ReadInt16LittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 2, "buf.readInt16LE");
+        return BinaryPrimitives.ReadInt16LittleEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a signed 32-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readInt32BE")]
-    private static StashValue ReadInt32BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readInt32BE")]
+    private static long ReadInt32BE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt32BE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt32BE");
-        CheckReadBounds(ba, offset, 4, "buf.readInt32BE");
-        return StashValue.FromInt(BinaryPrimitives.ReadInt32BigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 4, "buf.readInt32BE");
+        return BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a signed 32-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readInt32LE")]
-    private static StashValue ReadInt32LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readInt32LE")]
+    private static long ReadInt32LE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt32LE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt32LE");
-        CheckReadBounds(ba, offset, 4, "buf.readInt32LE");
-        return StashValue.FromInt(BinaryPrimitives.ReadInt32LittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 4, "buf.readInt32LE");
+        return BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a signed 64-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readInt64BE")]
-    private static StashValue ReadInt64BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readInt64BE")]
+    private static long ReadInt64BE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt64BE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt64BE");
-        CheckReadBounds(ba, offset, 8, "buf.readInt64BE");
-        return StashValue.FromInt(BinaryPrimitives.ReadInt64BigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 8, "buf.readInt64BE");
+        return BinaryPrimitives.ReadInt64BigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a signed 64-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as int</returns>
-    [StashFn(Raw = true, Name = "readInt64LE")]
-    private static StashValue ReadInt64LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readInt64LE")]
+    private static long ReadInt64LE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readInt64LE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readInt64LE");
-        CheckReadBounds(ba, offset, 8, "buf.readInt64LE");
-        return StashValue.FromInt(BinaryPrimitives.ReadInt64LittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 8, "buf.readInt64LE");
+        return BinaryPrimitives.ReadInt64LittleEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a 32-bit IEEE 754 float (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as float</returns>
-    [StashFn(Raw = true, Name = "readFloatBE")]
-    private static StashValue ReadFloatBE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readFloatBE")]
+    private static double ReadFloatBE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readFloatBE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readFloatBE");
-        CheckReadBounds(ba, offset, 4, "buf.readFloatBE");
-        return StashValue.FromFloat(BinaryPrimitives.ReadSingleBigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 4, "buf.readFloatBE");
+        return BinaryPrimitives.ReadSingleBigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a 32-bit IEEE 754 float (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as float</returns>
-    [StashFn(Raw = true, Name = "readFloatLE")]
-    private static StashValue ReadFloatLE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readFloatLE")]
+    private static double ReadFloatLE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readFloatLE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readFloatLE");
-        CheckReadBounds(ba, offset, 4, "buf.readFloatLE");
-        return StashValue.FromFloat(BinaryPrimitives.ReadSingleLittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 4, "buf.readFloatLE");
+        return BinaryPrimitives.ReadSingleLittleEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a 64-bit IEEE 754 double (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as float</returns>
-    [StashFn(Raw = true, Name = "readDoubleBE")]
-    private static StashValue ReadDoubleBE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readDoubleBE")]
+    private static double ReadDoubleBE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readDoubleBE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readDoubleBE");
-        CheckReadBounds(ba, offset, 8, "buf.readDoubleBE");
-        return StashValue.FromFloat(BinaryPrimitives.ReadDoubleBigEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 8, "buf.readDoubleBE");
+        return BinaryPrimitives.ReadDoubleBigEndian(data.AsSpan(off));
     }
 
     /// <summary>Reads a 64-bit IEEE 754 double (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <returns>The value as float</returns>
-    [StashFn(Raw = true, Name = "readDoubleLE")]
-    private static StashValue ReadDoubleLE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn(Name = "readDoubleLE")]
+    private static double ReadDoubleLE(byte[] data, long offset)
     {
-        StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.readDoubleLE");
-        int offset = (int)SvArgs.Long(args, 1, "buf.readDoubleLE");
-        CheckReadBounds(ba, offset, 8, "buf.readDoubleLE");
-        return StashValue.FromFloat(BinaryPrimitives.ReadDoubleLittleEndian(ba.AsSpan().Slice(offset)));
+        int off = (int)offset;
+        CheckReadBounds(data, off, 8, "buf.readDoubleLE");
+        return BinaryPrimitives.ReadDoubleLittleEndian(data.AsSpan(off));
     }
 
     // --- Binary Write Functions ---
@@ -578,6 +550,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write (0-255)</param>
     [StashFn(Raw = true)]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint8(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint8");
@@ -594,6 +567,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeUint16BE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint16BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint16BE");
@@ -610,6 +584,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeUint16LE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint16LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint16LE");
@@ -626,6 +601,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeUint32BE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint32BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint32BE");
@@ -642,6 +618,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeUint32LE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint32LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint32LE");
@@ -658,6 +635,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write (-128 to 127)</param>
     [StashFn(Raw = true)]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt8(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt8");
@@ -674,6 +652,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeInt16BE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt16BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt16BE");
@@ -690,6 +669,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeInt16LE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt16LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt16LE");
@@ -706,6 +686,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeInt32BE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt32BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt32BE");
@@ -722,6 +703,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeInt32LE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt32LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt32LE");
@@ -738,6 +720,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeInt64BE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt64BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt64BE");
@@ -753,6 +736,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeInt64LE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt64LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt64LE");
@@ -768,6 +752,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeFloatBE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteFloatBE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeFloatBE");
@@ -783,6 +768,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeFloatLE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteFloatLE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeFloatLE");
@@ -798,6 +784,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeDoubleBE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteDoubleBE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeDoubleBE");
@@ -813,6 +800,7 @@ public static partial class BufBuiltIns
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
     [StashFn(Raw = true, Name = "writeDoubleLE")]
+    // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteDoubleLE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
         StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeDoubleLE");
@@ -821,6 +809,12 @@ public static partial class BufBuiltIns
         CheckWriteBounds(ba, offset, 8, "buf.writeDoubleLE");
         BinaryPrimitives.WriteDoubleLittleEndian(ba.GetBackingArray(out int _).AsSpan(offset), val);
         return StashValue.Null;
+    }
+
+    private static void CheckReadBounds(byte[] data, int offset, int size, string func)
+    {
+        if (offset < 0 || offset + size > data.Length)
+            throw new RuntimeError($"{func}: offset {offset} with {size}-byte read exceeds buffer length {data.Length}.");
     }
 
     private static void CheckReadBounds(StashByteArray ba, int offset, int size, string func)

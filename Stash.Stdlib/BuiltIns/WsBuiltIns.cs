@@ -27,6 +27,7 @@ public static partial class WsBuiltIns
     /// <param name="url">The WebSocket URL (must start with 'ws://' or 'wss://').</param>
     /// <param name="options">Optional dict with 'headers' (dict), 'timeout' (duration), 'subprotocol' (string).</param>
     /// <returns>A Future resolving to a WsConnection.</returns>
+    // Raw = true: returns StashFuture — async returns are out of scope for Phase A.
     [StashFn(Raw = true, ReturnType = "WsConnection")]
     private static StashValue Connect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsConnect(ctx, args, "ws.connect");
@@ -35,6 +36,7 @@ public static partial class WsBuiltIns
     /// <param name="conn">The WsConnection.</param>
     /// <param name="data">The string data to send.</param>
     /// <returns>A Future resolving to the number of bytes sent.</returns>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue Send(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsSend(ctx, args, "ws.send");
@@ -43,6 +45,7 @@ public static partial class WsBuiltIns
     /// <param name="conn">The WsConnection.</param>
     /// <param name="data">Base64-encoded string of bytes to send.</param>
     /// <returns>A Future resolving to the number of bytes sent.</returns>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue SendBinary(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsSendBinary(ctx, args, "ws.sendBinary");
@@ -51,6 +54,7 @@ public static partial class WsBuiltIns
     /// <param name="conn">The WsConnection.</param>
     /// <param name="timeout">Optional timeout duration (default 30s). Returns null on timeout.</param>
     /// <returns>A Future resolving to a WsMessage or null on timeout.</returns>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "WsMessage")]
     private static StashValue Recv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsRecv(ctx, args, "ws.recv");
@@ -60,6 +64,7 @@ public static partial class WsBuiltIns
     /// <param name="code">Optional close code (1000-4999, default 1000).</param>
     /// <param name="reason">Optional close reason string (default empty).</param>
     /// <returns>A Future resolving to null.</returns>
+    // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Close(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsClose(ctx, args, "ws.close");
@@ -67,6 +72,7 @@ public static partial class WsBuiltIns
     /// <summary>Returns the current connection state of a WebSocket.</summary>
     /// <param name="conn">The WsConnection.</param>
     /// <returns>A WsConnectionState enum value.</returns>
+    // Raw = true: first arg is StashInstance (WsConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "WsConnectionState")]
     private static StashValue State(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsState(ctx, args, "ws.state");
@@ -74,6 +80,7 @@ public static partial class WsBuiltIns
     /// <summary>Returns true if the WebSocket connection is open.</summary>
     /// <param name="conn">The WsConnection.</param>
     /// <returns>True if the connection state is Open.</returns>
+    // Raw = true: first arg is StashInstance (WsConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "bool")]
     private static StashValue IsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => NetSocketImpl.WsIsOpen(ctx, args, "ws.isOpen");

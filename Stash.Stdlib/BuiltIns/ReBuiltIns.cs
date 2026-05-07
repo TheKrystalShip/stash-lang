@@ -37,11 +37,9 @@ public static partial class ReBuiltIns
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
     /// <returns>Matched string or null</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Match(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "string")]
+    private static StashValue Match(string s, string pattern)
     {
-        var s = SvArgs.String(args, 0, "re.match");
-        var pattern = SvArgs.String(args, 1, "re.match");
         try
         {
             var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -62,11 +60,9 @@ public static partial class ReBuiltIns
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
     /// <returns>Array of matched strings</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue MatchAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> MatchAll(string s, string pattern)
     {
-        var s = SvArgs.String(args, 0, "re.matchAll");
-        var pattern = SvArgs.String(args, 1, "re.matchAll");
         try
         {
             var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -74,7 +70,7 @@ public static partial class ReBuiltIns
             var result = new List<StashValue>(matches.Count);
             foreach (Match match in matches)
                 result.Add(StashValue.FromObj(match.Value));
-            return StashValue.FromObj(result);
+            return result;
         }
         catch (RegexMatchTimeoutException)
         {
@@ -90,15 +86,13 @@ public static partial class ReBuiltIns
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
     /// <returns>true if the string matches</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Test(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static bool Test(string s, string pattern)
     {
-        var s = SvArgs.String(args, 0, "re.test");
-        var pattern = SvArgs.String(args, 1, "re.test");
         try
         {
             var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
-            return StashValue.FromBool(regex.IsMatch(s));
+            return regex.IsMatch(s);
         }
         catch (RegexMatchTimeoutException)
         {
@@ -115,16 +109,13 @@ public static partial class ReBuiltIns
     /// <param name="pattern">Regex pattern</param>
     /// <param name="replacement">Replacement string (backreferences supported)</param>
     /// <returns>Modified string</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Replace(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    private static string Replace(string s, string pattern, string replacement)
     {
-        var s = SvArgs.String(args, 0, "re.replace");
-        var pattern = SvArgs.String(args, 1, "re.replace");
-        var replacement = SvArgs.String(args, 2, "re.replace");
         try
         {
             var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
-            return StashValue.FromObj(regex.Replace(s, replacement));
+            return regex.Replace(s, replacement);
         }
         catch (RegexMatchTimeoutException)
         {
@@ -140,11 +131,9 @@ public static partial class ReBuiltIns
     /// <param name="s">The string to search</param>
     /// <param name="pattern">Regex pattern (supports named groups via (?&lt;name&gt;...) syntax)</param>
     /// <returns>RegexMatch struct or null</returns>
-    [StashFn(Raw = true, ReturnType = "RegexMatch")]
-    private static StashValue Capture(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "RegexMatch")]
+    private static StashValue Capture(string s, string pattern)
     {
-        var s = SvArgs.String(args, 0, "re.capture");
-        var pattern = SvArgs.String(args, 1, "re.capture");
         try
         {
             var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -166,11 +155,9 @@ public static partial class ReBuiltIns
     /// <param name="s">The string to search</param>
     /// <param name="pattern">Regex pattern (supports named groups via (?&lt;name&gt;...) syntax)</param>
     /// <returns>Array of RegexMatch structs</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue CaptureAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn(ReturnType = "array")]
+    private static List<StashValue> CaptureAll(string s, string pattern)
     {
-        var s = SvArgs.String(args, 0, "re.captureAll");
-        var pattern = SvArgs.String(args, 1, "re.captureAll");
         try
         {
             var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -178,7 +165,7 @@ public static partial class ReBuiltIns
             var result = new List<StashValue>(matches.Count);
             foreach (Match m in matches)
                 result.Add(StashValue.FromObj(RegexImpl.BuildRegexMatch(m)));
-            return StashValue.FromObj(result);
+            return result;
         }
         catch (RegexMatchTimeoutException)
         {

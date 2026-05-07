@@ -16,6 +16,7 @@ public static partial class EnvBuiltIns
     /// <param name="name">The environment variable name</param>
     /// <param name="default">Optional default value when the variable is not set</param>
     /// <returns>The value, default, or null</returns>
+    // Raw: second arg is pass-through StashValue (any type allowed as default)
     [StashFn(Raw = true)]
     private static StashValue Get(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -32,49 +33,38 @@ public static partial class EnvBuiltIns
     /// <summary>Sets an environment variable to the given value.</summary>
     /// <param name="name">The environment variable name</param>
     /// <param name="value">The value to assign</param>
-    /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Set(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static void Set(string name, string value)
     {
-        var name = SvArgs.String(args, 0, "env.set");
-        var value = SvArgs.String(args, 1, "env.set");
-
         System.Environment.SetEnvironmentVariable(name, value);
-        return StashValue.Null;
     }
 
     /// <summary>Returns true if the environment variable is set.</summary>
     /// <param name="name">The environment variable name</param>
     /// <returns>True if the variable exists</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Has(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-    {
-        var name = SvArgs.String(args, 0, "env.has");
-
-        return StashValue.FromBool(System.Environment.GetEnvironmentVariable(name) != null);
-    }
+    [StashFn]
+    public static bool Has(string name) =>
+        System.Environment.GetEnvironmentVariable(name) != null;
 
     /// <summary>Returns a dictionary of all current environment variables.</summary>
     /// <returns>A dictionary mapping variable names to their values</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue All(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static StashDictionary All()
     {
         var dict = new StashDictionary();
         foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
         {
             dict.Set(entry.Key.ToString()!, StashValue.FromObject(entry.Value?.ToString()));
         }
-        return StashValue.FromObj(dict);
+        return dict;
     }
 
     /// <summary>Returns a dictionary of all environment variables whose names start with the given prefix.</summary>
     /// <param name="prefix">The prefix to filter by</param>
     /// <returns>A dictionary of matching environment variables</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue WithPrefix(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static StashDictionary WithPrefix(string prefix)
     {
-        var prefix = SvArgs.String(args, 0, "env.withPrefix");
-
         var dict = new StashDictionary();
         foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
         {
@@ -84,30 +74,23 @@ public static partial class EnvBuiltIns
                 dict.Set(key, StashValue.FromObject(entry.Value?.ToString()));
             }
         }
-        return StashValue.FromObj(dict);
+        return dict;
     }
 
     /// <summary>Removes an environment variable.</summary>
     /// <param name="name">The environment variable name to remove</param>
-    /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Remove(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static void Remove(string name)
     {
-        var name = SvArgs.String(args, 0, "env.remove");
-
         System.Environment.SetEnvironmentVariable(name, null);
-        return StashValue.Null;
     }
 
     /// <summary>Removes the environment variable 'name'. Returns true if the variable existed, false otherwise.</summary>
     /// <param name="name">The environment variable name to remove</param>
     /// <returns>True if the variable was set, false if it was not set</returns>
-    [StashFn(Raw = true, ReturnType = "bool")]
-    private static StashValue Unset(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static bool Unset(string name)
     {
-        StashValue v0 = args[0];
-        if (!v0.IsObj || v0.AsObj is not string name)
-            throw new RuntimeError("1st argument to 'env.unset' must be a string.", errorType: StashErrorTypes.TypeError);
         if (name.Length == 0)
             throw new RuntimeError("'env.unset': name must not be empty.", errorType: StashErrorTypes.ValueError);
         if (name.Contains('='))
@@ -117,89 +100,58 @@ public static partial class EnvBuiltIns
 
         bool existed = System.Environment.GetEnvironmentVariable(name) is not null;
         System.Environment.SetEnvironmentVariable(name, null);
-        return StashValue.FromBool(existed);
+        return existed;
     }
 
     /// <summary>Returns the current working directory path.</summary>
     /// <returns>The current working directory</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Cwd(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-    {
-        return StashValue.FromObj(System.Environment.CurrentDirectory);
-    }
+    [StashFn]
+    public static string Cwd() => System.Environment.CurrentDirectory;
 
     /// <summary>Returns the current user's home directory path.</summary>
     /// <returns>The home directory path</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Home(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-    {
-        return StashValue.FromObj(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile));
-    }
+    [StashFn]
+    public static string Home() =>
+        System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
 
     /// <summary>Returns the machine's hostname.</summary>
     /// <returns>The hostname</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Hostname(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-    {
-        return StashValue.FromObj(System.Environment.MachineName);
-    }
+    [StashFn]
+    public static string Hostname() => System.Environment.MachineName;
 
     /// <summary>Returns the current user's login name.</summary>
     /// <returns>The username</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue User(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-    {
-        return StashValue.FromObj(System.Environment.UserName);
-    }
+    [StashFn]
+    public static string User() => System.Environment.UserName;
 
     /// <summary>Returns the current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'.</summary>
     /// <returns>The OS name</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Os(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static string Os()
     {
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
-        {
-            return StashValue.FromObj("linux");
-        }
-
+            return "linux";
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
-        {
-            return StashValue.FromObj("macos");
-        }
-
+            return "macos";
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
-        {
-            return StashValue.FromObj("windows");
-        }
-
-        return StashValue.FromObj("unknown");
+            return "windows";
+        return "unknown";
     }
 
     /// <summary>Returns the CPU architecture (e.g. 'x64', 'arm64').</summary>
     /// <returns>The architecture name</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Arch(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
-    {
-        return StashValue.FromObj(System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant());
-    }
+    [StashFn]
+    public static string Arch() =>
+        System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
 
     /// <summary>Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.</summary>
     /// <param name="path">Path to the .env file</param>
     /// <param name="prefix">Optional prefix to prepend to all variable names</param>
     /// <returns>The number of variables loaded</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue LoadFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static long LoadFile(IInterpreterContext ctx, string path, string prefix = "")
     {
-        if (args.Length < 1 || args.Length > 2)
-            throw new RuntimeError("'env.loadFile' expects 1 or 2 arguments.");
-        var filePath = SvArgs.String(args, 0, "env.loadFile");
-        var prefix = "";
-        if (args.Length == 2)
-        {
-            prefix = SvArgs.String(args, 1, "env.loadFile");
-        }
-
-        filePath = ctx.ExpandTilde(filePath);
+        var filePath = ctx.ExpandTilde(path);
 
         string text;
         try
@@ -248,18 +200,15 @@ public static partial class EnvBuiltIns
             count++;
         }
 
-        return StashValue.FromInt(count);
+        return count;
     }
 
     /// <summary>Saves all current environment variables to a .env file at the given path.</summary>
     /// <param name="path">Path to write the .env file</param>
-    /// <returns>null</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue SaveFile(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static void SaveFile(IInterpreterContext ctx, string path)
     {
-        var filePath = SvArgs.String(args, 0, "env.saveFile");
-
-        filePath = ctx.ExpandTilde(filePath);
+        var filePath = ctx.ExpandTilde(path);
 
         var sb = new StringBuilder();
         var entries = new System.Collections.Generic.SortedDictionary<string, string>();
@@ -295,30 +244,33 @@ public static partial class EnvBuiltIns
             throw new RuntimeError("env.saveFile: " + e.Message, errorType: StashErrorTypes.IOError);
         }
 
-        return StashValue.Null;
     }
 
     /// <summary>Changes the current working directory to the given path and pushes it onto the directory stack.</summary>
     /// <param name="path">The directory path to change to</param>
     /// <returns>null</returns>
+    // Raw: delegates to CurrentProcessImpl.Chdir which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "null")]
     private static StashValue Chdir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.Chdir(ctx, args, "env.chdir");
 
     /// <summary>Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.</summary>
     /// <returns>The directory path that was popped</returns>
+    // Raw: delegates to CurrentProcessImpl.PopDir which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "string")]
     private static StashValue PopDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.PopDir(ctx, args, "env.popDir");
 
     /// <summary>Returns a copy of the directory stack, oldest entry first.</summary>
     /// <returns>An array of directory path strings</returns>
+    // Raw: delegates to CurrentProcessImpl.DirStack which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "array")]
     private static StashValue DirStack(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.DirStack(ctx, args, "env.dirStack");
 
     /// <summary>Returns the number of entries in the directory stack.</summary>
     /// <returns>The depth as an integer</returns>
+    // Raw: delegates to CurrentProcessImpl.DirStackDepth which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue DirStackDepth(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.DirStackDepth(ctx, args, "env.dirStackDepth");
@@ -327,18 +279,17 @@ public static partial class EnvBuiltIns
     /// <param name="path">The directory to temporarily change to</param>
     /// <param name="fn">The function to execute in the new directory</param>
     /// <returns>The return value of fn</returns>
+    // Raw: delegates to CurrentProcessImpl.WithDir which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "any")]
     private static StashValue WithDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.WithDir(ctx, args, "env.withDir");
 
     /// <summary>Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.</summary>
-    /// <param name="code">(optional) The exit code. Defaults to 0</param>
+    /// <param name="code">The exit code. Defaults to 0</param>
     /// <returns>Does not return — exits the process</returns>
-    [StashFn(Raw = true, ReturnType = "null")]
-    private static StashValue Exit(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static void Exit(IInterpreterContext ctx, long code = 0L)
     {
-        long code = args.Length > 0 ? SvArgs.Long(args, 0, "env.exit") : 0L;
         GlobalBuiltIns.EmitExitImpl(ctx, code);
-        return StashValue.Null;
     }
 }

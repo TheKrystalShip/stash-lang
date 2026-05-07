@@ -17,7 +17,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsInt) return v.AsInt;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an integer.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an integer.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -25,7 +25,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsFloat) return v.AsFloat;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a float.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a float.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -33,7 +33,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is string s) return s;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a string.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a string.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -41,7 +41,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsBool) return v.AsBool;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a boolean.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a boolean.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -54,7 +54,7 @@ public static class SvArgs
             long n = v.AsInt;
             if (n >= 0 && n <= 255) return (byte)n;
         }
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte (0-255).");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte (0-255).", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -66,7 +66,7 @@ public static class SvArgs
             if (v.AsObj is List<StashValue> l) return l;
             if (v.AsObj is StashTypedArray ta) return MaterializeTypedArray(ta);
         }
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -83,7 +83,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashTypedArray ta) return ta;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a typed array.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a typed array.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -91,7 +91,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashByteArray ba) return ba;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte[].");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte[].", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>
@@ -103,7 +103,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashByteArray ba) return ba.AsSpan().ToArray();
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a buffer.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a buffer.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -115,7 +115,7 @@ public static class SvArgs
             object obj = v.AsObj!;
             if (obj is List<StashValue> || obj is StashTypedArray) return obj;
         }
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -123,7 +123,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashDictionary d) return d;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a dictionary.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a dictionary.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -131,7 +131,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is IStashCallable fn) return fn;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a function.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a function.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -139,14 +139,14 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashInstance inst) return inst;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a struct instance.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a struct instance.", errorType: StashErrorTypes.TypeError);
     }
 
     public static StashInstance Instance(ReadOnlySpan<StashValue> args, int index, string typeName, string funcName)
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashInstance inst && inst.TypeName == typeName) return inst;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a {typeName}.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a {typeName}.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -154,7 +154,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashIpAddress ip) return ip;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an IP address.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an IP address.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -162,7 +162,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashFuture f) return f;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a future.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a future.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -170,7 +170,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashDuration d) return d;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a duration.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a duration.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>
@@ -182,14 +182,14 @@ public static class SvArgs
         StashValue v = args[index];
         if (v.IsFloat) return v.AsFloat;
         if (v.IsInt) return (double)v.AsInt;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a number.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a number.", errorType: StashErrorTypes.TypeError);
     }
 
     public static object NotNull(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         StashValue v = args[index];
         if (v.IsNull)
-            throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must not be null.");
+            throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must not be null.", errorType: StashErrorTypes.TypeError);
         return v.ToObject()!;
     }
 
@@ -197,7 +197,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashEnumValue value && value.TypeName == typeName) return value;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a {typeName} enum value.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a {typeName} enum value.", errorType: StashErrorTypes.TypeError);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -205,7 +205,7 @@ public static class SvArgs
     {
         StashValue v = args[index];
         if (v.IsObj && v.AsObj is StashSecret sec) return sec;
-        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a secret.");
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a secret.", errorType: StashErrorTypes.TypeError);
     }
 
     /// <summary>

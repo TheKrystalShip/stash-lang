@@ -37,22 +37,22 @@ public static partial class SysBuiltIns
 
     /// <summary>Returns the number of logical CPU processors available to the current process.</summary>
     /// <returns>CPU count</returns>
-    [StashFn(ReturnType = "int")]
-    private static long CpuCount() => Environment.ProcessorCount;
+    [StashFn]
+    public static long CpuCount() => Environment.ProcessorCount;
 
     /// <summary>Returns the total available system memory in bytes as reported by the GC memory info.</summary>
     /// <returns>Total memory in bytes</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue TotalMemory(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    [StashFn]
+    public static long TotalMemory()
     {
         var gcInfo = GC.GetGCMemoryInfo();
-        return StashValue.FromInt(gcInfo.TotalAvailableMemoryBytes);
+        return gcInfo.TotalAvailableMemoryBytes;
     }
 
     /// <summary>Returns the amount of free system memory in bytes. On Linux reads /proc/meminfo; falls back to GC info.</summary>
     /// <returns>Free memory in bytes</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue FreeMemory(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    [StashFn]
+    public static long FreeMemory()
     {
         if (OperatingSystem.IsLinux())
         {
@@ -66,7 +66,7 @@ public static partial class SysBuiltIns
                         var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                         if (parts.Length >= 2 && long.TryParse(parts[1], out var kb))
                         {
-                            return StashValue.FromInt(kb * 1024L);
+                            return kb * 1024L;
                         }
                     }
                 }
@@ -74,21 +74,18 @@ public static partial class SysBuiltIns
             catch { }
         }
 
-        return StashValue.FromInt(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
+        return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
     }
 
     /// <summary>Returns the system uptime in seconds since process start via Environment.TickCount64.</summary>
     /// <returns>Uptime in seconds</returns>
-    [StashFn(Raw = true, ReturnType = "float")]
-    private static StashValue Uptime(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
-    {
-        return StashValue.FromFloat(Environment.TickCount64 / 1000.0);
-    }
+    [StashFn]
+    public static double Uptime() => Environment.TickCount64 / 1000.0;
 
     /// <summary>Returns an array of 1-, 5-, and 15-minute load averages. Returns [0,0,0] on non-Linux.</summary>
     /// <returns>Array of three load average floats</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue LoadAvg(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    [StashFn]
+    public static List<StashValue> LoadAvg()
     {
         if (OperatingSystem.IsLinux())
         {
@@ -101,35 +98,27 @@ public static partial class SysBuiltIns
                     && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var five)
                     && double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var fifteen))
                 {
-                    return StashValue.FromObj(new List<StashValue> { StashValue.FromFloat(one), StashValue.FromFloat(five), StashValue.FromFloat(fifteen) });
+                    return new List<StashValue> { StashValue.FromFloat(one), StashValue.FromFloat(five), StashValue.FromFloat(fifteen) };
                 }
             }
             catch { }
         }
 
-        return StashValue.FromObj(new List<StashValue> { StashValue.FromFloat(0.0), StashValue.FromFloat(0.0), StashValue.FromFloat(0.0) });
+        return new List<StashValue> { StashValue.FromFloat(0.0), StashValue.FromFloat(0.0), StashValue.FromFloat(0.0) };
     }
 
     /// <summary>Returns disk usage info (total, used, free bytes) for the given path, or root if omitted.</summary>
     /// <param name="path">Optional path (default: root)</param>
     /// <returns>Dictionary with total, used, free keys</returns>
-    [StashFn(Raw = true, ReturnType = "dict")]
-    private static StashValue DiskUsage(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    [StashFn]
+    public static StashDictionary DiskUsage(string? path = null)
     {
-        string path;
-        if (args.Length == 0)
-        {
-            path = OperatingSystem.IsWindows() ? "C:\\" : "/";
-        }
-        else
-        {
-            path = SvArgs.String(args, 0, "sys.diskUsage");
-        }
+        string resolvedPath = path ?? (OperatingSystem.IsWindows() ? "C:\\" : "/");
 
         System.IO.DriveInfo drive;
         try
         {
-            var root = System.IO.Path.GetPathRoot(path) ?? path;
+            var root = System.IO.Path.GetPathRoot(resolvedPath) ?? resolvedPath;
             drive = new System.IO.DriveInfo(root);
         }
         catch (Exception ex)
@@ -146,29 +135,24 @@ public static partial class SysBuiltIns
         dict.Set("total", StashValue.FromInt(drive.TotalSize));
         dict.Set("used", StashValue.FromInt(drive.TotalSize - drive.AvailableFreeSpace));
         dict.Set("free", StashValue.FromInt(drive.AvailableFreeSpace));
-        return StashValue.FromObj(dict);
+        return dict;
     }
 
     /// <summary>Returns the current process ID.</summary>
     /// <returns>The PID as an integer</returns>
-    [StashFn(Raw = true, ReturnType = "int")]
-    private static StashValue Pid(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
-    {
-        return StashValue.FromInt((long)Environment.ProcessId);
-    }
+    [StashFn]
+    public static long Pid() => (long)Environment.ProcessId;
 
     /// <summary>Returns the path to the system's temporary directory.</summary>
     /// <returns>The temp directory path</returns>
-    [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue TempDir(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
-    {
-        return StashValue.FromObj(System.IO.Path.GetTempPath().TrimEnd(System.IO.Path.DirectorySeparatorChar));
-    }
+    [StashFn]
+    public static string TempDir() =>
+        System.IO.Path.GetTempPath().TrimEnd(System.IO.Path.DirectorySeparatorChar);
 
     /// <summary>Returns an array of objects describing each network interface.</summary>
     /// <returns>Array of interface dictionaries</returns>
-    [StashFn(Raw = true, ReturnType = "array")]
-    private static StashValue NetworkInterfaces(IInterpreterContext _, ReadOnlySpan<StashValue> _args)
+    [StashFn]
+    public static List<StashValue> NetworkInterfaces()
     {
         var interfaces = NetworkInterface.GetAllNetworkInterfaces();
         var result = new List<StashValue>();
@@ -187,7 +171,7 @@ public static partial class SysBuiltIns
             dict.Set("addresses", StashValue.FromObj(addresses));
             result.Add(StashValue.FromObj(dict));
         }
-        return StashValue.FromObj(result);
+        return result;
     }
 
     /// <summary>Searches the system PATH for an executable with the given name.
@@ -197,6 +181,7 @@ public static partial class SysBuiltIns
     /// <param name="name">The command name to search for</param>
     /// <param name="all">Optional. When true, returns an array of all matches instead of just the first</param>
     /// <returns>Full path to the executable (or null), or an array of paths when all=true</returns>
+    // Raw: return type is polymorphic — string|null when all=false, array when all=true
     [StashFn(Raw = true, ReturnType = "string")]
     private static StashValue Which(IInterpreterContext _, ReadOnlySpan<StashValue> args)
     {
@@ -284,6 +269,7 @@ public static partial class SysBuiltIns
     /// <param name="signal">A Signal enum value (e.g., Signal.Term)</param>
     /// <param name="handler">A function to invoke when the signal is received</param>
     /// <returns>null</returns>
+    // Raw: signal arg is a StashEnumValue inspected inside SignalImpl
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("signal.on")]
     private static StashValue OnSignal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
@@ -294,6 +280,7 @@ public static partial class SysBuiltIns
     /// <summary>Deprecated. Use signal.off.</summary>
     /// <param name="signal">A Signal enum value (e.g., Signal.Term)</param>
     /// <returns>null</returns>
+    // Raw: signal arg is a StashEnumValue inspected inside SignalImpl
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("signal.off")]
     private static StashValue OffSignal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
@@ -319,4 +306,3 @@ public static partial class SysBuiltIns
         }
     }
 }
-
