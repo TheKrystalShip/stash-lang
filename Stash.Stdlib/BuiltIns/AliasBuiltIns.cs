@@ -7,8 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>alias</c> namespace built-in functions.
@@ -28,7 +27,8 @@ using static Stash.Stdlib.Registration.P;
 /// platforms, including Windows embedded hosts, even though shell mode is POSIX-only.
 /// </para>
 /// </remarks>
-public static class AliasBuiltIns
+[StashNamespace]
+public static partial class AliasBuiltIns
 {
     // ---------------------------------------------------------------------------
     // Static delegate slots — populated by Stash.Cli in later phases
@@ -87,332 +87,294 @@ public static class AliasBuiltIns
         TimeSpan.FromMilliseconds(100));
 
     // ---------------------------------------------------------------------------
-    // Namespace definition
+    // Stash function implementations
     // ---------------------------------------------------------------------------
 
-    public static NamespaceDefinition Define()
+    /// <summary>Defines a new alias. `body` may be a string (template alias) or a function (function alias). Optional `opts` is an AliasOptions struct for description, hooks, and override flag.</summary>
+    /// <param name="name">Alias name — must be a valid identifier</param>
+    /// <param name="body">Template string or callable</param>
+    /// <param name="opts">Optional AliasOptions struct</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Define(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("alias");
+        string name = SvArgs.String(args, 0, "alias.define");
+        StashValue body = args[1];
+        StashValue optsVal = args.Length > 2 ? args[2] : StashValue.Null;
 
-        // ── alias.define(name, body, opts? = null) ──────────────────────────
-        ns.Function("define",
-            [Param("name", "string"), Param("body"), Param("opts", "AliasOptions?")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        AliasRegistry.AliasEntry entry;
+
+        if (body.IsObj && body.AsObj is string templateBody)
+        {
+            entry = new AliasRegistry.AliasEntry
             {
-                string name = SvArgs.String(args, 0, "alias.define");
-                StashValue body = args[1];
-                StashValue optsVal = args.Length > 2 ? args[2] : StashValue.Null;
-
-                AliasRegistry.AliasEntry entry;
-
-                if (body.IsObj && body.AsObj is string templateBody)
-                {
-                    entry = new AliasRegistry.AliasEntry
-                    {
-                        Name = name,
-                        Kind = AliasRegistry.AliasKind.Template,
-                        TemplateBody = templateBody,
-                    };
-                }
-                else if (body.IsObj && body.AsObj is IStashCallable callable)
-                {
-                    entry = new AliasRegistry.AliasEntry
-                    {
-                        Name = name,
-                        Kind = AliasRegistry.AliasKind.Function,
-                        FunctionBody = callable,
-                    };
-                }
-                else
-                {
-                    throw new RuntimeError(
-                        "2nd argument to 'alias.define' must be a string (template body) or a function.",
-                        null,
-                        StashErrorTypes.TypeError);
-                }
-
-                // Parse AliasOptions struct if provided
-                if (!optsVal.IsNull && optsVal.IsObj && optsVal.AsObj is StashInstance opts &&
-                    opts.TypeName == "AliasOptions")
-                {
-                    if (opts.VMTryGetField("description", out StashValue descVal, null) &&
-                        descVal.IsObj && descVal.AsObj is string desc)
-                        entry.Description = desc;
-
-                    if (opts.VMTryGetField("before", out StashValue beforeVal, null) &&
-                        beforeVal.IsObj && beforeVal.AsObj is IStashCallable beforeFn)
-                        entry.Before = beforeFn;
-
-                    if (opts.VMTryGetField("after", out StashValue afterVal, null) &&
-                        afterVal.IsObj && afterVal.AsObj is IStashCallable afterFn)
-                        entry.After = afterFn;
-
-                    if (opts.VMTryGetField("confirm", out StashValue confirmVal, null) &&
-                        confirmVal.IsObj && confirmVal.AsObj is string confirmStr)
-                        entry.Confirm = confirmStr;
-
-                    if (opts.VMTryGetField("override", out StashValue overrideVal, null) &&
-                        overrideVal.IsBool)
-                        entry.Override = overrideVal.AsBool;
-                }
-
-                ctx.AliasRegistry.Define(entry);
-                return StashValue.Null;
-            },
-            returnType: null,
-            isVariadic: true,
-            documentation: "Defines a new alias. `body` may be a string (template alias) or a function (function alias). " +
-                           "Optional `opts` is an AliasOptions struct for description, hooks, and override flag.\n" +
-                           "@param name Alias name — must be a valid identifier\n" +
-                           "@param body Template string or callable\n" +
-                           "@param opts Optional AliasOptions struct\n" +
-                           "@return null");
-
-        // ── alias.list() ────────────────────────────────────────────────────
-        ns.Function("list", [],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
+                Name = name,
+                Kind = AliasRegistry.AliasKind.Template,
+                TemplateBody = templateBody,
+            };
+        }
+        else if (body.IsObj && body.AsObj is IStashCallable callable)
+        {
+            entry = new AliasRegistry.AliasEntry
             {
-                var result = new List<StashValue>();
-                foreach (var entry in ctx.AliasRegistry.All())
-                    result.Add(MakeAliasInfo(entry));
-                return StashValue.FromObj(result);
-            },
-            returnType: "array",
-            documentation: "Returns an array of AliasInfo structs for all registered aliases, sorted by name.\n@return Array of AliasInfo");
+                Name = name,
+                Kind = AliasRegistry.AliasKind.Function,
+                FunctionBody = callable,
+            };
+        }
+        else
+        {
+            throw new RuntimeError(
+                "2nd argument to 'alias.define' must be a string (template body) or a function.",
+                null,
+                StashErrorTypes.TypeError);
+        }
 
-        // ── alias.names() ───────────────────────────────────────────────────
-        ns.Function("names", [],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
+        // Parse AliasOptions struct if provided
+        if (!optsVal.IsNull && optsVal.IsObj && optsVal.AsObj is StashInstance opts &&
+            opts.TypeName == "AliasOptions")
+        {
+            if (opts.VMTryGetField("description", out StashValue descVal, null) &&
+                descVal.IsObj && descVal.AsObj is string desc)
+                entry.Description = desc;
+
+            if (opts.VMTryGetField("before", out StashValue beforeVal, null) &&
+                beforeVal.IsObj && beforeVal.AsObj is IStashCallable beforeFn)
+                entry.Before = beforeFn;
+
+            if (opts.VMTryGetField("after", out StashValue afterVal, null) &&
+                afterVal.IsObj && afterVal.AsObj is IStashCallable afterFn)
+                entry.After = afterFn;
+
+            if (opts.VMTryGetField("confirm", out StashValue confirmVal, null) &&
+                confirmVal.IsObj && confirmVal.AsObj is string confirmStr)
+                entry.Confirm = confirmStr;
+
+            if (opts.VMTryGetField("override", out StashValue overrideVal, null) &&
+                overrideVal.IsBool)
+                entry.Override = overrideVal.AsBool;
+        }
+
+        ctx.AliasRegistry.Define(entry);
+        return StashValue.Null;
+    }
+
+    /// <summary>Returns an array of AliasInfo structs for all registered aliases, sorted by name.</summary>
+    /// <returns>Array of AliasInfo</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue List(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var result = new List<StashValue>();
+        foreach (var entry in ctx.AliasRegistry.All())
+            result.Add(MakeAliasInfo(entry));
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Returns a sorted array of all registered alias names.</summary>
+    /// <returns>Array of strings</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Names(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var result = ctx.AliasRegistry.Names()
+            .Select(StashValue.FromObj)
+            .ToList();
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Returns the AliasInfo struct for the given alias name, or null if not found.</summary>
+    /// <param name="name">Alias name</param>
+    /// <returns>AliasInfo or null</returns>
+    [StashFn(Raw = true, ReturnType = "AliasInfo?")]
+    private static StashValue Get(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.get");
+        if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
+            return StashValue.Null;
+        return MakeAliasInfo(entry);
+    }
+
+    /// <summary>Returns true if an alias with the given name is registered.</summary>
+    /// <param name="name">Alias name</param>
+    /// <returns>bool</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Exists(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.exists");
+        return StashValue.FromBool(ctx.AliasRegistry.Exists(name));
+    }
+
+    /// <summary>Removes the alias with the given name. Returns true if removed, false if not found. Throws AliasError if the alias is a built-in.</summary>
+    /// <param name="name">Alias name</param>
+    /// <returns>bool</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Remove(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.remove");
+        return StashValue.FromBool(ctx.AliasRegistry.Remove(name));
+    }
+
+    /// <summary>Removes all non-built-in aliases and returns the count removed.</summary>
+    /// <returns>int</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue Clear(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        return StashValue.FromInt((long)ctx.AliasRegistry.Clear());
+    }
+
+    /// <summary>Executes the alias with the given name and string arguments. For template aliases, delegates to the shell runner (requires shell mode). For function aliases, invokes the callable directly.</summary>
+    /// <param name="name">Alias name</param>
+    /// <param name="args">Array of string arguments</param>
+    /// <returns>Exit code (int)</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue Exec(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.exec");
+        List<StashValue> argList = SvArgs.StashList(args, 1, "alias.exec");
+
+        if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
+        {
+            throw new RuntimeError(
+                $"alias '{name}' is not defined",
+                null,
+                StashErrorTypes.AliasError);
+        }
+
+        string[] stringArgs = ParseStringArgs(argList, "alias.exec");
+
+        if (entry.Kind == AliasRegistry.AliasKind.Function)
+        {
+            // Function alias: invoke via the interpreter context
+            StashValue[] fnArgs = Array.ConvertAll(stringArgs, StashValue.FromObj);
+            ctx.InvokeCallbackDirect(entry.FunctionBody!, fnArgs);
+            return StashValue.FromInt((long)ctx.GetLastExitCode());
+        }
+        else
+        {
+            // Template alias: delegate to AliasExecutor (wired in Phase B)
+            if (AliasExecutor is null)
             {
-                var result = ctx.AliasRegistry.Names()
-                    .Select(StashValue.FromObj)
-                    .ToList();
-                return StashValue.FromObj(result);
-            },
-            returnType: "array",
-            documentation: "Returns a sorted array of all registered alias names.\n@return Array of strings");
+                throw new RuntimeError(
+                    "alias execution requires shell mode; alias.exec for template aliases is not available in embedded mode",
+                    null,
+                    StashErrorTypes.AliasError);
+            }
 
-        // ── alias.get(name) ─────────────────────────────────────────────────
-        ns.Function("get", [Param("name", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.get");
-                if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
-                    return StashValue.Null;
-                return MakeAliasInfo(entry);
-            },
-            returnType: "AliasInfo?",
-            documentation: "Returns the AliasInfo struct for the given alias name, or null if not found.\n@param name Alias name\n@return AliasInfo or null");
+            int exitCode = AliasExecutor(entry, stringArgs, ctx);
+            return StashValue.FromInt((long)exitCode);
+        }
+    }
 
-        // ── alias.exists(name) ──────────────────────────────────────────────
-        ns.Function("exists", [Param("name", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.exists");
-                return StashValue.FromBool(ctx.AliasRegistry.Exists(name));
-            },
-            returnType: "bool",
-            documentation: "Returns true if an alias with the given name is registered.\n@param name Alias name\n@return bool");
+    /// <summary>Returns the expanded form of a template alias body with arguments substituted. For function aliases, returns a '&lt;function alias `name`&gt;' placeholder.</summary>
+    /// <param name="name">Alias name</param>
+    /// <param name="args">Array of string arguments</param>
+    /// <returns>Expanded string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Expand(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.expand");
+        List<StashValue> argList = SvArgs.StashList(args, 1, "alias.expand");
 
-        // ── alias.remove(name) ──────────────────────────────────────────────
-        ns.Function("remove", [Param("name", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.remove");
-                return StashValue.FromBool(ctx.AliasRegistry.Remove(name));
-            },
-            returnType: "bool",
-            documentation: "Removes the alias with the given name. Returns true if removed, false if not found. " +
-                           "Throws AliasError if the alias is a built-in.\n" +
-                           "@param name Alias name\n@return bool");
+        if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
+        {
+            throw new RuntimeError(
+                $"alias '{name}' is not defined",
+                null,
+                StashErrorTypes.AliasError);
+        }
 
-        // ── alias.clear() ───────────────────────────────────────────────────
-        ns.Function("clear", [],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
-            {
-                return StashValue.FromInt((long)ctx.AliasRegistry.Clear());
-            },
-            returnType: "int",
-            documentation: "Removes all non-built-in aliases and returns the count removed.\n@return int");
+        if (entry.Kind == AliasRegistry.AliasKind.Function)
+            return StashValue.FromObj($"<function alias `{entry.Name}`>");
 
-        // ── alias.exec(name, args) ──────────────────────────────────────────
-        ns.Function("exec",
-            [Param("name", "string"), Param("args", "array")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.exec");
-                List<StashValue> argList = SvArgs.StashList(args, 1, "alias.exec");
+        string[] stringArgs = ParseStringArgs(argList, "alias.expand");
+        string expanded = ExpandTemplate(entry.Name, entry.TemplateBody!, stringArgs);
+        return StashValue.FromObj(expanded);
+    }
 
-                if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
-                {
-                    throw new RuntimeError(
-                        $"alias '{name}' is not defined",
-                        null,
-                        StashErrorTypes.AliasError);
-                }
+    /// <summary>Persists one or all aliases to the managed aliases file. Function aliases must reference a top-level fn (lambdas cannot be saved). Returns the path written.</summary>
+    /// <param name="name">(optional) Alias name to save; saves all non-builtin when omitted</param>
+    /// <returns>Path written</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Save(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (SaveHandler is null)
+            throw new RuntimeError(
+                "alias.save requires shell mode (not available in embedded mode)",
+                null,
+                StashErrorTypes.NotSupportedError);
 
-                string[] stringArgs = ParseStringArgs(argList, "alias.exec");
+        string? name = null;
+        if (args.Length > 0 && !args[0].IsNull && args[0].IsObj && args[0].AsObj is string n)
+            name = n;
 
-                if (entry.Kind == AliasRegistry.AliasKind.Function)
-                {
-                    // Function alias: invoke via the interpreter context
-                    StashValue[] fnArgs = Array.ConvertAll(stringArgs, StashValue.FromObj);
-                    ctx.InvokeCallbackDirect(entry.FunctionBody!, fnArgs);
-                    return StashValue.FromInt((long)ctx.GetLastExitCode());
-                }
-                else
-                {
-                    // Template alias: delegate to AliasExecutor (wired in Phase B)
-                    if (AliasExecutor is null)
-                    {
-                        throw new RuntimeError(
-                            "alias execution requires shell mode; alias.exec for template aliases is not available in embedded mode",
-                            null,
-                            StashErrorTypes.AliasError);
-                    }
+        string path = SaveHandler(name);
+        return StashValue.FromObj(path);
+    }
 
-                    int exitCode = AliasExecutor(entry, stringArgs, ctx);
-                    return StashValue.FromInt((long)exitCode);
-                }
-            },
-            returnType: "int",
-            documentation: "Executes the alias with the given name and string arguments. " +
-                           "For template aliases, delegates to the shell runner (requires shell mode). " +
-                           "For function aliases, invokes the callable directly.\n" +
-                           "@param name Alias name\n@param args Array of string arguments\n@return Exit code (int)");
+    /// <summary>Loads aliases from the managed aliases file (or a custom path). Evaluates each alias.define call tolerantly and tags loaded aliases as source='saved'.</summary>
+    /// <param name="path">(optional) Custom file path; defaults to the managed aliases file</param>
+    /// <returns>Count of aliases loaded</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue Load(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (LoadHandler is null)
+            throw new RuntimeError(
+                "alias.load requires shell mode (not available in embedded mode)",
+                null,
+                StashErrorTypes.NotSupportedError);
 
-        // ── alias.expand(name, args) ─────────────────────────────────────────
-        ns.Function("expand",
-            [Param("name", "string"), Param("args", "array")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.expand");
-                List<StashValue> argList = SvArgs.StashList(args, 1, "alias.expand");
+        string? pathOverride = null;
+        if (args.Length > 0 && !args[0].IsNull && args[0].IsObj && args[0].AsObj is string p)
+            pathOverride = p;
 
-                if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
-                {
-                    throw new RuntimeError(
-                        $"alias '{name}' is not defined",
-                        null,
-                        StashErrorTypes.AliasError);
-                }
+        int count = LoadHandler(pathOverride);
+        return StashValue.FromInt((long)count);
+    }
 
-                if (entry.Kind == AliasRegistry.AliasKind.Function)
-                    return StashValue.FromObj($"<function alias `{entry.Name}`>");
+    /// <summary>Internal: pretty-prints all aliases grouped by source. Used by alias shell sugar.</summary>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, Name = "__listPretty", ReturnType = "null")]
+    private static StashValue ListPrettyInternal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        PrettyPrintAll(ctx);
+        return StashValue.Null;
+    }
 
-                string[] stringArgs = ParseStringArgs(argList, "alias.expand");
-                string expanded = ExpandTemplate(entry.Name, entry.TemplateBody!, stringArgs);
-                return StashValue.FromObj(expanded);
-            },
-            returnType: "string",
-            documentation: "Returns the expanded form of a template alias body with arguments substituted. " +
-                           "For function aliases, returns a '<function alias `name`>' placeholder.\n" +
-                           "@param name Alias name\n@param args Array of string arguments\n@return Expanded string");
+    /// <summary>Internal: pretty-prints a single alias definition. Used by alias shell sugar.</summary>
+    /// <param name="name">Alias name</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, Name = "__getPretty", ReturnType = "null")]
+    private static StashValue GetPrettyInternal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.__getPretty");
+        PrettyPrintOne(ctx, name);
+        return StashValue.Null;
+    }
 
-        // ── alias.save(name? = null) ────────────────────────────────────────
-        ns.Function("save", [Param("name", "string?")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                if (SaveHandler is null)
-                    throw new RuntimeError(
-                        "alias.save requires shell mode (not available in embedded mode)",
-                        null,
-                        StashErrorTypes.NotSupportedError);
+    /// <summary>Internal: session-disables a built-in alias. Used by unalias --force sugar.</summary>
+    /// <param name="name">Alias name</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, Name = "__forceDisable", ReturnType = "null")]
+    private static StashValue ForceDisableInternal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.__forceDisable");
+        ctx.AliasRegistry.ForceDisable(name);
+        return StashValue.Null;
+    }
 
-                string? name = null;
-                if (args.Length > 0 && !args[0].IsNull && args[0].IsObj && args[0].AsObj is string n)
-                    name = n;
-
-                string path = SaveHandler(name);
-                return StashValue.FromObj(path);
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Persists one or all aliases to the managed aliases file. " +
-                           "Function aliases must reference a top-level fn (lambdas cannot be saved). " +
-                           "Returns the path written.\n" +
-                           "@param name (optional) Alias name to save; saves all non-builtin when omitted\n@return Path written");
-
-        // ── alias.load(path? = null) ────────────────────────────────────────
-        ns.Function("load", [Param("path", "string?")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                if (LoadHandler is null)
-                    throw new RuntimeError(
-                        "alias.load requires shell mode (not available in embedded mode)",
-                        null,
-                        StashErrorTypes.NotSupportedError);
-
-                string? pathOverride = null;
-                if (args.Length > 0 && !args[0].IsNull && args[0].IsObj && args[0].AsObj is string p)
-                    pathOverride = p;
-
-                int count = LoadHandler(pathOverride);
-                return StashValue.FromInt((long)count);
-            },
-            returnType: "int",
-            isVariadic: true,
-            documentation: "Loads aliases from the managed aliases file (or a custom path). " +
-                           "Evaluates each alias.define call tolerantly and tags loaded aliases as source='saved'.\n" +
-                           "@param path (optional) Custom file path; defaults to the managed aliases file\n@return Count of aliases loaded");
-
-        // ── alias.__listPretty() — internal shell sugar helper (Phase C) ─────
-        // Not part of the public API; called by the alias shell sugar to pretty-print
-        // all registered aliases grouped by source.
-        ns.Function("__listPretty", [],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
-            {
-                PrettyPrintAll(ctx);
-                return StashValue.Null;
-            },
-            returnType: null,
-            documentation: "Internal: pretty-prints all aliases grouped by source. Used by alias shell sugar.");
-
-        // ── alias.__getPretty(name) — internal shell sugar helper (Phase C) ──
-        // Not part of the public API; called by the alias shell sugar to pretty-print
-        // a single alias, or report that it is not defined.
-        ns.Function("__getPretty", [Param("name", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.__getPretty");
-                PrettyPrintOne(ctx, name);
-                return StashValue.Null;
-            },
-            returnType: null,
-            documentation: "Internal: pretty-prints a single alias definition. Used by alias shell sugar.");
-
-        // ── alias.__forceDisable(name) — internal for unalias --force (Phase D) ──
-        // Not part of the public API; called by unalias --force sugar to session-disable
-        // a built-in alias without removing it from the registry.
-        ns.Function("__forceDisable", [Param("name", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.__forceDisable");
-                ctx.AliasRegistry.ForceDisable(name);
-                return StashValue.Null;
-            },
-            returnType: null,
-            documentation: "Internal: session-disables a built-in alias. Used by unalias --force sugar.");
-
-        // ── alias.__removeSaved(name) — internal for unalias --save (Phase F) ──
-        // Not part of the public API; called by unalias --save sugar to remove a persisted
-        // alias entry from aliases.stash without affecting the in-memory registry.
-        ns.Function("__removeSaved", [Param("name", "string")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "alias.__removeSaved");
-                if (RemoveSavedHandler is null)
-                    throw new RuntimeError(
-                        "alias.__removeSaved requires shell mode (not available in embedded mode)",
-                        null,
-                        StashErrorTypes.NotSupportedError);
-                RemoveSavedHandler(name);
-                return StashValue.Null;
-            },
-            returnType: null,
-            documentation: "Internal: removes a persisted alias entry from aliases.stash. Used by unalias --save sugar.");
-
-        return ns.Build();
+    /// <summary>Internal: removes a persisted alias entry from aliases.stash. Used by unalias --save sugar.</summary>
+    /// <param name="name">Alias name</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, Name = "__removeSaved", ReturnType = "null")]
+    private static StashValue RemoveSavedInternal(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "alias.__removeSaved");
+        if (RemoveSavedHandler is null)
+            throw new RuntimeError(
+                "alias.__removeSaved requires shell mode (not available in embedded mode)",
+                null,
+                StashErrorTypes.NotSupportedError);
+        RemoveSavedHandler(name);
+        return StashValue.Null;
     }
 
     // ---------------------------------------------------------------------------

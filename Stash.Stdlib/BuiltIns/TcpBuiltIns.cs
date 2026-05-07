@@ -3,152 +3,145 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>tcp</c> namespace built-in functions for TCP socket communication.
 /// </summary>
-public static class TcpBuiltIns
+[StashNamespace(Capability = StashCapabilities.Network)]
+public static partial class TcpBuiltIns
 {
-    public static NamespaceDefinition Define()
-    {
-        var ns = new NamespaceBuilder("tcp");
-        ns.RequiresCapability(StashCapabilities.Network);
+    /// <summary>A TCP connection handle.</summary>
+    [StashStruct]
+    public sealed record TcpConnection(string Host, long Port, long LocalPort);
 
-        ns.Struct("TcpConnection", [
-            new BuiltInField("host",      "string"),
-            new BuiltInField("port",      "int"),
-            new BuiltInField("localPort", "int"),
-        ]);
+    /// <summary>Options for tcp.connect and tcp.connectAsync.</summary>
+    [StashStruct]
+    public sealed record TcpConnectOptions(long TimeoutMs, bool Tls, bool NoDelay, bool KeepAlive, bool TlsVerify, string TlsSni);
 
-        ns.Struct("TcpConnectOptions", [
-            new BuiltInField("timeoutMs", "int"),
-            new BuiltInField("tls",       "bool"),
-            new BuiltInField("noDelay",   "bool"),
-            new BuiltInField("keepAlive", "bool"),
-            new BuiltInField("tlsVerify", "bool"),
-            new BuiltInField("tlsSni",    "string"),
-        ]);
+    /// <summary>Options for tcp.recv and tcp.recvAsync.</summary>
+    [StashStruct]
+    public sealed record TcpRecvOptions(long MaxBytes, long TimeoutMs);
 
-        ns.Struct("TcpRecvOptions", [
-            new BuiltInField("maxBytes",  "int"),
-            new BuiltInField("timeoutMs", "int"),
-        ]);
+    /// <summary>A TCP server handle returned by tcp.listenAsync.</summary>
+    [StashStruct]
+    public sealed record TcpServer(long Port, bool Active);
 
-        ns.Struct("TcpServer", [
-            new BuiltInField("port",   "int"),
-            new BuiltInField("active", "bool"),
-        ]);
+    /// <summary>The state of a TCP connection.</summary>
+    [StashEnum]
+    public enum TcpConnectionState { Open, Closed }
 
-        ns.Enum("TcpConnectionState", ["Open", "Closed"]);
+    /// <summary>Creates a TCP connection to a host and port.</summary>
+    /// <param name="host">The hostname or IP address.</param>
+    /// <param name="port">The port number (1-65535).</param>
+    /// <param name="timeout">Optional timeout in milliseconds (default 5000).</param>
+    /// <returns>A TcpConnection struct.</returns>
+    [StashFn(Raw = true, ReturnType = "TcpConnection")]
+    private static StashValue Connect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpConnect(ctx, args, "tcp.connect");
 
-        // tcp.connect(host, port, ?timeout) — Creates a synchronous TCP connection.
-        ns.Function("connect", [Param("host", "string"), Param("port", "int"), Param("timeout", "int")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpConnect(ctx, args, "tcp.connect"),
-            returnType: "TcpConnection", isVariadic: true,
-            documentation: "Creates a TCP connection to a host and port.\n@param host The hostname or IP address.\n@param port The port number (1-65535).\n@param timeout Optional timeout in milliseconds (default 5000).\n@return A TcpConnection struct.");
+    /// <summary>Sends string data over a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <param name="data">The string data to send.</param>
+    /// <returns>The number of bytes sent.</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue Send(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpSend(ctx, args, "tcp.send");
 
-        // tcp.send(conn, data) — Sends string data.
-        ns.Function("send", [Param("conn", "TcpConnection"), Param("data", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpSend(ctx, args, "tcp.send"),
-            returnType: "int",
-            documentation: "Sends string data over a TCP connection.\n@param conn The TcpConnection.\n@param data The string data to send.\n@return The number of bytes sent.");
+    /// <summary>Receives data from a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <param name="maxBytes">Optional maximum bytes to read (default 4096).</param>
+    /// <returns>The received data as a string.</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Recv(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpRecv(ctx, args, "tcp.recv");
 
-        // tcp.recv(conn, ?maxBytes) — Receives data.
-        ns.Function("recv", [Param("conn", "TcpConnection"), Param("maxBytes", "int")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpRecv(ctx, args, "tcp.recv"),
-            returnType: "string", isVariadic: true,
-            documentation: "Receives data from a TCP connection.\n@param conn The TcpConnection.\n@param maxBytes Optional maximum bytes to read (default 4096).\n@return The received data as a string.");
+    /// <summary>Closes a TCP connection and releases its resources.</summary>
+    /// <param name="conn">The TcpConnection to close.</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Close(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpClose(ctx, args, "tcp.close");
 
-        // tcp.close(conn) — Closes the connection.
-        ns.Function("close", [Param("conn", "TcpConnection")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpClose(ctx, args, "tcp.close"),
-            returnType: "null",
-            documentation: "Closes a TCP connection and releases its resources.\n@param conn The TcpConnection to close.");
+    /// <summary>Starts a TCP listener on a port, accepts one connection, invokes the handler with a TcpConnection, then stops.</summary>
+    /// <param name="port">The port to listen on (1-65535).</param>
+    /// <param name="handler">A function that receives the TcpConnection.</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Listen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpListen(ctx, args, "tcp.listen");
 
-        // tcp.listen(port, handler) — Accepts one connection synchronously.
-        ns.Function("listen", [Param("port", "int"), Param("handler", "function")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpListen(ctx, args, "tcp.listen"),
-            returnType: "null",
-            documentation: "Starts a TCP listener on a port, accepts one connection, invokes the handler with a TcpConnection, then stops.\n@param port The port to listen on (1-65535).\n@param handler A function that receives the TcpConnection.");
+    /// <summary>Async. Creates a TCP connection to a host and port.</summary>
+    /// <param name="host">The hostname or IP address.</param>
+    /// <param name="port">The port number (1-65535).</param>
+    /// <param name="options">Optional TcpConnectOptions struct.</param>
+    /// <returns>A Future resolving to a TcpConnection.</returns>
+    [StashFn(Raw = true, ReturnType = "TcpConnection")]
+    private static StashValue ConnectAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpConnectAsync(ctx, args, "tcp.connectAsync");
 
-        // tcp.connectAsync(host, port, ?options) — Async TCP connection.
-        ns.Function("connectAsync", [Param("host", "string"), Param("port", "int"), Param("options", "TcpConnectOptions")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpConnectAsync(ctx, args, "tcp.connectAsync"),
-            returnType: "TcpConnection", isVariadic: true,
-            documentation: "Async. Creates a TCP connection to a host and port.\n@param host The hostname or IP address.\n@param port The port number (1-65535).\n@param options Optional TcpConnectOptions struct.\n@return A Future resolving to a TcpConnection.");
+    /// <summary>Async. Sends string data over a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <param name="data">The string data to send.</param>
+    /// <returns>A Future resolving to the number of bytes sent.</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue SendAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpSendAsync(ctx, args, "tcp.sendAsync");
 
-        // tcp.sendAsync(conn, data) — Async send.
-        ns.Function("sendAsync", [Param("conn", "TcpConnection"), Param("data", "string")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpSendAsync(ctx, args, "tcp.sendAsync"),
-            returnType: "int",
-            documentation: "Async. Sends string data over a TCP connection.\n@param conn The TcpConnection.\n@param data The string data to send.\n@return A Future resolving to the number of bytes sent.");
+    /// <summary>Async. Sends binary data (byte[]) over a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <param name="data">The byte[] data to send.</param>
+    /// <returns>A Future resolving to the number of bytes sent.</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    private static StashValue SendBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpSendBytesAsync(ctx, args, "tcp.sendBytesAsync");
 
-        // tcp.sendBytesAsync(conn, data) — Async binary send.
-        ns.Function("sendBytesAsync", [Param("conn", "TcpConnection"), Param("data", "byte[]")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpSendBytesAsync(ctx, args, "tcp.sendBytesAsync"),
-            returnType: "int",
-            documentation: "Async. Sends binary data (byte[]) over a TCP connection.\n@param conn The TcpConnection.\n@param data The byte[] data to send.\n@return A Future resolving to the number of bytes sent.");
+    /// <summary>Async. Receives string data from a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <param name="options">Optional TcpRecvOptions struct with maxBytes and timeout.</param>
+    /// <returns>A Future resolving to a string, or null on timeout.</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue RecvAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpRecvAsync(ctx, args, "tcp.recvAsync");
 
-        // tcp.recvAsync(conn, ?options) — Async receive string.
-        ns.Function("recvAsync", [Param("conn", "TcpConnection"), Param("options", "TcpRecvOptions")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpRecvAsync(ctx, args, "tcp.recvAsync"),
-            returnType: "string", isVariadic: true,
-            documentation: "Async. Receives string data from a TCP connection.\n@param conn The TcpConnection.\n@param options Optional TcpRecvOptions struct with maxBytes and timeout.\n@return A Future resolving to a string, or null on timeout.");
+    /// <summary>Async. Receives binary data from a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <param name="options">Optional TcpRecvOptions struct with maxBytes and timeout.</param>
+    /// <returns>A Future resolving to a byte[], or null on timeout.</returns>
+    [StashFn(Raw = true, ReturnType = "byte[]")]
+    private static StashValue RecvBytesAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpRecvBytesAsync(ctx, args, "tcp.recvBytesAsync");
 
-        // tcp.recvBytesAsync(conn, ?options) — Async receive bytes.
-        ns.Function("recvBytesAsync", [Param("conn", "TcpConnection"), Param("options", "TcpRecvOptions")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpRecvBytesAsync(ctx, args, "tcp.recvBytesAsync"),
-            returnType: "byte[]", isVariadic: true,
-            documentation: "Async. Receives binary data from a TCP connection.\n@param conn The TcpConnection.\n@param options Optional TcpRecvOptions struct with maxBytes and timeout.\n@return A Future resolving to a byte[], or null on timeout.");
+    /// <summary>Async. Gracefully closes a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection to close.</param>
+    /// <returns>A Future resolving to null.</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue CloseAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpCloseAsync(ctx, args, "tcp.closeAsync");
 
-        // tcp.closeAsync(conn) — Async graceful close.
-        ns.Function("closeAsync", [Param("conn", "TcpConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpCloseAsync(ctx, args, "tcp.closeAsync"),
-            returnType: "null",
-            documentation: "Async. Gracefully closes a TCP connection.\n@param conn The TcpConnection to close.\n@return A Future resolving to null.");
+    /// <summary>Returns true if the TCP connection is open.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <returns>True if the connection is open.</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue IsOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpIsOpen(ctx, args, "tcp.isOpen");
 
-        // tcp.isOpen(conn) — Returns true if the connection is open.
-        ns.Function("isOpen", [Param("conn", "TcpConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpIsOpen(ctx, args, "tcp.isOpen"),
-            returnType: "bool",
-            documentation: "Returns true if the TCP connection is open.\n@param conn The TcpConnection.\n@return True if the connection is open.");
+    /// <summary>Returns the current connection state of a TCP connection.</summary>
+    /// <param name="conn">The TcpConnection.</param>
+    /// <returns>A TcpConnectionState enum value.</returns>
+    [StashFn(Raw = true, ReturnType = "TcpConnectionState")]
+    private static StashValue State(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpState(ctx, args, "tcp.state");
 
-        // tcp.state(conn) — Returns the connection state enum value.
-        ns.Function("state", [Param("conn", "TcpConnection")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpState(ctx, args, "tcp.state"),
-            returnType: "TcpConnectionState",
-            documentation: "Returns the current connection state of a TCP connection.\n@param conn The TcpConnection.\n@return A TcpConnectionState enum value.");
+    /// <summary>Async. Starts a multi-client TCP server on a port.</summary>
+    /// <param name="port">The port to listen on (1-65535, or 0 for auto).</param>
+    /// <param name="handler">A function that receives each TcpConnection.</param>
+    /// <returns>A Future resolving to a TcpServer handle.</returns>
+    [StashFn(Raw = true, ReturnType = "TcpServer")]
+    private static StashValue ListenAsync(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpListenAsync(ctx, args, "tcp.listenAsync");
 
-        // tcp.listenAsync(port, handler) — Async multi-client server.
-        ns.Function("listenAsync", [Param("port", "int"), Param("handler", "function")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpListenAsync(ctx, args, "tcp.listenAsync"),
-            returnType: "TcpServer",
-            documentation: "Async. Starts a multi-client TCP server on a port.\n@param port The port to listen on (1-65535, or 0 for auto).\n@param handler A function that receives each TcpConnection.\n@return A Future resolving to a TcpServer handle.");
-
-        // tcp.serverClose(server) — Stops a TCP server.
-        ns.Function("serverClose", [Param("server", "TcpServer")],
-            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.TcpServerClose(ctx, args, "tcp.serverClose"),
-            returnType: "null",
-            documentation: "Stops a TCP server and closes the listener.\n@param server The TcpServer handle to stop.");
-
-        return ns.Build();
-    }
+    /// <summary>Stops a TCP server and closes the listener.</summary>
+    /// <param name="server">The TcpServer handle to stop.</param>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue ServerClose(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.TcpServerClose(ctx, args, "tcp.serverClose");
 }

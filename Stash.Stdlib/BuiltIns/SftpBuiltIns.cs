@@ -9,9 +9,8 @@ using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
 
 /// <summary>
 /// Registers the <c>sftp</c> namespace built-in functions for SFTP file transfer operations.
@@ -30,474 +29,493 @@ using static Stash.Stdlib.Registration.P;
 /// <see cref="StashCapabilities.Network"/> capability is enabled.
 /// </para>
 /// </remarks>
-public static class SftpBuiltIns
+[StashNamespace(Capability = StashCapabilities.Network)]
+public static partial class SftpBuiltIns
 {
     /// <summary>Maps SftpConnection instances to their underlying SftpClient. Uses weak references to allow GC.</summary>
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<StashInstance, SftpClient> _clients = new();
 
-    /// <summary>
-    /// Registers all <c>sftp</c> namespace functions into the global environment.
-    /// </summary>
-    /// <param name="globals">The runtime environment to register functions in.</param>
-    public static NamespaceDefinition Define()
+    // ── Struct declarations ───────────────────────────────────────────────────
+
+    /// <summary>An active SFTP connection to a remote host.</summary>
+    [StashStruct]
+    public sealed record SftpConnection(string Host, long Port, string Username);
+
+    // ── Functions ─────────────────────────────────────────────────────────────
+
+    /// <summary>Connects to an SFTP server and returns an SftpConnection instance.</summary>
+    /// <param name="options">Options dict with host, port (default 22), username, and password or privateKey</param>
+    /// <returns>An SftpConnection struct with host, port, and username fields</returns>
+    [StashFn(Raw = true, ReturnType = "SftpConnection")]
+    private static StashValue Connect(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("sftp");
-        ns.RequiresCapability(StashCapabilities.Network);
+        var options = SvArgs.Dict(args, 0, "sftp.connect");
 
-        // sftp.connect(options) — Connects to a remote host via SFTP.
-        // Options dict: host (string, required), port (int, default 22), username (string, required),
-        // password (string), privateKey (string path), passphrase (string).
-        // Returns an SftpConnection struct.
-        ns.Function("connect", [Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        var host = options.Get("host").ToObject() as string
+            ?? throw new RuntimeError("sftp.connect: 'host' is required and must be a string.");
+        var username = options.Get("username").ToObject() as string
+            ?? throw new RuntimeError("sftp.connect: 'username' is required and must be a string.");
+
+        int port = 22;
+        var portVal = options.Get("port").ToObject();
+        if (portVal is long p)
         {
-            var options = SvArgs.Dict(args, 0, "sftp.connect");
+            port = (int)p;
+        }
 
-            var host = options.Get("host").ToObject() as string
-                ?? throw new RuntimeError("sftp.connect: 'host' is required and must be a string.");
-            var username = options.Get("username").ToObject() as string
-                ?? throw new RuntimeError("sftp.connect: 'username' is required and must be a string.");
+        var password = options.Get("password").ToObject() as string;
+        var privateKeyPath = options.Get("privateKey").ToObject() as string;
+        var passphrase = options.Get("passphrase").ToObject() as string;
 
-            int port = 22;
-            var portVal = options.Get("port").ToObject();
-            if (portVal is long p)
-            {
-                port = (int)p;
-            }
-
-            var password = options.Get("password").ToObject() as string;
-            var privateKeyPath = options.Get("privateKey").ToObject() as string;
-            var passphrase = options.Get("passphrase").ToObject() as string;
-
-            if (password is null && privateKeyPath is null)
-            {
-                throw new RuntimeError("sftp.connect: must provide 'password' or 'privateKey'.");
-            }
-
-            try
-            {
-                SftpClient client;
-                if (privateKeyPath is not null)
-                {
-                    privateKeyPath = ctx.ExpandTilde(privateKeyPath);
-                    PrivateKeyFile keyFile = passphrase is not null
-                        ? new PrivateKeyFile(privateKeyPath, passphrase)
-                        : new PrivateKeyFile(privateKeyPath);
-                    client = new SftpClient(host, port, username, keyFile);
-                }
-                else
-                {
-                    client = new SftpClient(host, port, username, password!);
-                }
-
-                client.Connect();
-
-                var instance = new StashInstance("SftpConnection", new Dictionary<string, StashValue>
-                {
-                    ["host"] = StashValue.FromObj(host),
-                    ["port"] = StashValue.FromInt((long)port),
-                    ["username"] = StashValue.FromObj(username)
-                });
-                _clients.Add(instance, client);
-                return StashValue.FromObj(instance);
-            }
-            catch (SshAuthenticationException e)
-            {
-                throw new RuntimeError($"sftp.connect: authentication failed — {e.Message}");
-            }
-            catch (SshConnectionException e)
-            {
-                throw new RuntimeError($"sftp.connect: connection failed — {e.Message}");
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.connect: {e.Message}");
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeError($"sftp.connect: {e.Message}");
-            }
-            catch (System.Net.Sockets.SocketException e)
-            {
-                throw new RuntimeError($"sftp.connect: {e.Message}");
-            }
-        },
-            returnType: "SftpConnection",
-            documentation: "Connects to an SFTP server and returns an SftpConnection instance.\n@param options Options dict with host, port (default 22), username, and password or privateKey\n@return An SftpConnection struct with host, port, and username fields");
-
-        // sftp.upload(conn, localPath, remotePath) — Uploads a local file to the remote host.
-        ns.Function("upload", [Param("conn", "SftpConnection"), Param("localPath", "string"), Param("remotePath", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        if (password is null && privateKeyPath is null)
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.upload");
-            var localPath = SvArgs.String(args, 1, "sftp.upload");
-            var remotePath = SvArgs.String(args, 2, "sftp.upload");
+            throw new RuntimeError("sftp.connect: must provide 'password' or 'privateKey'.");
+        }
 
-            localPath = ctx.ExpandTilde(localPath);
-
-            try
-            {
-                using FileStream fileStream = File.OpenRead(localPath);
-                client.UploadFile(fileStream, remotePath);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.upload: {e.Message}");
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeError($"sftp.upload: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Uploads a local file to the remote server.\n@param conn The SFTP connection\n@param localPath Path to the local file to upload\n@param remotePath Destination path on the remote server\n@return null");
-
-        // sftp.download(conn, remotePath, localPath) — Downloads a remote file to the local host.
-        ns.Function("download", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("localPath", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        try
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.download");
-            var remotePath = SvArgs.String(args, 1, "sftp.download");
-            var localPath = SvArgs.String(args, 2, "sftp.download");
-
-            localPath = ctx.ExpandTilde(localPath);
-
-            try
+            SftpClient client;
+            if (privateKeyPath is not null)
             {
-                using FileStream fileStream = File.Create(localPath);
-                client.DownloadFile(remotePath, fileStream);
+                privateKeyPath = ctx.ExpandTilde(privateKeyPath);
+                PrivateKeyFile keyFile = passphrase is not null
+                    ? new PrivateKeyFile(privateKeyPath, passphrase)
+                    : new PrivateKeyFile(privateKeyPath);
+                client = new SftpClient(host, port, username, keyFile);
             }
-            catch (SshException e)
+            else
             {
-                throw new RuntimeError($"sftp.download: {e.Message}");
-            }
-            catch (IOException e)
-            {
-                throw new RuntimeError($"sftp.download: {e.Message}");
+                client = new SftpClient(host, port, username, password!);
             }
 
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Downloads a file from the remote server to a local path.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@param localPath Destination path on the local machine\n@return null");
+            client.Connect();
 
-        // sftp.readFile(conn, remotePath) — Reads a remote file and returns its contents as a string.
-        ns.Function("readFile", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            var instance = new StashInstance("SftpConnection", new Dictionary<string, StashValue>
+            {
+                ["host"] = StashValue.FromObj(host),
+                ["port"] = StashValue.FromInt((long)port),
+                ["username"] = StashValue.FromObj(username)
+            });
+            _clients.Add(instance, client);
+            return StashValue.FromObj(instance);
+        }
+        catch (SshAuthenticationException e)
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.readFile");
-            var remotePath = SvArgs.String(args, 1, "sftp.readFile");
-
-            try
-            {
-                using var memStream = new MemoryStream();
-                client.DownloadFile(remotePath, memStream);
-                return StashValue.FromObj(Encoding.UTF8.GetString(memStream.ToArray()));
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.readFile: {e.Message}");
-            }
-        },
-            returnType: "string",
-            documentation: "Reads and returns the content of a remote file as a string.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@return The file content decoded as a UTF-8 string");
-
-        // sftp.writeFile(conn, remotePath, content) — Writes a string to a remote file.
-        ns.Function("writeFile", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("content", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            throw new RuntimeError($"sftp.connect: authentication failed — {e.Message}");
+        }
+        catch (SshConnectionException e)
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.writeFile");
-            var remotePath = SvArgs.String(args, 1, "sftp.writeFile");
-            var content = SvArgs.String(args, 2, "sftp.writeFile");
-
-            try
-            {
-                byte[] bytes = Encoding.UTF8.GetBytes(content);
-                using var memStream = new MemoryStream(bytes);
-                client.UploadFile(memStream, remotePath);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.writeFile: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Writes content to a remote file, creating or overwriting it.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@param content The string content to write\n@return null");
-
-        // sftp.list(conn, remotePath) — Lists entries in a remote directory.
-        // Returns an array of dicts with name, size, isDir, and modified fields.
-        ns.Function("list", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            throw new RuntimeError($"sftp.connect: connection failed — {e.Message}");
+        }
+        catch (SshException e)
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.list");
-            var remotePath = SvArgs.String(args, 1, "sftp.list");
-
-            try
-            {
-                IEnumerable<ISftpFile> entries = client.ListDirectory(remotePath);
-                var results = new List<StashValue>();
-
-                foreach (ISftpFile entry in entries)
-                {
-                    if (entry.Name == "." || entry.Name == "..")
-                    {
-                        continue;
-                    }
-
-                    var dict = new StashDictionary();
-                    dict.Set("name", StashValue.FromObj(entry.Name));
-                    dict.Set("size", StashValue.FromInt(entry.Length));
-                    dict.Set("isDir", StashValue.FromBool(entry.IsDirectory));
-                    dict.Set("modified", StashValue.FromObj(entry.LastWriteTime.ToString("o")));
-                    results.Add(StashValue.FromObj(dict));
-                }
-
-                return StashValue.FromObj(results);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.list: {e.Message}");
-            }
-        },
-            returnType: "array",
-            documentation: "Lists files and directories at the remote path.\n@param conn The SFTP connection\n@param remotePath The remote directory path to list\n@return An array of dicts with name, size, isDir, and modified fields");
-
-        // sftp.delete(conn, remotePath) — Deletes a remote file.
-        ns.Function("delete", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            throw new RuntimeError($"sftp.connect: {e.Message}");
+        }
+        catch (IOException e)
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.delete");
-            var remotePath = SvArgs.String(args, 1, "sftp.delete");
-
-            try
-            {
-                client.Delete(remotePath);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.delete: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Deletes a file on the remote server.\n@param conn The SFTP connection\n@param remotePath Path to the file to delete\n@return null");
-
-        // sftp.mkdir(conn, remotePath) — Creates a remote directory.
-        ns.Function("mkdir", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            throw new RuntimeError($"sftp.connect: {e.Message}");
+        }
+        catch (System.Net.Sockets.SocketException e)
         {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.mkdir");
-            var remotePath = SvArgs.String(args, 1, "sftp.mkdir");
-
-            try
-            {
-                client.CreateDirectory(remotePath);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.mkdir: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Creates a directory on the remote server.\n@param conn The SFTP connection\n@param remotePath Path of the directory to create\n@return null");
-
-        // sftp.rmdir(conn, remotePath) — Removes a remote directory.
-        ns.Function("rmdir", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.rmdir");
-            var remotePath = SvArgs.String(args, 1, "sftp.rmdir");
-
-            try
-            {
-                client.DeleteDirectory(remotePath);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.rmdir: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Removes a directory on the remote server.\n@param conn The SFTP connection\n@param remotePath Path of the directory to remove\n@return null");
-
-        // sftp.exists(conn, remotePath) — Checks if a remote path exists.
-        ns.Function("exists", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.exists");
-            var remotePath = SvArgs.String(args, 1, "sftp.exists");
-
-            try
-            {
-                return StashValue.FromBool(client.Exists(remotePath));
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.exists: {e.Message}");
-            }
-        },
-            returnType: "bool",
-            documentation: "Returns true if a file or directory exists at the remote path.\n@param conn The SFTP connection\n@param remotePath The remote path to check\n@return true if the path exists, false otherwise");
-
-        // sftp.stat(conn, remotePath) — Gets file attributes for a remote path.
-        // Returns a dict with size, isDir, modified, and permissions fields.
-        ns.Function("stat", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.stat");
-            var remotePath = SvArgs.String(args, 1, "sftp.stat");
-
-            try
-            {
-                SftpFileAttributes attrs = client.GetAttributes(remotePath);
-                var dict = new StashDictionary();
-                dict.Set("size", StashValue.FromInt(attrs.Size));
-                dict.Set("isDir", StashValue.FromBool(attrs.IsDirectory));
-                dict.Set("modified", StashValue.FromObj(attrs.LastWriteTime.ToString("o")));
-
-                // Format permissions as octal string (e.g., "755")
-                int mode = 0;
-                if (attrs.OwnerCanRead)
-                {
-                    mode += 400;
-                }
-
-                if (attrs.OwnerCanWrite)
-                {
-                    mode += 200;
-                }
-
-                if (attrs.OwnerCanExecute)
-                {
-                    mode += 100;
-                }
-
-                if (attrs.GroupCanRead)
-                {
-                    mode += 40;
-                }
-
-                if (attrs.GroupCanWrite)
-                {
-                    mode += 20;
-                }
-
-                if (attrs.GroupCanExecute)
-                {
-                    mode += 10;
-                }
-
-                if (attrs.OthersCanRead)
-                {
-                    mode += 4;
-                }
-
-                if (attrs.OthersCanWrite)
-                {
-                    mode += 2;
-                }
-
-                if (attrs.OthersCanExecute)
-                {
-                    mode += 1;
-                }
-
-                dict.Set("permissions", StashValue.FromObj(mode.ToString()));
-
-                return StashValue.FromObj(dict);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.stat: {e.Message}");
-            }
-        },
-            returnType: "dict",
-            documentation: "Returns file metadata as a dictionary.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@return A dict with size, isDir, modified, and permissions fields");
-
-        // sftp.chmod(conn, remotePath, mode) — Changes file permissions on a remote path.
-        // Mode is an integer representing octal permissions (e.g., 755).
-        ns.Function("chmod", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("mode", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.chmod");
-            var remotePath = SvArgs.String(args, 1, "sftp.chmod");
-            var modeDecimal = SvArgs.Long(args, 2, "sftp.chmod");
-
-            // Convert decimal representation of octal (e.g., 755) to actual octal value
-            short octalMode = ParseOctalMode(modeDecimal, "sftp.chmod");
-
-            try
-            {
-                client.ChangePermissions(remotePath, octalMode);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.chmod: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Changes the permissions of a remote file.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@param mode Permission mode as a decimal octal representation (e.g., 755)\n@return null");
-
-        // sftp.rename(conn, oldPath, newPath) — Renames or moves a remote file.
-        ns.Function("rename", [Param("conn", "SftpConnection"), Param("oldPath", "string"), Param("newPath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.rename");
-            var oldPath = SvArgs.String(args, 1, "sftp.rename");
-            var newPath = SvArgs.String(args, 2, "sftp.rename");
-
-            try
-            {
-                client.RenameFile(oldPath, newPath);
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.rename: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Renames or moves a file on the remote server.\n@param conn The SFTP connection\n@param oldPath Current path of the file\n@param newPath New path for the file\n@return null");
-
-        // sftp.close(conn) — Disconnects and disposes the SFTP connection.
-        ns.Function("close", [Param("conn", "SftpConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.close");
-
-            try
-            {
-                if (client.IsConnected)
-                {
-                    client.Disconnect();
-                }
-                client.Dispose();
-            }
-            catch (SshException e)
-            {
-                throw new RuntimeError($"sftp.close: {e.Message}");
-            }
-
-            return StashValue.Null;
-        },
-            returnType: "null",
-            documentation: "Closes the SFTP connection and releases all resources.\n@param conn The SFTP connection to close\n@return null");
-
-        // sftp.isConnected(conn) — Returns true if the SFTP connection is still active.
-        ns.Function("isConnected", [Param("conn", "SftpConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            SftpClient client = GetClient(args[0].ToObject(), "sftp.isConnected");
-            return StashValue.FromBool(client.IsConnected);
-        },
-            returnType: "bool",
-            documentation: "Returns true if the SFTP connection is still active.\n@param conn The SFTP connection to check\n@return true if connected, false otherwise");
-
-        ns.Struct("SftpConnection", [
-            new BuiltInField("host", "string"),
-            new BuiltInField("port", "int"),
-            new BuiltInField("username", "string"),
-        ]);
-
-        return ns.Build();
+            throw new RuntimeError($"sftp.connect: {e.Message}");
+        }
     }
+
+    /// <summary>Uploads a local file to the remote server.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="localPath">Path to the local file to upload</param>
+    /// <param name="remotePath">Destination path on the remote server</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Upload(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.upload");
+        var localPath = SvArgs.String(args, 1, "sftp.upload");
+        var remotePath = SvArgs.String(args, 2, "sftp.upload");
+
+        localPath = ctx.ExpandTilde(localPath);
+
+        try
+        {
+            using FileStream fileStream = File.OpenRead(localPath);
+            client.UploadFile(fileStream, remotePath);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.upload: {e.Message}");
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeError($"sftp.upload: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Downloads a file from the remote server to a local path.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path to the file on the remote server</param>
+    /// <param name="localPath">Destination path on the local machine</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Download(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.download");
+        var remotePath = SvArgs.String(args, 1, "sftp.download");
+        var localPath = SvArgs.String(args, 2, "sftp.download");
+
+        localPath = ctx.ExpandTilde(localPath);
+
+        try
+        {
+            using FileStream fileStream = File.Create(localPath);
+            client.DownloadFile(remotePath, fileStream);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.download: {e.Message}");
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeError($"sftp.download: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Reads and returns the content of a remote file as a string.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path to the file on the remote server</param>
+    /// <returns>The file content decoded as a UTF-8 string</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue ReadFile(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.readFile");
+        var remotePath = SvArgs.String(args, 1, "sftp.readFile");
+
+        try
+        {
+            using var memStream = new MemoryStream();
+            client.DownloadFile(remotePath, memStream);
+            return StashValue.FromObj(Encoding.UTF8.GetString(memStream.ToArray()));
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.readFile: {e.Message}");
+        }
+    }
+
+    /// <summary>Writes content to a remote file, creating or overwriting it.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path to the file on the remote server</param>
+    /// <param name="content">The string content to write</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue WriteFile(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.writeFile");
+        var remotePath = SvArgs.String(args, 1, "sftp.writeFile");
+        var content = SvArgs.String(args, 2, "sftp.writeFile");
+
+        try
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(content);
+            using var memStream = new MemoryStream(bytes);
+            client.UploadFile(memStream, remotePath);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.writeFile: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Lists files and directories at the remote path.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">The remote directory path to list</param>
+    /// <returns>An array of dicts with name, size, isDir, and modified fields</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue List(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.list");
+        var remotePath = SvArgs.String(args, 1, "sftp.list");
+
+        try
+        {
+            IEnumerable<ISftpFile> entries = client.ListDirectory(remotePath);
+            var results = new List<StashValue>();
+
+            foreach (ISftpFile entry in entries)
+            {
+                if (entry.Name == "." || entry.Name == "..")
+                {
+                    continue;
+                }
+
+                var dict = new StashDictionary();
+                dict.Set("name", StashValue.FromObj(entry.Name));
+                dict.Set("size", StashValue.FromInt(entry.Length));
+                dict.Set("isDir", StashValue.FromBool(entry.IsDirectory));
+                dict.Set("modified", StashValue.FromObj(entry.LastWriteTime.ToString("o")));
+                results.Add(StashValue.FromObj(dict));
+            }
+
+            return StashValue.FromObj(results);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.list: {e.Message}");
+        }
+    }
+
+    /// <summary>Deletes a file on the remote server.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path to the file to delete</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Delete(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.delete");
+        var remotePath = SvArgs.String(args, 1, "sftp.delete");
+
+        try
+        {
+            client.Delete(remotePath);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.delete: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Creates a directory on the remote server.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path of the directory to create</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Mkdir(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.mkdir");
+        var remotePath = SvArgs.String(args, 1, "sftp.mkdir");
+
+        try
+        {
+            client.CreateDirectory(remotePath);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.mkdir: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Removes a directory on the remote server.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path of the directory to remove</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Rmdir(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.rmdir");
+        var remotePath = SvArgs.String(args, 1, "sftp.rmdir");
+
+        try
+        {
+            client.DeleteDirectory(remotePath);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.rmdir: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Returns true if a file or directory exists at the remote path.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">The remote path to check</param>
+    /// <returns>true if the path exists, false otherwise</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Exists(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.exists");
+        var remotePath = SvArgs.String(args, 1, "sftp.exists");
+
+        try
+        {
+            return StashValue.FromBool(client.Exists(remotePath));
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.exists: {e.Message}");
+        }
+    }
+
+    /// <summary>Returns file metadata as a dictionary.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path to the file on the remote server</param>
+    /// <returns>A dict with size, isDir, modified, and permissions fields</returns>
+    [StashFn(Raw = true, ReturnType = "dict")]
+    private static StashValue Stat(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.stat");
+        var remotePath = SvArgs.String(args, 1, "sftp.stat");
+
+        try
+        {
+            SftpFileAttributes attrs = client.GetAttributes(remotePath);
+            var dict = new StashDictionary();
+            dict.Set("size", StashValue.FromInt(attrs.Size));
+            dict.Set("isDir", StashValue.FromBool(attrs.IsDirectory));
+            dict.Set("modified", StashValue.FromObj(attrs.LastWriteTime.ToString("o")));
+
+            // Format permissions as octal string (e.g., "755")
+            int mode = 0;
+            if (attrs.OwnerCanRead)
+            {
+                mode += 400;
+            }
+
+            if (attrs.OwnerCanWrite)
+            {
+                mode += 200;
+            }
+
+            if (attrs.OwnerCanExecute)
+            {
+                mode += 100;
+            }
+
+            if (attrs.GroupCanRead)
+            {
+                mode += 40;
+            }
+
+            if (attrs.GroupCanWrite)
+            {
+                mode += 20;
+            }
+
+            if (attrs.GroupCanExecute)
+            {
+                mode += 10;
+            }
+
+            if (attrs.OthersCanRead)
+            {
+                mode += 4;
+            }
+
+            if (attrs.OthersCanWrite)
+            {
+                mode += 2;
+            }
+
+            if (attrs.OthersCanExecute)
+            {
+                mode += 1;
+            }
+
+            dict.Set("permissions", StashValue.FromObj(mode.ToString()));
+
+            return StashValue.FromObj(dict);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.stat: {e.Message}");
+        }
+    }
+
+    /// <summary>Changes the permissions of a remote file.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="remotePath">Path to the file on the remote server</param>
+    /// <param name="mode">Permission mode as a decimal octal representation (e.g., 755)</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Chmod(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.chmod");
+        var remotePath = SvArgs.String(args, 1, "sftp.chmod");
+        var modeDecimal = SvArgs.Long(args, 2, "sftp.chmod");
+
+        // Convert decimal representation of octal (e.g., 755) to actual octal value
+        short octalMode = ParseOctalMode(modeDecimal, "sftp.chmod");
+
+        try
+        {
+            client.ChangePermissions(remotePath, octalMode);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.chmod: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Renames or moves a file on the remote server.</summary>
+    /// <param name="conn">The SFTP connection</param>
+    /// <param name="oldPath">Current path of the file</param>
+    /// <param name="newPath">New path for the file</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Rename(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.rename");
+        var oldPath = SvArgs.String(args, 1, "sftp.rename");
+        var newPath = SvArgs.String(args, 2, "sftp.rename");
+
+        try
+        {
+            client.RenameFile(oldPath, newPath);
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.rename: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Closes the SFTP connection and releases all resources.</summary>
+    /// <param name="conn">The SFTP connection to close</param>
+    /// <returns>null</returns>
+    [StashFn(Raw = true, ReturnType = "null")]
+    private static StashValue Close(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.close");
+
+        try
+        {
+            if (client.IsConnected)
+            {
+                client.Disconnect();
+            }
+            client.Dispose();
+        }
+        catch (SshException e)
+        {
+            throw new RuntimeError($"sftp.close: {e.Message}");
+        }
+
+        return StashValue.Null;
+    }
+
+    /// <summary>Returns true if the SFTP connection is still active.</summary>
+    /// <param name="conn">The SFTP connection to check</param>
+    /// <returns>true if connected, false otherwise</returns>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue IsConnected(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    {
+        SftpClient client = GetClient(args[0].ToObject(), "sftp.isConnected");
+        return StashValue.FromBool(client.IsConnected);
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────────
 
     /// <summary>
     /// Extracts and validates the <see cref="SftpClient"/> from a connection instance.

@@ -3,8 +3,8 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using System.IO;
 using Stash.Runtime;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Runtime.Types;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>tpl</c> built-in namespace, which exposes Stash's templating engine
@@ -31,75 +31,64 @@ using static Stash.Stdlib.Registration.P;
 /// </list>
 /// </para>
 /// </remarks>
-public static class TplBuiltIns
+[StashNamespace]
+public static partial class TplBuiltIns
 {
-    /// <summary>
-    /// Registers the <c>tpl</c> namespace and its three functions into <paramref name="globals"/>.
-    /// </summary>
-    /// <param name="globals">The runtime environment to register functions in.</param>
-    public static NamespaceDefinition Define()
+    /// <summary>Renders a template string or pre-compiled template with the given data dictionary.</summary>
+    /// <param name="template">The template string or pre-compiled template</param>
+    /// <param name="data">The data dictionary to use for rendering</param>
+    /// <returns>The rendered output string</returns>
+    [StashFn(ReturnType = "string")]
+    public static StashValue Render(IInterpreterContext ctx, StashValue template, StashDictionary data)
     {
-        var ns = new NamespaceBuilder("tpl");
-
-        // tpl.render(template, data) — render a template string with data dictionary
-        // tpl.render(compiled, data) — render a pre-compiled template with data dictionary
-        ns.Function("render", [Param("template"), Param("data", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // If first arg is a string, render it as a template
+        if (template.ToObject() is string str)
         {
-            var data = SvArgs.Dict(args, 1, "tpl.render");
-
-            // If first arg is a string, render it as a template
-            if (args[0].ToObject() is string template)
-            {
-                return ctx.CompileAndRenderTemplate(template, data) is { } rendered
-                    ? StashValue.FromObj(rendered)
-                    : StashValue.Null;
-            }
-
-            // If first arg is a compiled template (List<TemplateNode>), render pre-parsed AST
-            return ctx.RenderCompiledTemplate(args[0].ToObject(), data) is { } compiled
-                ? StashValue.FromObj(compiled)
+            return ctx.CompileAndRenderTemplate(str, data) is { } rendered
+                ? StashValue.FromObj(rendered)
                 : StashValue.Null;
-        },
-            returnType: "string",
-            documentation: "Renders a template string or pre-compiled template with the given data dictionary.\n@param template The template string or pre-compiled template\n@param data The data dictionary to use for rendering\n@return The rendered output string");
+        }
 
-        // tpl.renderFile(path, data) — render a template file with data dictionary
-        ns.Function("renderFile", [Param("path", "string"), Param("data", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // If first arg is a compiled template (List<TemplateNode>), render pre-parsed AST
+        return ctx.RenderCompiledTemplate(template.ToObject(), data) is { } compiled
+            ? StashValue.FromObj(compiled)
+            : StashValue.Null;
+    }
+
+    /// <summary>Reads a template from a file and renders it with the given data dictionary.</summary>
+    /// <param name="path">The path to the template file</param>
+    /// <param name="data">The data dictionary to use for rendering</param>
+    /// <returns>The rendered output string</returns>
+    [StashFn(ReturnType = "string")]
+    public static StashValue RenderFile(IInterpreterContext ctx, string path, StashDictionary data)
+    {
+        string expandedPath = ExpandTilde(path);
+
+        if (!File.Exists(expandedPath))
         {
-            var path = SvArgs.String(args, 0, "tpl.renderFile");
-            var data = SvArgs.Dict(args, 1, "tpl.renderFile");
-            string expandedPath = ExpandTilde(path);
+            throw new RuntimeError($"Template file not found: '{path}'.");
+        }
 
-            if (!File.Exists(expandedPath))
-            {
-                throw new RuntimeError($"Template file not found: '{path}'.");
-            }
-
-            string template;
-            try
-            {
-                template = File.ReadAllText(expandedPath);
-            }
-            catch (IOException ex)
-            {
-                throw new RuntimeError($"Failed to read template file '{path}': {ex.Message}");
-            }
-            string? basePath = Path.GetDirectoryName(Path.GetFullPath(expandedPath));
-            return StashValue.FromObject(ctx.CompileAndRenderTemplate(template, data, basePath));
-        },
-            returnType: "string",
-            documentation: "Reads a template from a file and renders it with the given data dictionary.\n@param path The path to the template file\n@param data The data dictionary to use for rendering\n@return The rendered output string");
-
-        // tpl.compile(template) — pre-compile a template string for repeated rendering
-        ns.Function("compile", [Param("template", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        string template;
+        try
         {
-            var template = SvArgs.String(args, 0, "tpl.compile");
-            return StashValue.FromObject(ctx.CompileTemplate(template));
-        },
-            returnType: "function",
-            documentation: "Compiles a template string and returns a pre-compiled template for repeated rendering.\n@param template The template string to compile\n@return A pre-compiled template object");
+            template = File.ReadAllText(expandedPath);
+        }
+        catch (IOException ex)
+        {
+            throw new RuntimeError($"Failed to read template file '{path}': {ex.Message}");
+        }
+        string? basePath = Path.GetDirectoryName(Path.GetFullPath(expandedPath));
+        return StashValue.FromObject(ctx.CompileAndRenderTemplate(template, data, basePath));
+    }
 
-        return ns.Build();
+    /// <summary>Compiles a template string and returns a pre-compiled template for repeated rendering.</summary>
+    /// <param name="template">The template string to compile</param>
+    /// <returns>A pre-compiled template object</returns>
+    [StashFn(ReturnType = "function")]
+    public static StashValue Compile(IInterpreterContext ctx, string template)
+    {
+        return StashValue.FromObject(ctx.CompileTemplate(template));
     }
 
     /// <summary>

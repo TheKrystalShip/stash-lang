@@ -9,9 +9,9 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
 
 /// <summary>
 /// Registers the <c>archive</c> namespace providing ZIP, TAR, and GZIP archive operations.
@@ -27,544 +27,537 @@ using static Stash.Stdlib.Registration.P;
 /// capability is enabled.
 /// </para>
 /// </remarks>
-public static class ArchiveBuiltIns
+[StashNamespace(Capability = StashCapabilities.FileSystem)]
+public static partial class ArchiveBuiltIns
 {
-    public static NamespaceDefinition Define()
+    // ── Stash struct declarations ─────────────────────────────────────────────
+
+    /// <summary>Options for controlling archive operations.</summary>
+    [StashStruct]
+    public sealed record ArchiveOptions(long CompressionLevel, bool Overwrite, bool PreservePaths, string Filter);
+
+    /// <summary>An entry inside an archive.</summary>
+    [StashStruct]
+    public sealed record ArchiveEntry(string Name, long Size, bool IsDirectory, string ModifiedAt);
+
+    // ── Functions ─────────────────────────────────────────────────────────────
+
+    /// <summary>Creates a ZIP archive from one or more files or directories.</summary>
+    /// <param name="outputPath">The path for the output ZIP file</param>
+    /// <param name="inputPaths">A single path or array of paths to include in the archive</param>
+    /// <param name="options">Optional ArchiveOptions struct with compressionLevel (0-9), overwrite, preservePaths, filter</param>
+    /// <returns>The path to the created archive</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Zip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("archive");
-        ns.RequiresCapability(StashCapabilities.FileSystem);
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("archive.zip: expected 2 or 3 arguments.");
 
-        // ArchiveOptions struct for controlling archive operations
-        ns.Struct("ArchiveOptions", [
-            new BuiltInField("compressionLevel", "int"),
-            new BuiltInField("overwrite", "bool"),
-            new BuiltInField("preservePaths", "bool"),
-            new BuiltInField("filter", "string")
-        ]);
+        var outputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.zip"));
+        var inputPaths = GetInputPaths(args[1], ctx, "archive.zip");
+        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.zip") : DefaultOptions;
 
-        // ArchiveEntry struct for listing archive contents
-        ns.Struct("ArchiveEntry", [
-            new BuiltInField("name", "string"),
-            new BuiltInField("size", "int"),
-            new BuiltInField("isDirectory", "bool"),
-            new BuiltInField("modifiedAt", "string")
-        ]);
+        if (inputPaths.Count == 0)
+            throw new RuntimeError("archive.zip: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
 
-        // archive.zip(outputPath, inputPaths, options?) — Creates a ZIP archive
-        ns.Function("zip", [Param("outputPath", "string"), Param("inputPaths", "string|array"), Param("options?", "ArchiveOptions")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // Check for existing file
+        if (File.Exists(outputPath) && !options.Overwrite)
+            throw new RuntimeError($"archive.zip: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
+
+        // Validate input paths exist
+        foreach (var p in inputPaths)
+        {
+            if (!File.Exists(p) && !Directory.Exists(p))
+                throw new RuntimeError($"archive.zip: file not found: '{p}'", errorType: StashErrorTypes.IOError);
+        }
+
+        try
+        {
+            var compressionLevel = options.CompressionLevel switch
             {
-                if (args.Length < 2 || args.Length > 3)
-                    throw new RuntimeError("archive.zip: expected 2 or 3 arguments.");
+                0 => CompressionLevel.NoCompression,
+                >= 1 and <= 3 => CompressionLevel.Fastest,
+                >= 4 and <= 6 => CompressionLevel.Optimal,
+                >= 7 => CompressionLevel.SmallestSize,
+                _ => CompressionLevel.Optimal
+            };
 
-                var outputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.zip"));
-                var inputPaths = GetInputPaths(args[1], ctx, "archive.zip");
-                var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.zip") : DefaultOptions;
+            // Delete existing file if overwrite is true
+            if (File.Exists(outputPath))
+                File.Delete(outputPath);
 
-                if (inputPaths.Count == 0)
-                    throw new RuntimeError("archive.zip: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
+            using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
 
-                // Check for existing file
-                if (File.Exists(outputPath) && !options.Overwrite)
-                    throw new RuntimeError($"archive.zip: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
-
-                // Validate input paths exist
-                foreach (var p in inputPaths)
+            foreach (var inputPath in inputPaths)
+            {
+                if (File.Exists(inputPath))
                 {
-                    if (!File.Exists(p) && !Directory.Exists(p))
-                        throw new RuntimeError($"archive.zip: file not found: '{p}'", errorType: StashErrorTypes.IOError);
+                    // Individual files always use just the filename as the entry name.
+                    // preservePaths only affects directory structure within directory inputs.
+                    archive.CreateEntryFromFile(inputPath, Path.GetFileName(inputPath), compressionLevel);
                 }
-
-                try
+                else if (Directory.Exists(inputPath))
                 {
-                    var compressionLevel = options.CompressionLevel switch
+                    AddDirectoryToZip(archive, inputPath, options.PreservePaths, compressionLevel);
+                }
+            }
+
+            return StashValue.FromObj(outputPath);
+        }
+        catch (RuntimeError) { throw; }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"archive.zip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.zip: failed to create archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    /// <summary>Extracts a ZIP archive to a directory.</summary>
+    /// <param name="archivePath">The path to the ZIP file to extract</param>
+    /// <param name="outputDir">The directory to extract files into</param>
+    /// <param name="options">Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)</param>
+    /// <returns>An array of extracted file paths</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Unzip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("archive.unzip: expected 2 or 3 arguments.");
+
+        var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.unzip"));
+        var outputDir = ctx.ExpandTilde(SvArgs.String(args, 1, "archive.unzip"));
+        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.unzip") : DefaultOptions;
+
+        if (!File.Exists(archivePath))
+            throw new RuntimeError($"archive.unzip: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+            var outputDirFull = Path.GetFullPath(outputDir);
+            var extractedFiles = new List<StashValue>();
+            var filterRegex = !string.IsNullOrEmpty(options.Filter) ? GlobToRegex(options.Filter) : null;
+
+            using var archive = ZipFile.OpenRead(archivePath);
+            foreach (var entry in archive.Entries)
+            {
+                // Skip directories
+                if (string.IsNullOrEmpty(entry.Name))
+                    continue;
+
+                // Apply filter if specified
+                if (filterRegex != null && !filterRegex.IsMatch(entry.FullName))
+                    continue;
+
+                var destPath = options.PreservePaths
+                    ? Path.Combine(outputDir, entry.FullName)
+                    : Path.Combine(outputDir, entry.Name);
+
+                // Security check — prevent path traversal
+                var destPathFull = Path.GetFullPath(destPath);
+                if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
+                    throw new RuntimeError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'", errorType: StashErrorTypes.ValueError);
+
+                if (File.Exists(destPath) && !options.Overwrite)
+                    throw new RuntimeError($"archive.unzip: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
+
+                var destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir))
+                    Directory.CreateDirectory(destDir);
+
+                entry.ExtractToFile(destPath, options.Overwrite);
+                extractedFiles.Add(StashValue.FromObj(destPath));
+            }
+
+            return StashValue.FromObj(extractedFiles);
+        }
+        catch (RuntimeError) { throw; }
+        catch (InvalidDataException)
+        {
+            throw new RuntimeError($"archive.unzip: invalid ZIP archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"archive.unzip: permission denied: '{outputDir}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.unzip: failed to extract archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    /// <summary>Creates a TAR archive from one or more files or directories.</summary>
+    /// <param name="outputPath">The path for the output TAR file. Use .tar.gz or .tgz extension for gzip compression</param>
+    /// <param name="inputPaths">A single path or array of paths to include in the archive</param>
+    /// <param name="options">Optional ArchiveOptions struct with compressionLevel (for .tar.gz), overwrite, preservePaths</param>
+    /// <returns>The path to the created archive</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Tar(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("archive.tar: expected 2 or 3 arguments.");
+
+        var outputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.tar"));
+        var inputPaths = GetInputPaths(args[1], ctx, "archive.tar");
+        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.tar") : DefaultOptions;
+
+        if (inputPaths.Count == 0)
+            throw new RuntimeError("archive.tar: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
+
+        // Check for existing file
+        if (File.Exists(outputPath) && !options.Overwrite)
+            throw new RuntimeError($"archive.tar: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
+
+        // Validate input paths exist
+        foreach (var p in inputPaths)
+        {
+            if (!File.Exists(p) && !Directory.Exists(p))
+                throw new RuntimeError($"archive.tar: file not found: '{p}'", errorType: StashErrorTypes.IOError);
+        }
+
+        try
+        {
+            // Delete existing file if overwrite is true
+            if (File.Exists(outputPath))
+                File.Delete(outputPath);
+
+            using var fileStream = File.Create(outputPath);
+
+            // If output ends with .tar.gz or .tgz, use gzip compression
+            var useGzip = outputPath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+                          outputPath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase);
+
+            Stream tarStream = fileStream;
+            GZipStream? gzipStream = null;
+
+            if (useGzip)
+            {
+                var gzipLevel = options.CompressionLevel switch
+                {
+                    0 => CompressionLevel.NoCompression,
+                    >= 1 and <= 3 => CompressionLevel.Fastest,
+                    >= 4 and <= 6 => CompressionLevel.Optimal,
+                    >= 7 => CompressionLevel.SmallestSize,
+                    _ => CompressionLevel.Optimal
+                };
+                gzipStream = new GZipStream(fileStream, gzipLevel);
+                tarStream = gzipStream;
+            }
+
+            try
+            {
+                using var tarWriter = new TarWriter(tarStream, TarEntryFormat.Pax, leaveOpen: false);
+
+                foreach (var inputPath in inputPaths)
+                {
+                    if (File.Exists(inputPath))
                     {
-                        0 => CompressionLevel.NoCompression,
-                        >= 1 and <= 3 => CompressionLevel.Fastest,
-                        >= 4 and <= 6 => CompressionLevel.Optimal,
-                        >= 7 => CompressionLevel.SmallestSize,
-                        _ => CompressionLevel.Optimal
-                    };
-
-                    // Delete existing file if overwrite is true
-                    if (File.Exists(outputPath))
-                        File.Delete(outputPath);
-
-                    using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Create);
-
-                    foreach (var inputPath in inputPaths)
-                    {
-                        if (File.Exists(inputPath))
+                        // Individual files always use just the filename as the entry name.
+                        var entry = new PaxTarEntry(TarEntryType.RegularFile, Path.GetFileName(inputPath))
                         {
-                            // Individual files always use just the filename as the entry name.
-                            // preservePaths only affects directory structure within directory inputs.
-                            archive.CreateEntryFromFile(inputPath, Path.GetFileName(inputPath), compressionLevel);
-                        }
-                        else if (Directory.Exists(inputPath))
-                        {
-                            AddDirectoryToZip(archive, inputPath, options.PreservePaths, compressionLevel);
-                        }
+                            DataStream = File.OpenRead(inputPath),
+                            ModificationTime = File.GetLastWriteTimeUtc(inputPath)
+                        };
+                        tarWriter.WriteEntry(entry);
                     }
-
-                    return StashValue.FromObj(outputPath);
+                    else if (Directory.Exists(inputPath))
+                    {
+                        AddDirectoryToTar(tarWriter, inputPath, options.PreservePaths);
+                    }
                 }
-                catch (RuntimeError) { throw; }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"archive.zip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.zip: failed to create archive: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Creates a ZIP archive from one or more files or directories.\n@param outputPath The path for the output ZIP file\n@param inputPaths A single path or array of paths to include in the archive\n@param options Optional ArchiveOptions struct with compressionLevel (0-9), overwrite, preservePaths, filter\n@return The path to the created archive");
-
-        // archive.unzip(archivePath, outputDir, options?) — Extracts a ZIP archive
-        ns.Function("unzip", [Param("archivePath", "string"), Param("outputDir", "string"), Param("options?", "ArchiveOptions")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            }
+            finally
             {
-                if (args.Length < 2 || args.Length > 3)
-                    throw new RuntimeError("archive.unzip: expected 2 or 3 arguments.");
+                gzipStream?.Dispose();
+            }
 
-                var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.unzip"));
-                var outputDir = ctx.ExpandTilde(SvArgs.String(args, 1, "archive.unzip"));
-                var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.unzip") : DefaultOptions;
+            return StashValue.FromObj(outputPath);
+        }
+        catch (RuntimeError) { throw; }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"archive.tar: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.tar: failed to create archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
 
-                if (!File.Exists(archivePath))
-                    throw new RuntimeError($"archive.unzip: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+    /// <summary>Extracts a TAR archive to a directory. Automatically detects gzip compression.</summary>
+    /// <param name="archivePath">The path to the TAR file to extract</param>
+    /// <param name="outputDir">The directory to extract files into</param>
+    /// <param name="options">Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)</param>
+    /// <returns>An array of extracted file paths</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Untar(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 2 || args.Length > 3)
+            throw new RuntimeError("archive.untar: expected 2 or 3 arguments.");
+
+        var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.untar"));
+        var outputDir = ctx.ExpandTilde(SvArgs.String(args, 1, "archive.untar"));
+        var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.untar") : DefaultOptions;
+
+        if (!File.Exists(archivePath))
+            throw new RuntimeError($"archive.untar: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+
+        try
+        {
+            Directory.CreateDirectory(outputDir);
+            var outputDirFull = Path.GetFullPath(outputDir);
+            var extractedFiles = new List<StashValue>();
+            var filterRegex = !string.IsNullOrEmpty(options.Filter) ? GlobToRegex(options.Filter) : null;
+
+            using var fileStream = File.OpenRead(archivePath);
+
+            // Detect gzip compression
+            var useGzip = archivePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+                          archivePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase) ||
+                          IsGzipFile(fileStream);
+
+            // Reset stream position if we checked for gzip magic number
+            fileStream.Position = 0;
+
+            Stream tarStream = useGzip ? new GZipStream(fileStream, CompressionMode.Decompress) : fileStream;
+
+            try
+            {
+                using var tarReader = new TarReader(tarStream);
+                TarEntry? entry;
+
+                while ((entry = tarReader.GetNextEntry()) != null)
+                {
+                    // Skip entries without names and directory entries
+                    if (string.IsNullOrEmpty(entry.Name) || entry.EntryType == TarEntryType.Directory)
+                        continue;
+
+                    // Apply filter if specified
+                    if (filterRegex != null && !filterRegex.IsMatch(entry.Name))
+                        continue;
+
+                    var destPath = options.PreservePaths
+                        ? Path.Combine(outputDir, entry.Name)
+                        : Path.Combine(outputDir, Path.GetFileName(entry.Name));
+
+                    // Security check — prevent path traversal
+                    var destPathFull = Path.GetFullPath(destPath);
+                    if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
+                        throw new RuntimeError($"archive.untar: entry would extract outside target directory: '{entry.Name}'", errorType: StashErrorTypes.ValueError);
+
+                    if (File.Exists(destPath) && !options.Overwrite)
+                        throw new RuntimeError($"archive.untar: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
+
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(destDir))
+                        Directory.CreateDirectory(destDir);
+
+                    entry.ExtractToFile(destPath, options.Overwrite);
+                    extractedFiles.Add(StashValue.FromObj(destPath));
+                }
+            }
+            finally
+            {
+                if (useGzip && tarStream != fileStream)
+                    tarStream.Dispose();
+            }
+
+            return StashValue.FromObj(extractedFiles);
+        }
+        catch (RuntimeError) { throw; }
+        catch (InvalidDataException)
+        {
+            throw new RuntimeError($"archive.untar: invalid TAR archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"archive.untar: permission denied: '{outputDir}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.untar: failed to extract archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    /// <summary>Compresses a file using gzip compression.</summary>
+    /// <param name="inputPath">The file to compress</param>
+    /// <param name="outputPath">Optional output path (defaults to inputPath + ".gz")</param>
+    /// <returns>The path to the compressed file</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Gzip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("archive.gzip: expected 1 or 2 arguments.");
+
+        var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gzip"));
+
+        if (!File.Exists(inputPath))
+            throw new RuntimeError($"archive.gzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
+
+        var outputPath = args.Length > 1 && !args[1].IsNull
+            ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gzip"))
+            : inputPath + ".gz";
+
+        try
+        {
+            using var inputStream = File.OpenRead(inputPath);
+            using var outputStream = File.Create(outputPath);
+            using var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal);
+            inputStream.CopyTo(gzipStream);
+
+            return StashValue.FromObj(outputPath);
+        }
+        catch (RuntimeError) { throw; }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"archive.gzip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.gzip: failed to compress file: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    /// <summary>Decompresses a gzip-compressed file.</summary>
+    /// <param name="inputPath">The gzip file to decompress</param>
+    /// <param name="outputPath">Optional output path (defaults to inputPath without .gz extension)</param>
+    /// <returns>The path to the decompressed file</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue Gunzip(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 2)
+            throw new RuntimeError("archive.gunzip: expected 1 or 2 arguments.");
+
+        var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gunzip"));
+
+        if (!File.Exists(inputPath))
+            throw new RuntimeError($"archive.gunzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
+
+        var outputPath = args.Length > 1 && !args[1].IsNull
+            ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gunzip"))
+            : inputPath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
+                ? inputPath[..^3]
+                : inputPath + ".out";
+
+        try
+        {
+            using var inputStream = File.OpenRead(inputPath);
+
+            // Validate it's a gzip file
+            if (!IsGzipFile(inputStream))
+                throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: StashErrorTypes.ParseError);
+
+            inputStream.Position = 0;
+
+            using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
+            using var outputStream = File.Create(outputPath);
+            gzipStream.CopyTo(outputStream);
+
+            return StashValue.FromObj(outputPath);
+        }
+        catch (RuntimeError) { throw; }
+        catch (InvalidDataException)
+        {
+            throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: StashErrorTypes.ParseError);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new RuntimeError($"archive.gunzip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.gunzip: failed to decompress file: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
+    }
+
+    /// <summary>Lists the contents of a ZIP or TAR archive without extracting.</summary>
+    /// <param name="archivePath">The path to the archive file</param>
+    /// <returns>An array of ArchiveEntry structs with name, size, isDirectory, modifiedAt</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue List(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length != 1)
+            throw new RuntimeError("archive.list: expected 1 argument.");
+
+        var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.list"));
+
+        if (!File.Exists(archivePath))
+            throw new RuntimeError($"archive.list: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+
+        var entries = new List<StashValue>();
+
+        try
+        {
+            // Try ZIP first
+            if (archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
+                IsZipFile(archivePath))
+            {
+                using var archive = ZipFile.OpenRead(archivePath);
+                foreach (var entry in archive.Entries)
+                {
+                    entries.Add(CreateArchiveEntry(
+                        entry.FullName,
+                        entry.Length,
+                        string.IsNullOrEmpty(entry.Name),
+                        entry.LastWriteTime.UtcDateTime));
+                }
+            }
+            // Try TAR (including .tar.gz, .tgz)
+            else if (archivePath.EndsWith(".tar", StringComparison.OrdinalIgnoreCase) ||
+                     archivePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+                     archivePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
+            {
+                using var fileStream = File.OpenRead(archivePath);
+
+                var useGzip = archivePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+                              archivePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase) ||
+                              IsGzipFile(fileStream);
+
+                fileStream.Position = 0;
+
+                Stream tarStream = useGzip ? new GZipStream(fileStream, CompressionMode.Decompress) : fileStream;
 
                 try
                 {
-                    Directory.CreateDirectory(outputDir);
-                    var outputDirFull = Path.GetFullPath(outputDir);
-                    var extractedFiles = new List<StashValue>();
-                    var filterRegex = !string.IsNullOrEmpty(options.Filter) ? GlobToRegex(options.Filter) : null;
+                    using var tarReader = new TarReader(tarStream);
+                    TarEntry? entry;
 
-                    using var archive = ZipFile.OpenRead(archivePath);
-                    foreach (var entry in archive.Entries)
+                    while ((entry = tarReader.GetNextEntry()) != null)
                     {
-                        // Skip directories
                         if (string.IsNullOrEmpty(entry.Name))
                             continue;
 
-                        // Apply filter if specified
-                        if (filterRegex != null && !filterRegex.IsMatch(entry.FullName))
-                            continue;
-
-                        var destPath = options.PreservePaths
-                            ? Path.Combine(outputDir, entry.FullName)
-                            : Path.Combine(outputDir, entry.Name);
-
-                        // Security check — prevent path traversal
-                        var destPathFull = Path.GetFullPath(destPath);
-                        if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
-                            throw new RuntimeError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'", errorType: StashErrorTypes.ValueError);
-
-                        if (File.Exists(destPath) && !options.Overwrite)
-                            throw new RuntimeError($"archive.unzip: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
-
-                        var destDir = Path.GetDirectoryName(destPath);
-                        if (!string.IsNullOrEmpty(destDir))
-                            Directory.CreateDirectory(destDir);
-
-                        entry.ExtractToFile(destPath, options.Overwrite);
-                        extractedFiles.Add(StashValue.FromObj(destPath));
+                        entries.Add(CreateArchiveEntry(
+                            entry.Name,
+                            entry.Length,
+                            entry.EntryType == TarEntryType.Directory,
+                            entry.ModificationTime.UtcDateTime));
                     }
-
-                    return StashValue.FromObj(extractedFiles);
                 }
-                catch (RuntimeError) { throw; }
-                catch (InvalidDataException)
+                finally
                 {
-                    throw new RuntimeError($"archive.unzip: invalid ZIP archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+                    if (useGzip && tarStream != fileStream)
+                        tarStream.Dispose();
                 }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"archive.unzip: permission denied: '{outputDir}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.unzip: failed to extract archive: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "array",
-            isVariadic: true,
-            documentation: "Extracts a ZIP archive to a directory.\n@param archivePath The path to the ZIP file to extract\n@param outputDir The directory to extract files into\n@param options Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)\n@return An array of extracted file paths");
-
-        // archive.tar(outputPath, inputPaths, options?) — Creates a TAR archive
-        ns.Function("tar", [Param("outputPath", "string"), Param("inputPaths", "string|array"), Param("options?", "ArchiveOptions")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            }
+            else
             {
-                if (args.Length < 2 || args.Length > 3)
-                    throw new RuntimeError("archive.tar: expected 2 or 3 arguments.");
+                throw new RuntimeError($"archive.list: unsupported archive format: '{archivePath}'", errorType: StashErrorTypes.ValueError);
+            }
 
-                var outputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.tar"));
-                var inputPaths = GetInputPaths(args[1], ctx, "archive.tar");
-                var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.tar") : DefaultOptions;
-
-                if (inputPaths.Count == 0)
-                    throw new RuntimeError("archive.tar: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
-
-                // Check for existing file
-                if (File.Exists(outputPath) && !options.Overwrite)
-                    throw new RuntimeError($"archive.tar: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
-
-                // Validate input paths exist
-                foreach (var p in inputPaths)
-                {
-                    if (!File.Exists(p) && !Directory.Exists(p))
-                        throw new RuntimeError($"archive.tar: file not found: '{p}'", errorType: StashErrorTypes.IOError);
-                }
-
-                try
-                {
-                    // Delete existing file if overwrite is true
-                    if (File.Exists(outputPath))
-                        File.Delete(outputPath);
-
-                    using var fileStream = File.Create(outputPath);
-
-                    // If output ends with .tar.gz or .tgz, use gzip compression
-                    var useGzip = outputPath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
-                                  outputPath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase);
-
-                    Stream tarStream = fileStream;
-                    GZipStream? gzipStream = null;
-
-                    if (useGzip)
-                    {
-                        var gzipLevel = options.CompressionLevel switch
-                        {
-                            0 => CompressionLevel.NoCompression,
-                            >= 1 and <= 3 => CompressionLevel.Fastest,
-                            >= 4 and <= 6 => CompressionLevel.Optimal,
-                            >= 7 => CompressionLevel.SmallestSize,
-                            _ => CompressionLevel.Optimal
-                        };
-                        gzipStream = new GZipStream(fileStream, gzipLevel);
-                        tarStream = gzipStream;
-                    }
-
-                    try
-                    {
-                        using var tarWriter = new TarWriter(tarStream, TarEntryFormat.Pax, leaveOpen: false);
-
-                        foreach (var inputPath in inputPaths)
-                        {
-                            if (File.Exists(inputPath))
-                            {
-                                // Individual files always use just the filename as the entry name.
-                                var entry = new PaxTarEntry(TarEntryType.RegularFile, Path.GetFileName(inputPath))
-                                {
-                                    DataStream = File.OpenRead(inputPath),
-                                    ModificationTime = File.GetLastWriteTimeUtc(inputPath)
-                                };
-                                tarWriter.WriteEntry(entry);
-                            }
-                            else if (Directory.Exists(inputPath))
-                            {
-                                AddDirectoryToTar(tarWriter, inputPath, options.PreservePaths);
-                            }
-                        }
-                    }
-                    finally
-                    {
-                        gzipStream?.Dispose();
-                    }
-
-                    return StashValue.FromObj(outputPath);
-                }
-                catch (RuntimeError) { throw; }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"archive.tar: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.tar: failed to create archive: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Creates a TAR archive from one or more files or directories.\n@param outputPath The path for the output TAR file. Use .tar.gz or .tgz extension for gzip compression\n@param inputPaths A single path or array of paths to include in the archive\n@param options Optional ArchiveOptions struct with compressionLevel (for .tar.gz), overwrite, preservePaths\n@return The path to the created archive");
-
-        // archive.untar(archivePath, outputDir, options?) — Extracts a TAR archive
-        ns.Function("untar", [Param("archivePath", "string"), Param("outputDir", "string"), Param("options?", "ArchiveOptions")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 2 || args.Length > 3)
-                    throw new RuntimeError("archive.untar: expected 2 or 3 arguments.");
-
-                var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.untar"));
-                var outputDir = ctx.ExpandTilde(SvArgs.String(args, 1, "archive.untar"));
-                var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.untar") : DefaultOptions;
-
-                if (!File.Exists(archivePath))
-                    throw new RuntimeError($"archive.untar: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
-
-                try
-                {
-                    Directory.CreateDirectory(outputDir);
-                    var outputDirFull = Path.GetFullPath(outputDir);
-                    var extractedFiles = new List<StashValue>();
-                    var filterRegex = !string.IsNullOrEmpty(options.Filter) ? GlobToRegex(options.Filter) : null;
-
-                    using var fileStream = File.OpenRead(archivePath);
-
-                    // Detect gzip compression
-                    var useGzip = archivePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
-                                  archivePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase) ||
-                                  IsGzipFile(fileStream);
-
-                    // Reset stream position if we checked for gzip magic number
-                    fileStream.Position = 0;
-
-                    Stream tarStream = useGzip ? new GZipStream(fileStream, CompressionMode.Decompress) : fileStream;
-
-                    try
-                    {
-                        using var tarReader = new TarReader(tarStream);
-                        TarEntry? entry;
-
-                        while ((entry = tarReader.GetNextEntry()) != null)
-                        {
-                            // Skip entries without names and directory entries
-                            if (string.IsNullOrEmpty(entry.Name) || entry.EntryType == TarEntryType.Directory)
-                                continue;
-
-                            // Apply filter if specified
-                            if (filterRegex != null && !filterRegex.IsMatch(entry.Name))
-                                continue;
-
-                            var destPath = options.PreservePaths
-                                ? Path.Combine(outputDir, entry.Name)
-                                : Path.Combine(outputDir, Path.GetFileName(entry.Name));
-
-                            // Security check — prevent path traversal
-                            var destPathFull = Path.GetFullPath(destPath);
-                            if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
-                                throw new RuntimeError($"archive.untar: entry would extract outside target directory: '{entry.Name}'", errorType: StashErrorTypes.ValueError);
-
-                            if (File.Exists(destPath) && !options.Overwrite)
-                                throw new RuntimeError($"archive.untar: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
-
-                            var destDir = Path.GetDirectoryName(destPath);
-                            if (!string.IsNullOrEmpty(destDir))
-                                Directory.CreateDirectory(destDir);
-
-                            entry.ExtractToFile(destPath, options.Overwrite);
-                            extractedFiles.Add(StashValue.FromObj(destPath));
-                        }
-                    }
-                    finally
-                    {
-                        if (useGzip && tarStream != fileStream)
-                            tarStream.Dispose();
-                    }
-
-                    return StashValue.FromObj(extractedFiles);
-                }
-                catch (RuntimeError) { throw; }
-                catch (InvalidDataException)
-                {
-                    throw new RuntimeError($"archive.untar: invalid TAR archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"archive.untar: permission denied: '{outputDir}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.untar: failed to extract archive: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "array",
-            isVariadic: true,
-            documentation: "Extracts a TAR archive to a directory. Automatically detects gzip compression.\n@param archivePath The path to the TAR file to extract\n@param outputDir The directory to extract files into\n@param options Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)\n@return An array of extracted file paths");
-
-        // archive.gzip(inputPath, outputPath?) — Compresses a file with gzip
-        ns.Function("gzip", [Param("inputPath", "string"), Param("outputPath?", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("archive.gzip: expected 1 or 2 arguments.");
-
-                var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gzip"));
-
-                if (!File.Exists(inputPath))
-                    throw new RuntimeError($"archive.gzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
-
-                var outputPath = args.Length > 1 && !args[1].IsNull
-                    ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gzip"))
-                    : inputPath + ".gz";
-
-                try
-                {
-                    using var inputStream = File.OpenRead(inputPath);
-                    using var outputStream = File.Create(outputPath);
-                    using var gzipStream = new GZipStream(outputStream, CompressionLevel.Optimal);
-                    inputStream.CopyTo(gzipStream);
-
-                    return StashValue.FromObj(outputPath);
-                }
-                catch (RuntimeError) { throw; }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"archive.gzip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.gzip: failed to compress file: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Compresses a file using gzip compression.\n@param inputPath The file to compress\n@param outputPath Optional output path (defaults to inputPath + \".gz\")\n@return The path to the compressed file");
-
-        // archive.gunzip(inputPath, outputPath?) — Decompresses a gzip file
-        ns.Function("gunzip", [Param("inputPath", "string"), Param("outputPath?", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length < 1 || args.Length > 2)
-                    throw new RuntimeError("archive.gunzip: expected 1 or 2 arguments.");
-
-                var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gunzip"));
-
-                if (!File.Exists(inputPath))
-                    throw new RuntimeError($"archive.gunzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
-
-                var outputPath = args.Length > 1 && !args[1].IsNull
-                    ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gunzip"))
-                    : inputPath.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)
-                        ? inputPath[..^3]
-                        : inputPath + ".out";
-
-                try
-                {
-                    using var inputStream = File.OpenRead(inputPath);
-
-                    // Validate it's a gzip file
-                    if (!IsGzipFile(inputStream))
-                        throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: StashErrorTypes.ParseError);
-
-                    inputStream.Position = 0;
-
-                    using var gzipStream = new GZipStream(inputStream, CompressionMode.Decompress);
-                    using var outputStream = File.Create(outputPath);
-                    gzipStream.CopyTo(outputStream);
-
-                    return StashValue.FromObj(outputPath);
-                }
-                catch (RuntimeError) { throw; }
-                catch (InvalidDataException)
-                {
-                    throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: StashErrorTypes.ParseError);
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    throw new RuntimeError($"archive.gunzip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.gunzip: failed to decompress file: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "string",
-            isVariadic: true,
-            documentation: "Decompresses a gzip-compressed file.\n@param inputPath The gzip file to decompress\n@param outputPath Optional output path (defaults to inputPath without .gz extension)\n@return The path to the decompressed file");
-
-        // archive.list(archivePath) — Lists contents of an archive
-        ns.Function("list", [Param("archivePath", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                if (args.Length != 1)
-                    throw new RuntimeError("archive.list: expected 1 argument.");
-
-                var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.list"));
-
-                if (!File.Exists(archivePath))
-                    throw new RuntimeError($"archive.list: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
-
-                var entries = new List<StashValue>();
-
-                try
-                {
-                    // Try ZIP first
-                    if (archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) ||
-                        IsZipFile(archivePath))
-                    {
-                        using var archive = ZipFile.OpenRead(archivePath);
-                        foreach (var entry in archive.Entries)
-                        {
-                            entries.Add(CreateArchiveEntry(
-                                entry.FullName,
-                                entry.Length,
-                                string.IsNullOrEmpty(entry.Name),
-                                entry.LastWriteTime.UtcDateTime));
-                        }
-                    }
-                    // Try TAR (including .tar.gz, .tgz)
-                    else if (archivePath.EndsWith(".tar", StringComparison.OrdinalIgnoreCase) ||
-                             archivePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
-                             archivePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase))
-                    {
-                        using var fileStream = File.OpenRead(archivePath);
-
-                        var useGzip = archivePath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
-                                      archivePath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase) ||
-                                      IsGzipFile(fileStream);
-
-                        fileStream.Position = 0;
-
-                        Stream tarStream = useGzip ? new GZipStream(fileStream, CompressionMode.Decompress) : fileStream;
-
-                        try
-                        {
-                            using var tarReader = new TarReader(tarStream);
-                            TarEntry? entry;
-
-                            while ((entry = tarReader.GetNextEntry()) != null)
-                            {
-                                if (string.IsNullOrEmpty(entry.Name))
-                                    continue;
-
-                                entries.Add(CreateArchiveEntry(
-                                    entry.Name,
-                                    entry.Length,
-                                    entry.EntryType == TarEntryType.Directory,
-                                    entry.ModificationTime.UtcDateTime));
-                            }
-                        }
-                        finally
-                        {
-                            if (useGzip && tarStream != fileStream)
-                                tarStream.Dispose();
-                        }
-                    }
-                    else
-                    {
-                        throw new RuntimeError($"archive.list: unsupported archive format: '{archivePath}'", errorType: StashErrorTypes.ValueError);
-                    }
-
-                    return StashValue.FromObj(entries);
-                }
-                catch (RuntimeError) { throw; }
-                catch (InvalidDataException)
-                {
-                    throw new RuntimeError($"archive.list: invalid archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
-                }
-                catch (Exception ex)
-                {
-                    throw new RuntimeError($"archive.list: failed to read archive: {ex.Message}", errorType: StashErrorTypes.IOError);
-                }
-            },
-            returnType: "array",
-            documentation: "Lists the contents of a ZIP or TAR archive without extracting.\n@param archivePath The path to the archive file\n@return An array of ArchiveEntry structs with name, size, isDirectory, modifiedAt");
-
-        return ns.Build();
+            return StashValue.FromObj(entries);
+        }
+        catch (RuntimeError) { throw; }
+        catch (InvalidDataException)
+        {
+            throw new RuntimeError($"archive.list: invalid archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"archive.list: failed to read archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+        }
     }
 
     // ── Helper types and methods ────────────────────────────────────────────────

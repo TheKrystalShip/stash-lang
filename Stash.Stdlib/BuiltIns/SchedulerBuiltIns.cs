@@ -7,236 +7,199 @@ using Stash.Runtime.Types;
 using Stash.Scheduler;
 using Stash.Scheduler.Logging;
 using Stash.Scheduler.Models;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
-public static class SchedulerBuiltIns
+[StashNamespace(Capability = StashCapabilities.Process | StashCapabilities.FileSystem)]
+public static partial class SchedulerBuiltIns
 {
-    public static NamespaceDefinition Define()
+    // ── Struct declarations ───────────────────────────────────────────────────
+
+    /// <summary>Definition for installing a Stash script as an OS-managed service.</summary>
+    [StashStruct]
+    public sealed record ServiceDef(
+        string Name,
+        string ScriptPath,
+        string? Description,
+        string? Schedule,
+        string? WorkingDir,
+        [property: StashField(Type = "dict")] Dictionary<string, StashValue>? Env,
+        string? User,
+        bool AutoStart,
+        bool RestartOnFailure,
+        long MaxRestarts,
+        long RestartDelaySec,
+        [property: StashField(Type = "dict")] Dictionary<string, StashValue>? PlatformExtras,
+        bool System);
+
+    /// <summary>Status of an installed OS-managed service.</summary>
+    [StashStruct]
+    public sealed record ServiceStatus(
+        string Name,
+        string State,
+        string? Schedule,
+        string? ScriptPath,
+        string? WorkingDir,
+        string? User,
+        string? LastRunTime,
+        string? NextRunTime,
+        long? LastExitCode,
+        long RestartCount,
+        string? Mode,
+        string? Platform);
+
+    /// <summary>Summary info for a listed OS-managed service.</summary>
+    [StashStruct]
+    public sealed record ServiceInfo(
+        string Name,
+        string State,
+        string? Schedule,
+        string? LastRunTime,
+        string? NextRunTime);
+
+    // ── Functions ────────────────────────────────────────────────────────────
+
+    /// <summary>Install a Stash script as an OS-managed service.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Install(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var ns = new NamespaceBuilder("scheduler");
-        ns.RequiresCapability(StashCapabilities.Process | StashCapabilities.FileSystem);
+        var defInstance = SvArgs.Instance(args, 0, "ServiceDef", "scheduler.install");
+        var definition = ConvertToServiceDefinition(defInstance);
+        var manager = ServiceManagerFactory.Create(definition.SystemMode);
+        var result = manager.Install(definition);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.install: {result.Error}");
+        return StashValue.True;
+    }
 
-        // ── Struct definitions ───────────────────────────────────────────────
+    /// <summary>Remove an installed service and its artifacts.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Uninstall(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.uninstall");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.uninstall") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var result = manager.Uninstall(name);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.uninstall: {result.Error}");
+        return StashValue.True;
+    }
 
-        ns.Struct("ServiceDef", [
-            new BuiltInField("name",            "string"),
-            new BuiltInField("scriptPath",      "string"),
-            new BuiltInField("description",     "string"),
-            new BuiltInField("schedule",        "string"),
-            new BuiltInField("workingDir",      "string"),
-            new BuiltInField("env",             "dict"),
-            new BuiltInField("user",            "string"),
-            new BuiltInField("autoStart",       "bool"),
-            new BuiltInField("restartOnFailure","bool"),
-            new BuiltInField("maxRestarts",     "int"),
-            new BuiltInField("restartDelaySec", "int"),
-            new BuiltInField("platformExtras",  "dict"),
-            new BuiltInField("system",          "bool"),
-        ]);
+    /// <summary>Start a stopped service.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Start(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.start");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.start") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var result = manager.Start(name);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.start: {result.Error}");
+        return StashValue.True;
+    }
 
-        ns.Struct("ServiceStatus", [
-            new BuiltInField("name",         "string"),
-            new BuiltInField("state",        "string"),
-            new BuiltInField("schedule",     "string"),
-            new BuiltInField("scriptPath",   "string"),
-            new BuiltInField("workingDir",   "string"),
-            new BuiltInField("user",         "string"),
-            new BuiltInField("lastRunTime",  "string"),
-            new BuiltInField("nextRunTime",  "string"),
-            new BuiltInField("lastExitCode", "int"),
-            new BuiltInField("restartCount", "int"),
-            new BuiltInField("mode",         "string"),
-            new BuiltInField("platform",     "string"),
-        ]);
+    /// <summary>Stop a running service.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Stop(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.stop");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.stop") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var result = manager.Stop(name);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.stop: {result.Error}");
+        return StashValue.True;
+    }
 
-        ns.Struct("ServiceInfo", [
-            new BuiltInField("name",        "string"),
-            new BuiltInField("state",       "string"),
-            new BuiltInField("schedule",    "string"),
-            new BuiltInField("lastRunTime", "string"),
-            new BuiltInField("nextRunTime", "string"),
-        ]);
+    /// <summary>Restart a service.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Restart(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.restart");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.restart") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var result = manager.Restart(name);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.restart: {result.Error}");
+        return StashValue.True;
+    }
 
-        // ── Functions ────────────────────────────────────────────────────────
+    /// <summary>Enable auto-start on boot.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Enable(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.enable");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.enable") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var result = manager.Enable(name);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.enable: {result.Error}");
+        return StashValue.True;
+    }
 
-        // scheduler.install(def) — Install a Stash script as an OS-managed service.
-        ns.Function("install", [Param("def", "ServiceDef")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                var defInstance = SvArgs.Instance(args, 0, "ServiceDef", "scheduler.install");
-                var definition = ConvertToServiceDefinition(defInstance);
-                var manager = ServiceManagerFactory.Create(definition.SystemMode);
-                var result = manager.Install(definition);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.install: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            documentation: "Install a Stash script as an OS-managed service.");
+    /// <summary>Disable auto-start on boot.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Disable(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.disable");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.disable") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var result = manager.Disable(name);
+        if (!result.Success)
+            throw new RuntimeError($"scheduler.disable: {result.Error}");
+        return StashValue.True;
+    }
 
-        // scheduler.uninstall(name, system?) — Remove an installed service.
-        ns.Function("uninstall", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.uninstall");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.uninstall") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var result = manager.Uninstall(name);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.uninstall: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            isVariadic: true,
-            documentation: "Remove an installed service and its artifacts.");
+    /// <summary>Get the current status of a service.</summary>
+    [StashFn(Raw = true, ReturnType = "ServiceStatus")]
+    private static StashValue Status(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.status");
+        bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.status") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var status = manager.GetStatus(name);
+        return StashValue.FromObj(ConvertFromServiceStatus(status));
+    }
 
-        // scheduler.start(name, system?) — Start a stopped service.
-        ns.Function("start", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.start");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.start") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var result = manager.Start(name);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.start: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            isVariadic: true,
-            documentation: "Start a stopped service.");
+    /// <summary>List all Stash-managed services.</summary>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue List(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        bool system = args.Length > 0 && !args[0].IsNull ? SvArgs.Bool(args, 0, "scheduler.list") : false;
+        var manager = ServiceManagerFactory.Create(system);
+        var services = manager.List();
+        var result = new List<StashValue>(services.Count);
+        foreach (var svc in services)
+            result.Add(StashValue.FromObj(ConvertFromServiceInfo(svc)));
+        return StashValue.FromObj(result);
+    }
 
-        // scheduler.stop(name, system?) — Stop a running service.
-        ns.Function("stop", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.stop");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.stop") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var result = manager.Stop(name);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.stop: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            isVariadic: true,
-            documentation: "Stop a running service.");
+    /// <summary>Read service log lines.</summary>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue Logs(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        string name = SvArgs.String(args, 0, "scheduler.logs");
+        int lines = args.Length > 1 && !args[1].IsNull ? (int)SvArgs.Long(args, 1, "scheduler.logs") : 50;
+        string? date = args.Length > 2 && !args[2].IsNull ? SvArgs.String(args, 2, "scheduler.logs") : null;
+        var logLines = ServiceLogManager.ReadLines(name, lines, date);
+        var result = new List<StashValue>(logLines.Count);
+        foreach (string line in logLines)
+            result.Add(StashValue.FromObj(line));
+        return StashValue.FromObj(result);
+    }
 
-        // scheduler.restart(name, system?) — Restart a service.
-        ns.Function("restart", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.restart");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.restart") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var result = manager.Restart(name);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.restart: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            isVariadic: true,
-            documentation: "Restart a service.");
-
-        // scheduler.enable(name, system?) — Enable auto-start on boot.
-        ns.Function("enable", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.enable");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.enable") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var result = manager.Enable(name);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.enable: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            isVariadic: true,
-            documentation: "Enable auto-start on boot.");
-
-        // scheduler.disable(name, system?) — Disable auto-start on boot.
-        ns.Function("disable", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.disable");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.disable") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var result = manager.Disable(name);
-                if (!result.Success)
-                    throw new RuntimeError($"scheduler.disable: {result.Error}");
-                return StashValue.True;
-            },
-            returnType: "bool",
-            isVariadic: true,
-            documentation: "Disable auto-start on boot.");
-
-        // scheduler.status(name, system?) — Get the current status of a service.
-        ns.Function("status", [Param("name", "string"), Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.status");
-                bool system = args.Length > 1 && !args[1].IsNull ? SvArgs.Bool(args, 1, "scheduler.status") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var status = manager.GetStatus(name);
-                return StashValue.FromObj(ConvertFromServiceStatus(status));
-            },
-            returnType: "ServiceStatus",
-            isVariadic: true,
-            documentation: "Get the current status of a service.");
-
-        // scheduler.list(system?) — List all Stash-managed services.
-        ns.Function("list", [Param("system", "bool")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                bool system = args.Length > 0 && !args[0].IsNull ? SvArgs.Bool(args, 0, "scheduler.list") : false;
-                var manager = ServiceManagerFactory.Create(system);
-                var services = manager.List();
-                var result = new List<StashValue>(services.Count);
-                foreach (var svc in services)
-                    result.Add(StashValue.FromObj(ConvertFromServiceInfo(svc)));
-                return StashValue.FromObj(result);
-            },
-            returnType: "array",
-            isVariadic: true,
-            documentation: "List all Stash-managed services.");
-
-        // scheduler.logs(name, lines?, date?) — Read service log lines.
-        ns.Function("logs", [Param("name", "string"), Param("lines", "int"), Param("date", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                string name = SvArgs.String(args, 0, "scheduler.logs");
-                int lines = args.Length > 1 && !args[1].IsNull ? (int)SvArgs.Long(args, 1, "scheduler.logs") : 50;
-                string? date = args.Length > 2 && !args[2].IsNull ? SvArgs.String(args, 2, "scheduler.logs") : null;
-                var logLines = ServiceLogManager.ReadLines(name, lines, date);
-                var result = new List<StashValue>(logLines.Count);
-                foreach (string line in logLines)
-                    result.Add(StashValue.FromObj(line));
-                return StashValue.FromObj(result);
-            },
-            returnType: "array",
-            isVariadic: true,
-            documentation: "Read service log lines.");
-
-        // scheduler.available() — Check if the OS service manager is available.
-        ns.Function("available", [],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                try
-                {
-                    var manager = ServiceManagerFactory.Create();
-                    return StashValue.FromBool(manager.IsAvailable());
-                }
-                catch
-                {
-                    return StashValue.False;
-                }
-            },
-            returnType: "bool",
-            documentation: "Check if the OS service manager is available.");
-
-        return ns.Build();
+    /// <summary>Check if the OS service manager is available.</summary>
+    [StashFn(Raw = true, ReturnType = "bool")]
+    private static StashValue Available(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        try
+        {
+            var manager = ServiceManagerFactory.Create();
+            return StashValue.FromBool(manager.IsAvailable());
+        }
+        catch
+        {
+            return StashValue.False;
+        }
     }
 
     // ── Private helpers ──────────────────────────────────────────────────────
@@ -309,7 +272,7 @@ public static class SchedulerBuiltIns
         };
     }
 
-    private static StashInstance ConvertFromServiceStatus(ServiceStatus status)
+    private static StashInstance ConvertFromServiceStatus(Stash.Scheduler.Models.ServiceStatus status)
     {
         return new StashInstance("ServiceStatus", new Dictionary<string, StashValue>
         {
@@ -328,7 +291,7 @@ public static class SchedulerBuiltIns
         });
     }
 
-    private static StashInstance ConvertFromServiceInfo(ServiceInfo info)
+    private static StashInstance ConvertFromServiceInfo(Stash.Scheduler.Models.ServiceInfo info)
     {
         return new StashInstance("ServiceInfo", new Dictionary<string, StashValue>
         {
@@ -340,15 +303,15 @@ public static class SchedulerBuiltIns
         });
     }
 
-    private static string FormatState(ServiceState state) => state switch
+    private static string FormatState(Stash.Scheduler.Models.ServiceState state) => state switch
     {
-        ServiceState.Active    => "active",
-        ServiceState.Running   => "running",
-        ServiceState.Inactive  => "inactive",
-        ServiceState.Stopped   => "stopped",
-        ServiceState.Failed    => "failed",
-        ServiceState.Orphaned  => "orphaned",
-        ServiceState.Unmanaged => "unmanaged",
+        Stash.Scheduler.Models.ServiceState.Active    => "active",
+        Stash.Scheduler.Models.ServiceState.Running   => "running",
+        Stash.Scheduler.Models.ServiceState.Inactive  => "inactive",
+        Stash.Scheduler.Models.ServiceState.Stopped   => "stopped",
+        Stash.Scheduler.Models.ServiceState.Failed    => "failed",
+        Stash.Scheduler.Models.ServiceState.Orphaned  => "orphaned",
+        Stash.Scheduler.Models.ServiceState.Unmanaged => "unmanaged",
         _                      => "unknown",
     };
 }

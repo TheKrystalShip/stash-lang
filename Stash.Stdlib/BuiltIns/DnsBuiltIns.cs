@@ -3,60 +3,50 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
 /// Registers the <c>dns</c> namespace built-in functions for DNS resolution.
 /// </summary>
-public static class DnsBuiltIns
+[StashNamespace(Capability = StashCapabilities.Network)]
+public static partial class DnsBuiltIns
 {
-    public static NamespaceDefinition Define()
-    {
-        var ns = new NamespaceBuilder("dns");
-        ns.RequiresCapability(StashCapabilities.Network);
+    /// <summary>An MX record returned by dns.resolveMx.</summary>
+    [StashStruct]
+    public sealed record MxRecord(long Priority, string Exchange);
 
-        ns.Struct("MxRecord", [
-            new BuiltInField("priority", "int"),
-            new BuiltInField("exchange", "string"),
-        ]);
+    /// <summary>Resolves a hostname to its first IP address via DNS.</summary>
+    /// <param name="hostname">The hostname to resolve.</param>
+    /// <returns>The first resolved IP address.</returns>
+    [StashFn(Raw = true, ReturnType = "ip")]
+    private static StashValue Resolve(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolve(ctx, args, "dns.resolve");
 
-        // dns.resolve(hostname) — Resolves a hostname to its first IP address.
-        ns.Function("resolve", [Param("hostname", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolve(ctx, args, "dns.resolve"),
-            returnType: "ip",
-            documentation: "Resolves a hostname to its first IP address via DNS.\n@param hostname The hostname to resolve.\n@return The first resolved IP address.");
+    /// <summary>Resolves a hostname to all IP addresses via DNS.</summary>
+    /// <param name="hostname">The hostname to resolve.</param>
+    /// <returns>An array of resolved IP addresses.</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue ResolveAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolveAll(ctx, args, "dns.resolveAll");
 
-        // dns.resolveAll(hostname) — Resolves a hostname to all IP addresses.
-        ns.Function("resolveAll", [Param("hostname", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolveAll(ctx, args, "dns.resolveAll"),
-            returnType: "array",
-            documentation: "Resolves a hostname to all IP addresses via DNS.\n@param hostname The hostname to resolve.\n@return An array of resolved IP addresses.");
+    /// <summary>Performs reverse DNS lookup for an IP address.</summary>
+    /// <param name="ip">The IP address to lookup.</param>
+    /// <returns>The hostname associated with the IP.</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    private static StashValue ReverseLookup(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsReverseLookup(ctx, args, "dns.reverseLookup");
 
-        // dns.reverseLookup(ip) — Reverse DNS lookup.
-        ns.Function("reverseLookup", [Param("ip", "ip")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsReverseLookup(ctx, args, "dns.reverseLookup"),
-            returnType: "string",
-            documentation: "Performs reverse DNS lookup for an IP address.\n@param ip The IP address to lookup.\n@return The hostname associated with the IP.");
+    /// <summary>Resolves MX records for a domain.</summary>
+    /// <param name="domain">The domain to query.</param>
+    /// <returns>An array of MxRecord structs with priority and exchange fields.</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue ResolveMx(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolveMx(ctx, args, "dns.resolveMx");
 
-        // dns.resolveMx(domain) — Resolves MX records.
-        ns.Function("resolveMx", [Param("domain", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolveMx(ctx, args, "dns.resolveMx"),
-            returnType: "array",
-            documentation: "Resolves MX records for a domain.\n@param domain The domain to query.\n@return An array of MxRecord structs with priority and exchange fields.");
-
-        // dns.resolveTxt(domain) — Resolves TXT records.
-        ns.Function("resolveTxt", [Param("domain", "string")],
-            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-                NetSocketImpl.DnsResolveTxt(ctx, args, "dns.resolveTxt"),
-            returnType: "array",
-            documentation: "Resolves TXT records for a domain.\n@param domain The domain to query.\n@return An array of strings containing the TXT record values.");
-
-        return ns.Build();
-    }
+    /// <summary>Resolves TXT records for a domain.</summary>
+    /// <param name="domain">The domain to query.</param>
+    /// <returns>An array of strings containing the TXT record values.</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    private static StashValue ResolveTxt(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => NetSocketImpl.DnsResolveTxt(ctx, args, "dns.resolveTxt");
 }
