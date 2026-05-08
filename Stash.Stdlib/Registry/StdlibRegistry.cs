@@ -3,13 +3,15 @@ namespace Stash.Stdlib;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Common;
 using Stash.Stdlib.Models;
 
 /// <summary>
-/// Single source of truth for all built-in functions, types, namespaces,
-/// keywords, and type metadata in the Stash language.
-/// Core data (Structs, Enums, Keywords, ValidTypes, TypeDescriptions)
-/// is defined in StdlibRegistry.Types.cs.
+/// Single source of truth for all built-in functions, types, namespaces, and type metadata
+/// in the Stash language.
+/// Core data (Structs, Enums, ValidTypes, TypeDescriptions) is defined in StdlibRegistry.Types.cs.
+/// Keywords and primitive type names live in Stash.Core (Stash.Lexing.Keywords,
+/// Stash.Common.PrimitiveTypes).
 /// Namespace and global function metadata is derived from StdlibDefinitions.
 /// This file contains derived lookup tables and public query methods.
 /// </summary>
@@ -61,9 +63,7 @@ public static partial class StdlibRegistry
 
     static StdlibRegistry()
     {
-        ValidTypes = new[] { "string", "int", "float", "bool", "byte", "null", "array", "dict", "function",
-                    "namespace", "range", "Future", "ip", "duration", "bytes", "semver", "secret",
-                    "int[]", "float[]", "string[]", "bool[]", "byte[]" }
+        ValidTypes = PrimitiveTypes.Names
                 .Concat(Structs.Select(s => s.Name))
                 .Concat(Enums.Select(e => e.Name))
                 .ToFrozenSet();
