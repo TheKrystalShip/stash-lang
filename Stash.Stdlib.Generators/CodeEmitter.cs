@@ -22,7 +22,7 @@ internal static class CodeEmitter
         sb.AppendLine();
         sb.Append("partial class ").Append(ns.ClassName).AppendLine();
         sb.AppendLine("{");
-        sb.AppendLine("    public static global::Stash.Stdlib.Registration.NamespaceDefinition Define()");
+        sb.AppendLine("    public static global::Stash.Stdlib.Registration.NamespaceDefinition Define(global::Stash.Runtime.StashCapabilities __caps = global::Stash.Runtime.StashCapabilities.All)");
         sb.AppendLine("    {");
         sb.Append("        var ns = new global::Stash.Stdlib.Registration.NamespaceBuilder(\"").Append(ns.StashName).AppendLine("\");");
         sb.Append("        ns.RequiresCapability(").Append(ns.CapabilityFullName).AppendLine(");");
@@ -112,6 +112,12 @@ internal static class CodeEmitter
             ? "null"
             : $"new global::Stash.Stdlib.Models.DeprecationInfo({Quote(fn.DeprecationReplacement)})";
 
+        bool hasFnCap = fn.CapabilityFullName != "global::Stash.Runtime.StashCapabilities.None";
+        if (hasFnCap)
+        {
+            sb.Append("        if ((__caps & ").Append(fn.CapabilityFullName).Append(") == ").Append(fn.CapabilityFullName).AppendLine(")");
+            sb.AppendLine("        {");
+        }
         sb.Append("        ns.Function(").Append(Quote(fn.StashName)).Append(", ").Append(paramArray).AppendLine(",");
 
         // Body
@@ -131,6 +137,10 @@ internal static class CodeEmitter
         sb.Append("            isVariadic: ").Append(variadicArg).AppendLine(",");
         sb.Append("            documentation: ").Append(docArg).AppendLine(",");
         sb.Append("            deprecation: ").Append(deprecArg).AppendLine(");");
+        if (hasFnCap)
+        {
+            sb.AppendLine("        }");
+        }
     }
 
     private static void EmitMarshalBody(StringBuilder sb, NamespaceModel ns, FunctionModel fn, string qualifiedName)
@@ -246,7 +256,7 @@ internal static class CodeEmitter
         sb.AppendLine();
         sb.AppendLine("internal static class GeneratedStdlibRegistry");
         sb.AppendLine("{");
-        sb.AppendLine("    public static global::System.Collections.Generic.IEnumerable<(global::System.Func<global::Stash.Stdlib.Registration.NamespaceDefinition> Factory, global::Stash.Runtime.StashCapabilities Required)> All()");
+        sb.AppendLine("    public static global::System.Collections.Generic.IEnumerable<(global::System.Func<global::Stash.Runtime.StashCapabilities, global::Stash.Stdlib.Registration.NamespaceDefinition> Factory, global::Stash.Runtime.StashCapabilities Required)> All()");
         sb.AppendLine("    {");
         if (namespaces.Count == 0)
         {
@@ -256,8 +266,8 @@ internal static class CodeEmitter
         {
             foreach (var ns in namespaces)
             {
-                sb.Append("        yield return ((global::System.Func<global::Stash.Stdlib.Registration.NamespaceDefinition>)(() => global::")
-                  .Append(ns.ClassFullName).Append(".Define()), ")
+                sb.Append("        yield return ((global::System.Func<global::Stash.Runtime.StashCapabilities, global::Stash.Stdlib.Registration.NamespaceDefinition>)(__caps => global::")
+                  .Append(ns.ClassFullName).Append(".Define(__caps)), ")
                   .Append(ns.CapabilityFullName).AppendLine(");");
             }
         }

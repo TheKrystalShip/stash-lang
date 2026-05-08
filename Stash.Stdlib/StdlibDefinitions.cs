@@ -18,7 +18,7 @@ public static class StdlibDefinitions
     /// types are resolved lazily — platform-incompatible types (e.g. Renci.SshNet in WASM)
     /// are never loaded when their capability is absent.
     /// </summary>
-    private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] _registry =
+    private static readonly (Func<StashCapabilities, NamespaceDefinition> Factory, StashCapabilities Required)[] _registry =
         GeneratedStdlibRegistry.All().ToArray();
 
     private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();
@@ -87,7 +87,7 @@ public static class StdlibDefinitions
             if (required != StashCapabilities.None && !capabilities.HasFlag(required))
                 continue;
 
-            namespaces.Add(factory());
+            namespaces.Add(factory(capabilities));
         }
 
         return namespaces;
