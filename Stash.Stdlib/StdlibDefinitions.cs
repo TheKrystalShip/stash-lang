@@ -85,7 +85,7 @@ public static class StdlibDefinitions
 
         foreach (var (factory, required) in _registry)
         {
-            if (required != StashCapabilities.None && !capabilities.HasFlag(required))
+            if (!capabilities.HasFlag(required))
                 continue;
 
             namespaces.Add(factory(capabilities));

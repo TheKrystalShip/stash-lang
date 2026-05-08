@@ -90,7 +90,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "Name" && na.Value.Value is string s) nameOverride = s;
                 if (na.Key == "Capability" && na.Value.Value is int capVal)
                 {
-                    capabilityFull = $"(global::Stash.Runtime.StashCapabilities){capVal}";
+                    capabilityFull = FormatCapabilityFlags(capVal);
                 }
             }
         }
@@ -171,7 +171,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "ReturnType" && na.Value.Value is string rt) returnTypeOverride = rt;
                 if (na.Key == "Capability" && na.Value.Value is int capVal)
                 {
-                    capabilityFull = $"(global::Stash.Runtime.StashCapabilities){capVal}";
+                    capabilityFull = FormatCapabilityFlags(capVal);
                 }
             }
         }
@@ -269,10 +269,6 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 pms.Add(new ParameterModel(p.Name, paramNameOverride ?? p.Name, p.Type.ToDisplayString(), "...any", "", false, null, false, true));
                 continue;
             }
-
-            // Reserved-word check (C# uses @ prefix; symbol name strips it).
-            // The symbol's Name here is the unescaped form. We don't have a clean way to detect
-            // @-escaping without inspecting syntax, so skip the diagnostic when we have an override.
 
             // Nullability: detect string?, etc.
             bool isNullable = p.Type.NullableAnnotation == NullableAnnotation.Annotated;
@@ -473,6 +469,27 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             case byte by: return "(byte)" + by.ToString(CultureInfo.InvariantCulture);
         }
         return "default";
+    }
+
+    private static string FormatCapabilityFlags(int value)
+    {
+        const string Prefix = "global::Stash.Runtime.StashCapabilities";
+        if (value == 0) return $"{Prefix}.None";
+        // All = FileSystem | Network | Process | Environment | Shell = 31
+        if (value == 31) return $"{Prefix}.All";
+
+        var parts = new List<string>(5);
+        if ((value & 1)  != 0) parts.Add($"{Prefix}.FileSystem");
+        if ((value & 2)  != 0) parts.Add($"{Prefix}.Network");
+        if ((value & 4)  != 0) parts.Add($"{Prefix}.Process");
+        if ((value & 8)  != 0) parts.Add($"{Prefix}.Environment");
+        if ((value & 16) != 0) parts.Add($"{Prefix}.Shell");
+
+        // Any unrecognised bits — fall back to a raw cast to preserve runtime semantics.
+        int known = 1 | 2 | 4 | 8 | 16;
+        if ((value & ~known) != 0) return $"({Prefix}){value}";
+
+        return string.Join(" | ", parts);
     }
 
     private static string FormatConstantValue(object? value)

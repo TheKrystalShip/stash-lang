@@ -30,14 +30,6 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor ReservedParameterName = new(
-        id: "STASH_GEN004",
-        title: "Reserved C# parameter name needs [StashParam(Name = ...)]",
-        messageFormat: "Reserved C# parameter name '@{0}' in method '{1}' requires [StashParam(Name = \"{0}\")].",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
-
     public static readonly DiagnosticDescriptor DuplicateFunctionName = new(
         id: "STASH_GEN005",
         title: "Duplicate Stash function name in namespace",

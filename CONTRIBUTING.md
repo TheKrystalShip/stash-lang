@@ -106,11 +106,26 @@ These rules are enforced by [`.editorconfig`](.editorconfig).
 
 ## 4. Adding a Standard Library Function
 
+Built-ins are authored as ordinary C# methods inside `[StashNamespace]` partial classes. The `Stash.Stdlib.Generators` source generator inspects `[StashFn]`-attributed methods, derives the Stash signature from the C# parameters, hooks XML doc comments into the LSP/analysis metadata, and registers the namespace into `GeneratedStdlibRegistry` automatically — there is no hand-maintained registry list.
+
 1. Open the appropriate file in `Stash.Stdlib/BuiltIns/` (e.g., `IoBuiltIns.cs` for the `io` namespace).
-2. Implement your function as a `BuiltInFunction` delegate.
-3. Register it in the namespace builder using `ns.Function(...)`.
-4. Add documentation to [`docs/Stash — Standard Library Reference.md`](docs/Stash%20—%20Standard%20Library%20Reference.md).
-5. Write tests in the corresponding test file (e.g., `Stash.Tests/BuiltIns/IoBuiltInsTests.cs`).
+2. Add a method to the partial class with `[StashFn]` and an XML `<summary>` plus `<param>` tags for every argument:
+
+   ```csharp
+   /// <summary>Repeats a string a given number of times.</summary>
+   /// <param name="s">The string to repeat.</param>
+   /// <param name="count">Times to repeat. Defaults to 1.</param>
+   [StashFn]
+   public static string Repeat(string s, long count = 1)
+       => string.Concat(System.Linq.Enumerable.Repeat(s, (int)count));
+   ```
+
+   The C# method body **is** the function body — no lambda wrapper, no `SvArgs.*` extraction, no qualified-name string. Use C# defaults for optional parameters and `params StashValue[] rest` for variadics. Use `[StashFn(Raw = true)]` when auto-marshalling can't express what the body needs.
+
+3. Add documentation to [`docs/Stash — Standard Library Reference.md`](docs/Stash%20—%20Standard%20Library%20Reference.md).
+4. Write tests in the corresponding test file (e.g., `Stash.Tests/BuiltIns/IoBuiltInsTests.cs`).
+
+See [`Stash.Stdlib/BuiltIns/CLAUDE.md`](Stash.Stdlib/BuiltIns/CLAUDE.md) for the full authoring guide — naming rules, parameter type table, capability gating, structs/enums/constants, and deprecation.
 
 ### Test Naming Convention
 
@@ -120,7 +135,7 @@ These rules are enforced by [`.editorconfig`](.editorconfig).
 
 **Example:** Adding `io.readLine` requires:
 
-- Updating `IoBuiltIns.cs` with the implementation and registration
+- Adding the `[StashFn]`-attributed method to `IoBuiltIns.cs`
 - Adding an entry to the Standard Library Reference doc
 - Writing tests in `IoBuiltInsTests.cs`
 
