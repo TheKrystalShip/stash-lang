@@ -1,10 +1,8 @@
 namespace Stash.Stdlib;
 
-using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using Stash.Common;
-using Stash.Runtime;
 using Stash.Stdlib.Models;
 
 /// <summary>
@@ -25,7 +23,7 @@ public static partial class StdlibRegistry
 
     // ── Built-in Interfaces ──
 
-    public static readonly IReadOnlyList<BuiltInInterface> Interfaces = Array.Empty<BuiltInInterface>();
+    public static readonly IReadOnlyList<BuiltInInterface> Interfaces = [];
 
     // ── Valid built-in type names (for type hint validation) ──
 

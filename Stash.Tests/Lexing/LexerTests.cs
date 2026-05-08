@@ -1658,4 +1658,15 @@ public class LexerTests
         Assert.Equal(TokenType.StrictCommandLiteral, tokens[2].Type);
         Assert.StartsWith("$!(", tokens[2].Lexeme);
     }
+
+    // ── Invariant: Keywords.HardKeywords matches Lexer.KeywordNames ────────
+
+    [Fact]
+    public void Keywords_HardKeywords_MatchesLexerKeywordTable()
+    {
+        // Invariant: every keyword the lexer tokenizes into a dedicated TokenType
+        // must appear in Keywords.HardKeywords. Prevents drift between the lexer
+        // and the tooling-facing keyword list.
+        Assert.Equal(Lexer.KeywordNames.ToHashSet(), Keywords.HardKeywords.ToHashSet());
+    }
 }
