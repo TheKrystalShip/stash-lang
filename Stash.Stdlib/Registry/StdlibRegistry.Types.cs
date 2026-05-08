@@ -19,27 +19,8 @@ public static partial class StdlibRegistry
         new("stack",   "array"),
     ]);
 
-    private static readonly BuiltInStruct _completionContextStruct = new("CompletionContext",
-    [
-        new("command",  "string"),
-        new("args",     "array"),
-        new("current",  "string"),
-        new("position", "int"),
-        new("mode",     "string"),
-    ]);
-
-    private static readonly BuiltInStruct _completionResultStruct = new("CompletionResult",
-    [
-        new("replace_start", "int"),
-        new("replace_end",   "int"),
-        new("candidates",    "array"),
-        new("common_prefix", "string"),
-    ]);
-
     public static readonly IReadOnlyList<BuiltInStruct> Structs =
-        new[] { _errorStruct, _completionContextStruct, _completionResultStruct }
-            .Concat(StdlibDefinitions.Structs)
-            .ToArray();
+        new[] { _errorStruct }.Concat(StdlibDefinitions.Structs).ToArray();
 
     // ── Built-in Enums: registered via namespace metadata (including the empty-named global namespace) ──
 
