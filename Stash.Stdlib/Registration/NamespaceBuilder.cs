@@ -76,11 +76,11 @@ public class NamespaceBuilder
     /// The struct is both added to the LSP/Analysis metadata list and defined as a constructible
     /// type in the runtime namespace so that <c>ns.StructName { field: value }</c> works in Stash.
     /// </summary>
-    public NamespaceBuilder Struct(string name, BuiltInField[] fields)
+    public NamespaceBuilder Struct(string name, BuiltInField[] fields, string? description = null)
     {
         if (_structs.Any(s => s.Name == name))
             throw new ArgumentException($"Struct '{name}' is already registered in namespace '{_name}'.", nameof(name));
-        _structs.Add(new BuiltInStruct(name, fields));
+        _structs.Add(new BuiltInStruct(name, fields, description));
         var fieldNames = fields.Select(f => f.Name).ToList();
         _namespace.Define(name, new StashStruct(name, fieldNames, new Dictionary<string, IStashCallable>()) { IsBuiltIn = true });
         return this;
@@ -91,11 +91,11 @@ public class NamespaceBuilder
     /// The enum is both added to the LSP/Analysis metadata list and defined as a runtime
     /// value in the namespace so that <c>EnumName.Member</c> works in Stash.
     /// </summary>
-    public NamespaceBuilder Enum(string name, string[] members)
+    public NamespaceBuilder Enum(string name, string[] members, string? description = null)
     {
         if (_enums.Any(e => e.Name == name))
             throw new ArgumentException($"Enum '{name}' is already registered in namespace '{_name}'.", nameof(name));
-        _enums.Add(new BuiltInEnum(name, members, _name));
+        _enums.Add(new BuiltInEnum(name, members, _name, description));
         _namespace.Define(name, new StashEnum(name, members.ToList()) { IsBuiltIn = true });
         return this;
     }

@@ -409,7 +409,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             }
         }
 
-        return new StructModel(type.ToDisplayString(), nameOverride ?? type.Name, fields.ToEquatableArray());
+        string? doc = DocCommentParser.ParseSummaryOnly(type.GetDocumentationCommentXml());
+        return new StructModel(type.ToDisplayString(), nameOverride ?? type.Name, fields.ToEquatableArray(), doc);
     }
 
     private static EnumModel BuildEnum(INamedTypeSymbol type)
@@ -424,7 +425,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             }
         }
         var members = type.GetMembers().OfType<IFieldSymbol>().Where(f => f.IsConst).Select(f => f.Name).ToArray();
-        return new EnumModel(type.ToDisplayString(), nameOverride ?? type.Name, new EquatableArray<string>(members));
+        string? doc = DocCommentParser.ParseSummaryOnly(type.GetDocumentationCommentXml());
+        return new EnumModel(type.ToDisplayString(), nameOverride ?? type.Name, new EquatableArray<string>(members), doc);
     }
 
     private static string? ReadDeprecation(ISymbol symbol)

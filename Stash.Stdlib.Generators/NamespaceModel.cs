@@ -52,7 +52,8 @@ internal sealed record ConstantModel(
 internal sealed record StructModel(
     string TypeFullName,
     string StashName,
-    EquatableArray<FieldModel> Fields);
+    EquatableArray<FieldModel> Fields,
+    string? Documentation = null);
 
 internal sealed record FieldModel(
     string CSharpName,
@@ -62,7 +63,8 @@ internal sealed record FieldModel(
 internal sealed record EnumModel(
     string TypeFullName,
     string StashName,
-    EquatableArray<string> Members);
+    EquatableArray<string> Members,
+    string? Documentation = null);
 
 /// <summary>
 /// Equatable wrapper around <see cref="ImmutableArray{T}"/> for use as a generator pipeline value.

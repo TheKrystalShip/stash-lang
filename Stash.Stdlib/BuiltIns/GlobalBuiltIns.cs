@@ -234,7 +234,7 @@ public static partial class GlobalBuiltIns
 
     // ── Enums ────────────────────────────────────────────────────────────────
 
-    /// <summary>Backoff strategy for retry blocks.</summary>
+    /// <summary>Backoff strategy enum for retry blocks. Members: `Fixed`, `Linear`, `Exponential`.</summary>
     [StashEnum]
     public enum Backoff { Fixed, Linear, Exponential }
 
@@ -242,13 +242,13 @@ public static partial class GlobalBuiltIns
     [StashEnum]
     public enum Signal { Hup, Int, Quit, Kill, Usr1, Usr2, Term }
 
-    /// <summary>Execution mode for process.exec and process.pipeline.</summary>
+    /// <summary>Execution mode enum for process.exec and process.pipeline. Members: `Capture` (collect stdout/stderr), `Passthrough` (inherit terminal I/O), `Stream` (return a StreamingProcess handle).</summary>
     [StashEnum]
     public enum ExecMode { Capture, Passthrough, Stream }
 
     // ── Command execution structs ────────────────────────────────────────────
 
-    /// <summary>Options for process.exec and process.pipeline.</summary>
+    /// <summary>Options for process.exec and process.pipeline. Fields: `mode` (ExecMode?), `strict` (bool), `redirect` (RedirectSpec?), `cwd` (string?), `env` (dict?).</summary>
     [StashStruct]
     public sealed record ExecOptions
     {
@@ -259,7 +259,7 @@ public static partial class GlobalBuiltIns
         [StashField(Type = "dict?")] public StashDictionary? Env { get; init; }
     }
 
-    /// <summary>Output redirect specification for process.exec.</summary>
+    /// <summary>Output redirect specification for process.exec. Fields: `stream` ("stdout"|"stderr"|"all"), `target` (destination file path), `append` (bool — append vs. overwrite).</summary>
     [StashStruct]
     public sealed record RedirectSpec
     {
@@ -268,7 +268,7 @@ public static partial class GlobalBuiltIns
         public bool Append { get; init; }
     }
 
-    /// <summary>One stage in a process.pipeline call.</summary>
+    /// <summary>One stage in a process.pipeline call. Fields: `program` (string), `args` (array).</summary>
     [StashStruct]
     public sealed record PipelineStage
     {
@@ -276,7 +276,7 @@ public static partial class GlobalBuiltIns
         public List<StashValue> Args { get; init; } = new();
     }
 
-    /// <summary>Handle to a running external process spawned by streaming command syntax.</summary>
+    /// <summary>Handle to a running external process spawned by `$&lt;(cmd)` / `$!&lt;(cmd)`. Iterates over stdout lines. Fields: `pid` (int), `exitCode` (int?), `signal` (Signal?).</summary>
     [StashStruct]
     public sealed record StreamingProcess
     {
@@ -296,27 +296,35 @@ public static partial class GlobalBuiltIns
         [StashField(Type = "array")] public List<StashValue> Stack { get; init; } = new();
     }
 
+    /// <summary>Thrown when a value is invalid or out of range.</summary>
     [StashStruct(Name = StashErrorTypes.ValueError)]
     public sealed record ValueErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when an operation is applied to a value of the wrong type.</summary>
     [StashStruct(Name = StashErrorTypes.TypeError)]
     public sealed record TypeErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when parsing fails (JSON, CSV, INI, TOML, etc.).</summary>
     [StashStruct(Name = StashErrorTypes.ParseError)]
     public sealed record ParseErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when an array or string index is out of bounds.</summary>
     [StashStruct(Name = StashErrorTypes.IndexError)]
     public sealed record IndexErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when a filesystem or I/O operation fails.</summary>
     [StashStruct(Name = StashErrorTypes.IOError)]
     public sealed record IOErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when a feature is not available on the current platform.</summary>
     [StashStruct(Name = StashErrorTypes.NotSupportedError)]
     public sealed record NotSupportedErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when an operation exceeds its timeout.</summary>
     [StashStruct(Name = StashErrorTypes.TimeoutError)]
     public sealed record TimeoutErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown by strict command expressions (`$!(...)`, `$!&gt;(...)`) when the command exits with a non-zero code. Extra fields: `exitCode`, `stderr`, `stdout`, `command`.</summary>
     [StashStruct(Name = StashErrorTypes.CommandError)]
     public sealed record CommandErrorStruct
     {
@@ -327,6 +335,7 @@ public static partial class GlobalBuiltIns
         public string Command { get; init; } = "";
     }
 
+    /// <summary>Thrown when a lock acquisition fails. Extra fields: `path`.</summary>
     [StashStruct(Name = StashErrorTypes.LockError)]
     public sealed record LockErrorStruct
     {
@@ -334,6 +343,7 @@ public static partial class GlobalBuiltIns
         public string Path { get; init; } = "";
     }
 
+    /// <summary>Thrown by the `alias` namespace when an alias operation fails. Extra fields: `aliasName`, `detail`.</summary>
     [StashStruct(Name = StashErrorTypes.AliasError)]
     public sealed record AliasErrorStruct
     {
@@ -342,9 +352,11 @@ public static partial class GlobalBuiltIns
         [StashField(Type = "string?")] public string? Detail { get; init; }
     }
 
+    /// <summary>Thrown when an operation is attempted on an object in an invalid state — e.g., iterating a `StreamingProcess` that has already been consumed.</summary>
     [StashStruct(Name = StashErrorTypes.StateError)]
     public sealed record StateErrorStruct { public string Message { get; init; } = ""; }
 
+    /// <summary>Thrown when an operation is cancelled by an external cancellation token (e.g. Ctrl-C or programmatic CTS). Distinct from `TimeoutError` which is raised by `timeout` blocks.</summary>
     [StashStruct(Name = StashErrorTypes.CancellationError)]
     public sealed record CancellationErrorStruct { public string Message { get; init; } = ""; }
 
@@ -430,7 +442,7 @@ public static partial class GlobalBuiltIns
 
     // ── Retry-related structs ────────────────────────────────────────────────
 
-    /// <summary>Options accepted by retry blocks.</summary>
+    /// <summary>Options for retry blocks. Fields: `delay` (duration), `backoff` (Backoff), `maxDelay` (duration), `jitter` (bool), `timeout` (duration), `on` (array of error type names).</summary>
     [StashStruct]
     public sealed record RetryOptions
     {
@@ -442,7 +454,7 @@ public static partial class GlobalBuiltIns
         public List<StashValue> On { get; init; } = new();
     }
 
-    /// <summary>Attempt context exposed to retry block bodies as `attempt`.</summary>
+    /// <summary>Attempt context available inside retry blocks via `attempt`. Fields: `current` (int), `max` (int), `remaining` (int), `elapsed` (duration), `errors` (array).</summary>
     [StashStruct]
     public sealed record RetryContext
     {

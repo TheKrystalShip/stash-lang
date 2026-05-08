@@ -68,6 +68,7 @@ internal static class CodeEmitter
 
     private static void EmitStruct(StringBuilder sb, StructModel s)
     {
+        string doc = s.Documentation is null ? "null" : Quote(s.Documentation);
         sb.Append("        ns.Struct(").Append(Quote(s.StashName)).Append(", new global::Stash.Stdlib.Models.BuiltInField[] { ");
         for (int i = 0; i < s.Fields.Count; i++)
         {
@@ -75,18 +76,19 @@ internal static class CodeEmitter
             if (i > 0) sb.Append(", ");
             sb.Append("new global::Stash.Stdlib.Models.BuiltInField(").Append(Quote(f.StashName)).Append(", ").Append(Quote(f.StashTypeLabel)).Append(")");
         }
-        sb.AppendLine(" });");
+        sb.Append(" }, ").Append(doc).AppendLine(");");
     }
 
     private static void EmitEnum(StringBuilder sb, EnumModel e)
     {
+        string doc = e.Documentation is null ? "null" : Quote(e.Documentation);
         sb.Append("        ns.Enum(").Append(Quote(e.StashName)).Append(", new string[] { ");
         for (int i = 0; i < e.Members.Count; i++)
         {
             if (i > 0) sb.Append(", ");
             sb.Append(Quote(e.Members[i]));
         }
-        sb.AppendLine(" });");
+        sb.Append(" }, ").Append(doc).AppendLine(");");
     }
 
     private static void EmitFunction(StringBuilder sb, NamespaceModel ns, FunctionModel fn)

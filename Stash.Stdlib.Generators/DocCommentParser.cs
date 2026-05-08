@@ -106,6 +106,25 @@ internal static class DocCommentParser
         return names;
     }
 
+    /// <summary>
+    /// Returns only the normalized summary text from an XML doc comment, ignoring
+    /// all other tags. Used for struct/enum type descriptions.
+    /// </summary>
+    public static string? ParseSummaryOnly(string? xml)
+    {
+        if (string.IsNullOrWhiteSpace(xml)) return null;
+        try
+        {
+            var root = XElement.Parse(xml!, LoadOptions.PreserveWhitespace);
+            var summary = NormalizeText(root.Element("summary")?.Value);
+            return string.IsNullOrEmpty(summary) ? null : summary;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public static bool HasSummary(string? xml)
     {
         if (string.IsNullOrWhiteSpace(xml)) return false;

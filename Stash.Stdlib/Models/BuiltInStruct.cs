@@ -3,7 +3,7 @@ namespace Stash.Stdlib.Models;
 using System.Linq;
 
 /// <summary>Describes a built-in struct type (CommandResult, HttpResponse, etc.).</summary>
-public record BuiltInStruct(string Name, BuiltInField[] Fields)
+public record BuiltInStruct(string Name, BuiltInField[] Fields, string? Description = null)
 {
     public string Detail
     {
