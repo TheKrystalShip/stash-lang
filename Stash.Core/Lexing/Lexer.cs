@@ -111,6 +111,9 @@ public class Lexer
             ["or"] = TokenType.PipePipe,
         }.ToFrozenDictionary();
 
+    /// <summary>Public read-only view of the keyword names recognized by the lexer.</summary>
+    public static FrozenSet<string> KeywordNames { get; } = _keywords.Keys.ToFrozenSet();
+
     /// <summary>Alternate lookup handle for <see cref="_keywords"/>, enabling keyword matching directly from <see cref="ReadOnlySpan{T}"/> slices without allocating a string.</summary>
     private static readonly FrozenDictionary<string, TokenType>.AlternateLookup<ReadOnlySpan<char>> _keywordLookup =
         _keywords.GetAlternateLookup<ReadOnlySpan<char>>();
