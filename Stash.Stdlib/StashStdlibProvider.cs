@@ -49,7 +49,15 @@ public sealed class StashStdlibProvider : IStdlibProvider
 
     public IReadOnlyList<StdlibGlobalEntry> GetGlobals(StashCapabilities capabilities)
     {
-        NamespaceDefinition globalDef = StdlibDefinitions.GetGlobalNamespace(capabilities);
+        // The global namespace (Name = "") is registered like any other namespace via the
+        // generated registry; locate it from the capability-filtered namespace list.
+        NamespaceDefinition? globalDef = null;
+        foreach (NamespaceDefinition def in StdlibDefinitions.GetNamespaces(capabilities))
+        {
+            if (def.IsGlobal) { globalDef = def; break; }
+        }
+        if (globalDef is null) return System.Array.Empty<StdlibGlobalEntry>();
+
         var entries = new List<StdlibGlobalEntry>();
 
         // Get all member values from the global namespace

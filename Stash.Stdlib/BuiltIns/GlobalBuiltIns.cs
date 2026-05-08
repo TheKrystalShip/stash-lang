@@ -4,365 +4,470 @@ using System;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
-using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
+using Stash.Stdlib.Abstractions;
 
 /// <summary>
-/// Registers global built-in functions and types.
+/// Registers global built-in functions and types — the Stash names that are
+/// reachable without a namespace qualifier (<c>typeof</c>, <c>len</c>, <c>range</c>, …)
+/// plus all globally-visible structs and enums (error types, ExecOptions, etc.).
 /// </summary>
-public static class GlobalBuiltIns
+[StashNamespace(Name = "")]
+public static partial class GlobalBuiltIns
 {
-    public static NamespaceDefinition Define(StashCapabilities capabilities)
+    // ── Functions ────────────────────────────────────────────────────────────
+
+    /// <summary>Returns the type name of a value as a string.</summary>
+    /// <param name="value">The value to inspect.</param>
+    /// <returns>A string such as 'int', 'string', 'array', 'dict', 'null', 'bool', 'float', or a struct/enum name.</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    public static StashValue Typeof(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var b = new NamespaceBuilder("");
+        StashValue val = args[0];
 
-        b.Function("typeof", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        if (val.IsNull) return StashValue.FromObj("null");
+        if (val.IsInt) return StashValue.FromObj("int");
+        if (val.IsFloat) return StashValue.FromObj("float");
+        if (val.IsBool) return StashValue.FromObj("bool");
+        if (val.IsByte) return StashValue.FromObj("byte");
+
+        object? obj = val.AsObj;
+        return StashValue.FromObj(obj switch
         {
-            StashValue val = args[0];
+            null => "null",
+            string => "string",
+            List<StashValue> => "array",
+            StashTypedArray ta => $"{ta.ElementTypeName}[]",
+            StashSecret => "secret",
+            StashError => "Error",
+            StashInstance => "struct",
+            StashStruct => "struct",
+            StashEnumValue => "enum",
+            StashEnum => "enum",
+            StashInterface => "interface",
+            StashDictionary => "dict",
+            StashRange => "range",
+            StashFuture => "Future",
+            StashNamespace => "namespace",
+            StashDuration => "duration",
+            StashByteSize => "bytes",
+            StashIpAddress => "ip",
+            StashSemVer => "semver",
+            IStashCallable => "function",
+            _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : ctx.ResolveRegisteredTypeName(obj)
+        });
+    }
 
-            if (val.IsNull) return StashValue.FromObj("null");
-            if (val.IsInt) return StashValue.FromObj("int");
-            if (val.IsFloat) return StashValue.FromObj("float");
-            if (val.IsBool) return StashValue.FromObj("bool");
-            if (val.IsByte) return StashValue.FromObj("byte");
-
-            object? obj = val.AsObj;
-            return StashValue.FromObj(obj switch
-            {
-                null => "null",
-                string => "string",
-                List<StashValue> => "array",
-                StashTypedArray ta => $"{ta.ElementTypeName}[]",
-                StashSecret => "secret",
-                StashError => "Error",
-                StashInstance => "struct",
-                StashStruct => "struct",
-                StashEnumValue => "enum",
-                StashEnum => "enum",
-                StashInterface => "interface",
-                StashDictionary => "dict",
-                StashRange => "range",
-                StashFuture => "Future",
-                StashNamespace => "namespace",
-                StashDuration => "duration",
-                StashByteSize => "bytes",
-                StashIpAddress => "ip",
-                StashSemVer => "semver",
-                IStashCallable => "function",
-                _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : ctx.ResolveRegisteredTypeName(obj)
-            });
-        }, returnType: "string",
-            documentation: "Returns the type name of a value as a string.\n@param value The value to inspect\n@return A string such as 'int', 'string', 'array', 'dict', 'null', 'bool', 'float', or a struct/enum name");
-
-        b.Function("semver", [Param("value", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+    /// <summary>Parses a string into a semver value.</summary>
+    /// <param name="value">A semantic version string in the format MAJOR.MINOR.PATCH (e.g. '1.2.3' or '2.0.0-beta.1').</param>
+    /// <returns>A semver value representing the parsed version.</returns>
+    [StashFn(ReturnType = "semver")]
+    public static StashValue Semver(string value)
+    {
+        if (StashSemVer.TryParse(value, out StashSemVer? result))
         {
-            string str = SvArgs.String(args, 0, "semver");
-
-            if (StashSemVer.TryParse(str, out StashSemVer? result))
-            {
-                return StashValue.FromObj(result!);
-            }
-
-            string detail = StashSemVer.ValidateFormat(str) ?? $"Invalid semantic version '{str}'.";
-            throw new RuntimeError(detail, null);
-        }, returnType: "semver", documentation: "Parses a string into a semver value.\n@param value A semantic version string in the format MAJOR.MINOR.PATCH (e.g. '1.2.3' or '2.0.0-beta.1')\n@return A semver value representing the parsed version");
-
-        b.Function("nameof", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            StashValue val = args[0];
-
-            if (val.IsNull) return StashValue.FromObj("null");
-            if (val.IsInt) return StashValue.FromObj("int");
-            if (val.IsFloat) return StashValue.FromObj("float");
-            if (val.IsBool) return StashValue.FromObj("bool");
-            if (val.IsByte) return StashValue.FromObj("byte");
-
-            object? obj = val.AsObj;
-            return StashValue.FromObj(obj switch
-            {
-                null => "null",
-                string => "string",
-                List<StashValue> => "array",
-                StashSecret => "secret",
-                StashError => "Error",
-                StashInstance inst => inst.TypeName,
-                StashStruct s => s.Name,
-                StashEnumValue ev => $"{ev.TypeName}.{ev.MemberName}",
-                StashEnum e => e.Name,
-                StashInterface i => i.Name,
-                StashDictionary => "dict",
-                StashRange => "range",
-                StashFuture => "Future",
-                StashNamespace => "namespace",
-                Runtime.BuiltInFunction bf => bf.Name,
-                IStashCallable c => c.Name ?? "function",
-                _ => "unknown"
-            });
-        }, returnType: "string",
-            documentation: "Returns the name of a variable, function, struct, or enum as a string.\n@param value The value to name\n@return The name of the value, or its type name for primitives");
-
-        b.Function("len", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            StashValue val = args[0];
-            if (val.IsObj)
-            {
-                object? obj = val.AsObj;
-                if (obj is StashSecret sec)
-                {
-                    object? inner = sec.InnerValue.IsObj ? sec.InnerValue.AsObj : null;
-                    if (inner is string innerStr) return StashValue.FromInt((long)innerStr.Length);
-                    if (inner is List<StashValue> innerList) return StashValue.FromInt((long)innerList.Count);
-                    if (inner is StashDictionary innerDict) return StashValue.FromInt((long)innerDict.Count);
-                    throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
-                }
-                if (obj is string s) return StashValue.FromInt((long)s.Length);
-                if (obj is List<StashValue> svList) return StashValue.FromInt((long)svList.Count);
-                if (obj is StashTypedArray typedArr) return StashValue.FromInt((long)typedArr.Count);
-                if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
-            }
-            throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
-        }, returnType: "int",
-            documentation: "Returns the length of a string, array, or dictionary.\n@param value A string, array, or dict\n@return The number of characters, elements, or entries");
-
-        b.Function("lastError", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            return ctx.LastError is not null ? StashValue.FromObj(ctx.LastError) : StashValue.Null;
-        }, returnType: "Error",
-            documentation: "Returns the last error that was caught in a try/catch block, or null if none.\n@return The last caught Error value, or null");
-
-        b.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            if (args.Length < 1 || args.Length > 3) throw new RuntimeError("'range' expects 1 to 3 arguments.");
-            long start, end, step;
-            if (args.Length == 1)
-            {
-                var e = SvArgs.Long(args, 0, "range");
-                start = 0; end = e; step = 1;
-            }
-            else if (args.Length == 2)
-            {
-                var s = SvArgs.Long(args, 0, "range");
-                var e = SvArgs.Long(args, 1, "range");
-                start = s; end = e; step = 1;
-            }
-            else
-            {
-                var s = SvArgs.Long(args, 0, "range");
-                var e = SvArgs.Long(args, 1, "range");
-                var st = SvArgs.Long(args, 2, "range");
-                if (st == 0)
-                {
-                    throw new RuntimeError("'range' step cannot be zero.");
-                }
-
-                start = s; end = e; step = st;
-            }
-
-            var result = new List<StashValue>();
-            if (step > 0)
-            {
-                for (long i = start; i < end; i += step)
-                {
-                    result.Add(StashValue.FromInt(i));
-                }
-            }
-            else
-            {
-                for (long i = start; i > end; i += step)
-                {
-                    result.Add(StashValue.FromInt(i));
-                }
-            }
-            return StashValue.FromObj(result);
-        }, returnType: "array", isVariadic: true,
-            documentation: "Generates an array of integers. With one argument, generates 0..n-1. With two, generates start..end-1. With three, uses the given step.\n@param start_or_end End (exclusive) when called with 1 arg, or start when called with 2-3 args\n@param end End (exclusive) when called with 2 or 3 args\n@param step Step size (positive or negative); must not be zero\n@return An array of integers");
-
-        if (capabilities.HasFlag(StashCapabilities.Environment))
-        {
-            b.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-            {
-                long code = args.Length > 0 ? SvArgs.Long(args, 0, "exit") : 0L;
-                EmitExitImpl(ctx, code);
-                return StashValue.Null;
-            },
-                returnType: "never",
-                isVariadic: true,
-                documentation: "Terminates the program with the given exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.\n@param code (optional) The exit code to return to the OS. Defaults to 0\n@return never");
+            return StashValue.FromObj(result!);
         }
 
-        b.Function("hash", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
-        {
-            if (args[0].IsNull) return StashValue.FromInt(0L);
-            return StashValue.FromInt((long)args[0].ToObject()!.GetHashCode());
-        }, returnType: "int",
-            documentation: "Returns a hash code for the given value.\n@param value The value to hash\n@return An integer hash code");
-
-        b.Function("secret", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            return StashValue.FromObj(new StashSecret(args[0]));
-        }, returnType: "secret", documentation: "Wraps a value as a secret. Secrets auto-redact when printed or interpolated.\n@param value The value to protect.\n@return A secret-wrapped value.");
-
-        b.Function("reveal", [Param("value", "secret")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
-        {
-            StashValue val = args[0];
-            if (val.IsObj && val.AsObj is StashSecret sec)
-            {
-                return sec.Reveal();
-            }
-            throw new RuntimeError("Argument to 'reveal' must be a secret.");
-        }, returnType: "any", documentation: "Unwraps a secret value, returning the real underlying value.\n@param value The secret to unwrap.\n@return The original value.");
-
-        // Enums
-        b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);
-        b.Enum("Signal", ["Hup", "Int", "Quit", "Kill", "Usr1", "Usr2", "Term"]);
-        b.Enum("ExecMode", ["Capture", "Passthrough", "Stream"]);
-
-        // Command execution structs — registered here so the VM and LSP know their fields.
-        b.Struct("ExecOptions", [
-            new("mode",     "ExecMode?"),
-            new("strict",   "bool"),
-            new("redirect", "RedirectSpec?"),
-            new("cwd",      "string?"),
-            new("env",      "dict?"),
-        ]);
-        b.Struct("RedirectSpec", [
-            new("stream", "string"),
-            new("target", "string"),
-            new("append", "bool"),
-        ]);
-        b.Struct("PipelineStage", [
-            new("program", "string"),
-            new("args",    "array"),
-        ]);
-
-        // Typed error structs — registered here so the VM can instantiate them via
-        // struct-init literals (e.g. `throw ValueError { message: "x" }`).
-        b.Struct(StashErrorTypes.ValueError,        [new("message", "string")]);
-        b.Struct(StashErrorTypes.TypeError,         [new("message", "string")]);
-        b.Struct(StashErrorTypes.ParseError,        [new("message", "string")]);
-        b.Struct(StashErrorTypes.IndexError,        [new("message", "string")]);
-        b.Struct(StashErrorTypes.IOError,           [new("message", "string")]);
-        b.Struct(StashErrorTypes.NotSupportedError, [new("message", "string")]);
-        b.Struct(StashErrorTypes.TimeoutError,      [new("message", "string")]);
-        b.Struct(StashErrorTypes.CommandError, [
-            new("message",  "string"),
-            new("exitCode", "int"),
-            new("stderr",   "string"),
-            new("stdout",   "string"),
-            new("command",  "string"),
-        ]);
-        b.Struct(StashErrorTypes.LockError, [new("message", "string"), new("path", "string")]);
-        b.Struct(StashErrorTypes.AliasError, [
-            new("message",   "string"),
-            new("aliasName", "string?"),
-            new("detail",    "string?"),
-        ]);
-        b.Struct(StashErrorTypes.StateError, [
-            new("message", "string"),
-        ]);
-        b.Struct(StashErrorTypes.CancellationError, [
-            new("message", "string"),
-        ]);
-        b.Struct("StreamingProcess", [
-            new("pid",      "int"),
-            new("exitCode", "int?"),
-            new("signal",   "Signal?"),
-        ]);
-
-        // Alias-related structs — registered here so LSP hover/completion knows their fields.
-        b.Struct("SourceLoc", [
-            new("file", "string"),
-            new("line", "int"),
-        ]);
-        b.Struct("ParamInfo", [
-            new("name",    "string"),
-            new("type",    "string?"),
-            new("rest",    "bool"),
-            new("default", "any?"),
-        ]);
-        b.Struct("AliasOptions", [
-            new("description", "string?"),
-            new("before",      "function?"),
-            new("after",       "function?"),
-            new("confirm",     "string?"),
-            new("override",    "bool"),
-        ]);
-        b.Struct("AliasInfo", [
-            new("name",        "string"),
-            new("kind",        "string"),
-            new("body",        "string"),
-            new("params",      "array"),
-            new("description", "string?"),
-            new("hasBefore",   "bool"),
-            new("hasAfter",    "bool"),
-            new("confirm",     "string?"),
-            new("source",      "string"),
-            new("sourceLoc",   "SourceLoc?"),
-        ]);
-
-        // Prompt-related structs — registered here so LSP hover/completion knows their fields.
-        b.Struct("PromptGit", [
-            new("isInRepo",       "bool"),
-            new("branch",         "string"),
-            new("isDirty",        "bool"),
-            new("stagedCount",    "int"),
-            new("unstagedCount",  "int"),
-            new("untrackedCount", "int"),
-            new("ahead",          "int"),
-            new("behind",         "int"),
-        ]);
-        b.Struct("PromptContext", [
-            new("cwd",            "string"),
-            new("cwdAbsolute",    "string"),
-            new("user",           "string"),
-            new("host",           "string"),
-            new("hostFull",       "string"),
-            new("time",           "float"),
-            new("lastExitCode",   "int"),
-            new("lineNumber",     "int"),
-            new("mode",           "string"),
-            new("hostColor",      "string"),
-            new("git",            "PromptGit"),
-        ]);
-
-        // Retry-related struct and context types
-        b.Struct("RetryOptions", [
-            new("delay",    "duration"),
-            new("backoff",  "Backoff"),
-            new("maxDelay", "duration"),
-            new("jitter",   "bool"),
-            new("timeout",  "duration"),
-            new("on",       "array"),
-        ]);
-        // RetryContext is metadata-only — the runtime `attempt` variable is a dict, but
-        // registering the struct here gives the LSP field info for hover/completion.
-        b.Struct("RetryContext", [
-            new("current",   "int"),
-            new("max",       "int"),
-            new("remaining", "int"),
-            new("elapsed",   "duration"),
-            new("errors",    "array"),
-        ]);
-
-        // Completion-related struct types — registered here so the VM can instantiate them
-        // at runtime and the LSP knows their fields.
-        b.Struct("CompletionContext", [
-            new("command",  "string"),
-            new("args",     "array"),
-            new("current",  "string"),
-            new("position", "int"),
-            new("mode",     "string"),
-        ]);
-        b.Struct("CompletionResult", [
-            new("replace_start", "int"),
-            new("replace_end",   "int"),
-            new("candidates",    "array"),
-            new("common_prefix", "string"),
-        ]);
-
-        return b.Build();
+        string detail = StashSemVer.ValidateFormat(value) ?? $"Invalid semantic version '{value}'.";
+        throw new RuntimeError(detail, null);
     }
+
+    /// <summary>Returns the name of a variable, function, struct, or enum as a string.</summary>
+    /// <param name="value">The value to name.</param>
+    /// <returns>The name of the value, or its type name for primitives.</returns>
+    [StashFn(Raw = true, ReturnType = "string")]
+    public static StashValue Nameof(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        StashValue val = args[0];
+
+        if (val.IsNull) return StashValue.FromObj("null");
+        if (val.IsInt) return StashValue.FromObj("int");
+        if (val.IsFloat) return StashValue.FromObj("float");
+        if (val.IsBool) return StashValue.FromObj("bool");
+        if (val.IsByte) return StashValue.FromObj("byte");
+
+        object? obj = val.AsObj;
+        return StashValue.FromObj(obj switch
+        {
+            null => "null",
+            string => "string",
+            List<StashValue> => "array",
+            StashSecret => "secret",
+            StashError => "Error",
+            StashInstance inst => inst.TypeName,
+            StashStruct s => s.Name,
+            StashEnumValue ev => $"{ev.TypeName}.{ev.MemberName}",
+            StashEnum e => e.Name,
+            StashInterface i => i.Name,
+            StashDictionary => "dict",
+            StashRange => "range",
+            StashFuture => "Future",
+            StashNamespace => "namespace",
+            Stash.Runtime.BuiltInFunction bf => bf.Name,
+            IStashCallable c => c.Name ?? "function",
+            _ => "unknown"
+        });
+    }
+
+    /// <summary>Returns the length of a string, array, or dictionary.</summary>
+    /// <param name="value">A string, array, or dict.</param>
+    /// <returns>The number of characters, elements, or entries.</returns>
+    [StashFn(Raw = true, ReturnType = "int")]
+    public static StashValue Len(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        StashValue val = args[0];
+        if (val.IsObj)
+        {
+            object? obj = val.AsObj;
+            if (obj is StashSecret sec)
+            {
+                object? inner = sec.InnerValue.IsObj ? sec.InnerValue.AsObj : null;
+                if (inner is string innerStr) return StashValue.FromInt((long)innerStr.Length);
+                if (inner is List<StashValue> innerList) return StashValue.FromInt((long)innerList.Count);
+                if (inner is StashDictionary innerDict) return StashValue.FromInt((long)innerDict.Count);
+                throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
+            }
+            if (obj is string s) return StashValue.FromInt((long)s.Length);
+            if (obj is List<StashValue> svList) return StashValue.FromInt((long)svList.Count);
+            if (obj is StashTypedArray typedArr) return StashValue.FromInt((long)typedArr.Count);
+            if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
+        }
+        throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
+    }
+
+    /// <summary>Returns the last error that was caught in a try/catch block, or null if none.</summary>
+    /// <returns>The last caught Error value, or null.</returns>
+    [StashFn(ReturnType = "Error")]
+    public static StashValue LastError(IInterpreterContext ctx)
+        => ctx.LastError is not null ? StashValue.FromObj(ctx.LastError) : StashValue.Null;
+
+    /// <summary>Generates an array of integers. With one argument, generates 0..n-1. With two, generates start..end-1. With three, uses the given step.</summary>
+    /// <param name="start_or_end">End (exclusive) when called with 1 arg, or start when called with 2-3 args.</param>
+    /// <param name="end">End (exclusive) when called with 2 or 3 args.</param>
+    /// <param name="step">Step size (positive or negative); must not be zero.</param>
+    /// <returns>An array of integers.</returns>
+    [StashFn(Raw = true, ReturnType = "array")]
+    public static StashValue Range(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1 || args.Length > 3) throw new RuntimeError("'range' expects 1 to 3 arguments.");
+        long start, end, step;
+        if (args.Length == 1)
+        {
+            var e = SvArgs.Long(args, 0, "range");
+            start = 0; end = e; step = 1;
+        }
+        else if (args.Length == 2)
+        {
+            var s = SvArgs.Long(args, 0, "range");
+            var e = SvArgs.Long(args, 1, "range");
+            start = s; end = e; step = 1;
+        }
+        else
+        {
+            var s = SvArgs.Long(args, 0, "range");
+            var e = SvArgs.Long(args, 1, "range");
+            var st = SvArgs.Long(args, 2, "range");
+            if (st == 0)
+            {
+                throw new RuntimeError("'range' step cannot be zero.");
+            }
+
+            start = s; end = e; step = st;
+        }
+
+        var result = new List<StashValue>();
+        if (step > 0)
+        {
+            for (long i = start; i < end; i += step)
+            {
+                result.Add(StashValue.FromInt(i));
+            }
+        }
+        else
+        {
+            for (long i = start; i > end; i += step)
+            {
+                result.Add(StashValue.FromInt(i));
+            }
+        }
+        return StashValue.FromObj(result);
+    }
+
+    /// <summary>Terminates the program with the given exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.</summary>
+    /// <param name="code">The exit code to return to the OS. Defaults to 0.</param>
+    /// <returns>never</returns>
+    [StashFn(Capability = StashCapabilities.Environment, ReturnType = "never")]
+    public static void Exit(IInterpreterContext ctx, long code = 0L)
+    {
+        EmitExitImpl(ctx, code);
+    }
+
+    /// <summary>Returns a hash code for the given value.</summary>
+    /// <param name="value">The value to hash.</param>
+    /// <returns>An integer hash code.</returns>
+    [StashFn]
+    public static long Hash(StashValue value)
+    {
+        if (value.IsNull) return 0L;
+        return (long)value.ToObject()!.GetHashCode();
+    }
+
+    /// <summary>Wraps a value as a secret. Secrets auto-redact when printed or interpolated.</summary>
+    /// <param name="value">The value to protect.</param>
+    /// <returns>A secret-wrapped value.</returns>
+    [StashFn(ReturnType = "secret")]
+    public static StashValue Secret(StashValue value)
+        => StashValue.FromObj(new StashSecret(value));
+
+    /// <summary>Unwraps a secret value, returning the real underlying value.</summary>
+    /// <param name="value">The secret to unwrap.</param>
+    /// <returns>The original value.</returns>
+    [StashFn(ReturnType = "any")]
+    public static StashValue Reveal([StashParam(Type = "secret")] StashValue value)
+    {
+        if (value.IsObj && value.AsObj is StashSecret sec)
+        {
+            return sec.Reveal();
+        }
+        throw new RuntimeError("Argument to 'reveal' must be a secret.");
+    }
+
+    // ── Enums ────────────────────────────────────────────────────────────────
+
+    /// <summary>Backoff strategy for retry blocks.</summary>
+    [StashEnum]
+    public enum Backoff { Fixed, Linear, Exponential }
+
+    /// <summary>POSIX-style signals used by process.signal and StreamingProcess.signal.</summary>
+    [StashEnum]
+    public enum Signal { Hup, Int, Quit, Kill, Usr1, Usr2, Term }
+
+    /// <summary>Execution mode for process.exec and process.pipeline.</summary>
+    [StashEnum]
+    public enum ExecMode { Capture, Passthrough, Stream }
+
+    // ── Command execution structs ────────────────────────────────────────────
+
+    /// <summary>Options for process.exec and process.pipeline.</summary>
+    [StashStruct]
+    public sealed record ExecOptions
+    {
+        [StashField(Type = "ExecMode?")] public string? Mode { get; init; }
+        public bool Strict { get; init; }
+        [StashField(Type = "RedirectSpec?")] public string? Redirect { get; init; }
+        [StashField(Type = "string?")] public string? Cwd { get; init; }
+        [StashField(Type = "dict?")] public StashDictionary? Env { get; init; }
+    }
+
+    /// <summary>Output redirect specification for process.exec.</summary>
+    [StashStruct]
+    public sealed record RedirectSpec
+    {
+        public string Stream { get; init; } = "";
+        public string Target { get; init; } = "";
+        public bool Append { get; init; }
+    }
+
+    /// <summary>One stage in a process.pipeline call.</summary>
+    [StashStruct]
+    public sealed record PipelineStage
+    {
+        public string Program { get; init; } = "";
+        public List<StashValue> Args { get; init; } = new();
+    }
+
+    /// <summary>Handle to a running external process spawned by streaming command syntax.</summary>
+    [StashStruct]
+    public sealed record StreamingProcess
+    {
+        public long Pid { get; init; }
+        [StashField(Type = "int?")] public long? ExitCode { get; init; }
+        [StashField(Type = "Signal?")] public string? Signal { get; init; }
+    }
+
+    // ── Typed error structs ──────────────────────────────────────────────────
+
+    [StashStruct(Name = StashErrorTypes.ValueError)]
+    public sealed record ValueErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.TypeError)]
+    public sealed record TypeErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.ParseError)]
+    public sealed record ParseErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.IndexError)]
+    public sealed record IndexErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.IOError)]
+    public sealed record IOErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.NotSupportedError)]
+    public sealed record NotSupportedErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.TimeoutError)]
+    public sealed record TimeoutErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.CommandError)]
+    public sealed record CommandErrorStruct
+    {
+        public string Message { get; init; } = "";
+        public long ExitCode { get; init; }
+        public string Stderr { get; init; } = "";
+        public string Stdout { get; init; } = "";
+        public string Command { get; init; } = "";
+    }
+
+    [StashStruct(Name = StashErrorTypes.LockError)]
+    public sealed record LockErrorStruct
+    {
+        public string Message { get; init; } = "";
+        public string Path { get; init; } = "";
+    }
+
+    [StashStruct(Name = StashErrorTypes.AliasError)]
+    public sealed record AliasErrorStruct
+    {
+        public string Message { get; init; } = "";
+        [StashField(Type = "string?")] public string? AliasName { get; init; }
+        [StashField(Type = "string?")] public string? Detail { get; init; }
+    }
+
+    [StashStruct(Name = StashErrorTypes.StateError)]
+    public sealed record StateErrorStruct { public string Message { get; init; } = ""; }
+
+    [StashStruct(Name = StashErrorTypes.CancellationError)]
+    public sealed record CancellationErrorStruct { public string Message { get; init; } = ""; }
+
+    // ── Alias-related structs ────────────────────────────────────────────────
+
+    /// <summary>Source location of an alias definition.</summary>
+    [StashStruct]
+    public sealed record SourceLoc
+    {
+        public string File { get; init; } = "";
+        public long Line { get; init; }
+    }
+
+    /// <summary>Information about a single alias parameter.</summary>
+    [StashStruct]
+    public sealed record ParamInfo
+    {
+        public string Name { get; init; } = "";
+        [StashField(Type = "string?")] public string? Type { get; init; }
+        public bool Rest { get; init; }
+        [StashField(Type = "any?")] public StashValue Default { get; init; }
+    }
+
+    /// <summary>Options accepted by alias.add.</summary>
+    [StashStruct]
+    public sealed record AliasOptions
+    {
+        [StashField(Type = "string?")] public string? Description { get; init; }
+        [StashField(Type = "function?")] public IStashCallable? Before { get; init; }
+        [StashField(Type = "function?")] public IStashCallable? After { get; init; }
+        [StashField(Type = "string?")] public string? Confirm { get; init; }
+        public bool Override { get; init; }
+    }
+
+    /// <summary>Detail record describing a registered alias.</summary>
+    [StashStruct]
+    public sealed record AliasInfo
+    {
+        public string Name { get; init; } = "";
+        public string Kind { get; init; } = "";
+        public string Body { get; init; } = "";
+        public List<StashValue> Params { get; init; } = new();
+        [StashField(Type = "string?")] public string? Description { get; init; }
+        public bool HasBefore { get; init; }
+        public bool HasAfter { get; init; }
+        [StashField(Type = "string?")] public string? Confirm { get; init; }
+        public string Source { get; init; } = "";
+        [StashField(Type = "SourceLoc?")] public string? SourceLoc { get; init; }
+    }
+
+    // ── Prompt-related structs ───────────────────────────────────────────────
+
+    /// <summary>Git portion of a prompt context.</summary>
+    [StashStruct]
+    public sealed record PromptGit
+    {
+        public bool IsInRepo { get; init; }
+        public string Branch { get; init; } = "";
+        public bool IsDirty { get; init; }
+        public long StagedCount { get; init; }
+        public long UnstagedCount { get; init; }
+        public long UntrackedCount { get; init; }
+        public long Ahead { get; init; }
+        public long Behind { get; init; }
+    }
+
+    /// <summary>Context value passed to user-defined shell prompt callbacks.</summary>
+    [StashStruct]
+    public sealed record PromptContext
+    {
+        public string Cwd { get; init; } = "";
+        public string CwdAbsolute { get; init; } = "";
+        public string User { get; init; } = "";
+        public string Host { get; init; } = "";
+        public string HostFull { get; init; } = "";
+        public double Time { get; init; }
+        public long LastExitCode { get; init; }
+        public long LineNumber { get; init; }
+        public string Mode { get; init; } = "";
+        public string HostColor { get; init; } = "";
+        [StashField(Type = "PromptGit")] public string Git { get; init; } = "";
+    }
+
+    // ── Retry-related structs ────────────────────────────────────────────────
+
+    /// <summary>Options accepted by retry blocks.</summary>
+    [StashStruct]
+    public sealed record RetryOptions
+    {
+        [StashField(Type = "duration")] public StashValue Delay { get; init; }
+        [StashField(Type = "Backoff")] public string Backoff { get; init; } = "";
+        [StashField(Type = "duration")] public StashValue MaxDelay { get; init; }
+        public bool Jitter { get; init; }
+        [StashField(Type = "duration")] public StashValue Timeout { get; init; }
+        public List<StashValue> On { get; init; } = new();
+    }
+
+    /// <summary>Attempt context exposed to retry block bodies as `attempt`.</summary>
+    [StashStruct]
+    public sealed record RetryContext
+    {
+        public long Current { get; init; }
+        public long Max { get; init; }
+        public long Remaining { get; init; }
+        [StashField(Type = "duration")] public StashValue Elapsed { get; init; }
+        public List<StashValue> Errors { get; init; } = new();
+    }
+
+    // ── Completion-related structs ───────────────────────────────────────────
+
+    /// <summary>Context passed to completion callbacks.</summary>
+    [StashStruct]
+    public sealed record CompletionContext
+    {
+        public string Command { get; init; } = "";
+        public List<StashValue> Args { get; init; } = new();
+        public string Current { get; init; } = "";
+        public long Position { get; init; }
+        public string Mode { get; init; } = "";
+    }
+
+    /// <summary>Result returned from a completion callback.</summary>
+    [StashStruct]
+    public sealed record CompletionResult
+    {
+        [StashField(Name = "replace_start")] public long ReplaceStart { get; init; }
+        [StashField(Name = "replace_end")] public long ReplaceEnd { get; init; }
+        public List<StashValue> Candidates { get; init; } = new();
+        [StashField(Name = "common_prefix")] public string CommonPrefix { get; init; } = "";
+    }
+
+    // ── Class-level non-Stash members ────────────────────────────────────────
 
     /// <summary>
     /// Maps a Signal enum member name to its POSIX signal number.

@@ -38,16 +38,12 @@ public static partial class StdlibRegistry
 
     public static readonly IReadOnlyList<BuiltInStruct> Structs =
         new[] { _errorStruct, _completionContextStruct, _completionResultStruct }
-            .Concat(StdlibDefinitions.GetGlobalNamespace(StashCapabilities.All).Structs)
             .Concat(StdlibDefinitions.Structs)
             .ToArray();
 
-    // ── Built-in Enums: global types (from GlobalBuiltIns) + namespace types ──
+    // ── Built-in Enums: registered via namespace metadata (including the empty-named global namespace) ──
 
-    public static readonly IReadOnlyList<BuiltInEnum> Enums =
-        StdlibDefinitions.GetGlobalNamespace(StashCapabilities.All).Enums
-            .Concat(StdlibDefinitions.Enums)
-            .ToArray();
+    public static readonly IReadOnlyList<BuiltInEnum> Enums = StdlibDefinitions.Enums;
 
     // ── Built-in Interfaces ──
 

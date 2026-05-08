@@ -17,18 +17,23 @@ public static partial class StdlibRegistry
 {
     // ── Derived from StdlibDefinitions ──
 
+    // Global namespace metadata (Name = "") is exposed separately via Functions/Structs/Enums;
+    // NamespaceNames / NamespaceFunctions / NamespaceConstants describe only the namespaces
+    // that are user-visible under a prefix.
+
     public static IReadOnlyList<string> NamespaceNames { get; } =
-        StdlibDefinitions.Namespaces.Select(d => d.Name).ToArray();
+        StdlibDefinitions.Namespaces.Where(d => !d.IsGlobal).Select(d => d.Name).ToArray();
 
     public static IReadOnlyList<NamespaceFunction> NamespaceFunctions { get; } =
-        StdlibDefinitions.Namespaces.SelectMany(d => d.Functions).ToArray();
+        StdlibDefinitions.Namespaces.Where(d => !d.IsGlobal).SelectMany(d => d.Functions).ToArray();
 
     public static IReadOnlyList<NamespaceConstant> NamespaceConstants { get; } =
-        StdlibDefinitions.Namespaces.SelectMany(d => d.Constants).ToArray();
+        StdlibDefinitions.Namespaces.Where(d => !d.IsGlobal).SelectMany(d => d.Constants).ToArray();
 
     public static IReadOnlyList<BuiltInFunction> Functions { get; } =
-        StdlibDefinitions.GetGlobalNamespace(Stash.Runtime.StashCapabilities.All)
-            .Functions
+        StdlibDefinitions.Namespaces
+            .Where(d => d.IsGlobal)
+            .SelectMany(d => d.Functions)
             .Select(f => new BuiltInFunction(f.Name, f.Parameters, f.ReturnType, f.Documentation))
             .ToArray();
 

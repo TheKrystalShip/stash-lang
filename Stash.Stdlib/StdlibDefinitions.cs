@@ -22,7 +22,6 @@ public static class StdlibDefinitions
         GeneratedStdlibRegistry.All().ToArray();
 
     private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();
-    private static readonly ConcurrentDictionary<StashCapabilities, NamespaceDefinition> _globalsCache = new();
     private static readonly ConcurrentDictionary<StashCapabilities, Dictionary<string, StashValue>> _vmGlobalsCache = new();
 
     private static readonly Lazy<IReadOnlyList<BuiltInStruct>> _structs =
@@ -45,9 +44,6 @@ public static class StdlibDefinitions
 
     public static IReadOnlyList<BuiltInEnum> Enums => _enums.Value;
 
-    public static NamespaceDefinition GetGlobalNamespace(StashCapabilities capabilities)
-        => _globalsCache.GetOrAdd(capabilities, static caps => GlobalBuiltIns.Define(caps));
-
     /// <summary>
     /// Creates the globals dictionary for a bytecode VM, populated with all built-in
     /// functions, namespaces, and types filtered by the given capabilities.
@@ -63,16 +59,21 @@ public static class StdlibDefinitions
     {
         var globals = new Dictionary<string, StashValue>();
 
-        var globalNs = GetGlobalNamespace(capabilities);
-        foreach (var (key, value) in globalNs.Namespace.GetAllMemberValues())
-        {
-            globals[key] = value;
-        }
-
-        // Namespace list is already capability-filtered by GetNamespaces
         foreach (var nsDef in GetNamespaces(capabilities))
         {
-            globals[nsDef.Name] = StashValue.FromObj(nsDef.Namespace);
+            if (nsDef.IsGlobal)
+            {
+                // Global namespace members (typeof, len, range, …, plus enum/struct types)
+                // are added to the globals dictionary directly — no namespace prefix.
+                foreach (var (key, value) in nsDef.Namespace.GetAllMemberValues())
+                {
+                    globals[key] = value;
+                }
+            }
+            else
+            {
+                globals[nsDef.Name] = StashValue.FromObj(nsDef.Namespace);
+            }
         }
 
         return globals;
