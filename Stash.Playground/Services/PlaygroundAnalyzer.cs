@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
 using Stash.Analysis;
 using Stash.Common;
+using Stash.Lexing;
 using Stash.Stdlib;
 using Stash.Stdlib.Models;
 
@@ -95,7 +96,7 @@ public static class PlaygroundAnalyzer
 
         var completions = new List<CompletionDto>();
 
-        foreach (var kw in StdlibRegistry.Keywords)
+        foreach (var kw in Keywords.All)
         {
             completions.Add(new CompletionDto(kw, KindKeyword, null, null));
         }

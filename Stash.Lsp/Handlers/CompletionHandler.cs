@@ -12,6 +12,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
 using Stash.Analysis;
+using Stash.Lexing;
 using Stash.Stdlib;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
@@ -148,7 +149,7 @@ public class CompletionHandler : CompletionHandlerBase
         var items = new List<CompletionItem>();
 
         // Keywords
-        foreach (var kw in StdlibRegistry.Keywords)
+        foreach (var kw in Keywords.All)
         {
             items.Add(new CompletionItem
             {

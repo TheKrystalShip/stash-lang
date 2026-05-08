@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Stash.Lexing;
 using Stash.Stdlib;
 
 namespace Stash.Cli.Completion.Completers;
@@ -11,7 +12,7 @@ namespace Stash.Cli.Completion.Completers;
 /// <para>
 /// Candidate sources (unioned, deduped by insert):
 /// <list type="number">
-///   <item>Stash keywords from <see cref="StdlibRegistry.Keywords"/>.</item>
+///   <item>Stash keywords from <see cref="Keywords.All"/>.</item>
 ///   <item>Global built-in functions from <see cref="StdlibRegistry.Functions"/>.</item>
 ///   <item>Stdlib namespace names from <see cref="StdlibRegistry.NamespaceNames"/>.</item>
 ///   <item>REPL globals (all, callable or not) from the VM.</item>
@@ -26,7 +27,7 @@ internal sealed class StashIdentifierCompleter : ICompleter
         var candidates = new List<Candidate>();
 
         // 1. Keywords
-        foreach (string kw in StdlibRegistry.Keywords)
+        foreach (string kw in Keywords.All)
         {
             if (seen.Add(kw))
                 candidates.Add(new Candidate(kw, kw, CandidateKind.StashKeyword));
