@@ -26,7 +26,8 @@ internal sealed record FunctionModel(
     bool IsVariadic,
     EquatableArray<ParameterModel> Parameters,
     string? Documentation,
-    string? DeprecationReplacement);
+    string? DeprecationReplacement,
+    string CapabilityFullName = "global::Stash.Runtime.StashCapabilities.None");
 
 internal sealed record ParameterModel(
     string CSharpName,

@@ -161,6 +161,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         string? nameOverride = null;
         bool raw = false;
         string? returnTypeOverride = null;
+        string capabilityFull = "global::Stash.Runtime.StashCapabilities.None";
         if (fnAttr is not null)
         {
             foreach (var na in fnAttr.NamedArguments)
@@ -168,6 +169,10 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "Name" && na.Value.Value is string s) nameOverride = s;
                 if (na.Key == "Raw" && na.Value.Value is bool b) raw = b;
                 if (na.Key == "ReturnType" && na.Value.Value is string rt) returnTypeOverride = rt;
+                if (na.Key == "Capability" && na.Value.Value is int capVal)
+                {
+                    capabilityFull = $"(global::Stash.Runtime.StashCapabilities){capVal}";
+                }
             }
         }
 
@@ -221,7 +226,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             return new FunctionModel(method.Name, stashName, true, "passthrough", returnTypeOverride ?? "any", true, true,
                 rawPms.Count == 0 ? EquatableArray<ParameterModel>.Empty : new EquatableArray<ParameterModel>(rawPms.ToArray()),
                 DocCommentParser.Parse(rawDocXml),
-                ReadDeprecation(method));
+                ReadDeprecation(method),
+                capabilityFull);
         }
 
         // Return type
@@ -331,7 +337,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             isVariadic,
             pms.ToEquatableArray(),
             DocCommentParser.Parse(docXml),
-            ReadDeprecation(method));
+            ReadDeprecation(method),
+            capabilityFull);
     }
 
     private static ConstantModel? BuildConstant(IFieldSymbol field, List<Diagnostic> diags)

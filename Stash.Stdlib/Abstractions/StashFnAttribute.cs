@@ -1,6 +1,7 @@
 namespace Stash.Stdlib.Abstractions;
 
 using System;
+using Stash.Runtime;
 
 /// <summary>
 /// Marks a static method on a <see cref="StashNamespaceAttribute"/>-decorated class as a Stash
@@ -34,4 +35,13 @@ public sealed class StashFnAttribute : Attribute
     /// of the returned C# value stays based on the actual C# return type.
     /// </summary>
     public string? ReturnType { get; set; }
+
+    /// <summary>
+    /// Optional capability requirement for this individual function. The function is only
+    /// registered when its required capability is present in the active <see cref="StashCapabilities"/>
+    /// set. Defaults to <see cref="StashCapabilities.None"/> (always registered).
+    /// Use this when the function's enclosing namespace is not capability-gated as a whole
+    /// but a single function within it must be (e.g. a globally-visible <c>exit</c>).
+    /// </summary>
+    public StashCapabilities Capability { get; set; } = StashCapabilities.None;
 }
