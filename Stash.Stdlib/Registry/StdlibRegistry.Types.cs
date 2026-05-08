@@ -3,7 +3,6 @@ namespace Stash.Stdlib;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
-using System.Linq;
 using Stash.Runtime;
 using Stash.Stdlib.Models;
 
@@ -12,15 +11,7 @@ public static partial class StdlibRegistry
     // ── Built-in Structs: global types (from GlobalBuiltIns) + namespace types ──
     // GlobalBuiltIns is the single source of truth for all globally-scoped struct/enum definitions.
 
-    private static readonly BuiltInStruct _errorStruct = new("Error",
-    [
-        new("message", "string"),
-        new("type",    "string"),
-        new("stack",   "array"),
-    ]);
-
-    public static readonly IReadOnlyList<BuiltInStruct> Structs =
-        new[] { _errorStruct }.Concat(StdlibDefinitions.Structs).ToArray();
+    public static readonly IReadOnlyList<BuiltInStruct> Structs = StdlibDefinitions.Structs;
 
     // ── Built-in Enums: registered via namespace metadata (including the empty-named global namespace) ──
 

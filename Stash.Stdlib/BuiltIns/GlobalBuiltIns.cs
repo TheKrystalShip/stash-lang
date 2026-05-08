@@ -287,6 +287,15 @@ public static partial class GlobalBuiltIns
 
     // ── Typed error structs ──────────────────────────────────────────────────
 
+    /// <summary>Error type. Returned by `try` on failure. Has `.message`, `.type`, and `.stack` fields.</summary>
+    [StashStruct(Name = "Error")]
+    public sealed record ErrorStruct
+    {
+        public string Message { get; init; } = "";
+        public string Type { get; init; } = "";
+        [StashField(Type = "array")] public List<StashValue> Stack { get; init; } = new();
+    }
+
     [StashStruct(Name = StashErrorTypes.ValueError)]
     public sealed record ValueErrorStruct { public string Message { get; init; } = ""; }
 
