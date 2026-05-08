@@ -8,7 +8,7 @@ using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Protocols;
 
-public class StashIpAddress : IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable
+public class StashIpAddress : IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable, IVMPrimitiveType
 {
     public IPAddress Address { get; }
     public int Version { get; }
@@ -457,7 +457,10 @@ public class StashIpAddress : IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMCo
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "ip";
+    public static string PrimitiveTypeName => "ip";
+    public static string PrimitiveTypeDescription => "IP address type. IPv4 or IPv6 addresses like `192.168.1.1` or `::1`.";
+
+    public string VMTypeName => PrimitiveTypeName;
 
     public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
     {

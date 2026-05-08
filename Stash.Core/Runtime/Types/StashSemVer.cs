@@ -11,7 +11,7 @@ using Stash.Runtime.Protocols;
 /// Build metadata is ignored in comparisons and equality per spec.
 /// </summary>
 public sealed class StashSemVer : IComparable<StashSemVer>, IEquatable<StashSemVer>,
-    IVMTyped, IVMFieldAccessible, IVMComparable, IVMStringifiable
+    IVMTyped, IVMFieldAccessible, IVMComparable, IVMStringifiable, IVMPrimitiveType
 {
     public long Major { get; }
     public long Minor { get; }
@@ -289,7 +289,10 @@ public sealed class StashSemVer : IComparable<StashSemVer>, IEquatable<StashSemV
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "semver";
+    public static string PrimitiveTypeName => "semver";
+    public static string PrimitiveTypeDescription => "Semantic version type. Versions like `1.2.3` or `2.0.0-beta.1`.";
+
+    public string VMTypeName => PrimitiveTypeName;
 
     public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
     {

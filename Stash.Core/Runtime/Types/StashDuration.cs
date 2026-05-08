@@ -10,7 +10,7 @@ using Stash.Runtime.Protocols;
 /// Stores time as total milliseconds internally.
 /// </summary>
 public sealed class StashDuration : IComparable<StashDuration>, IEquatable<StashDuration>,
-    IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable
+    IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable, IVMPrimitiveType
 {
     public long TotalMilliseconds { get; }
 
@@ -212,7 +212,10 @@ public sealed class StashDuration : IComparable<StashDuration>, IEquatable<Stash
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "duration";
+    public static string PrimitiveTypeName => "duration";
+    public static string PrimitiveTypeDescription => "Duration type. Time spans like `5s`, `1h30m`, `7d`.";
+
+    public string VMTypeName => PrimitiveTypeName;
 
     public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
     {

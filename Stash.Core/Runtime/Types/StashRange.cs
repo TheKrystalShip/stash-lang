@@ -8,7 +8,7 @@ using Stash.Runtime.Protocols;
 /// <summary>
 /// Represents an exclusive range of integers: start..end or start..end..step
 /// </summary>
-public class StashRange : IVMTyped, IVMIterable, IVMStringifiable
+public class StashRange : IVMTyped, IVMIterable, IVMStringifiable, IVMPrimitiveType
 {
     public long Start { get; }
     public long End { get; }
@@ -87,7 +87,10 @@ public class StashRange : IVMTyped, IVMIterable, IVMStringifiable
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "range";
+    public static string PrimitiveTypeName => "range";
+    public static string PrimitiveTypeDescription => "Range type. Lazy integer sequences like `1..10`.";
+
+    public string VMTypeName => PrimitiveTypeName;
 
     public IVMIterator VMGetIterator(bool indexed) => new StashRangeIterator(this);
 

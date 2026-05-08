@@ -8,7 +8,7 @@ using Stash.Runtime.Protocols;
 /// <summary>
 /// Represents a future value in the Stash runtime — the result of calling an async function.
 /// </summary>
-public class StashFuture : IVMTyped, IVMStringifiable
+public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
 {
     private readonly Task<object?> _task;
     private readonly CancellationTokenSource _cts;
@@ -82,7 +82,12 @@ public class StashFuture : IVMTyped, IVMStringifiable
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "Future";
+    public static string PrimitiveTypeName => "Future";
+    public static string PrimitiveTypeDescription =>
+        "Represents an asynchronous computation that may not have completed yet. " +
+        "Returned by async functions. Use `await` to get the resolved value.";
+
+    public string VMTypeName => PrimitiveTypeName;
 
     public string VMToString() => ToString();
 }

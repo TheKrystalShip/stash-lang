@@ -11,7 +11,7 @@ using Stash.Runtime.Protocols;
 /// Use <see cref="Reveal"/> to access the underlying value.
 /// </summary>
 public sealed class StashSecret : IEquatable<StashSecret>,
-    IVMTyped, IVMTruthiness, IVMStringifiable, IVMArithmetic
+    IVMTyped, IVMTruthiness, IVMStringifiable, IVMArithmetic, IVMPrimitiveType
 {
     public const string RedactedText = "******";
 
@@ -39,7 +39,11 @@ public sealed class StashSecret : IEquatable<StashSecret>,
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "secret";
+    public static string PrimitiveTypeName => "secret";
+    public static string PrimitiveTypeDescription =>
+        "Secret type. Auto-redacts when printed or interpolated. Use `reveal()` to access the underlying value.";
+
+    public string VMTypeName => PrimitiveTypeName;
     public bool VMIsFalsy => false;
     public string VMToString() => RedactedText;
 

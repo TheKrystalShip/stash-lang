@@ -11,7 +11,7 @@ using Stash.Runtime.Protocols;
 /// Stores size as total bytes internally.
 /// </summary>
 public sealed class StashByteSize : IComparable<StashByteSize>, IEquatable<StashByteSize>,
-    IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable
+    IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable, IVMPrimitiveType
 {
     public long TotalBytes { get; }
 
@@ -180,7 +180,10 @@ public sealed class StashByteSize : IComparable<StashByteSize>, IEquatable<Stash
 
     // --- VM Protocol Implementations ---
 
-    public string VMTypeName => "bytes";
+    public static string PrimitiveTypeName => "bytes";
+    public static string PrimitiveTypeDescription => "Byte size type. Storage sizes like `512b`, `1kb`, `4mb`.";
+
+    public string VMTypeName => PrimitiveTypeName;
 
     public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
     {
