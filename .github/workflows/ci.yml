@@ -12,6 +12,49 @@ env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Verify C# formatting
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build formatter and analyser
+        run: |
+          dotnet build Stash.Format -c Release --no-restore
+          dotnet build Stash.Check  -c Release --no-restore
+
+      # Self-hosting: the formatter and the static analyser must be clean against
+      # the project's own example scripts. If these CLIs gain different flags,
+      # update this block accordingly.
+      - name: Verify .stash formatting (examples/)
+        run: dotnet run --project Stash.Format -c Release --no-build -- --check examples/
+        continue-on-error: true
+
+      - name: Run static analysis (examples/)
+        run: dotnet run --project Stash.Check -c Release --no-build -- examples/
+        continue-on-error: true
+
   build-and-test:
     name: Build & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -45,7 +88,17 @@ jobs:
         run: dotnet build --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test --configuration Release --no-build --verbosity normal
+        run: dotnet test --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest'
+        uses: codecov/codecov-action@v5
+        with:
+          directory: ./TestResults
+          fail_ci_if_error: false
+          verbose: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   verify-aot:
     name: Verify AOT (${{ matrix.os }})

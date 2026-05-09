@@ -1,0 +1,47 @@
+#!/usr/bin/env stash
+
+// shell_args.stash — turning a string of flags into argv with str.words / str.shellSplit
+//
+// Stash deliberately does not auto-split strings spread into argument lists.
+// Use one of two stdlib helpers, then splice the resulting array with the
+// spread operator (...).
+
+// ── str.words: naive whitespace tokenization ─────────────────────────────────
+let opts = "-la --color=always";
+let words = str.words(opts);
+io.println(words);                  // ["-la", "--color=always"]
+
+// Composing with array spread inside a function call:
+fn run(prog, ...args) {
+    io.println("program: " + prog);
+    io.println("args: " + conv.toStr(args));
+}
+
+let flags = "-v --quiet";
+run("mytool", ...str.words(flags));
+// program: mytool
+// args: ["-v", "--quiet"]
+
+// ── str.shellSplit: POSIX-style quote-aware splitting ────────────────────────
+let line = "grep \"hello world\" file.txt";
+let tokens = str.shellSplit(line);
+io.println(tokens);                 // ["grep", "hello world", "file.txt"]
+
+let py = "python -c 'print(\"hi\")'";
+io.println(str.shellSplit(py));     // ["python", "-c", "print(\"hi\")"]
+
+// ── ...null splices zero entries (in calls and array literals) ──────────────
+let extra = env.get("EXTRA_FLAGS") ?? null;
+let allArgs = ["build", ...(extra == null ? [] : str.words(extra)), "--target=release"];
+io.println(allArgs);
+
+// ...null directly in function call:
+fn collect(...xs) { return xs; }
+io.println(collect(1, ...null, 2));  // [1, 2]
+
+// ── Spreading a string is NOT supported ─────────────────────────────────────
+// The following would error at runtime:
+//   let bad = [..."abc"];
+// RuntimeError: Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.
+//
+// The ...str form is reserved for a future char-iterable string semantics.

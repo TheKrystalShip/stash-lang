@@ -172,6 +172,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write   # required for sigstore keyless signing
 
     steps:
       - name: Checkout
@@ -185,16 +186,14 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          
-          # Move all native binaries
+
           cp artifacts/native-linux-x64/* release/
           cp artifacts/native-osx-x64/* release/
           cp artifacts/native-osx-arm64/* release/
           cp artifacts/native-win-x64/* release/
-          
-          # Move managed archives
+
           cp artifacts/managed/* release/
-          
+
           echo "Release files:"
           ls -la release/
 
@@ -204,6 +203,27 @@ jobs:
           sha256sum * > checksums-sha256.txt
           echo "Checksums:"
           cat checksums-sha256.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign release artifacts (keyless, sigstore)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cd release
+          # Keyless OIDC signing — produces .sig and .pem alongside each asset.
+          # Verification instructions are in the release body and SECURITY.md.
+          for f in *; do
+            case "$f" in
+              *.sig|*.pem) continue ;;
+            esac
+            echo "Signing $f..."
+            cosign sign-blob --yes \
+              --output-signature "${f}.sig" \
+              --output-certificate "${f}.pem" \
+              "$f"
+          done
 
       - name: Extract version from tag
         id: version
@@ -216,6 +236,21 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           generate_release_notes: true
+          body: |
+            ## Verifying the release
+
+            Every artifact is signed with [sigstore](https://www.sigstore.dev/) keyless OIDC signing. Verify with [cosign](https://github.com/sigstore/cosign):
+
+            ```bash
+            cosign verify-blob \
+              --certificate stash-linux-x64.pem \
+              --signature stash-linux-x64.sig \
+              --certificate-identity-regexp 'https://github.com/TheKrystalShip/stash-lang/.+' \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              stash-linux-x64
+            ```
+
+            SHA-256 checksums are in `checksums-sha256.txt`.
           files: |
             release/*
         env:

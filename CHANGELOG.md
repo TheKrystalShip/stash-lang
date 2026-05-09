@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Language
 
+- **Spreading `null` splices zero entries** — In function-call and array-literal contexts, `...null` is now equivalent to spreading an empty array (`f(1, ...null, 2) → f(1, 2)`, `[1, ...null, 2] → [1, 2]`). Symmetric with empty-array splat and Stash's general null-tolerance for collection-like operations. Dict-literal spread of `null` continues to error (dict spread requires key/value pairs). The analyzer's SA0503 warning is narrowed to fire only in the dict context.
+- **String spread error message points to the helpers** — `[..."abc"]` and `f(..."abc")` now throw `RuntimeError: Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.` The `...str` syntax is reserved for a future char-iterable string semantics.
+
+#### Standard Library
+
+- **`str.shellSplit(s) -> array<string>`** — POSIX-shell-style word-splitting that honors `'...'` (literal contents — no escapes), `"..."` (with `\"` and `\\` escapes), and backslash escapes outside of single quotes. Throws `ValueError("unterminated quote in str.shellSplit")` on an unterminated quote. Pairs with array-spread for the common "command-line string → argv" pattern: `$(python ${...str.shellSplit(line)})`. Companion to the existing `str.words(s)` (naive Unicode-whitespace split).
+
 - **Safe Shell Interpolation — `$(...)` desugars to `process.exec` / `process.pipeline`** *(breaking change)* — All six command sigils (`$()`, `$!()`, `$>()`, `$!>()`, `$<()`, `$!<()`) now desugar at **compile time** into calls to the new stdlib API `process.exec(program, args, opts?)` and `process.pipeline(stages, opts?)`. The standard library is now the single source of truth for command execution; `$(...)` is purely surface syntax. Key behavioral changes:
   - **Interpolation slots are atomic argv entries** — `${expr}` always becomes exactly one argument, never split on inner whitespace, never glob-expanded, never tilde-expanded. Quotes around a slot (`"${x}"`) are inert.
   - **Literal source text** is still tokenized at compile time (whitespace and source-level quote grouping), and literal tokens (not from `${}`) still receive glob and tilde expansion.
