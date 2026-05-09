@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build*)",
+      "Bash(dotnet test*)",
+      "Bash(dotnet run*)",
+      "Bash(dotnet publish*)",
+      "Bash(dotnet restore*)",
+      "Bash(dotnet clean*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git stash list*)",
+      "Bash(git stash show*)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(cat *.md)",
+      "Bash(cat *.cs)",
+      "Bash(cat *.ts)",
+      "Bash(cat *.json)",
+      "Bash(cat *.stash)",
+      "Bash(sed -n *)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff --stat HEAD 2>/dev/null | grep -v '^$' && echo '' && git status --short 2>/dev/null | head -20 || true"
+          }
+        ]
+      }
+    ]
+  }
+}

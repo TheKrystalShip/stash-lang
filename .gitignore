@@ -36,6 +36,3 @@ Thumbs.db
 # Compiled stash files
 *.stashc
 
-# Claude files
-.claude/
-CLAUDE.md

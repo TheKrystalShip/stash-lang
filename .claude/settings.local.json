@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git stash *)",
+      "Bash(git mv *)",
+      "Bash(awk '{print $2}')",
+      "Bash(awk -F. '{print $4}')",
+      "Bash(python3 *)",
+      "Bash(awk -F: '{print $1}')",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs -n1 basename)",
+      "Bash(dotnet --version)"
+    ]
+  },
+  "outputStyle": "Explanatory"
+}
