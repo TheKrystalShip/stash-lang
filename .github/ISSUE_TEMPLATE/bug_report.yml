@@ -1,0 +1,104 @@
+name: Bug report
+description: Something is wrong with the Stash interpreter, stdlib, or tooling.
+title: "[Bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill out as much of this form as you can — the more we have, the faster the fix.
+        For security issues, please use [private vulnerability reporting](https://github.com/TheKrystalShip/stash-lang/security/advisories/new) instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Stash version
+      description: Output of `stash --version`.
+      placeholder: "stash 0.x.0 (build abcdef0)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Windows
+        - Other (please describe in details)
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version / distribution
+      placeholder: "Ubuntu 24.04, macOS 14.5, Windows 11 23H2..."
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of Stash is misbehaving?
+      options:
+        - Interpreter / VM (running scripts)
+        - REPL / shell mode
+        - Compiler / parser / lexer
+        - Standard library function
+        - LSP (language server)
+        - DAP (debugger)
+        - stash-check (static analyser)
+        - stash-format (formatter)
+        - Package manager (stash pkg ...)
+        - Registry server
+        - Playground (browser)
+        - VS Code extension
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        A complete, minimal Stash script (or command sequence) that demonstrates the bug. Smaller is better.
+      render: stash
+      placeholder: |
+        let xs = [1, 2, 3];
+        io.println(arr.reverse(xs));
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead? Include any error message, stack trace, or REPL transcript verbatim.
+    validations:
+      required: true
+
+  - type: textarea
+    id: disassembly
+    attributes:
+      label: Disassembly (optional, for VM / compiler bugs)
+      description: |
+        For bugs in the VM, compiler optimiser, or codegen, the bytecode is often diagnostic.
+        Run `stash --disassemble path/to/repro.stash` and paste the output here. Also helpful: `stash --no-optimize --disassemble ...` for comparison.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Anything else that might help — logs, screenshots, related issues, recent changes that might have introduced this.

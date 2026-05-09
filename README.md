@@ -1,6 +1,13 @@
 # Stash
 
-A dynamically typed scripting language for system administration. Stash combines C-style syntax with first-class shell command execution, real data structures (structs, enums, interfaces), and 29 namespaces of standard library functions — compiled to a register-based bytecode VM for fast execution on Linux, macOS, and Windows.
+[![CI](https://github.com/TheKrystalShip/stash-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/TheKrystalShip/stash-lang/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/TheKrystalShip/stash-lang/actions/workflows/codeql.yml/badge.svg)](https://github.com/TheKrystalShip/stash-lang/actions/workflows/codeql.yml)
+[![Latest release](https://img.shields.io/github/v/release/TheKrystalShip/stash-lang?include_prereleases&sort=semver)](https://github.com/TheKrystalShip/stash-lang/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/github/license/TheKrystalShip/stash-lang)](LICENSE)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4)](global.json)
+[![Platforms](https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-blue)](#getting-started)
+
+A dynamically typed scripting language for system administration. Stash combines C-style syntax with first-class shell command execution, real data structures (structs, enums, interfaces), and 30 namespaces of standard library functions — compiled to a register-based bytecode VM for fast execution on Linux, macOS, and Windows.
 
 [**Try it in the Playground →**](https://playground.stash-lang.dev/)
 
@@ -336,13 +343,33 @@ See the [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Ref
 
 ## Getting Started
 
+### Install
+
+**Linux / macOS** — install the latest release into `~/.stash/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TheKrystalShip/stash-lang/main/install.sh | bash
+```
+
+**Windows** — install into `%USERPROFILE%\.stash\bin`:
+
+```powershell
+irm https://raw.githubusercontent.com/TheKrystalShip/stash-lang/main/install.ps1 | iex
+```
+
+Both installers verify SHA-256 checksums against the release manifest. Pin a specific version with `--version v0.1.0` (bash) or `-Version v0.1.0` (PowerShell). See [`install.sh`](install.sh) and [`install.ps1`](install.ps1) for options.
+
+> Pre-built binaries are published for `linux-x64`, `macos-x64`, `macos-arm64`, and `windows-x64`. Other platforms can build from source.
+
+### Build from source
+
 ```bash
 dotnet build                                         # Build all projects
 dotnet run --project Stash.Cli/                      # Start the REPL
 dotnet run --project Stash.Cli/ -- script.stash      # Run a script
 dotnet run --project Stash.Cli/ -- -c 'io.println("hi");'
 echo 'code' | dotnet run --project Stash.Cli/        # Pipe from stdin
-dotnet test                                          # Run 5,700+ tests
+dotnet test                                          # Run tests
 stash-check .                                        # Lint all .stash files
 stash-format --write .                               # Format all files
 ```
@@ -476,9 +503,9 @@ Stash compiles to a **register-based bytecode VM** with constant folding, dead b
 ## Architecture
 
 ```
-Stash.Core          → Lexer, Parser, 46 AST node types
+Stash.Core          → Lexer, Parser, AST node types
 Stash.Stdlib        → Standard library metadata registry (30 namespaces, ~387 functions)
-Stash.Bytecode      → Register-based bytecode VM (compiler + VM, 70+ opcodes)
+Stash.Bytecode      → Register-based bytecode VM (compiler + VM)
 Stash.Analysis      → Static analysis engine (63 rules, autofix, flow analysis)
 Stash.Scheduler     → Cross-platform OS service management (systemd, launchd, Task Scheduler)
 Stash.Cli           → REPL + script runner (Native AOT)

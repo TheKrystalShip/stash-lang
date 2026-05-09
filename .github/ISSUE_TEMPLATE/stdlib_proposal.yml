@@ -1,0 +1,78 @@
+name: Stdlib proposal
+description: Propose a new stdlib namespace, or new functions in an existing namespace.
+title: "[Stdlib] "
+labels: ["stdlib", "design"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Stash's stdlib is intentionally broad — but every addition is a permanent commitment.
+        Proposals that mirror well-trodden patterns from Python, Go, or Node are easier to evaluate than novel designs.
+
+  - type: input
+    id: namespace
+    attributes:
+      label: Namespace
+      placeholder: "e.g. archive (new), or str (existing)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: What problem does this solve?
+      description: Concrete sysadmin scripting use cases that need this. Workarounds and their pain.
+    validations:
+      required: true
+
+  - type: textarea
+    id: signatures
+    attributes:
+      label: Proposed function signatures
+      description: |
+        List each function with its full signature, parameter names and types, and return type.
+      render: stash
+      placeholder: |
+        archive.zip(outputPath: string, inputPaths: arr<string>, options?: dict) -> bool
+        archive.unzip(archivePath: string, outputDir: string, options?: dict) -> arr<string>
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Usage examples
+      description: At least three example calls per function. Mix happy path, edge cases, and error handling.
+      render: stash
+    validations:
+      required: true
+
+  - type: textarea
+    id: cross-platform
+    attributes:
+      label: Cross-platform considerations
+      description: |
+        Stash runs on Linux, macOS, and Windows. How does this behave on each? Which OS APIs does it call? Any platform-specific gotchas (filesystem semantics, line endings, path separators)?
+    validations:
+      required: true
+
+  - type: textarea
+    id: precedent
+    attributes:
+      label: Precedent in other languages
+      description: How do Python, Go, Node, Ruby, PowerShell, etc. expose this? Link to their docs.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Could this be a package instead of stdlib? Why does it belong in core?
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Implementation
+      options:
+        - label: I can implement this myself if the design is accepted.
+        - label: I can review someone else's implementation.
+        - label: I'm only proposing — I need someone else to build it.

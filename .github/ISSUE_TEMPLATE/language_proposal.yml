@@ -1,0 +1,74 @@
+name: Language proposal
+description: Propose a change to Stash language syntax, semantics, or type system.
+title: "[Lang] "
+labels: ["language-proposal", "design"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Language proposals are larger than feature requests — they affect every user of Stash and every piece of tooling.
+        Please be thorough. Light proposals usually get bounced back with requests for detail; complete ones get discussed on the merits.
+
+        See `.claude/language-changes.md` for the implementation checklist a proposal of this scope eventually has to satisfy.
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: What real, concrete problem does this solve? Show code that is awkward or impossible today and code that would be clean with the proposal.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: |
+        Describe the change precisely. For new syntax, include a grammar sketch. For semantic changes, describe the runtime behaviour.
+      render: markdown
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: At least three examples showing the feature in use. Mix simple and realistic.
+      render: stash
+    validations:
+      required: true
+
+  - type: textarea
+    id: tooling-impact
+    attributes:
+      label: Tooling impact
+      description: |
+        Which of these need work? (Lexer, parser, AST, all six visitors, compiler, VM, LSP, DAP, formatter, stash-check, playground, VS Code extension, docs.)
+        A proposal that hand-waves "the LSP would need updates" without saying which handlers is harder to evaluate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other designs did you consider? Why is this one preferable? How do other languages handle this?
+    validations:
+      required: true
+
+  - type: textarea
+    id: drawbacks
+    attributes:
+      label: Drawbacks and open questions
+      description: Honest accounting of what this costs — complexity budget, migration burden, ambiguity in error messages, edge cases, etc.
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Is this a breaking change?
+      options:
+        - "No — purely additive"
+        - "Yes — changes existing behaviour"
+        - "Unsure"
+    validations:
+      required: true

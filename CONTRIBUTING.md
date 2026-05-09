@@ -8,14 +8,14 @@ Thank you for your interest in contributing to Stash! This guide will help you g
 
 ### Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (the exact version is pinned in `global.json`)
 - [VS Code](https://code.visualstudio.com/) with the Stash extension (recommended)
 
 ### Clone and Build
 
 ```bash
-git clone https://github.com/stash-lang/stash.git
-cd stash
+git clone https://github.com/TheKrystalShip/stash-lang.git
+cd stash-lang
 dotnet build
 ```
 

@@ -1,0 +1,62 @@
+name: Feature request
+description: Suggest an improvement to Stash that isn't a language or stdlib design proposal.
+title: "[Feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For language design changes (new syntax, semantics, type system) please use **Language proposal** instead.
+        For new stdlib namespaces or functions, please use **Stdlib proposal** instead.
+        Use this template for tooling improvements, ergonomics, performance asks, etc.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you're in and why the current state is painful or insufficient.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like to see? Sketches, snippets, or analogies to other tools are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches have you tried or thought about? Why is this proposal better?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - REPL / shell mode
+        - LSP
+        - DAP / debugging
+        - stash-check
+        - stash-format
+        - Package manager
+        - Registry
+        - Playground
+        - VS Code extension
+        - CLI / build / release
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Are you willing to help implement this?
+      options:
+        - label: Yes, I can submit a PR if the design is accepted.
+        - label: Yes, with guidance.
+        - label: No — I'm filing this as a request.
