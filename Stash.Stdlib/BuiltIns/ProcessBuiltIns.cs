@@ -1319,7 +1319,7 @@ public static partial class ProcessBuiltIns
         {
             case ExecModeEnum.Stream:
             {
-                var handle = SpawnStreaming(program, argv, commandLabel, opts.Strict, ctx.CancellationToken, opts.Cwd, opts.Env);
+                var handle = SpawnStreaming(program, argv, commandLabel, opts.Strict, ctx, opts.Cwd, opts.Env);
                 return StashValue.FromObj(handle);
             }
             case ExecModeEnum.Passthrough:
@@ -1354,7 +1354,7 @@ public static partial class ProcessBuiltIns
     {
         if (opts.Mode == ExecModeEnum.Stream)
         {
-            var handle = SpawnPipelineStreaming(stages, commandLabel, opts.Strict, ctx.CancellationToken, opts.Cwd, opts.Env);
+            var handle = SpawnPipelineStreaming(stages, commandLabel, opts.Strict, ctx, opts.Cwd, opts.Env);
             return StashValue.FromObj(handle);
         }
 
@@ -1465,7 +1465,7 @@ public static partial class ProcessBuiltIns
     }
 
     private static Stash.Runtime.Types.StashStreamingProcess SpawnStreaming(
-        string program, List<string> arguments, string commandLabel, bool isStrict, CancellationToken ct,
+        string program, List<string> arguments, string commandLabel, bool isStrict, IInterpreterContext ctx,
         string? cwd = null, Dictionary<string, string>? env = null)
     {
         var psi = new ProcessStartInfo
@@ -1493,8 +1493,9 @@ public static partial class ProcessBuiltIns
             throw new RuntimeError($"process.exec: failed to start '{program}' in stream mode: {ex.Message}", errorType: StashErrorTypes.CommandError);
         }
 
-        // Capture the token at construction time; close over it for the ctProvider delegate.
-        return new Stash.Runtime.Types.StashStreamingProcess(process, commandLabel, isStrict, null, () => ct);
+        // Re-read the token from the context on each iteration tick so that timeout-block
+        // cancellation (which mutates the context's CT) propagates into streaming MoveNext.
+        return new Stash.Runtime.Types.StashStreamingProcess(process, commandLabel, isStrict, null, () => ctx.CancellationToken);
     }
 
     private static (string Stdout, string Stderr, long ExitCode) ExecPipelineCaptured(
@@ -1630,10 +1631,14 @@ public static partial class ProcessBuiltIns
         List<(string Program, List<string> Argv)> stages,
         string commandLabel,
         bool isStrict,
-        CancellationToken ct,
+        IInterpreterContext ctx,
         string? cwd = null,
         Dictionary<string, string>? env = null)
     {
+        // Token captured for intra-stage pump tasks (fire-and-forget); these can use the
+        // initial token because they only need an outer-cancellation observation. Streaming
+        // MoveNext re-reads via ctx.CancellationToken so timeout-block updates propagate.
+        CancellationToken ct = ctx.CancellationToken;
         int n = stages.Count;
         var processes = new System.Diagnostics.Process[n];
         int started = 0;
@@ -1693,7 +1698,7 @@ public static partial class ProcessBuiltIns
             }
 
             // StashStreamingProcess takes ownership of all stages.
-            return new Stash.Runtime.Types.StashStreamingProcess(processes, commandLabel, isStrict, null, () => ct);
+            return new Stash.Runtime.Types.StashStreamingProcess(processes, commandLabel, isStrict, null, () => ctx.CancellationToken);
         }
         catch (RuntimeError)
         {
