@@ -72,10 +72,14 @@ public sealed class SpreadDiagnosticsRule : IAnalysisRule
     {
         var inner = spread.Expression;
 
-        // SA0503: spreading null literal
+        // SA0503: spreading null literal — only diagnostic in dict context (dict needs key/value).
+        // In array literals and function calls, ...null splices zero entries (valid at runtime).
         if (inner is LiteralExpr lit && lit.Value == null)
         {
-            context.ReportDiagnostic(DiagnosticDescriptors.SA0503.CreateDiagnostic(spread.Span));
+            if (!isArrayContext)
+            {
+                context.ReportDiagnostic(DiagnosticDescriptors.SA0503.CreateDiagnostic(spread.Span));
+            }
             return;
         }
 

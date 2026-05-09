@@ -47,16 +47,18 @@ public class SpreadRestAnalysisTests : AnalysisTestBase
     }
 
     // === Null Literal Tests (SA0503) ===
+    // ...null splices zero entries in array & call contexts (valid). Only the dict context
+    // still warns, since dict spread requires key/value pairs.
 
-    // Test 56: Spreading null in array literal
+    // Test 56: Spreading null in array literal — no diagnostic (zero-splice is valid)
     [Fact]
-    public void SpreadNull_InArray_EmitsSA0503()
+    public void SpreadNull_InArray_NoDiagnostic()
     {
         var diagnostics = Validate("let r = [...null];");
-        Assert.Contains(diagnostics, d => d.Code == "SA0503");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0503");
     }
 
-    // Test 57: Spreading null in dict literal
+    // Test 57: Spreading null in dict literal — still emits SA0503
     [Fact]
     public void SpreadNull_InDict_EmitsSA0503()
     {
@@ -64,12 +66,12 @@ public class SpreadRestAnalysisTests : AnalysisTestBase
         Assert.Contains(diagnostics, d => d.Code == "SA0503");
     }
 
-    // Test 58: Spreading null in function call
+    // Test 58: Spreading null in function call — no diagnostic (zero-splice is valid)
     [Fact]
-    public void SpreadNull_InCall_EmitsSA0503()
+    public void SpreadNull_InCall_NoDiagnostic()
     {
         var diagnostics = Validate("fn f(a) { return a; } f(...null);");
-        Assert.Contains(diagnostics, d => d.Code == "SA0503");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0503");
     }
 
     // === Arity Tests (SA0506) ===

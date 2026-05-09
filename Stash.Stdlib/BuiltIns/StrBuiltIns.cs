@@ -639,7 +639,7 @@ public static partial class StrBuiltIns
         return result;
     }
 
-    /// <summary>Splits the string into words by whitespace.</summary>
+    /// <summary>Splits the string into words by Unicode whitespace. Empty entries are dropped.</summary>
     /// <param name="s">The string</param>
     /// <returns>Array of words</returns>
     [StashFn]
@@ -649,6 +649,100 @@ public static partial class StrBuiltIns
         var result = new List<StashValue>(words.Length);
         foreach (var w in words)
             result.Add(StashValue.FromObj(w));
+        return result;
+    }
+
+    /// <summary>POSIX-shell-style word splitting. Honors single and double quotes; backslash escapes outside single quotes. Throws ValueError on unterminated quotes.</summary>
+    /// <param name="s">The string to tokenize</param>
+    /// <returns>Array of tokens</returns>
+    [StashFn]
+    private static List<StashValue> ShellSplit(string s)
+    {
+        var result = new List<StashValue>();
+        var token = new System.Text.StringBuilder();
+        bool inToken = false;
+        int i = 0;
+        int len = s.Length;
+
+        while (i < len)
+        {
+            char c = s[i];
+
+            if (char.IsWhiteSpace(c))
+            {
+                if (inToken)
+                {
+                    result.Add(StashValue.FromObj(token.ToString()));
+                    token.Clear();
+                    inToken = false;
+                }
+                i++;
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                inToken = true;
+                i++; // consume opening quote
+                int start = i;
+                while (i < len && s[i] != '\'') i++;
+                if (i >= len)
+                    throw new RuntimeError("unterminated quote in str.shellSplit", errorType: StashErrorTypes.ValueError);
+                token.Append(s, start, i - start);
+                i++; // consume closing quote
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inToken = true;
+                i++; // consume opening quote
+                while (i < len && s[i] != '"')
+                {
+                    if (s[i] == '\\' && i + 1 < len)
+                    {
+                        char next = s[i + 1];
+                        if (next == '"' || next == '\\')
+                        {
+                            token.Append(next);
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    token.Append(s[i]);
+                    i++;
+                }
+                if (i >= len)
+                    throw new RuntimeError("unterminated quote in str.shellSplit", errorType: StashErrorTypes.ValueError);
+                i++; // consume closing quote
+                continue;
+            }
+
+            if (c == '\\' && i + 1 < len)
+            {
+                char next = s[i + 1];
+                if (next == '"' || next == '\\' || next == '\'' || char.IsWhiteSpace(next))
+                {
+                    inToken = true;
+                    token.Append(next);
+                    i += 2;
+                    continue;
+                }
+                // Unknown escape — keep backslash literal.
+                inToken = true;
+                token.Append(c);
+                i++;
+                continue;
+            }
+
+            inToken = true;
+            token.Append(c);
+            i++;
+        }
+
+        if (inToken)
+            result.Add(StashValue.FromObj(token.ToString()));
+
         return result;
     }
 

@@ -172,6 +172,39 @@ public class SpreadRestTests : StashTestBase
     }
 
     [Fact]
+    public void SpreadCall_String_ErrorRecommendsHelpers()
+    {
+        var err = RunCapturingError("fn f(...args) { return args; } f(...\"hi\");");
+        Assert.Contains("str.words", err.Message);
+    }
+
+    [Fact]
+    public void SpreadCall_Null_SplicesZeroEntries()
+    {
+        var result = Run("fn f(...args) { return args; } let result = f(...null);") as List<object?>;
+        Assert.NotNull(result);
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public void SpreadCall_NullBetweenArgs_SplicesZeroEntries()
+    {
+        var result = Run("fn f(...args) { return args; } let result = f(1, ...null, 2);") as List<object?>;
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Count);
+        Assert.Equal(1L, result[0]);
+        Assert.Equal(2L, result[1]);
+    }
+
+    [Fact]
+    public void SpreadCall_StrWordsComposes()
+    {
+        var result = Run("fn run(...args) { return args; } let flags = \"-v --quiet\"; let result = run(...str.words(flags));") as List<object?>;
+        Assert.NotNull(result);
+        Assert.Equal(new object?[] { "-v", "--quiet" }, result);
+    }
+
+    [Fact]
     public void SpreadCall_InterleavedSpread_CombinesAll()
     {
         var result = Run("fn f(...args) { return args; } let a = [1, 2]; let result = f(...a, 3, ...a);") as List<object?>;
@@ -240,15 +273,28 @@ public class SpreadRestTests : StashTestBase
     }
 
     [Fact]
-    public void SpreadArray_StringNotSpreadable_ThrowsRuntimeError()
+    public void SpreadArray_Null_SplicesZeroEntries()
     {
-        RunExpectingError("let result = [...\"abc\"];");
+        var result = Run("let result = [...null];");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
     }
 
     [Fact]
-    public void SpreadArray_NullNotSpreadable_ThrowsRuntimeError()
+    public void SpreadArray_NullBetweenElements_SplicesZeroEntries()
     {
-        RunExpectingError("let result = [...null];");
+        var result = Run("let result = [1, ...null, 2];");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(2L, list[1]);
+    }
+
+    [Fact]
+    public void SpreadArray_StringNotSpreadable_ErrorMessageRecommendsHelpers()
+    {
+        var err = RunCapturingError("let result = [...\"abc\"];");
+        Assert.Contains("str.words", err.Message);
     }
 
     // === Spread in Dict Literals (#27-35) ===

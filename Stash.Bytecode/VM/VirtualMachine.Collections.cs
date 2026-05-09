@@ -392,15 +392,23 @@ public sealed partial class VirtualMachine
             StashValue val = _stack[@base + a + 1 + i];
             if (val.IsObj && val.AsObj is SpreadMarker sm)
             {
-                if (sm.Items is List<StashValue> items)
+                if (sm.Items is null)
+                {
+                    // ...null splices zero entries.
+                }
+                else if (sm.Items is List<StashValue> items)
                     list.AddRange(items);
                 else if (sm.Items is StashTypedArray typedItems)
                 {
                     for (int j = 0; j < typedItems.Count; j++)
                         list.Add(typedItems.Get(j));
                 }
+                else if (sm.Items is string)
+                    throw new RuntimeError(
+                        "Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.",
+                        GetCurrentSpan(ref frame));
                 else
-                    throw new RuntimeError("Spread operator requires an array.", GetCurrentSpan(ref frame));
+                    throw new RuntimeError("Cannot spread non-array value; expected array.", GetCurrentSpan(ref frame));
             }
             else
             {

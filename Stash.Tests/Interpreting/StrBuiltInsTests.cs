@@ -146,6 +146,127 @@ public class StrBuiltInsTests : StashTestBase
         RunExpectingError("str.words(42);");
     }
 
+    [Fact]
+    public void Words_WhitespaceOnly_ReturnsEmptyArray()
+    {
+        var result = Run("let result = str.words(\"   \\t  \\n \");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void Words_QuoteCharsAreLiteral()
+    {
+        var result = Run("let result = str.words(\"-l \\\"long arg\\\" -v\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(new object?[] { "-l", "\"long", "arg\"", "-v" }, list);
+    }
+
+    [Fact]
+    public void Words_SingleToken()
+    {
+        var result = Run("let result = str.words(\"single\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Single(list);
+        Assert.Equal("single", list[0]);
+    }
+
+    // ── str.shellSplit ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ShellSplit_Basic()
+    {
+        var result = Run("let result = str.shellSplit(\"grep hello file.txt\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(new object?[] { "grep", "hello", "file.txt" }, list);
+    }
+
+    [Fact]
+    public void ShellSplit_DoubleQuotedToken()
+    {
+        // Stash source: str.shellSplit("grep \"hello world\" file.txt")
+        var result = Run("let result = str.shellSplit(\"grep \\\"hello world\\\" file.txt\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(new object?[] { "grep", "hello world", "file.txt" }, list);
+    }
+
+    [Fact]
+    public void ShellSplit_SingleQuotedToken_LiteralContents()
+    {
+        // Stash source: str.shellSplit("python -c 'print(\"hi\")'")
+        var result = Run("let result = str.shellSplit(\"python -c 'print(\\\"hi\\\")'\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(new object?[] { "python", "-c", "print(\"hi\")" }, list);
+    }
+
+    [Fact]
+    public void ShellSplit_MixedQuotesConcatenateWithinToken()
+    {
+        // Stash source: str.shellSplit("a\"b c\"d")
+        var result = Run("let result = str.shellSplit(\"a\\\"b c\\\"d\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Single(list);
+        Assert.Equal("ab cd", list[0]);
+    }
+
+    [Fact]
+    public void ShellSplit_BackslashEscapesQuote()
+    {
+        // Stash source: str.shellSplit("\\\"escaped\\\"") — the Stash string holds: \"escaped\"
+        var result = Run("let result = str.shellSplit(\"\\\\\\\"escaped\\\\\\\"\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Single(list);
+        Assert.Equal("\"escaped\"", list[0]);
+    }
+
+    [Fact]
+    public void ShellSplit_BackslashInsideSingleQuotesIsLiteral()
+    {
+        // Stash source: str.shellSplit("'a\\b'") — Stash string holds: 'a\b'
+        var result = Run("let result = str.shellSplit(\"'a\\\\b'\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Single(list);
+        Assert.Equal("a\\b", list[0]);
+    }
+
+    [Fact]
+    public void ShellSplit_Empty_ReturnsEmptyArray()
+    {
+        var result = Run("let result = str.shellSplit(\"\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void ShellSplit_WhitespaceOnly_ReturnsEmptyArray()
+    {
+        var result = Run("let result = str.shellSplit(\"   \\t \");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void ShellSplit_UnterminatedDoubleQuote_ThrowsValueError()
+    {
+        var err = RunCapturingError("str.shellSplit(\"oops \\\"unterminated\");");
+        Assert.Equal("ValueError", err.ErrorType);
+        Assert.Contains("unterminated", err.Message);
+    }
+
+    [Fact]
+    public void ShellSplit_UnterminatedSingleQuote_ThrowsValueError()
+    {
+        var err = RunCapturingError("str.shellSplit(\"oops 'unterminated\");");
+        Assert.Equal("ValueError", err.ErrorType);
+        Assert.Contains("unterminated", err.Message);
+    }
+
+    [Fact]
+    public void ShellSplit_NonStringThrows()
+    {
+        RunExpectingError("str.shellSplit(42);");
+    }
+
     // ── str.truncate ──────────────────────────────────────────────────────
 
     [Fact]

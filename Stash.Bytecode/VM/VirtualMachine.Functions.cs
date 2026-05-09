@@ -674,14 +674,24 @@ public sealed partial class VirtualMachine
             StashValue arg = _stack[@base + a + 1 + i];
             if (arg.IsObj && arg.AsObj is SpreadMarker sm)
             {
-                if (sm.Items is List<StashValue> items)
+                if (sm.Items is null)
+                {
+                    // ...null splices zero entries.
+                }
+                else if (sm.Items is List<StashValue> items)
                 {
                     flatArgs.AddRange(items);
+                }
+                else if (sm.Items is string)
+                {
+                    throw new RuntimeError(
+                        "Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.",
+                        GetCurrentSpan(ref frame));
                 }
                 else
                 {
                     throw new RuntimeError(
-                        $"Spread argument must be an array, got {RuntimeValues.Stringify(sm.Items)}.",
+                        $"Cannot spread {SpreadTypeName(sm.Items)}; expected array.",
                         GetCurrentSpan(ref frame));
                 }
             }
@@ -898,4 +908,14 @@ public sealed partial class VirtualMachine
         }
     }
 
+    private static string SpreadTypeName(object? items) => items switch
+    {
+        null => "null",
+        string => "string",
+        StashDictionary => "dict",
+        StashInstance => "struct",
+        StashRange => "range",
+        byte[] => "bytes",
+        _ => items.GetType().Name,
+    };
 }

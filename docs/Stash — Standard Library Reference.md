@@ -925,7 +925,8 @@ All `str` functions take the target string as the first argument. Strings are im
 | `str.padEnd(s, len, fill?)`        | Pad end to `len` characters with `fill` (default `" "`)                                    |
 | `str.format(template, ...args)`    | Replace `{0}`, `{1}`, etc. placeholders with arguments                                     |
 | `str.lines(s)`                     | Split string into array of lines (handles `\r\n`, `\r`, `\n`)                              |
-| `str.words(s)`                     | Split string into array of whitespace-separated words                                      |
+| `str.words(s)`                     | Split string into array of Unicode-whitespace-separated words; empty entries dropped       |
+| `str.shellSplit(s)`                | POSIX-shell-style word split honoring `'...'`, `"..."`, and backslash escapes; throws `ValueError` on unterminated quote |
 | `str.truncate(s, maxLen, suffix?)` | Truncate to `maxLen` characters with optional suffix (default `"..."`)                     |
 | `str.slug(s)`                      | Convert to URL-friendly slug (lowercase, hyphens, no special chars)                        |
 | `str.wrap(s, width)`               | Word-wrap string to specified width, preserving paragraph breaks                           |

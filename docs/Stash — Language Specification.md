@@ -4492,14 +4492,62 @@ let p = Point { x: 1, y: 2 };
 let dict = { ...p, z: 3 };  // { x: 1, y: 2, z: 3 }
 ```
 
-#### Runtime Errors
+#### Spreading `null`
 
-Spreading a non-iterable value is a runtime error:
+In **function call** and **array literal** contexts, `...null` splices **zero entries** —
+it is treated the same as spreading an empty array. This is symmetric with empty-array
+splat and matches Stash's general null-tolerance pattern for collection-like operations:
 
 ```stash
-[...5];        // RuntimeError: Cannot spread non-array value in array context
+fn f(...args) { return args; }
+f(...null);              // []  — zero entries spliced
+f(1, ...null, 2);        // [1, 2]
+let arr = [1, ...null, 2];   // [1, 2]
+
+let extra = env.get("EXTRA_FLAGS") ?? "";
+$(builder ${...str.words(extra)} target);   // 0 extra args when env unset
+```
+
+In **dictionary literal** contexts, `...null` is still a runtime error — dict spread
+requires key/value pairs.
+
+#### Spreading Strings
+
+Spreading a string is **not supported**. The spread operator expects an array, and
+strings are deliberately not auto-iterated as character arrays. Use one of the explicit
+helpers and spread the result:
+
+| Helper                   | What it does                                                          |
+| ------------------------ | --------------------------------------------------------------------- |
+| `str.words(s)`           | Naive Unicode-whitespace split. Best for static flag strings.         |
+| `str.shellSplit(s)`      | POSIX-shell-style split honoring `'...'`, `"..."`, and `\` escapes.   |
+
+```stash
+let opts = "-la --color=always";
+$(ls ${...str.words(opts)});                  // ["-la", "--color=always"]
+
+let line = $"-e \"import sys\" -c print";
+$(python ${...str.shellSplit(line)});         // ["-e", "import sys", "-c", "print"]
+
+fn run(prog, ...args) { /* ... */ }
+let flags = "-v --quiet";
+run("mytool", ...str.words(flags));           // run("mytool", "-v", "--quiet")
+```
+
+The `...str` form is **reserved for future use** — if Stash ever grows char-iterable
+strings, `...str` will splat characters (matching JS / Python semantics). It is
+deliberately left unsupported today rather than overloaded with whitespace-split
+semantics.
+
+#### Runtime Errors
+
+Spreading a non-array, non-null value is a runtime error:
+
+```stash
+[...5];        // RuntimeError: Cannot spread non-array value; expected array.
+[..."abc"];    // RuntimeError: Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.
 { ...5 };      // RuntimeError: Cannot spread a non-dict/struct value in dict literal
-[...null];     // RuntimeError: Cannot spread null value
+{ ...null };   // RuntimeError: dict spread requires key/value pairs
 ```
 
 ### Implicit Return Value
