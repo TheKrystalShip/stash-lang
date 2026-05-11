@@ -2,6 +2,7 @@ namespace Stash.Analysis;
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Frozen;
 using System.IO;
 using System.Text.RegularExpressions;
 
@@ -54,6 +55,13 @@ public class ProjectConfig
     /// <summary>An empty config with no overrides.</summary>
     public static readonly ProjectConfig Empty = new();
 
+    /// <summary>
+    /// Diagnostic codes that are disabled by default and must be explicitly opted in to
+    /// via <c>enable=CODE</c> in a <c>.stashcheck</c> file.
+    /// </summary>
+    public static readonly FrozenSet<string> DefaultDisabledCodes =
+        new HashSet<string>(StringComparer.Ordinal) { "SA0164" }.ToFrozenSet();
+
     // ── Public API ────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -105,6 +113,10 @@ public class ProjectConfig
             if (entry.Length < 6 && code.StartsWith(entry, StringComparison.Ordinal))
                 return true;
         }
+
+        // Default-disabled rules require explicit opt-in via enable=
+        if (DefaultDisabledCodes.Contains(code))
+            return true;
 
         return false;
     }

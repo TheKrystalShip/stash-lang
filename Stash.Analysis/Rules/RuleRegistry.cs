@@ -3,6 +3,7 @@ namespace Stash.Analysis.Rules;
 using System.Collections.Generic;
 using Stash.Analysis.Rules.Functions;
 using Stash.Analysis.Rules.Performance;
+using Stash.Analysis.Rules.Throws;
 
 /// <summary>
 /// Central registry of all <see cref="IAnalysisRule"/> implementations.
@@ -79,6 +80,9 @@ public static class RuleRegistry
 
             // Deprecations (SA083x)
             new Deprecations.DeprecatedBuiltInMemberRule(),
+
+            // Throws (SA016x — SA0164 is default-disabled via ProjectConfig.DefaultDisabledCodes)
+            new UncaughtDeclaredThrowRule(),
 
             // Style (SA09xx)
             new NoUnnecessaryElseRule(),

@@ -7,6 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Stash.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
     <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
   </ItemGroup>

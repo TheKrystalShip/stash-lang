@@ -3,6 +3,7 @@ namespace Stash.Lsp.Handlers;
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol;
@@ -11,8 +12,10 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
+using Stash.Common;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
+using Stash.Stdlib;
 
 /// <summary>
 /// Handles LSP <c>textDocument/codeAction</c> requests to provide quick-fix actions
@@ -395,6 +398,25 @@ public class CodeActionHandler : CodeActionHandlerBase
             actions.Add(new CommandOrCodeAction(organizeAction));
         }
 
+        // "Surround with try/catch (typed)" — position-based refactoring action.
+        // Fires when the cursor is on (or inside) a statement that calls a function
+        // with declared throws that are not already caught.
+        {
+            int cursorLine1 = request.Range.Start.Line + 1; // AST spans are 1-indexed
+            var enclosingStmt = FindLeafStatementAt(result.Statements, cursorLine1);
+            if (enclosingStmt != null)
+            {
+                var errorTypes = CollectUncoveredThrows(enclosingStmt, result.Symbols);
+                if (errorTypes.Count > 0)
+                {
+                    var wrapAction = BuildTryCatchWrapAction(
+                        enclosingStmt, errorTypes, suppressionLines, request.TextDocument.Uri);
+                    if (wrapAction != null)
+                        actions.Add(new CommandOrCodeAction(wrapAction));
+                }
+            }
+        }
+
         _logger.LogDebug("CodeAction: {Count} actions for {Uri}", actions.Count, request.TextDocument.Uri);
         return Task.FromResult<CommandOrCodeActionContainer?>(
             new CommandOrCodeActionContainer(actions));
@@ -598,6 +620,280 @@ public class CodeActionHandler : CodeActionHandlerBase
                         {
                             Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(startLine, 0, rangeEndLine, rangeEndChar),
                             NewText = organizedText
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    // ── "Surround with try/catch (typed)" helpers ────────────────────────────────────
+
+    /// <summary>
+    /// Finds the innermost leaf statement (non-compound) that contains <paramref name="cursorLine"/>.
+    /// Returns <c>null</c> if the cursor is inside a <c>try</c> block (already protected)
+    /// or no matching statement is found.
+    /// </summary>
+    internal static Stmt? FindLeafStatementAt(IReadOnlyList<Stmt> stmts, int cursorLine)
+    {
+        foreach (var stmt in stmts)
+        {
+            if (stmt.Span.StartLine > cursorLine || stmt.Span.EndLine < cursorLine)
+                continue;
+
+            switch (stmt)
+            {
+                case TryCatchStmt:
+                    // Inside a try block → already protected; suppress action.
+                    return null;
+
+                case FnDeclStmt fn:
+                    return FindLeafStatementAt(fn.Body.Statements, cursorLine);
+
+                case BlockStmt blk:
+                    return FindLeafStatementAt(blk.Statements, cursorLine);
+
+                case IfStmt ifStmt:
+                {
+                    Stmt? found = null;
+                    if (ifStmt.ThenBranch is BlockStmt tb)
+                        found = FindLeafStatementAt(tb.Statements, cursorLine);
+                    else if (ifStmt.ThenBranch.Span.StartLine <= cursorLine && ifStmt.ThenBranch.Span.EndLine >= cursorLine)
+                        found = FindLeafStatementAt(new[] { ifStmt.ThenBranch }, cursorLine);
+
+                    if (found != null) return found;
+
+                    if (ifStmt.ElseBranch is BlockStmt eb)
+                        found = FindLeafStatementAt(eb.Statements, cursorLine);
+                    else if (ifStmt.ElseBranch != null && ifStmt.ElseBranch.Span.StartLine <= cursorLine && ifStmt.ElseBranch.Span.EndLine >= cursorLine)
+                        found = FindLeafStatementAt(new[] { ifStmt.ElseBranch }, cursorLine);
+
+                    return found;
+                }
+
+                case WhileStmt w:
+                    return FindLeafStatementAt(w.Body.Statements, cursorLine);
+
+                case DoWhileStmt dw:
+                    return FindLeafStatementAt(dw.Body.Statements, cursorLine);
+
+                case ForInStmt fi:
+                    return FindLeafStatementAt(fi.Body.Statements, cursorLine);
+
+                case ForStmt f:
+                    return FindLeafStatementAt(f.Body.Statements, cursorLine);
+
+                case LockStmt lk:
+                    return FindLeafStatementAt(lk.Body.Statements, cursorLine);
+
+                default:
+                    return stmt; // Leaf statement (ExprStmt, VarDeclStmt, ReturnStmt, etc.)
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Collects the unique set of error type names declared as thrown by any function call
+    /// reachable in <paramref name="stmt"/> that are not already wrapped in a nested try/catch.
+    /// Excludes error types covered by a parent catch-all (none at this level — that's
+    /// handled by <see cref="FindLeafStatementAt"/> returning null for TryCatchStmt).
+    /// </summary>
+    internal static IReadOnlyList<string> CollectUncoveredThrows(Stmt stmt, ScopeTree scopeTree)
+    {
+        var rawResults = new List<(string FnName, string ErrorType, SourceSpan Span)>();
+        CollectThrowsInStmt(stmt, scopeTree, rawResults);
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var unique = new List<string>();
+        foreach (var (_, errorType, _) in rawResults)
+            if (seen.Add(errorType))
+                unique.Add(errorType);
+
+        return unique;
+    }
+
+    private static void CollectThrowsInStmt(
+        Stmt stmt,
+        ScopeTree scopeTree,
+        List<(string, string, SourceSpan)> results)
+    {
+        switch (stmt)
+        {
+            case ExprStmt exprStmt:
+                CollectThrowsInExpr(exprStmt.Expression, scopeTree, results);
+                break;
+            case VarDeclStmt varDecl when varDecl.Initializer != null:
+                CollectThrowsInExpr(varDecl.Initializer, scopeTree, results);
+                break;
+            case ConstDeclStmt constDecl:
+                CollectThrowsInExpr(constDecl.Initializer, scopeTree, results);
+                break;
+            case ReturnStmt ret when ret.Value != null:
+                CollectThrowsInExpr(ret.Value, scopeTree, results);
+                break;
+        }
+    }
+
+    private static void CollectThrowsInExpr(
+        Expr expr,
+        ScopeTree scopeTree,
+        List<(string, string, SourceSpan)> results)
+    {
+        if (expr is TryExpr)
+            return; // universal catch-all — skip
+
+        if (expr is CallExpr call)
+        {
+            ResolveCallThrowsForWrap(call, scopeTree, results);
+            foreach (var arg in call.Arguments)
+                CollectThrowsInExpr(arg, scopeTree, results);
+        }
+        else
+        {
+            switch (expr)
+            {
+                case BinaryExpr bin:
+                    CollectThrowsInExpr(bin.Left, scopeTree, results);
+                    CollectThrowsInExpr(bin.Right, scopeTree, results);
+                    break;
+                case UnaryExpr un:
+                    CollectThrowsInExpr(un.Right, scopeTree, results);
+                    break;
+                case GroupingExpr group:
+                    CollectThrowsInExpr(group.Expression, scopeTree, results);
+                    break;
+                case TernaryExpr tern:
+                    CollectThrowsInExpr(tern.Condition, scopeTree, results);
+                    CollectThrowsInExpr(tern.ThenBranch, scopeTree, results);
+                    CollectThrowsInExpr(tern.ElseBranch, scopeTree, results);
+                    break;
+                case DotExpr dotExpr:
+                    CollectThrowsInExpr(dotExpr.Object, scopeTree, results);
+                    break;
+                case NullCoalesceExpr coalesce:
+                    CollectThrowsInExpr(coalesce.Left, scopeTree, results);
+                    CollectThrowsInExpr(coalesce.Right, scopeTree, results);
+                    break;
+                case ArrayExpr arr:
+                    foreach (var elem in arr.Elements)
+                        CollectThrowsInExpr(elem, scopeTree, results);
+                    break;
+                case InterpolatedStringExpr interp:
+                    foreach (var part in interp.Parts)
+                        CollectThrowsInExpr(part, scopeTree, results);
+                    break;
+            }
+        }
+    }
+
+    private static void ResolveCallThrowsForWrap(
+        CallExpr call,
+        ScopeTree scopeTree,
+        List<(string, string, SourceSpan)> results)
+    {
+        // Stdlib call: ns.fn(…)
+        if (call.Callee is DotExpr dot &&
+            dot.Object is IdentifierExpr nsId &&
+            StdlibRegistry.IsBuiltInNamespace(nsId.Name.Lexeme))
+        {
+            var qualName = $"{nsId.Name.Lexeme}.{dot.Name.Lexeme}";
+            if (StdlibRegistry.TryGetNamespaceFunction(qualName, out var nsFn) && nsFn.Throws != null)
+            {
+                foreach (var t in nsFn.Throws)
+                    results.Add((qualName, t.ErrorType, call.Span));
+            }
+            return;
+        }
+
+        // User function call: fn(…)
+        if (call.Callee is IdentifierExpr fnId)
+        {
+            var def = scopeTree.FindDefinition(
+                fnId.Name.Lexeme, fnId.Span.StartLine, fnId.Span.StartColumn);
+            if (def?.Throws != null)
+            {
+                foreach (var t in def.Throws)
+                    results.Add((fnId.Name.Lexeme, t.ErrorType, call.Span));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="CodeAction"/> that wraps <paramref name="stmt"/> in a typed try/catch.
+    /// </summary>
+    internal static CodeAction? BuildTryCatchWrapAction(
+        Stmt stmt,
+        IReadOnlyList<string> errorTypes,
+        string[] lines,
+        DocumentUri documentUri)
+    {
+        int startLine0 = stmt.Span.StartLine - 1; // convert to 0-indexed
+        int endLine0 = stmt.Span.EndLine - 1;
+
+        if (startLine0 < 0 || endLine0 >= lines.Length)
+            return null;
+
+        // Extract indentation from the statement's first line.
+        string firstLine = lines[startLine0];
+        int k = 0;
+        while (k < firstLine.Length && (firstLine[k] == ' ' || firstLine[k] == '\t'))
+            k++;
+        string indent = firstLine[..k];
+        string innerIndent = indent + "    ";
+
+        // Build the replacement text.
+        var sb = new System.Text.StringBuilder();
+        sb.Append(indent);
+        sb.AppendLine("try {");
+
+        for (int i = startLine0; i <= endLine0; i++)
+        {
+            string rawLine = lines[i];
+            // Re-indent: strip existing base indent and add inner indent.
+            string content = rawLine.StartsWith(indent, StringComparison.Ordinal)
+                ? rawLine[indent.Length..]
+                : rawLine;
+            sb.Append(innerIndent);
+            sb.AppendLine(content);
+        }
+
+        sb.Append(indent);
+        sb.AppendLine("}");
+
+        foreach (var errorType in errorTypes)
+        {
+            sb.Append(indent);
+            sb.AppendLine($"catch ({errorType} e) {{");
+            sb.Append(innerIndent);
+            sb.AppendLine($"// handle {errorType}");
+            sb.Append(indent);
+            sb.AppendLine("}");
+        }
+
+        // Remove trailing newline added by the last AppendLine.
+        string newText = sb.ToString().TrimEnd('\r', '\n');
+
+        string catchLabel = errorTypes.Count == 1
+            ? $"({errorTypes[0]})"
+            : $"({string.Join(", ", errorTypes)})";
+
+        return new CodeAction
+        {
+            Title = $"Surround with try/catch {catchLabel}",
+            Kind = CodeActionKind.Refactor,
+            Edit = new WorkspaceEdit
+            {
+                Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                {
+                    [documentUri] = new[]
+                    {
+                        new TextEdit
+                        {
+                            Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
+                                startLine0, 0, endLine0, lines[endLine0].Length),
+                            NewText = newText
                         }
                     }
                 }

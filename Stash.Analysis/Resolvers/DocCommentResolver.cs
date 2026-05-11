@@ -2,6 +2,7 @@ namespace Stash.Analysis;
 
 using System.Collections.Generic;
 using Stash.Lexing;
+using Stash.Parsing;
 
 /// <summary>
 /// Attaches documentation comments to symbols by matching DocComment tokens
@@ -67,7 +68,20 @@ public static class DocCommentResolver
             var symbol = FindNextSymbol(symbols, docEndLine);
             if (symbol != null)
             {
-                symbol.Documentation = ExtractDocText(docTokens);
+                var docText = ExtractDocText(docTokens);
+                symbol.Documentation = docText;
+
+                // Also extract structured @throws metadata so SA0164 and SA0167/SA0168
+                // work correctly when analysis goes through the full AnalysisEngine path
+                // (which lexes with preserveTrivia:true and cannot attach LeadingDoc via
+                // the parser's _pendingDocLines mechanism).
+                if (symbol.Kind is (SymbolKind.Function or SymbolKind.Method)
+                    && symbol.Throws == null)
+                {
+                    var (_, throws) = DocCommentMetadata.Extract(docText, symbol.Span);
+                    if (throws != null)
+                        symbol.Throws = throws;
+                }
             }
 
             // Skip past the consumed doc tokens
