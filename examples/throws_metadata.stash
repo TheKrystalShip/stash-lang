@@ -68,11 +68,11 @@ fn normaliseUrl(url) {
 fn runSafely(input) {
     try {
         let n = parseInteger(input);
-        io.writeln("Parsed: ${n}");
+        io.println("Parsed: ${n}");
     } catch (ValueError e) {
-        io.writeln("Empty input: ${e.message}");
+        io.println("Empty input: ${e.message}");
     } catch (ParseError e) {
-        io.writeln("Bad format: ${e.message}");
+        io.println("Bad format: ${e.message}");
     }
 }
 

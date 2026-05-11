@@ -3540,6 +3540,17 @@ If neither condition is met, the static analyser emits:
 
 Neither diagnostic is a compilation error; both are purely advisory.
 
+#### Opt-In Diagnostic Rules
+
+Two additional analysis rules interact with throws metadata but are **disabled by default** and must be explicitly enabled via `enable=SA0164` (or `SA0169`) in a `.stashcheck` file:
+
+| Code     | Severity | Trigger                                                                                                       |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------- |
+| `SA0164` | Warning  | A `try` block calls a function with declared throws that are not covered by any catch clause or catch-all.    |
+| `SA0169` | Info     | A catch clause covers an error type that no call in the try body declares in its throws metadata (dead catch). |
+
+`SA0164` fires only when at least one function in the try body has explicit throws metadata. `SA0169` fires only when the union of declared throw types across all calls in the try body is non-empty. Both rules stay silent when metadata is absent (silent-fallback posture).
+
 #### Tooling Integration
 
 When `@throws` metadata is present, the language server enriches several surfaces:

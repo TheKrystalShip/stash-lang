@@ -6,6 +6,7 @@ using Stash.Analysis.Rules;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Runtime;
 using Stash.Stdlib;
 
 /// <summary>
@@ -35,12 +36,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// The set of built-in error type names that are always valid in <c>@throws</c> tags
     /// and always carry a <c>message: string</c> field.
     /// </summary>
-    private static readonly IReadOnlySet<string> _builtInErrorTypes = new HashSet<string>(StringComparer.Ordinal)
-    {
-        "ValueError", "TypeError", "ParseError", "IndexError", "IOError",
-        "NotSupportedError", "TimeoutError", "CommandError", "LockError",
-        "AliasError", "StateError", "CancellationError", "RuntimeError",
-    };
+    private static readonly IReadOnlySet<string> _builtInErrorTypes = ErrorTypeRegistry.BuiltInSubtypes;
 
     private List<Stmt> _allStatements = new();
 

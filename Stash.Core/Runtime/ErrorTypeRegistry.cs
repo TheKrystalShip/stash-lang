@@ -28,6 +28,8 @@ public static class ErrorTypeRegistry
         StashErrorTypes.CancellationError,
     };
 
+    public static IReadOnlySet<string> BuiltInSubtypes => _subtypes;
+
     /// <summary>Returns true if the given type name is a known built-in error subtype.</summary>
     public static bool IsBuiltInSubtype(string typeName)
         => _subtypes.Contains(typeName);

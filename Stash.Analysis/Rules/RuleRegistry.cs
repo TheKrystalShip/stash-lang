@@ -81,8 +81,9 @@ public static class RuleRegistry
             // Deprecations (SA083x)
             new Deprecations.DeprecatedBuiltInMemberRule(),
 
-            // Throws (SA016x — SA0164 is default-disabled via ProjectConfig.DefaultDisabledCodes)
+            // Throws (SA016x — SA0164 and SA0169 are default-disabled via ProjectConfig.DefaultDisabledCodes)
             new UncaughtDeclaredThrowRule(),
+            new UnreachableCatchRule(),
 
             // Style (SA09xx)
             new NoUnnecessaryElseRule(),

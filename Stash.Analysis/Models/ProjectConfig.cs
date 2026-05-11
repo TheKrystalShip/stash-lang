@@ -60,7 +60,7 @@ public class ProjectConfig
     /// via <c>enable=CODE</c> in a <c>.stashcheck</c> file.
     /// </summary>
     public static readonly FrozenSet<string> DefaultDisabledCodes =
-        new HashSet<string>(StringComparer.Ordinal) { "SA0164" }.ToFrozenSet();
+        new HashSet<string>(StringComparer.Ordinal) { DiagnosticDescriptors.SA0164.Code, DiagnosticDescriptors.SA0169.Code }.ToFrozenSet();
 
     // ── Public API ────────────────────────────────────────────────────────────
 
