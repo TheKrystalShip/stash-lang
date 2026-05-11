@@ -66,6 +66,13 @@ public class Lexer
     private readonly bool _preserveTrivia;
 
     /// <summary>
+    /// Accumulates doc-comment lines (with <c>///</c> stripped) in non-trivia mode.
+    /// When non-null, the joined text is attached to the next real token as <see cref="Token.LeadingDoc"/>
+    /// and the buffer is cleared.
+    /// </summary>
+    private List<string>? _pendingDocLines;
+
+    /// <summary>
     /// Maps reserved word strings to their corresponding <see cref="TokenType"/> values.
     /// </summary>
     /// <remarks>
@@ -627,6 +634,7 @@ public class Lexer
     /// </summary>
     private void DocLineComment()
     {
+        int contentStart = _current; // position immediately after the third /
         while (!IsAtEnd && _source[_current] != '\n')
         {
             _current++;
@@ -636,6 +644,16 @@ public class Lexer
         if (_preserveTrivia)
         {
             AddToken(TokenType.DocComment);
+        }
+        else
+        {
+            // In non-trivia mode: buffer the line content so the parser can attach it
+            // to the following function declaration as structured metadata.
+            string raw = _source[contentStart.._current];
+            // Strip one optional leading space (the conventional "/// text" format)
+            string content = raw.Length > 0 && raw[0] == ' ' ? raw.Substring(1) : raw;
+            _pendingDocLines ??= new List<string>();
+            _pendingDocLines.Add(content);
         }
     }
 
@@ -2762,8 +2780,16 @@ public class Lexer
     private void AddToken(TokenType type)
     {
         string lexeme = _staticLexemes.TryGetValue(type, out string? s) ? s : _source[_start.._current];
-        _tokens.Add(new Token(type, lexeme, null,
-            new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1)));
+        var span = new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1);
+        if (_pendingDocLines != null)
+        {
+            _tokens.Add(new Token(type, lexeme, null, span) { LeadingDoc = string.Join("\n", _pendingDocLines) });
+            _pendingDocLines = null;
+        }
+        else
+        {
+            _tokens.Add(new Token(type, lexeme, null, span));
+        }
     }
 
     /// <summary>
@@ -2774,7 +2800,15 @@ public class Lexer
     /// <param name="lexeme">The raw source text for this token.</param>
     private void AddToken(TokenType type, object? literal, string lexeme)
     {
-        _tokens.Add(new Token(type, lexeme, literal,
-            new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1)));
+        var span = new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1);
+        if (_pendingDocLines != null)
+        {
+            _tokens.Add(new Token(type, lexeme, literal, span) { LeadingDoc = string.Join("\n", _pendingDocLines) });
+            _pendingDocLines = null;
+        }
+        else
+        {
+            _tokens.Add(new Token(type, lexeme, literal, span));
+        }
     }
 }

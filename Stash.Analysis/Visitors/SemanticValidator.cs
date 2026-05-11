@@ -31,6 +31,17 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
 
+    /// <summary>
+    /// The set of built-in error type names that are always valid in <c>@throws</c> tags
+    /// and always carry a <c>message: string</c> field.
+    /// </summary>
+    private static readonly IReadOnlySet<string> _builtInErrorTypes = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ValueError", "TypeError", "ParseError", "IndexError", "IOError",
+        "NotSupportedError", "TimeoutError", "CommandError", "LockError",
+        "AliasError", "StateError", "CancellationError", "RuntimeError",
+    };
+
     private List<Stmt> _allStatements = new();
 
     private readonly Dictionary<Type, List<IAnalysisRule>> _rulesByNodeType = new();
@@ -189,6 +200,9 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         DispatchNodeRules(stmt);
+
+        // SA0167 / SA0168: validate @throws tag entries
+        ValidateThrowsTags(stmt.Throws);
 
         _functionDepth++;
         if (stmt.IsAsync) _asyncDepth++;
@@ -1078,5 +1092,49 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         expr.Expression.Accept(this);
         return null;
+    }
+
+    // ── @throws tag validation ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Validates each entry in a function's <c>@throws</c> list against known built-in error types
+    /// and user-declared structs. Emits SA0167 or SA0168 for unresolvable or non-error-shape entries.
+    /// </summary>
+    private void ValidateThrowsTags(IReadOnlyList<ThrowsEntry>? throws)
+    {
+        if (throws == null) return;
+
+        foreach (var entry in throws)
+        {
+            // Built-in error types are always valid — skip further checks.
+            if (_builtInErrorTypes.Contains(entry.ErrorType))
+                continue;
+
+            // Look for a user-declared struct with this name in the global scope.
+            bool foundStruct = false;
+            foreach (var sym in _scopeTree.GetTopLevel())
+            {
+                if (sym.Name == entry.ErrorType && sym.Kind == SymbolKind.Struct)
+                {
+                    foundStruct = true;
+                    break;
+                }
+            }
+
+            if (!foundStruct)
+            {
+                // SA0168: type not found at all.
+                _diagnostics.Add(DiagnosticDescriptors.SA0168.CreateDiagnostic(entry.Span, entry.ErrorType));
+                continue;
+            }
+
+            // Found a struct — check that it has a 'message' field (any type is accepted).
+            var messageField = _scopeTree.FindField(entry.ErrorType, "message");
+            if (messageField == null)
+            {
+                // SA0167: struct without a message field.
+                _diagnostics.Add(DiagnosticDescriptors.SA0167.CreateDiagnostic(entry.Span, entry.ErrorType));
+            }
+        }
     }
 }

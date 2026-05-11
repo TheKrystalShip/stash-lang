@@ -35,4 +35,18 @@ using Stash.Common;
 /// The <see cref="SourceSpan"/> indicating where this token appears in the source file,
 /// used for error reporting and diagnostics.
 /// </param>
-public record Token(TokenType Type, string Lexeme, object? Literal, SourceSpan Span);
+public record Token(TokenType Type, string Lexeme, object? Literal, SourceSpan Span)
+{
+    /// <summary>
+    /// Gets the joined text of any <c>///</c> doc-comment lines that immediately preceded
+    /// this token in the source. Set by the <see cref="Lexer"/> in non-trivia mode.
+    /// <see langword="null"/> when no doc comment precedes this token.
+    /// </summary>
+    /// <remarks>
+    /// Each line has its leading <c>///</c> and one optional space stripped.
+    /// Multiple lines are joined with <c>\n</c>. The formatter path re-lexes with
+    /// <c>preserveTrivia: true</c> and does not populate this field (doc comments are
+    /// emitted as <see cref="TokenType.DocComment"/> trivia tokens instead).
+    /// </remarks>
+    public string? LeadingDoc { get; init; }
+}

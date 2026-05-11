@@ -270,7 +270,10 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         foreach (var pt in stmt.ParameterTypes) RecordTypeReference(pt);
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes, isVariadic: stmt.HasRestParam, isAsync: stmt.IsAsync));
+        var fnSymbol = new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes, isVariadic: stmt.HasRestParam, isAsync: stmt.IsAsync);
+        if (stmt.Throws != null)
+            fnSymbol.Throws = stmt.Throws;
+        _currentScope.AddSymbol(fnSymbol);
 
         // Visit default value expressions for reference collection
         foreach (var defaultVal in stmt.DefaultValues)

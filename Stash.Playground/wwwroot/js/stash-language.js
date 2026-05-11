@@ -49,6 +49,9 @@ function registerStashLanguage() {
                 // Block comments (before line comments)
                 [/\/\*/, 'comment', '@comment'],
 
+                // Doc-comment lines (/// — must be checked before // line comment)
+                [/\/\/\//, 'comment.doc', '@docComment'],
+
                 // Line comments
                 [/\/\/.*$/, 'comment'],
 
@@ -135,6 +138,13 @@ function registerStashLanguage() {
                 [/\/\*/, 'comment', '@push'],  // nested
                 [/\*\//, 'comment', '@pop'],
                 [/./, 'comment']
+            ],
+
+            docComment: [
+                // Highlight @throws, @param, @return, @returns, @example, @deprecated, @since, @see
+                [/@(?:throws|param|returns?|example|deprecated|since|see)/, 'keyword.other.documentation'],
+                // Anything else on the line
+                [/.*$/, 'comment.doc', '@pop']
             ],
 
             string: [

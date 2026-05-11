@@ -117,6 +117,12 @@ Stash organizes built-in functions into **namespaces** accessed via dot notation
 
 Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
+### Error Documentation Convention
+
+Each namespace section opens with a `**Throws:**` callout summarizing the error types it may raise. For Wave 1 namespaces (`fs`, `process`, `io`, `conv`, `json`, `http`) this metadata is encoded in `[StashFn(Throws=...)]` source-generator attributes and surfaces automatically in LSP hover, signature help, and completion tooltips. Individual function descriptions call out specific errors where the set differs from the namespace-level default.
+
+User functions can document their own throws using the `@throws` doc-comment tag — see [Documenting Throws](Stash%20—%20Language%20Specification.md#documenting-throws) in the Language Specification.
+
 ### Global Functions
 
 | Function      | Description                                                                                   |

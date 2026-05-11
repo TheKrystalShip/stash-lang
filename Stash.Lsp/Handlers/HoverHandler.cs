@@ -256,6 +256,14 @@ public class HoverHandler : HoverHandlerBase
             md += "\n\n---\n\n" + FormatDocumentation(symbol.Documentation);
         }
 
+        // Render @throws section for user-defined functions that carry structured throws metadata.
+        if (symbol.Throws != null && symbol.Kind is StashSymbolKind.Function or StashSymbolKind.Method)
+        {
+            var adapted = AdaptThrows(symbol.Throws);
+            var userThrows = ThrowsRenderer.Render(adapted);
+            if (userThrows != null) md += userThrows;
+        }
+
         _logger.LogDebug("Hover: resolved for {Uri}", request.TextDocument.Uri);
         return Task.FromResult<Hover?>(new Hover
         {
@@ -336,5 +344,18 @@ public class HoverHandler : HoverHandlerBase
         return result;
     }
 
-}
+    /// <summary>
+    /// Converts user-code <see cref="Stash.Parsing.AST.ThrowsEntry"/> records into the
+    /// <see cref="Stash.Stdlib.Models.ThrowsEntry"/> shape expected by <see cref="ThrowsRenderer"/>.
+    /// </summary>
+    private static Stash.Stdlib.Models.ThrowsEntry[]? AdaptThrows(
+        IReadOnlyList<Stash.Parsing.AST.ThrowsEntry>? throws)
+    {
+        if (throws == null || throws.Count == 0) return null;
+        var result = new Stash.Stdlib.Models.ThrowsEntry[throws.Count];
+        for (int i = 0; i < throws.Count; i++)
+            result[i] = new Stash.Stdlib.Models.ThrowsEntry(throws[i].ErrorType, throws[i].Description);
+        return result;
+    }
 
+}

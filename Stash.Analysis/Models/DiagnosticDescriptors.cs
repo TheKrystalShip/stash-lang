@@ -31,6 +31,10 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0162 = new("SA0162", "Duplicate catch-all clause", DiagnosticLevel.Warning, "Control flow", "Multiple catch-all clauses — only the first is reachable.");
     public static readonly DiagnosticDescriptor SA0163 = new("SA0163", "Catching generic RuntimeError", DiagnosticLevel.Warning, "Control flow", "Catching 'RuntimeError' — consider catching a more specific error type instead.");
 
+    // ── SA016x — Throws metadata ─────────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0167 = new("SA0167", "@throws references non-error struct", DiagnosticLevel.Information, "Throws", "'{0}' is declared in @throws but is not an error type (no message: string field). Did you mean to declare it as one?");
+    public static readonly DiagnosticDescriptor SA0168 = new("SA0168", "@throws references unknown type", DiagnosticLevel.Warning, "Throws", "'{0}' in @throws is not a known type.");
+
     // ── SA02xx — Declarations ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0201 = new("SA0201", "Unused declaration", DiagnosticLevel.Information, "Declarations", "{0} '{1}' is declared but never used.");
     public static readonly DiagnosticDescriptor SA0202 = new("SA0202", "Undefined identifier", DiagnosticLevel.Warning, "Declarations", "'{0}' is not defined.");
@@ -211,6 +215,8 @@ public static class DiagnosticDescriptors
         dict[SA0161.Code] = SA0161;
         dict[SA0162.Code] = SA0162;
         dict[SA0163.Code] = SA0163;
+        dict[SA0167.Code] = SA0167;
+        dict[SA0168.Code] = SA0168;
         dict[SA0201.Code] = SA0201;
         dict[SA0202.Code] = SA0202;
         dict[SA0203.Code] = SA0203;

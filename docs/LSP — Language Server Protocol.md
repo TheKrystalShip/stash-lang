@@ -302,7 +302,7 @@ Establishes the full client ↔ server pipeline with real-time diagnostic report
 
 - Symbol resolution uses `ScopeTree` (hierarchical scope tree) instead of a flat `SymbolTable`
 - `DefinitionHandler` supports cross-file go-to-definition through `ImportResolver`
-- `HoverHandler` resolves symbols, namespaces, and built-in constants
+- `HoverHandler` resolves symbols, namespaces, and built-in constants; renders a **Throws** section when throws metadata is present (from stdlib `[StashFn(Throws=...)]` or user-code `@throws` doc-comment tags)
 - `DocumentSymbolHandler` produces hierarchical symbols; skips built-ins and loop variables
 
 ---

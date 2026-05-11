@@ -196,11 +196,22 @@ public class CompletionHandler : CompletionHandlerBase
                     continue;
                 }
 
+                string? symDoc = sym.Documentation;
+                if (sym.Throws != null)
+                {
+                    var adapted = AdaptThrows(sym.Throws);
+                    var throwsSection = ThrowsRenderer.Render(adapted);
+                    if (throwsSection != null) symDoc = (symDoc ?? "") + throwsSection;
+                }
+
                 items.Add(new CompletionItem
                 {
                     Label = sym.Name,
                     Kind = MapCompletionKind(sym.Kind),
-                    Detail = sym.Detail
+                    Detail = sym.Detail,
+                    Documentation = symDoc != null
+                        ? new MarkupContent { Kind = MarkupKind.Markdown, Value = symDoc }
+                        : null
                 });
             }
         }
@@ -794,4 +805,14 @@ public class CompletionHandler : CompletionHandlerBase
         StashSymbolKind.Namespace => LspCompletionItemKind.Module,
         _ => LspCompletionItemKind.Text
     };
+
+    private static Stash.Stdlib.Models.ThrowsEntry[]? AdaptThrows(
+        IReadOnlyList<Stash.Parsing.AST.ThrowsEntry>? throws)
+    {
+        if (throws == null || throws.Count == 0) return null;
+        var result = new Stash.Stdlib.Models.ThrowsEntry[throws.Count];
+        for (int i = 0; i < throws.Count; i++)
+            result[i] = new Stash.Stdlib.Models.ThrowsEntry(throws[i].ErrorType, throws[i].Description);
+        return result;
+    }
 }

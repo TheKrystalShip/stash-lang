@@ -1,0 +1,81 @@
+// examples/throws_metadata.stash
+// Demonstrates the @throws doc-comment tag for documenting error contracts.
+// Run: dotnet run --project Stash.Cli/ -- examples/throws_metadata.stash
+
+// ── 1. Basic @throws annotation ──────────────────────────────────────────────
+
+/// Parses an integer from a string.
+/// @param s the string to parse
+/// @return the parsed integer
+/// @throws ParseError if s is not a valid integer
+/// @throws ValueError if s is empty
+fn parseInteger(s) {
+    if (s == "") {
+        throw ValueError { message: "Input string is empty" };
+    }
+    let n = conv.toInt(s);
+    return n;
+}
+
+// ── 2. Multiple error types ───────────────────────────────────────────────────
+
+/// Reads a configuration value from a file.
+/// @param path the path to the config file
+/// @param key  the config key to look up
+/// @return the value associated with the key
+/// @throws IOError if the file cannot be read
+/// @throws ParseError if the file is not valid JSON
+/// @throws ValueError if the key does not exist in the config
+fn readConfig(path, key) {
+    let raw = fs.read(path);
+    let cfg = json.parse(raw);
+    if (!dict.has(cfg, key)) {
+        throw ValueError { message: "Key '${key}' not found in config" };
+    }
+    return cfg[key];
+}
+
+// ── 3. Comma-separated shorthand for related types ────────────────────────────
+
+/// Validates and normalises a URL string.
+/// @param url the URL to validate
+/// @return the canonical form of the URL
+/// @throws ParseError, ValueError if the URL is malformed or empty
+fn normaliseUrl(url) {
+    if (url == "") {
+        throw ValueError { message: "URL must not be empty" };
+    }
+    // (further validation would go here)
+    return str.trim(url);
+}
+
+// ── 4. Typed catch using @throws-documented types ─────────────────────────────
+
+// The hover tooltip in VS Code for parseInteger() shows:
+//
+//   fn parseInteger(s)
+//
+//   Parses an integer from a string.
+//   @param s the string to parse
+//   @return the parsed integer
+//
+//   **Throws:**
+//   - `ParseError` — if s is not a valid integer
+//   - `ValueError` — if s is empty
+//
+// This lets you write a typed catch:
+
+fn runSafely(input) {
+    try {
+        let n = parseInteger(input);
+        io.writeln("Parsed: ${n}");
+    } catch (ValueError e) {
+        io.writeln("Empty input: ${e.message}");
+    } catch (ParseError e) {
+        io.writeln("Bad format: ${e.message}");
+    }
+}
+
+runSafely("42");
+runSafely("");
+runSafely("not-a-number");

@@ -68,6 +68,16 @@ public class LambdaExpr : Expr
     public bool HasRestParam { get; }
     /// <summary>The number of local variable slots needed in this lambda's scope, set by the Resolver.</summary>
     public int ResolvedLocalCount { get; set; }
+    /// <summary>
+    /// Gets or sets the joined prose from a leading <c>///</c> doc comment (with <c>@throws</c> lines
+    /// removed), or <see langword="null"/> if no doc comment was present.
+    /// </summary>
+    public string? Documentation { get; set; }
+    /// <summary>
+    /// Gets or sets the structured list of <c>@throws</c> entries parsed from the doc comment,
+    /// or <see langword="null"/> when no <c>@throws</c> tags were found.
+    /// </summary>
+    public IReadOnlyList<ThrowsEntry>? Throws { get; set; }
 
     /// <summary>
     /// Creates a new lambda expression node.

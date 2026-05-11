@@ -3500,6 +3500,68 @@ The following diagnostics apply to typed catch:
 
 The original design used only `try expr` — lightweight, no exception machinery, no Go-style verbosity. After a gap analysis revealed that the absence of structured error handling blocked reliable deploy scripts and resource cleanup patterns, `try/catch/finally` was added as a **complement** (not a replacement). The `try expr` pattern remains the recommended choice for simple fallible expressions.
 
+### Documenting Throws
+
+Functions can document the errors they may raise using the `@throws` doc-comment tag. This is advisory metadata — it does not change runtime semantics, but it enriches LSP hover tooltips, signature help, and completion items, and enables static analysis.
+
+#### Syntax
+
+```stash
+/// Reads a file from disk.
+/// @param path the file path to read
+/// @return the file contents as a string
+/// @throws IOError if the file does not exist or cannot be read
+/// @throws ValueError if path is empty
+fn readFile(path) { ... }
+```
+
+One `@throws` tag per line; multiple tags are allowed. A comma-separated shorthand lists multiple types that share the same condition:
+
+```stash
+/// @throws ParseError, ValueError if the input is malformed
+fn parse(input) { ... }
+```
+
+The description after the type name is optional free-form prose. The `@throws` lines are removed from the prose `Documentation` string — they do not appear in the rendered summary.
+
+#### Resolution Rules
+
+A type name in `@throws` is valid if it resolves to one of:
+
+1. A built-in error type: `ValueError`, `TypeError`, `ParseError`, `IndexError`, `IOError`, `NotSupportedError`, `TimeoutError`, `CommandError`, `LockError`, `AliasError`, `StateError`, `CancellationError`, `RuntimeError`.
+2. A user-declared struct that has a `message: string` field (the error-shape convention).
+
+If neither condition is met, the static analyser emits:
+
+| Code     | Severity | Description                                                                                                  |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `SA0167` | Info     | `@throws` references a known struct that does not have a `message: string` field — not an error-shape type.  |
+| `SA0168` | Warning  | `@throws` references a type that is not known at the function's declaration site.                             |
+
+Neither diagnostic is a compilation error; both are purely advisory.
+
+#### Tooling Integration
+
+When `@throws` metadata is present, the language server enriches several surfaces:
+
+- **Hover** — appends a `**Throws:**` section with one bullet per declared type and its description.
+- **Signature help** — the same section appears in the function's parameter-assistance popup.
+- **Completion** — the function's `documentation` field includes the throws section so the error contract is visible before the call is written.
+
+Example hover output for `readFile`:
+
+```
+fn readFile(path: string) -> string
+
+Reads a file from disk.
+@param path the file path to read
+@return the file contents as a string
+
+**Throws:**
+- `IOError` — if the file does not exist or cannot be read
+- `ValueError` — if path is empty
+```
+
 ---
 
 ## 7d. Retry Blocks

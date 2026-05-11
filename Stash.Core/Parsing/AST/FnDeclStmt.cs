@@ -34,6 +34,17 @@ public class FnDeclStmt : Stmt
     public bool HasRestParam { get; }
     /// <summary>The number of local variable slots needed in this function's scope, set by the Resolver.</summary>
     public int ResolvedLocalCount { get; set; }
+    /// <summary>
+    /// Gets or sets the joined prose from the leading <c>///</c> doc comment (with <c>@throws</c> lines
+    /// already removed), or <see langword="null"/> if no doc comment was present.
+    /// Populated by the parser; mutated by post-parse passes.
+    /// </summary>
+    public string? Documentation { get; set; }
+    /// <summary>
+    /// Gets or sets the structured list of <c>@throws</c> entries parsed from the doc comment,
+    /// or <see langword="null"/> when no <c>@throws</c> tags were found.
+    /// </summary>
+    public IReadOnlyList<ThrowsEntry>? Throws { get; set; }
 
     /// <summary>Initializes a new instance of <see cref="FnDeclStmt"/>.</summary>
     /// <param name="name">The function name token.</param>

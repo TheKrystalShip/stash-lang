@@ -121,7 +121,14 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
             {
                 _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
                 var paramLabels = ExtractParamLabels(definition.Detail);
-                return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(definition.Detail, paramLabels, activeParam));
+                string? userDoc = definition.Documentation;
+                if (definition.Throws != null)
+                {
+                    var adapted = AdaptThrows(definition.Throws);
+                    userDoc = (userDoc ?? "") + ThrowsRenderer.Render(adapted);
+                    if (string.IsNullOrEmpty(userDoc)) userDoc = null;
+                }
+                return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(definition.Detail, paramLabels, activeParam, userDoc));
             }
         }
 
@@ -327,4 +334,14 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash")),
             TriggerCharacters = new Container<string>("(", ",")
         };
+
+    private static Stash.Stdlib.Models.ThrowsEntry[]? AdaptThrows(
+        IReadOnlyList<Stash.Parsing.AST.ThrowsEntry>? throws)
+    {
+        if (throws == null || throws.Count == 0) return null;
+        var result = new Stash.Stdlib.Models.ThrowsEntry[throws.Count];
+        for (int i = 0; i < throws.Count; i++)
+            result[i] = new Stash.Stdlib.Models.ThrowsEntry(throws[i].ErrorType, throws[i].Description);
+        return result;
+    }
 }

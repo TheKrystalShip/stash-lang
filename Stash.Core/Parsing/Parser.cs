@@ -441,7 +441,19 @@ public class Parser
             returnType = ParseTypeHint();
         }
         BlockStmt body = ParseBlock();
-        return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken, hasRestParam);
+        var decl = new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken, hasRestParam);
+
+        // Attach doc-comment metadata when present.
+        // For async fns the doc comment is on the 'async' keyword token; for plain fns it's on 'fn'.
+        string? rawDoc = asyncToken?.LeadingDoc ?? fnToken.LeadingDoc;
+        if (rawDoc != null)
+        {
+            var (docProse, throws) = DocCommentMetadata.Extract(rawDoc, decl.Span);
+            decl.Documentation = docProse;
+            decl.Throws = throws;
+        }
+
+        return decl;
     }
 
     /// <summary>Parses a struct declaration: <c>struct Name { field1, field2, fn method() { ... } }</c>.</summary>

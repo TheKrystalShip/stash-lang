@@ -1,6 +1,7 @@
 namespace Stash.Analysis;
 
 using System;
+using System.Collections.Generic;
 using Stash.Common;
 
 /// <summary>
@@ -149,6 +150,13 @@ public class SymbolInfo
     /// Shown in hover tooltips and completion item documentation.
     /// </summary>
     public string? Documentation { get; set; }
+
+    /// <summary>
+    /// Gets or sets the structured list of <c>@throws</c> entries parsed from the doc comment,
+    /// populated by <see cref="SymbolCollector"/> for user-defined functions and methods.
+    /// <see langword="null"/> when no <c>@throws</c> tags were present.
+    /// </summary>
+    public IReadOnlyList<Stash.Parsing.AST.ThrowsEntry>? Throws { get; set; }
 
     /// <summary>
     /// Initializes a new <see cref="SymbolInfo"/> with the given metadata.
