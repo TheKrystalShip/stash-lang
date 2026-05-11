@@ -2,50 +2,65 @@
 
 Living document tracking `[StashFn(Throws=...)]` metadata coverage across stdlib namespaces. Wave 1 namespaces (high-traffic, source-generator-attributed) are prioritised for machine-readable throws metadata. Remaining namespaces document errors in prose `**Throws:**` callouts in the Standard Library Reference.
 
-## Wave 1 — High-Traffic (Source Generator + `[StashFn(Throws=...)]`)
+## Wave 1 — High-Traffic Foundations (Complete)
 
-These namespaces have been migrated to the source-generator form and carry structured throws metadata consumed by LSP tooling.
+| Namespace   | Functions | Tagged | Untagged (intentional) | Coverage                    |
+| ----------- | --------- | ------ | ---------------------- | --------------------------- |
+| `fs`        | 37        | 26     | 11                     | 100% (allow-listed)         |
+| `io`        | 7         | 2      | 5                      | 100% (allow-listed)         |
+| `conv`      | 13        | 11     | 2                      | 100% (allow-listed)         |
+| `json`      | 4         | 4      | 0                      | 100%                        |
+| `http`      | 8         | 8      | 0                      | 100%                        |
+| `process`   | 30        | 22     | 8                      | 100% (allow-listed)         |
+| **Total**   | **99**    | **73** | **26**                 | **100%**                    |
 
-| Namespace  | Coverage   | Notes                                                               |
-| ---------- | ---------- | ------------------------------------------------------------------- |
-| `fs`       | ✅ Tagged  | All public functions annotated; `IOError`, `ValueError`, `TypeError` |
-| `process`  | ✅ Tagged  | All public functions annotated; `CommandError`, `ValueError`, `TypeError` |
-| `io`       | ✅ Tagged  | All public functions annotated; `IOError`                           |
-| `conv`     | ✅ Tagged  | All public functions annotated; `ParseError`, `TypeError`, `ValueError` |
-| `json`     | ✅ Tagged  | All public functions annotated; `ParseError`, `TypeError`           |
-| `http`     | ✅ Tagged  | All public functions annotated; `IOError`, `TimeoutError`           |
+The "untagged (intentional)" column counts pure query/predicate functions that genuinely throw nothing. Enforced by `Stash.Tests/Stdlib/SourceGenerator/Wave1ThrowsCoverageTests.cs`.
 
-## Wave 2+ — Pending Attribution
+## Wave 2 — Common Namespaces (Pending)
 
-Remaining namespaces use hand-written `BuiltInFunction` delegates. Throws information is documented in the Standard Library Reference prose callouts only (not machine-readable via `[StashFn(Throws=...)]`).
+`str`, `arr`, `dict`, `math`, `time`, `path`, `re`, `crypto`, `encoding`, `net`, `env`. ~150 throw sites. Not yet machine-readable.
 
-| Namespace    | Notes                                                              |
-| ------------ | ------------------------------------------------------------------ |
-| `str`        | `TypeError`, `ValueError`, `ParseError` documented in prose       |
-| `arr`        | `TypeError`, `IndexError` documented in prose                     |
-| `dict`       | `TypeError`, `KeyError` documented in prose                       |
-| `math`       | `TypeError`, `ValueError` documented in prose                     |
-| `time`       | `TypeError`, `ValueError`, `ParseError` documented in prose       |
-| `path`       | `TypeError`, `ValueError` documented in prose                     |
-| `env`        | `TypeError`, `ValueError` documented in prose                     |
-| `re`         | `TypeError`, `ValueError`, `ParseError` documented in prose       |
-| `buf`        | `TypeError`, `IndexError` documented in prose                     |
-| `xml`        | `ParseError`, `TypeError` documented in prose                     |
-| `ini`        | `ParseError`, `TypeError` documented in prose                     |
-| `yaml`       | `ParseError`, `TypeError` documented in prose                     |
-| `csv`        | `ParseError`, `TypeError` documented in prose                     |
-| `archive`    | `IOError`, `TypeError` documented in prose                        |
-| `crypto`     | `TypeError`, `ValueError` documented in prose                     |
-| `encoding`   | `TypeError`, `ValueError` documented in prose                     |
-| `net`        | `IOError`, `TimeoutError` documented in prose                     |
-| `sys`        | `TypeError`, `NotSupportedError` documented in prose              |
-| `task`       | `TimeoutError`, `CancellationError` documented in prose           |
-| `tpl`        | `ParseError`, `IOError` documented in prose                       |
-| `alias`      | `AliasError` documented in prose                                  |
-| `config`     | `IOError`, `ParseError` documented in prose                       |
-| `args`       | `ValueError` documented in prose                                  |
-| `lock`       | `LockError` documented in prose                                   |
-| `term`       | `IOError`, `NotSupportedError` documented in prose                |
+| Namespace    | Functions | Tagged | Coverage | Notes                              |
+| ------------ | --------- | ------ | -------- | ---------------------------------- |
+| `str`        | —         | 0      | 0%       | `TypeError`, `ValueError`, `ParseError` documented in prose |
+| `arr`        | —         | 0      | 0%       | `TypeError`, `IndexError` documented in prose |
+| `dict`       | —         | 0      | 0%       | `TypeError`, `KeyError` documented in prose |
+| `math`       | —         | 0      | 0%       | `TypeError`, `ValueError` documented in prose |
+| `time`       | —         | 0      | 0%       | `TypeError`, `ValueError`, `ParseError` documented in prose |
+| `path`       | —         | 0      | 0%       | `TypeError`, `ValueError` documented in prose |
+| `re`         | —         | 0      | 0%       | `TypeError`, `ValueError`, `ParseError` documented in prose |
+| `crypto`     | —         | 0      | 0%       | `TypeError`, `ValueError` documented in prose |
+| `encoding`   | —         | 0      | 0%       | `TypeError`, `ValueError` documented in prose |
+| `net`        | —         | 0      | 0%       | `IOError`, `TimeoutError` documented in prose |
+| `env`        | —         | 0      | 0%       | `TypeError`, `ValueError` documented in prose |
+
+## Wave 3 — Specialized Namespaces (Pending)
+
+`buf`, `xml`, `ini`, `yaml`, `csv`, `archive`, `tpl`, `task`. ~100 throw sites. Not yet machine-readable.
+
+| Namespace    | Functions | Tagged | Coverage | Notes                              |
+| ------------ | --------- | ------ | -------- | ---------------------------------- |
+| `buf`        | —         | 0      | 0%       | `TypeError`, `IndexError` documented in prose |
+| `xml`        | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose |
+| `ini`        | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose |
+| `yaml`       | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose |
+| `csv`        | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose |
+| `archive`    | —         | 0      | 0%       | `IOError`, `TypeError` documented in prose |
+| `tpl`        | —         | 0      | 0%       | `ParseError`, `IOError` documented in prose |
+| `task`       | —         | 0      | 0%       | `TimeoutError`, `CancellationError` documented in prose |
+
+## Wave 4 — Long Tail (Pending)
+
+`sys`, `term`, `alias`, `config`, `args`, `lock`, `test`, `assert`, and remaining utilities. ~100 throw sites.
+
+| Namespace    | Functions | Tagged | Coverage | Notes                              |
+| ------------ | --------- | ------ | -------- | ---------------------------------- |
+| `sys`        | —         | 0      | 0%       | `TypeError`, `NotSupportedError` documented in prose |
+| `term`       | —         | 0      | 0%       | `IOError`, `NotSupportedError` documented in prose |
+| `alias`      | —         | 0      | 0%       | `AliasError` documented in prose |
+| `config`     | —         | 0      | 0%       | `IOError`, `ParseError` documented in prose |
+| `args`       | —         | 0      | 0%       | `ValueError` documented in prose |
+| `lock`       | —         | 0      | 0%       | `LockError` documented in prose |
 
 ## User-Code Surface
 

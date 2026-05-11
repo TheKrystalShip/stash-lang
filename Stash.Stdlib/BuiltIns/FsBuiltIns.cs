@@ -176,6 +176,8 @@ public static partial class FsBuiltIns
     /// <summary>Reads the entire contents of a file as a string. Throws on I/O error.</summary>
     /// <param name="path">The file path to read.</param>
     /// <param name="encoding">Optional encoding name (default "utf-8"). Supported: "utf-8", "ascii", "latin1", "utf-16", "utf-32".</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file does not exist or cannot be read</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the encoding name is not recognised</exception>
     [StashFn]
     private static string ReadFile(IInterpreterContext ctx, string path, string? encoding = null)
     {
@@ -199,6 +201,8 @@ public static partial class FsBuiltIns
     /// <param name="path">The file path to write.</param>
     /// <param name="content">The string content to write.</param>
     /// <param name="encoding">Optional encoding name (default "utf-8"). Supported: "utf-8", "ascii", "latin1", "utf-16", "utf-32".</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be created or written</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the encoding name is not recognised</exception>
     [StashFn]
     private static void WriteFile(IInterpreterContext ctx, string path, string content, string? encoding = null)
     {
@@ -250,6 +254,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Creates a directory and all necessary parent directories. No-ops if the directory already exists.</summary>
     /// <param name="path">The directory path to create.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the directory cannot be created</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void CreateDir(IInterpreterContext ctx, string path)
@@ -261,6 +266,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Deletes a file or recursively deletes a directory at the given path. Throws if the path does not exist.</summary>
     /// <param name="path">The file or directory path to delete.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or cannot be deleted</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void Delete(IInterpreterContext ctx, string path)
@@ -288,6 +294,7 @@ public static partial class FsBuiltIns
     /// <param name="src">The source file path.</param>
     /// <param name="dst">The destination file path.</param>
     /// <param name="overwrite">Optional bool (default true). When false and dst already exists, throws an error.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the destination already exists and overwrite is false, or if the copy fails</exception>
     [StashFn]
     private static void Copy(IInterpreterContext ctx, string src, string dst, bool overwrite = true)
     {
@@ -305,6 +312,7 @@ public static partial class FsBuiltIns
     /// <param name="src">The source file path.</param>
     /// <param name="dst">The destination file path.</param>
     /// <param name="overwrite">Optional bool (default true). When false and dst already exists, throws an error.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the destination already exists and overwrite is false, or if the move fails</exception>
     [StashFn]
     private static void Move(IInterpreterContext ctx, string src, string dst, bool overwrite = true)
     {
@@ -320,6 +328,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Returns the size of a file in bytes.</summary>
     /// <param name="path">The file path.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file does not exist or cannot be accessed</exception>
     /// <returns>The file size in bytes as an integer.</returns>
     [StashFn]
     private static long Size(IInterpreterContext ctx, string path)
@@ -332,6 +341,7 @@ public static partial class FsBuiltIns
     /// <summary>Returns an array of file and directory paths directly inside the given directory.</summary>
     /// <param name="path">The directory path to list.</param>
     /// <param name="filter">Optional glob pattern (e.g. "*.txt") to filter results. When omitted, all entries are returned.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the directory does not exist or cannot be listed</exception>
     [StashFn]
     private static List<StashValue> ListDir(IInterpreterContext ctx, string path, string? filter = null)
     {
@@ -355,6 +365,7 @@ public static partial class FsBuiltIns
     /// <summary>Appends content to a file, creating it if it doesn't exist. Returns null.</summary>
     /// <param name="path">The file path to append to.</param>
     /// <param name="content">The string content to append.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be opened or written</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void AppendFile(IInterpreterContext ctx, string path, string content)
@@ -367,6 +378,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Reads a file and returns an array of lines.</summary>
     /// <param name="path">The file path to read.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file does not exist or cannot be read</exception>
     /// <returns>An array of strings, one per line.</returns>
     [StashFn]
     private static List<StashValue> ReadLines(IInterpreterContext ctx, string path)
@@ -385,6 +397,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Returns an array of file paths matching the glob pattern.</summary>
     /// <param name="pattern">The glob pattern (e.g. "src/**/*.cs").</param>
+    /// <exception cref="StashErrorTypes.IOError">if the base directory does not exist or cannot be read</exception>
     /// <returns>An array of matching file path strings.</returns>
     [StashFn]
     private static List<StashValue> Glob(IInterpreterContext ctx, string pattern)
@@ -471,6 +484,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Returns the last modification time of a file as a Unix timestamp (seconds since epoch).</summary>
     /// <param name="path">The file path.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file does not exist or cannot be accessed</exception>
     /// <returns>The last modified time as a float (seconds since Unix epoch).</returns>
     [StashFn]
     private static double ModifiedAt(IInterpreterContext ctx, string path)
@@ -486,6 +500,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Recursively lists all files under the given directory path.</summary>
     /// <param name="path">The directory path to walk.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the directory does not exist or cannot be read</exception>
     /// <returns>An array of file path strings for all files found recursively.</returns>
     [StashFn]
     private static List<StashValue> Walk(IInterpreterContext ctx, string path)
@@ -587,6 +602,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Creates an empty file at the given path, or updates its last-modified time if it already exists.</summary>
     /// <param name="path">The file path to create or touch.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be created or its modification time cannot be updated</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void CreateFile(IInterpreterContext ctx, string path)
@@ -609,6 +625,7 @@ public static partial class FsBuiltIns
     /// <summary>Creates a symbolic link at linkPath pointing to target.</summary>
     /// <param name="target">The target path the symlink will point to.</param>
     /// <param name="linkPath">The path where the symbolic link will be created.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the symbolic link cannot be created</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Symlink(IInterpreterContext ctx, string target, string linkPath)
@@ -625,6 +642,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Returns a dictionary with file metadata including size, isFile, isDir, isSymlink, modified, created, and name.</summary>
     /// <param name="path">The file or directory path.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or cannot be accessed</exception>
     /// <returns>A dictionary with keys: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).</returns>
     [StashFn(ReturnType = "dict")]
     private static StashValue Stat(IInterpreterContext ctx, string path)
@@ -658,6 +676,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Returns a FilePermissions struct describing the read/write/execute permissions for owner, group, and others.</summary>
     /// <param name="path">The path to inspect.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or permissions cannot be read</exception>
     /// <returns>A FilePermissions struct with owner, group, and others fields (each a FilePermission with read, write, execute bools).</returns>
     [StashFn(ReturnType = "FilePermissions")]
     private static StashValue GetPermissions(IInterpreterContext ctx, string path)
@@ -753,6 +772,8 @@ public static partial class FsBuiltIns
     /// <summary>Sets file permissions from a FilePermissions struct. On Unix, sets full rwx bits for owner/group/others. On Windows, controls the read-only attribute based on owner write permission.</summary>
     /// <param name="path">The file path to modify.</param>
     /// <param name="permissions">A FilePermissions struct with owner, group, and others fields.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or permissions cannot be set</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `permissions` is not a FilePermissions struct, or if owner/group/others is not a FilePermission struct</exception>
     [StashFn(ReturnType = "null")]
     private static void SetPermissions(IInterpreterContext ctx, string path, StashValue permissions)
     {
@@ -818,6 +839,7 @@ public static partial class FsBuiltIns
     /// <summary>Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.</summary>
     /// <param name="path">The file path to modify.</param>
     /// <param name="readOnly">True to make the file read-only, false to make it writable.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or the read-only state cannot be changed</exception>
     [StashFn(ReturnType = "null")]
     private static void SetReadOnly(IInterpreterContext ctx, string path, bool readOnly)
     {
@@ -869,6 +891,8 @@ public static partial class FsBuiltIns
     /// <param name="path">The file or directory path</param>
     /// <param name="uid">New owner user ID (-1 to leave unchanged)</param>
     /// <param name="gid">New owner group ID (-1 to leave unchanged)</param>
+    /// <exception cref="StashErrorTypes.NotSupportedError">on Windows, where uid/gid ownership changes are not supported</exception>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or the ownership change fails</exception>
     [StashFn(ReturnType = "null")]
     private static void Chown(IInterpreterContext ctx, string path, long uid, long gid)
     {
@@ -888,6 +912,7 @@ public static partial class FsBuiltIns
     /// <summary>Sets or clears the executable permission on a file. On Unix, toggles the user execute bit (adds on true, clears all execute bits on false). On Windows, this is a no-op since executability is determined by file extension.</summary>
     /// <param name="path">The file path to modify.</param>
     /// <param name="executable">True to make executable, false to remove execute permission.</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or the executable bit cannot be changed</exception>
     [StashFn(ReturnType = "null")]
     private static void SetExecutable(IInterpreterContext ctx, string path, bool executable)
     {
@@ -926,6 +951,8 @@ public static partial class FsBuiltIns
     /// <param name="path">File or directory path to watch.</param>
     /// <param name="callback">Function receiving a WatchEvent on each change.</param>
     /// <param name="options">Optional WatchOptions struct: recursive (bool), filter (string glob), bufferSize (int bytes), debounce (int ms).</param>
+    /// <exception cref="StashErrorTypes.IOError">if the path does not exist or the watcher cannot be started</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `path` or `callback` has the wrong type</exception>
     [StashFn(Raw = true, ReturnType = "Watcher")]
     private static StashValue Watch(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
@@ -1019,6 +1046,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Stops a file watcher previously created by fs.watch(). Disposes the underlying OS watcher and removes it from tracking. Calling fs.unwatch() on an already-stopped watcher is a no-op.</summary>
     /// <param name="watcher">The Watcher handle returned by fs.watch().</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `watcher` is not a Watcher handle</exception>
     [StashFn(ReturnType = "null")]
     private static void Unwatch(IInterpreterContext ctx, StashValue watcher)
     {
@@ -1036,6 +1064,7 @@ public static partial class FsBuiltIns
 
     /// <summary>Reads the entire contents of a file as a byte array.</summary>
     /// <param name="path">The file path</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file does not exist or cannot be read</exception>
     /// <returns>The file contents as byte[]</returns>
     [StashFn(ReturnType = "byte[]")]
     private static StashValue ReadBytes(IInterpreterContext ctx, string path)
@@ -1054,6 +1083,7 @@ public static partial class FsBuiltIns
     /// <summary>Writes raw bytes to a file, creating or overwriting it.</summary>
     /// <param name="path">The file path</param>
     /// <param name="data">The byte array to write</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be created or written</exception>
     [StashFn(ReturnType = "null")]
     private static void WriteBytes(IInterpreterContext ctx, string path, byte[] data)
     {
@@ -1071,6 +1101,7 @@ public static partial class FsBuiltIns
     /// <summary>Appends raw bytes to a file.</summary>
     /// <param name="path">The file path</param>
     /// <param name="data">The byte array to append</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be opened or written</exception>
     [StashFn(ReturnType = "null")]
     private static void AppendBytes(IInterpreterContext ctx, string path, byte[] data)
     {
