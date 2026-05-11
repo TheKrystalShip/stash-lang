@@ -10,7 +10,8 @@ public record NamespaceFunction(
     string? ReturnType = null,
     bool IsVariadic = false,
     string? Documentation = null,
-    DeprecationInfo? Deprecation = null)
+    DeprecationInfo? Deprecation = null,
+    ThrowsEntry[]? Throws = null)
 {
     public string QualifiedName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
 

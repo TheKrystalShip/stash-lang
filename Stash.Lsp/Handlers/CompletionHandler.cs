@@ -439,13 +439,16 @@ public class CompletionHandler : CompletionHandlerBase
         {
             foreach (var fn in StdlibRegistry.GetNamespaceMembers(prefix))
             {
+                string? docValue = fn.Documentation;
+                var throwsSection = ThrowsRenderer.Render(fn.Throws);
+                if (throwsSection != null) docValue = (docValue ?? "") + throwsSection;
                 items.Add(new CompletionItem
                 {
                     Label = fn.Name,
                     Kind = LspCompletionItemKind.Function,
                     Detail = fn.Detail,
-                    Documentation = fn.Documentation != null
-                        ? new MarkupContent { Kind = MarkupKind.Markdown, Value = fn.Documentation }
+                    Documentation = docValue != null
+                        ? new MarkupContent { Kind = MarkupKind.Markdown, Value = docValue }
                         : null
                 });
             }
@@ -564,8 +567,8 @@ public class CompletionHandler : CompletionHandlerBase
                         Label = fn.Name,
                         Kind = LspCompletionItemKind.Method,
                         Detail = $"{sig}  (UFCS: {ufcsNamespace}.{fn.Name})",
-                        Documentation = fn.Documentation != null
-                            ? new MarkupContent { Kind = MarkupKind.Markdown, Value = fn.Documentation }
+                        Documentation = fn.Documentation != null || fn.Throws is { Length: > 0 }
+                            ? new MarkupContent { Kind = MarkupKind.Markdown, Value = (fn.Documentation ?? "") + (ThrowsRenderer.Render(fn.Throws) ?? "") }
                             : null
                     });
                 }

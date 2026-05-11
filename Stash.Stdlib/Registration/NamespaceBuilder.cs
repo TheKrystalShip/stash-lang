@@ -44,12 +44,12 @@ public class NamespaceBuilder
     public NamespaceBuilder Function(string name, BuiltInParam[] parameters,
         Runtime.BuiltInFunction.DirectHandler body,
         string? returnType = null, bool isVariadic = false, string? documentation = null,
-        DeprecationInfo? deprecation = null)
+        DeprecationInfo? deprecation = null, ThrowsEntry[]? throws = null)
     {
         int arity = isVariadic ? -1 : parameters.Length;
         string qualifiedName = string.IsNullOrEmpty(_name) ? name : $"{_name}.{name}";
         _namespace.Define(name, new Runtime.BuiltInFunction(qualifiedName, arity, body));
-        _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation, deprecation));
+        _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation, deprecation, throws));
         return this;
     }
 

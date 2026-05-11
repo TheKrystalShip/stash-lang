@@ -7,7 +7,8 @@ public record BuiltInFunction(
     string Name,
     BuiltInParam[] Parameters,
     string? ReturnType = null,
-    string? Documentation = null)
+    string? Documentation = null,
+    ThrowsEntry[]? Throws = null)
 {
     public string Detail
     {

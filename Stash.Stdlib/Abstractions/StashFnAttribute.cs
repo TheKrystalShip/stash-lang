@@ -44,4 +44,10 @@ public sealed class StashFnAttribute : Attribute
     /// but a single function within it must be (e.g. a globally-visible <c>exit</c>).
     /// </summary>
     public StashCapabilities Capability { get; set; } = StashCapabilities.None;
+
+    /// <summary>
+    /// Error type names this function may throw. Use <c>StashErrorTypes.*</c> constants —
+    /// never literal strings — to avoid drift and aid refactoring.
+    /// </summary>
+    public string[]? Throws { get; set; }
 }

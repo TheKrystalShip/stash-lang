@@ -138,11 +138,31 @@ internal static class CodeEmitter
         sb.Append("            returnType: ").Append(returnTypeArg).AppendLine(",");
         sb.Append("            isVariadic: ").Append(variadicArg).AppendLine(",");
         sb.Append("            documentation: ").Append(docArg).AppendLine(",");
-        sb.Append("            deprecation: ").Append(deprecArg).AppendLine(");");
+        sb.Append("            deprecation: ").Append(deprecArg);
+        if (fn.Throws.Count > 0)
+        {
+            sb.AppendLine(",");
+            sb.Append("            throws: ");
+            EmitThrowsArray(sb, fn.Throws);
+        }
+        sb.AppendLine(");");
         if (hasFnCap)
         {
             sb.AppendLine("        }");
         }
+    }
+
+    private static void EmitThrowsArray(StringBuilder sb, EquatableArray<ThrowsModel> throws)
+    {
+        sb.Append("new global::Stash.Stdlib.Models.ThrowsEntry[] { ");
+        for (int i = 0; i < throws.Count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            var t = throws[i];
+            string descArg = t.Description is null ? "null" : Quote(t.Description);
+            sb.Append($"new global::Stash.Stdlib.Models.ThrowsEntry({Quote(t.ErrorType)}, {descArg})");
+        }
+        sb.Append(" }");
     }
 
     private static void EmitMarshalBody(StringBuilder sb, NamespaceModel ns, FunctionModel fn, string qualifiedName)

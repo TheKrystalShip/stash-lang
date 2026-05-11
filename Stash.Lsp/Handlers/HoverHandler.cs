@@ -146,6 +146,8 @@ public class HoverHandler : HoverHandlerBase
                         {
                             markdown += "\n\n---\n\n" + FormatDocumentation(nsFunc.Documentation);
                         }
+                        var throwsSection = ThrowsRenderer.Render(nsFunc.Throws);
+                        if (throwsSection != null) markdown += throwsSection;
                         return Task.FromResult<Hover?>(new Hover
                         {
                             Contents = new MarkedStringsOrMarkupContent(new MarkupContent
@@ -175,6 +177,8 @@ public class HoverHandler : HoverHandlerBase
                                 {
                                     markdown += "\n\n---\n\n" + FormatDocumentation(ufcsFunc.Documentation);
                                 }
+                                var ufcsThrows = ThrowsRenderer.Render(ufcsFunc.Throws);
+                                if (ufcsThrows != null) markdown += ufcsThrows;
                                 return Task.FromResult<Hover?>(new Hover
                                 {
                                     Contents = new MarkedStringsOrMarkupContent(new MarkupContent
@@ -197,6 +201,8 @@ public class HoverHandler : HoverHandlerBase
                 {
                     markdown += "\n\n---\n\n" + FormatDocumentation(builtInFn.Documentation);
                 }
+                var builtInThrows = ThrowsRenderer.Render(builtInFn.Throws);
+                if (builtInThrows != null) markdown += builtInThrows;
                 return Task.FromResult<Hover?>(new Hover
                 {
                     Contents = new MarkedStringsOrMarkupContent(new MarkupContent

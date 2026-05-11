@@ -162,6 +162,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         bool raw = false;
         string? returnTypeOverride = null;
         string capabilityFull = "global::Stash.Runtime.StashCapabilities.None";
+        var attrThrows = new List<string>(); // error-type names from [StashFn(Throws=...)]
         if (fnAttr is not null)
         {
             foreach (var na in fnAttr.NamedArguments)
@@ -172,6 +173,20 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "Capability" && na.Value.Value is int capVal)
                 {
                     capabilityFull = FormatCapabilityFlags(capVal);
+                }
+                if (na.Key == "Throws" && na.Value.Kind == TypedConstantKind.Array)
+                {
+                    foreach (var tc in na.Value.Values)
+                    {
+                        if (tc.Value is string ts)
+                        {
+                            // Extract trailing identifier (e.g. "StashErrorTypes.IOError" → "IOError").
+                            int dotIdx = ts.LastIndexOf('.');
+                            string errorType = dotIdx >= 0 ? ts.Substring(dotIdx + 1) : ts;
+                            if (!string.IsNullOrEmpty(errorType))
+                                attrThrows.Add(errorType);
+                        }
+                    }
                 }
             }
         }
@@ -223,11 +238,13 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             var rawParams = DocCommentParser.GetDocumentedParamList(rawDocXml);
             var rawPms = rawParams.ConvertAll(name =>
                 new ParameterModel(name, name, "Stash.Runtime.StashValue", "any", "", false, null, false, false));
+            var rawThrows = MergeThrows(attrThrows, DocCommentParser.ParseThrows(rawDocXml), method.Name, loc, diags);
             return new FunctionModel(method.Name, stashName, true, "passthrough", returnTypeOverride ?? "any", true, true,
                 rawPms.Count == 0 ? EquatableArray<ParameterModel>.Empty : new EquatableArray<ParameterModel>(rawPms.ToArray()),
                 DocCommentParser.Parse(rawDocXml),
                 ReadDeprecation(method),
-                capabilityFull);
+                capabilityFull,
+                rawThrows);
         }
 
         // Return type
@@ -323,6 +340,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         }
         if (hasOptional) isVariadic = true;
 
+        var mergedThrows = MergeThrows(attrThrows, DocCommentParser.ParseThrows(docXml), method.Name, loc, diags);
+
         return new FunctionModel(
             method.Name,
             stashName,
@@ -334,7 +353,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             pms.ToEquatableArray(),
             DocCommentParser.Parse(docXml),
             ReadDeprecation(method),
-            capabilityFull);
+            capabilityFull,
+            mergedThrows);
     }
 
     private static ConstantModel? BuildConstant(IFieldSymbol field, List<Diagnostic> diags)
@@ -430,6 +450,76 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         var attr = symbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == DeprecAttr);
         if (attr is null || attr.ConstructorArguments.Length == 0) return null;
         return attr.ConstructorArguments[0].Value as string;
+    }
+
+    /// <summary>
+    /// Merges throws from <c>[StashFn(Throws=...)]</c> and <c>&lt;exception&gt;</c> doc tags into a single
+    /// ordered list. Attribute order is preserved first; doc-only entries are appended.
+    /// When the same type appears in both sources the doc description is preferred (it's more informative).
+    /// Emits <c>STSG010</c> when the type sets from the two sources differ.
+    /// </summary>
+    private static EquatableArray<ThrowsModel> MergeThrows(
+        List<string> attrTypes,
+        List<(string ErrorType, string? Description)>? docEntries,
+        string methodName,
+        Location loc,
+        List<Diagnostic> diags)
+    {
+        bool hasAttr = attrTypes.Count > 0;
+        bool hasDoc = docEntries is { Count: > 0 };
+        if (!hasAttr && !hasDoc) return EquatableArray<ThrowsModel>.Empty;
+
+        // Mismatch detection: compare type sets when both sources are present.
+        if (hasAttr && hasDoc)
+        {
+            var attrSet = new System.Collections.Generic.HashSet<string>(attrTypes, System.StringComparer.Ordinal);
+            var docSet = new System.Collections.Generic.HashSet<string>(
+                docEntries!.Select(e => e.ErrorType), System.StringComparer.Ordinal);
+            if (!attrSet.SetEquals(docSet))
+            {
+                string attrList = string.Join(", ", attrTypes);
+                string docList = string.Join(", ", docEntries!.Select(e => e.ErrorType));
+                diags.Add(Diagnostic.Create(Diagnostics.ThrowsMetadataMismatch, loc, methodName, attrList, docList));
+            }
+        }
+
+        // Merge: start with attribute order, append doc-only entries.
+        // When a type appears in both, use the doc description (richer).
+        var result = new List<ThrowsModel>();
+        var seen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+
+        // Build a lookup of doc descriptions by type (last-wins for duplicates in doc).
+        var docByType = new System.Collections.Generic.Dictionary<string, string?>(System.StringComparer.Ordinal);
+        if (hasDoc)
+        {
+            foreach (var (et, desc) in docEntries!)
+            {
+                // For duplicates in doc, preserve each as its own entry (spec: duplicates preserved).
+                // But for the merge lookup we use the last description per type.
+                docByType[et] = desc;
+            }
+        }
+
+        // 1. Walk attribute types first.
+        foreach (var et in attrTypes)
+        {
+            if (!seen.Add(et)) continue; // de-dup within attribute list
+            // Prefer doc description if available.
+            string? desc = hasDoc && docByType.TryGetValue(et, out var d) ? d : null;
+            result.Add(new ThrowsModel(et, desc));
+        }
+
+        // 2. Append doc entries not already seen.
+        if (hasDoc)
+        {
+            foreach (var (et, desc) in docEntries!)
+            {
+                if (!seen.Add(et)) continue; // already covered by attribute
+                result.Add(new ThrowsModel(et, desc));
+            }
+        }
+
+        return result.Count == 0 ? EquatableArray<ThrowsModel>.Empty : new EquatableArray<ThrowsModel>(result.ToArray());
     }
 
     private static bool HasAttr(ISymbol symbol, string attrFullName)

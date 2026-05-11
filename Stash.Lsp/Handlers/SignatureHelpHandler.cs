@@ -96,13 +96,15 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         if (StdlibRegistry.TryGetFunction(functionName, out var builtInFn))
         {
             _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam, builtInFn.Documentation));
+            var builtInDoc = builtInFn.Documentation + ThrowsRenderer.Render(builtInFn.Throws);
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam, string.IsNullOrEmpty(builtInDoc) ? null : builtInDoc));
         }
 
         if (StdlibRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
         {
             _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam, nsFn.Documentation));
+            var nsFnDoc = nsFn.Documentation + ThrowsRenderer.Render(nsFn.Throws);
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam, string.IsNullOrEmpty(nsFnDoc) ? null : nsFnDoc));
         }
 
         // Try user-defined functions

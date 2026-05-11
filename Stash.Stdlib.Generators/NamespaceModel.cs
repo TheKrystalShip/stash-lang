@@ -27,7 +27,8 @@ internal sealed record FunctionModel(
     EquatableArray<ParameterModel> Parameters,
     string? Documentation,
     string? DeprecationReplacement,
-    string CapabilityFullName = "global::Stash.Runtime.StashCapabilities.None");
+    string CapabilityFullName = "global::Stash.Runtime.StashCapabilities.None",
+    EquatableArray<ThrowsModel> Throws = default);
 
 internal sealed record ParameterModel(
     string CSharpName,
@@ -65,6 +66,8 @@ internal sealed record EnumModel(
     string StashName,
     EquatableArray<string> Members,
     string? Documentation = null);
+
+internal sealed record ThrowsModel(string ErrorType, string? Description);
 
 /// <summary>
 /// Equatable wrapper around <see cref="ImmutableArray{T}"/> for use as a generator pipeline value.

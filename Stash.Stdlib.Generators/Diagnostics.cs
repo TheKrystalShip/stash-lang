@@ -85,4 +85,12 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ThrowsMetadataMismatch = new(
+        id: "STSG010",
+        title: "Throws metadata mismatch",
+        messageFormat: "Throws metadata for {0} differs between [StashFn(Throws=...)] and <exception> tags. Attribute: [{1}]. Doc: [{2}]. Union will be used.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
 }
