@@ -36,3 +36,4 @@ Thumbs.db
 # Compiled stash files
 *.stashc
 
+test_output.log

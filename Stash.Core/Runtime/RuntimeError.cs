@@ -64,4 +64,12 @@ public class RuntimeError : Exception
         Span = span;
         ErrorType = errorType;
     }
+
+    /// <summary>
+    /// Returns a dictionary of named properties carried by this error for exposure to Stash code
+    /// via <c>e.&lt;property&gt;</c>. Typed subclasses (e.g. <see cref="Errors.CommandError"/>)
+    /// override this to materialize their typed fields; the base implementation returns
+    /// <see cref="Properties"/> as-is.
+    /// </summary>
+    protected internal virtual System.Collections.Generic.Dictionary<string, object?>? GetProperties() => Properties;
 }
