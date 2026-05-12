@@ -40,6 +40,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Suspends execution for the given number of seconds.</summary>
     /// <param name="seconds">The duration to sleep (float or int)</param>
+    /// <exception cref="StashErrorTypes.CancellationError">if the cancellation token is triggered while sleeping</exception>
     [StashFn]
     public static void Sleep(IInterpreterContext ctx, [StashParam(Type = "number")] double seconds)
     {
@@ -69,6 +70,7 @@ public static partial class TimeBuiltIns
     /// <summary>Parses a date string using a .NET format string. Returns a Unix timestamp.</summary>
     /// <param name="str">The date string</param>
     /// <param name="format">The .NET format</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the date string cannot be parsed with the given format</exception>
     /// <returns>Unix timestamp as float</returns>
     [StashFn]
     public static double Parse(string str, string format)
@@ -106,6 +108,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC year of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Year as int</returns>
     [StashFn]
     public static long Year(params StashValue[] args)
@@ -116,6 +119,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC month (1-12) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Month as int</returns>
     [StashFn]
     public static long Month(params StashValue[] args)
@@ -126,6 +130,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC day of month (1-31) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Day as int</returns>
     [StashFn]
     public static long Day(params StashValue[] args)
@@ -136,6 +141,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC hour (0-23) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Hour as int</returns>
     [StashFn]
     public static long Hour(params StashValue[] args)
@@ -146,6 +152,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC minute (0-59) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Minute as int</returns>
     [StashFn]
     public static long Minute(params StashValue[] args)
@@ -156,6 +163,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC second (0-59) of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Second as int</returns>
     [StashFn]
     public static long Second(params StashValue[] args)
@@ -166,6 +174,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the UTC day of week as lowercase string (e.g. 'monday') of a timestamp (or now if omitted).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Day of week string</returns>
     [StashFn]
     public static string DayOfWeek(params StashValue[] args)
@@ -195,6 +204,7 @@ public static partial class TimeBuiltIns
     /// <summary>Converts a UTC timestamp to the local time in a timezone by applying the UTC offset.</summary>
     /// <param name="timestamp">Unix seconds (UTC)</param>
     /// <param name="timezone">IANA or Windows timezone ID</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the timezone ID is not recognised</exception>
     /// <returns>Offset-adjusted Unix timestamp as float</returns>
     [StashFn]
     public static double ToTimezone([StashParam(Type = "number")] double timestamp, string timezone)
@@ -213,6 +223,7 @@ public static partial class TimeBuiltIns
     /// <summary>Interprets a timestamp as local time in the given timezone and returns the UTC equivalent.</summary>
     /// <param name="timestamp">Unix seconds (local time)</param>
     /// <param name="timezone">IANA or Windows timezone ID</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the timezone ID is not recognised</exception>
     /// <returns>UTC Unix timestamp as float</returns>
     [StashFn(Name = "toUTC")]
     public static double ToUTC([StashParam(Type = "number")] double timestamp, string timezone)
@@ -245,6 +256,7 @@ public static partial class TimeBuiltIns
     /// <summary>Returns the UTC offset in hours for a timezone at a specific timestamp.</summary>
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="timezone">IANA or Windows timezone ID</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the timezone ID is not recognised</exception>
     /// <returns>UTC offset in hours (e.g. -5.0 for EST, 5.5 for IST)</returns>
     [StashFn]
     public static double Offset([StashParam(Type = "number")] double timestamp, string timezone)
@@ -296,6 +308,7 @@ public static partial class TimeBuiltIns
     /// <summary>Returns the timestamp truncated to the start of the given unit (UTC).</summary>
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="unit">One of: year, month, day, hour, minute</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `unit` is not one of: year, month, day, hour, minute</exception>
     /// <returns>Start-of-unit Unix timestamp as float</returns>
     [StashFn]
     public static double StartOf([StashParam(Type = "number")] double timestamp, string unit)
@@ -316,6 +329,7 @@ public static partial class TimeBuiltIns
     /// <summary>Returns the timestamp at the end of the given unit (last millisecond, UTC).</summary>
     /// <param name="timestamp">Unix seconds</param>
     /// <param name="unit">One of: year, month, day, hour, minute</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `unit` is not one of: year, month, day, hour, minute</exception>
     /// <returns>End-of-unit Unix timestamp as float</returns>
     [StashFn]
     public static double EndOf([StashParam(Type = "number")] double timestamp, string unit)
@@ -335,6 +349,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns whether the year of a timestamp is a leap year (defaults to current year).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>true if leap year</returns>
     [StashFn]
     public static bool IsLeapYear(params StashValue[] args)
@@ -345,6 +360,7 @@ public static partial class TimeBuiltIns
 
     /// <summary>Returns the number of days in the month of a timestamp (defaults to current month).</summary>
     /// <param name="timestamp">Optional Unix timestamp</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `timestamp` is not a number</exception>
     /// <returns>Days in month as int</returns>
     [StashFn]
     public static long DaysInMonth(params StashValue[] args)

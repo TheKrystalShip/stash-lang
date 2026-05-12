@@ -65,6 +65,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the string with leading and trailing whitespace (or specified chars) removed.</summary>
     /// <param name="s">The string</param>
     /// <param name="chars">Optional string of characters to trim</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Trimmed string</returns>
     [StashFn]
     private static string Trim(string s, params StashValue[] rest)
@@ -80,6 +81,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the string with leading whitespace (or specified chars) removed.</summary>
     /// <param name="s">The string</param>
     /// <param name="chars">Optional string of characters to trim</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Left-trimmed string</returns>
     [StashFn]
     private static string TrimStart(string s, params StashValue[] rest)
@@ -95,6 +97,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the string with trailing whitespace (or specified chars) removed.</summary>
     /// <param name="s">The string</param>
     /// <param name="chars">Optional string of characters to trim</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Right-trimmed string</returns>
     [StashFn]
     private static string TrimEnd(string s, params StashValue[] rest)
@@ -111,6 +114,7 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="substring">The substring to search for</param>
     /// <param name="ignoreCase">Optional; when true, comparison is case-insensitive</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>true if found</returns>
     [StashFn]
     private static bool Contains(string s, string substring, params StashValue[] rest)
@@ -125,6 +129,7 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="prefix">The prefix</param>
     /// <param name="ignoreCase">Optional; when true, comparison is case-insensitive</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>true if starts with prefix</returns>
     [StashFn]
     private static bool StartsWith(string s, string prefix, params StashValue[] rest)
@@ -139,6 +144,7 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="suffix">The suffix</param>
     /// <param name="ignoreCase">Optional; when true, comparison is case-insensitive</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>true if ends with suffix</returns>
     [StashFn]
     private static bool EndsWith(string s, string suffix, params StashValue[] rest)
@@ -153,6 +159,7 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="substring">The substring</param>
     /// <param name="startIndex">Optional start position for the search</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Zero-based index or -1</returns>
     [StashFn]
     private static long IndexOf(string s, string substring, params StashValue[] rest)
@@ -169,6 +176,7 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="substring">The substring</param>
     /// <param name="startIndex">Optional position to begin searching backwards from</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Zero-based index or -1</returns>
     [StashFn]
     private static long LastIndexOf(string s, string substring, params StashValue[] rest)
@@ -185,6 +193,8 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="start">Start index (inclusive)</param>
     /// <param name="end">Optional end index (exclusive)</param>
+    /// <exception cref="StashErrorTypes.IndexError">if `start` or `end` is out of range</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Substring</returns>
     [StashFn]
     private static string Substring(string s, long start, params StashValue[] rest)
@@ -206,6 +216,7 @@ public static partial class StrBuiltIns
     /// <param name="old">The substring to replace</param>
     /// <param name="new">The replacement</param>
     /// <param name="count">Optional maximum number of replacements (default 1)</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Modified string</returns>
     [StashFn]
     private static string Replace(string s, string old, [StashParam(Name = "new")] string newValue, params StashValue[] rest)
@@ -236,6 +247,7 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="delimiter">The delimiter</param>
     /// <param name="limit">Optional maximum number of splits</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Array of substrings</returns>
     [StashFn]
     private static List<StashValue> Split(string s, string delimiter, params StashValue[] rest)
@@ -261,6 +273,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the string repeated count times.</summary>
     /// <param name="s">The string</param>
     /// <param name="count">Number of repetitions (&gt;= 0)</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `count` is negative</exception>
     /// <returns>Repeated string</returns>
     [StashFn]
     private static string Repeat(string s, long count)
@@ -292,6 +305,8 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="width">Target width</param>
     /// <param name="padChar">Optional pad character (default ' ')</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `padChar` is not a single character</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Padded string</returns>
     [StashFn]
     private static string PadStart(string s, long width, params StashValue[] rest)
@@ -311,6 +326,8 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="width">Target width</param>
     /// <param name="padChar">Optional pad character (default ' ')</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `padChar` is not a single character</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Padded string</returns>
     [StashFn]
     private static string PadEnd(string s, long width, params StashValue[] rest)
@@ -366,6 +383,7 @@ public static partial class StrBuiltIns
 
     /// <summary>Returns the Unicode code point of the first character in the string.</summary>
     /// <param name="s">A non-empty string</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `s` is empty</exception>
     /// <returns>The Unicode code point as an integer</returns>
     [StashFn]
     private static long CharCode(string s)
@@ -377,6 +395,7 @@ public static partial class StrBuiltIns
 
     /// <summary>Returns a single-character string from a Unicode code point.</summary>
     /// <param name="n">The Unicode code point</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `n` is outside the valid Unicode range (0–0x10FFFF)</exception>
     /// <returns>A string containing the character</returns>
     [StashFn]
     private static string FromCharCode(long n)
@@ -395,6 +414,8 @@ public static partial class StrBuiltIns
     /// <summary>Deprecated. Use re.match.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match times out</exception>
     /// <returns>Matched string or null</returns>
     [StashFn(ReturnType = "string")]
     [StashDeprecated("re.match")]
@@ -419,6 +440,8 @@ public static partial class StrBuiltIns
     /// <summary>Deprecated. Use re.matchAll.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match times out</exception>
     /// <returns>Array of matched strings</returns>
     [StashFn]
     [StashDeprecated("re.matchAll")]
@@ -446,6 +469,8 @@ public static partial class StrBuiltIns
     /// <summary>Deprecated. Use re.test.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match times out</exception>
     /// <returns>true if the pattern matches</returns>
     [StashFn]
     [StashDeprecated("re.test")]
@@ -470,6 +495,8 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
     /// <param name="replacement">Replacement string</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match times out</exception>
     /// <returns>Modified string</returns>
     [StashFn]
     [StashDeprecated("re.replace")]
@@ -493,6 +520,8 @@ public static partial class StrBuiltIns
     /// <summary>Deprecated. Use re.capture.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match times out</exception>
     /// <returns>RegexMatch struct or null</returns>
     [StashFn(ReturnType = "RegexMatch")]
     [StashDeprecated("re.capture")]
@@ -518,6 +547,8 @@ public static partial class StrBuiltIns
     /// <summary>Deprecated. Use re.captureAll.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match times out</exception>
     /// <returns>Array of RegexMatch structs</returns>
     [StashFn]
     [StashDeprecated("re.captureAll")]
@@ -545,6 +576,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the count of non-overlapping occurrences of substring.</summary>
     /// <param name="s">The string</param>
     /// <param name="substring">The substring to count</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `substring` is empty</exception>
     /// <returns>Count of occurrences</returns>
     [StashFn]
     private static long Count(string s, string substring)
@@ -564,6 +596,7 @@ public static partial class StrBuiltIns
     /// <summary>Replaces {0}, {1}, ... placeholders in template with the given arguments.</summary>
     /// <param name="template">The template string</param>
     /// <param name="args">Values to substitute</param>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the internal regex match times out</exception>
     /// <returns>Formatted string</returns>
     [StashFn]
     private static string Format(string template, params StashValue[] rest)
@@ -654,6 +687,7 @@ public static partial class StrBuiltIns
 
     /// <summary>POSIX-shell-style word splitting. Honors single and double quotes; backslash escapes outside single quotes. Throws ValueError on unterminated quotes.</summary>
     /// <param name="s">The string to tokenize</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the string contains an unterminated quote</exception>
     /// <returns>Array of tokens</returns>
     [StashFn]
     private static List<StashValue> ShellSplit(string s)
@@ -750,6 +784,8 @@ public static partial class StrBuiltIns
     /// <param name="s">The string</param>
     /// <param name="maxLen">Maximum length</param>
     /// <param name="suffix">Optional suffix (default '...')</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `maxLen` is negative</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
     /// <returns>Truncated string</returns>
     [StashFn]
     private static string Truncate(string s, long maxLen, params StashValue[] rest)
@@ -779,6 +815,7 @@ public static partial class StrBuiltIns
     /// <summary>Wraps the string at word boundaries so no line exceeds width characters.</summary>
     /// <param name="s">The string</param>
     /// <param name="width">Maximum line width</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `width` is not positive</exception>
     /// <returns>Wrapped string</returns>
     [StashFn]
     private static string Wrap(string s, long width)

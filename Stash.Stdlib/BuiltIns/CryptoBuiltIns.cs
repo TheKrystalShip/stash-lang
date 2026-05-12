@@ -52,6 +52,7 @@ public static partial class CryptoBuiltIns
     /// <param name="algo">The hash algorithm: "md5", "sha1", "sha256", or "sha512"</param>
     /// <param name="key">The secret key</param>
     /// <param name="data">The data to sign</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `algo` is not one of: md5, sha1, sha256, sha512</exception>
     /// <returns>The HMAC as a lowercase hexadecimal string</returns>
     [StashFn]
     private static string Hmac(string algo, string key, string data)
@@ -74,6 +75,9 @@ public static partial class CryptoBuiltIns
     /// <summary>Computes the hash of a file's contents.</summary>
     /// <param name="path">The file path to hash</param>
     /// <param name="algo">Optional hash algorithm (default: "sha256"). One of "md5", "sha1", "sha256", "sha512"</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be read</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if `algo` is not one of: md5, sha1, sha256, sha512</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `algo` is not a string</exception>
     /// <returns>The hash as a lowercase hexadecimal string</returns>
     [StashFn]
     private static string HashFile(string path, [StashParam(Name = "algo")] params StashValue[] rest)
@@ -112,6 +116,8 @@ public static partial class CryptoBuiltIns
     /// <summary>Generates cryptographically secure random bytes.</summary>
     /// <param name="n">The number of random bytes to generate (must be > 0)</param>
     /// <param name="encoding">Optional output encoding: "hex", "base64", or "raw". If omitted, returns byte[]</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `n` is not greater than 0, exceeds the maximum size, or `encoding` is not one of: hex, base64, raw</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `encoding` is not a string</exception>
     /// <returns>A byte[] or encoded string depending on arguments</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue RandomBytes(long n, [StashParam(Name = "encoding")] params StashValue[] rest)
@@ -181,6 +187,7 @@ public static partial class CryptoBuiltIns
     /// <param name="algo">The hash algorithm: "md5", "sha1", "sha256", or "sha512"</param>
     /// <param name="key">The secret key as byte[]</param>
     /// <param name="data">The data to sign as byte[]</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `algo` is not one of: md5, sha1, sha256, sha512</exception>
     /// <returns>The HMAC as a byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue HmacBytes(string algo, byte[] key, byte[] data)
@@ -198,6 +205,8 @@ public static partial class CryptoBuiltIns
 
     /// <summary>Generates a cryptographically secure random encryption key.</summary>
     /// <param name="bits">Optional key size in bits: 128, 192, or 256 (default: 256)</param>
+    /// <exception cref="StashErrorTypes.ValueError">if `bits` is not 128, 192, or 256</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `bits` is not an integer</exception>
     /// <returns>The key as a lowercase hexadecimal string</returns>
     [StashFn]
     private static string GenerateKey([StashParam(Name = "bits")] params StashValue[] args)
@@ -217,6 +226,9 @@ public static partial class CryptoBuiltIns
     /// <param name="data">The plaintext to encrypt -- string or byte[]</param>
     /// <param name="key">A 32-byte (256-bit) key as a hex string or byte[]</param>
     /// <param name="options">Reserved for future use (optional)</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the key is not 32 bytes (256-bit)</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the key is provided as a hex string with an invalid format</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `data` is not a string or byte[], or `key` is not a hex string or byte[]</exception>
     /// <returns>A dictionary with fields: ciphertext (hex), iv (hex), tag (hex)</returns>
     [StashFn(ReturnType = "dict")]
     private static StashValue Encrypt(StashValue data, StashValue key, params StashValue[] rest)
@@ -255,6 +267,9 @@ public static partial class CryptoBuiltIns
     /// <param name="ciphertext">A dictionary { ciphertext, iv, tag } with hex fields, or a combined hex string</param>
     /// <param name="key">The 32-byte (256-bit) decryption key as a hex string or byte[]</param>
     /// <param name="options">Reserved for future use (optional)</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the key is not 32 bytes, the combined hex string is too short, or authentication tag verification fails</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if any hex field in the ciphertext dict or the key contains invalid hex characters</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if `ciphertext` is not a dict or hex string, required dict fields are missing or not strings, or `key` is not a hex string or byte[]</exception>
     /// <returns>The decrypted plaintext string</returns>
     [StashFn(ReturnType = "string")]
     private static string Decrypt(StashValue ciphertext, StashValue key, params StashValue[] rest)

@@ -25,6 +25,7 @@ public static partial class DictBuiltIns
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key</param>
     /// <param name="rest">Optional default value when key is missing</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `key` is null</exception>
     /// <returns>The value, default, or null</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Get(StashDictionary dict, StashValue key, params StashValue[] rest)
@@ -40,6 +41,7 @@ public static partial class DictBuiltIns
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key</param>
     /// <param name="value">The value to set</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `key` is null</exception>
     [StashFn(ReturnType = "void")]
     private static void Set(StashDictionary dict, StashValue key, StashValue value)
     {
@@ -50,6 +52,7 @@ public static partial class DictBuiltIns
     /// <summary>Returns true if the dictionary contains the key.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key to check</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `key` is null</exception>
     /// <returns>true if the key exists</returns>
     [StashFn(ReturnType = "bool")]
     private static bool Has(StashDictionary dict, StashValue key)
@@ -61,6 +64,7 @@ public static partial class DictBuiltIns
     /// <summary>Removes a key from the dictionary. Returns true if it existed.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key to remove</param>
+    /// <exception cref="StashErrorTypes.TypeError">if `key` is null</exception>
     /// <returns>true if the key was removed</returns>
     [StashFn(ReturnType = "bool")]
     private static bool Remove(StashDictionary dict, StashValue key)
@@ -173,6 +177,7 @@ public static partial class DictBuiltIns
 
     /// <summary>Constructs a dictionary from an array of [key, value] pairs.</summary>
     /// <param name="pairs">Array of [key, value] pairs</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any element is not a two-element [key, value] array, or if any key is null</exception>
     /// <returns>New dictionary</returns>
     [StashFn(ReturnType = "dict")]
     private static StashDictionary FromPairs(List<StashValue> pairs)
