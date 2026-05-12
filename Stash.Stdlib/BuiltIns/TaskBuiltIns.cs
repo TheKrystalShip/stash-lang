@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the 'task' namespace built-in functions for parallel task execution.
@@ -310,7 +311,7 @@ public static partial class TaskBuiltIns
             if (!completed)
             {
                 cts.Cancel();
-                throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
+                throw new TimeoutError($"Operation timed out after {timeoutMs}ms.");
             }
 
             // Check if the task faulted
@@ -326,14 +327,14 @@ public static partial class TaskBuiltIns
         }
         catch (AggregateException ae) when (ae.InnerException is OperationCanceledException)
         {
-            throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError($"Operation timed out after {timeoutMs}ms.");
         }
         catch (AggregateException ae) when (ae.InnerException is RuntimeError re && re.ErrorType == StashErrorTypes.CancellationError)
         {
             // The child VM's outer dispatch loop converted the timeout-triggered OCE into
             // a CancellationError. From the caller's perspective this is a timeout, not an
             // external cancellation — re-tag it.
-            throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError($"Operation timed out after {timeoutMs}ms.");
         }
         catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
         {

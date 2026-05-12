@@ -6,6 +6,7 @@ using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the 'assert' namespace.
@@ -212,7 +213,7 @@ public static partial class AssertBuiltIns
     {
         if (v.IsFloat) return v.AsFloat;
         if (v.IsInt) return (double)v.AsInt;
-        throw new RuntimeError($"Argument '{paramName}' to '{funcName}' must be a number.", errorType: StashErrorTypes.TypeError);
+        throw new TypeError($"Argument '{paramName}' to '{funcName}' must be a number.");
     }
 
     private static (bool Equal, string FailPath, string? ExpStr, string? ActStr)

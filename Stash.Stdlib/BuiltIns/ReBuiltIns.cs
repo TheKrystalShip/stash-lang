@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>re</c> namespace built-in functions for regular expressions.
@@ -51,11 +52,11 @@ public static partial class ReBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'re.match' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'re.match' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'re.match' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'re.match' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -80,11 +81,11 @@ public static partial class ReBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'re.matchAll' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'re.matchAll' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'re.matchAll' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'re.matchAll' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -105,11 +106,11 @@ public static partial class ReBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'re.test' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'re.test' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'re.test' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'re.test' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -131,11 +132,11 @@ public static partial class ReBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'re.replace' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'re.replace' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'re.replace' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'re.replace' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -158,11 +159,11 @@ public static partial class ReBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'re.capture' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'re.capture' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'re.capture' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'re.capture' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -187,11 +188,11 @@ public static partial class ReBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'re.captureAll' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'re.captureAll' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'re.captureAll' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'re.captureAll' invalid regex pattern: {ex.Message}");
         }
     }
 }

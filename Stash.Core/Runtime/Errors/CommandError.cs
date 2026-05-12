@@ -2,6 +2,7 @@ namespace Stash.Runtime.Errors;
 
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Runtime;
 
 [StashError(Properties = new[] { "exitCode", "stderr", "stdout", "command" })]
 public sealed class CommandError : RuntimeError
@@ -18,7 +19,7 @@ public sealed class CommandError : RuntimeError
         string? stdout = null,
         string? command = null,
         SourceSpan? span = null)
-        : base(message, span)
+        : base(message, span, StashErrorTypes.CommandError)
     {
         ExitCode = exitCode;
         Stderr = stderr;

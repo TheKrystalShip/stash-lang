@@ -9,6 +9,7 @@ using System.Xml.XPath;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>xml</c> namespace built-in functions for XML parsing, serialization, and querying.
@@ -46,13 +47,13 @@ public static partial class XmlBuiltIns
         if (!options.IsNull)
         {
             if (options.AsObj is not StashInstance opts)
-                throw new RuntimeError("xml.parse: options must be an XmlParseOptions struct.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("xml.parse: options must be an XmlParseOptions struct.");
 
             var pwVal = opts.GetField("preserveWhitespace", null);
             if (!pwVal.IsNull)
             {
                 if (!pwVal.IsBool)
-                    throw new RuntimeError("xml.parse: preserveWhitespace must be a boolean.", errorType: StashErrorTypes.TypeError);
+                    throw new TypeError("xml.parse: preserveWhitespace must be a boolean.");
                 preserveWhitespace = pwVal.AsBool;
             }
         }
@@ -86,7 +87,7 @@ public static partial class XmlBuiltIns
     private static string Stringify(StashValue node, StashValue options = default)
     {
         if (node.AsObj is not StashInstance nodeInst)
-            throw new RuntimeError("xml.stringify: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("xml.stringify: first argument must be an XmlNode.");
 
         int indent = 2;
         bool declaration = false;
@@ -95,13 +96,13 @@ public static partial class XmlBuiltIns
         if (!options.IsNull)
         {
             if (options.AsObj is not StashInstance opts)
-                throw new RuntimeError("xml.stringify: options must be an XmlStringifyOptions struct.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("xml.stringify: options must be an XmlStringifyOptions struct.");
 
             var indentVal = opts.GetField("indent", null);
             if (!indentVal.IsNull)
             {
                 if (!indentVal.IsInt)
-                    throw new RuntimeError("xml.stringify: indent must be an integer.", errorType: StashErrorTypes.TypeError);
+                    throw new TypeError("xml.stringify: indent must be an integer.");
                 indent = (int)indentVal.AsInt;
             }
 
@@ -109,7 +110,7 @@ public static partial class XmlBuiltIns
             if (!declVal.IsNull)
             {
                 if (!declVal.IsBool)
-                    throw new RuntimeError("xml.stringify: declaration must be a boolean.", errorType: StashErrorTypes.TypeError);
+                    throw new TypeError("xml.stringify: declaration must be a boolean.");
                 declaration = declVal.AsBool;
             }
 
@@ -117,7 +118,7 @@ public static partial class XmlBuiltIns
             if (!encVal.IsNull)
             {
                 if (encVal.AsObj is not string encStr)
-                    throw new RuntimeError("xml.stringify: encoding must be a string.", errorType: StashErrorTypes.TypeError);
+                    throw new TypeError("xml.stringify: encoding must be a string.");
                 encoding = encStr;
             }
         }
@@ -150,7 +151,7 @@ public static partial class XmlBuiltIns
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"xml.stringify: failed — {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"xml.stringify: failed — {ex.Message}");
         }
     }
 
@@ -184,7 +185,7 @@ public static partial class XmlBuiltIns
     private static List<StashValue> Query(StashValue root, string xpath)
     {
         if (root.AsObj is not StashInstance nodeInst)
-            throw new RuntimeError("xml.query: first argument must be an XmlNode.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("xml.query: first argument must be an XmlNode.");
 
         var results = new List<StashValue>();
 
@@ -226,12 +227,12 @@ public static partial class XmlBuiltIns
         }
         catch (XPathException ex)
         {
-            throw new RuntimeError($"xml.query: invalid XPath expression — {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"xml.query: invalid XPath expression — {ex.Message}");
         }
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"xml.query: failed — {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"xml.query: failed — {ex.Message}");
         }
     }
 
@@ -345,17 +346,17 @@ public static partial class XmlBuiltIns
         {
             var doc = XDocument.Parse(text, LoadOptions.None);
             if (doc.Root is null)
-                throw new RuntimeError("xml.parse: document has no root element.", errorType: StashErrorTypes.ParseError);
+                throw new ParseError("xml.parse: document has no root element.");
             return XElementToNode(doc.Root, false);
         }
         catch (XmlException ex)
         {
-            throw new RuntimeError($"xml.parse: invalid XML — {ex.LineNumber},{ex.LinePosition}: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"xml.parse: invalid XML — {ex.LineNumber},{ex.LinePosition}: {ex.Message}");
         }
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"xml.parse: failed to parse XML — {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"xml.parse: failed to parse XML — {ex.Message}");
         }
     }
 
@@ -382,7 +383,7 @@ public static partial class XmlBuiltIns
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerName}: XML serialization failed — {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerName}: XML serialization failed — {ex.Message}");
         }
     }
 }

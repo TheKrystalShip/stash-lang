@@ -41,8 +41,8 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
     /// </summary>
     public static StashError FromRuntimeError(RuntimeError error, List<string>? stackLines, List<StashError>? suppressed = null)
     {
-        string type = error.ErrorType ?? "RuntimeError";
-        var stashError = new StashError(error.Message, type, stackLines, error.Properties);
+        string type = error.ErrorType ?? StashErrorTypes.RuntimeError;
+        var stashError = new StashError(error.Message, type, stackLines, error.GetProperties());
         stashError.OriginalException = error;
         if (suppressed is { Count: > 0 })
             stashError.Suppressed = suppressed;
@@ -70,8 +70,8 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
             }
         }
 
-        string type = error.ErrorType ?? "RuntimeError";
-        var stashError = new StashError(error.Message, type, stack, error.Properties);
+        string type = error.ErrorType ?? StashErrorTypes.RuntimeError;
+        var stashError = new StashError(error.Message, type, stack, error.GetProperties());
         stashError.OriginalException = error;
 
         // When the caller provides an explicit suppressed list (already merged with error.SuppressedErrors),

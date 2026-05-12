@@ -5,6 +5,7 @@ using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>env</c> namespace built-in functions.
@@ -94,11 +95,11 @@ public static partial class EnvBuiltIns
     public static bool Unset(string name)
     {
         if (name.Length == 0)
-            throw new RuntimeError("'env.unset': name must not be empty.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'env.unset': name must not be empty.");
         if (name.Contains('='))
-            throw new RuntimeError("'env.unset': name must not contain '='.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'env.unset': name must not contain '='.");
         if (name.Contains('\0'))
-            throw new RuntimeError("'env.unset': name must not contain null characters.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'env.unset': name must not contain null characters.");
 
         bool existed = System.Environment.GetEnvironmentVariable(name) is not null;
         System.Environment.SetEnvironmentVariable(name, null);
@@ -163,7 +164,7 @@ public static partial class EnvBuiltIns
         }
         catch (System.IO.IOException e)
         {
-            throw new RuntimeError("env.loadFile: " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("env.loadFile: " + e.Message);
         }
 
         long count = 0;
@@ -245,7 +246,7 @@ public static partial class EnvBuiltIns
         }
         catch (System.IO.IOException e)
         {
-            throw new RuntimeError("env.saveFile: " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("env.saveFile: " + e.Message);
         }
 
     }

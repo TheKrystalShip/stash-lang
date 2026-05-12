@@ -216,7 +216,7 @@ public class CommandLoweringTests : BytecodeTestBase
     {
         if (OperatingSystem.IsWindows()) return;
 
-        var ex = Assert.Throws<RuntimeError>(() => Exec("return $!(false);"));
+        var ex = Assert.ThrowsAny<RuntimeError>(() => Exec("return $!(false);"));
         Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 

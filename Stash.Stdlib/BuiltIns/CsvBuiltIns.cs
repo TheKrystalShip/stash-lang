@@ -8,6 +8,7 @@ using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
+using Stash.Runtime.Errors;
 
 [StashNamespace]
 public static partial class CsvBuiltIns
@@ -53,10 +54,10 @@ public static partial class CsvBuiltIns
         var opts = !options.IsNull ? GetCsvOptions(options, "csv.stringify") : DefaultOptions;
 
         if (data.IsNull)
-            throw new RuntimeError("csv.stringify: data must be an array.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("csv.stringify: data must be an array.");
 
         if (data.ToObject() is not List<StashValue> rows)
-            throw new RuntimeError("csv.stringify: data must be an array.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("csv.stringify: data must be an array.");
 
         return StringifyCsv(rows, opts.Delimiter, opts.Quote, opts.Escape, opts.Header, opts.Columns);
     }
@@ -76,7 +77,7 @@ public static partial class CsvBuiltIns
         var opts = !options.IsNull ? GetCsvOptions(options, "csv.parseFile") : DefaultOptions;
 
         if (!File.Exists(path))
-            throw new RuntimeError($"csv.parseFile: file not found: '{path}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"csv.parseFile: file not found: '{path}'");
 
         string text;
         try
@@ -85,11 +86,11 @@ public static partial class CsvBuiltIns
         }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"csv.parseFile: permission denied: '{path}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"csv.parseFile: permission denied: '{path}'");
         }
         catch (Exception ex) when (ex is not RuntimeError)
         {
-            throw new RuntimeError($"csv.parseFile: failed to read file: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"csv.parseFile: failed to read file: {ex.Message}");
         }
 
         var rows = ParseCsv(text, opts.Delimiter, opts.Quote, opts.Escape);
@@ -114,10 +115,10 @@ public static partial class CsvBuiltIns
         var opts = !options.IsNull ? GetCsvOptions(options, "csv.writeFile") : DefaultOptions;
 
         if (data.IsNull)
-            throw new RuntimeError("csv.writeFile: data must be an array.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("csv.writeFile: data must be an array.");
 
         if (data.ToObject() is not List<StashValue> rows)
-            throw new RuntimeError("csv.writeFile: data must be an array.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("csv.writeFile: data must be an array.");
 
         var csv = StringifyCsv(rows, opts.Delimiter, opts.Quote, opts.Escape, opts.Header, opts.Columns);
 
@@ -131,11 +132,11 @@ public static partial class CsvBuiltIns
         }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"csv.writeFile: permission denied: '{path}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"csv.writeFile: permission denied: '{path}'");
         }
         catch (Exception ex) when (ex is not RuntimeError)
         {
-            throw new RuntimeError($"csv.writeFile: failed to write file: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"csv.writeFile: failed to write file: {ex.Message}");
         }
 
         return path;
@@ -152,7 +153,7 @@ public static partial class CsvBuiltIns
         if (value.IsNull) return DefaultOptions;
 
         if (value.ToObject() is not StashInstance opts)
-            throw new RuntimeError($"{funcName}: options must be a CsvOptions struct.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{funcName}: options must be a CsvOptions struct.");
 
         var delimiter = ',';
         var quote = '"';
@@ -164,9 +165,9 @@ public static partial class CsvBuiltIns
         if (!delimVal.IsNull)
         {
             if (delimVal.ToObject() is not string delimStr)
-                throw new RuntimeError($"{funcName}: invalid options: delimiter must be a string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError($"{funcName}: invalid options: delimiter must be a string.");
             if (delimStr.Length != 1)
-                throw new RuntimeError($"{funcName}: invalid options: delimiter must be a single character.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError($"{funcName}: invalid options: delimiter must be a single character.");
             delimiter = delimStr[0];
         }
 
@@ -174,9 +175,9 @@ public static partial class CsvBuiltIns
         if (!quoteVal.IsNull)
         {
             if (quoteVal.ToObject() is not string quoteStr)
-                throw new RuntimeError($"{funcName}: invalid options: quote must be a string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError($"{funcName}: invalid options: quote must be a string.");
             if (quoteStr.Length != 1)
-                throw new RuntimeError($"{funcName}: invalid options: quote must be a single character.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError($"{funcName}: invalid options: quote must be a single character.");
             quote = quoteStr[0];
         }
 
@@ -184,9 +185,9 @@ public static partial class CsvBuiltIns
         if (!escapeVal.IsNull)
         {
             if (escapeVal.ToObject() is not string escapeStr)
-                throw new RuntimeError($"{funcName}: invalid options: escape must be a string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError($"{funcName}: invalid options: escape must be a string.");
             if (escapeStr.Length != 1)
-                throw new RuntimeError($"{funcName}: invalid options: escape must be a single character.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError($"{funcName}: invalid options: escape must be a single character.");
             escape = escapeStr[0];
         }
 
@@ -194,7 +195,7 @@ public static partial class CsvBuiltIns
         if (!headerVal.IsNull)
         {
             if (!headerVal.IsBool)
-                throw new RuntimeError($"{funcName}: invalid options: header must be a boolean.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError($"{funcName}: invalid options: header must be a boolean.");
             header = headerVal.AsBool;
         }
 

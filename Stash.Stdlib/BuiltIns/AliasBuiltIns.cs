@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>alias</c> namespace built-in functions.
@@ -124,10 +125,7 @@ public static partial class AliasBuiltIns
         }
         else
         {
-            throw new RuntimeError(
-                "2nd argument to 'alias.define' must be a string (template body) or a function.",
-                null,
-                StashErrorTypes.TypeError);
+            throw new TypeError("2nd argument to 'alias.define' must be a string (template body) or a function.");
         }
 
         // Parse AliasOptions struct if provided
@@ -228,10 +226,7 @@ public static partial class AliasBuiltIns
     {
         if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
         {
-            throw new RuntimeError(
-                $"alias '{name}' is not defined",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"alias '{name}' is not defined");
         }
 
         string[] stringArgs = ParseStringArgs(args, "alias.exec");
@@ -248,10 +243,7 @@ public static partial class AliasBuiltIns
             // Template alias: delegate to AliasExecutor (wired in Phase B)
             if (AliasExecutor is null)
             {
-                throw new RuntimeError(
-                    "alias execution requires shell mode; alias.exec for template aliases is not available in embedded mode",
-                    null,
-                    StashErrorTypes.AliasError);
+                throw new AliasError("alias execution requires shell mode; alias.exec for template aliases is not available in embedded mode");
             }
 
             int exitCode = AliasExecutor(entry, stringArgs, ctx);
@@ -270,10 +262,7 @@ public static partial class AliasBuiltIns
     {
         if (!ctx.AliasRegistry.TryGet(name, out AliasRegistry.AliasEntry? entry) || entry is null)
         {
-            throw new RuntimeError(
-                $"alias '{name}' is not defined",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"alias '{name}' is not defined");
         }
 
         if (entry.Kind == AliasRegistry.AliasKind.Function)
@@ -291,10 +280,7 @@ public static partial class AliasBuiltIns
     private static string Save(IInterpreterContext ctx, params StashValue[] rest)
     {
         if (SaveHandler is null)
-            throw new RuntimeError(
-                "alias.save requires shell mode (not available in embedded mode)",
-                null,
-                StashErrorTypes.NotSupportedError);
+            throw new NotSupportedError("alias.save requires shell mode (not available in embedded mode)");
 
         string? name = null;
         if (rest.Length > 0 && !rest[0].IsNull && rest[0].IsObj && rest[0].AsObj is string n)
@@ -311,10 +297,7 @@ public static partial class AliasBuiltIns
     private static long Load(IInterpreterContext ctx, params StashValue[] rest)
     {
         if (LoadHandler is null)
-            throw new RuntimeError(
-                "alias.load requires shell mode (not available in embedded mode)",
-                null,
-                StashErrorTypes.NotSupportedError);
+            throw new NotSupportedError("alias.load requires shell mode (not available in embedded mode)");
 
         string? pathOverride = null;
         if (rest.Length > 0 && !rest[0].IsNull && rest[0].IsObj && rest[0].AsObj is string p)
@@ -358,10 +341,7 @@ public static partial class AliasBuiltIns
     private static void RemoveSavedInternal(IInterpreterContext ctx, string name)
     {
         if (RemoveSavedHandler is null)
-            throw new RuntimeError(
-                "alias.__removeSaved requires shell mode (not available in embedded mode)",
-                null,
-                StashErrorTypes.NotSupportedError);
+            throw new NotSupportedError("alias.__removeSaved requires shell mode (not available in embedded mode)");
         RemoveSavedHandler(name);
     }
 
@@ -503,10 +483,7 @@ public static partial class AliasBuiltIns
             if (sv.IsObj && sv.AsObj is string s)
                 result[i] = s;
             else
-                throw new RuntimeError(
-                    $"each element of the args array passed to '{callerName}' must be a string.",
-                    null,
-                    StashErrorTypes.TypeError);
+                throw new TypeError($"each element of the args array passed to '{callerName}' must be a string.");
         }
         return result;
     }
@@ -553,10 +530,7 @@ public static partial class AliasBuiltIns
                     int n = int.Parse(m.Groups[1].Value);
                     if (n < 0 || n >= args.Length)
                     {
-                        throw new RuntimeError(
-                            $"alias '{aliasName}' references args[{n}] but only {args.Length} argument(s) were provided",
-                            null,
-                            StashErrorTypes.AliasError);
+                        throw new AliasError($"alias '{aliasName}' references args[{n}] but only {args.Length} argument(s) were provided");
                     }
                     return args[n];
                 }

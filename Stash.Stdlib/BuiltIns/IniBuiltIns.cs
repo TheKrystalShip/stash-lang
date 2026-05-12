@@ -7,6 +7,7 @@ using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>ini</c> namespace built-in functions for INI format parsing and serialization.
@@ -27,7 +28,7 @@ public static partial class IniBuiltIns
         }
         catch (Exception e) when (e is not RuntimeError)
         {
-            throw new RuntimeError("ini.parse: failed to parse INI — " + e.Message, errorType: StashErrorTypes.ParseError);
+            throw new ParseError("ini.parse: failed to parse INI — " + e.Message);
         }
     }
 

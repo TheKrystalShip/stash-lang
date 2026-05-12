@@ -718,7 +718,7 @@ public class TemplateTests : StashTestBase
     [Fact]
     public void Render_SecondArgMustBeDict()
     {
-        Assert.Throws<RuntimeError>(() => Run("""
+        Assert.ThrowsAny<RuntimeError>(() => Run("""
             let result = tpl.render("hello", "not a dict");
         """));
     }

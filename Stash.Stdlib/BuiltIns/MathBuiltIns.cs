@@ -4,6 +4,7 @@ using System;
 using Stash.Runtime;
 using Stash.Stdlib.Abstractions;
 using Stash.Stdlib;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>math</c> namespace built-in functions and constants for mathematical operations.
@@ -28,7 +29,7 @@ public static partial class MathBuiltIns
     {
         if (n.IsInt) return StashValue.FromInt(Math.Abs(n.AsInt));
         if (n.IsFloat) return StashValue.FromFloat(Math.Abs(n.AsFloat));
-        throw new RuntimeError("First argument to 'math.abs' must be a number.", errorType: StashErrorTypes.TypeError);
+        throw new TypeError("First argument to 'math.abs' must be a number.");
     }
 
     /// <summary>Returns the smallest integer greater than or equal to a number (rounds up).</summary>
@@ -260,7 +261,7 @@ public static partial class MathBuiltIns
     {
         if (n.IsInt) return Math.Sign(n.AsInt);
         if (n.IsFloat) return Math.Sign(n.AsFloat);
-        throw new RuntimeError("First argument to 'math.sign' must be a number.", errorType: StashErrorTypes.TypeError);
+        throw new TypeError("First argument to 'math.sign' must be a number.");
     }
 
     /// <summary>Returns e raised to the specified power.</summary>

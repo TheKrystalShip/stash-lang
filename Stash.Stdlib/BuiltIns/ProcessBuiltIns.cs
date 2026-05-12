@@ -14,6 +14,7 @@ using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>process</c> namespace built-in functions for process management.
@@ -84,7 +85,7 @@ public static partial class ProcessBuiltIns
         {
             var v = rest[0];
             if (!v.IsInt)
-                throw new RuntimeError("First argument to 'process.exit' must be an integer.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("First argument to 'process.exit' must be an integer.");
             code = v.AsInt;
         }
         GlobalBuiltIns.EmitExitImpl(ctx, code);
@@ -100,7 +101,7 @@ public static partial class ProcessBuiltIns
     {
         if (ctx.EmbeddedMode)
         {
-            throw new RuntimeError("'process.replace' is not available in embedded mode.", errorType: StashErrorTypes.NotSupportedError);
+            throw new NotSupportedError("'process.replace' is not available in embedded mode.");
         }
 
         var (program, arguments) = CommandParser.Parse(command);
@@ -127,7 +128,7 @@ public static partial class ProcessBuiltIns
             try
             {
                 using var child = System.Diagnostics.Process.Start(psi)
-                    ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
+                    ?? throw new IOError("Failed to start process.");
                 try
                 {
                     child.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
@@ -142,7 +143,7 @@ public static partial class ProcessBuiltIns
             catch (RuntimeError) { throw; }
             catch (System.Exception ex)
             {
-                throw new RuntimeError($"process.replace failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+                throw new IOError($"process.replace failed: {ex.Message}");
             }
         }
         else
@@ -152,7 +153,7 @@ public static partial class ProcessBuiltIns
 
             // If we get here, execvp failed
             int errno = Marshal.GetLastPInvokeError();
-            throw new RuntimeError($"process.replace failed: execvp returned {result} (errno {errno}).", errorType: StashErrorTypes.IOError);
+            throw new IOError($"process.replace failed: execvp returned {result} (errno {errno}).");
         }
     }
 
@@ -181,7 +182,7 @@ public static partial class ProcessBuiltIns
         if (arg0.IsObj && arg0.AsObj is List<StashValue> programArray)
         {
             if (programArray.Count == 0)
-                throw new RuntimeError("process.exec: program array cannot be empty.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError("process.exec: program array cannot be empty.");
             program = StringifyArg(programArray[0]);
             for (int pi = 1; pi < programArray.Count; pi++)
                 extraLeading.Add(StringifyArg(programArray[pi]));
@@ -192,10 +193,10 @@ public static partial class ProcessBuiltIns
         }
 
         if (string.IsNullOrEmpty(program))
-            throw new RuntimeError("process.exec: 'program' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("process.exec: 'program' must be a non-empty string.");
 
         if (args.Length < 2 || args[1].IsNull || !(args[1].IsObj && args[1].AsObj is List<StashValue>))
-            throw new RuntimeError("process.exec: 'args' must be an array.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("process.exec: 'args' must be an array.");
 
         var rawArgs = (List<StashValue>)args[1].AsObj!;
         var argv = ResolveArgv(rawArgs, "process.exec");
@@ -230,16 +231,16 @@ public static partial class ProcessBuiltIns
     private static StashValue Pipeline(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
         if (args.Length < 1 || args[0].IsNull || !(args[0].IsObj && args[0].AsObj is List<StashValue>))
-            throw new RuntimeError("process.pipeline: 'stages' must be a non-empty array.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("process.pipeline: 'stages' must be a non-empty array.");
 
         var rawStages = (List<StashValue>)args[0].AsObj!;
         if (rawStages.Count == 0)
-            throw new RuntimeError("process.pipeline: 'stages' must contain at least one stage.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("process.pipeline: 'stages' must contain at least one stage.");
 
         var opts = args.Length >= 2 ? ParseExecOptions(args[1], "process.pipeline") : ExecOptionsData.Default;
 
         if (opts.Mode == ExecModeEnum.Passthrough)
-            throw new RuntimeError("process.pipeline: Passthrough mode is not allowed in pipelines. Use Capture or Stream.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("process.pipeline: Passthrough mode is not allowed in pipelines. Use Capture or Stream.");
 
         // Parse each stage.
         var stages = new List<(string Program, List<string> Argv)>(rawStages.Count);
@@ -280,7 +281,7 @@ public static partial class ProcessBuiltIns
             psi.ArgumentList.Add(arg);
         }
 
-        var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
+        var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new IOError("Failed to start process.");
         var fields = new Dictionary<string, StashValue>
         {
             ["pid"] = StashValue.FromInt((long)osProcess.Id),
@@ -463,19 +464,19 @@ public static partial class ProcessBuiltIns
         {
             if (!GlobalBuiltIns.SignalNumbers.TryGetValue(ev.MemberName, out sig))
             {
-                throw new RuntimeError($"Unknown Signal member '{ev.MemberName}'.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError($"Unknown Signal member '{ev.MemberName}'.");
             }
         }
         else
         {
             if (!sigArg.IsInt)
-                throw new RuntimeError("Second argument to 'process.signal' must be an integer or a Signal enum value.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("Second argument to 'process.signal' must be an integer or a Signal enum value.");
             sig = sigArg.AsInt;
         }
 
         if (sig < 1 || sig > 64)
         {
-            throw new RuntimeError($"Signal number must be between 1 and 64, got {sig}.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"Signal number must be between 1 and 64, got {sig}.");
         }
 
         var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -618,7 +619,7 @@ public static partial class ProcessBuiltIns
 
         if (callback.MinArity > 1)
         {
-            throw new RuntimeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).");
         }
 
         var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -660,7 +661,7 @@ public static partial class ProcessBuiltIns
             psi.ArgumentList.Add(arg);
         }
 
-        var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to daemonize process.", errorType: StashErrorTypes.IOError);
+        var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new IOError("Failed to daemonize process.");
 
         var fields = new Dictionary<string, StashValue>
         {
@@ -737,7 +738,7 @@ public static partial class ProcessBuiltIns
         {
             if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
             {
-                throw new RuntimeError("All elements in 'process.waitAll' array must be Process handles.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("All elements in 'process.waitAll' array must be Process handles.");
             }
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -789,7 +790,7 @@ public static partial class ProcessBuiltIns
 
         if (procs.Count == 0)
         {
-            throw new RuntimeError("'process.waitAny' requires a non-empty array.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'process.waitAny' requires a non-empty array.");
         }
 
         // Validate all handles first
@@ -798,7 +799,7 @@ public static partial class ProcessBuiltIns
         {
             if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
             {
-                throw new RuntimeError("All elements in 'process.waitAny' array must be Process handles.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("All elements in 'process.waitAny' array must be Process handles.");
             }
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -880,7 +881,7 @@ public static partial class ProcessBuiltIns
         string expanded = ctx.ExpandTilde(path);
         string resolved = System.IO.Path.GetFullPath(expanded);
         if (!System.IO.Directory.Exists(resolved))
-            throw new RuntimeError($"no such directory: {resolved}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"no such directory: {resolved}", exitCode: -1);
 
         var stack = ctx.DirStack;
         if (stack.Count >= 256)
@@ -898,7 +899,7 @@ public static partial class ProcessBuiltIns
     {
         var stack = ctx.DirStack;
         if (stack.Count <= 1)
-            throw new RuntimeError("directory stack is at root", errorType: StashErrorTypes.CommandError);
+            throw new CommandError("directory stack is at root", exitCode: -1);
 
         string popped = stack[^1];
         stack.RemoveAt(stack.Count - 1);
@@ -934,7 +935,7 @@ public static partial class ProcessBuiltIns
     {
         string resolved = System.IO.Path.GetFullPath(path);
         if (!System.IO.Directory.Exists(resolved))
-            throw new RuntimeError($"process.withDir: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"process.withDir: directory does not exist: '{resolved}'.");
 
         string previous = System.Environment.CurrentDirectory;
         System.Environment.CurrentDirectory = resolved;
@@ -984,7 +985,7 @@ public static partial class ProcessBuiltIns
     private static void HistoryAdd(IInterpreterContext ctx, string line)
     {
         if (string.IsNullOrWhiteSpace(line))
-            throw new RuntimeError("process.historyAdd: line must not be empty or whitespace-only.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("process.historyAdd: line must not be empty or whitespace-only.");
         HistoryAddHandler?.Invoke(line);
     }
 
@@ -1000,7 +1001,7 @@ public static partial class ProcessBuiltIns
     {
         if (v.IsObj && v.AsObj is StashInstance inst && inst.TypeName == "Process")
             return inst;
-        throw new RuntimeError($"First argument to '{funcName}' must be a Process.", errorType: StashErrorTypes.TypeError);
+        throw new TypeError($"First argument to '{funcName}' must be a Process.");
     }
 
     /// <summary>
@@ -1063,7 +1064,7 @@ public static partial class ProcessBuiltIns
     private static void ResolveArgvElement(StashValue arg, List<string> argv, string callerName, int depth)
     {
         if (arg.IsNull)
-            throw new RuntimeError($"{callerName}: argv element cannot be null.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerName}: argv element cannot be null.");
 
         object? obj = arg.IsObj ? arg.AsObj : null;
 
@@ -1145,7 +1146,7 @@ public static partial class ProcessBuiltIns
         if (raw.IsNull) return ExecOptionsData.Default;
 
         if (!raw.IsObj)
-            throw new RuntimeError($"{callerName}: 'opts' must be an ExecOptions struct or dict, got {raw.Tag}.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerName}: 'opts' must be an ExecOptions struct or dict, got {raw.Tag}.");
 
         object? obj = raw.AsObj;
 
@@ -1204,7 +1205,7 @@ public static partial class ProcessBuiltIns
         }
         else
         {
-            throw new RuntimeError($"{callerName}: 'opts' must be an ExecOptions struct or dict.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerName}: 'opts' must be an ExecOptions struct or dict.");
         }
 
         return new ExecOptionsData(mode, strict, redirects, cwd, env);
@@ -1239,7 +1240,7 @@ public static partial class ProcessBuiltIns
                     "Capture"     => ExecModeEnum.Capture,
                     "Passthrough" => ExecModeEnum.Passthrough,
                     "Stream"      => ExecModeEnum.Stream,
-                    _ => throw new RuntimeError($"{callerName}: Unknown ExecMode member '{ev.MemberName}'.", errorType: StashErrorTypes.ValueError)
+                    _ => throw new ValueError($"{callerName}: Unknown ExecMode member '{ev.MemberName}'.")
                 };
             }
             if (obj is string modeStr)
@@ -1249,11 +1250,11 @@ public static partial class ProcessBuiltIns
                     "Capture"     => ExecModeEnum.Capture,
                     "Passthrough" => ExecModeEnum.Passthrough,
                     "Stream"      => ExecModeEnum.Stream,
-                    _ => throw new RuntimeError($"{callerName}: Unknown ExecMode string '{modeStr}'. Expected 'Capture', 'Passthrough', or 'Stream'.", errorType: StashErrorTypes.ValueError)
+                    _ => throw new ValueError($"{callerName}: Unknown ExecMode string '{modeStr}'. Expected 'Capture', 'Passthrough', or 'Stream'.")
                 };
             }
         }
-        throw new RuntimeError($"{callerName}: 'mode' must be an ExecMode enum value or string.", errorType: StashErrorTypes.TypeError);
+        throw new TypeError($"{callerName}: 'mode' must be an ExecMode enum value or string.");
     }
 
     private static RedirectData ParseRedirectSpec(StashValue val, string callerName)
@@ -1263,7 +1264,7 @@ public static partial class ProcessBuiltIns
         bool append = false;
 
         if (!val.IsObj)
-            throw new RuntimeError($"{callerName}: 'redirect' must be a RedirectSpec struct or dict.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerName}: 'redirect' must be a RedirectSpec struct or dict.");
 
         object? obj = val.AsObj;
         if (obj is StashInstance inst)
@@ -1285,14 +1286,14 @@ public static partial class ProcessBuiltIns
         }
         else
         {
-            throw new RuntimeError($"{callerName}: 'redirect' must be a RedirectSpec struct or dict.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerName}: 'redirect' must be a RedirectSpec struct or dict.");
         }
 
         if (string.IsNullOrEmpty(target))
-            throw new RuntimeError($"{callerName}: RedirectSpec 'target' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerName}: RedirectSpec 'target' must be a non-empty string.");
 
         if (stream is not ("stdout" or "stderr" or "all"))
-            throw new RuntimeError($"{callerName}: RedirectSpec 'stream' must be \"stdout\", \"stderr\", or \"all\".", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerName}: RedirectSpec 'stream' must be \"stdout\", \"stderr\", or \"all\".");
 
         return new RedirectData(stream, target, append);
     }
@@ -1300,7 +1301,7 @@ public static partial class ProcessBuiltIns
     private static Dictionary<string, string>? ParseEnvDict(StashValue val, string callerName)
     {
         if (!val.IsObj || val.AsObj is not StashDictionary dict)
-            throw new RuntimeError($"{callerName}: 'env' must be a dict.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerName}: 'env' must be a dict.");
 
         var result = new Dictionary<string, string>();
         foreach (var kvp in dict.GetAllEntries())
@@ -1332,7 +1333,7 @@ public static partial class ProcessBuiltIns
         }
 
         if (string.IsNullOrEmpty(program))
-            throw new RuntimeError($"{callerName}: stage[{index}] 'program' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerName}: stage[{index}] 'program' must be a non-empty string.");
 
         return (program, ResolveArgv(rawArgs, callerName));
     }
@@ -1342,9 +1343,7 @@ public static partial class ProcessBuiltIns
         IInterpreterContext ctx, string program, List<string> argv, ExecOptionsData opts, string commandLabel)
     {
         if (opts.Mode == ExecModeEnum.Stream && opts.Redirects is not null)
-            throw new RuntimeError(
-                "process.exec: 'redirect' is not supported with Stream mode.",
-                errorType: StashErrorTypes.ValueError);
+            throw new ValueError("process.exec: 'redirect' is not supported with Stream mode.");
 
         switch (opts.Mode)
         {
@@ -1422,12 +1421,12 @@ public static partial class ProcessBuiltIns
         try
         {
             process = System.Diagnostics.Process.Start(psi)
-                ?? throw new RuntimeError($"process.exec: failed to start '{program}'.", errorType: StashErrorTypes.CommandError);
+                ?? throw new CommandError($"process.exec: failed to start '{program}'.", exitCode: -1);
         }
         catch (RuntimeError) { throw; }
         catch (System.Exception ex)
         {
-            throw new RuntimeError($"process.exec: failed to start '{program}': {ex.Message}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"process.exec: failed to start '{program}': {ex.Message}", exitCode: -1);
         }
 
         using (process)
@@ -1472,12 +1471,12 @@ public static partial class ProcessBuiltIns
         try
         {
             process = System.Diagnostics.Process.Start(psi)
-                ?? throw new RuntimeError($"process.exec: failed to start '{program}' in passthrough mode.", errorType: StashErrorTypes.CommandError);
+                ?? throw new CommandError($"process.exec: failed to start '{program}' in passthrough mode.", exitCode: -1);
         }
         catch (RuntimeError) { throw; }
         catch (System.Exception ex)
         {
-            throw new RuntimeError($"process.exec: failed to start '{program}': {ex.Message}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"process.exec: failed to start '{program}': {ex.Message}", exitCode: -1);
         }
 
         using (process)
@@ -1516,12 +1515,12 @@ public static partial class ProcessBuiltIns
         try
         {
             process = System.Diagnostics.Process.Start(psi)
-                ?? throw new RuntimeError($"process.exec: failed to start '{program}' in stream mode.", errorType: StashErrorTypes.CommandError);
+                ?? throw new CommandError($"process.exec: failed to start '{program}' in stream mode.", exitCode: -1);
         }
         catch (RuntimeError) { throw; }
         catch (System.Exception ex)
         {
-            throw new RuntimeError($"process.exec: failed to start '{program}' in stream mode: {ex.Message}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"process.exec: failed to start '{program}' in stream mode: {ex.Message}", exitCode: -1);
         }
 
         // Re-read the token from the context on each iteration tick so that timeout-block
@@ -1559,12 +1558,12 @@ public static partial class ProcessBuiltIns
                 try
                 {
                     processes[i] = System.Diagnostics.Process.Start(psi)
-                        ?? throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start.", errorType: StashErrorTypes.CommandError);
+                        ?? throw new CommandError($"pipeline stage {i} ('{prog}') failed to start.", exitCode: -1);
                 }
                 catch (RuntimeError) { throw; }
                 catch (System.Exception ex)
                 {
-                    throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start: {ex.Message}", errorType: StashErrorTypes.CommandError);
+                    throw new CommandError($"pipeline stage {i} ('{prog}') failed to start: {ex.Message}", exitCode: -1);
                 }
                 started++;
             }
@@ -1649,7 +1648,7 @@ public static partial class ProcessBuiltIns
         catch (OperationCanceledException) { throw; }
         catch (System.Exception ex)
         {
-            throw new RuntimeError($"process.pipeline: execution failed: {ex.Message}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"process.pipeline: execution failed: {ex.Message}", exitCode: -1);
         }
         finally
         {
@@ -1695,12 +1694,12 @@ public static partial class ProcessBuiltIns
                 try
                 {
                     processes[i] = System.Diagnostics.Process.Start(psi)
-                        ?? throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start.", errorType: StashErrorTypes.CommandError);
+                        ?? throw new CommandError($"pipeline stage {i} ('{prog}') failed to start.", exitCode: -1);
                 }
                 catch (RuntimeError) { throw; }
                 catch (System.Exception ex)
                 {
-                    throw new RuntimeError($"pipeline stage {i} ('{prog}') failed to start: {ex.Message}", errorType: StashErrorTypes.CommandError);
+                    throw new CommandError($"pipeline stage {i} ('{prog}') failed to start: {ex.Message}", exitCode: -1);
                 }
                 started++;
             }
@@ -1747,7 +1746,7 @@ public static partial class ProcessBuiltIns
                 try { if (!processes[i].HasExited) processes[i].Kill(entireProcessTree: true); } catch { }
                 try { processes[i].Dispose(); } catch { }
             }
-            throw new RuntimeError($"process.pipeline: failed to start pipeline: {ex.Message}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"process.pipeline: failed to start pipeline: {ex.Message}", exitCode: -1);
         }
     }
 
@@ -1768,23 +1767,12 @@ public static partial class ProcessBuiltIns
         }
         catch (System.Exception ex)
         {
-            throw new RuntimeError($"process.exec: redirect to '{redir.Target}' failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"process.exec: redirect to '{redir.Target}' failed: {ex.Message}");
         }
     }
 
     private static void ThrowCommandError(string command, long exitCode, string stderr, string stdout)
     {
-        throw new RuntimeError(
-            $"Command failed with exit code {exitCode}: {command}",
-            errorType: StashErrorTypes.CommandError)
-        {
-            Properties = new Dictionary<string, object?>
-            {
-                ["exitCode"] = exitCode,
-                ["stderr"]   = stderr,
-                ["stdout"]   = stdout,
-                ["command"]  = command,
-            }
-        };
+        throw new CommandError($"Command failed with exit code {exitCode}: {command}", exitCode: exitCode, stderr: stderr, stdout: stdout, command: command);
     }
 }

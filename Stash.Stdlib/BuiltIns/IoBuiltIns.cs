@@ -5,6 +5,7 @@ using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the 'io' namespace built-in functions.
@@ -123,7 +124,7 @@ public static partial class IoBuiltIns
         {
             string? line = ctx.Input.ReadLine();
             if (line is null)
-                throw new RuntimeError("io.readPassword: input cancelled.", errorType: StashErrorTypes.IOError);
+                throw new IOError("io.readPassword: input cancelled.");
             collected = line;
         }
         else
@@ -147,7 +148,7 @@ public static partial class IoBuiltIns
             {
                 string? line = ctx.Input.ReadLine();
                 if (line is null)
-                    throw new RuntimeError("io.readPassword: input cancelled.", errorType: StashErrorTypes.IOError);
+                    throw new IOError("io.readPassword: input cancelled.");
                 return line;
             }
 
@@ -162,7 +163,7 @@ public static partial class IoBuiltIns
             }
 
             if (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0)
-                throw new RuntimeError("io.readPassword: input cancelled.", errorType: StashErrorTypes.IOError);
+                throw new IOError("io.readPassword: input cancelled.");
 
             if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                 sb.Append(key.KeyChar);

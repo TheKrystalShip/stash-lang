@@ -55,7 +55,7 @@ public class CompleteBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
     private static RuntimeError RunExpectingRuntimeError(string source)
     {
         var (chunk, vm) = CompileSource(source);
-        return Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        return Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
     }
 
     private static CompletionEngine MakeEngineAndWire(out CustomCompleterRegistry registry, Func<string, bool>? isExec = null)

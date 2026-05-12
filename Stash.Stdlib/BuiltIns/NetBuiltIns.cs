@@ -10,6 +10,7 @@ using System.Threading;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>net</c> namespace built-in functions for network operations and subnet utilities.
@@ -101,7 +102,7 @@ public static partial class NetBuiltIns
     {
         var ip = SvArgs.IpAddress(args, 0, "net.subnetInfo");
         if (ip.PrefixLength is null)
-            throw new RuntimeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).");
 
         var (maskBytes, networkBytes, broadcastBytes, wildcardBytes) = ComputeSubnetComponents(ip);
         long hostCount = ComputeHostCount(ip);
@@ -271,7 +272,7 @@ public static partial class NetBuiltIns
         object? hostArg = args[0].ToObject();
         var port = SvArgs.Long(args, 1, "net.isPortOpen");
         if (port < 1 || port > 65535)
-            throw new RuntimeError("Port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("Port must be between 1 and 65535.");
         int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, "net.isPortOpen") : 3000;
 
         try
@@ -284,7 +285,7 @@ public static partial class NetBuiltIns
             else if (hostArg is string hostname)
                 client.ConnectAsync(hostname, (int)port, cts.Token).GetAwaiter().GetResult();
             else
-                throw new RuntimeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.");
             return StashValue.FromBool(client.Connected);
         }
         catch (RuntimeError) { throw; }
@@ -312,7 +313,7 @@ public static partial class NetBuiltIns
         var match = NetworkInterface.GetAllNetworkInterfaces()
             .FirstOrDefault(ni => ni.Name == name);
         if (match is null)
-            throw new RuntimeError($"Network interface '{name}' not found.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Network interface '{name}' not found.");
         return BuildInterfaceList([match])[0];
     }
 
@@ -588,7 +589,7 @@ public static partial class NetBuiltIns
     private static (byte[] MaskBytes, byte[] NetworkBytes, byte[] BroadcastBytes, byte[] WildcardBytes) ComputeSubnetComponents(StashIpAddress ip, string funcName = "net.subnetInfo")
     {
         if (ip.PrefixLength is null)
-            throw new RuntimeError($"'{funcName}' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"'{funcName}' requires a CIDR IP address (e.g., @192.168.1.0/24).");
 
         int prefix = ip.PrefixLength.Value;
         byte[] addrBytes = ip.GetBytes();

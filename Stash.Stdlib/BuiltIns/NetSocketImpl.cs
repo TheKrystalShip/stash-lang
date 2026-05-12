@@ -15,6 +15,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Shared state and implementations for TCP, UDP, WebSocket, and DNS built-ins.
@@ -48,7 +49,7 @@ internal static class NetSocketImpl
         var host = SvArgs.String(args, 0, callerQualified);
         var port = SvArgs.Long(args, 1, callerQualified);
         if (port < 1 || port > 65535)
-            throw new RuntimeError($"{callerQualified}: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: port must be between 1 and 65535.");
         int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, callerQualified) : 5000;
 
         try
@@ -71,7 +72,7 @@ internal static class NetSocketImpl
         catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: failed to connect to '{host}:{port}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: failed to connect to '{host}:{port}': {ex.Message}");
         }
     }
 
@@ -80,11 +81,11 @@ internal static class NetSocketImpl
         if (args.Length != 2)
             throw new RuntimeError($"{callerQualified}: expected 2 arguments.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: first argument must be a TcpConnection.");
         var data = SvArgs.String(args, 1, callerQualified);
 
         if (conn.GetField("_client", null).ToObject() is not TcpClient client)
-            throw new RuntimeError($"{callerQualified}: invalid or closed TcpConnection.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: invalid or closed TcpConnection.");
 
         try
         {
@@ -95,7 +96,7 @@ internal static class NetSocketImpl
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: send failed: {ex.Message}");
         }
     }
 
@@ -104,11 +105,11 @@ internal static class NetSocketImpl
         if (args.Length < 1 || args.Length > 2)
             throw new RuntimeError($"{callerQualified}: expected 1 or 2 arguments.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: first argument must be a TcpConnection.");
         int maxBytes = args.Length > 1 ? (int)SvArgs.Long(args, 1, callerQualified) : 4096;
 
         if (conn.GetField("_client", null).ToObject() is not TcpClient client)
-            throw new RuntimeError($"{callerQualified}: invalid or closed TcpConnection.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: invalid or closed TcpConnection.");
 
         try
         {
@@ -119,7 +120,7 @@ internal static class NetSocketImpl
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: receive failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: receive failed: {ex.Message}");
         }
     }
 
@@ -128,7 +129,7 @@ internal static class NetSocketImpl
         if (args.Length != 1)
             throw new RuntimeError($"{callerQualified}: expected 1 argument.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: argument must be a TcpConnection.");
 
         if (conn.GetField("_client", null).ToObject() is TcpClient client)
             client.Dispose();
@@ -142,7 +143,7 @@ internal static class NetSocketImpl
             throw new RuntimeError($"{callerQualified}: expected 2 arguments.");
         var port = SvArgs.Long(args, 0, callerQualified);
         if (port < 1 || port > 65535)
-            throw new RuntimeError($"{callerQualified}: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: port must be between 1 and 65535.");
         var handler = SvArgs.Callable(args, 1, callerQualified);
 
         var listener = new TcpListener(IPAddress.Any, (int)port);
@@ -166,7 +167,7 @@ internal static class NetSocketImpl
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: failed on port {port}: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: failed on port {port}: {ex.Message}");
         }
         finally
         {
@@ -182,7 +183,7 @@ internal static class NetSocketImpl
         var host = SvArgs.String(args, 0, callerQualified);
         var port = SvArgs.Long(args, 1, callerQualified);
         if (port < 1 || port > 65535)
-            throw new RuntimeError($"{callerQualified}: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: port must be between 1 and 65535.");
 
         int timeout  = 5000;
         bool noDelay  = false;
@@ -224,17 +225,17 @@ internal static class NetSocketImpl
             catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cts.Token.IsCancellationRequested)
             {
                 client.Dispose();
-                throw new RuntimeError($"{capturedQual}: connection timed out after {capturedTimeout}ms.", errorType: StashErrorTypes.TimeoutError);
+                throw new TimeoutError($"{capturedQual}: connection timed out after {capturedTimeout}ms.");
             }
             catch (OperationCanceledException)
             {
                 client.Dispose();
-                throw new RuntimeError($"{capturedQual}: connection was cancelled.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"{capturedQual}: connection was cancelled.");
             }
             catch (Exception ex)
             {
                 client.Dispose();
-                throw new RuntimeError($"{capturedQual}: failed to connect to '{capturedHost}:{capturedPort}': {ex.Message}", errorType: StashErrorTypes.IOError);
+                throw new IOError($"{capturedQual}: failed to connect to '{capturedHost}:{capturedPort}': {ex.Message}");
             }
 
             SslStream? sslStream = null;
@@ -255,15 +256,15 @@ internal static class NetSocketImpl
                 {
                     sslStream.Dispose();
                     client.Dispose();
-                    throw new RuntimeError($"{capturedQual}: TLS handshake failed — {ex.Message}.", errorType: StashErrorTypes.IOError);
+                    throw new IOError($"{capturedQual}: TLS handshake failed — {ex.Message}.");
                 }
                 catch (IOException ex) when (ex.InnerException is AuthenticationException innerEx)
                 {
                     sslStream.Dispose();
                     client.Dispose();
                     if (capturedVerify)
-                        throw new RuntimeError($"{capturedQual}: TLS certificate validation failed — {innerEx.Message}. Set tlsVerify: false to skip validation (insecure).", errorType: StashErrorTypes.IOError);
-                    throw new RuntimeError($"{capturedQual}: TLS handshake failed — {ex.Message}.", errorType: StashErrorTypes.IOError);
+                        throw new IOError($"{capturedQual}: TLS certificate validation failed — {innerEx.Message}. Set tlsVerify: false to skip validation (insecure).");
+                    throw new IOError($"{capturedQual}: TLS handshake failed — {ex.Message}.");
                 }
             }
 
@@ -287,7 +288,7 @@ internal static class NetSocketImpl
         if (args.Length != 2)
             throw new RuntimeError($"{callerQualified}: expected 2 arguments.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: first argument must be a TcpConnection.");
         var data = SvArgs.String(args, 1, callerQualified);
 
         TcpClient client = GetTcpClient(conn, callerQualified);
@@ -307,7 +308,7 @@ internal static class NetSocketImpl
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"{capturedQual}: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+                throw new IOError($"{capturedQual}: send failed: {ex.Message}");
             }
         });
         return StashValue.FromObj(new StashFuture(dotnetTask, cts));
@@ -318,9 +319,9 @@ internal static class NetSocketImpl
         if (args.Length != 2)
             throw new RuntimeError($"{callerQualified}: expected 2 arguments.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: first argument must be a TcpConnection.");
         if (args[1].ToObject() is not StashByteArray byteArr)
-            throw new RuntimeError($"{callerQualified}: second argument must be a byte[].", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: second argument must be a byte[].");
 
         TcpClient client = GetTcpClient(conn, callerQualified);
         byte[] data = byteArr.AsSpan().ToArray();
@@ -338,7 +339,7 @@ internal static class NetSocketImpl
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"{capturedQual}: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+                throw new IOError($"{capturedQual}: send failed: {ex.Message}");
             }
         });
         return StashValue.FromObj(new StashFuture(dotnetTask, cts));
@@ -349,7 +350,7 @@ internal static class NetSocketImpl
         if (args.Length < 1 || args.Length > 2)
             throw new RuntimeError($"{callerQualified}: expected 1 or 2 arguments.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: first argument must be a TcpConnection.");
 
         int maxBytes = 4096;
         int timeout  = 30000;
@@ -388,7 +389,7 @@ internal static class NetSocketImpl
         if (args.Length < 1 || args.Length > 2)
             throw new RuntimeError($"{callerQualified}: expected 1 or 2 arguments.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: first argument must be a TcpConnection.");
 
         int maxBytes = 4096;
         int timeout  = 30000;
@@ -428,7 +429,7 @@ internal static class NetSocketImpl
         if (args.Length != 1)
             throw new RuntimeError($"{callerQualified}: expected 1 argument.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: argument must be a TcpConnection.");
 
         if (SslStreams.TryGetValue(conn, out SslStream? ssl))
         {
@@ -462,7 +463,7 @@ internal static class NetSocketImpl
         if (args.Length != 1)
             throw new RuntimeError($"{callerQualified}: expected 1 argument.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: argument must be a TcpConnection.");
 
         try
         {
@@ -480,7 +481,7 @@ internal static class NetSocketImpl
         if (args.Length != 1)
             throw new RuntimeError($"{callerQualified}: expected 1 argument.");
         if (args[0].ToObject() is not StashInstance conn)
-            throw new RuntimeError($"{callerQualified}: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: argument must be a TcpConnection.");
 
         try
         {
@@ -501,7 +502,7 @@ internal static class NetSocketImpl
             throw new RuntimeError($"{callerQualified}: expected 2 arguments.");
         var port = SvArgs.Long(args, 0, callerQualified);
         if (port < 0 || port > 65535)
-            throw new RuntimeError($"{callerQualified}: port must be between 0 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: port must be between 0 and 65535.");
         var handler = SvArgs.Callable(args, 1, callerQualified);
 
         var listener = new TcpListener(IPAddress.Any, (int)port);
@@ -568,7 +569,7 @@ internal static class NetSocketImpl
         if (args.Length != 1)
             throw new RuntimeError($"{callerQualified}: expected 1 argument.");
         if (args[0].ToObject() is not StashInstance server || server.TypeName != "TcpServer")
-            throw new RuntimeError($"{callerQualified}: argument must be a TcpServer.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{callerQualified}: argument must be a TcpServer.");
 
         if (TcpServers.TryGetValue(server, out TcpListener? listener))
         {
@@ -588,7 +589,7 @@ internal static class NetSocketImpl
         var host = SvArgs.String(args, 0, callerQualified);
         var port = SvArgs.Long(args, 1, callerQualified);
         if (port < 1 || port > 65535)
-            throw new RuntimeError($"{callerQualified}: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: port must be between 1 and 65535.");
         var data = SvArgs.String(args, 2, callerQualified);
 
         try
@@ -600,7 +601,7 @@ internal static class NetSocketImpl
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: send failed: {ex.Message}");
         }
     }
 
@@ -610,7 +611,7 @@ internal static class NetSocketImpl
             throw new RuntimeError($"{callerQualified}: expected 1 or 2 arguments.");
         var port = SvArgs.Long(args, 0, callerQualified);
         if (port < 1 || port > 65535)
-            throw new RuntimeError($"{callerQualified}: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: port must be between 1 and 65535.");
         int timeout = args.Length > 1 ? (int)SvArgs.Long(args, 1, callerQualified) : 5000;
 
         try
@@ -633,7 +634,7 @@ internal static class NetSocketImpl
         catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: receive failed: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: receive failed: {ex.Message}");
         }
     }
 
@@ -645,7 +646,7 @@ internal static class NetSocketImpl
             throw new RuntimeError($"{callerQualified}: expected 1 or 2 arguments.");
         var url = SvArgs.String(args, 0, callerQualified);
         if (!url.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-            throw new RuntimeError($"{callerQualified}: url must start with 'ws://' or 'wss://'.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: url must start with 'ws://' or 'wss://'.");
 
         StashDictionary? options = args.Length > 1 ? SvArgs.Dict(args, 1, callerQualified) : null;
 
@@ -732,7 +733,7 @@ internal static class NetSocketImpl
         }
         catch (FormatException)
         {
-            throw new RuntimeError($"{callerQualified}: invalid base64 data", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"{callerQualified}: invalid base64 data");
         }
 
         var capturedBytes = bytes;
@@ -782,7 +783,7 @@ internal static class NetSocketImpl
                     }
                     ms.Write(buffer, 0, result.Count);
                     if (ms.Length > 16 * 1024 * 1024)
-                        throw new RuntimeError($"{capturedQual}: message exceeds maximum size of 16MB.", errorType: StashErrorTypes.ValueError);
+                        throw new ValueError($"{capturedQual}: message exceeds maximum size of 16MB.");
                 } while (!result.EndOfMessage);
 
                 string msgType;
@@ -820,7 +821,7 @@ internal static class NetSocketImpl
         var client = GetWsClient(args[0].ToObject(), callerQualified);
         long code = args.Length > 1 ? SvArgs.Long(args, 1, callerQualified) : 1000;
         if (code < 1000 || code > 4999)
-            throw new RuntimeError($"{callerQualified}: close code must be between 1000 and 4999.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"{callerQualified}: close code must be between 1000 and 4999.");
         string reason = args.Length > 2 ? SvArgs.String(args, 2, callerQualified) : "";
 
         var capturedReason = reason;
@@ -870,12 +871,12 @@ internal static class NetSocketImpl
         {
             var entry = Dns.GetHostEntry(hostname);
             if (entry.AddressList.Length == 0)
-                throw new RuntimeError($"No DNS records found for '{hostname}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"No DNS records found for '{hostname}'.");
             return StashValue.FromObj(new StashIpAddress(entry.AddressList[0], null));
         }
         catch (SocketException ex)
         {
-            throw new RuntimeError($"DNS resolution failed for '{hostname}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"DNS resolution failed for '{hostname}': {ex.Message}");
         }
     }
 
@@ -889,7 +890,7 @@ internal static class NetSocketImpl
         }
         catch (SocketException ex)
         {
-            throw new RuntimeError($"DNS resolution failed for '{hostname}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"DNS resolution failed for '{hostname}': {ex.Message}");
         }
     }
 
@@ -903,7 +904,7 @@ internal static class NetSocketImpl
         }
         catch (SocketException ex)
         {
-            throw new RuntimeError($"Reverse DNS lookup failed for '{ip}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Reverse DNS lookup failed for '{ip}': {ex.Message}");
         }
     }
 
@@ -927,7 +928,7 @@ internal static class NetSocketImpl
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: DNS query failed for '{domain}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: DNS query failed for '{domain}': {ex.Message}");
         }
     }
 
@@ -943,7 +944,7 @@ internal static class NetSocketImpl
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerQualified}: DNS query failed for '{domain}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: DNS query failed for '{domain}': {ex.Message}");
         }
     }
 
@@ -952,9 +953,9 @@ internal static class NetSocketImpl
     internal static ClientWebSocket GetWsClient(object? arg, string funcName)
     {
         if (arg is not StashInstance inst || inst.TypeName != "WsConnection")
-            throw new RuntimeError($"First argument to '{funcName}' must be a WsConnection.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"First argument to '{funcName}' must be a WsConnection.");
         if (!WsClients.TryGetValue(inst, out ClientWebSocket? ws))
-            throw new RuntimeError($"{funcName}: connection is invalid or closed.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{funcName}: connection is invalid or closed.");
         return ws;
     }
 
@@ -978,7 +979,7 @@ internal static class NetSocketImpl
         }
         catch { }
 
-        throw new RuntimeError($"{funcName}: invalid or closed TcpConnection.", errorType: StashErrorTypes.IOError);
+        throw new IOError($"{funcName}: invalid or closed TcpConnection.");
     }
 
     internal static string MapWsState(WebSocketState state) => state switch

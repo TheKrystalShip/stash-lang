@@ -8,6 +8,7 @@ using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
 using System;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>toml</c> namespace built-in functions for TOML serialization and deserialization.
@@ -37,7 +38,7 @@ public static partial class TomlBuiltIns
         }
         catch (TomlException e)
         {
-            throw new RuntimeError("toml.parse: invalid TOML — " + e.Message, errorType: StashErrorTypes.ParseError);
+            throw new ParseError("toml.parse: invalid TOML — " + e.Message);
         }
     }
 
@@ -54,7 +55,7 @@ public static partial class TomlBuiltIns
         }
         catch (TomlException e)
         {
-            throw new RuntimeError("toml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
+            throw new TypeError("toml.stringify: " + e.Message);
         }
     }
 

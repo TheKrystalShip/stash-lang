@@ -2,6 +2,7 @@ namespace Stash.Runtime.Errors;
 
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Runtime;
 
 [StashError(Properties = new[] { "path" })]
 public sealed class LockError : RuntimeError
@@ -9,7 +10,7 @@ public sealed class LockError : RuntimeError
     public string? Path { get; }
 
     public LockError(string message, string? path = null, SourceSpan? span = null)
-        : base(message, span)
+        : base(message, span, StashErrorTypes.LockError)
     {
         Path = path;
     }

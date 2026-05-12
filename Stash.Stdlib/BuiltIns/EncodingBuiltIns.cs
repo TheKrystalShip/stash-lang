@@ -4,6 +4,7 @@ using System;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>Registers the <c>encoding</c> namespace with base64, URL, and hex encoding/decoding functions.</summary>
 [StashNamespace]
@@ -85,7 +86,7 @@ public static partial class EncodingBuiltIns
         }
         catch (FormatException)
         {
-            throw new RuntimeError($"'encoding.hexDecode' invalid hex string: {s}", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"'encoding.hexDecode' invalid hex string: {s}");
         }
     }
 
@@ -122,7 +123,7 @@ public static partial class EncodingBuiltIns
         }
         catch (FormatException)
         {
-            throw new RuntimeError($"'encoding.hexDecodeBytes' invalid hex string: {s}", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"'encoding.hexDecodeBytes' invalid hex string: {s}");
         }
     }
 }

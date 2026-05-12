@@ -467,7 +467,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             // SA0163: warn on explicit "RuntimeError" catch type (not for untyped catch-all)
             foreach (Token typeToken in clause.TypeTokens)
             {
-                if (typeToken.Lexeme == "RuntimeError")
+                if (typeToken.Lexeme == StashErrorTypes.RuntimeError)
                     _diagnostics.Add(DiagnosticDescriptors.SA0163.CreateDiagnostic(typeToken.Span));
             }
 
@@ -1102,8 +1102,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
         foreach (var entry in throws)
         {
-            // Built-in error types are always valid — skip further checks.
-            if (_builtInErrorTypes.Contains(entry.ErrorType))
+            // Built-in error types (and the bare RuntimeError name) are always valid — skip further checks.
+            if (_builtInErrorTypes.Contains(entry.ErrorType) || entry.ErrorType == StashErrorTypes.RuntimeError)
                 continue;
 
             // Look for a user-declared struct with this name in the global scope.

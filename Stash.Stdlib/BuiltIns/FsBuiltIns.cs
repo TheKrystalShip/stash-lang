@@ -11,6 +11,7 @@ using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>fs</c> namespace built-in functions for filesystem operations.
@@ -123,7 +124,7 @@ public static partial class FsBuiltIns
     private static void ChownFile(string path, int uid, int gid)
     {
         if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-            throw new RuntimeError($"fs.chown: path not found: '{path}'.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"fs.chown: path not found: '{path}'.");
 
         uint owner = uid == -1 ? unchecked((uint)-1) : (uint)uid;
         uint group = gid == -1 ? unchecked((uint)-1) : (uint)gid;
@@ -139,7 +140,7 @@ public static partial class FsBuiltIns
                 22 => $"fs.chown: invalid uid {uid} or gid {gid}.",
                 _  => $"fs.chown: failed with errno {errno}."
             };
-            throw new RuntimeError(msg, errorType: StashErrorTypes.IOError);
+            throw new IOError(msg);
         }
     }
 
@@ -190,11 +191,11 @@ public static partial class FsBuiltIns
             "latin1"  => Encoding.Latin1,
             "utf-16"  => Encoding.Unicode,
             "utf-32"  => Encoding.UTF32,
-            var e     => throw new RuntimeError($"fs.readFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".", errorType: StashErrorTypes.ValueError),
+            var e     => throw new ValueError($"fs.readFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\"."),
         };
 
         try { return System.IO.File.ReadAllText(path, enc); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot read file '{path}': {e.Message}"); }
     }
 
     /// <summary>Writes a string to a file, creating or overwriting it. Returns null.</summary>
@@ -215,11 +216,11 @@ public static partial class FsBuiltIns
             "latin1"  => Encoding.Latin1,
             "utf-16"  => Encoding.Unicode,
             "utf-32"  => Encoding.UTF32,
-            var e     => throw new RuntimeError($"fs.writeFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".", errorType: StashErrorTypes.ValueError),
+            var e     => throw new ValueError($"fs.writeFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\"."),
         };
 
         try { System.IO.File.WriteAllText(path, content, enc); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot write file '{path}': {e.Message}"); }
     }
 
     /// <summary>Returns true if a file exists at the given path.</summary>
@@ -261,7 +262,7 @@ public static partial class FsBuiltIns
     {
         path = ctx.ExpandTilde(path);
         try { System.IO.Directory.CreateDirectory(path); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot create directory '{path}': {e.Message}"); }
     }
 
     /// <summary>Deletes a file or recursively deletes a directory at the given path. Throws if the path does not exist.</summary>
@@ -284,10 +285,10 @@ public static partial class FsBuiltIns
             }
             else
             {
-                throw new RuntimeError($"Path does not exist: '{path}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"Path does not exist: '{path}'.");
             }
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot delete '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot delete '{path}': {e.Message}"); }
     }
 
     /// <summary>Copies a file from src to dst. Returns null.</summary>
@@ -302,10 +303,10 @@ public static partial class FsBuiltIns
         dst = ctx.ExpandTilde(dst);
 
         if (!overwrite && System.IO.File.Exists(dst))
-            throw new RuntimeError($"fs.copy: destination '{dst}' already exists. Pass overwrite: true to replace it.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"fs.copy: destination '{dst}' already exists. Pass overwrite: true to replace it.");
 
         try { System.IO.File.Copy(src, dst, overwrite); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot copy '{src}' to '{dst}': {e.Message}"); }
     }
 
     /// <summary>Moves or renames a file from src to dst. Returns null.</summary>
@@ -320,10 +321,10 @@ public static partial class FsBuiltIns
         dst = ctx.ExpandTilde(dst);
 
         if (!overwrite && System.IO.File.Exists(dst))
-            throw new RuntimeError($"fs.move: destination '{dst}' already exists. Pass overwrite: true to replace it.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"fs.move: destination '{dst}' already exists. Pass overwrite: true to replace it.");
 
         try { System.IO.File.Move(src, dst, overwrite); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot move '{src}' to '{dst}': {e.Message}"); }
     }
 
     /// <summary>Returns the size of a file in bytes.</summary>
@@ -335,7 +336,7 @@ public static partial class FsBuiltIns
     {
         path = ctx.ExpandTilde(path);
         try { return new System.IO.FileInfo(path).Length; }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot get size of '{path}': {e.Message}"); }
     }
 
     /// <summary>Returns an array of file and directory paths directly inside the given directory.</summary>
@@ -359,7 +360,7 @@ public static partial class FsBuiltIns
 
             return result;
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot list directory '{path}': {e.Message}"); }
     }
 
     /// <summary>Appends content to a file, creating it if it doesn't exist. Returns null.</summary>
@@ -373,7 +374,7 @@ public static partial class FsBuiltIns
         path = ctx.ExpandTilde(path);
 
         try { System.IO.File.AppendAllText(path, content); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot append to file '{path}': {e.Message}"); }
     }
 
     /// <summary>Reads a file and returns an array of lines.</summary>
@@ -392,7 +393,7 @@ public static partial class FsBuiltIns
                 result.Add(StashValue.FromObj(line));
             return result;
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot read file '{path}': {e.Message}"); }
     }
 
     /// <summary>Returns an array of file paths matching the glob pattern.</summary>
@@ -423,7 +424,7 @@ public static partial class FsBuiltIns
                 result.Add(StashValue.FromObj(f));
             return result;
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"fs.glob failed: {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"fs.glob failed: {e.Message}"); }
     }
 
     /// <summary>Returns true if the path points to a regular file.</summary>
@@ -495,7 +496,7 @@ public static partial class FsBuiltIns
             var info = new System.IO.FileInfo(path);
             return (double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0;
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get modified time for '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot get modified time for '{path}': {e.Message}"); }
     }
 
     /// <summary>Recursively lists all files under the given directory path.</summary>
@@ -514,7 +515,7 @@ public static partial class FsBuiltIns
                 result.Add(StashValue.FromObj(f));
             return result;
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"fs.walk failed: {e.Message}"); }
     }
 
     /// <summary>Returns true if the file at the given path is readable by the current process.</summary>
@@ -619,7 +620,7 @@ public static partial class FsBuiltIns
                 using (System.IO.File.Create(path)) { }
             }
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create file '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot create file '{path}': {e.Message}"); }
     }
 
     /// <summary>Creates a symbolic link at linkPath pointing to target.</summary>
@@ -637,7 +638,7 @@ public static partial class FsBuiltIns
         {
             System.IO.File.CreateSymbolicLink(linkPath, target);
         }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create symlink '{linkPath}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot create symlink '{linkPath}': {e.Message}"); }
     }
 
     /// <summary>Returns a dictionary with file metadata including size, isFile, isDir, isSymlink, modified, created, and name.</summary>
@@ -654,7 +655,7 @@ public static partial class FsBuiltIns
             var info = new System.IO.FileInfo(path);
             if (!info.Exists && !System.IO.Directory.Exists(path))
             {
-                throw new RuntimeError($"Path does not exist: '{path}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"Path does not exist: '{path}'.");
             }
 
             var isDir = System.IO.Directory.Exists(path);
@@ -671,7 +672,7 @@ public static partial class FsBuiltIns
             return StashValue.FromObj(result);
         }
         catch (RuntimeError) { throw; }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot stat '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot stat '{path}': {e.Message}"); }
     }
 
     /// <summary>Returns a FilePermissions struct describing the read/write/execute permissions for owner, group, and others.</summary>
@@ -686,7 +687,7 @@ public static partial class FsBuiltIns
         try
         {
             if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-                throw new RuntimeError($"Path does not exist: '{path}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"Path does not exist: '{path}'.");
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                 System.Runtime.InteropServices.OSPlatform.Windows))
@@ -765,8 +766,8 @@ public static partial class FsBuiltIns
             }
         }
         catch (RuntimeError) { throw; }
-        catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot get permissions for '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get permissions for '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.UnauthorizedAccessException e) { throw new IOError($"Cannot get permissions for '{path}': {e.Message}"); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot get permissions for '{path}': {e.Message}"); }
     }
 
     /// <summary>Sets file permissions from a FilePermissions struct. On Unix, sets full rwx bits for owner/group/others. On Windows, controls the read-only attribute based on owner write permission.</summary>
@@ -778,20 +779,20 @@ public static partial class FsBuiltIns
     private static void SetPermissions(IInterpreterContext ctx, string path, StashValue permissions)
     {
         if (permissions.ToObject() is not StashInstance perms || perms.TypeName != "FilePermissions")
-            throw new RuntimeError("Second argument to 'fs.setPermissions' must be a FilePermissions.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("Second argument to 'fs.setPermissions' must be a FilePermissions.");
         path = ctx.ExpandTilde(path);
 
         try
         {
             if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-                throw new RuntimeError($"Path does not exist: '{path}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"Path does not exist: '{path}'.");
 
             var ownerInst = perms.GetField("owner", null).ToObject() as StashInstance
-                ?? throw new RuntimeError("'owner' field must be a FilePermission struct.", errorType: StashErrorTypes.TypeError);
+                ?? throw new TypeError("'owner' field must be a FilePermission struct.");
             var groupInst = perms.GetField("group", null).ToObject() as StashInstance
-                ?? throw new RuntimeError("'group' field must be a FilePermission struct.", errorType: StashErrorTypes.TypeError);
+                ?? throw new TypeError("'group' field must be a FilePermission struct.");
             var othersInst = perms.GetField("others", null).ToObject() as StashInstance
-                ?? throw new RuntimeError("'others' field must be a FilePermission struct.", errorType: StashErrorTypes.TypeError);
+                ?? throw new TypeError("'others' field must be a FilePermission struct.");
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                 System.Runtime.InteropServices.OSPlatform.Windows))
@@ -832,8 +833,8 @@ public static partial class FsBuiltIns
             }
         }
         catch (RuntimeError) { throw; }
-        catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.UnauthorizedAccessException e) { throw new IOError($"Cannot set permissions on '{path}': {e.Message}"); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot set permissions on '{path}': {e.Message}"); }
     }
 
     /// <summary>Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.</summary>
@@ -848,7 +849,7 @@ public static partial class FsBuiltIns
         try
         {
             if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-                throw new RuntimeError($"Path does not exist: '{path}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"Path does not exist: '{path}'.");
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                 System.Runtime.InteropServices.OSPlatform.Windows))
@@ -883,8 +884,8 @@ public static partial class FsBuiltIns
             }
         }
         catch (RuntimeError) { throw; }
-        catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.UnauthorizedAccessException e) { throw new IOError($"Cannot set read-only on '{path}': {e.Message}"); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot set read-only on '{path}': {e.Message}"); }
     }
 
     /// <summary>Changes the owner and group of a file or directory. Unix only.</summary>
@@ -901,9 +902,8 @@ public static partial class FsBuiltIns
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
             System.Runtime.InteropServices.OSPlatform.Windows))
         {
-            throw new RuntimeError(
-                "fs.chown: file ownership change by uid/gid is not supported on Windows. " +
-                "Use fs.setPermissions() for access control.", errorType: StashErrorTypes.NotSupportedError);
+            throw new NotSupportedError("fs.chown: file ownership change by uid/gid is not supported on Windows. " +
+                "Use fs.setPermissions() for access control.");
         }
 
         ChownFile(path, (int)uid, (int)gid);
@@ -921,7 +921,7 @@ public static partial class FsBuiltIns
         try
         {
             if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-                throw new RuntimeError($"Path does not exist: '{path}'.", errorType: StashErrorTypes.IOError);
+                throw new IOError($"Path does not exist: '{path}'.");
 
             if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                 System.Runtime.InteropServices.OSPlatform.Windows))
@@ -942,8 +942,8 @@ public static partial class FsBuiltIns
             // On Windows, executable status is determined by file extension -- no action needed.
         }
         catch (RuntimeError) { throw; }
-        catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
-        catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}", errorType: StashErrorTypes.IOError); }
+        catch (System.UnauthorizedAccessException e) { throw new IOError($"Cannot set executable on '{path}': {e.Message}"); }
+        catch (System.IO.IOException e) { throw new IOError($"Cannot set executable on '{path}': {e.Message}"); }
     }
 
     /// <summary>Watches a file or directory for changes and invokes a callback for each event. Returns a Watcher handle that can be passed to fs.unwatch() to stop watching.</summary>
@@ -964,7 +964,7 @@ public static partial class FsBuiltIns
         path = System.IO.Path.GetFullPath(path);
 
         if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
-            throw new RuntimeError($"Cannot watch '{path}': path does not exist.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Cannot watch '{path}': path does not exist.");
 
         // Parse options
         bool recursive = false;
@@ -1038,7 +1038,7 @@ public static partial class FsBuiltIns
             _activeWatchers.TryRemove(handle, out _);
             ctx.TrackedWatchers.RemoveAll(e => ReferenceEquals(e.Handle, handle));
             state.Dispose();
-            throw new RuntimeError($"Cannot watch '{path}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Cannot watch '{path}': {ex.Message}");
         }
 
         return StashValue.FromObj(handle);
@@ -1051,7 +1051,7 @@ public static partial class FsBuiltIns
     private static void Unwatch(IInterpreterContext ctx, StashValue watcher)
     {
         if (watcher.ToObject() is not StashInstance handle || handle.TypeName != "Watcher")
-            throw new RuntimeError("First argument to 'fs.unwatch' must be a Watcher.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("First argument to 'fs.unwatch' must be a Watcher.");
 
         if (_activeWatchers.TryRemove(handle, out WatcherState? state))
         {
@@ -1076,7 +1076,7 @@ public static partial class FsBuiltIns
         }
         catch (System.IO.IOException e)
         {
-            throw new RuntimeError($"Cannot read file '{path}': {e.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Cannot read file '{path}': {e.Message}");
         }
     }
 
@@ -1094,7 +1094,7 @@ public static partial class FsBuiltIns
         }
         catch (System.IO.IOException e)
         {
-            throw new RuntimeError($"Cannot write file '{path}': {e.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Cannot write file '{path}': {e.Message}");
         }
     }
 
@@ -1113,7 +1113,7 @@ public static partial class FsBuiltIns
         }
         catch (System.IO.IOException e)
         {
-            throw new RuntimeError($"Cannot append to file '{path}': {e.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Cannot append to file '{path}': {e.Message}");
         }
     }
 }

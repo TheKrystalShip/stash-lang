@@ -80,13 +80,13 @@ public abstract class StashTestBase
     protected static void RunExpectingError(string source)
     {
         var (chunk, vm) = CompileToVM(source);
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
     }
 
     protected static RuntimeError RunCapturingError(string source)
     {
         var (chunk, vm) = CompileToVM(source);
-        return Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        return Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
     }
 
     protected static string RunCapturingOutput(string source)

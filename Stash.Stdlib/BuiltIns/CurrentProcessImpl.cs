@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Shared implementations for current-process built-ins exposed via both
@@ -19,7 +20,7 @@ internal static class CurrentProcessImpl
         string resolved = System.IO.Path.GetFullPath(expanded);
         if (!System.IO.Directory.Exists(resolved))
         {
-            throw new RuntimeError($"no such directory: {resolved}", errorType: StashErrorTypes.CommandError);
+            throw new CommandError($"no such directory: {resolved}", exitCode: -1);
         }
 
         // Cap the stack at 256 entries: drop the eldest (index 0) to make room.
@@ -40,7 +41,7 @@ internal static class CurrentProcessImpl
         var stack = ctx.DirStack;
         if (stack.Count <= 1)
         {
-            throw new RuntimeError("directory stack is at root", errorType: StashErrorTypes.CommandError);
+            throw new CommandError("directory stack is at root", exitCode: -1);
         }
 
         string popped = stack[^1];
@@ -74,7 +75,7 @@ internal static class CurrentProcessImpl
         string resolved = System.IO.Path.GetFullPath(path);
         if (!System.IO.Directory.Exists(resolved))
         {
-            throw new RuntimeError($"{callerQualified}: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"{callerQualified}: directory does not exist: '{resolved}'.");
         }
 
         string previous = System.Environment.CurrentDirectory;

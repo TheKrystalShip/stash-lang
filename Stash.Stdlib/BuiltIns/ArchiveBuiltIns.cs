@@ -12,6 +12,7 @@ using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>archive</c> namespace providing ZIP, TAR, and GZIP archive operations.
@@ -57,17 +58,17 @@ public static partial class ArchiveBuiltIns
         var opts = !options.IsNull ? GetArchiveOptions(options, "archive.zip") : DefaultOptions;
 
         if (paths.Count == 0)
-            throw new RuntimeError("archive.zip: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("archive.zip: input paths cannot be empty.");
 
         // Check for existing file
         if (File.Exists(outputPath) && !opts.Overwrite)
-            throw new RuntimeError($"archive.zip: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.zip: file already exists: '{outputPath}'");
 
         // Validate input paths exist
         foreach (var p in paths)
         {
             if (!File.Exists(p) && !Directory.Exists(p))
-                throw new RuntimeError($"archive.zip: file not found: '{p}'", errorType: StashErrorTypes.IOError);
+                throw new IOError($"archive.zip: file not found: '{p}'");
         }
 
         try
@@ -106,11 +107,11 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"archive.zip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.zip: permission denied: '{outputPath}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.zip: failed to create archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.zip: failed to create archive: {ex.Message}");
         }
     }
 
@@ -130,7 +131,7 @@ public static partial class ArchiveBuiltIns
         var opts = !options.IsNull ? GetArchiveOptions(options, "archive.unzip") : DefaultOptions;
 
         if (!File.Exists(archivePath))
-            throw new RuntimeError($"archive.unzip: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.unzip: file not found: '{archivePath}'");
 
         try
         {
@@ -157,10 +158,10 @@ public static partial class ArchiveBuiltIns
                 // Security check — prevent path traversal
                 var destPathFull = Path.GetFullPath(destPath);
                 if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
-                    throw new RuntimeError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'", errorType: StashErrorTypes.ValueError);
+                    throw new ValueError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'");
 
                 if (File.Exists(destPath) && !opts.Overwrite)
-                    throw new RuntimeError($"archive.unzip: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
+                    throw new IOError($"archive.unzip: file already exists: '{destPath}'");
 
                 var destDir = Path.GetDirectoryName(destPath);
                 if (!string.IsNullOrEmpty(destDir))
@@ -175,15 +176,15 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
         {
-            throw new RuntimeError($"archive.unzip: invalid ZIP archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"archive.unzip: invalid ZIP archive: '{archivePath}'");
         }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"archive.unzip: permission denied: '{outputDir}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.unzip: permission denied: '{outputDir}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.unzip: failed to extract archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.unzip: failed to extract archive: {ex.Message}");
         }
     }
 
@@ -202,17 +203,17 @@ public static partial class ArchiveBuiltIns
         var opts = !options.IsNull ? GetArchiveOptions(options, "archive.tar") : DefaultOptions;
 
         if (paths.Count == 0)
-            throw new RuntimeError("archive.tar: input paths cannot be empty.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("archive.tar: input paths cannot be empty.");
 
         // Check for existing file
         if (File.Exists(outputPath) && !opts.Overwrite)
-            throw new RuntimeError($"archive.tar: file already exists: '{outputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.tar: file already exists: '{outputPath}'");
 
         // Validate input paths exist
         foreach (var p in paths)
         {
             if (!File.Exists(p) && !Directory.Exists(p))
-                throw new RuntimeError($"archive.tar: file not found: '{p}'", errorType: StashErrorTypes.IOError);
+                throw new IOError($"archive.tar: file not found: '{p}'");
         }
 
         try
@@ -276,11 +277,11 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"archive.tar: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.tar: permission denied: '{outputPath}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.tar: failed to create archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.tar: failed to create archive: {ex.Message}");
         }
     }
 
@@ -303,7 +304,7 @@ public static partial class ArchiveBuiltIns
         var options = rest.Length > 0 ? GetArchiveOptions(rest[0], "archive.untar") : DefaultOptions;
 
         if (!File.Exists(archivePath))
-            throw new RuntimeError($"archive.untar: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.untar: file not found: '{archivePath}'");
 
         try
         {
@@ -346,10 +347,10 @@ public static partial class ArchiveBuiltIns
                     // Security check — prevent path traversal
                     var destPathFull = Path.GetFullPath(destPath);
                     if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
-                        throw new RuntimeError($"archive.untar: entry would extract outside target directory: '{entry.Name}'", errorType: StashErrorTypes.ValueError);
+                        throw new ValueError($"archive.untar: entry would extract outside target directory: '{entry.Name}'");
 
                     if (File.Exists(destPath) && !options.Overwrite)
-                        throw new RuntimeError($"archive.untar: file already exists: '{destPath}'", errorType: StashErrorTypes.IOError);
+                        throw new IOError($"archive.untar: file already exists: '{destPath}'");
 
                     var destDir = Path.GetDirectoryName(destPath);
                     if (!string.IsNullOrEmpty(destDir))
@@ -370,15 +371,15 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
         {
-            throw new RuntimeError($"archive.untar: invalid TAR archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"archive.untar: invalid TAR archive: '{archivePath}'");
         }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"archive.untar: permission denied: '{outputDir}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.untar: permission denied: '{outputDir}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.untar: failed to extract archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.untar: failed to extract archive: {ex.Message}");
         }
     }
 
@@ -397,7 +398,7 @@ public static partial class ArchiveBuiltIns
         inputPath = ctx.ExpandTilde(inputPath);
 
         if (!File.Exists(inputPath))
-            throw new RuntimeError($"archive.gzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.gzip: file not found: '{inputPath}'");
 
         var outputPath = rest.Length > 0 && !rest[0].IsNull
             ? ctx.ExpandTilde(SvArgs.String(rest, 0, "archive.gzip"))
@@ -415,11 +416,11 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"archive.gzip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.gzip: permission denied: '{outputPath}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.gzip: failed to compress file: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.gzip: failed to compress file: {ex.Message}");
         }
     }
 
@@ -439,7 +440,7 @@ public static partial class ArchiveBuiltIns
         inputPath = ctx.ExpandTilde(inputPath);
 
         if (!File.Exists(inputPath))
-            throw new RuntimeError($"archive.gunzip: file not found: '{inputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.gunzip: file not found: '{inputPath}'");
 
         var outputPath = rest.Length > 0 && !rest[0].IsNull
             ? ctx.ExpandTilde(SvArgs.String(rest, 0, "archive.gunzip"))
@@ -453,7 +454,7 @@ public static partial class ArchiveBuiltIns
 
             // Validate it's a gzip file
             if (!IsGzipFile(inputStream))
-                throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: StashErrorTypes.ParseError);
+                throw new ParseError($"archive.gunzip: invalid gzip file: '{inputPath}'");
 
             inputStream.Position = 0;
 
@@ -466,15 +467,15 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
         {
-            throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"archive.gunzip: invalid gzip file: '{inputPath}'");
         }
         catch (UnauthorizedAccessException)
         {
-            throw new RuntimeError($"archive.gunzip: permission denied: '{outputPath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.gunzip: permission denied: '{outputPath}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.gunzip: failed to decompress file: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.gunzip: failed to decompress file: {ex.Message}");
         }
     }
 
@@ -490,7 +491,7 @@ public static partial class ArchiveBuiltIns
         archivePath = ctx.ExpandTilde(archivePath);
 
         if (!File.Exists(archivePath))
-            throw new RuntimeError($"archive.list: file not found: '{archivePath}'", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.list: file not found: '{archivePath}'");
 
         var entries = new List<StashValue>();
 
@@ -550,7 +551,7 @@ public static partial class ArchiveBuiltIns
             }
             else
             {
-                throw new RuntimeError($"archive.list: unsupported archive format: '{archivePath}'", errorType: StashErrorTypes.ValueError);
+                throw new ValueError($"archive.list: unsupported archive format: '{archivePath}'");
             }
 
             return entries;
@@ -558,11 +559,11 @@ public static partial class ArchiveBuiltIns
         catch (RuntimeError) { throw; }
         catch (InvalidDataException)
         {
-            throw new RuntimeError($"archive.list: invalid archive: '{archivePath}'", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"archive.list: invalid archive: '{archivePath}'");
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"archive.list: failed to read archive: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"archive.list: failed to read archive: {ex.Message}");
         }
     }
 

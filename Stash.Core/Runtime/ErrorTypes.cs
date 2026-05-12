@@ -19,4 +19,5 @@ public static class StashErrorTypes
     public const string AliasError           = "AliasError";
     public const string StateError           = "StateError";
     public const string CancellationError    = "CancellationError";
+    public const string RuntimeError         = "RuntimeError";
 }

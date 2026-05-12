@@ -181,7 +181,7 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void StringRepetition_NegativeCount_ThrowsError()
     {
-        Assert.Throws<RuntimeError>(() => Eval("\"x\" * -1"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("\"x\" * -1"));
     }
 
     [Fact]
@@ -511,38 +511,38 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void DivisionByZero_Throws()
     {
-        Assert.Throws<RuntimeError>(() => Eval("1 / 0"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("1 / 0"));
     }
 
     [Fact]
     public void ModuloByZero_Throws()
     {
-        Assert.Throws<RuntimeError>(() => Eval("1 % 0"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("1 % 0"));
     }
 
     // 22. Type errors
     [Fact]
     public void TypeError_StringMinusInt()
     {
-        Assert.Throws<RuntimeError>(() => Eval("\"x\" - 1"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("\"x\" - 1"));
     }
 
     [Fact]
     public void TypeError_BoolPlusBool()
     {
-        Assert.Throws<RuntimeError>(() => Eval("true + false"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("true + false"));
     }
 
     [Fact]
     public void TypeError_StringLessThanInt()
     {
-        Assert.Throws<RuntimeError>(() => Eval("\"x\" < 1"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("\"x\" < 1"));
     }
 
     [Fact]
     public void TypeError_NegateString()
     {
-        Assert.Throws<RuntimeError>(() => Eval("-\"hello\""));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("-\"hello\""));
     }
 
     // 23. Stringify
@@ -624,7 +624,7 @@ public class InterpreterTests : StashTestBase
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
     }
 
     // ===== Category 1: Variables (let) =====
@@ -3176,7 +3176,7 @@ public class InterpreterTests : StashTestBase
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.CurrentFile = filePath;
         vm.ModuleLoader = (modulePath, _) => LoadModuleChunk(modulePath);
-        return Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        return Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
     }
 
     [Fact]
@@ -5491,7 +5491,7 @@ let result = labels;
     [Fact]
     public void Switch_NoMatchThrows()
     {
-        Assert.Throws<RuntimeError>(() => Eval("3 switch { 1 => \"one\", 2 => \"two\" }"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("3 switch { 1 => \"one\", 2 => \"two\" }"));
     }
 
     [Fact]
@@ -8328,13 +8328,13 @@ let result = labels;
     [Fact]
     public void InOperator_WrongRightType_ThrowsRuntimeError()
     {
-        Assert.Throws<RuntimeError>(() => Eval("1 in 42"));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("1 in 42"));
     }
 
     [Fact]
     public void InOperator_String_NonStringLeft_ThrowsRuntimeError()
     {
-        Assert.Throws<RuntimeError>(() => Eval("42 in \"hello\""));
+        Assert.ThrowsAny<RuntimeError>(() => Eval("42 in \"hello\""));
     }
 
     // ===== Range expressions =====
@@ -9613,7 +9613,7 @@ let result = labels;
     public void Is_ExpressionRHS_NonType_ThrowsRuntimeError()
     {
         // Function call forces the expression path; a string return value is not a valid type, so RuntimeError is thrown
-        Assert.Throws<RuntimeError>(() => Run(@"
+        Assert.ThrowsAny<RuntimeError>(() => Run(@"
             fn notAType() { return ""hello""; }
             let x = 42;
             let result = x is notAType();
@@ -9760,7 +9760,7 @@ let result = labels;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.ThrowsAny<RuntimeError>(() =>
             Run("$!(false); let result = null;")
         );
         Assert.Equal("CommandError", ex.ErrorType);
@@ -9927,7 +9927,7 @@ let result = labels;
     public void StrictCommand_Pipeline_Failure_ThrowsCommandError()
     {
         if (OperatingSystem.IsWindows()) return;
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.ThrowsAny<RuntimeError>(() =>
             Run("$!(echo hello | false); let result = null;")
         );
         Assert.Equal("CommandError", ex.ErrorType);

@@ -9,6 +9,7 @@ using System.Text.Json;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>Registers the <c>log</c> namespace providing structured logging with levels, timestamps, and text/JSON output.</summary>
 [StashNamespace]
@@ -83,7 +84,7 @@ public static partial class LogBuiltIns
     private static void SetFormat(IInterpreterContext ctx, string format)
     {
         if (format != "text" && format != "json")
-            throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.");
         ctx.LoggerState.Format = format;
     }
 
@@ -96,7 +97,7 @@ public static partial class LogBuiltIns
         if (target != "stdout" && target != "stderr")
         {
             try { ctx.LoggerState.SetFileOutput(target); }
-            catch (Exception ex) { throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}", errorType: StashErrorTypes.IOError); }
+            catch (Exception ex) { throw new IOError($"log.setOutput: failed to open file '{target}': {ex.Message}"); }
         }
         else
         {
@@ -395,6 +396,6 @@ public static partial class LogBuiltIns
             "info"  => LevelInfo,
             "warn" or "warning" => LevelWarn,
             "error" => LevelError,
-            _ => throw new RuntimeError($"log.setLevel: unknown level '{level}'. Expected 'debug', 'info', 'warn', or 'error'.", errorType: StashErrorTypes.ValueError)
+            _ => throw new ValueError($"log.setLevel: unknown level '{level}'. Expected 'debug', 'info', 'warn', or 'error'.")
         };
 }

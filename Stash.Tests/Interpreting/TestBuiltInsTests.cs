@@ -467,7 +467,7 @@ public class TestBuiltInsTests : StashTestBase
     [Fact]
     public void CaptureOutput_RequiresFunctionArgument()
     {
-        Assert.Throws<RuntimeError>(() => RunStatements("test.captureOutput(42);"));
+        Assert.ThrowsAny<RuntimeError>(() => RunStatements("test.captureOutput(42);"));
     }
 
     [Fact]
@@ -726,26 +726,26 @@ public class TestBuiltInsTests : StashTestBase
     [Fact]
     public void Hooks_OutsideDescribe_ThrowsRuntimeError()
     {
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("test.beforeEach(() => {});"));
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("test.afterEach(() => {});"));
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("test.beforeAll(() => {});"));
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("test.afterAll(() => {});"));
     }
 
     [Fact]
     public void Hooks_RequireFunctionArgument()
     {
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("""test.describe("x", () => { test.beforeEach(42); });"""));
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("""test.describe("x", () => { test.afterEach(42); });"""));
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("""test.describe("x", () => { test.beforeAll(42); });"""));
-        Assert.Throws<RuntimeError>(() =>
+        Assert.ThrowsAny<RuntimeError>(() =>
             RunStatements("""test.describe("x", () => { test.afterAll(42); });"""));
     }
 
@@ -919,6 +919,6 @@ public class TestBuiltInsTests : StashTestBase
     [Fact]
     public void CloseTo_NegativeDelta_ThrowsRuntimeError()
     {
-        Assert.Throws<RuntimeError>(() => RunStatements("assert.closeTo(1.0, 1.0, -0.1);"));
+        Assert.ThrowsAny<RuntimeError>(() => RunStatements("assert.closeTo(1.0, 1.0, -0.1);"));
     }
 }

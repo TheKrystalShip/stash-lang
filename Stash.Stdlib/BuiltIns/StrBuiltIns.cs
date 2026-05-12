@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>str</c> namespace built-in functions for string manipulation.
@@ -200,12 +201,12 @@ public static partial class StrBuiltIns
     private static string Substring(string s, long start, params StashValue[] rest)
     {
         if (start < 0 || start > s.Length)
-            throw new RuntimeError($"'str.substring' start index {start} is out of range for string of length {s.Length}.", errorType: StashErrorTypes.IndexError);
+            throw new IndexError($"'str.substring' start index {start} is out of range for string of length {s.Length}.");
         if (rest.Length > 0)
         {
             var end = SvArgs.Long(rest, 0, "str.substring");
             if (end < start || end > s.Length)
-                throw new RuntimeError($"'str.substring' end index {end} is out of range.", errorType: StashErrorTypes.IndexError);
+                throw new IndexError($"'str.substring' end index {end} is out of range.");
             return s.Substring((int)start, (int)(end - start));
         }
         return s.Substring((int)start);
@@ -279,7 +280,7 @@ public static partial class StrBuiltIns
     private static string Repeat(string s, long count)
     {
         if (count < 0)
-            throw new RuntimeError("'str.repeat' count must be >= 0.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'str.repeat' count must be >= 0.");
         return string.Concat(Enumerable.Repeat(s, (int)count));
     }
 
@@ -316,7 +317,7 @@ public static partial class StrBuiltIns
         {
             var fill = SvArgs.String(rest, 0, "str.padStart");
             if (fill.Length != 1)
-                throw new RuntimeError("Third argument to 'str.padStart' must be a single-character string.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError("Third argument to 'str.padStart' must be a single-character string.");
             fillChar = fill[0];
         }
         return s.PadLeft((int)width, fillChar);
@@ -337,7 +338,7 @@ public static partial class StrBuiltIns
         {
             var fill = SvArgs.String(rest, 0, "str.padEnd");
             if (fill.Length != 1)
-                throw new RuntimeError("Third argument to 'str.padEnd' must be a single-character string.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError("Third argument to 'str.padEnd' must be a single-character string.");
             fillChar = fill[0];
         }
         return s.PadRight((int)width, fillChar);
@@ -389,7 +390,7 @@ public static partial class StrBuiltIns
     private static long CharCode(string s)
     {
         if (s.Length == 0)
-            throw new RuntimeError("Argument to 'str.charCode' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("Argument to 'str.charCode' must be a non-empty string.");
         return (long)s[0];
     }
 
@@ -401,7 +402,7 @@ public static partial class StrBuiltIns
     private static string FromCharCode(long n)
     {
         if (n < 0 || n > 0x10FFFF)
-            throw new RuntimeError($"Code point {n} is out of the valid Unicode range (0\u20130x10FFFF).", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"Code point {n} is out of the valid Unicode range (0\u20130x10FFFF).");
         return ((char)(int)n).ToString();
     }
 
@@ -429,11 +430,11 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.match' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.match' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'str.match' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'str.match' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -458,11 +459,11 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.matchAll' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.matchAll' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'str.matchAll' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'str.matchAll' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -483,11 +484,11 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.isMatch' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.isMatch' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'str.isMatch' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'str.isMatch' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -509,11 +510,11 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.replaceRegex' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.replaceRegex' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'str.replaceRegex' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'str.replaceRegex' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -536,11 +537,11 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.capture' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.capture' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'str.capture' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'str.capture' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -565,11 +566,11 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.captureAll' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.captureAll' regex match timed out.");
         }
         catch (ArgumentException ex)
         {
-            throw new RuntimeError($"'str.captureAll' invalid regex pattern: {ex.Message}", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"'str.captureAll' invalid regex pattern: {ex.Message}");
         }
     }
 
@@ -582,7 +583,7 @@ public static partial class StrBuiltIns
     private static long Count(string s, string substring)
     {
         if (substring.Length == 0)
-            throw new RuntimeError("'str.count' substring must not be empty.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'str.count' substring must not be empty.");
         long count = 0;
         int idx = 0;
         while ((idx = s.IndexOf(substring, idx, StringComparison.Ordinal)) >= 0)
@@ -621,7 +622,7 @@ public static partial class StrBuiltIns
         }
         catch (RegexMatchTimeoutException)
         {
-            throw new RuntimeError("'str.format' regex match timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("'str.format' regex match timed out.");
         }
     }
 
@@ -721,7 +722,7 @@ public static partial class StrBuiltIns
                 int start = i;
                 while (i < len && s[i] != '\'') i++;
                 if (i >= len)
-                    throw new RuntimeError("unterminated quote in str.shellSplit", errorType: StashErrorTypes.ValueError);
+                    throw new ValueError("unterminated quote in str.shellSplit");
                 token.Append(s, start, i - start);
                 i++; // consume closing quote
                 continue;
@@ -747,7 +748,7 @@ public static partial class StrBuiltIns
                     i++;
                 }
                 if (i >= len)
-                    throw new RuntimeError("unterminated quote in str.shellSplit", errorType: StashErrorTypes.ValueError);
+                    throw new ValueError("unterminated quote in str.shellSplit");
                 i++; // consume closing quote
                 continue;
             }
@@ -791,7 +792,7 @@ public static partial class StrBuiltIns
     private static string Truncate(string s, long maxLen, params StashValue[] rest)
     {
         if (maxLen < 0)
-            throw new RuntimeError("'str.truncate' maxLen must be >= 0.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'str.truncate' maxLen must be >= 0.");
         string suffix = rest.Length > 0 ? SvArgs.String(rest, 0, "str.truncate") : "...";
         if (s.Length <= (int)maxLen) return s;
         int cutLen = (int)maxLen - suffix.Length;
@@ -821,7 +822,7 @@ public static partial class StrBuiltIns
     private static string Wrap(string s, long width)
     {
         if (width <= 0)
-            throw new RuntimeError("'str.wrap' width must be > 0.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'str.wrap' width must be > 0.");
         var result = new System.Text.StringBuilder();
         int w = (int)width;
         foreach (var paragraph in s.Split('\n'))

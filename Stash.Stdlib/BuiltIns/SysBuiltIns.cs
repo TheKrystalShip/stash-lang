@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>sys</c> namespace built-in functions for system information and resource queries.
@@ -124,12 +125,12 @@ public static partial class SysBuiltIns
         }
         catch (Exception ex)
         {
-            throw new RuntimeError($"sys.diskUsage: {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"sys.diskUsage: {ex.Message}");
         }
 
         if (!drive.IsReady)
         {
-            throw new RuntimeError($"sys.diskUsage: drive '{drive.Name}' is not ready.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"sys.diskUsage: drive '{drive.Name}' is not ready.");
         }
 
         var dict = new StashDictionary();

@@ -6,6 +6,7 @@ using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>dict</c> namespace built-in functions for dictionary manipulation.
@@ -30,7 +31,7 @@ public static partial class DictBuiltIns
     [StashFn(ReturnType = "any")]
     private static StashValue Get(StashDictionary dict, StashValue key, params StashValue[] rest)
     {
-        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
         var result = dict.Get(keyObj);
         if (result.IsNull && rest.Length > 0)
             return rest[0];
@@ -45,7 +46,7 @@ public static partial class DictBuiltIns
     [StashFn(ReturnType = "void")]
     private static void Set(StashDictionary dict, StashValue key, StashValue value)
     {
-        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
         dict.Set(keyObj, value);
     }
 
@@ -57,7 +58,7 @@ public static partial class DictBuiltIns
     [StashFn(ReturnType = "bool")]
     private static bool Has(StashDictionary dict, StashValue key)
     {
-        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
         return dict.Has(keyObj);
     }
 
@@ -69,7 +70,7 @@ public static partial class DictBuiltIns
     [StashFn(ReturnType = "bool")]
     private static bool Remove(StashDictionary dict, StashValue key)
     {
-        var keyObj = key.ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
+        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
         return dict.Remove(keyObj);
     }
 
@@ -195,9 +196,9 @@ public static partial class DictBuiltIns
             }
             else
             {
-                throw new RuntimeError("'dict.fromPairs' requires each element to be a [key, value] pair.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("'dict.fromPairs' requires each element to be a [key, value] pair.");
             }
-            if (key is null) throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.", errorType: StashErrorTypes.TypeError);
+            if (key is null) throw new TypeError("Dictionary key cannot be null in 'dict.fromPairs'.");
             result.Set(key, val);
         }
         return result;

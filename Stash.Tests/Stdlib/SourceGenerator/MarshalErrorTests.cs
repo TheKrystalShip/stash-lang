@@ -3,6 +3,7 @@ namespace Stash.Tests.Stdlib.SourceGenerator;
 using System;
 using System.Collections.Generic;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
 using Stash.Tests.Stdlib.SourceGenerator.Fixtures;
@@ -24,49 +25,49 @@ public class MarshalErrorTests
     [Fact]
     public void LongParam_NotInt_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("longParam", StashValue.FromObj("hi")));
+        var ex = Assert.Throws<TypeError>(() => Call("longParam", StashValue.FromObj("hi")));
         Assert.Contains("must be an int", ex.Message);
     }
 
     [Fact]
     public void DoubleParam_NotFloat_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("doubleParam", StashValue.FromObj("hi")));
+        var ex = Assert.Throws<TypeError>(() => Call("doubleParam", StashValue.FromObj("hi")));
         Assert.Contains("must be a float", ex.Message);
     }
 
     [Fact]
     public void StringParam_NotString_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("stringParam", StashValue.FromInt(1)));
+        var ex = Assert.Throws<TypeError>(() => Call("stringParam", StashValue.FromInt(1)));
         Assert.Contains("must be a string", ex.Message);
     }
 
     [Fact]
     public void BoolParam_NotBool_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("boolParam", StashValue.FromInt(1)));
+        var ex = Assert.Throws<TypeError>(() => Call("boolParam", StashValue.FromInt(1)));
         Assert.Contains("must be a bool", ex.Message);
     }
 
     [Fact]
     public void BufferParam_NotBuffer_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("bufferParam", StashValue.FromObj("hi")));
+        var ex = Assert.Throws<TypeError>(() => Call("bufferParam", StashValue.FromObj("hi")));
         Assert.Contains("must be a buffer", ex.Message);
     }
 
     [Fact]
     public void DictParam_NotDict_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("dictParam", StashValue.FromInt(1)));
+        var ex = Assert.Throws<TypeError>(() => Call("dictParam", StashValue.FromInt(1)));
         Assert.Contains("must be a dict", ex.Message);
     }
 
     [Fact]
     public void ListParam_NotArray_ThrowsTypeError()
     {
-        var ex = Assert.Throws<RuntimeError>(() => Call("listParam", StashValue.FromInt(1)));
+        var ex = Assert.Throws<TypeError>(() => Call("listParam", StashValue.FromInt(1)));
         Assert.Contains("must be a", ex.Message);
     }
 

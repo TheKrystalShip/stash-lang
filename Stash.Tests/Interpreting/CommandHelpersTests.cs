@@ -32,7 +32,7 @@ public class CommandHelpersTests
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
     }
 
     // ── RunCaptured ───────────────────────────────────────────────────────────

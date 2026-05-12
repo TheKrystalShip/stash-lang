@@ -18,7 +18,7 @@ public sealed class UserRuntimeError : RuntimeError
     public string UserTypeName { get; }
 
     public UserRuntimeError(string typeName, string message, SourceSpan? span = null)
-        : base(message, span)
+        : base(message, span, typeName)
     {
         UserTypeName = typeName;
     }

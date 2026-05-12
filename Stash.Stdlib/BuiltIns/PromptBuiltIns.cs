@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>prompt</c> namespace built-in functions for REPL prompt customization.
@@ -145,10 +146,7 @@ public static partial class PromptBuiltIns
             if (result.ToObject() is string s)
                 return StashValue.FromObj(s);
             string typeName = result.ToObject()?.GetType().Name ?? "null";
-            throw new RuntimeError(
-                $"prompt.render: user prompt fn returned {typeName}, expected string.",
-                null,
-                StashErrorTypes.TypeError);
+            throw new TypeError($"prompt.render: user prompt fn returned {typeName}, expected string.");
         }
         finally
         {
@@ -204,9 +202,7 @@ public static partial class PromptBuiltIns
     private static void ThemeUse(string name)
     {
         if (!_themes.TryGetValue(name, out StashValue palette))
-            throw new RuntimeError(
-                $"prompt.themeUse: unknown theme '{name}'. Available: {string.Join(", ", _themes.Keys)}",
-                null, StashErrorTypes.ValueError);
+            throw new ValueError($"prompt.themeUse: unknown theme '{name}'. Available: {string.Join(", ", _themes.Keys)}");
         _palette = palette;
         _currentTheme = name;
     }
@@ -251,9 +247,7 @@ public static partial class PromptBuiltIns
     private static void UseStarter(string name)
     {
         if (!_starters.TryGetValue(name, out IStashCallable? callable))
-            throw new RuntimeError(
-                $"prompt.useStarter: unknown starter '{name}'. Available: {string.Join(", ", _starters.Keys)}",
-                null, StashErrorTypes.ValueError);
+            throw new ValueError($"prompt.useStarter: unknown starter '{name}'. Available: {string.Join(", ", _starters.Keys)}");
         _promptFn = callable;
     }
 
@@ -348,17 +342,14 @@ public static partial class PromptBuiltIns
     private static IStashCallable ValidateCallable(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         if (index >= args.Length || args[index].ToObject() is not IStashCallable callable)
-            throw new RuntimeError($"'{funcName}' requires a callable argument.", null, StashErrorTypes.TypeError);
+            throw new TypeError($"'{funcName}' requires a callable argument.");
 
         // Accept: variadic (Arity == -1), or MinArity <= 1 <= Arity
         bool isVariadic = callable.Arity == -1;
         bool acceptsOne = callable.MinArity <= 1 && callable.Arity >= 1;
         if (!isVariadic && !acceptsOne)
         {
-            throw new RuntimeError(
-                $"'{funcName}': the function must accept exactly 1 argument (got arity {callable.Arity}).",
-                null,
-                StashErrorTypes.TypeError);
+            throw new TypeError($"'{funcName}': the function must accept exactly 1 argument (got arity {callable.Arity}).");
         }
 
         return callable;

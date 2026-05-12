@@ -6,6 +6,7 @@ using SharpYaml;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>yaml</c> namespace built-in functions for YAML serialization and deserialization.
@@ -28,7 +29,7 @@ public static partial class YamlBuiltIns
         }
         catch (Exception e) when (e is not RuntimeError)
         {
-            throw new RuntimeError("yaml.parse: invalid YAML — " + e.Message, errorType: StashErrorTypes.ParseError);
+            throw new ParseError("yaml.parse: invalid YAML — " + e.Message);
         }
     }
 
@@ -47,7 +48,7 @@ public static partial class YamlBuiltIns
         }
         catch (SharpYaml.YamlException e)
         {
-            throw new RuntimeError("yaml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
+            throw new TypeError("yaml.stringify: " + e.Message);
         }
     }
 
@@ -158,7 +159,7 @@ public static partial class YamlBuiltIns
             List<StashValue> list => ConvertListToYaml(list),
             StashDictionary dict => ConvertDictToYaml(dict),
             StashInstance inst => ConvertInstanceToYaml(inst),
-            _ => throw new RuntimeError($"yaml.stringify: cannot serialize value of type {value.GetType().Name}.", errorType: StashErrorTypes.TypeError)
+            _ => throw new TypeError($"yaml.stringify: cannot serialize value of type {value.GetType().Name}.")
         };
     }
 

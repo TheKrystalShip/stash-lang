@@ -72,7 +72,7 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         var (chunk, vm) = BuildVM("""
             env.chdir("/this/path/absolutely/does/not/exist/xyz");
             """);
-        var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+        var ex = Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
         Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.StartsWith("no such directory: ", ex.Message);
     }
@@ -116,7 +116,7 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
             var (chunk, vm) = BuildVM("""
                 env.popDir();
                 """);
-            var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+            var ex = Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
             Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
             Assert.Contains("root", ex.Message, StringComparison.OrdinalIgnoreCase);
         }

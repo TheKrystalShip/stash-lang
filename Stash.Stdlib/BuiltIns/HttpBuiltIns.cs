@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>http</c> namespace built-in functions for HTTP client operations.
@@ -69,11 +70,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.get: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.get: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.get: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.get: request timed out.");
         }
     }
 
@@ -105,11 +106,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.post: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.post: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.post: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.post: request timed out.");
         }
     }
 
@@ -141,11 +142,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.put: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.put: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.put: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.put: request timed out.");
         }
     }
 
@@ -173,11 +174,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.delete: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.delete: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.delete: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.delete: request timed out.");
         }
     }
 
@@ -205,11 +206,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.head: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.head: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.head: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.head: request timed out.");
         }
     }
 
@@ -225,7 +226,7 @@ public static partial class HttpBuiltIns
         var urlVal = options.Get("url").ToObject();
         if (urlVal is not string url)
         {
-            throw new RuntimeError("http.request: 'url' must be a string.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("http.request: 'url' must be a string.");
         }
 
         ValidateUrl(url, "http.request");
@@ -259,11 +260,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.request: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.request: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.request: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.request: request timed out.");
         }
     }
 
@@ -295,11 +296,11 @@ public static partial class HttpBuiltIns
         }
         catch (HttpRequestException e)
         {
-            throw new RuntimeError("http.patch: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
+            throw new IOError("http.patch: request failed — " + e.Message);
         }
         catch (TaskCanceledException)
         {
-            throw new RuntimeError("http.patch: request timed out.", errorType: StashErrorTypes.TimeoutError);
+            throw new TimeoutError("http.patch: request timed out.");
         }
     }
 
@@ -352,7 +353,7 @@ public static partial class HttpBuiltIns
         if (optionsVal.IsNull) return null;
 
         if (optionsVal.ToObject() is not StashDictionary options)
-            throw new RuntimeError($"{funcName}: options must be a dict.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError($"{funcName}: options must be a dict.");
 
         var headersVal = options.Get("headers").ToObject();
         if (headersVal is StashDictionary headersDict)

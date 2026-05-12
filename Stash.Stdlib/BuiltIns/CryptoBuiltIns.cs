@@ -7,6 +7,7 @@ using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>Registers the <c>crypto</c> namespace providing hashing, HMAC, UUID, and random byte functions.</summary>
 [StashNamespace]
@@ -66,7 +67,7 @@ public static partial class CryptoBuiltIns
             "sha1"   => new HMACSHA1(keyBytes),
             "sha256" => new HMACSHA256(keyBytes),
             "sha512" => new HMACSHA512(keyBytes),
-            _        => throw new RuntimeError("crypto.hmac: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.", errorType: StashErrorTypes.ValueError)
+            _        => throw new ValueError("crypto.hmac: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.")
         };
 
         return HashToHex(hmac.ComputeHash(dataBytes));
@@ -95,11 +96,11 @@ public static partial class CryptoBuiltIns
         }
         catch (FileNotFoundException)
         {
-            throw new RuntimeError($"File not found: '{path}'.", errorType: StashErrorTypes.IOError);
+            throw new IOError($"File not found: '{path}'.");
         }
         catch (IOException ex)
         {
-            throw new RuntimeError($"Error reading file '{path}': {ex.Message}", errorType: StashErrorTypes.IOError);
+            throw new IOError($"Error reading file '{path}': {ex.Message}");
         }
 
         return HashToHex(ComputeHash(algo, fileBytes));
@@ -126,10 +127,10 @@ public static partial class CryptoBuiltIns
             throw new RuntimeError("'crypto.randomBytes' requires 1 or 2 arguments.");
 
         if (n <= 0)
-            throw new RuntimeError("Argument to 'crypto.randomBytes' must be greater than 0.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("Argument to 'crypto.randomBytes' must be greater than 0.");
 
         if (n > int.MaxValue)
-            throw new RuntimeError("Argument to 'crypto.randomBytes' is too large.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("Argument to 'crypto.randomBytes' is too large.");
 
         byte[] bytes = RandomNumberGenerator.GetBytes((int)n);
 
@@ -142,7 +143,7 @@ public static partial class CryptoBuiltIns
             "hex"    => HashToHex(bytes),
             "base64" => Convert.ToBase64String(bytes),
             "raw"    => Encoding.Latin1.GetString(bytes),
-            _        => throw new RuntimeError($"Unknown encoding '{encoding}' in 'crypto.randomBytes'. Expected \"hex\", \"base64\", or \"raw\".", errorType: StashErrorTypes.ValueError)
+            _        => throw new ValueError($"Unknown encoding '{encoding}' in 'crypto.randomBytes'. Expected \"hex\", \"base64\", or \"raw\".")
         };
         return StashValue.FromObj(result);
     }
@@ -198,7 +199,7 @@ public static partial class CryptoBuiltIns
             "sha1"   => new HMACSHA1(key),
             "sha256" => new HMACSHA256(key),
             "sha512" => new HMACSHA512(key),
-            _        => throw new RuntimeError("crypto.hmacBytes: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.", errorType: StashErrorTypes.ValueError)
+            _        => throw new ValueError("crypto.hmacBytes: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.")
         };
         return StashValue.FromObj(new StashByteArray(hmac.ComputeHash(data)));
     }
@@ -216,7 +217,7 @@ public static partial class CryptoBuiltIns
         {
             long rawBits = SvArgs.Long(args, 0, "crypto.generateKey");
             if (rawBits != 128 && rawBits != 192 && rawBits != 256)
-                throw new RuntimeError($"'crypto.generateKey' accepts 128, 192, or 256 bits, got {rawBits}.", errorType: StashErrorTypes.ValueError);
+                throw new ValueError($"'crypto.generateKey' accepts 128, 192, or 256 bits, got {rawBits}.");
             bits = (int)rawBits;
         }
         return HashToHex(RandomNumberGenerator.GetBytes(bits / 8));
@@ -242,12 +243,12 @@ public static partial class CryptoBuiltIns
         else if (data.IsObj && data.AsObj is StashByteArray dataBa)
             plaintext = dataBa.AsSpan().ToArray();
         else
-            throw new RuntimeError("1st argument to 'crypto.encrypt' must be a string or byte[].", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("1st argument to 'crypto.encrypt' must be a string or byte[].");
 
         byte[] keyBytes = ExtractKeyBytes(key, "crypto.encrypt");
 
         if (keyBytes.Length != 32)
-            throw new RuntimeError($"'crypto.encrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"'crypto.encrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.");
 
         byte[] iv = RandomNumberGenerator.GetBytes(12);
         byte[] ciphertext = new byte[plaintext.Length];
@@ -280,7 +281,7 @@ public static partial class CryptoBuiltIns
         byte[] keyBytes = ExtractKeyBytes(key, "crypto.decrypt");
 
         if (keyBytes.Length != 32)
-            throw new RuntimeError($"'crypto.decrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError($"'crypto.decrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.");
 
         byte[] cipherBytes;
         byte[] ivBytes;
@@ -292,13 +293,13 @@ public static partial class CryptoBuiltIns
             StashValue ivVal = ctDict.Get("iv");
             StashValue tagVal = ctDict.Get("tag");
             if (ctVal.IsNull || ivVal.IsNull || tagVal.IsNull)
-                throw new RuntimeError("'crypto.decrypt' dict must contain 'ciphertext', 'iv', and 'tag' fields.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("'crypto.decrypt' dict must contain 'ciphertext', 'iv', and 'tag' fields.");
             if (ctVal.AsObj is not string ctHexField)
-                throw new RuntimeError("'ciphertext' field in 'crypto.decrypt' dict must be a hex string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("'ciphertext' field in 'crypto.decrypt' dict must be a hex string.");
             if (ivVal.AsObj is not string ivHexField)
-                throw new RuntimeError("'iv' field in 'crypto.decrypt' dict must be a hex string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("'iv' field in 'crypto.decrypt' dict must be a hex string.");
             if (tagVal.AsObj is not string tagHexField)
-                throw new RuntimeError("'tag' field in 'crypto.decrypt' dict must be a hex string.", errorType: StashErrorTypes.TypeError);
+                throw new TypeError("'tag' field in 'crypto.decrypt' dict must be a hex string.");
             cipherBytes = HexToBytes(ctHexField, "crypto.decrypt");
             ivBytes = HexToBytes(ivHexField, "crypto.decrypt");
             tagBytes = HexToBytes(tagHexField, "crypto.decrypt");
@@ -306,14 +307,14 @@ public static partial class CryptoBuiltIns
         else if (ciphertext.IsObj && ciphertext.AsObj is string combinedHex)
         {
             if (combinedHex.Length < 56)
-                throw new RuntimeError("'crypto.decrypt' combined hex string is too short (must encode at least iv + tag).", errorType: StashErrorTypes.ValueError);
+                throw new ValueError("'crypto.decrypt' combined hex string is too short (must encode at least iv + tag).");
             ivBytes = HexToBytes(combinedHex[..24], "crypto.decrypt");
             tagBytes = HexToBytes(combinedHex[24..56], "crypto.decrypt");
             cipherBytes = HexToBytes(combinedHex[56..], "crypto.decrypt");
         }
         else
         {
-            throw new RuntimeError("1st argument to 'crypto.decrypt' must be a dictionary { ciphertext, iv, tag } or a combined hex string.", errorType: StashErrorTypes.TypeError);
+            throw new TypeError("1st argument to 'crypto.decrypt' must be a dictionary { ciphertext, iv, tag } or a combined hex string.");
         }
 
         byte[] plaintext = new byte[cipherBytes.Length];
@@ -324,7 +325,7 @@ public static partial class CryptoBuiltIns
         }
         catch (CryptographicException)
         {
-            throw new RuntimeError("'crypto.decrypt' failed: authentication tag verification failed.", errorType: StashErrorTypes.ValueError);
+            throw new ValueError("'crypto.decrypt' failed: authentication tag verification failed.");
         }
 
         return Encoding.UTF8.GetString(plaintext);
@@ -336,20 +337,20 @@ public static partial class CryptoBuiltIns
             return HexToBytes(keyHex, funcName);
         if (keyArg.IsObj && keyArg.AsObj is StashByteArray keyBa)
             return keyBa.AsSpan().ToArray();
-        throw new RuntimeError($"2nd argument to '{funcName}' must be a hex string or byte[].", errorType: StashErrorTypes.TypeError);
+        throw new TypeError($"2nd argument to '{funcName}' must be a hex string or byte[].");
     }
 
     private static byte[] HexToBytes(string hex, string funcName)
     {
         if (hex.Length % 2 != 0)
-            throw new RuntimeError($"Invalid hex string in '{funcName}': length must be even.", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"Invalid hex string in '{funcName}': length must be even.");
         try
         {
             return Convert.FromHexString(hex);
         }
         catch (FormatException)
         {
-            throw new RuntimeError($"Invalid hex string in '{funcName}': contains non-hexadecimal characters.", errorType: StashErrorTypes.ParseError);
+            throw new ParseError($"Invalid hex string in '{funcName}': contains non-hexadecimal characters.");
         }
     }
 
@@ -363,6 +364,6 @@ public static partial class CryptoBuiltIns
             "sha1"   => SHA1.HashData(data),
             "sha256" => SHA256.HashData(data),
             "sha512" => SHA512.HashData(data),
-            _        => throw new RuntimeError($"Unknown hash algorithm '{algo}'. Supported: md5, sha1, sha256, sha512.", errorType: StashErrorTypes.ValueError)
+            _        => throw new ValueError($"Unknown hash algorithm '{algo}'. Supported: md5, sha1, sha256, sha512.")
         };
 }

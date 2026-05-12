@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Abstractions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Registers the <c>complete</c> namespace built-in functions for REPL tab completion.
@@ -115,10 +116,7 @@ public static partial class CompleteBuiltIns
     {
         if (ctx.ToObject() is not StashInstance ctxInst || ctxInst.TypeName != "CompletionContext")
         {
-            throw new RuntimeError(
-                "'complete.paths' requires a CompletionContext struct argument.",
-                null,
-                StashErrorTypes.TypeError);
+            throw new TypeError("'complete.paths' requires a CompletionContext struct argument.");
         }
 
         if (PathHelperHandler is null)
