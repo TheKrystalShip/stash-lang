@@ -30,6 +30,8 @@ public static class ErrorTypeRegistry
 
     public static IReadOnlySet<string> BuiltInSubtypes => _subtypes;
 
+    // Note: Prefer BuiltInErrorRegistry.IsBuiltInName — BuiltInSubtypes will be removed in Phase E.
+
     /// <summary>Returns true if the given type name is a known built-in error subtype.</summary>
     public static bool IsBuiltInSubtype(string typeName)
         => _subtypes.Contains(typeName);

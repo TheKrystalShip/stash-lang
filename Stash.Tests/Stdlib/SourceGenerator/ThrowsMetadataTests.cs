@@ -175,6 +175,216 @@ public class ThrowsMetadataTests
         Assert.Contains(diags, d => d.Id == "STSG010" && d.Severity == DiagnosticSeverity.Warning);
     }
 
+    // ── Phase D: IsOldForm detection in ParseThrows ──────────────────────────
+
+    [Fact]
+    public void ParseThrows_BareClassName_IsOldFormFalse()
+    {
+        const string xml = """
+            <member>
+              <summary>Does a thing.</summary>
+              <exception cref="IOError">if the file is missing</exception>
+            </member>
+            """;
+        var result = DocCommentParser.ParseThrows(xml);
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Equal("IOError", result![0].ErrorType);
+        Assert.False(result[0].IsOldForm);
+    }
+
+    [Fact]
+    public void ParseThrows_StashErrorTypesQualifier_IsOldFormTrue()
+    {
+        const string xml = """
+            <member>
+              <summary>Does a thing.</summary>
+              <exception cref="StashErrorTypes.ValueError">bad input</exception>
+            </member>
+            """;
+        var result = DocCommentParser.ParseThrows(xml);
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Equal("ValueError", result![0].ErrorType);
+        Assert.True(result![0].IsOldForm);
+    }
+
+    [Fact]
+    public void ParseThrows_RoslynFieldPrefix_IsOldFormTrue()
+    {
+        // Roslyn emits F: when cref resolves to a field (e.g. StashErrorTypes.IOError const).
+        const string xml = """
+            <member>
+              <summary>Does a thing.</summary>
+              <exception cref="F:Stash.Runtime.StashErrorTypes.IOError">file error</exception>
+            </member>
+            """;
+        var result = DocCommentParser.ParseThrows(xml);
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Equal("IOError", result![0].ErrorType);
+        Assert.True(result![0].IsOldForm);
+    }
+
+    [Fact]
+    public void ParseThrows_RoslynTypePrefix_IsOldFormFalse()
+    {
+        // Roslyn emits T: when cref resolves to a type (e.g. IOError class directly).
+        const string xml = """
+            <member>
+              <summary>Does a thing.</summary>
+              <exception cref="T:Stash.Runtime.Errors.IOError">file error</exception>
+            </member>
+            """;
+        var result = DocCommentParser.ParseThrows(xml);
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Equal("IOError", result![0].ErrorType);
+        Assert.False(result![0].IsOldForm);
+    }
+
+    // ── Phase D: STSG011 — old doc-tag form ──────────────────────────────────
+
+    [Fact]
+    public void Generator_OldDocTagForm_EmitsSTSG011()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Does a thing.</summary>
+                /// <param name="path">The path.</param>
+                /// <exception cref="StashErrorTypes.IOError">file error</exception>
+                [StashFn]
+                public static string DoIt(string path) => path;
+            }
+            """;
+        var (diags, _) = RunGenerator(src);
+        Assert.Contains(diags, d => d.Id == "STSG011" && d.Severity == DiagnosticSeverity.Info);
+    }
+
+    [Fact]
+    public void Generator_NewDocTagForm_NoSTSG011()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            using Stash.Runtime.Errors;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Does a thing.</summary>
+                /// <param name="path">The path.</param>
+                /// <exception cref="IOError">file error</exception>
+                [StashFn]
+                public static string DoIt(string path) => path;
+            }
+            """;
+        var (diags, _) = RunGenerator(src);
+        Assert.DoesNotContain(diags, d => d.Id == "STSG011");
+    }
+
+    // ── Phase D: STSG012 — legacy string Throws attribute ────────────────────
+
+    [Fact]
+    public void Generator_StringThrowsAttribute_EmitsSTSG012()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Does a thing.</summary>
+                /// <param name="path">The path.</param>
+                [StashFn(Throws = [StashErrorTypes.IOError])]
+                public static string DoIt(string path) => path;
+            }
+            """;
+        var (diags, _) = RunGenerator(src);
+        Assert.Contains(diags, d => d.Id == "STSG012" && d.Severity == DiagnosticSeverity.Info);
+    }
+
+    // ── Phase D: STSG013 — ThrowsTypes type missing [StashError] ─────────────
+
+    [Fact]
+    public void Generator_ThrowsTypesWithNonStashErrorType_EmitsSTSG013()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            using System;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Does a thing.</summary>
+                /// <param name="path">The path.</param>
+                [StashFn(ThrowsTypes = new[] { typeof(InvalidOperationException) })]
+                public static string DoIt(string path) => path;
+            }
+            """;
+        var (diags, _) = RunGenerator(src);
+        Assert.Contains(diags, d => d.Id == "STSG013" && d.Severity == DiagnosticSeverity.Error);
+    }
+
+    // ── Phase D: ThrowsTypes — type-safe attribute form ──────────────────────
+
+    [Fact]
+    public void Generator_ThrowsTypes_ProducesCanonicalNameInMetadata()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            using Stash.Runtime.Errors;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Does a thing.</summary>
+                /// <param name="path">The path.</param>
+                [StashFn(ThrowsTypes = new[] { typeof(IOError) })]
+                public static string DoIt(string path) => path;
+            }
+            """;
+        var (diags, result) = RunGenerator(src);
+        // STSG013 must NOT fire (IOError is [StashError]-attributed).
+        Assert.DoesNotContain(diags, d => d.Id == "STSG013");
+        // The generated source must reference the canonical name "IOError".
+        var genSource = result.GeneratedTrees
+            .Select(t => t.ToString())
+            .FirstOrDefault(s => s.Contains("doIt") || s.Contains("DoIt"));
+        Assert.NotNull(genSource);
+        Assert.Contains("IOError", genSource);
+    }
+
+    [Fact]
+    public void Generator_ThrowsTypes_NoSTSG012()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            using Stash.Runtime.Errors;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Does a thing.</summary>
+                /// <param name="path">The path.</param>
+                [StashFn(ThrowsTypes = new[] { typeof(IOError) })]
+                public static string DoIt(string path) => path;
+            }
+            """;
+        var (diags, _) = RunGenerator(src);
+        // ThrowsTypes (type-safe form) must NOT trigger STSG012.
+        Assert.DoesNotContain(diags, d => d.Id == "STSG012");
+    }
+
     // ── ThrowsRenderer ──────────────────────────────────────────────────────
 
     [Fact]

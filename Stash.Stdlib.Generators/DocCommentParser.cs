@@ -147,8 +147,14 @@ internal static class DocCommentParser
     /// (e.g. <c>"StashErrorTypes.IOError"</c> → <c>"IOError"</c>).
     /// Returns <see langword="null"/> (not an empty list) when no <c>&lt;exception&gt;</c> tags are present.
     /// Multiple tags are returned in document order; duplicates are preserved.
+    /// <para>
+    /// <c>IsOldForm</c> is <see langword="true"/> when the cref used the old <c>StashErrorTypes.X</c>
+    /// field-reference form (Roslyn emits an <c>F:</c> prefix, or the raw value contains
+    /// <c>"StashErrorTypes."</c>). These entries should trigger a <c>STSG011</c> diagnostic at the
+    /// call site so authors know to migrate to <c>&lt;exception cref="IOError"&gt;</c>.
+    /// </para>
     /// </summary>
-    public static List<(string ErrorType, string? Description)>? ParseThrows(string? xml)
+    public static List<(string ErrorType, string? Description, bool IsOldForm)>? ParseThrows(string? xml)
     {
         if (string.IsNullOrWhiteSpace(xml)) return null;
         XElement root;
@@ -158,11 +164,17 @@ internal static class DocCommentParser
         var exceptions = root.Elements("exception").ToList();
         if (exceptions.Count == 0) return null;
 
-        var result = new List<(string ErrorType, string? Description)>();
+        var result = new List<(string ErrorType, string? Description, bool IsOldForm)>();
         foreach (var e in exceptions)
         {
             var cref = e.Attribute("cref")?.Value;
             if (string.IsNullOrEmpty(cref)) continue;
+
+            // Detect old form BEFORE stripping Roslyn prefixes.
+            // Old form: Roslyn resolved the cref as a field (F: prefix — i.e. StashErrorTypes.X
+            // is a string constant field), or the raw value explicitly names StashErrorTypes.
+            bool isOldForm = cref!.StartsWith("F:")
+                || cref.Contains("StashErrorTypes.");
 
             // Strip Roslyn prefixes like "T:", "F:", "M:", "P:" (single char + colon).
             if (cref!.Length > 2 && cref[1] == ':')
@@ -174,7 +186,7 @@ internal static class DocCommentParser
             if (string.IsNullOrEmpty(errorType)) continue;
 
             var desc = NormalizeText(e.Value);
-            result.Add((errorType, string.IsNullOrEmpty(desc) ? null : desc));
+            result.Add((errorType, string.IsNullOrEmpty(desc) ? null : desc, isOldForm));
         }
 
         return result.Count == 0 ? null : result;

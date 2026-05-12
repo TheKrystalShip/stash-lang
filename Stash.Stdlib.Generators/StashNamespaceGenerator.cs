@@ -20,6 +20,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
     private const string EnumAttr = "Stash.Stdlib.Abstractions.StashEnumAttribute";
     private const string FieldAttr = "Stash.Stdlib.Abstractions.StashFieldAttribute";
     private const string DeprecAttr = "Stash.Stdlib.Abstractions.StashDeprecatedAttribute";
+    private const string ErrorAttrFullName = "Stash.Runtime.Errors.StashErrorAttribute";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -162,7 +163,9 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         bool raw = false;
         string? returnTypeOverride = null;
         string capabilityFull = "global::Stash.Runtime.StashCapabilities.None";
-        var attrThrows = new List<string>(); // error-type names from [StashFn(Throws=...)]
+        var attrThrows = new List<string>(); // error-type names from [StashFn(Throws=...)] (string form)
+        var attrThrowsTypes = new List<string>(); // canonical names from [StashFn(ThrowsTypes=...)] (Type[] form)
+        bool hasStringThrows = false; // true when Throws (string form) is used → STSG012
         if (fnAttr is not null)
         {
             foreach (var na in fnAttr.NamedArguments)
@@ -184,11 +187,58 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                             int dotIdx = ts.LastIndexOf('.');
                             string errorType = dotIdx >= 0 ? ts.Substring(dotIdx + 1) : ts;
                             if (!string.IsNullOrEmpty(errorType))
+                            {
                                 attrThrows.Add(errorType);
+                                hasStringThrows = true;
+                            }
+                        }
+                    }
+                }
+                if (na.Key == "ThrowsTypes" && !na.Value.IsNull && na.Value.Kind == TypedConstantKind.Array)
+                {
+                    foreach (var tc in na.Value.Values)
+                    {
+                        if (tc.Kind == TypedConstantKind.Type && tc.Value is INamedTypeSymbol errSym)
+                        {
+                            // STSG013: validate that the type has [StashError].
+                            bool hasStashError = errSym.GetAttributes().Any(
+                                a => a.AttributeClass?.ToDisplayString() == ErrorAttrFullName);
+                            if (!hasStashError)
+                            {
+                                diags.Add(Diagnostic.Create(Diagnostics.ThrowsTypesNotStashError, loc, errSym.Name, method.Name));
+                                continue;
+                            }
+                            // Canonical name: class name, or [StashError(Name="...")] override.
+                            string canonicalName = errSym.Name;
+                            var errAttr = errSym.GetAttributes().FirstOrDefault(
+                                a => a.AttributeClass?.ToDisplayString() == ErrorAttrFullName);
+                            if (errAttr is not null)
+                            {
+                                foreach (var arg in errAttr.NamedArguments)
+                                {
+                                    if (arg.Key == "Name" && arg.Value.Value is string nameOvr)
+                                        canonicalName = nameOvr;
+                                }
+                            }
+                            attrThrowsTypes.Add(canonicalName);
                         }
                     }
                 }
             }
+        }
+
+        // STSG012: legacy string Throws form detected — recommend migration to ThrowsTypes.
+        if (hasStringThrows)
+        {
+            diags.Add(Diagnostic.Create(Diagnostics.StringThrowsDeprecated, loc, method.Name));
+        }
+
+        // Merge ThrowsTypes canonical names into the unified attrThrows list.
+        // ThrowsTypes entries are appended after Throws entries; MergeThrows deduplicates.
+        foreach (var t in attrThrowsTypes)
+        {
+            if (!attrThrows.Contains(t))
+                attrThrows.Add(t);
         }
 
         string stashName = nameOverride ?? NamingRules.ToCamelCase(method.Name);
@@ -238,7 +288,9 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             var rawParams = DocCommentParser.GetDocumentedParamList(rawDocXml);
             var rawPms = rawParams.ConvertAll(name =>
                 new ParameterModel(name, name, "Stash.Runtime.StashValue", "any", "", false, null, false, false));
-            var rawThrows = MergeThrows(attrThrows, DocCommentParser.ParseThrows(rawDocXml), method.Name, loc, diags);
+            var rawDocThrows = DocCommentParser.ParseThrows(rawDocXml);
+            ReportOldDocTagForm(rawDocThrows, method.Name, loc, diags);
+            var rawThrows = MergeThrows(attrThrows, ToCompatThrows(rawDocThrows), method.Name, loc, diags);
             return new FunctionModel(method.Name, stashName, true, "passthrough", returnTypeOverride ?? "any", true, true,
                 rawPms.Count == 0 ? EquatableArray<ParameterModel>.Empty : new EquatableArray<ParameterModel>(rawPms.ToArray()),
                 DocCommentParser.Parse(rawDocXml),
@@ -340,7 +392,9 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         }
         if (hasOptional) isVariadic = true;
 
-        var mergedThrows = MergeThrows(attrThrows, DocCommentParser.ParseThrows(docXml), method.Name, loc, diags);
+        var docThrows = DocCommentParser.ParseThrows(docXml);
+        ReportOldDocTagForm(docThrows, method.Name, loc, diags);
+        var mergedThrows = MergeThrows(attrThrows, ToCompatThrows(docThrows), method.Name, loc, diags);
 
         return new FunctionModel(
             method.Name,
@@ -450,6 +504,39 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         var attr = symbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == DeprecAttr);
         if (attr is null || attr.ConstructorArguments.Length == 0) return null;
         return attr.ConstructorArguments[0].Value as string;
+    }
+
+    /// <summary>
+    /// Emits STSG011 (once per method) if any <c>&lt;exception&gt;</c> entry used the old
+    /// <c>StashErrorTypes.X</c> field-reference form.
+    /// </summary>
+    private static void ReportOldDocTagForm(
+        List<(string ErrorType, string? Description, bool IsOldForm)>? entries,
+        string methodName,
+        Location loc,
+        List<Diagnostic> diags)
+    {
+        if (entries is null) return;
+        foreach (var e in entries)
+        {
+            if (e.IsOldForm)
+            {
+                diags.Add(Diagnostic.Create(Diagnostics.OldDocTagForm, loc, methodName));
+                return; // one diagnostic per method is sufficient
+            }
+        }
+    }
+
+    /// <summary>
+    /// Strips the <c>IsOldForm</c> field from the extended tuple returned by
+    /// <see cref="DocCommentParser.ParseThrows"/> so the result is compatible
+    /// with <see cref="MergeThrows"/>.
+    /// </summary>
+    private static List<(string ErrorType, string? Description)>? ToCompatThrows(
+        List<(string ErrorType, string? Description, bool IsOldForm)>? entries)
+    {
+        if (entries is null) return null;
+        return entries.ConvertAll(e => (e.ErrorType, e.Description));
     }
 
     /// <summary>

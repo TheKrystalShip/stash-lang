@@ -7,6 +7,7 @@ using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 /// <summary>
@@ -31,12 +32,6 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
-
-    /// <summary>
-    /// The set of built-in error type names that are always valid in <c>@throws</c> tags
-    /// and always carry a <c>message: string</c> field.
-    /// </summary>
-    private static readonly IReadOnlySet<string> _builtInErrorTypes = ErrorTypeRegistry.BuiltInSubtypes;
 
     private List<Stmt> _allStatements = new();
 
@@ -1103,7 +1098,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         foreach (var entry in throws)
         {
             // Built-in error types (and the bare RuntimeError name) are always valid — skip further checks.
-            if (_builtInErrorTypes.Contains(entry.ErrorType) || entry.ErrorType == StashErrorTypes.RuntimeError)
+            if (BuiltInErrorRegistry.IsBuiltInName(entry.ErrorType) || entry.ErrorType == StashErrorTypes.RuntimeError)
                 continue;
 
             // Look for a user-declared struct with this name in the global scope.
