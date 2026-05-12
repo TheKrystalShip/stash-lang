@@ -6,6 +6,7 @@ using Stash.Bytecode;
 using Stash.Cli.Completion;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
@@ -118,7 +119,7 @@ public class CompleteBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
         MakeEngineAndWire(out _);
 
         var ex = RunExpectingRuntimeError("""complete.register("git", 42);""");
-        Assert.Equal(StashErrorTypes.TypeError, ex.ErrorType);
+        Assert.IsType<TypeError>(ex);
     }
 
     // ── complete.unregister ───────────────────────────────────────────────────

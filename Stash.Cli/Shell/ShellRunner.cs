@@ -9,6 +9,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Cli.Shell;
@@ -99,9 +100,9 @@ internal sealed class ShellRunner
             foreach (int code in exitCodes)
             {
                 if (code != 0)
-                    throw new RuntimeError(
+                    throw new CommandError(
                         $"Command failed with exit code {code}: {line.Trim()}",
-                        null, StashErrorTypes.CommandError);
+                        exitCode: code);
             }
         }
     }
@@ -166,13 +167,13 @@ internal sealed class ShellRunner
                 }
                 catch (IOException ex)
                 {
-                    throw new RuntimeError(
-                        $"redirect to '{path}' failed: {ex.Message}", null, StashErrorTypes.CommandError);
+                    throw new CommandError(
+                        $"redirect to '{path}' failed: {ex.Message}", exitCode: -1);
                 }
                 catch (UnauthorizedAccessException ex)
                 {
-                    throw new RuntimeError(
-                        $"redirect to '{path}' failed: {ex.Message}", null, StashErrorTypes.CommandError);
+                    throw new CommandError(
+                        $"redirect to '{path}' failed: {ex.Message}", exitCode: -1);
                 }
 
                 openedStreams.Add(fs);

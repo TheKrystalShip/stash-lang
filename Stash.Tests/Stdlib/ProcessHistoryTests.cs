@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using Stash.Cli.History;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Tests.Stdlib;
@@ -118,7 +119,7 @@ public sealed class ProcessHistoryTests : Stash.Tests.Interpreting.StashTestBase
             }
             """);
 
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.IsType<ValueError>(ex);
     }
 
     [Fact]
@@ -132,7 +133,7 @@ public sealed class ProcessHistoryTests : Stash.Tests.Interpreting.StashTestBase
             }
             """);
 
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.IsType<ValueError>(ex);
     }
 
     [Fact]

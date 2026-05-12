@@ -7,6 +7,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Bytecode;
@@ -92,15 +93,11 @@ public class StreamingPipelineTests : BytecodeTestBase
     public async Task Pipeline_Strict_LastStageNonZero_ThrowsCommandError()
     {
         if (OperatingSystem.IsWindows()) return;
-        var ex = await Task.Run(() => Assert.Throws<RuntimeError>(() => Execute(@"
+        var ex = await Task.Run(() => Assert.Throws<CommandError>(() => Execute(@"
             let s = $!<(true | false);
             for (let line in s) { }
         ")));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
-        Assert.NotNull(ex.Properties);
-        Assert.True(ex.Properties!.ContainsKey("exitCode"));
-        long exitCode = Assert.IsType<long>(ex.Properties["exitCode"]);
-        Assert.Equal(1L, exitCode);
+        Assert.Equal(1L, ex.ExitCode);
     }
 
     [Fact(Timeout = 10000)]

@@ -1,6 +1,7 @@
 namespace Stash.Tests.Stdlib;
 
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib.BuiltIns;
 using Stash.Tests.Interpreting;
 
@@ -203,7 +204,7 @@ public class AliasBuiltInsTests : StashTestBase
         var err = RunCapturingError("""
             alias.define("g.s", "git status");
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     [Fact]
@@ -212,7 +213,7 @@ public class AliasBuiltInsTests : StashTestBase
         var err = RunCapturingError("""
             alias.define("", "git");
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     [Fact]
@@ -221,7 +222,7 @@ public class AliasBuiltInsTests : StashTestBase
         var err = RunCapturingError("""
             alias.define("my alias", "git");
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     [Fact]
@@ -230,7 +231,7 @@ public class AliasBuiltInsTests : StashTestBase
         var err = RunCapturingError("""
             alias.define("1g", "git");
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     // =========================================================================
@@ -274,7 +275,7 @@ public class AliasBuiltInsTests : StashTestBase
             alias.define("gco", "git checkout \${args[5]}");
             alias.expand("gco", []);
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     [Fact]
@@ -313,7 +314,7 @@ public class AliasBuiltInsTests : StashTestBase
         var err = RunCapturingError("""
             alias.expand("nonexistent", []);
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     // =========================================================================
@@ -350,7 +351,7 @@ public class AliasBuiltInsTests : StashTestBase
                 alias.define("g", "git \${args}");
                 alias.exec("g", ["status"]);
                 """);
-            Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+            Assert.IsType<AliasError>(err);
         }
         finally
         {
@@ -364,7 +365,7 @@ public class AliasBuiltInsTests : StashTestBase
         var err = RunCapturingError("""
             alias.exec("notdefined", []);
             """);
-        Assert.Equal(StashErrorTypes.AliasError, err.ErrorType);
+        Assert.IsType<AliasError>(err);
     }
 
     // =========================================================================
@@ -381,7 +382,7 @@ public class AliasBuiltInsTests : StashTestBase
             var err = RunCapturingError("""
                 alias.save();
                 """);
-            Assert.Equal(StashErrorTypes.NotSupportedError, err.ErrorType);
+            Assert.IsType<NotSupportedError>(err);
         }
         finally
         {
@@ -399,7 +400,7 @@ public class AliasBuiltInsTests : StashTestBase
             var err = RunCapturingError("""
                 alias.load();
                 """);
-            Assert.Equal(StashErrorTypes.NotSupportedError, err.ErrorType);
+            Assert.IsType<NotSupportedError>(err);
         }
         finally
         {

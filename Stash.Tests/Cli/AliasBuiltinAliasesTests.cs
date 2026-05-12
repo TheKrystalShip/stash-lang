@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
 using Xunit;
@@ -123,10 +124,9 @@ public sealed class AliasBuiltinAliasesTests : IDisposable
     [Fact]
     public void Builtins_DefineWithoutOverride_ThrowsAliasError()
     {
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<AliasError>(() =>
             ShellRunner.EvaluateSource("alias.define(\"cd\", \"echo hi\");", _vm));
 
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
         Assert.Contains("override", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -159,10 +159,9 @@ public sealed class AliasBuiltinAliasesTests : IDisposable
     [Fact]
     public void Builtins_UnaliasCd_ThrowsAliasError()
     {
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<AliasError>(() =>
             ShellRunner.EvaluateSource("alias.remove(\"cd\");", _vm));
 
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
         Assert.Contains("cannot remove built-in", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -195,8 +194,7 @@ public sealed class AliasBuiltinAliasesTests : IDisposable
         _runner.Run("unalias --force cd");
 
         // cd is not a standalone executable — spawn will fail
-        var ex = Assert.Throws<RuntimeError>(() => _runner.Run("cd /tmp"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => _runner.Run("cd /tmp"));
     }
 
     // ── 9. Re-registering builtins re-enables cd after force-disable ──────────
@@ -275,8 +273,7 @@ public sealed class AliasBuiltinAliasesTests : IDisposable
     [Fact]
     public void Builtins_ForceDisable_UnknownName_ThrowsAliasError()
     {
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<AliasError>(() =>
             _runner.Run("unalias --force nonexistent_alias_xyz"));
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
     }
 }

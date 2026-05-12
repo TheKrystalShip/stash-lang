@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 namespace Stash.Cli.Shell;
 
@@ -75,7 +76,7 @@ internal static class ShellSugarDesugarer
             if (int.TryParse(arg, out int n))
             {
                 if (n < 0)
-                    throw new RuntimeError("history: numeric argument must be a positive integer", null, StashErrorTypes.CommandError);
+                    throw new CommandError("history: numeric argument must be a positive integer", exitCode: -1);
 
                 // history 0 → print nothing
                 if (n == 0)
@@ -84,15 +85,15 @@ internal static class ShellSugarDesugarer
                 return $"let __h = process.historyList(); let __n = arr.len(__h); let __s = __n > {n} ? __n - {n} : 0; let __slice = arr.slice(__h, __s, __n); for entry in __slice {{ io.println(entry); }}";
             }
 
-            throw new RuntimeError("history: usage: history [N | -c]", null, StashErrorTypes.CommandError);
+            throw new CommandError("history: usage: history [N | -c]", exitCode: -1);
         }
 
-        throw new RuntimeError("history: usage: history [N | -c]", null, StashErrorTypes.CommandError);
+        throw new CommandError("history: usage: history [N | -c]", exitCode: -1);
     }
     internal static string DesugarCd(IReadOnlyList<string> args)
     {
         if (args.Count > 1)
-            throw new RuntimeError("cd: too many arguments", null, StashErrorTypes.CommandError);
+            throw new CommandError("cd: too many arguments", exitCode: -1);
 
         if (args.Count == 0)
         {
@@ -115,7 +116,7 @@ internal static class ShellSugarDesugarer
     internal static string DesugarPwd(IReadOnlyList<string> args)
     {
         if (args.Count > 0)
-            throw new RuntimeError("pwd: too many arguments", null, StashErrorTypes.CommandError);
+            throw new CommandError("pwd: too many arguments", exitCode: -1);
 
         return "io.println(env.cwd());";
     }
@@ -123,7 +124,7 @@ internal static class ShellSugarDesugarer
     internal static string DesugarExit(string program, IReadOnlyList<string> args)
     {
         if (args.Count > 1)
-            throw new RuntimeError($"{program}: too many arguments", null, StashErrorTypes.CommandError);
+            throw new CommandError($"{program}: too many arguments", exitCode: -1);
 
         if (args.Count == 0)
             return "env.exit(0);";
@@ -133,7 +134,7 @@ internal static class ShellSugarDesugarer
         // Validate numeric argument in C# to produce the right error immediately, then
         // embed the parsed integer as a literal so `env.exit` receives a plain int.
         if (!long.TryParse(arg, out long code))
-            throw new RuntimeError($"{program}: numeric argument required", null, StashErrorTypes.CommandError);
+            throw new CommandError($"{program}: numeric argument required", exitCode: -1);
 
         return $"env.exit({code});";
     }

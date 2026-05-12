@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Tests.Stdlib;
@@ -47,7 +48,7 @@ public class PromptBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
     {
         PromptBuiltIns.ResetAllForTesting();
         var ex = RunCapturingError("prompt.set(5);");
-        Assert.Equal(StashErrorTypes.TypeError, ex.ErrorType);
+        Assert.IsType<TypeError>(ex);
     }
 
     [Fact]
@@ -56,7 +57,7 @@ public class PromptBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
         PromptBuiltIns.ResetAllForTesting();
         // fn () { } has Arity=0, which fails MinArity<=1<=Arity
         var ex = RunCapturingError("""prompt.set(() => { return "x"; });""");
-        Assert.Equal(StashErrorTypes.TypeError, ex.ErrorType);
+        Assert.IsType<TypeError>(ex);
     }
 
     [Fact]
@@ -65,7 +66,7 @@ public class PromptBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
         PromptBuiltIns.ResetAllForTesting();
         // fn (a, b, c) { } has Arity=3, MinArity=3 => MinArity(3)<=1 is false
         var ex = RunCapturingError("""prompt.set((a, b, c) => { return ""; });""");
-        Assert.Equal(StashErrorTypes.TypeError, ex.ErrorType);
+        Assert.IsType<TypeError>(ex);
     }
 
     // =========================================================================
@@ -243,7 +244,7 @@ public class PromptBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
     {
         PromptBuiltIns.ResetAllForTesting();
         var ex = RunCapturingError("""prompt.themeUse("nonexistent");""");
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.IsType<ValueError>(ex);
     }
 
     [Fact]
@@ -291,7 +292,7 @@ public class PromptBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
     {
         PromptBuiltIns.ResetAllForTesting();
         var ex = RunCapturingError("""prompt.useStarter("nonexistent");""");
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.IsType<ValueError>(ex);
     }
 
     [Fact]

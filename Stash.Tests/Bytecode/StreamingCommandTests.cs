@@ -8,6 +8,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Bytecode;
@@ -68,15 +69,11 @@ public class StreamingCommandTests : BytecodeTestBase
     public void StreamingStrict_NonZeroExit_ThrowsCommandError()
     {
         if (OperatingSystem.IsWindows()) return;
-        var ex = Assert.Throws<RuntimeError>(() => Execute(@"
+        var ex = Assert.Throws<CommandError>(() => Execute(@"
             let s = $!<(false);
             for (let line in s) { }
         "));
-        Assert.Equal("CommandError", ex.ErrorType);
-        Assert.NotNull(ex.Properties);
-        Assert.True(ex.Properties!.ContainsKey("exitCode"));
-        long exitCode = Assert.IsType<long>(ex.Properties["exitCode"]);
-        Assert.NotEqual(0L, exitCode);
+        Assert.NotEqual(0L, ex.ExitCode);
     }
 
     [Fact]
@@ -95,7 +92,7 @@ public class StreamingCommandTests : BytecodeTestBase
     public void Streaming_DoubleIteration_ThrowsStateError()
     {
         if (OperatingSystem.IsWindows()) return;
-        var ex = Assert.Throws<RuntimeError>(() => Execute(@"
+        var ex = Assert.Throws<StateError>(() => Execute(@"
             let s = $<(printf 'a\nb\n');
             for (let line in s) { }
             for (let line in s) { }

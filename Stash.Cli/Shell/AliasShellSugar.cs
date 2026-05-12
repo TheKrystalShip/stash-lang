@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Desugars <c>alias</c> and <c>unalias</c> shell-mode lines into Stash source snippets
@@ -227,9 +228,9 @@ internal static class AliasShellSugar
         string trailing = raw[pos..].Trim();
         if (trailing.Length > 0)
         {
-            throw new RuntimeError(
+            throw new ParseError(
                 $"alias: body must be quoted; use: alias {name} = \"{EscapeQuotedInMessage(body + " " + trailing)}\"",
-                null, StashErrorTypes.ParseError);
+                null);
         }
 
         // Emit Stash source: body is escaped for a Stash string literal.
@@ -252,9 +253,9 @@ internal static class AliasShellSugar
         // raw[parenPos] == '(' and IsLambdaShape has already verified the trailing '=>'.
         int closeParen = FindMatchingClose(raw, parenPos, '(', ')');
         if (closeParen < 0)
-            throw new RuntimeError(
+            throw new ParseError(
                 $"alias: unmatched '(' in alias '{name}' definition",
-                null, StashErrorTypes.ParseError);
+                null);
 
         string paramList = raw[(parenPos + 1)..closeParen];
 

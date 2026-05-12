@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 namespace Stash.Tests.Cli;
 
@@ -69,9 +70,8 @@ public class ShellSugarDesugarerTests
     [Fact]
     public void Cd_TooManyArgs_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarCd(["/a", "/b"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Equal("cd: too many arguments", ex.Message);
     }
 
@@ -104,9 +104,8 @@ public class ShellSugarDesugarerTests
     [Fact]
     public void Pwd_WithArg_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarPwd(["/tmp"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Equal("pwd: too many arguments", ex.Message);
     }
 
@@ -129,18 +128,16 @@ public class ShellSugarDesugarerTests
     [Fact]
     public void Exit_NonNumericArg_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarExit("exit", ["abc"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Equal("exit: numeric argument required", ex.Message);
     }
 
     [Fact]
     public void Exit_TooManyArgs_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarExit("exit", ["0", "1"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Equal("exit: too many arguments", ex.Message);
     }
 
@@ -159,18 +156,16 @@ public class ShellSugarDesugarerTests
     [Fact]
     public void Quit_TooManyArgs_ThrowsCommandErrorWithQuitName()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarExit("quit", ["0", "1"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Equal("quit: too many arguments", ex.Message);
     }
 
     [Fact]
     public void Quit_NonNumericArg_ThrowsCommandErrorWithQuitName()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarExit("quit", ["abc"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Equal("quit: numeric argument required", ex.Message);
     }
 
@@ -247,25 +242,22 @@ public class ShellSugarDesugarerTests
     [Fact]
     public void History_NegativeInt_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarHistory(["-1"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 
     [Fact]
     public void History_NonNumericArg_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarHistory(["foo"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 
     [Fact]
     public void History_TooManyArgs_ThrowsCommandError()
     {
-        var ex = Assert.Throws<RuntimeError>(
+        Assert.Throws<CommandError>(
             () => ShellSugarDesugarer.DesugarHistory(["5", "extra"]));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Bytecode;
@@ -102,8 +103,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
             var (chunk, vm) = BuildVM("""
                 env.chdir("/this/path/does/not/exist/at/all");
                 """);
-            var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-            Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+            var ex = Assert.Throws<CommandError>(() => vm.Execute(chunk));
             Assert.StartsWith("no such directory: ", ex.Message);
         }
         finally
@@ -178,8 +178,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
             var (chunk, vm) = BuildVM("""
                 env.popDir();
                 """);
-            var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-            Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+            var ex = Assert.Throws<CommandError>(() => vm.Execute(chunk));
             Assert.Contains("root", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally

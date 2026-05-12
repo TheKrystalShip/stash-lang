@@ -12,6 +12,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 
 /// <summary>
@@ -416,9 +417,9 @@ public sealed class StashStreamingProcess
     private void ConsumeOrThrow()
     {
         if (_consumed)
-            throw new RuntimeError(
+            throw new StateError(
                 "StreamingProcess has already been consumed",
-                _span, StashErrorTypes.StateError);
+                _span);
         _consumed = true;
     }
 
@@ -526,18 +527,13 @@ public sealed class StashStreamingProcess
     {
         string stderrText;
         lock (_stderrBuffer) stderrText = _stderrBuffer.ToString();
-        throw new RuntimeError(
+        throw new CommandError(
             $"Command failed with exit code {_exitCode}: {_command}",
-            _span, StashErrorTypes.CommandError)
-        {
-            Properties = new Dictionary<string, object?>
-            {
-                ["exitCode"] = (long)_exitCode!.Value,
-                ["stderr"] = stderrText,
-                ["stdout"] = "",
-                ["command"] = _command
-            }
-        };
+            exitCode: (long)_exitCode!.Value,
+            stderr: stderrText,
+            stdout: "",
+            command: _command,
+            span: _span);
     }
 
     internal enum IterMode { Lines, Json, Bytes, Framed }
@@ -620,9 +616,9 @@ public sealed class StashStreamingProcess
             catch (JsonException ex)
             {
                 FinishNaturally();
-                throw new RuntimeError(
+                throw new ParseError(
                     "StreamingProcess.json: malformed JSON line — " + ex.Message,
-                    _parent._span, StashErrorTypes.ParseError);
+                    _parent._span);
             }
         }
 

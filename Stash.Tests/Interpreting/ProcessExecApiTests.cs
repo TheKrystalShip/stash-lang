@@ -1,5 +1,7 @@
 namespace Stash.Tests.Interpreting;
 
+using Stash.Runtime.Errors;
+
 /// <summary>
 /// Integration tests for <c>process.exec</c> and <c>process.pipeline</c> —
 /// Phase A: API surface, type-checking, and basic capture-mode execution.
@@ -95,17 +97,17 @@ public class ProcessExecApiTests : TempDirectoryFixture
     public void Exec_NonExistentProgram_ThrowsCommandError()
     {
         var err = RunCapturingError(@"process.exec(""__nonexistent_program_xyz"", []);");
-        Assert.Equal(Stash.Runtime.StashErrorTypes.CommandError, err.ErrorType);
+        Assert.IsType<CommandError>(err);
     }
 
     [Fact]
     public void Exec_ArgsNotArray_ThrowsTypeError()
     {
         var err = RunCapturingError(@"process.exec(""echo"", ""notarray"");");
-        Assert.Equal(Stash.Runtime.StashErrorTypes.TypeError, err.ErrorType);
+        Assert.IsType<TypeError>(err);
     }
 
-    // ── process.exec — stream mode ────────────────────────────────────────────
+    // ── process.exec — stream mode ─────────────────────────────────────────────
 
     [Fact]
     public void Exec_StreamMode_ReturnsStreamingProcess()
@@ -153,7 +155,7 @@ public class ProcessExecApiTests : TempDirectoryFixture
     public void Exec_NonStructOpts_ThrowsTypeError()
     {
         var err = RunCapturingError(@"process.exec(""echo"", [""hi""], 42);");
-        Assert.Equal(Stash.Runtime.StashErrorTypes.TypeError, err.ErrorType);
+        Assert.IsType<TypeError>(err);
     }
 
     // ── process.exec — redirect ────────────────────────────────────────────────
@@ -242,7 +244,7 @@ public class ProcessExecApiTests : TempDirectoryFixture
     public void Pipeline_EmptyStages_ThrowsValueError()
     {
         var err = RunCapturingError("process.pipeline([]);");
-        Assert.Equal(Stash.Runtime.StashErrorTypes.ValueError, err.ErrorType);
+        Assert.IsType<ValueError>(err);
     }
 
     [Fact]
@@ -272,6 +274,6 @@ public class ProcessExecApiTests : TempDirectoryFixture
                 PipelineStage { program: ""echo"", args: [""hi""] }
             ], ExecOptions { mode: ExecMode.Passthrough });
         ");
-        Assert.Equal(Stash.Runtime.StashErrorTypes.ValueError, err.ErrorType);
+        Assert.IsType<ValueError>(err);
     }
 }

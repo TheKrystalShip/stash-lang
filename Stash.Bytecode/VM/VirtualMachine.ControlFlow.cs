@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 
@@ -24,7 +25,7 @@ public sealed partial class VirtualMachine
         SourceSpan? span = GetCurrentSpan(ref frame);
 
         if (errorVal is StashError se)
-            throw new RuntimeError(se.Message, span, se.Type) { Properties = se.Properties };
+            throw new UserRuntimeError(se.Type, se.Message, span) { Properties = se.Properties };
 
         if (errorVal is string msg)
             throw new RuntimeError(msg, span);
@@ -43,7 +44,7 @@ public sealed partial class VirtualMachine
                 if (kv.Key is string k)
                     props[k] = kv.Value.ToObject();
             }
-            throw new RuntimeError(errMsg, span, errType) { Properties = props };
+            throw new UserRuntimeError(errType, errMsg, span) { Properties = props };
         }
 
         if (errorVal is StashInstance thrownInstance)
@@ -63,7 +64,7 @@ public sealed partial class VirtualMachine
                 props[fieldName] = fieldValue.ToObject();
             }
 
-            throw new RuntimeError(instMsg, span, instType) { Properties = props };
+            throw new UserRuntimeError(instType, instMsg, span) { Properties = props };
         }
 
         throw new RuntimeError(RuntimeValues.Stringify(errorVal), span);
@@ -180,16 +181,10 @@ public sealed partial class VirtualMachine
         {
             if (string.Equals(activeLock.NormalizedPath, path, StringComparison.OrdinalIgnoreCase))
             {
-                throw new RuntimeError(
+                throw new LockError(
                     $"Attempted to acquire lock on already-locked path (would deadlock): {path}",
-                    GetCurrentSpan(ref frame),
-                    StashErrorTypes.LockError)
-                {
-                    Properties = new Dictionary<string, object?>
-                    {
-                        ["path"] = path,
-                    },
-                };
+                    path: path,
+                    span: GetCurrentSpan(ref frame));
             }
         }
 
@@ -205,13 +200,7 @@ public sealed partial class VirtualMachine
         }
         catch (LockAcquisitionException ex)
         {
-            throw new RuntimeError(ex.Message, GetCurrentSpan(ref frame), StashErrorTypes.LockError)
-            {
-                Properties = new Dictionary<string, object?>
-                {
-                    ["path"] = path,
-                },
-            };
+            throw new LockError(ex.Message, path: path, span: GetCurrentSpan(ref frame));
         }
 
         _context.ActiveLocks.Push(handle);
@@ -466,9 +455,9 @@ public sealed partial class VirtualMachine
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !oldCt.IsCancellationRequested)
         {
             // The timeout fired — not an external cancellation
-            throw new RuntimeError(
+            throw new TimeoutError(
                 $"Operation timed out after {timeoutMs}ms.",
-                span, "TimeoutError");
+                span);
         }
         finally
         {
@@ -722,10 +711,22 @@ public sealed partial class VirtualMachine
 
         foreach (string typeName in typeNames)
         {
-            if (errObj is StashError se && ErrorTypeRegistry.Matches(se.Type, typeName))
+            if (errObj is StashError se)
             {
-                frame.IP++; // matched — skip the following Jmp
-                return;
+                // Fast path: CLR-type identity for C#-raised built-in errors.
+                if (se.BuiltInClrType is { } clrType &&
+                    BuiltInErrorRegistry.ByName.TryGetValue(typeName, out var targetClrType) &&
+                    clrType == targetClrType)
+                {
+                    frame.IP++; // matched — skip the following Jmp
+                    return;
+                }
+                // Name-based fallback: handles user-thrown errors and the base "Error" catch-all.
+                if (ErrorTypeRegistry.Matches(se.Type, typeName))
+                {
+                    frame.IP++; // matched — skip the following Jmp
+                    return;
+                }
             }
         }
 
@@ -747,7 +748,7 @@ public sealed partial class VirtualMachine
                 throw orig;
 
             // Fallback: reconstruct from StashError fields
-            throw new RuntimeError(se.Message, GetCurrentSpan(ref frame), se.Type) { Properties = se.Properties };
+            throw new UserRuntimeError(se.Type, se.Message, GetCurrentSpan(ref frame)) { Properties = se.Properties };
         }
 
         throw new RuntimeError("Rethrow used outside of a catch block.", GetCurrentSpan(ref frame));

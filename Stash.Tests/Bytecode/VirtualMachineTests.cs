@@ -4,6 +4,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 
 namespace Stash.Tests.Bytecode;
@@ -1610,8 +1611,7 @@ public class VirtualMachineTests : BytecodeTestBase
         var cts = new CancellationTokenSource();
         cts.CancelAfter(TimeSpan.FromMilliseconds(100));
         var vm = new VirtualMachine(ct: cts.Token);
-        var ex = Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-        Assert.Equal(StashErrorTypes.CancellationError, ex.ErrorType);
+        Assert.Throws<CancellationError>(() => vm.Execute(chunk));
     }
 
     // =========================================================================
@@ -3172,7 +3172,7 @@ public class VirtualMachineTests : BytecodeTestBase
     [Fact]
     public void TryCatch_UncaughtError_Propagates()
     {
-        Assert.Throws<RuntimeError>(() => Execute("""
+        Assert.ThrowsAny<RuntimeError>(() => Execute("""
             let func = null;
             func = () => {
                 try {

@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Cli;
@@ -41,9 +42,8 @@ public class ShellStrictModeTests
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
         var runner = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<CommandError>(() =>
             runner.Run("!sh -c 'exit 1'"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
         Assert.Contains("1", ex.Message, StringComparison.Ordinal);
     }
 
@@ -63,9 +63,8 @@ public class ShellStrictModeTests
 
         // Pipeline where the last stage exits non-zero → throws.
         var runner = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<CommandError>(() =>
             runner.Run("!echo hello | sh -c 'exit 2'"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 
     [Fact]
@@ -104,8 +103,7 @@ public class ShellStrictModeTests
 
         // !\cmd sets both strict and forced; a non-zero exit still throws.
         var runner = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<CommandError>(() =>
             runner.Run("!\\sh -c 'exit 3'"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 }

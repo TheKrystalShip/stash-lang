@@ -1,9 +1,11 @@
 namespace Stash.Runtime.Types;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 
 /// <summary>
@@ -15,6 +17,14 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
     public string Type { get; }
     public List<string>? Stack { get; }
     public Dictionary<string, object?>? Properties { get; }
+
+    /// <summary>
+    /// The CLR type of the C# built-in error class that produced this StashError.
+    /// <c>null</c> for user-thrown errors (<see cref="UserRuntimeError"/>) and for errors
+    /// raised via bare <c>RuntimeError</c>. Used for fast CLR-identity matching in
+    /// <c>is</c> / <c>catch</c> dispatch. Not accessible from Stash code.
+    /// </summary>
+    public Type? BuiltInClrType { get; init; }
 
     public StashError(string message, string type, List<string>? stack = null, Dictionary<string, object?>? properties = null)
     {
@@ -41,8 +51,13 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
     /// </summary>
     public static StashError FromRuntimeError(RuntimeError error, List<string>? stackLines, List<StashError>? suppressed = null)
     {
-        string type = error.ErrorType ?? StashErrorTypes.RuntimeError;
-        var stashError = new StashError(error.Message, type, stackLines, error.GetProperties());
+        string type = BuiltInErrorRegistry.NameOf(error);
+        Type? clrType = error is UserRuntimeError ? null
+            : (BuiltInErrorRegistry.TryGetName(error.GetType(), out _) ? error.GetType() : null);
+        var stashError = new StashError(error.Message, type, stackLines, error.GetProperties())
+        {
+            BuiltInClrType = clrType,
+        };
         stashError.OriginalException = error;
         if (suppressed is { Count: > 0 })
             stashError.Suppressed = suppressed;
@@ -70,8 +85,13 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
             }
         }
 
-        string type = error.ErrorType ?? StashErrorTypes.RuntimeError;
-        var stashError = new StashError(error.Message, type, stack, error.GetProperties());
+        string type = BuiltInErrorRegistry.NameOf(error);
+        Type? clrType = error is UserRuntimeError ? null
+            : (BuiltInErrorRegistry.TryGetName(error.GetType(), out _) ? error.GetType() : null);
+        var stashError = new StashError(error.Message, type, stack, error.GetProperties())
+        {
+            BuiltInClrType = clrType,
+        };
         stashError.OriginalException = error;
 
         // When the caller provides an explicit suppressed list (already merged with error.SuppressedErrors),

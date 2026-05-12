@@ -1,5 +1,6 @@
 using System;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 namespace Stash.Tests.Stdlib;
 
@@ -66,7 +67,7 @@ public class EnvUnsetTests : Stash.Tests.Interpreting.StashTestBase
     public void EnvUnset_EmptyName_ThrowsValueError()
     {
         var ex = RunCapturingError("""env.unset("");""");
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.IsType<ValueError>(ex);
     }
 
     // =========================================================================
@@ -77,7 +78,7 @@ public class EnvUnsetTests : Stash.Tests.Interpreting.StashTestBase
     public void EnvUnset_NameWithEquals_ThrowsValueError()
     {
         var ex = RunCapturingError("""env.unset("A=B");""");
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.IsType<ValueError>(ex);
     }
 
     // =========================================================================
@@ -91,7 +92,7 @@ public class EnvUnsetTests : Stash.Tests.Interpreting.StashTestBase
         // The implementation delegates to SvArgs.String which raises a RuntimeError;
         // the test verifies the error type is TypeError as specified.
         var ex = RunCapturingError("env.unset(42);");
-        Assert.Equal(StashErrorTypes.TypeError, ex.ErrorType);
+        Assert.IsType<TypeError>(ex);
     }
 
     // =========================================================================

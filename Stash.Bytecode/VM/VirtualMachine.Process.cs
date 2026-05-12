@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 namespace Stash.Bytecode;
 
@@ -138,12 +139,12 @@ public sealed partial class VirtualMachine
                 try
                 {
                     processes[i] = Process.Start(psi)
-                        ?? throw new RuntimeError($"pipeline stage {i} failed to spawn: process start returned null", span, StashErrorTypes.CommandError);
+                        ?? throw new CommandError($"pipeline stage {i} failed to spawn: process start returned null", exitCode: -1, span: span);
                 }
                 catch (RuntimeError) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"pipeline stage {i} failed to spawn: {ex.Message}", span, StashErrorTypes.CommandError);
+                    throw new CommandError($"pipeline stage {i} failed to spawn: {ex.Message}", exitCode: -1, span: span);
                 }
                 started++;
             }
@@ -441,12 +442,12 @@ public sealed partial class VirtualMachine
                 try
                 {
                     processes[i] = Process.Start(psi)
-                        ?? throw new RuntimeError($"pipeline stage {i} failed to spawn: process start returned null", span, StashErrorTypes.CommandError);
+                        ?? throw new CommandError($"pipeline stage {i} failed to spawn: process start returned null", exitCode: -1, span: span);
                 }
                 catch (RuntimeError) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"pipeline stage {i} failed to spawn: {ex.Message}", span, StashErrorTypes.CommandError);
+                    throw new CommandError($"pipeline stage {i} failed to spawn: {ex.Message}", exitCode: -1, span: span);
                 }
                 started++;
             }
@@ -646,7 +647,7 @@ public sealed partial class VirtualMachine
     {
         int n = stages.Count;
         if (n < 2)
-            throw new RuntimeError("Streaming pipeline requires at least 2 stages.", span, StashErrorTypes.CommandError);
+            throw new CommandError("Streaming pipeline requires at least 2 stages.", exitCode: -1, span: span);
 
         var processes = new Process[n];
         int started = 0;
@@ -675,12 +676,12 @@ public sealed partial class VirtualMachine
                 try
                 {
                     processes[i] = Process.Start(psi)
-                        ?? throw new RuntimeError($"pipeline stage {i} failed to spawn: process start returned null", span, StashErrorTypes.CommandError);
+                        ?? throw new CommandError($"pipeline stage {i} failed to spawn: process start returned null", exitCode: -1, span: span);
                 }
                 catch (RuntimeError) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"pipeline stage {i} failed to spawn: {ex.Message}", span, StashErrorTypes.CommandError);
+                    throw new CommandError($"pipeline stage {i} failed to spawn: {ex.Message}", exitCode: -1, span: span);
                 }
                 started++;
             }
@@ -719,7 +720,7 @@ public sealed partial class VirtualMachine
                 try { if (!processes[i].HasExited) processes[i].Kill(entireProcessTree: true); } catch { }
                 try { processes[i].Dispose(); } catch { }
             }
-            throw new RuntimeError($"Failed to start streaming pipeline: {ex.Message}", span, StashErrorTypes.CommandError);
+            throw new CommandError($"Failed to start streaming pipeline: {ex.Message}", exitCode: -1, span: span);
         }
     }
 
@@ -741,22 +742,22 @@ public sealed partial class VirtualMachine
                 psi.ArgumentList.Add(arg);
 
             var process = Process.Start(psi)
-                ?? throw new RuntimeError($"Failed to start process: {command}", span, StashErrorTypes.CommandError);
+                ?? throw new CommandError($"Failed to start process: {command}", exitCode: -1, span: span);
 
             return new Stash.Runtime.Types.StashStreamingProcess(process, command, isStrict, span, () => _context.CancellationToken);
         }
         catch (RuntimeError) { throw; }
         catch (System.ComponentModel.Win32Exception ex)
         {
-            throw new RuntimeError(
+            throw new CommandError(
                 $"Failed to start process '{program}': {ex.Message}",
-                span, StashErrorTypes.CommandError);
+                exitCode: -1, span: span);
         }
         catch (Exception ex)
         {
-            throw new RuntimeError(
+            throw new CommandError(
                 $"Failed to start streaming command: {ex.Message}",
-                span, StashErrorTypes.CommandError);
+                exitCode: -1, span: span);
         }
     }
 }

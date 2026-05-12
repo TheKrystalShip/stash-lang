@@ -6,6 +6,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
 
@@ -103,8 +104,7 @@ public sealed class AliasShellSugarTests
     {
         var (runner, vm, _) = MakeRunner();
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("alias gst = git status"));
-        Assert.Equal(StashErrorTypes.ParseError, ex.ErrorType);
+        var ex = Assert.Throws<ParseError>(() => runner.Run("alias gst = git status"));
         Assert.Contains("quoted", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -432,7 +432,6 @@ public sealed class AliasShellSugarTests
     {
         var (runner, _, _) = MakeRunner();
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("unalias"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => runner.Run("unalias"));
     }
 }

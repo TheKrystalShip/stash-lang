@@ -6,6 +6,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
 using Xunit;
@@ -216,8 +217,7 @@ public class CommandLoweringTests : BytecodeTestBase
     {
         if (OperatingSystem.IsWindows()) return;
 
-        var ex = Assert.ThrowsAny<RuntimeError>(() => Exec("return $!(false);"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        Assert.ThrowsAny<CommandError>(() => Exec("return $!(false);"));
     }
 
     // =========================================================================

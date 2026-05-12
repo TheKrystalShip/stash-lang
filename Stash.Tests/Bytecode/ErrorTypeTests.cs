@@ -1,5 +1,3 @@
-using Stash.Runtime;
-
 namespace Stash.Tests.Bytecode;
 
 /// <summary>
@@ -21,7 +19,7 @@ public class ErrorTypeTests : Stash.Tests.Interpreting.StashTestBase
             fn f() { throw ValueError { message: ""bad value"" }; }
             f();
         ");
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.Equal("ValueError", ex.ErrorType);
     }
 
     [Fact]
@@ -31,7 +29,7 @@ public class ErrorTypeTests : Stash.Tests.Interpreting.StashTestBase
             fn f() { throw TypeError { message: ""bad type"" }; }
             f();
         ");
-        Assert.Equal(StashErrorTypes.TypeError, ex.ErrorType);
+        Assert.Equal("TypeError", ex.ErrorType);
     }
 
     [Fact]
@@ -41,11 +39,9 @@ public class ErrorTypeTests : Stash.Tests.Interpreting.StashTestBase
             fn f() { throw ParseError { message: ""bad parse"" }; }
             f();
         ");
-        Assert.Equal(StashErrorTypes.ParseError, ex.ErrorType);
+        Assert.Equal("ParseError", ex.ErrorType);
     }
 
-    // =========================================================================
-    // 2. Struct throw — typed catch matches
     // =========================================================================
 
     [Fact]
@@ -76,7 +72,7 @@ public class ErrorTypeTests : Stash.Tests.Interpreting.StashTestBase
                 // should not catch ValueError
             }
         ");
-        Assert.Equal(StashErrorTypes.ValueError, ex.ErrorType);
+        Assert.Equal("ValueError", ex.ErrorType);
     }
 
     // =========================================================================
@@ -206,6 +202,6 @@ public class ErrorTypeTests : Stash.Tests.Interpreting.StashTestBase
         var ex = RunCapturingError(@"
             throw LockError { message: ""lock failed"", path: ""/tmp/test.lock"" };
         ");
-        Assert.Equal(StashErrorTypes.LockError, ex.ErrorType);
+        Assert.Equal("LockError", ex.ErrorType);
     }
 }

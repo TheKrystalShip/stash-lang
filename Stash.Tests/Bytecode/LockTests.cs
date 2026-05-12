@@ -5,6 +5,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Bytecode;
@@ -96,7 +97,7 @@ public class LockTests : Stash.Tests.Interpreting.StashTestBase
                     }
                 }
                 """);
-            Assert.Equal(StashErrorTypes.LockError, ex.ErrorType);
+            Assert.Equal("LockError", ex.ErrorType);
             Assert.Contains("deadlock", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally { File.Delete(lockPath); }
@@ -146,7 +147,7 @@ public class LockTests : Stash.Tests.Interpreting.StashTestBase
                     io.println("unreachable");
                 }
                 """);
-            Assert.Equal(StashErrorTypes.LockError, ex.ErrorType);
+            Assert.IsType<LockError>(ex);
         }
         finally
         {
@@ -224,7 +225,7 @@ public class LockTests : Stash.Tests.Interpreting.StashTestBase
                     }
                 }
                 """);
-            Assert.Equal(StashErrorTypes.LockError, ex.ErrorType);
+            Assert.Equal("LockError", ex.ErrorType);
         }
         finally { File.Delete(lockPath); }
     }

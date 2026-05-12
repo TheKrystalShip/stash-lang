@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Debugging;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using DebugCallFrame = Stash.Debugging.CallFrame;
 
@@ -106,7 +107,7 @@ public sealed partial class VirtualMachine
                 _frameCount = 0;
                 _sp = 0;
                 _exceptionHandlers.Clear();
-                var err = new RuntimeError("Operation cancelled.", null, StashErrorTypes.CancellationError)
+                var err = new CancellationError("Operation cancelled.")
                 {
                     SuppressedErrors = suppressed
                 };

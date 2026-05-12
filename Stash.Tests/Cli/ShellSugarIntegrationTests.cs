@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Cli;
@@ -179,8 +180,7 @@ public class ShellSugarIntegrationTests
     public void Sugar_CdTooManyArgs_ThrowsRuntimeError()
     {
         var (runner, _) = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("cd /a /b"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => runner.Run("cd /a /b"));
         Assert.Equal("cd: too many arguments", ex.Message);
     }
 
@@ -188,8 +188,7 @@ public class ShellSugarIntegrationTests
     public void Sugar_PwdWithArg_ThrowsRuntimeError()
     {
         var (runner, _) = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("pwd /tmp"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => runner.Run("pwd /tmp"));
         Assert.Equal("pwd: too many arguments", ex.Message);
     }
 
@@ -197,8 +196,7 @@ public class ShellSugarIntegrationTests
     public void Sugar_ExitNonNumericArg_ThrowsRuntimeError()
     {
         var (runner, _) = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("exit notanumber"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => runner.Run("exit notanumber"));
         Assert.Equal("exit: numeric argument required", ex.Message);
     }
 }

@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Cli;
@@ -177,8 +178,7 @@ public class ShellRedirectTests
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
         var runner = MakeRunner();
-        var ex = Assert.Throws<RuntimeError>(() =>
+        var ex = Assert.Throws<CommandError>(() =>
             runner.Run("echo x > /no/such/dir/file.txt"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 }

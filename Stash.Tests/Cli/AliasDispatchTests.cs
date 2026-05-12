@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
 
@@ -154,8 +155,7 @@ public sealed class AliasDispatchTests : IDisposable
         DefineTemplateAlias(vm, "gst", "echo hi > " + tmp);
 
         // \gst — forced shell mode, bypasses alias registry; gst is not on PATH.
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run(@"\gst foo"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => runner.Run(@"\gst foo"));
         // Output file should not exist (alias was not executed).
         Assert.False(File.Exists(tmp), "alias should not have run");
     }
@@ -174,8 +174,7 @@ public sealed class AliasDispatchTests : IDisposable
         DefineTemplateAlias(vm, "gst", "echo hi > " + tmp);
 
         // !gst — strict mode, bypasses alias; gst is not on PATH → CommandError.
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("!gst foo"));
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
+        var ex = Assert.Throws<CommandError>(() => runner.Run("!gst foo"));
         Assert.False(File.Exists(tmp), "alias should not have run");
     }
 
@@ -192,8 +191,7 @@ public sealed class AliasDispatchTests : IDisposable
         DefineTemplateAlias(vm, "a", "b");
         DefineTemplateAlias(vm, "b", "a");
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("a"));
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
+        var ex = Assert.Throws<AliasError>(() => runner.Run("a"));
         Assert.Contains("recursive alias expansion", ex.Message, StringComparison.Ordinal);
         Assert.Contains("a", ex.Message, StringComparison.Ordinal);
         Assert.Contains("b", ex.Message, StringComparison.Ordinal);
@@ -217,8 +215,7 @@ public sealed class AliasDispatchTests : IDisposable
             DefineTemplateAlias(vm, $"alias{i}", $"alias{i + 1}");
         DefineTemplateAlias(vm, "alias32", "echo done");
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("alias0"));
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
+        var ex = Assert.Throws<AliasError>(() => runner.Run("alias0"));
         Assert.Contains("too deep", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -316,8 +313,7 @@ public sealed class AliasDispatchTests : IDisposable
         var (runner, vm, _, _) = MakeRunner();
         DefineTemplateAlias(vm, "gst", "echo hi");  // no ${args} placeholder
 
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("gst foo bar"));
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
+        var ex = Assert.Throws<AliasError>(() => runner.Run("gst foo bar"));
         Assert.Contains("no arguments", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 

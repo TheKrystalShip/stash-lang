@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using Stash.Runtime.Errors;
 using Stash.Tests.Interpreting;
 
 namespace Stash.Tests.Bytecode;
@@ -152,7 +153,7 @@ public class StreamingPipeTests : StashTestBase
         // with "pipeline stage " (§15 error table).
         var ex = await Task.Run(() => RunCapturingError(
             "let r = $(echo hi | nonexistent_cmd_xyz_99 | wc -l);"));
-        Assert.Equal(Stash.Runtime.StashErrorTypes.CommandError, ex.ErrorType);
+        Assert.IsType<CommandError>(ex);
         Assert.StartsWith("pipeline stage ", ex.Message, StringComparison.Ordinal);
     }
 }

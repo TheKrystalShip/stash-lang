@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 
@@ -95,7 +96,10 @@ public sealed partial class VirtualMachine
                 {
                     StashStruct sd2    => (value is StashInstance inst2 && inst2.TypeName == sd2.Name) ||
                                           (value is StashError errIs && sd2.IsBuiltIn &&
-                                           ErrorTypeRegistry.Matches(errIs.Type, sd2.Name)),
+                                           ((errIs.BuiltInClrType is { } clrType &&
+                                             BuiltInErrorRegistry.ByName.TryGetValue(sd2.Name, out var targetClrType) &&
+                                             clrType == targetClrType)
+                                            || ErrorTypeRegistry.Matches(errIs.Type, sd2.Name))),
                     StashEnum se2      => value is StashEnumValue ev2 && ev2.TypeName == se2.Name,
                     StashInterface si2 => value is StashInstance inst3 &&
                         InstanceImplementsInterfaceName(inst3, si2.Name),

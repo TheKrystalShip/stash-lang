@@ -4,6 +4,7 @@ using System.IO;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
 using Xunit;
@@ -239,8 +240,7 @@ public sealed class AliasPersistenceTests : IDisposable
         ShellRunner.EvaluateSource(
             "let prefix = \"git\"; alias.define(\"g\", (x) => prefix + x);", vm);
 
-        var ex = Assert.Throws<RuntimeError>(() => AliasPersistence.Save(vm, "g"));
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
+        var ex = Assert.Throws<AliasError>(() => AliasPersistence.Save(vm, "g"));
         Assert.Contains("top-level fn", ex.Message);
     }
 
@@ -274,8 +274,7 @@ public sealed class AliasPersistenceTests : IDisposable
             "alias.define(\"g\", \"git status\", AliasOptions { before: (n, a) => true });",
             vm);
 
-        var ex = Assert.Throws<RuntimeError>(() => AliasPersistence.Save(vm, "g"));
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
+        var ex = Assert.Throws<AliasError>(() => AliasPersistence.Save(vm, "g"));
         Assert.Contains("before", ex.Message);
         Assert.Contains("top-level fn", ex.Message);
     }

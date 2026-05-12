@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Cli.Shell;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
 using Xunit;
@@ -230,10 +231,9 @@ public sealed class AliasHooksTests : IDisposable
             """, _vm);
 
         _vm.AliasRegistry.TryGet("boom", out var entry);
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<AliasError>(
             () => AliasDispatcher.ExecuteAlias(_runner, _vm, entry!, []));
 
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
         Assert.Contains("hook 'before' for alias 'boom' threw:", ex.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("body", Output, StringComparison.Ordinal);
         Assert.DoesNotContain("after", Output, StringComparison.Ordinal);
@@ -409,11 +409,10 @@ public sealed class AliasHooksTests : IDisposable
             """, _vm);
 
         _vm.AliasRegistry.TryGet("recur", out var entry);
-        var ex = Assert.Throws<RuntimeError>(
+        var ex = Assert.Throws<AliasError>(
             () => AliasDispatcher.ExecuteAlias(_runner, _vm, entry!, []));
 
         // RuntimeError from cycle guard wrapped as "hook 'before' ... threw: recursive alias expansion"
-        Assert.Equal(StashErrorTypes.AliasError, ex.ErrorType);
         Assert.Contains("recur", ex.Message, StringComparison.Ordinal);
     }
 
@@ -493,10 +492,9 @@ public sealed class AliasHooksTests : IDisposable
         // Function alias in a pipeline stage currently falls through to PATH lookup.
         // "fnpipe" is not on PATH, so it should raise CommandError.
         // This is the documented deferred behaviour (spec §8.2 / Phase B notes).
-        var ex = Assert.Throws<RuntimeError>(() => runner.Run("echo hello | fnpipe"));
+        var ex = Assert.Throws<CommandError>(() => runner.Run("echo hello | fnpipe"));
 
         // Confirm we get a CommandError (not an unhandled crash or AliasError).
-        Assert.Equal(StashErrorTypes.CommandError, ex.ErrorType);
     }
 
     // ── Isolated runner helper for pipeline test ──────────────────────────────
