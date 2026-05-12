@@ -35,20 +35,21 @@ The "untagged (intentional)" column counts pure query/predicate functions that g
 
 The "untagged (intentional)" column counts pure query/predicate functions that genuinely throw nothing (e.g. `str.upper`, `arr.contains`, `time.now`). Enforced by `Stash.Tests/Stdlib/SourceGenerator/Wave2ThrowsCoverageTests.cs`.
 
-## Wave 3 — Specialized Namespaces (Pending)
+## Wave 3 — Specialized Namespaces (Complete)
 
-`buf`, `xml`, `ini`, `yaml`, `csv`, `archive`, `tpl`, `task`. ~100 throw sites. Not yet machine-readable.
+| Namespace | Functions | Tagged | Untagged (intentional) | Coverage            |
+| --------- | --------- | ------ | ---------------------- | ------------------- |
+| `buf`     | 50        | 44     | 6                      | 100% (allow-listed) |
+| `xml`     | 4         | 3      | 1                      | 100% (allow-listed) |
+| `ini`     | 2         | 1      | 1                      | 100% (allow-listed) |
+| `yaml`    | 3         | 2      | 1                      | 100% (allow-listed) |
+| `csv`     | 4         | 4      | 0                      | 100%                |
+| `archive` | 7         | 7      | 0                      | 100%                |
+| `tpl`     | 3         | 3      | 0                      | 100%                |
+| `task`    | 11        | 7      | 4                      | 100% (allow-listed) |
+| **Total** | **84**    | **71** | **13**                 | **100%**            |
 
-| Namespace | Functions | Tagged | Coverage | Notes                                                   |
-| --------- | --------- | ------ | -------- | ------------------------------------------------------- |
-| `buf`     | —         | 0      | 0%       | `TypeError`, `IndexError` documented in prose           |
-| `xml`     | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose           |
-| `ini`     | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose           |
-| `yaml`    | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose           |
-| `csv`     | —         | 0      | 0%       | `ParseError`, `TypeError` documented in prose           |
-| `archive` | —         | 0      | 0%       | `IOError`, `TypeError` documented in prose              |
-| `tpl`     | —         | 0      | 0%       | `ParseError`, `IOError` documented in prose             |
-| `task`    | —         | 0      | 0%       | `TimeoutError`, `CancellationError` documented in prose |
+The "untagged (intentional)" column counts pure query/predicate functions that genuinely throw nothing (e.g. `buf.toHex`, `xml.valid`, `task.run`). Enforced by `Stash.Tests/Stdlib/SourceGenerator/Wave3ThrowsCoverageTests.cs`.
 
 ## Wave 4 — Long Tail (Pending)
 

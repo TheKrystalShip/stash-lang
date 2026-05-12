@@ -48,6 +48,8 @@ public static partial class TaskBuiltIns
 
     /// <summary>Waits for a Future to complete and returns its result. Throws if the task failed.</summary>
     /// <param name="task">The Future to await</param>
+    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a Future</exception>
+    /// <exception cref="StashErrorTypes.CancellationError">if the task was cancelled</exception>
     /// <returns>The result value of the task</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Await(IInterpreterContext ctx, StashValue task)
@@ -59,6 +61,7 @@ public static partial class TaskBuiltIns
 
     /// <summary>Waits for all Futures in the array to complete. Returns an array of results in the same order. Failed tasks become error values.</summary>
     /// <param name="tasks">An array of Futures</param>
+    /// <exception cref="StashErrorTypes.TypeError">if any element in the array is not a Future</exception>
     /// <returns>An array of result values</returns>
     [StashFn(ReturnType = "array")]
     private static StashValue AwaitAll(IInterpreterContext ctx, List<StashValue> tasks)
@@ -107,6 +110,9 @@ public static partial class TaskBuiltIns
 
     /// <summary>Waits for the first Future in the array to complete. Returns its result and cancels all remaining tasks.</summary>
     /// <param name="tasks">A non-empty array of Futures</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the tasks array is empty</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any element in the array is not a Future</exception>
+    /// <exception cref="StashErrorTypes.CancellationError">if the first completed task was cancelled</exception>
     /// <returns>The result of the first completed Future</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue AwaitAny(IInterpreterContext ctx, List<StashValue> tasks)
@@ -145,6 +151,7 @@ public static partial class TaskBuiltIns
 
     /// <summary>Returns the current status of a Future as a Status enum value: Running, Completed, Failed, or Cancelled.</summary>
     /// <param name="task">The Future to check</param>
+    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a Future</exception>
     /// <returns>The task status enum value</returns>
     [StashFn(ReturnType = "string")]
     private static StashValue Status(IInterpreterContext ctx, StashValue task)
@@ -157,6 +164,7 @@ public static partial class TaskBuiltIns
 
     /// <summary>Requests cancellation of a running Future. The task may not stop immediately.</summary>
     /// <param name="task">The Future to cancel</param>
+    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a Future</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Cancel(IInterpreterContext ctx, StashValue task)
@@ -210,6 +218,7 @@ public static partial class TaskBuiltIns
 
     /// <summary>Returns a new Future that resolves when the first Future in the array completes. Requires a non-empty array.</summary>
     /// <param name="tasks">A non-empty array of Futures</param>
+    /// <exception cref="StashErrorTypes.ValueError">if the tasks array is empty</exception>
     /// <returns>A Future that resolves to the first completed value</returns>
     [StashFn(ReturnType = "Future")]
     private static StashValue Race(IInterpreterContext ctx, List<StashValue> tasks)
@@ -274,6 +283,7 @@ public static partial class TaskBuiltIns
     /// <summary>Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time.</summary>
     /// <param name="ms">Timeout in milliseconds</param>
     /// <param name="fn">The function to execute</param>
+    /// <exception cref="StashErrorTypes.TimeoutError">if the function does not complete within the timeout</exception>
     /// <returns>The function's return value</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Timeout(IInterpreterContext ctx, [StashParam(Type = "number")] double ms, IStashCallable fn)

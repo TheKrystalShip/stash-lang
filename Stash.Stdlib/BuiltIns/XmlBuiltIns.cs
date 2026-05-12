@@ -35,6 +35,8 @@ public static partial class XmlBuiltIns
     /// <summary>Parses an XML string into an XmlNode tree.</summary>
     /// <param name="text">XML string to parse</param>
     /// <param name="options">Optional XmlParseOptions struct</param>
+    /// <exception cref="StashErrorTypes.TypeError">if options is not an XmlParseOptions struct or a field has the wrong type</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the XML is malformed or the document has no root element</exception>
     /// <returns>Root XmlNode</returns>
     [StashFn(ReturnType = "XmlNode")]
     private static StashValue Parse(string text, StashValue options = default)
@@ -77,6 +79,8 @@ public static partial class XmlBuiltIns
     /// <summary>Serializes an XmlNode tree to an XML string.</summary>
     /// <param name="node">Root XmlNode</param>
     /// <param name="options">Optional XmlStringifyOptions struct</param>
+    /// <exception cref="StashErrorTypes.TypeError">if node is not an XmlNode or options fields have the wrong type</exception>
+    /// <exception cref="StashErrorTypes.IOError">if serialization fails</exception>
     /// <returns>XML string</returns>
     [StashFn]
     private static string Stringify(StashValue node, StashValue options = default)
@@ -172,6 +176,9 @@ public static partial class XmlBuiltIns
     /// <summary>Queries an XmlNode tree using an XPath expression.</summary>
     /// <param name="root">Root XmlNode</param>
     /// <param name="xpath">XPath expression</param>
+    /// <exception cref="StashErrorTypes.TypeError">if root is not an XmlNode</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the XPath expression is invalid</exception>
+    /// <exception cref="StashErrorTypes.IOError">if the query operation fails</exception>
     /// <returns>Array of matching XmlNode or string values</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Query(StashValue root, string xpath)

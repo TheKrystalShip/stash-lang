@@ -46,6 +46,8 @@ public static partial class ArchiveBuiltIns
     /// <param name="outputPath">The path for the output ZIP file</param>
     /// <param name="inputPaths">A single path or array of paths to include in the archive</param>
     /// <param name="options">Optional ArchiveOptions struct with compressionLevel (0-9), overwrite, preservePaths, filter</param>
+    /// <exception cref="StashErrorTypes.IOError">if an input path does not exist, the output file already exists without overwrite, or a filesystem error occurs</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if input paths are empty or options fields have invalid values</exception>
     /// <returns>The path to the created archive</returns>
     [StashFn]
     private static string Zip(IInterpreterContext ctx, string outputPath, StashValue inputPaths, StashValue options = default)
@@ -116,6 +118,9 @@ public static partial class ArchiveBuiltIns
     /// <param name="archivePath">The path to the ZIP file to extract</param>
     /// <param name="outputDir">The directory to extract files into</param>
     /// <param name="options">Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)</param>
+    /// <exception cref="StashErrorTypes.IOError">if the archive file is not found, an output file already exists without overwrite, or a filesystem error occurs</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the file is not a valid ZIP archive</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if an entry would extract outside the target directory or options fields have invalid values</exception>
     /// <returns>An array of extracted file paths</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Unzip(IInterpreterContext ctx, string archivePath, string outputDir, StashValue options = default)
@@ -186,6 +191,8 @@ public static partial class ArchiveBuiltIns
     /// <param name="outputPath">The path for the output TAR file. Use .tar.gz or .tgz extension for gzip compression</param>
     /// <param name="inputPaths">A single path or array of paths to include in the archive</param>
     /// <param name="options">Optional ArchiveOptions struct with compressionLevel (for .tar.gz), overwrite, preservePaths</param>
+    /// <exception cref="StashErrorTypes.IOError">if an input path does not exist, the output file already exists without overwrite, or a filesystem error occurs</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if input paths are empty or options fields have invalid values</exception>
     /// <returns>The path to the created archive</returns>
     [StashFn(ReturnType = "string")]
     private static string Tar(IInterpreterContext ctx, string outputPath, StashValue inputPaths, StashValue options = default)
@@ -281,6 +288,9 @@ public static partial class ArchiveBuiltIns
     /// <param name="archivePath">The path to the TAR file to extract</param>
     /// <param name="outputDir">The directory to extract files into</param>
     /// <param name="options">Optional ArchiveOptions struct with overwrite, preservePaths, filter (glob pattern)</param>
+    /// <exception cref="StashErrorTypes.IOError">if the archive file is not found, an output file already exists without overwrite, or a filesystem error occurs</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the file is not a valid TAR archive</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if an entry would extract outside the target directory or too many arguments are provided</exception>
     /// <returns>An array of extracted file paths</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Untar(IInterpreterContext ctx, string archivePath, string outputDir, params StashValue[] rest)
@@ -375,6 +385,8 @@ public static partial class ArchiveBuiltIns
     /// <summary>Compresses a file using gzip compression.</summary>
     /// <param name="inputPath">The file to compress</param>
     /// <param name="outputPath">Optional output path (defaults to inputPath + ".gz")</param>
+    /// <exception cref="StashErrorTypes.IOError">if the input file is not found, or a filesystem error occurs during compression</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if too many arguments are provided</exception>
     /// <returns>The path to the compressed file</returns>
     [StashFn(ReturnType = "string")]
     private static string Gzip(IInterpreterContext ctx, string inputPath, params StashValue[] rest)
@@ -414,6 +426,9 @@ public static partial class ArchiveBuiltIns
     /// <summary>Decompresses a gzip-compressed file.</summary>
     /// <param name="inputPath">The gzip file to decompress</param>
     /// <param name="outputPath">Optional output path (defaults to inputPath without .gz extension)</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the file is not a valid gzip archive</exception>
+    /// <exception cref="StashErrorTypes.IOError">if the input file is not found, or a filesystem error occurs during decompression</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if too many arguments are provided</exception>
     /// <returns>The path to the decompressed file</returns>
     [StashFn(ReturnType = "string")]
     private static string Gunzip(IInterpreterContext ctx, string inputPath, params StashValue[] rest)
@@ -465,6 +480,9 @@ public static partial class ArchiveBuiltIns
 
     /// <summary>Lists the contents of a ZIP or TAR archive without extracting.</summary>
     /// <param name="archivePath">The path to the archive file</param>
+    /// <exception cref="StashErrorTypes.IOError">if the archive file is not found or a filesystem error occurs</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the archive data is malformed</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the file extension does not identify a supported archive format</exception>
     /// <returns>An array of ArchiveEntry structs with name, size, isDirectory, modifiedAt</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> List(IInterpreterContext ctx, string archivePath)
