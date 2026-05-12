@@ -13,28 +13,28 @@ public static partial class PathBuiltIns
 {
     /// <summary>Returns the absolute path for the given path string.</summary>
     /// <param name="p">The path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The absolute path</returns>
     [StashFn]
     public static string Abs(string p) => System.IO.Path.GetFullPath(p);
 
     /// <summary>Returns the directory component of the path.</summary>
     /// <param name="p">The path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The directory portion</returns>
     [StashFn]
     public static string Dir(string p) => System.IO.Path.GetDirectoryName(p) ?? "";
 
     /// <summary>Returns the filename (including extension) from the path.</summary>
     /// <param name="p">The path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The filename with extension</returns>
     [StashFn]
     public static string Base(string p) => System.IO.Path.GetFileName(p);
 
     /// <summary>Returns the file extension including the dot.</summary>
     /// <param name="p">The path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The file extension</returns>
     [StashFn]
     public static string Ext(string p) => System.IO.Path.GetExtension(p);
@@ -42,7 +42,7 @@ public static partial class PathBuiltIns
     /// <summary>Joins two or more path segments using the platform path separator.</summary>
     /// <param name="a">The first path segment</param>
     /// <param name="b">The second path segment</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The combined path</returns>
     [StashFn]
     public static string Join(string a, string b, params StashValue[] rest)
@@ -60,21 +60,21 @@ public static partial class PathBuiltIns
 
     /// <summary>Returns the filename without extension.</summary>
     /// <param name="p">The path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The filename without extension</returns>
     [StashFn]
     public static string Name(string p) => System.IO.Path.GetFileNameWithoutExtension(p);
 
     /// <summary>Normalizes the path by resolving '..' and '.' segments.</summary>
     /// <param name="p">The path to normalize</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The normalized path</returns>
     [StashFn]
     public static string Normalize(string p) => System.IO.Path.GetFullPath(p);
 
     /// <summary>Returns true if the path is absolute, false otherwise.</summary>
     /// <param name="p">The path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>Whether the path is absolute</returns>
     [StashFn]
     public static bool IsAbsolute(string p) => System.IO.Path.IsPathRooted(p);
@@ -82,7 +82,7 @@ public static partial class PathBuiltIns
     /// <summary>Returns the relative path from 'from' to 'to'.</summary>
     /// <param name="from">The source path</param>
     /// <param name="to">The target path</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The relative path</returns>
     [StashFn]
     public static string Relative(string from, string to)

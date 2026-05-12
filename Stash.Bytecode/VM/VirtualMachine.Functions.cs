@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Debugging;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using DebugCallFrame = Stash.Debugging.CallFrame;
 
@@ -836,7 +837,7 @@ public sealed partial class VirtualMachine
         {
             if (suppressed != null)
             {
-                throw new RuntimeError(firstError.Message, firstError.Span, firstError.ErrorType)
+                throw new UserRuntimeError(firstError.ErrorType, firstError.Message, firstError.Span)
                 {
                     Properties = firstError.Properties,
                     SuppressedErrors = suppressed,

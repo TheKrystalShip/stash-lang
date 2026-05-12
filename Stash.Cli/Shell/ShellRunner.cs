@@ -20,12 +20,12 @@ namespace Stash.Cli.Shell;
 ///
 /// Phase 5 additions:
 ///   • <c>\cmd</c>  forced shell execution (prefix stripped by lexer).
-///   • <c>!cmd</c>  strict mode — non-zero exit raises <see cref="StashErrorTypes.CommandError"/>.
+///   • <c>!cmd</c>  strict mode — non-zero exit raises <see cref="CommandError"/>.
 ///   • Redirects (<c>&gt;</c> <c>&gt;&gt;</c> <c>2&gt;</c> <c>2&gt;&gt;</c> <c>&amp;&gt;</c> <c>&amp;&gt;&gt;</c>)
 ///     applied to the last pipeline stage.
 ///
 /// Errors propagate as <see cref="RuntimeError"/> with error type
-/// <see cref="StashErrorTypes.CommandError"/> so the REPL prints them.
+/// <see cref="CommandError"/> so the REPL prints them.
 /// </summary>
 internal sealed class ShellRunner
 {
@@ -39,7 +39,7 @@ internal sealed class ShellRunner
     /// <summary>
     /// Execute a shell-mode line: parse → expand → run passthrough.
     /// Updates <see cref="VirtualMachine.LastExitCode"/> after each execution.
-    /// Throws <see cref="RuntimeError"/> (<see cref="StashErrorTypes.CommandError"/>) in strict mode
+    /// Throws <see cref="RuntimeError"/> (<see cref="CommandError"/>) in strict mode
     /// when any stage exits non-zero.
     /// </summary>
     public void Run(string line)
@@ -309,7 +309,7 @@ internal sealed class ShellRunner
         if (lexer.Errors.Count > 0)
             throw new RuntimeError(
                 $"shell sugar: lex error: {lexer.Errors[0]}",
-                null, StashErrorTypes.CommandError);
+                null);
 
         var parser = new Parser(tokens);
         List<Stmt> statements = parser.ParseProgram();
@@ -317,7 +317,7 @@ internal sealed class ShellRunner
         if (parser.Errors.Count > 0)
             throw new RuntimeError(
                 $"shell sugar: parse error: {parser.Errors[0]}",
-                null, StashErrorTypes.CommandError);
+                null);
 
         SemanticResolver.Resolve(statements);
         Chunk chunk = Compiler.Compile(statements, vm.ReplGlobalAllocator);
@@ -345,17 +345,17 @@ internal sealed class ShellRunner
             msg.Contains("not found", StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("Failed to start", StringComparison.OrdinalIgnoreCase))
         {
-            return new RuntimeError(
+            return new CommandError(
                 $"command not found: {program}",
-                inner.Span, StashErrorTypes.CommandError);
+                exitCode: 127, span: inner.Span);
         }
 
         if (msg.Contains("Permission denied", StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("Access is denied", StringComparison.OrdinalIgnoreCase))
         {
-            return new RuntimeError(
+            return new CommandError(
                 $"permission denied: {program}",
-                inner.Span, StashErrorTypes.CommandError);
+                exitCode: 126, span: inner.Span);
         }
 
         return inner;

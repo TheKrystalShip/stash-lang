@@ -37,8 +37,8 @@ public static partial class TplBuiltIns
     /// <summary>Renders a template string or pre-compiled template with the given data dictionary.</summary>
     /// <param name="template">The template string or pre-compiled template</param>
     /// <param name="data">The data dictionary to use for rendering</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the template string contains invalid syntax</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the first argument is not a string or compiled template</exception>
+    /// <exception cref="ParseError">if the template string contains invalid syntax</exception>
+    /// <exception cref="TypeError">if the first argument is not a string or compiled template</exception>
     /// <returns>The rendered output string</returns>
     [StashFn(ReturnType = "string")]
     public static StashValue Render(IInterpreterContext ctx, StashValue template, StashDictionary data)
@@ -60,8 +60,8 @@ public static partial class TplBuiltIns
     /// <summary>Reads a template from a file and renders it with the given data dictionary.</summary>
     /// <param name="path">The path to the template file</param>
     /// <param name="data">The data dictionary to use for rendering</param>
-    /// <exception cref="StashErrorTypes.IOError">if the template file does not exist or cannot be read</exception>
-    /// <exception cref="StashErrorTypes.ParseError">if the template contains invalid syntax</exception>
+    /// <exception cref="IOError">if the template file does not exist or cannot be read</exception>
+    /// <exception cref="ParseError">if the template contains invalid syntax</exception>
     /// <returns>The rendered output string</returns>
     [StashFn(ReturnType = "string")]
     public static StashValue RenderFile(IInterpreterContext ctx, string path, StashDictionary data)
@@ -88,7 +88,7 @@ public static partial class TplBuiltIns
 
     /// <summary>Compiles a template string and returns a pre-compiled template for repeated rendering.</summary>
     /// <param name="template">The template string to compile</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the template string contains invalid syntax</exception>
+    /// <exception cref="ParseError">if the template string contains invalid syntax</exception>
     /// <returns>A pre-compiled template object</returns>
     [StashFn(ReturnType = "function")]
     public static StashValue Compile(IInterpreterContext ctx, string template)

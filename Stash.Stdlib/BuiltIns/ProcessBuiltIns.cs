@@ -75,7 +75,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Exits the current process with the given integer exit code (default 0). Runs all pending defer blocks before terminating. Cannot be caught by try/catch.</summary>
     /// <param name="code">(optional) The exit code. Defaults to 0</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the exit code argument is not an integer</exception>
+    /// <exception cref="TypeError">if the exit code argument is not an integer</exception>
     /// <returns>Does not return — exits the process</returns>
     [StashFn, StashDeprecated("env.exit")]
     private static void Exit(IInterpreterContext ctx, params StashValue[] rest)
@@ -93,8 +93,8 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Replaces the current process image with the given command (Unix execvp / Windows spawn-and-exit). Does not return on success.</summary>
     /// <param name="command">The command and arguments to execute</param>
-    /// <exception cref="StashErrorTypes.IOError">if the executable cannot be launched or the process fails to start</exception>
-    /// <exception cref="StashErrorTypes.NotSupportedError">if called in embedded mode</exception>
+    /// <exception cref="IOError">if the executable cannot be launched or the process fails to start</exception>
+    /// <exception cref="NotSupportedError">if called in embedded mode</exception>
     /// <returns>Does not return — replaces the process</returns>
     [StashFn]
     private static void Replace(IInterpreterContext ctx, string command)
@@ -161,10 +161,10 @@ public static partial class ProcessBuiltIns
     /// <param name="program">The executable name or path</param>
     /// <param name="args">Array of argument strings</param>
     /// <param name="opts">Optional ExecOptions controlling mode, strict, redirect, cwd, env</param>
-    /// <exception cref="StashErrorTypes.CommandError">if the process fails to start, or exits with a non-zero status and strict mode is enabled</exception>
-    /// <exception cref="StashErrorTypes.IOError">if a redirect target file cannot be written</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if program is an empty string or empty array, redirect is used with Stream mode, an unknown ExecMode or RedirectSpec field value is given</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="CommandError">if the process fails to start, or exits with a non-zero status and strict mode is enabled</exception>
+    /// <exception cref="IOError">if a redirect target file cannot be written</exception>
+    /// <exception cref="ValueError">if program is an empty string or empty array, redirect is used with Stream mode, an unknown ExecMode or RedirectSpec field value is given</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A CommandResult (stdout, stderr, exitCode) in Capture/Passthrough mode, or a StreamingProcess in Stream mode</returns>
     // Raw = true: arg0 is polymorphic — may be a string (normal call) or a List<StashValue> (array
     // interpolation from the compiler, e.g. $(${cmd}) where cmd=["ls","-la"]). The typed generator
@@ -219,10 +219,10 @@ public static partial class ProcessBuiltIns
     /// <summary>Runs a multi-stage pipeline from an array of PipelineStage values. Each stage specifies program and args explicitly — no shell tokenisation applied.</summary>
     /// <param name="stages">Array of PipelineStage values (each with program and args fields)</param>
     /// <param name="opts">Optional ExecOptions controlling mode, strict, redirect</param>
-    /// <exception cref="StashErrorTypes.CommandError">if any pipeline stage fails to start, or the last stage exits with a non-zero status and strict mode is enabled</exception>
-    /// <exception cref="StashErrorTypes.IOError">if a redirect target file cannot be written</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if stages is empty, Passthrough mode is used, or an unknown ExecMode or RedirectSpec field value is given</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if stages is not an array, any argument has the wrong type, or a stage is not a PipelineStage struct or dict</exception>
+    /// <exception cref="CommandError">if any pipeline stage fails to start, or the last stage exits with a non-zero status and strict mode is enabled</exception>
+    /// <exception cref="IOError">if a redirect target file cannot be written</exception>
+    /// <exception cref="ValueError">if stages is empty, Passthrough mode is used, or an unknown ExecMode or RedirectSpec field value is given</exception>
+    /// <exception cref="TypeError">if stages is not an array, any argument has the wrong type, or a stage is not a PipelineStage struct or dict</exception>
     /// <returns>A CommandResult in Capture mode, or a StreamingProcess in Stream mode</returns>
     // Raw = true: the second arg is optional and has a complex struct/dict shape (ExecOptions) that
     // the typed generator cannot handle without deeper infrastructure. Keeping Raw preserves the
@@ -260,7 +260,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output and the exit code.</summary>
     /// <param name="command">The command and arguments to spawn</param>
-    /// <exception cref="StashErrorTypes.IOError">if the process cannot be started</exception>
+    /// <exception cref="IOError">if the process cannot be started</exception>
     /// <returns>A Process handle</returns>
     [StashFn(ReturnType = "Process")]
     private static StashValue Spawn(IInterpreterContext ctx, string command)
@@ -294,7 +294,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>A CommandResult with stdout, stderr, and exitCode</returns>
     [StashFn(ReturnType = "CommandResult")]
     private static StashValue Wait(IInterpreterContext ctx, StashValue handleVal)
@@ -347,7 +347,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Waits up to the given number of milliseconds for a process to exit. Returns a CommandResult on success, or null if the timeout expires.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
     /// <param name="ms">Maximum wait time in milliseconds</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>A CommandResult, or null if timed out</returns>
     [StashFn]
     private static StashValue WaitTimeout(IInterpreterContext ctx, StashValue handleVal, long ms)
@@ -394,7 +394,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if the signal was sent, false if the process was not running</returns>
     [StashFn]
     private static StashValue Kill(IInterpreterContext ctx, StashValue handleVal)
@@ -420,7 +420,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Returns true if the process is still running, false if it has exited.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if the process is running</returns>
     [StashFn]
     private static StashValue IsAlive(IInterpreterContext ctx, StashValue handleVal)
@@ -439,7 +439,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Returns the OS process ID for a spawned Process handle.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>The integer process ID</returns>
     [StashFn]
     private static StashValue Pid(IInterpreterContext ctx, StashValue handleVal)
@@ -451,8 +451,8 @@ public static partial class ProcessBuiltIns
     /// <summary>Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL, etc. as signal number constants. Returns true on success.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
     /// <param name="signum">The POSIX signal number (1–64)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the Signal enum member is unknown, or the signal number is outside the range 1–64</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process, or the signal argument is not an integer or Signal enum value</exception>
+    /// <exception cref="ValueError">if the Signal enum member is unknown, or the signal number is outside the range 1–64</exception>
+    /// <exception cref="TypeError">if handle is not a Process, or the signal argument is not an integer or Signal enum value</exception>
     /// <returns>True if the signal was sent successfully</returns>
     [StashFn]
     private static StashValue Signal(IInterpreterContext ctx, StashValue handleVal, StashValue sigArg)
@@ -515,7 +515,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.</summary>
     /// <param name="handle">The Process handle to detach</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if the handle was found and removed</returns>
     [StashFn]
     private static StashValue Detach(IInterpreterContext ctx, StashValue handleVal)
@@ -548,7 +548,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>A string chunk, or null if no data is available</returns>
     [StashFn]
     private static StashValue Read(IInterpreterContext ctx, StashValue handleVal)
@@ -582,7 +582,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Writes a string to a process's stdin. Returns true on success, false if the process has already exited.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
     /// <param name="data">The string data to write to stdin</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process</exception>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if written successfully</returns>
     [StashFn]
     private static StashValue Write(IInterpreterContext ctx, StashValue handleVal, string data)
@@ -610,7 +610,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Registers a callback function to be called when the process exits. The callback receives a CommandResult as its argument.</summary>
     /// <param name="handle">The Process handle returned by process.spawn()</param>
     /// <param name="callback">A function that accepts a CommandResult</param>
-    /// <exception cref="StashErrorTypes.TypeError">if handle is not a Process, or the callback requires more than one argument</exception>
+    /// <exception cref="TypeError">if handle is not a Process, or the callback requires more than one argument</exception>
     /// <returns>null</returns>
     [StashFn]
     private static StashValue OnExit(IInterpreterContext ctx, StashValue handleVal, IStashCallable callback)
@@ -640,7 +640,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Starts a process fully detached from the script with no stdio redirection. The process is not tracked and survives script exit.</summary>
     /// <param name="command">The command and arguments to daemonize</param>
-    /// <exception cref="StashErrorTypes.IOError">if the process cannot be started</exception>
+    /// <exception cref="IOError">if the process cannot be started</exception>
     /// <returns>A Process handle for the detached process</returns>
     [StashFn]
     private static StashValue Daemonize(IInterpreterContext ctx, string command)
@@ -727,7 +727,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order as the input.</summary>
     /// <param name="handles">An array of Process handles</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any element in the handles array is not a Process</exception>
+    /// <exception cref="TypeError">if any element in the handles array is not a Process</exception>
     /// <returns>An array of CommandResult values</returns>
     [StashFn]
     private static StashValue WaitAll(IInterpreterContext ctx, List<StashValue> procs)
@@ -781,8 +781,8 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Waits until any process in the array exits. Returns the CommandResult of the first process to finish.</summary>
     /// <param name="handles">A non-empty array of Process handles</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the handles array is empty</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any element in the handles array is not a Process</exception>
+    /// <exception cref="ValueError">if the handles array is empty</exception>
+    /// <exception cref="TypeError">if any element in the handles array is not a Process</exception>
     /// <returns>The CommandResult of the first process to exit</returns>
     [StashFn]
     private static StashValue WaitAny(IInterpreterContext ctx, List<StashValue> procs)
@@ -873,7 +873,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Changes the current working directory to the given path and pushes it onto the directory stack.</summary>
     /// <param name="path">The directory path to change to</param>
-    /// <exception cref="StashErrorTypes.CommandError">if the specified directory does not exist</exception>
+    /// <exception cref="CommandError">if the specified directory does not exist</exception>
     /// <returns>null</returns>
     [StashFn, StashDeprecated("env.chdir")]
     private static void Chdir(IInterpreterContext ctx, string path)
@@ -892,7 +892,7 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.</summary>
-    /// <exception cref="StashErrorTypes.CommandError">if the directory stack is at its root entry and cannot be popped further</exception>
+    /// <exception cref="CommandError">if the directory stack is at its root entry and cannot be popped further</exception>
     /// <returns>The directory path that was popped</returns>
     [StashFn, StashDeprecated("env.popDir")]
     private static string PopDir(IInterpreterContext ctx)
@@ -928,7 +928,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.</summary>
     /// <param name="path">The directory to temporarily change to</param>
     /// <param name="fn">The function to execute in the new directory</param>
-    /// <exception cref="StashErrorTypes.IOError">if the specified directory does not exist</exception>
+    /// <exception cref="IOError">if the specified directory does not exist</exception>
     /// <returns>The return value of fn</returns>
     [StashFn, StashDeprecated("env.withDir")]
     private static StashValue WithDir(IInterpreterContext ctx, string path, IStashCallable fn)
@@ -979,7 +979,7 @@ public static partial class ProcessBuiltIns
 
     /// <summary>Adds the given line to the REPL command history. Subject to the same dedup and leading-space-skip rules as user input. Throws ValueError if line is empty or whitespace-only. No-op when persistence is disabled.</summary>
     /// <param name="line">The command line to append</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the line is empty or whitespace-only</exception>
+    /// <exception cref="ValueError">if the line is empty or whitespace-only</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void HistoryAdd(IInterpreterContext ctx, string line)

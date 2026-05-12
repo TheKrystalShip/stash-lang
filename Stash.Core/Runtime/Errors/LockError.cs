@@ -10,7 +10,7 @@ public sealed class LockError : RuntimeError
     public string? Path { get; }
 
     public LockError(string message, string? path = null, SourceSpan? span = null)
-        : base(message, span, StashErrorTypes.LockError)
+        : base(message, span)
     {
         Path = path;
     }

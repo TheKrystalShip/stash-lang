@@ -3,6 +3,7 @@ namespace Stash.Runtime;
 using System;
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 
 /// <summary>
@@ -31,10 +32,11 @@ public class RuntimeError : Exception
     public SourceSpan? Span { get; }
 
     /// <summary>
-    /// The error type name supplied by user code via <c>throw { type: "...", message: "..." }</c>,
-    /// or <c>null</c> for built-in runtime errors (which default to <c>"RuntimeError"</c>).
+    /// The canonical Stash-facing error type name for this exception. Computed from
+    /// the CLR class identity via <see cref="BuiltInErrorRegistry.NameOf"/>; user-supplied
+    /// type names from <c>throw { type: "..." }</c> are surfaced via <see cref="UserRuntimeError"/>.
     /// </summary>
-    public string? ErrorType { get; }
+    public virtual string ErrorType => BuiltInErrorRegistry.NameOf(this);
 
     /// <summary>
     /// Optional dictionary of additional typed properties carried by this error.
@@ -59,10 +61,9 @@ public class RuntimeError : Exception
     /// Initializes a new <see cref="RuntimeError"/> with a human-readable message and an
     /// optional source location.
     /// </summary>
-    public RuntimeError(string message, SourceSpan? span = null, string? errorType = null) : base(message)
+    public RuntimeError(string message, SourceSpan? span = null) : base(message)
     {
         Span = span;
-        ErrorType = errorType;
     }
 
     /// <summary>

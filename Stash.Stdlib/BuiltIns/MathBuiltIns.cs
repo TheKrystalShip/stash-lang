@@ -22,7 +22,7 @@ public static partial class MathBuiltIns
 
     /// <summary>Returns the absolute value of a number.</summary>
     /// <param name="n">The number</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `n` is not a number</exception>
+    /// <exception cref="TypeError">if `n` is not a number</exception>
     /// <returns>The absolute value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Abs([StashParam(Type = "number")] StashValue n)
@@ -34,7 +34,7 @@ public static partial class MathBuiltIns
 
     /// <summary>Returns the smallest integer greater than or equal to a number (rounds up).</summary>
     /// <param name="n">The number to round up</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `n` is not a number</exception>
+    /// <exception cref="TypeError">if `n` is not a number</exception>
     /// <returns>The ceiling value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Ceil([StashParam(Type = "number")] StashValue n)
@@ -46,7 +46,7 @@ public static partial class MathBuiltIns
 
     /// <summary>Returns the largest integer less than or equal to a number (rounds down).</summary>
     /// <param name="n">The number to round down</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `n` is not a number</exception>
+    /// <exception cref="TypeError">if `n` is not a number</exception>
     /// <returns>The floor value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Floor([StashParam(Type = "number")] StashValue n)
@@ -59,7 +59,7 @@ public static partial class MathBuiltIns
     /// <summary>Rounds a number to the nearest integer, or to a specified number of decimal places. Ties round away from zero.</summary>
     /// <param name="n">The number to round</param>
     /// <param name="precision">(optional) Number of decimal places (positive) or significant digits to the left of the decimal (negative). Defaults to 0</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `n` or `precision` is not a number</exception>
+    /// <exception cref="TypeError">if `n` or `precision` is not a number</exception>
     /// <returns>The rounded value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Round([StashParam(Type = "number")] StashValue n, params StashValue[] rest)
@@ -81,7 +81,7 @@ public static partial class MathBuiltIns
     /// <param name="a">The first number</param>
     /// <param name="b">The second number</param>
     /// <param name="args">Additional numbers to compare</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument is not a number</exception>
+    /// <exception cref="TypeError">if any argument is not a number</exception>
     /// <returns>The smallest value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Min(
@@ -106,7 +106,7 @@ public static partial class MathBuiltIns
     /// <param name="a">The first number</param>
     /// <param name="b">The second number</param>
     /// <param name="args">Additional numbers to compare</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument is not a number</exception>
+    /// <exception cref="TypeError">if any argument is not a number</exception>
     /// <returns>The largest value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Max(
@@ -146,7 +146,7 @@ public static partial class MathBuiltIns
     /// <summary>Returns the logarithm of a number. When called with one argument, returns the natural logarithm (base e). When called with two arguments, returns the logarithm in the specified base.</summary>
     /// <param name="n">The number (must be positive)</param>
     /// <param name="base">(optional) The logarithm base. Defaults to e (natural log)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `base` is not a number</exception>
+    /// <exception cref="TypeError">if `base` is not a number</exception>
     /// <returns>The logarithm as a float</returns>
     [StashFn]
     public static double Log([StashParam(Type = "number")] double n, params StashValue[] rest)
@@ -166,7 +166,7 @@ public static partial class MathBuiltIns
     /// <summary>Returns a random integer. With no arguments, returns a random integer in [0, int.MaxValue]. With one argument, returns an integer in [0, max]. With two arguments, returns an integer in [min, max].</summary>
     /// <param name="min">(optional) The minimum value (inclusive). Defaults to 0</param>
     /// <param name="max">(optional) The maximum value (inclusive). Defaults to int.MaxValue when no args given, otherwise required upper bound</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `min` or `max` is not an integer</exception>
+    /// <exception cref="TypeError">if `min` or `max` is not an integer</exception>
     /// <returns>A random integer</returns>
     [StashFn]
     public static long RandomInt(params StashValue[] args)
@@ -189,7 +189,7 @@ public static partial class MathBuiltIns
     /// <param name="n">The number to clamp</param>
     /// <param name="min">The minimum value</param>
     /// <param name="max">The maximum value</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument is not a number</exception>
+    /// <exception cref="TypeError">if any argument is not a number</exception>
     /// <returns>The clamped value</returns>
     [StashFn(ReturnType = "number")]
     public static StashValue Clamp(
@@ -254,7 +254,7 @@ public static partial class MathBuiltIns
 
     /// <summary>Returns the sign of a number: -1 for negative, 0 for zero, 1 for positive.</summary>
     /// <param name="n">The number</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `n` is not a number</exception>
+    /// <exception cref="TypeError">if `n` is not a number</exception>
     /// <returns>-1, 0, or 1</returns>
     [StashFn(ReturnType = "int")]
     public static long Sign([StashParam(Type = "number")] StashValue n)

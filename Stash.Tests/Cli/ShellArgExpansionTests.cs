@@ -198,7 +198,7 @@ public class ShellArgExpansionTests
         try
         {
             string pattern = Path.Combine(dir, "*.xyz");
-            var ex = Assert.Throws<RuntimeError>(() => Expand(pattern));
+            var ex = Assert.ThrowsAny<RuntimeError>(() => Expand(pattern));
             Assert.Contains("did not match", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally

@@ -13,7 +13,7 @@ public static partial class EncodingBuiltIns
     /// <summary>Encodes a string to base64.</summary>
     /// <param name="s">The string to encode (UTF-8)</param>
     /// <param name="urlSafe">Optional boolean; when true, uses URL-safe base64 (no padding, '-' and '_')</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The base64-encoded string</returns>
     [StashFn]
     private static string Base64Encode(string s, [StashParam(Name = "urlSafe")] params StashValue[] rest)
@@ -26,7 +26,7 @@ public static partial class EncodingBuiltIns
     /// <summary>Decodes a base64 string to a plain string.</summary>
     /// <param name="s">The base64-encoded string to decode</param>
     /// <param name="urlSafe">Optional boolean; when true, accepts URL-safe base64 format</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The decoded string (interpreted as UTF-8)</returns>
     [StashFn]
     private static string Base64Decode(string s, [StashParam(Name = "urlSafe")] params StashValue[] rest)
@@ -44,7 +44,7 @@ public static partial class EncodingBuiltIns
 
     /// <summary>Percent-encodes a string for use in URLs.</summary>
     /// <param name="s">The string to encode</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The URL-encoded string</returns>
     [StashFn]
     private static string UrlEncode(string s)
@@ -54,7 +54,7 @@ public static partial class EncodingBuiltIns
 
     /// <summary>Decodes a percent-encoded URL string.</summary>
     /// <param name="s">The URL-encoded string to decode</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The decoded string</returns>
     [StashFn]
     private static string UrlDecode(string s)
@@ -64,7 +64,7 @@ public static partial class EncodingBuiltIns
 
     /// <summary>Encodes a string as a lowercase hexadecimal string (UTF-8 bytes).</summary>
     /// <param name="s">The string to encode</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The hex-encoded string</returns>
     [StashFn]
     private static string HexEncode(string s)
@@ -74,8 +74,8 @@ public static partial class EncodingBuiltIns
 
     /// <summary>Decodes a hexadecimal-encoded string.</summary>
     /// <param name="s">The hex string to decode (must be valid hex)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the input is not a valid hexadecimal string</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the input is not a valid hexadecimal string</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The decoded string (interpreted as UTF-8)</returns>
     [StashFn]
     private static string HexDecode(string s)
@@ -93,7 +93,7 @@ public static partial class EncodingBuiltIns
     /// <summary>Decodes a base64 string to a byte array.</summary>
     /// <param name="s">The base64-encoded string to decode</param>
     /// <param name="urlSafe">Optional boolean; when true, accepts URL-safe base64 format</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The decoded data as a byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue Base64DecodeBytes(string s, [StashParam(Name = "urlSafe")] params StashValue[] rest)
@@ -111,8 +111,8 @@ public static partial class EncodingBuiltIns
 
     /// <summary>Decodes a hexadecimal string to a byte array.</summary>
     /// <param name="s">The hex string to decode (must be valid hex)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the input is not a valid hexadecimal string</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the input is not a valid hexadecimal string</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The decoded data as a byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue HexDecodeBytes(string s)

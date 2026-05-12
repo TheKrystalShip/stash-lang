@@ -16,7 +16,7 @@ public static partial class EnvBuiltIns
     /// <summary>Returns the value of an environment variable, or null if not set. If a default is provided it is returned instead of null.</summary>
     /// <param name="name">The environment variable name</param>
     /// <param name="default">Optional default value when the variable is not set</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the variable name is not a string</exception>
+    /// <exception cref="TypeError">if the variable name is not a string</exception>
     /// <returns>The value, default, or null</returns>
     // Raw: second arg is pass-through StashValue (any type allowed as default)
     [StashFn(Raw = true)]
@@ -89,7 +89,7 @@ public static partial class EnvBuiltIns
 
     /// <summary>Removes the environment variable 'name'. Returns true if the variable existed, false otherwise.</summary>
     /// <param name="name">The environment variable name to remove</param>
-    /// <exception cref="StashErrorTypes.ValueError">if `name` is empty, contains '=', or contains a null character</exception>
+    /// <exception cref="ValueError">if `name` is empty, contains '=', or contains a null character</exception>
     /// <returns>True if the variable was set, false if it was not set</returns>
     [StashFn]
     public static bool Unset(string name)
@@ -150,7 +150,7 @@ public static partial class EnvBuiltIns
     /// <summary>Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.</summary>
     /// <param name="path">Path to the .env file</param>
     /// <param name="prefix">Optional prefix to prepend to all variable names</param>
-    /// <exception cref="StashErrorTypes.IOError">if the .env file cannot be read</exception>
+    /// <exception cref="IOError">if the .env file cannot be read</exception>
     /// <returns>The number of variables loaded</returns>
     [StashFn]
     public static long LoadFile(IInterpreterContext ctx, string path, string prefix = "")
@@ -209,7 +209,7 @@ public static partial class EnvBuiltIns
 
     /// <summary>Saves all current environment variables to a .env file at the given path.</summary>
     /// <param name="path">Path to write the .env file</param>
-    /// <exception cref="StashErrorTypes.IOError">if the file cannot be written</exception>
+    /// <exception cref="IOError">if the file cannot be written</exception>
     [StashFn]
     public static void SaveFile(IInterpreterContext ctx, string path)
     {
@@ -253,8 +253,8 @@ public static partial class EnvBuiltIns
 
     /// <summary>Changes the current working directory to the given path and pushes it onto the directory stack.</summary>
     /// <param name="path">The directory path to change to</param>
-    /// <exception cref="StashErrorTypes.CommandError">if the directory does not exist</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if `path` is not a string</exception>
+    /// <exception cref="CommandError">if the directory does not exist</exception>
+    /// <exception cref="TypeError">if `path` is not a string</exception>
     /// <returns>null</returns>
     // Raw: delegates to CurrentProcessImpl.Chdir which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "null")]
@@ -262,7 +262,7 @@ public static partial class EnvBuiltIns
         => CurrentProcessImpl.Chdir(ctx, args, "env.chdir");
 
     /// <summary>Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.</summary>
-    /// <exception cref="StashErrorTypes.CommandError">if the directory stack is already at its root entry</exception>
+    /// <exception cref="CommandError">if the directory stack is already at its root entry</exception>
     /// <returns>The directory path that was popped</returns>
     // Raw: delegates to CurrentProcessImpl.PopDir which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "string")]
@@ -286,8 +286,8 @@ public static partial class EnvBuiltIns
     /// <summary>Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.</summary>
     /// <param name="path">The directory to temporarily change to</param>
     /// <param name="fn">The function to execute in the new directory</param>
-    /// <exception cref="StashErrorTypes.IOError">if the directory does not exist</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if `path` is not a string or `fn` is not callable</exception>
+    /// <exception cref="IOError">if the directory does not exist</exception>
+    /// <exception cref="TypeError">if `path` is not a string or `fn` is not callable</exception>
     /// <returns>The return value of fn</returns>
     // Raw: delegates to CurrentProcessImpl.WithDir which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "any")]

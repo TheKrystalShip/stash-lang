@@ -7,7 +7,6 @@ namespace Stash.Stdlib.Models;
 /// </summary>
 /// <param name="ErrorType">
 /// The bare error-type name (e.g. <c>"IOError"</c>, <c>"ValueError"</c>).
-/// Use <c>StashErrorTypes.*</c> constants — never literal strings — to avoid drift.
 /// </param>
 /// <param name="Description">Optional prose description of when this error is thrown.</param>
 public record ThrowsEntry(string ErrorType, string? Description = null);

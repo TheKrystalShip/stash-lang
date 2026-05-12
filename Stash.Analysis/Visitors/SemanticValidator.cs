@@ -433,6 +433,24 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         else
         {
             stmt.Value.Accept(this);
+
+            // SA0860: warn when throw expression is a dict literal with a "type" key
+            // whose string literal value matches a built-in error type name.
+            if (stmt.Value is DictLiteralExpr dictLit)
+            {
+                foreach (var (key, value) in dictLit.Entries)
+                {
+                    if (key is not null
+                        && key.Lexeme == "type"
+                        && value is LiteralExpr literal
+                        && literal.Value is string typeName
+                        && BuiltInErrorRegistry.IsBuiltInName(typeName))
+                    {
+                        _diagnostics.Add(DiagnosticDescriptors.SA0860.CreateDiagnostic(stmt.Keyword.Span, typeName));
+                        break;
+                    }
+                }
+            }
         }
         return null;
     }
@@ -462,7 +480,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             // SA0163: warn on explicit "RuntimeError" catch type (not for untyped catch-all)
             foreach (Token typeToken in clause.TypeTokens)
             {
-                if (typeToken.Lexeme == StashErrorTypes.RuntimeError)
+                if (typeToken.Lexeme == "RuntimeError")
                     _diagnostics.Add(DiagnosticDescriptors.SA0163.CreateDiagnostic(typeToken.Span));
             }
 
@@ -1098,7 +1116,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         foreach (var entry in throws)
         {
             // Built-in error types (and the bare RuntimeError name) are always valid — skip further checks.
-            if (BuiltInErrorRegistry.IsBuiltInName(entry.ErrorType) || entry.ErrorType == StashErrorTypes.RuntimeError)
+            if (BuiltInErrorRegistry.IsBuiltInName(entry.ErrorType) || entry.ErrorType == "RuntimeError")
                 continue;
 
             // Look for a user-declared struct with this name in the global scope.

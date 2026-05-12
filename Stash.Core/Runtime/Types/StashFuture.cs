@@ -24,10 +24,10 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
         return new StashFuture(Task.FromResult(value), new CancellationTokenSource());
     }
 
-    public static StashFuture Failed(string message, string? errorType = null)
+    public static StashFuture Failed(string message)
     {
         var tcs = new TaskCompletionSource<object?>();
-        tcs.SetException(new RuntimeError(message, errorType: errorType));
+        tcs.SetException(new RuntimeError(message));
         return new StashFuture(tcs.Task, new CancellationTokenSource());
     }
 

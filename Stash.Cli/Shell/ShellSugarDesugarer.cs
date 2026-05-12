@@ -38,7 +38,7 @@ internal static class ShellSugarDesugarer
     /// when desugaring does not apply (piped / redirected cases).
     /// </summary>
     /// <exception cref="RuntimeError">
-    /// Thrown with <see cref="StashErrorTypes.CommandError"/> on arity or numeric-argument
+    /// Thrown with <see cref="CommandError"/> on arity or numeric-argument
     /// violations, matching the exact wording required by §11.2.
     /// </exception>
     public static string? TryDesugar(ShellCommandLine line, IReadOnlyList<string> expandedArgs)

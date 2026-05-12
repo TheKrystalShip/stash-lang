@@ -75,7 +75,7 @@ public static partial class IoBuiltIns
     /// <summary>Prompts the user for a yes/no confirmation.</summary>
     /// <param name="prompt">The prompt text to display</param>
     /// <param name="rest">Optional default value: true shows [Y/n] (Enter = yes), false shows [y/N] (Enter = no)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the optional default argument is not a bool</exception>
+    /// <exception cref="TypeError">if the optional default argument is not a bool</exception>
     /// <returns>true if the user answered yes, false otherwise</returns>
     [StashFn(ReturnType = "bool")]
     private static bool Confirm(IInterpreterContext ctx, StashValue prompt, params StashValue[] rest)
@@ -105,8 +105,8 @@ public static partial class IoBuiltIns
 
     /// <summary>Reads a password from stdin without echoing typed characters. Returns a secret.</summary>
     /// <param name="rest">Optional prompt text to display before reading</param>
-    /// <exception cref="StashErrorTypes.IOError">if input is closed or cancelled (Ctrl-C)</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the optional prompt argument is not a string</exception>
+    /// <exception cref="IOError">if input is closed or cancelled (Ctrl-C)</exception>
+    /// <exception cref="TypeError">if the optional prompt argument is not a string</exception>
     /// <returns>The entered password wrapped in a secret value</returns>
     [StashFn(ReturnType = "secret")]
     private static StashValue ReadPassword(IInterpreterContext ctx, params StashValue[] rest)

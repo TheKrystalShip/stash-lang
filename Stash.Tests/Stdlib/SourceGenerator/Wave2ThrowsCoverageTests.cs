@@ -2,7 +2,6 @@ namespace Stash.Tests.Stdlib.SourceGenerator;
 
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Stash.Stdlib;
 using Xunit;
 
@@ -67,10 +66,7 @@ public class Wave2ThrowsCoverageTests
     [Fact]
     public void Wave2_TaggedThrows_ReferenceKnownErrorTypes()
     {
-        var known = new HashSet<string>(typeof(Stash.Runtime.StashErrorTypes)
-            .GetFields(BindingFlags.Public | BindingFlags.Static)
-            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
-            .Select(f => (string)f.GetRawConstantValue()!));
+        var known = new HashSet<string>(Stash.Runtime.Errors.BuiltInErrorRegistry.Metadata.Keys);
 
         foreach (var nsName in NoThrowAllowList.Keys)
         {
@@ -81,7 +77,7 @@ public class Wave2ThrowsCoverageTests
                 foreach (var t in fn.Throws)
                 {
                     Assert.True(known.Contains(t.ErrorType),
-                        $"{nsName}.{fn.Name} throws unknown error type '{t.ErrorType}'. Must be a constant in StashErrorTypes.");
+                        $"{nsName}.{fn.Name} throws unknown error type '{t.ErrorType}'. Must be a built-in error type in BuiltInErrorRegistry.");
                 }
             }
         }

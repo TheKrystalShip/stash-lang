@@ -10,7 +10,7 @@ applyTo: "Stash.Analysis/**"
 ## Adding a New Diagnostic
 
 1. **Define the descriptor** in `Stash.Analysis/Models/DiagnosticDescriptors.cs`:
-   - Pick the next available code in the correct category range (SA00xx Infrastructure, SA01xx Control flow, SA02xx Declarations, SA03xx Type safety, SA04xx Functions & calls, SA07xx Commands, SA08xx Imports).
+   - Pick the next available code in the correct category range (SA00xx Infrastructure, SA01xx Control flow, SA02xx Declarations, SA03xx Type safety, SA04xx Functions & calls, SA07xx Commands, SA08xx Imports, SA086x Errors).
    - Set the `Title`, `DefaultLevel`, `Category`, and `MessageFormat` (use `{0}`, `{1}`, … placeholders for dynamic parts).
    - Register the new descriptor in `BuildCodeLookup()`.
 
@@ -56,3 +56,9 @@ applyTo: "Stash.Analysis/**"
 | `Stash.Analysis/Models/DiagnosticDescriptor.cs`  | Descriptor record + `CreateDiagnostic` / `CreateUnnecessaryDiagnostic` factory methods |
 | `Stash.Analysis/Models/DiagnosticDescriptors.cs` | Central registry of all SA-codes (single source of truth)                              |
 | `Stash.Analysis/Models/SemanticDiagnostics.cs`   | Diagnostic data class (do not construct directly for coded diagnostics)                |
+
+## Notable Diagnostic Codes
+
+| Code    | Severity | Category | Description                                                                                        |
+| ------- | -------- | -------- | -------------------------------------------------------------------------------------------------- |
+| SA0860  | Warning  | Errors   | `throw { type: "<built-in name>", ... }` — dict literal matches a built-in error type. Use struct throw form. |

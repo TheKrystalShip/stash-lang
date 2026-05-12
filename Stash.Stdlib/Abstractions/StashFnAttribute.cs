@@ -46,17 +46,9 @@ public sealed class StashFnAttribute : Attribute
     public StashCapabilities Capability { get; set; } = StashCapabilities.None;
 
     /// <summary>
-    /// Error type names this function may throw. Use <c>StashErrorTypes.*</c> constants —
-    /// never literal strings — to avoid drift and aid refactoring.
-    /// </summary>
-    /// <remarks>Legacy string form. Prefer <see cref="ThrowsTypes"/> for type-safe throws metadata.</remarks>
-    public string[]? Throws { get; set; }
-
-    /// <summary>
     /// Error types this function may throw. Each element must be a <c>[StashError]</c>-attributed
     /// class that inherits <c>RuntimeError</c>. The source generator validates the attribute presence
     /// and emits the canonical name into the throws metadata for LSP hover and static analysis.
-    /// Prefer this over <see cref="Throws"/> — the type-based form is validated at build time.
     /// </summary>
     public Type[]? ThrowsTypes { get; set; }
 }

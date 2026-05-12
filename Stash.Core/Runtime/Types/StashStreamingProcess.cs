@@ -384,8 +384,7 @@ public sealed class StashStreamingProcess
         if (OperatingSystem.IsWindows())
         {
             if (sigName != "Term" && sigName != "Kill")
-                throw new RuntimeError($"signal {sigName} not supported on Windows", _span,
-                    StashErrorTypes.NotSupportedError);
+                throw new NotSupportedError($"signal {sigName} not supported on Windows", _span);
             foreach (var p in _stages)
             {
                 try { p.Kill(entireProcessTree: true); } catch { }

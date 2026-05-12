@@ -25,9 +25,9 @@ public static partial class CsvBuiltIns
     /// <summary>Parses a CSV string into an array of arrays (default) or an array of dictionaries (when header:true or columns is set).</summary>
     /// <param name="text">The CSV string to parse</param>
     /// <param name="options">Optional CsvOptions struct</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the CSV contains an unterminated quoted field</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if options is not a CsvOptions struct or a field has the wrong type</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if delimiter, quote, or escape is not a single character</exception>
+    /// <exception cref="ParseError">if the CSV contains an unterminated quoted field</exception>
+    /// <exception cref="TypeError">if options is not a CsvOptions struct or a field has the wrong type</exception>
+    /// <exception cref="ValueError">if delimiter, quote, or escape is not a single character</exception>
     /// <returns>Array of arrays or array of dictionaries</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Parse(string text, StashValue options = default)
@@ -45,8 +45,8 @@ public static partial class CsvBuiltIns
     /// <summary>Converts an array of arrays or dictionaries to a CSV string.</summary>
     /// <param name="data">Array of arrays or array of dictionaries</param>
     /// <param name="options">Optional CsvOptions struct</param>
-    /// <exception cref="StashErrorTypes.TypeError">if data is not an array, rows have mixed types, or options fields have the wrong type</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if delimiter, quote, or escape is not a single character</exception>
+    /// <exception cref="TypeError">if data is not an array, rows have mixed types, or options fields have the wrong type</exception>
+    /// <exception cref="ValueError">if delimiter, quote, or escape is not a single character</exception>
     /// <returns>The CSV string</returns>
     [StashFn]
     private static string Stringify(StashValue data, StashValue options = default)
@@ -65,10 +65,10 @@ public static partial class CsvBuiltIns
     /// <summary>Reads a CSV file and parses it into an array of arrays or dictionaries.</summary>
     /// <param name="path">The path to the CSV file</param>
     /// <param name="options">Optional CsvOptions struct</param>
-    /// <exception cref="StashErrorTypes.IOError">if the file does not exist or cannot be read</exception>
-    /// <exception cref="StashErrorTypes.ParseError">if the CSV contains an unterminated quoted field</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if options is not a CsvOptions struct or a field has the wrong type</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if delimiter, quote, or escape is not a single character</exception>
+    /// <exception cref="IOError">if the file does not exist or cannot be read</exception>
+    /// <exception cref="ParseError">if the CSV contains an unterminated quoted field</exception>
+    /// <exception cref="TypeError">if options is not a CsvOptions struct or a field has the wrong type</exception>
+    /// <exception cref="ValueError">if delimiter, quote, or escape is not a single character</exception>
     /// <returns>Array of arrays or array of dictionaries</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> ParseFile(IInterpreterContext ctx, string path, StashValue options = default)
@@ -104,9 +104,9 @@ public static partial class CsvBuiltIns
     /// <param name="path">The path to the output CSV file</param>
     /// <param name="data">Array of arrays or array of dictionaries</param>
     /// <param name="options">Optional CsvOptions struct</param>
-    /// <exception cref="StashErrorTypes.TypeError">if data is not an array, rows have mixed types, or options fields have the wrong type</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if delimiter, quote, or escape is not a single character</exception>
-    /// <exception cref="StashErrorTypes.IOError">if the file cannot be written</exception>
+    /// <exception cref="TypeError">if data is not an array, rows have mixed types, or options fields have the wrong type</exception>
+    /// <exception cref="ValueError">if delimiter, quote, or escape is not a single character</exception>
+    /// <exception cref="IOError">if the file cannot be written</exception>
     /// <returns>The path to the written file</returns>
     [StashFn]
     private static string WriteFile(IInterpreterContext ctx, string path, StashValue data, StashValue options = default)

@@ -36,9 +36,9 @@ public static partial class ArgsBuiltIns
 
     /// <summary>Parses command-line arguments according to the given spec.</summary>
     /// <param name="spec">A dict describing the expected arguments (flags, options, positional)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if a required option or positional argument is missing, or an unknown argument is encountered</exception>
-    /// <exception cref="StashErrorTypes.ParseError">if an option value cannot be parsed as the declared type (int, float, or bool)</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if spec is not a dict, or a declared argument type is unrecognised</exception>
+    /// <exception cref="ValueError">if a required option or positional argument is missing, or an unknown argument is encountered</exception>
+    /// <exception cref="ParseError">if an option value cannot be parsed as the declared type (int, float, or bool)</exception>
+    /// <exception cref="TypeError">if spec is not a dict, or a declared argument type is unrecognised</exception>
     /// <returns>A dict of parsed argument values</returns>
     [StashFn(ReturnType = "dict")]
     public static StashValue Parse(IInterpreterContext ctx, [StashParam(Type = "dict")] StashValue spec)
@@ -51,7 +51,7 @@ public static partial class ArgsBuiltIns
     /// <summary>Builds an array of CLI argument strings from a spec and values dict.</summary>
     /// <param name="spec">The argument specification dict (same format as args.parse).</param>
     /// <param name="values">The values dict to serialize into CLI arguments.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if spec or values is not a dict, or if a value's type does not match the declared option type</exception>
+    /// <exception cref="TypeError">if spec or values is not a dict, or if a value's type does not match the declared option type</exception>
     /// <returns>An array of argument strings.</returns>
     [StashFn(ReturnType = "array")]
     public static StashValue Build([StashParam(Type = "dict")] StashValue spec, [StashParam(Type = "dict")] StashValue values)

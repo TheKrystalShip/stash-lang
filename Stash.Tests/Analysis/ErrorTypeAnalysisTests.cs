@@ -1,5 +1,6 @@
 using Stash.Analysis;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 namespace Stash.Tests.Analysis;
 
@@ -94,14 +95,14 @@ public class ErrorTypeAnalysisTests : AnalysisTestBase
 
         string[] errorTypeNames =
         [
-            StashErrorTypes.ValueError,
-            StashErrorTypes.TypeError,
-            StashErrorTypes.ParseError,
-            StashErrorTypes.IndexError,
-            StashErrorTypes.IOError,
-            StashErrorTypes.NotSupportedError,
-            StashErrorTypes.TimeoutError,
-            StashErrorTypes.CommandError,
+            nameof(ValueError),
+            nameof(TypeError),
+            nameof(ParseError),
+            nameof(IndexError),
+            nameof(IOError),
+            nameof(NotSupportedError),
+            nameof(TimeoutError),
+            nameof(CommandError),
         ];
 
         foreach (string name in errorTypeNames)

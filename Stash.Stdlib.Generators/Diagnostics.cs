@@ -102,14 +102,6 @@ internal static class Diagnostics
         defaultSeverity: DiagnosticSeverity.Info,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor StringThrowsDeprecated = new(
-        id: "STSG012",
-        title: "[StashFn(Throws=string[])] uses legacy string form",
-        messageFormat: "[StashFn(Throws=...)] on method '{0}' uses the legacy string form. Migrate to [StashFn(ThrowsTypes = new[] {{ typeof(X) }})] for type-safe throws metadata.",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Info,
-        isEnabledByDefault: true);
-
     public static readonly DiagnosticDescriptor ThrowsTypesNotStashError = new(
         id: "STSG013",
         title: "[StashFn(ThrowsTypes=...)] type not [StashError]-attributed",

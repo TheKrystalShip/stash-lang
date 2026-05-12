@@ -3306,19 +3306,21 @@ try {
 
 Stash assigns every runtime error a **type string** accessible via `e.type`. The built-in taxonomy:
 
-| Type                | Trigger                                                     |
-| ------------------- | ----------------------------------------------------------- |
-| `TypeError`         | Wrong type passed to a function                             |
-| `ValueError`        | Valid type, invalid value (e.g. out-of-range, empty string) |
-| `IndexError`        | Array or string index out of bounds                         |
-| `KeyError`          | Dictionary key not found                                    |
-| `IOError`           | File or network I/O failure                                 |
-| `ParseError`        | Parsing failure (JSON, config files, number conversion)     |
-| `CommandError`      | Shell command exited with a non-zero exit code              |
-| `NotSupportedError` | Operation not supported on this platform                    |
-| `TimeoutError`      | Network or async operation timed out                        |
-| `AssertionError`    | Failed assertion (test framework)                           |
-| `RuntimeError`      | Default / uncategorized error                               |
+| Type                 | Trigger                                                     |
+| -------------------- | ----------------------------------------------------------- |
+| `TypeError`          | Wrong type passed to a function                             |
+| `ValueError`         | Valid type, invalid value (e.g. out-of-range, empty string) |
+| `IndexError`         | Array or string index out of bounds                         |
+| `IOError`            | File or network I/O failure                                 |
+| `ParseError`         | Parsing failure (JSON, config files, number conversion)     |
+| `CommandError`       | Shell command exited with a non-zero exit code              |
+| `NotSupportedError`  | Operation not supported on this platform                    |
+| `TimeoutError`       | Network or async operation timed out                        |
+| `LockError`          | File lock acquisition failed                                |
+| `AliasError`         | Alias definition or execution failure                       |
+| `StateError`         | Object accessed in an invalid state (e.g. consumed iterator)|
+| `CancellationError`  | Operation cancelled via external cancellation token         |
+| `RuntimeError`       | Default / uncategorized error (catch-all)                   |
 
 > **Note:** Catching `RuntimeError` by name is discouraged — it is the default catch-all type in the taxonomy. Prefer specific types where possible. The static analysis engine emits `SA0163` (warning) when `RuntimeError` is caught by name.
 
@@ -3335,6 +3337,8 @@ throw CommandError { message: "deploy failed", exitCode: 1, stderr: "permission 
 // Equivalent dict form — still supported
 throw { type: "ValueError", message: "index must be positive" };
 ```
+
+> **SA0860 — Static analysis warning:** When `throw` is followed by a dict literal whose `type` key is a string literal matching a built-in error type name, the static analyzer emits `SA0860` (Warning). Use the struct form above or suppress with `// stash-disable SA0860` if intentional.
 
 Both forms produce the same runtime error — the struct's `TypeName` becomes `e.type` in the catch clause. Typed catch works identically with both forms:
 

@@ -11,7 +11,7 @@ public sealed class AliasError : RuntimeError
     public string? Detail { get; }
 
     public AliasError(string message, string? aliasName = null, string? detail = null, SourceSpan? span = null)
-        : base(message, span, StashErrorTypes.AliasError)
+        : base(message, span)
     {
         AliasName = aliasName;
         Detail = detail;

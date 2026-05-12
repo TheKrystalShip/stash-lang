@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Process-local registry of alias definitions held on each VM instance.
@@ -69,16 +70,13 @@ public sealed class AliasRegistry
     /// Registers an alias. Last-wins; if an existing entry's source is
     /// <see cref="AliasSource.Builtin"/> and <paramref name="entry"/>.Override is
     /// <see langword="false"/>, throws a <see cref="RuntimeError"/> with error type
-    /// <see cref="StashErrorTypes.AliasError"/>.
+    /// <see cref="AliasError"/>.
     /// </summary>
     public void Define(AliasEntry entry)
     {
         if (string.IsNullOrEmpty(entry.Name) || !_validName.IsMatch(entry.Name))
         {
-            throw new RuntimeError(
-                $"alias name '{entry.Name}' is not a valid identifier; must match [A-Za-z_][A-Za-z0-9_]*",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"alias name '{entry.Name}' is not a valid identifier; must match [A-Za-z_][A-Za-z0-9_]*");
         }
 
         // Allow a Builtin→Builtin replacement unconditionally (re-registration at startup).
@@ -88,10 +86,7 @@ public sealed class AliasRegistry
             entry.Source != AliasSource.Builtin &&
             !entry.Override)
         {
-            throw new RuntimeError(
-                $"cannot override built-in alias '{entry.Name}' without AliasOptions.override = true",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"cannot override built-in alias '{entry.Name}' without AliasOptions.override = true");
         }
 
         _entries[entry.Name] = entry;
@@ -113,7 +108,7 @@ public sealed class AliasRegistry
     /// <summary>
     /// Removes a user alias by name.
     /// Returns <see langword="false"/> if the name is not registered.
-    /// Throws <see cref="RuntimeError"/> with <see cref="StashErrorTypes.AliasError"/>
+    /// Throws <see cref="RuntimeError"/> with <see cref="AliasError"/>
     /// if the entry's source is <see cref="AliasSource.Builtin"/>.
     /// </summary>
     public bool Remove(string name)
@@ -125,10 +120,7 @@ public sealed class AliasRegistry
 
         if (entry.Source == AliasSource.Builtin)
         {
-            throw new RuntimeError(
-                $"cannot remove built-in alias '{name}'; use 'unalias --force' to disable",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"cannot remove built-in alias '{name}'; use 'unalias --force' to disable");
         }
 
         return _entries.Remove(name);
@@ -143,17 +135,14 @@ public sealed class AliasRegistry
     /// Session-disables an alias by setting its <see cref="AliasEntry.Disabled"/> flag.
     /// The entry remains in the dictionary so that a subsequent <see cref="Define"/> call
     /// (simulating REPL restart) can re-enable it by overwriting with a fresh entry.
-    /// Throws <see cref="RuntimeError"/> with <see cref="StashErrorTypes.AliasError"/> if
+    /// Throws <see cref="RuntimeError"/> with <see cref="AliasError"/> if
     /// the alias does not exist (including already-disabled entries).
     /// </summary>
     public void ForceDisable(string name)
     {
         if (!_entries.TryGetValue(name, out AliasEntry? entry) || entry.Disabled)
         {
-            throw new RuntimeError(
-                $"alias '{name}' is not defined",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"alias '{name}' is not defined");
         }
         entry.Disabled = true;
     }

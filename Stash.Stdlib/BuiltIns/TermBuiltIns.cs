@@ -42,8 +42,8 @@ public static partial class TermBuiltIns
     /// <param name="text">The text to colorize</param>
     /// <param name="color">Foreground color: ANSI name ("red", "brightcyan"), 256-color SGR fragment ("38;5;81"), 24-bit hex ("#RRGGBB"), or empty string for none</param>
     /// <param name="rest">Optional background color in the same accepted forms</param>
-    /// <exception cref="StashErrorTypes.ValueError">if a color string is not a recognised ANSI name, '#RRGGBB' hex, or valid SGR fragment</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if a color string is not a recognised ANSI name, '#RRGGBB' hex, or valid SGR fragment</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The ANSI-styled string (or text unchanged if both colors are empty)</returns>
     [StashFn(ReturnType = "string")]
     private static string Color(string text, string color, params StashValue[] rest)
@@ -94,8 +94,8 @@ public static partial class TermBuiltIns
     /// <summary>Applies multiple ANSI styles to text.</summary>
     /// <param name="text">The text to style</param>
     /// <param name="opts">A dict of style options: bold (bool), dim (bool), underline (bool), color (string)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if opts is not a dictionary</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the color field is not a recognised ANSI name, '#RRGGBB' hex, or valid SGR fragment</exception>
+    /// <exception cref="TypeError">if opts is not a dictionary</exception>
+    /// <exception cref="ValueError">if the color field is not a recognised ANSI name, '#RRGGBB' hex, or valid SGR fragment</exception>
     /// <returns>The ANSI-styled string, or text unchanged if no options are set</returns>
     [StashFn(ReturnType = "string")]
     public static string Style(string text, [StashParam(Type = "dict")] StashValue opts)
@@ -170,7 +170,7 @@ public static partial class TermBuiltIns
     /// <summary>Formats data as an ASCII table with the given headers and rows.</summary>
     /// <param name="rows">A 2D array of values to render as table rows</param>
     /// <param name="rest">Optional array of column header strings</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any element of rows is not an array</exception>
+    /// <exception cref="TypeError">if any element of rows is not an array</exception>
     /// <returns>A formatted ASCII table string</returns>
     [StashFn(ReturnType = "string")]
     private static string Table(List<StashValue> rows, params StashValue[] rest)

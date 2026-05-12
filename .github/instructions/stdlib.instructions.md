@@ -103,6 +103,29 @@ All argument type-checking and extraction uses the shared `Args` class (`Stash.S
 
 Error messages follow the format: `"First argument to 'func' must be a type."` with proper ordinals.
 
+## Throwing Errors from Built-ins
+
+Use typed error subclasses — **never** use the base `RuntimeError` with a string `errorType:` parameter (that form has been removed). Import `Stash.Runtime.Errors` and throw the appropriate subclass:
+
+```csharp
+using Stash.Core.Runtime.Errors;
+
+throw new TypeError("First argument to 'arr.sort' must be a function.");
+throw new ValueError("Index must be non-negative.");
+throw new IOError("File not found.", span: span);
+throw new CommandError("Process exited with code 1.", exitCode: 1, stderr: stderr);
+throw new NotSupportedError("Operation not available on Windows.");
+throw new ParseError("Invalid JSON.");
+throw new IndexError("Array index out of bounds.");
+throw new LockError("Failed to acquire lock.");
+throw new StateError("Iterator has already been consumed.");
+throw new AliasError("Alias not found.", aliasName: name);
+throw new TimeoutError("Operation timed out.");
+throw new CancellationError("Operation cancelled.");
+```
+
+Use the base `RuntimeError(message, span)` only for truly uncategorized internal errors.
+
 ## Cross-Platform Requirement
 
 Stash runs on Linux, macOS, and Windows. All built-in functions must work across all three platforms. Use `RuntimeInformation` or `env.os` for platform-specific behavior. Avoid hardcoding Unix paths or shell commands.

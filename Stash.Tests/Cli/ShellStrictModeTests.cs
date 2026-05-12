@@ -12,7 +12,7 @@ namespace Stash.Tests.Cli;
 /// <summary>
 /// Integration tests for shell-mode strict execution (Phase 5, §4.3).
 /// Tests exercise the <c>!</c> prefix and verify that non-zero exit codes raise
-/// <see cref="StashErrorTypes.CommandError"/> while zero-exit runs silently.
+/// <see cref="CommandError"/> while zero-exit runs silently.
 ///
 /// POSIX-only tests skip on Windows.
 /// </summary>

@@ -58,31 +58,25 @@ internal static class AliasShellSugar
         {
             string afterSave = raw["--save".Length..].TrimStart();
             if (afterSave.Length == 0)
-                throw new RuntimeError(
-                    "alias --save: missing alias definition after '--save'",
-                    null, StashErrorTypes.CommandError);
+                throw new CommandError("alias --save: missing alias definition after '--save'", exitCode: 1);
 
             int j = 0;
             string? saveName = ReadIdentifier(afterSave, ref j);
             if (saveName is null)
-                throw new RuntimeError(
-                    "alias --save: expected alias name",
-                    null, StashErrorTypes.CommandError);
+                throw new CommandError("alias --save: expected alias name", exitCode: 1);
 
             SkipWhitespace(afterSave, ref j);
             if (j >= afterSave.Length)
-                throw new RuntimeError(
+                throw new CommandError(
                     $"alias --save: missing '=' or '(' after alias name '{saveName}'",
-                    null, StashErrorTypes.CommandError);
+                    exitCode: 1);
 
             string? defineSource = afterSave[j] == '='
                 ? DesugarBodyAfterEq(saveName, afterSave, j + 1)
                 : null;
 
             if (defineSource is null)
-                throw new RuntimeError(
-                    $"alias --save: expected '=' after alias name '{saveName}'",
-                    null, StashErrorTypes.CommandError);
+                throw new CommandError($"alias --save: expected '=' after alias name '{saveName}'", exitCode: 1);
 
             string escapedSaveName = ShellSugarDesugarer.EscapeForStashString(saveName);
             return $"{{ {defineSource} alias.save(\"{escapedSaveName}\"); }}";
@@ -144,9 +138,7 @@ internal static class AliasShellSugar
         string raw = line.Stages[0].RawArgs.Trim();
 
         if (raw.Length == 0)
-            throw new RuntimeError(
-                "unalias: missing alias name; use 'unalias --all' to clear all aliases",
-                null, StashErrorTypes.CommandError);
+            throw new CommandError("unalias: missing alias name; use 'unalias --all' to clear all aliases", exitCode: 1);
 
         // --all → clear all user aliases
         if (raw.Equals("--all", StringComparison.Ordinal))
@@ -160,9 +152,7 @@ internal static class AliasShellSugar
             string? saveName = ReadIdentifier(remainder, ref j);
             SkipWhitespace(remainder, ref j);
             if (saveName is null || j < remainder.Length)
-                throw new RuntimeError(
-                    "unalias --save: usage: unalias --save <name>",
-                    null, StashErrorTypes.CommandError);
+                throw new CommandError("unalias --save: usage: unalias --save <name>", exitCode: 1);
             string escaped = ShellSugarDesugarer.EscapeForStashString(saveName);
             return $"{{ alias.remove(\"{escaped}\"); alias.__removeSaved(\"{escaped}\"); }}";
         }
@@ -175,9 +165,7 @@ internal static class AliasShellSugar
             string? forceName = ReadIdentifier(remainder, ref j);
             SkipWhitespace(remainder, ref j);
             if (forceName is null || j < remainder.Length)
-                throw new RuntimeError(
-                    "unalias --force: usage: unalias --force <name>",
-                    null, StashErrorTypes.CommandError);
+                throw new CommandError("unalias --force: usage: unalias --force <name>", exitCode: 1);
             string escaped = ShellSugarDesugarer.EscapeForStashString(forceName);
             return $"alias.__forceDisable(\"{escaped}\");";
         }
@@ -202,9 +190,7 @@ internal static class AliasShellSugar
         SkipWhitespace(raw, ref pos);
 
         if (pos >= raw.Length)
-            throw new RuntimeError(
-                $"alias: missing body after '=' for alias '{name}'",
-                null, StashErrorTypes.CommandError);
+            throw new CommandError($"alias: missing body after '=' for alias '{name}'", exitCode: 1);
 
         string body;
         if (raw[pos] == '"')
@@ -264,16 +250,12 @@ internal static class AliasShellSugar
 
         // Skip the '=>' arrow (presence guaranteed by IsLambdaShape).
         if (i + 1 >= raw.Length || raw[i] != '=' || raw[i + 1] != '>')
-            throw new RuntimeError(
-                $"alias: expected '=>' after parameter list for alias '{name}'",
-                null, StashErrorTypes.ParseError);
+            throw new ParseError($"alias: expected '=>' after parameter list for alias '{name}'");
         i += 2;
         SkipWhitespace(raw, ref i);
 
         if (i >= raw.Length)
-            throw new RuntimeError(
-                $"alias: missing body after '=>' for alias '{name}'",
-                null, StashErrorTypes.ParseError);
+            throw new ParseError($"alias: missing body after '=>' for alias '{name}'");
 
         string escapedName = ShellSugarDesugarer.EscapeForStashString(name);
 
@@ -282,9 +264,7 @@ internal static class AliasShellSugar
             // Block body: find matching closing brace
             int closeBrace = FindMatchingClose(raw, i, '{', '}');
             if (closeBrace < 0)
-                throw new RuntimeError(
-                    $"alias: unmatched '{{' in alias '{name}' definition",
-                    null, StashErrorTypes.ParseError);
+                throw new ParseError($"alias: unmatched '{{' in alias '{name}' definition");
 
             string block = raw[i..(closeBrace + 1)];
             return $"alias.define(\"{escapedName}\", ({paramList}) => {block});";
@@ -297,9 +277,7 @@ internal static class AliasShellSugar
             exprBody = exprBody[..^1].TrimEnd();
 
         if (exprBody.Length == 0)
-            throw new RuntimeError(
-                $"alias: missing body after '=>' for alias '{name}'",
-                null, StashErrorTypes.ParseError);
+            throw new ParseError($"alias: missing body after '=>' for alias '{name}'");
 
         return $"alias.define(\"{escapedName}\", ({paramList}) => {exprBody});";
     }

@@ -9,6 +9,7 @@ using System.Text;
 using Stash.Bytecode;
 using Stash.Runtime;
 using Stash.Stdlib.BuiltIns;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Reads and writes the managed <c>aliases.stash</c> persistence file (spec §10).
@@ -156,7 +157,7 @@ internal static class AliasPersistence
     /// <para>
     /// Function aliases must reference a named top-level <c>fn</c> with no captured upvalues
     /// (option (c) — see spec §20 decision log). Lambda-bodied or capturing-closure aliases
-    /// throw <see cref="StashErrorTypes.AliasError"/>.
+    /// throw <see cref="AliasError"/>.
     /// </para>
     /// </summary>
     /// <param name="vm">The active VM whose alias registry is the source of truth.</param>
@@ -173,14 +174,10 @@ internal static class AliasPersistence
         {
             // Single-entry update: merge into existing file to preserve other entries.
             if (!vm.AliasRegistry.TryGet(singleName, out AliasRegistry.AliasEntry? entry) || entry is null)
-                throw new RuntimeError(
-                    $"alias '{singleName}' is not defined",
-                    null, StashErrorTypes.AliasError);
+                throw new AliasError($"alias '{singleName}' is not defined");
 
             if (entry.Source == AliasRegistry.AliasSource.Builtin)
-                throw new RuntimeError(
-                    $"cannot save built-in alias '{singleName}'",
-                    null, StashErrorTypes.AliasError);
+                throw new AliasError($"cannot save built-in alias '{singleName}'");
 
             // Serialize first — may throw for unpersistable fn aliases before touching the file.
             string serialized = SerializeEntry(entry);
@@ -277,10 +274,8 @@ internal static class AliasPersistence
         // Function alias — option (c): only top-level fns (zero upvalues) are persistable.
         string? fnName = entry.FunctionBody?.TopLevelFunctionName;
         if (fnName is null)
-            throw new RuntimeError(
-                $"cannot save function alias '{entry.Name}': function aliases must reference a " +
-                "top-level fn (lambdas/closures cannot be persisted)",
-                null, StashErrorTypes.AliasError);
+            throw new AliasError($"cannot save function alias '{entry.Name}': function aliases must reference a " +
+                "top-level fn (lambdas/closures cannot be persisted)");
 
         return fnName; // Stash identifier — no quotes needed
     }
@@ -299,10 +294,8 @@ internal static class AliasPersistence
         {
             string? fnName = entry.Before.TopLevelFunctionName;
             if (fnName is null)
-                throw new RuntimeError(
-                    $"cannot save alias '{entry.Name}': 'before' hook must be a top-level fn " +
-                    "(lambdas/closures cannot be persisted)",
-                    null, StashErrorTypes.AliasError);
+                throw new AliasError($"cannot save alias '{entry.Name}': 'before' hook must be a top-level fn " +
+                    "(lambdas/closures cannot be persisted)");
             parts.Add($" before: {fnName}");
         }
 
@@ -310,10 +303,8 @@ internal static class AliasPersistence
         {
             string? fnName = entry.After.TopLevelFunctionName;
             if (fnName is null)
-                throw new RuntimeError(
-                    $"cannot save alias '{entry.Name}': 'after' hook must be a top-level fn " +
-                    "(lambdas/closures cannot be persisted)",
-                    null, StashErrorTypes.AliasError);
+                throw new AliasError($"cannot save alias '{entry.Name}': 'after' hook must be a top-level fn " +
+                    "(lambdas/closures cannot be persisted)");
             parts.Add($" after: {fnName}");
         }
 

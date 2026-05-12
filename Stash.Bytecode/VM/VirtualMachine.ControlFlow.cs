@@ -234,9 +234,10 @@ public sealed partial class VirtualMachine
         if (maxAttempts < 0)
             throw new RuntimeError("Retry max attempts must be non-negative.", span);
         if (maxAttempts == 0)
-            throw new RuntimeError(
+            throw new UserRuntimeError(
+                "RetryExhaustedError",
                 "All 0 retry attempts exhausted — predicate not satisfied.",
-                span, "RetryExhaustedError");
+                span);
 
         // Read options from registers at R(A+1).
         int nextReg = a + 1;
@@ -397,11 +398,11 @@ public sealed partial class VirtualMachine
             if (attempt == maxAttempts)
             {
                 if (retryLastError != null)
-                    throw new RuntimeError(retryLastError.Message, span,
-                        retryLastError.ErrorType ?? "RuntimeError");
-                throw new RuntimeError(
+                    throw new UserRuntimeError(retryLastError.ErrorType, retryLastError.Message, span);
+                throw new UserRuntimeError(
+                    "RetryExhaustedError",
                     $"All {maxAttempts} retry attempts exhausted — predicate not satisfied.",
-                    span, "RetryExhaustedError");
+                    span);
             }
         }
 

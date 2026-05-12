@@ -24,9 +24,9 @@ public static partial class ConvBuiltIns
     /// <summary>Parses a string or converts a number to an integer. Supports optional base (2, 8, 10, 16). Handles "0x", "0b", "0o" prefixes automatically. Floats are truncated.</summary>
     /// <param name="value">A string or number to convert</param>
     /// <param name="base">The numeric base (optional, default 10; must be 2, 8, 10, or 16)</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string cannot be parsed as an integer in the given base</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the base is not 2, 8, 10, or 16</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a number or string</exception>
+    /// <exception cref="ParseError">if the string cannot be parsed as an integer in the given base</exception>
+    /// <exception cref="ValueError">if the base is not 2, 8, 10, or 16</exception>
+    /// <exception cref="TypeError">if the argument is not a number or string</exception>
     /// <returns>The integer value</returns>
     [StashFn(ReturnType = "int")]
     public static StashValue ToInt(StashValue value, params StashValue[] rest)
@@ -71,8 +71,8 @@ public static partial class ConvBuiltIns
 
     /// <summary>Parses a string or converts a number to a float. Returns null on failure.</summary>
     /// <param name="value">A string or number to convert</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string cannot be parsed as a floating-point number</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a number or string</exception>
+    /// <exception cref="ParseError">if the string cannot be parsed as a floating-point number</exception>
+    /// <exception cref="TypeError">if the argument is not a number or string</exception>
     /// <returns>The float value, or null if parsing fails</returns>
     [StashFn(ReturnType = "float")]
     public static StashValue ToFloat(StashValue value)
@@ -102,9 +102,9 @@ public static partial class ConvBuiltIns
     /// <summary>Converts a value to a byte (0-255). Supports optional base (2, 8, 10, 16). Throws if out of range.</summary>
     /// <param name="value">A string or number to convert</param>
     /// <param name="base">The numeric base (optional, default 10)</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string cannot be parsed as an integer in the given base</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the base is not 2, 8, 10, or 16, or if the value is outside the range [0, 255]</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a number or string</exception>
+    /// <exception cref="ParseError">if the string cannot be parsed as an integer in the given base</exception>
+    /// <exception cref="ValueError">if the base is not 2, 8, 10, or 16, or if the value is outside the range [0, 255]</exception>
+    /// <exception cref="TypeError">if the argument is not a number or string</exception>
     /// <returns>The byte value</returns>
     [StashFn(ReturnType = "byte")]
     public static StashValue ToByte(StashValue value, params StashValue[] rest)
@@ -165,7 +165,7 @@ public static partial class ConvBuiltIns
     /// <summary>Converts an integer to its hexadecimal string representation with optional zero-padding.</summary>
     /// <param name="n">The integer to convert</param>
     /// <param name="padding">Minimum number of characters (optional, zero-pads if needed)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The hexadecimal string (e.g., "ff")</returns>
     [StashFn(ReturnType = "string")]
     public static string ToHex(long n, params StashValue[] rest)
@@ -182,22 +182,22 @@ public static partial class ConvBuiltIns
 
     /// <summary>Converts an integer to its octal string representation.</summary>
     /// <param name="n">The integer to convert</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an integer</exception>
+    /// <exception cref="TypeError">if the argument is not an integer</exception>
     /// <returns>The octal string</returns>
     [StashFn(ReturnType = "string")]
     public static string ToOct(long n) => System.Convert.ToString(n, 8);
 
     /// <summary>Converts an integer to its binary string representation.</summary>
     /// <param name="n">The integer to convert</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an integer</exception>
+    /// <exception cref="TypeError">if the argument is not an integer</exception>
     /// <returns>The binary string</returns>
     [StashFn(ReturnType = "string")]
     public static string ToBin(long n) => System.Convert.ToString(n, 2);
 
     /// <summary>Parses a hexadecimal string to an integer. Supports optional "0x" prefix.</summary>
     /// <param name="s">The hexadecimal string to parse</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string is not a valid hexadecimal integer</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a string</exception>
+    /// <exception cref="ParseError">if the string is not a valid hexadecimal integer</exception>
+    /// <exception cref="TypeError">if the argument is not a string</exception>
     /// <returns>The parsed integer value</returns>
     [StashFn(ReturnType = "int")]
     public static long FromHex(string s)
@@ -215,8 +215,8 @@ public static partial class ConvBuiltIns
 
     /// <summary>Parses an octal string to an integer. Supports optional "0o" prefix.</summary>
     /// <param name="s">The octal string to parse</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string is not a valid octal integer</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a string</exception>
+    /// <exception cref="ParseError">if the string is not a valid octal integer</exception>
+    /// <exception cref="TypeError">if the argument is not a string</exception>
     /// <returns>The parsed integer value</returns>
     [StashFn(ReturnType = "int")]
     public static long FromOct(string s)
@@ -234,8 +234,8 @@ public static partial class ConvBuiltIns
 
     /// <summary>Parses a binary string to an integer. Supports optional "0b" prefix.</summary>
     /// <param name="s">The binary string to parse</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string is not a valid binary integer</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a string</exception>
+    /// <exception cref="ParseError">if the string is not a valid binary integer</exception>
+    /// <exception cref="TypeError">if the argument is not a string</exception>
     /// <returns>The parsed integer value</returns>
     [StashFn(ReturnType = "int")]
     public static long FromBin(string s)
@@ -253,8 +253,8 @@ public static partial class ConvBuiltIns
 
     /// <summary>Deprecated. Use `str.charCode`. Returns the Unicode code point of the first character in the string.</summary>
     /// <param name="s">A non-empty string</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the string is empty</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a string</exception>
+    /// <exception cref="ValueError">if the string is empty</exception>
+    /// <exception cref="TypeError">if the argument is not a string</exception>
     /// <returns>The Unicode code point as an integer</returns>
     [StashFn(ReturnType = "int")]
     [StashDeprecated("str.charCode")]
@@ -267,8 +267,8 @@ public static partial class ConvBuiltIns
 
     /// <summary>Deprecated. Use `str.fromCharCode`. Returns a single-character string from a Unicode code point.</summary>
     /// <param name="n">The Unicode code point</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the code point is outside the valid Unicode range (0–0x10FFFF)</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an integer</exception>
+    /// <exception cref="ValueError">if the code point is outside the valid Unicode range (0–0x10FFFF)</exception>
+    /// <exception cref="TypeError">if the argument is not an integer</exception>
     /// <returns>A string containing the character</returns>
     [StashFn(ReturnType = "string")]
     [StashDeprecated("str.fromCharCode")]

@@ -15,8 +15,8 @@ public static partial class JsonBuiltIns
 {
     /// <summary>Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).</summary>
     /// <param name="str">The JSON string to parse</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the input is not valid JSON</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a string</exception>
+    /// <exception cref="ParseError">if the input is not valid JSON</exception>
+    /// <exception cref="TypeError">if the argument is not a string</exception>
     /// <returns>The parsed value</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Parse(string str)
@@ -35,7 +35,7 @@ public static partial class JsonBuiltIns
     /// <summary>Converts a Stash value to a JSON string. When indent is 0 or omitted, outputs compact JSON; when positive, outputs pretty-printed JSON with that many spaces of indentation.</summary>
     /// <param name="value">The value to serialize</param>
     /// <param name="indent">Number of spaces for indentation (optional, default 0 for compact)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the value contains a type that cannot be serialized to JSON, or if indent is not a number</exception>
+    /// <exception cref="TypeError">if the value contains a type that cannot be serialized to JSON, or if indent is not a number</exception>
     /// <returns>The JSON string representation</returns>
     [StashFn(ReturnType = "string")]
     private static string Stringify(StashValue value, [StashParam(Type = "number")] double indent = 0)
@@ -48,7 +48,7 @@ public static partial class JsonBuiltIns
     /// <summary>Converts a Stash value to a formatted JSON string with indentation. Defaults to 2 spaces.</summary>
     /// <param name="value">The value to serialize</param>
     /// <param name="indent">Number of spaces for indentation (optional, default 2)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the value contains a type that cannot be serialized to JSON, or if indent is not a number</exception>
+    /// <exception cref="TypeError">if the value contains a type that cannot be serialized to JSON, or if indent is not a number</exception>
     /// <returns>The pretty-printed JSON string</returns>
     [StashFn(ReturnType = "string")]
     private static string Pretty(StashValue value, [StashParam(Type = "number")] double indent = 2)
@@ -58,7 +58,7 @@ public static partial class JsonBuiltIns
 
     /// <summary>Checks whether a string is valid JSON without parsing it into a value.</summary>
     /// <param name="text">The string to validate</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not a string</exception>
+    /// <exception cref="TypeError">if the argument is not a string</exception>
     /// <returns>true if the string is valid JSON</returns>
     [StashFn]
     public static bool Valid(string text)

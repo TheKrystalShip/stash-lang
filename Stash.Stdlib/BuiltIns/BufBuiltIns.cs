@@ -19,7 +19,7 @@ public static partial class BufBuiltIns
     /// <summary>Encodes a string to a byte array using the specified encoding (default: utf-8).</summary>
     /// <param name="s">The string to encode</param>
     /// <param name="encoding">The encoding to use (optional: utf-8, ascii, latin1, utf-16, utf-32)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the encoding name is not recognised</exception>
+    /// <exception cref="ValueError">if the encoding name is not recognised</exception>
     /// <returns>A byte array containing the encoded bytes</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue From(string s, string encoding = "utf-8")
@@ -38,7 +38,7 @@ public static partial class BufBuiltIns
 
     /// <summary>Decodes a hexadecimal string to a byte array.</summary>
     /// <param name="hex">The hex string to decode</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the hex string contains non-hex characters</exception>
+    /// <exception cref="ParseError">if the hex string contains non-hex characters</exception>
     /// <returns>A byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue FromHex(string hex)
@@ -57,7 +57,7 @@ public static partial class BufBuiltIns
 
     /// <summary>Decodes a base64 string to a byte array.</summary>
     /// <param name="b64">The base64 string to decode</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the string is not valid base64</exception>
+    /// <exception cref="ParseError">if the string is not valid base64</exception>
     /// <returns>A byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue FromBase64(string b64)
@@ -75,7 +75,7 @@ public static partial class BufBuiltIns
     /// <summary>Creates a byte array of the given size, filled with zeros or an optional fill value.</summary>
     /// <param name="size">The number of bytes</param>
     /// <param name="fill">Optional byte value to fill with (default: 0)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if size is negative</exception>
+    /// <exception cref="ValueError">if size is negative</exception>
     /// <returns>A new byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue Alloc(long size, byte fill = 0)
@@ -89,8 +89,8 @@ public static partial class BufBuiltIns
 
     /// <summary>Creates a byte array from individual byte values.</summary>
     /// <param name="values">The byte values (0-255)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if any value is outside the byte range [0, 255]</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument is not a byte or integer</exception>
+    /// <exception cref="ValueError">if any value is outside the byte range [0, 255]</exception>
+    /// <exception cref="TypeError">if any argument is not a byte or integer</exception>
     /// <returns>A new byte array</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue Of(params StashValue[] values)
@@ -119,7 +119,7 @@ public static partial class BufBuiltIns
     /// <summary>Decodes a byte array to a string using the specified encoding (default: utf-8).</summary>
     /// <param name="data">The byte array to decode</param>
     /// <param name="encoding">The encoding to use (optional)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the encoding name is not recognised</exception>
+    /// <exception cref="ValueError">if the encoding name is not recognised</exception>
     /// <returns>The decoded string</returns>
     [StashFn(Name = "toString")]
     private static string BufToString(byte[] data, string encoding = "utf-8")
@@ -172,7 +172,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a byte at the given index. Supports negative indexing.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="index">The index to read</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the index is out of bounds</exception>
+    /// <exception cref="IndexError">if the index is out of bounds</exception>
     /// <returns>The byte value</returns>
     [StashFn]
     private static StashValue Get(byte[] data, long index)
@@ -188,8 +188,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array to search</param>
     /// <param name="search">The byte or byte[] to find</param>
     /// <param name="from">Starting index (optional)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the search byte value is outside [0, 255]</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the search argument is not a byte, integer, or byte array</exception>
+    /// <exception cref="ValueError">if the search byte value is outside [0, 255]</exception>
+    /// <exception cref="TypeError">if the search argument is not a byte, integer, or byte array</exception>
     /// <returns>The index, or -1 if not found</returns>
     [StashFn(Raw = true)]
     // Raw = true: search arg is polymorphic (byte, int, or StashByteArray); cannot express in typed form
@@ -219,8 +219,8 @@ public static partial class BufBuiltIns
     /// <summary>Checks if a byte array contains a byte or subsequence.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="search">The byte or byte[] to find</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the search byte value is outside [0, 255]</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the search argument is not a byte, integer, or byte array</exception>
+    /// <exception cref="ValueError">if the search byte value is outside [0, 255]</exception>
+    /// <exception cref="TypeError">if the search argument is not a byte, integer, or byte array</exception>
     /// <returns>true if found</returns>
     [StashFn(Raw = true)]
     // Raw = true: search arg is polymorphic (byte, int, or StashByteArray); cannot express in typed form
@@ -275,7 +275,7 @@ public static partial class BufBuiltIns
 
     /// <summary>Concatenates multiple byte arrays into one.</summary>
     /// <param name="arrays">The byte arrays to concatenate</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument is not a byte array</exception>
+    /// <exception cref="TypeError">if any argument is not a byte array</exception>
     /// <returns>A new byte array containing all bytes</returns>
     [StashFn(ReturnType = "buffer")]
     private static StashValue Concat(params StashValue[] arrays)
@@ -305,9 +305,9 @@ public static partial class BufBuiltIns
     /// <param name="destOffset">Offset in destination (optional, default 0)</param>
     /// <param name="srcStart">Start index in source (optional, default 0)</param>
     /// <param name="srcEnd">End index in source (optional, default length)</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the source range is out of bounds</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if any offset argument is negative</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the source range is out of bounds</exception>
+    /// <exception cref="ValueError">if any offset argument is negative</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The number of bytes copied</returns>
     [StashFn(Raw = true)]
     // Raw = true: mutates the destination StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
@@ -335,7 +335,7 @@ public static partial class BufBuiltIns
     /// <param name="value">The byte value to fill with</param>
     /// <param name="start">Start index (optional)</param>
     /// <param name="end">End index (optional)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The same byte array</returns>
     [StashFn(Raw = true, ReturnType = "buffer")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray() and returns the live object; typed byte[] would be a detached copy
@@ -372,7 +372,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads an unsigned 8-bit integer at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn]
     private static long ReadUint8(byte[] data, long offset)
@@ -385,7 +385,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads an unsigned 16-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readUint16BE")]
     private static long ReadUint16BE(byte[] data, long offset)
@@ -398,7 +398,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads an unsigned 16-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readUint16LE")]
     private static long ReadUint16LE(byte[] data, long offset)
@@ -411,7 +411,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads an unsigned 32-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readUint32BE")]
     private static long ReadUint32BE(byte[] data, long offset)
@@ -424,7 +424,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads an unsigned 32-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readUint32LE")]
     private static long ReadUint32LE(byte[] data, long offset)
@@ -437,7 +437,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 8-bit integer at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn]
     private static long ReadInt8(byte[] data, long offset)
@@ -450,7 +450,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 16-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readInt16BE")]
     private static long ReadInt16BE(byte[] data, long offset)
@@ -463,7 +463,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 16-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readInt16LE")]
     private static long ReadInt16LE(byte[] data, long offset)
@@ -476,7 +476,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 32-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readInt32BE")]
     private static long ReadInt32BE(byte[] data, long offset)
@@ -489,7 +489,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 32-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readInt32LE")]
     private static long ReadInt32LE(byte[] data, long offset)
@@ -502,7 +502,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 64-bit integer (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readInt64BE")]
     private static long ReadInt64BE(byte[] data, long offset)
@@ -515,7 +515,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a signed 64-bit integer (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as int</returns>
     [StashFn(Name = "readInt64LE")]
     private static long ReadInt64LE(byte[] data, long offset)
@@ -528,7 +528,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a 32-bit IEEE 754 float (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as float</returns>
     [StashFn(Name = "readFloatBE")]
     private static double ReadFloatBE(byte[] data, long offset)
@@ -541,7 +541,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a 32-bit IEEE 754 float (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as float</returns>
     [StashFn(Name = "readFloatLE")]
     private static double ReadFloatLE(byte[] data, long offset)
@@ -554,7 +554,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a 64-bit IEEE 754 double (big-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as float</returns>
     [StashFn(Name = "readDoubleBE")]
     private static double ReadDoubleBE(byte[] data, long offset)
@@ -567,7 +567,7 @@ public static partial class BufBuiltIns
     /// <summary>Reads a 64-bit IEEE 754 double (little-endian) at the given offset.</summary>
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
     /// <returns>The value as float</returns>
     [StashFn(Name = "readDoubleLE")]
     private static double ReadDoubleLE(byte[] data, long offset)
@@ -583,9 +583,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write (0-255)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [0, 255]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [0, 255]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true)]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint8(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -603,9 +603,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [0, 65535]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [0, 65535]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeUint16BE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint16BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -623,9 +623,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [0, 65535]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [0, 65535]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeUint16LE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint16LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -643,9 +643,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [0, 4294967295]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [0, 4294967295]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeUint32BE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint32BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -663,9 +663,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [0, 4294967295]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [0, 4294967295]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeUint32LE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteUint32LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -683,9 +683,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write (-128 to 127)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [-128, 127]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [-128, 127]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true)]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt8(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -703,9 +703,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [-32768, 32767]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [-32768, 32767]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeInt16BE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt16BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -723,9 +723,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [-32768, 32767]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [-32768, 32767]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeInt16LE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt16LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -743,9 +743,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [-2147483648, 2147483647]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [-2147483648, 2147483647]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeInt32BE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt32BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -763,9 +763,9 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the value is out of the valid range [-2147483648, 2147483647]</exception>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the value is out of the valid range [-2147483648, 2147483647]</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeInt32LE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt32LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -783,8 +783,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeInt64BE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt64BE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -801,8 +801,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeInt64LE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteInt64LE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -819,8 +819,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeFloatBE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteFloatBE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -837,8 +837,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeFloatLE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteFloatLE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -855,8 +855,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeDoubleBE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteDoubleBE(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -873,8 +873,8 @@ public static partial class BufBuiltIns
     /// <param name="data">The byte array</param>
     /// <param name="offset">The byte offset</param>
     /// <param name="value">The value to write</param>
-    /// <exception cref="StashErrorTypes.IndexError">if the offset is out of range for the buffer length</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IndexError">if the offset is out of range for the buffer length</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(Raw = true, Name = "writeDoubleLE")]
     // Raw = true: mutates the StashByteArray in place via GetBackingArray(); typed byte[] would be a detached copy
     private static StashValue WriteDoubleLE(IInterpreterContext _, ReadOnlySpan<StashValue> args)

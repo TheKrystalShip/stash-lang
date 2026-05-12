@@ -160,6 +160,7 @@ public class ThrowsMetadataTests
         const string src = """
             using Stash.Stdlib.Abstractions;
             using Stash.Runtime;
+            using Stash.Runtime.Errors;
             namespace T;
             [StashNamespace]
             public static partial class C
@@ -167,7 +168,7 @@ public class ThrowsMetadataTests
                 /// <summary>Does a thing.</summary>
                 /// <param name="path">The path.</param>
                 /// <exception cref="ValueError">if value wrong</exception>
-                [StashFn(Throws = [StashErrorTypes.IOError])]
+                [StashFn(ThrowsTypes = new[] { typeof(IOError) })]
                 public static string DoIt(string path) => path;
             }
             """;
@@ -288,28 +289,6 @@ public class ThrowsMetadataTests
         Assert.DoesNotContain(diags, d => d.Id == "STSG011");
     }
 
-    // ── Phase D: STSG012 — legacy string Throws attribute ────────────────────
-
-    [Fact]
-    public void Generator_StringThrowsAttribute_EmitsSTSG012()
-    {
-        const string src = """
-            using Stash.Stdlib.Abstractions;
-            using Stash.Runtime;
-            namespace T;
-            [StashNamespace]
-            public static partial class C
-            {
-                /// <summary>Does a thing.</summary>
-                /// <param name="path">The path.</param>
-                [StashFn(Throws = [StashErrorTypes.IOError])]
-                public static string DoIt(string path) => path;
-            }
-            """;
-        var (diags, _) = RunGenerator(src);
-        Assert.Contains(diags, d => d.Id == "STSG012" && d.Severity == DiagnosticSeverity.Info);
-    }
-
     // ── Phase D: STSG013 — ThrowsTypes type missing [StashError] ─────────────
 
     [Fact]
@@ -361,28 +340,6 @@ public class ThrowsMetadataTests
             .FirstOrDefault(s => s.Contains("doIt") || s.Contains("DoIt"));
         Assert.NotNull(genSource);
         Assert.Contains("IOError", genSource);
-    }
-
-    [Fact]
-    public void Generator_ThrowsTypes_NoSTSG012()
-    {
-        const string src = """
-            using Stash.Stdlib.Abstractions;
-            using Stash.Runtime;
-            using Stash.Runtime.Errors;
-            namespace T;
-            [StashNamespace]
-            public static partial class C
-            {
-                /// <summary>Does a thing.</summary>
-                /// <param name="path">The path.</param>
-                [StashFn(ThrowsTypes = new[] { typeof(IOError) })]
-                public static string DoIt(string path) => path;
-            }
-            """;
-        var (diags, _) = RunGenerator(src);
-        // ThrowsTypes (type-safe form) must NOT trigger STSG012.
-        Assert.DoesNotContain(diags, d => d.Id == "STSG012");
     }
 
     // ── ThrowsRenderer ──────────────────────────────────────────────────────

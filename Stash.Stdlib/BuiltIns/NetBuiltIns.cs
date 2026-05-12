@@ -95,7 +95,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns subnet details for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "SubnetInfo")]
     private static StashValue SubnetInfo(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -140,7 +140,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the subnet mask for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "ip")]
     private static StashValue Mask(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -153,7 +153,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the network address for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "ip")]
     private static StashValue Network(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -166,7 +166,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the broadcast address for a CIDR IP address.</summary>
     /// <param name="ip">The CIDR IP address.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "ip")]
     private static StashValue Broadcast(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -179,7 +179,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns the number of usable host addresses in a CIDR subnet.</summary>
     /// <param name="ip">The CIDR IP address.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address, or is not in CIDR notation</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "int")]
     private static StashValue HostCount(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -192,8 +192,8 @@ public static partial class NetBuiltIns
 
     /// <summary>Deprecated. Use dns.resolve.</summary>
     /// <param name="hostname">The hostname to resolve.</param>
-    /// <exception cref="StashErrorTypes.IOError">if the hostname cannot be resolved</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the hostname cannot be resolved</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(ReturnType = "ip")]
     [StashDeprecated("dns.resolve")]
     private static StashValue Resolve(IInterpreterContext ctx, string hostname)
@@ -205,8 +205,8 @@ public static partial class NetBuiltIns
 
     /// <summary>Deprecated. Use dns.resolveAll.</summary>
     /// <param name="hostname">The hostname to resolve.</param>
-    /// <exception cref="StashErrorTypes.IOError">if the hostname cannot be resolved</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the hostname cannot be resolved</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(ReturnType = "array")]
     [StashDeprecated("dns.resolveAll")]
     private static StashValue ResolveAll(IInterpreterContext ctx, string hostname)
@@ -217,8 +217,8 @@ public static partial class NetBuiltIns
 
 
     /// <summary>Deprecated. Use dns.reverseLookup.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the reverse DNS lookup fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address</exception>
+    /// <exception cref="IOError">if the reverse DNS lookup fails</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "string")]
     [StashDeprecated("dns.reverseLookup")]
@@ -228,7 +228,7 @@ public static partial class NetBuiltIns
 
     /// <summary>Sends an ICMP ping to a host and returns the result.</summary>
     /// <param name="host">The IP address to ping.</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the argument is not an IP address</exception>
+    /// <exception cref="TypeError">if the argument is not an IP address</exception>
     // Raw = true: StashIpAddress is not in the typed parameter table (Phase A).
     [StashFn(Raw = true, ReturnType = "PingResult")]
     private static StashValue Ping(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -261,8 +261,8 @@ public static partial class NetBuiltIns
     /// <param name="host">The IP address or hostname string to check.</param>
     /// <param name="port">The port number (1-65535).</param>
     /// <param name="timeout">Optional timeout in milliseconds (default 3000).</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 1 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the port number is not between 1 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first argument is polymorphic (StashIpAddress or string), not expressible as a single typed param.
     [StashFn(Raw = true, ReturnType = "bool")]
     private static StashValue IsPortOpen(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
@@ -305,8 +305,8 @@ public static partial class NetBuiltIns
 
     /// <summary>Returns information about a specific network interface.</summary>
     /// <param name="name">The interface name (e.g., "eth0", "wlan0").</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network interface is not found</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network interface is not found</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(ReturnType = "InterfaceInfo", Name = "interface")]
     private static StashValue Interface(string name)
     {
@@ -323,9 +323,9 @@ public static partial class NetBuiltIns
     // ── Deprecated TCP aliases ─────────────────────────────────────────────────────────
 
     /// <summary>Deprecated. Use tcp.connect.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection cannot be established</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 1 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection cannot be established</exception>
+    /// <exception cref="ValueError">if the port number is not between 1 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: requires StashInstance (TcpConnection) polymorphism, not in typed table.
     [StashFn(Raw = true, ReturnType = "TcpConnection")]
     [StashDeprecated("tcp.connect")]
@@ -333,8 +333,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpConnect(ctx, args, "net.tcpConnect");
 
     /// <summary>Deprecated. Use tcp.send.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if sending data on the connection fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if sending data on the connection fails</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("tcp.send")]
@@ -342,8 +342,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpSend(ctx, args, "net.tcpSend");
 
     /// <summary>Deprecated. Use tcp.recv.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if receiving data from the connection fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if receiving data from the connection fails</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "string")]
     [StashDeprecated("tcp.recv")]
@@ -351,7 +351,7 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpRecv(ctx, args, "net.tcpRecv");
 
     /// <summary>Deprecated. Use tcp.close.</summary>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.close")]
@@ -359,9 +359,9 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpClose(ctx, args, "net.tcpClose");
 
     /// <summary>Deprecated. Use tcp.listen.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the server cannot bind to the specified port</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 1 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the server cannot bind to the specified port</exception>
+    /// <exception cref="ValueError">if the port number is not between 1 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: requires IStashCallable handler arg with StashInstance result — mixed types.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.listen")]
@@ -375,9 +375,9 @@ public static partial class NetBuiltIns
     /// <param name="host">The destination hostname or IP address.</param>
     /// <param name="port">The destination port (1-65535).</param>
     /// <param name="data">The string data to send.</param>
-    /// <exception cref="StashErrorTypes.IOError">if the UDP send fails</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 1 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the UDP send fails</exception>
+    /// <exception cref="ValueError">if the port number is not between 1 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn]
     [StashDeprecated("udp.send")]
     private static long UdpSend(IInterpreterContext ctx, string host, long port, string data)
@@ -389,9 +389,9 @@ public static partial class NetBuiltIns
     /// <summary>Deprecated. Use udp.recv.</summary>
     /// <param name="port">The port to listen on (1-65535).</param>
     /// <param name="timeout">Optional timeout in milliseconds (default 5000).</param>
-    /// <exception cref="StashErrorTypes.IOError">if the UDP receive fails</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 1 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the UDP receive fails</exception>
+    /// <exception cref="ValueError">if the port number is not between 1 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(ReturnType = "UdpMessage")]
     [StashDeprecated("udp.recv")]
     private static StashValue UdpRecv(IInterpreterContext ctx, long port, long timeout = 5000)
@@ -403,8 +403,8 @@ public static partial class NetBuiltIns
 
     /// <summary>Deprecated. Use dns.resolveMx.</summary>
     /// <param name="domain">The domain to query.</param>
-    /// <exception cref="StashErrorTypes.IOError">if the DNS query fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the DNS query fails</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(ReturnType = "array")]
     [StashDeprecated("dns.resolveMx")]
     private static StashValue ResolveMx(IInterpreterContext ctx, string domain)
@@ -415,8 +415,8 @@ public static partial class NetBuiltIns
 
     /// <summary>Deprecated. Use dns.resolveTxt.</summary>
     /// <param name="domain">The domain to query.</param>
-    /// <exception cref="StashErrorTypes.IOError">if the DNS query fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the DNS query fails</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     [StashFn(ReturnType = "array")]
     [StashDeprecated("dns.resolveTxt")]
     private static StashValue ResolveTxt(IInterpreterContext ctx, string domain)
@@ -429,8 +429,8 @@ public static partial class NetBuiltIns
     // ── Deprecated WebSocket aliases ─────────────────────────────────────────────────────────
 
     /// <summary>Deprecated. Use ws.connect.</summary>
-    /// <exception cref="StashErrorTypes.ValueError">if the URL does not start with 'ws://' or 'wss://'</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the URL does not start with 'ws://' or 'wss://'</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: returns StashFuture — async returns are out of scope for Phase A.
     [StashFn(Raw = true, ReturnType = "WsConnection")]
     [StashDeprecated("ws.connect")]
@@ -438,8 +438,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.WsConnect(ctx, args, "net.wsConnect");
 
     /// <summary>Deprecated. Use ws.send.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("ws.send")]
@@ -447,9 +447,9 @@ public static partial class NetBuiltIns
         => NetSocketImpl.WsSend(ctx, args, "net.wsSend");
 
     /// <summary>Deprecated. Use ws.sendBinary.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.ParseError">if the data argument is not valid base64</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="ParseError">if the data argument is not valid base64</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("ws.sendBinary")]
@@ -457,9 +457,9 @@ public static partial class NetBuiltIns
         => NetSocketImpl.WsSendBinary(ctx, args, "net.wsSendBinary");
 
     /// <summary>Deprecated. Use ws.recv.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the received message exceeds the maximum allowed size</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="ValueError">if the received message exceeds the maximum allowed size</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "WsMessage")]
     [StashDeprecated("ws.recv")]
@@ -467,9 +467,9 @@ public static partial class NetBuiltIns
         => NetSocketImpl.WsRecv(ctx, args, "net.wsRecv");
 
     /// <summary>Deprecated. Use ws.close.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the close code is not between 1000 and 4999</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="ValueError">if the close code is not between 1000 and 4999</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (WsConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("ws.close")]
@@ -477,8 +477,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.WsClose(ctx, args, "net.wsClose");
 
     /// <summary>Deprecated. Use ws.state.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (WsConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "WsConnectionState")]
     [StashDeprecated("ws.state")]
@@ -486,8 +486,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.WsState(ctx, args, "net.wsState");
 
     /// <summary>Deprecated. Use ws.isOpen.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (WsConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "bool")]
     [StashDeprecated("ws.isOpen")]
@@ -496,10 +496,10 @@ public static partial class NetBuiltIns
 
 
     /// <summary>Deprecated. Use tcp.connectAsync.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection cannot be established</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the connection does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 1 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection cannot be established</exception>
+    /// <exception cref="TimeoutError">if the connection does not complete within the configured timeout</exception>
+    /// <exception cref="ValueError">if the port number is not between 1 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: returns StashFuture — async returns are out of scope for Phase A.
     [StashFn(Raw = true, ReturnType = "TcpConnection")]
     [StashDeprecated("tcp.connectAsync")]
@@ -507,8 +507,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpConnectAsync(ctx, args, "net.tcpConnectAsync");
 
     /// <summary>Deprecated. Use tcp.sendAsync.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or sending data fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or sending data fails</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("tcp.sendAsync")]
@@ -516,8 +516,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpSendAsync(ctx, args, "net.tcpSendAsync");
 
     /// <summary>Deprecated. Use tcp.sendBytesAsync.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or sending data fails</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or sending data fails</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "int")]
     [StashDeprecated("tcp.sendBytesAsync")]
@@ -525,8 +525,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpSendBytesAsync(ctx, args, "net.tcpSendBytesAsync");
 
     /// <summary>Deprecated. Use tcp.recvAsync.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "string")]
     [StashDeprecated("tcp.recvAsync")]
@@ -534,8 +534,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpRecvAsync(ctx, args, "net.tcpRecvAsync");
 
     /// <summary>Deprecated. Use tcp.recvBytesAsync.</summary>
-    /// <exception cref="StashErrorTypes.IOError">if the connection is invalid or closed</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the connection is invalid or closed</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "byte[]")]
     [StashDeprecated("tcp.recvBytesAsync")]
@@ -543,7 +543,7 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpRecvBytesAsync(ctx, args, "net.tcpRecvBytesAsync");
 
     /// <summary>Deprecated. Use tcp.closeAsync.</summary>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection) and returns StashFuture — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.closeAsync")]
@@ -551,7 +551,7 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpCloseAsync(ctx, args, "net.tcpCloseAsync");
 
     /// <summary>Deprecated. Use tcp.isOpen.</summary>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "bool")]
     [StashDeprecated("tcp.isOpen")]
@@ -559,7 +559,7 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpIsOpen(ctx, args, "net.tcpIsOpen");
 
     /// <summary>Deprecated. Use tcp.state.</summary>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpConnection), not in typed table.
     [StashFn(Raw = true, ReturnType = "TcpConnectionState")]
     [StashDeprecated("tcp.state")]
@@ -567,8 +567,8 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpState(ctx, args, "net.tcpState");
 
     /// <summary>Deprecated. Use tcp.listenAsync.</summary>
-    /// <exception cref="StashErrorTypes.ValueError">if the port number is not between 0 and 65535</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ValueError">if the port number is not between 0 and 65535</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: returns StashFuture wrapping StashInstance (TcpServer) — Phase A limitations.
     [StashFn(Raw = true, ReturnType = "TcpServer")]
     [StashDeprecated("tcp.listenAsync")]
@@ -576,7 +576,7 @@ public static partial class NetBuiltIns
         => NetSocketImpl.TcpListenAsync(ctx, args, "net.tcpListenAsync");
 
     /// <summary>Deprecated. Use tcp.serverClose.</summary>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     // Raw = true: first arg is StashInstance (TcpServer), not in typed table.
     [StashFn(Raw = true, ReturnType = "null")]
     [StashDeprecated("tcp.serverClose")]

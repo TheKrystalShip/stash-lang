@@ -16,7 +16,7 @@ public static partial class YamlBuiltIns
 {
     /// <summary>Parses a YAML string into a Stash value (dict, array, or scalar).</summary>
     /// <param name="text">The YAML string</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the YAML is malformed</exception>
+    /// <exception cref="ParseError">if the YAML is malformed</exception>
     /// <returns>Parsed value</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Parse(string text)
@@ -35,7 +35,7 @@ public static partial class YamlBuiltIns
 
     /// <summary>Serializes a Stash value to a YAML string.</summary>
     /// <param name="value">The value to serialize</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the value contains a type that cannot be serialized to YAML</exception>
+    /// <exception cref="TypeError">if the value contains a type that cannot be serialized to YAML</exception>
     /// <returns>YAML string</returns>
     [StashFn(ReturnType = "string")]
     private static string Stringify(StashValue value)

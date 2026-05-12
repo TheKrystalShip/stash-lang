@@ -110,7 +110,7 @@ public static partial class SysBuiltIns
 
     /// <summary>Returns disk usage info (total, used, free bytes) for the given path, or root if omitted.</summary>
     /// <param name="path">Optional path (default: root)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the path's drive cannot be initialised or is not ready</exception>
+    /// <exception cref="IOError">if the path's drive cannot be initialised or is not ready</exception>
     /// <returns>Dictionary with total, used, free keys</returns>
     [StashFn]
     public static StashDictionary DiskUsage(string? path = null)
@@ -182,7 +182,7 @@ public static partial class SysBuiltIns
     /// On Windows, also searches PATHEXT extensions (.exe, .cmd, .bat, etc.).</summary>
     /// <param name="name">The command name to search for</param>
     /// <param name="all">Optional. When true, returns an array of all matches instead of just the first</param>
-    /// <exception cref="StashErrorTypes.TypeError">if name is not a string or all is not a bool</exception>
+    /// <exception cref="TypeError">if name is not a string or all is not a bool</exception>
     /// <returns>Full path to the executable (or null), or an array of paths when all=true</returns>
     // Raw: return type is polymorphic — string|null when all=false, array when all=true
     [StashFn(Raw = true, ReturnType = "string")]
@@ -271,7 +271,7 @@ public static partial class SysBuiltIns
     /// <summary>Deprecated. Use signal.on.</summary>
     /// <param name="signal">A Signal enum value (e.g., Signal.Term)</param>
     /// <param name="handler">A function to invoke when the signal is received</param>
-    /// <exception cref="StashErrorTypes.TypeError">if signal is not a Signal enum value or handler is not callable</exception>
+    /// <exception cref="TypeError">if signal is not a Signal enum value or handler is not callable</exception>
     /// <returns>null</returns>
     // Raw: signal arg is a StashEnumValue inspected inside SignalImpl
     [StashFn(Raw = true, ReturnType = "null")]
@@ -283,7 +283,7 @@ public static partial class SysBuiltIns
 
     /// <summary>Deprecated. Use signal.off.</summary>
     /// <param name="signal">A Signal enum value (e.g., Signal.Term)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if signal is not a Signal enum value</exception>
+    /// <exception cref="TypeError">if signal is not a Signal enum value</exception>
     /// <returns>null</returns>
     // Raw: signal arg is a StashEnumValue inspected inside SignalImpl
     [StashFn(Raw = true, ReturnType = "null")]

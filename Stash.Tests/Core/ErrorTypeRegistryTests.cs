@@ -9,38 +9,6 @@ namespace Stash.Tests.Core;
 public class ErrorTypeRegistryTests
 {
     // =========================================================================
-    // IsBuiltInSubtype
-    // =========================================================================
-
-    [Theory]
-    [InlineData("ValueError")]
-    [InlineData("TypeError")]
-    [InlineData("ParseError")]
-    [InlineData("IndexError")]
-    [InlineData("IOError")]
-    [InlineData("NotSupportedError")]
-    [InlineData("TimeoutError")]
-    [InlineData("CommandError")]
-    [InlineData("LockError")]
-    public void IsBuiltInSubtype_KnownType_ReturnsTrue(string typeName)
-    {
-        Assert.True(ErrorTypeRegistry.IsBuiltInSubtype(typeName));
-    }
-
-    [Theory]
-    [InlineData("Error")]
-    [InlineData("error")]
-    [InlineData("valueerror")]
-    [InlineData("NetworkError")]
-    [InlineData("ConfigError")]
-    [InlineData("")]
-    [InlineData("RuntimeError")]
-    public void IsBuiltInSubtype_UnknownOrBaseType_ReturnsFalse(string typeName)
-    {
-        Assert.False(ErrorTypeRegistry.IsBuiltInSubtype(typeName));
-    }
-
-    // =========================================================================
     // IsBaseType
     // =========================================================================
 

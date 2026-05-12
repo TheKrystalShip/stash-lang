@@ -17,7 +17,7 @@ public static partial class IniBuiltIns
 {
     /// <summary>Parses INI-formatted text into a dictionary. Sections become nested dictionaries.</summary>
     /// <param name="text">The INI text to parse</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the INI text cannot be parsed</exception>
+    /// <exception cref="ParseError">if the INI text cannot be parsed</exception>
     /// <returns>A dictionary representing the INI structure</returns>
     [StashFn(ReturnType = "dict")]
     private static StashDictionary Parse(string text)

@@ -5,6 +5,7 @@ using Stash.Bytecode;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.BuiltIns;
+using Stash.Runtime.Errors;
 
 namespace Stash.Cli.Shell;
 
@@ -42,7 +43,7 @@ internal static class AliasDispatcher
     [ThreadStatic]
     private static Stack<string>? _expansionStack;
 
-    /// <summary>Maximum alias chain depth before raising <see cref="StashErrorTypes.AliasError"/>.</summary>
+    /// <summary>Maximum alias chain depth before raising <see cref="AliasError"/>.</summary>
     private const int MaxChainDepth = 32;
 
     /// <summary>
@@ -116,19 +117,13 @@ internal static class AliasDispatcher
         if (_expansionStack.Contains(entry.Name))
         {
             string chain = BuildChain(entry.Name);
-            throw new RuntimeError(
-                $"recursive alias expansion: {chain}",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"recursive alias expansion: {chain}");
         }
 
         if (_expansionStack.Count >= MaxChainDepth)
         {
             string chain = BuildChain(entry.Name);
-            throw new RuntimeError(
-                $"alias chain too deep (max {MaxChainDepth}): {chain}",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"alias chain too deep (max {MaxChainDepth}): {chain}");
         }
 
         _expansionStack.Push(entry.Name);
@@ -172,17 +167,11 @@ internal static class AliasDispatcher
             }
             catch (RuntimeError re)
             {
-                throw new RuntimeError(
-                    $"hook 'before' for alias '{entry.Name}' threw: {re.Message}",
-                    null,
-                    StashErrorTypes.AliasError);
+                throw new AliasError($"hook 'before' for alias '{entry.Name}' threw: {re.Message}");
             }
             catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
             {
-                throw new RuntimeError(
-                    $"hook 'before' for alias '{entry.Name}' threw: {ex.Message}",
-                    null,
-                    StashErrorTypes.AliasError);
+                throw new AliasError($"hook 'before' for alias '{entry.Name}' threw: {ex.Message}");
             }
 
             if (!proceed)
@@ -252,17 +241,11 @@ internal static class AliasDispatcher
         }
         catch (RuntimeError re)
         {
-            throw new RuntimeError(
-                $"hook 'after' for alias '{entry.Name}' threw: {re.Message}",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"hook 'after' for alias '{entry.Name}' threw: {re.Message}");
         }
         catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
-            throw new RuntimeError(
-                $"hook 'after' for alias '{entry.Name}' threw: {ex.Message}",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"hook 'after' for alias '{entry.Name}' threw: {ex.Message}");
         }
     }
 
@@ -290,11 +273,8 @@ internal static class AliasDispatcher
         // discarding them (no implicit magic per spec §2).
         if (args.Length > 0 && !AliasBuiltIns.HasArgPlaceholder(entry.TemplateBody!))
         {
-            throw new RuntimeError(
-                $"alias '{entry.Name}' takes no arguments; " +
-                "use a template with ${args} placeholder to forward arguments",
-                null,
-                StashErrorTypes.AliasError);
+            throw new AliasError($"alias '{entry.Name}' takes no arguments; " +
+                "use a template with ${args} placeholder to forward arguments");
         }
 
         string expanded = AliasBuiltIns.ExpandTemplate(entry.Name, entry.TemplateBody!, args);

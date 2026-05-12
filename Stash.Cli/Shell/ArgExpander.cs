@@ -8,6 +8,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 namespace Stash.Cli.Shell;
 
@@ -74,9 +75,7 @@ internal static class ArgExpander
             {
                 var matches = GlobExpander.Expand(text);
                 if (matches.Count == 0)
-                    throw new RuntimeError(
-                        $"glob pattern '{text}' did not match any files",
-                        span, StashErrorTypes.CommandError);
+                    throw new CommandError($"glob pattern '{text}' did not match any files", exitCode: 1, span: span);
                 result.AddRange(matches);
             }
             else
@@ -263,17 +262,13 @@ internal static class ArgExpander
             List<Token> tokens = lexer.ScanTokens();
 
             if (lexer.Errors.Count > 0)
-                throw new RuntimeError(
-                    $"interpolation error in shell command: {lexer.Errors[0]}",
-                    span, StashErrorTypes.CommandError);
+                throw new CommandError($"interpolation error in shell command: {lexer.Errors[0]}", exitCode: 1, span: span);
 
             var parser = new Parser(tokens);
             Expr expr = parser.Parse();
 
             if (parser.Errors.Count > 0)
-                throw new RuntimeError(
-                    $"interpolation error in shell command: {parser.Errors[0]}",
-                    span, StashErrorTypes.CommandError);
+                throw new CommandError($"interpolation error in shell command: {parser.Errors[0]}", exitCode: 1, span: span);
 
             Chunk chunk = Compiler.CompileExpression(expr);
             object? result = vm.Execute(chunk);
@@ -285,9 +280,7 @@ internal static class ArgExpander
         }
         catch (Exception ex)
         {
-            throw new RuntimeError(
-                $"interpolation error in shell command: {ex.Message}",
-                span, StashErrorTypes.CommandError);
+            throw new CommandError($"interpolation error in shell command: {ex.Message}", exitCode: 1, span: span);
         }
     }
 }

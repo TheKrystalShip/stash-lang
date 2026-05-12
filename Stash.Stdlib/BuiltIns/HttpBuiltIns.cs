@@ -49,9 +49,9 @@ public static partial class HttpBuiltIns
     /// <summary>Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
     /// <param name="url">The URL to send the GET request to</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Get(IInterpreterContext ctx, string url, params StashValue[] options)
@@ -82,9 +82,9 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to send the POST request to</param>
     /// <param name="body">The request body string (typically JSON)</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Post(IInterpreterContext ctx, string url, string body, params StashValue[] options)
@@ -118,9 +118,9 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to send the PUT request to</param>
     /// <param name="body">The request body string (typically JSON)</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Put(IInterpreterContext ctx, string url, string body, params StashValue[] options)
@@ -153,9 +153,9 @@ public static partial class HttpBuiltIns
     /// <summary>Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.</summary>
     /// <param name="url">The URL to send the DELETE request to</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Delete(IInterpreterContext ctx, string url, params StashValue[] options)
@@ -185,9 +185,9 @@ public static partial class HttpBuiltIns
     /// <summary>Sends an HTTP HEAD request and returns the response status and headers.</summary>
     /// <param name="url">The URL to request</param>
     /// <param name="options">Optional request options (headers, timeout)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>HttpResponse with status, headers, and empty body</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Head(IInterpreterContext ctx, string url, params StashValue[] options)
@@ -216,9 +216,9 @@ public static partial class HttpBuiltIns
 
     /// <summary>Sends a custom HTTP request. The options dict must include 'url' (string) and optionally 'method' (string, default GET), 'headers' (dict), and 'body' (string). Returns an HttpResponse struct with status, body, and headers fields.</summary>
     /// <param name="options">A dict with request options: url, method, headers, body</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if 'url' is missing or not a string, or if the options argument is not a dict</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if 'url' is missing or not a string, or if the options argument is not a dict</exception>
     /// <returns>An HttpResponse struct with status, body, and headers</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Request(IInterpreterContext ctx, StashDictionary options)
@@ -272,9 +272,9 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to send the PATCH request to</param>
     /// <param name="body">The request body string (typically JSON)</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
-    /// <exception cref="StashErrorTypes.IOError">if the network request fails or the connection drops</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the request exceeds the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="IOError">if the network request fails or the connection drops</exception>
+    /// <exception cref="TimeoutError">if the request exceeds the configured timeout</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>An HttpResponse struct with status (int), body (string), and headers (dict) fields</returns>
     [StashFn(ReturnType = "HttpResponse")]
     private static StashValue Patch(IInterpreterContext ctx, string url, string body, params StashValue[] options)
@@ -308,7 +308,7 @@ public static partial class HttpBuiltIns
     /// <param name="url">The URL to download from</param>
     /// <param name="path">The local file path to write the downloaded content to</param>
     /// <param name="options">An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if the options argument is not a dict, or if any argument has the wrong type</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Download(IInterpreterContext ctx, string url, string path, params StashValue[] options)

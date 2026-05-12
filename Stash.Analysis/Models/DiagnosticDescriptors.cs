@@ -121,6 +121,9 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0850 = new("SA0850", "Invalid alias name", DiagnosticLevel.Error, "Aliases", "Alias name '{0}' must be a valid identifier (letters, digits, underscores; cannot start with digit).");
     public static readonly DiagnosticDescriptor SA0851 = new("SA0851", "Empty alias confirm prompt", DiagnosticLevel.Warning, "Aliases", "AliasOptions.confirm is empty; the user will see no prompt text.");
 
+    // ── SA086x — Errors ───────────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0860 = new("SA0860", "Use built-in error type instead of dict literal", DiagnosticLevel.Warning, "Errors", "Throwing a dict literal with type \"{0}\" matches a built-in error type. Consider using the typed form when it becomes available.");
+
     // ── SA081x — Locks ────────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0810 = new("SA0810", "Lock path not a string", DiagnosticLevel.Warning, "Locks", "The 'lock' path expression does not evaluate to a string. The path must be a string value.");
     public static readonly DiagnosticDescriptor SA0811 = new("SA0811", "Lock body is empty", DiagnosticLevel.Warning, "Locks", "The 'lock' block body is empty. An empty lock block serves no purpose.");
@@ -290,6 +293,7 @@ public static class DiagnosticDescriptors
         dict[SA0844.Code] = SA0844;
         dict[SA0850.Code] = SA0850;
         dict[SA0851.Code] = SA0851;
+        dict[SA0860.Code] = SA0860;
         dict[SA0901.Code] = SA0901;
         dict[SA1002.Code] = SA1002;
         dict[SA1102.Code] = SA1102;

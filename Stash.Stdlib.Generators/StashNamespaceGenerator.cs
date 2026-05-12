@@ -163,9 +163,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
         bool raw = false;
         string? returnTypeOverride = null;
         string capabilityFull = "global::Stash.Runtime.StashCapabilities.None";
-        var attrThrows = new List<string>(); // error-type names from [StashFn(Throws=...)] (string form)
-        var attrThrowsTypes = new List<string>(); // canonical names from [StashFn(ThrowsTypes=...)] (Type[] form)
-        bool hasStringThrows = false; // true when Throws (string form) is used → STSG012
+        var attrThrows = new List<string>(); // canonical error-type names from [StashFn(ThrowsTypes=...)]
         if (fnAttr is not null)
         {
             foreach (var na in fnAttr.NamedArguments)
@@ -176,23 +174,6 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "Capability" && na.Value.Value is int capVal)
                 {
                     capabilityFull = FormatCapabilityFlags(capVal);
-                }
-                if (na.Key == "Throws" && na.Value.Kind == TypedConstantKind.Array)
-                {
-                    foreach (var tc in na.Value.Values)
-                    {
-                        if (tc.Value is string ts)
-                        {
-                            // Extract trailing identifier (e.g. "StashErrorTypes.IOError" → "IOError").
-                            int dotIdx = ts.LastIndexOf('.');
-                            string errorType = dotIdx >= 0 ? ts.Substring(dotIdx + 1) : ts;
-                            if (!string.IsNullOrEmpty(errorType))
-                            {
-                                attrThrows.Add(errorType);
-                                hasStringThrows = true;
-                            }
-                        }
-                    }
                 }
                 if (na.Key == "ThrowsTypes" && !na.Value.IsNull && na.Value.Kind == TypedConstantKind.Array)
                 {
@@ -220,25 +201,12 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                                         canonicalName = nameOvr;
                                 }
                             }
-                            attrThrowsTypes.Add(canonicalName);
+                            if (!attrThrows.Contains(canonicalName))
+                                attrThrows.Add(canonicalName);
                         }
                     }
                 }
             }
-        }
-
-        // STSG012: legacy string Throws form detected — recommend migration to ThrowsTypes.
-        if (hasStringThrows)
-        {
-            diags.Add(Diagnostic.Create(Diagnostics.StringThrowsDeprecated, loc, method.Name));
-        }
-
-        // Merge ThrowsTypes canonical names into the unified attrThrows list.
-        // ThrowsTypes entries are appended after Throws entries; MergeThrows deduplicates.
-        foreach (var t in attrThrowsTypes)
-        {
-            if (!attrThrows.Contains(t))
-                attrThrows.Add(t);
         }
 
         string stashName = nameOverride ?? NamingRules.ToCamelCase(method.Name);

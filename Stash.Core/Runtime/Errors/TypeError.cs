@@ -6,5 +6,5 @@ using Stash.Runtime;
 [StashError]
 public sealed class TypeError : RuntimeError
 {
-    public TypeError(string message, SourceSpan? span = null) : base(message, span, StashErrorTypes.TypeError) {}
+    public TypeError(string message, SourceSpan? span = null) : base(message, span) {}
 }

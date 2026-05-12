@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Runtime.Errors;
 using Stash.Stdlib.Abstractions;
 
 /// <summary>
@@ -297,35 +298,35 @@ public static partial class GlobalBuiltIns
     }
 
     /// <summary>Thrown when a value is invalid or out of range.</summary>
-    [StashStruct(Name = StashErrorTypes.ValueError)]
+    [StashStruct(Name = nameof(ValueError))]
     public sealed record ValueErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when an operation is applied to a value of the wrong type.</summary>
-    [StashStruct(Name = StashErrorTypes.TypeError)]
+    [StashStruct(Name = nameof(TypeError))]
     public sealed record TypeErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when parsing fails (JSON, CSV, INI, TOML, etc.).</summary>
-    [StashStruct(Name = StashErrorTypes.ParseError)]
+    [StashStruct(Name = nameof(ParseError))]
     public sealed record ParseErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when an array or string index is out of bounds.</summary>
-    [StashStruct(Name = StashErrorTypes.IndexError)]
+    [StashStruct(Name = nameof(IndexError))]
     public sealed record IndexErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when a filesystem or I/O operation fails.</summary>
-    [StashStruct(Name = StashErrorTypes.IOError)]
+    [StashStruct(Name = nameof(IOError))]
     public sealed record IOErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when a feature is not available on the current platform.</summary>
-    [StashStruct(Name = StashErrorTypes.NotSupportedError)]
+    [StashStruct(Name = nameof(NotSupportedError))]
     public sealed record NotSupportedErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when an operation exceeds its timeout.</summary>
-    [StashStruct(Name = StashErrorTypes.TimeoutError)]
+    [StashStruct(Name = nameof(TimeoutError))]
     public sealed record TimeoutErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown by strict command expressions (`$!(...)`, `$!&gt;(...)`) when the command exits with a non-zero code. Extra fields: `exitCode`, `stderr`, `stdout`, `command`.</summary>
-    [StashStruct(Name = StashErrorTypes.CommandError)]
+    [StashStruct(Name = nameof(CommandError))]
     public sealed record CommandErrorStruct
     {
         public string Message { get; init; } = "";
@@ -336,7 +337,7 @@ public static partial class GlobalBuiltIns
     }
 
     /// <summary>Thrown when a lock acquisition fails. Extra fields: `path`.</summary>
-    [StashStruct(Name = StashErrorTypes.LockError)]
+    [StashStruct(Name = nameof(LockError))]
     public sealed record LockErrorStruct
     {
         public string Message { get; init; } = "";
@@ -344,7 +345,7 @@ public static partial class GlobalBuiltIns
     }
 
     /// <summary>Thrown by the `alias` namespace when an alias operation fails. Extra fields: `aliasName`, `detail`.</summary>
-    [StashStruct(Name = StashErrorTypes.AliasError)]
+    [StashStruct(Name = nameof(AliasError))]
     public sealed record AliasErrorStruct
     {
         public string Message { get; init; } = "";
@@ -353,11 +354,11 @@ public static partial class GlobalBuiltIns
     }
 
     /// <summary>Thrown when an operation is attempted on an object in an invalid state — e.g., iterating a `StreamingProcess` that has already been consumed.</summary>
-    [StashStruct(Name = StashErrorTypes.StateError)]
+    [StashStruct(Name = nameof(StateError))]
     public sealed record StateErrorStruct { public string Message { get; init; } = ""; }
 
     /// <summary>Thrown when an operation is cancelled by an external cancellation token (e.g. Ctrl-C or programmatic CTS). Distinct from `TimeoutError` which is raised by `timeout` blocks.</summary>
-    [StashStruct(Name = StashErrorTypes.CancellationError)]
+    [StashStruct(Name = nameof(CancellationError))]
     public sealed record CancellationErrorStruct { public string Message { get; init; } = ""; }
 
     // ── Alias-related structs ────────────────────────────────────────────────

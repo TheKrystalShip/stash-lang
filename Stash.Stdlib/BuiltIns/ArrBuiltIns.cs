@@ -18,7 +18,7 @@ public static partial class ArrBuiltIns
     /// <summary>Appends a value to the end of the array. Mutates the original array.</summary>
     /// <param name="array">The array to modify</param>
     /// <param name="value">The value to append</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Push(IInterpreterContext ctx, StashValue array, StashValue value)
@@ -38,8 +38,8 @@ public static partial class ArrBuiltIns
 
     /// <summary>Removes and returns the last element of the array. Throws if empty.</summary>
     /// <param name="array">The array to pop from</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the array is empty</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="ValueError">if the array is empty</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>The removed last element</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Pop(IInterpreterContext ctx, StashValue array)
@@ -63,7 +63,7 @@ public static partial class ArrBuiltIns
 
     /// <summary>Returns the last element without removing it. Throws if empty.</summary>
     /// <param name="array">The array to peek</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the array is empty</exception>
+    /// <exception cref="ValueError">if the array is empty</exception>
     /// <returns>The last element</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue Peek(IInterpreterContext ctx, List<StashValue> array)
@@ -77,8 +77,8 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to modify</param>
     /// <param name="index">The position to insert at</param>
     /// <param name="value">The value to insert</param>
-    /// <exception cref="StashErrorTypes.IndexError">if `index` is out of bounds</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="IndexError">if `index` is out of bounds</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Insert(IInterpreterContext ctx, StashValue array, long index, StashValue value)
@@ -104,8 +104,8 @@ public static partial class ArrBuiltIns
     /// <summary>Removes and returns the element at the specified index.</summary>
     /// <param name="array">The array to modify</param>
     /// <param name="index">The index of the element to remove</param>
-    /// <exception cref="StashErrorTypes.IndexError">if `index` is out of bounds</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="IndexError">if `index` is out of bounds</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>The removed element</returns>
     [StashFn(ReturnType = "any")]
     private static StashValue RemoveAt(IInterpreterContext ctx, StashValue array, long index)
@@ -132,7 +132,7 @@ public static partial class ArrBuiltIns
     /// <summary>Removes the first occurrence of a value from the array. Returns true if found and removed.</summary>
     /// <param name="array">The array to modify</param>
     /// <param name="value">The value to remove</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>true if the value was found and removed, false otherwise</returns>
     [StashFn(ReturnType = "bool")]
     private static bool Remove(IInterpreterContext ctx, StashValue array, StashValue value)
@@ -168,7 +168,7 @@ public static partial class ArrBuiltIns
 
     /// <summary>Removes all elements from the array. Mutates the original array.</summary>
     /// <param name="array">The array to clear</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Clear(IInterpreterContext ctx, StashValue array)
@@ -244,7 +244,7 @@ public static partial class ArrBuiltIns
     /// <param name="array">The array to search</param>
     /// <param name="value">The value to look for</param>
     /// <param name="startIndex">The index to start searching backwards from (default is last element; negative counts from end)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The index of the last match, or -1 if not found</returns>
     // Raw = true: the default for startIndex depends on the array length (list.Count - 1),
     // which cannot be expressed as a C# constant default value.
@@ -270,7 +270,7 @@ public static partial class ArrBuiltIns
     /// <param name="array">The source array</param>
     /// <param name="start">The start index (inclusive)</param>
     /// <param name="end">The end index (exclusive)</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A new array with the specified range of elements</returns>
     // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
     // returned array. The typed form would receive a materialized List<StashValue> and
@@ -294,7 +294,7 @@ public static partial class ArrBuiltIns
     /// <summary>Returns a new array combining two arrays.</summary>
     /// <param name="a">The first array</param>
     /// <param name="b">The second array</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A new array containing all elements from a followed by all elements from b</returns>
     // Raw = true: inspects both args[0] and args[1] for StashTypedArray to preserve element
     // type in the returned array when both inputs share the same type.
@@ -328,7 +328,7 @@ public static partial class ArrBuiltIns
 
     /// <summary>Reverses the array in place. Mutates the original array.</summary>
     /// <param name="array">The array to reverse</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Reverse(IInterpreterContext ctx, StashValue array)
@@ -354,7 +354,7 @@ public static partial class ArrBuiltIns
     /// <summary>Sorts the array in place. When comparator is provided, it receives two elements and must return a negative number (a less than b), zero (a == b), or positive number (a greater than b).</summary>
     /// <param name="array">The array to sort in place</param>
     /// <param name="comparator">A function(a, b) returning negative, zero, or positive to define sort order</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array, if the comparator does not return a number, or if elements have incompatible types</exception>
+    /// <exception cref="TypeError">if `array` is not an array, if the comparator does not return a number, or if elements have incompatible types</exception>
     /// <returns>null (the array is sorted in place)</returns>
     // Raw = true: handles both List<StashValue> and StashTypedArray polymorphically,
     // and has an optional callable parameter. See Push comment above.
@@ -458,7 +458,7 @@ public static partial class ArrBuiltIns
     /// <summary>Returns a new array containing only elements for which fn returns truthy.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A predicate function that receives each element</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A new array of elements where fn returned truthy</returns>
     // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
     // returned array. The typed form would receive a materialized List<StashValue> and
@@ -498,8 +498,8 @@ public static partial class ArrBuiltIns
     /// <summary>Like map, but executes the function in parallel across elements.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its transformed value</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array or `fn` is not callable</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if `maxConcurrency` is less than 1</exception>
+    /// <exception cref="TypeError">if `array` is not an array or `fn` is not callable</exception>
+    /// <exception cref="ValueError">if `maxConcurrency` is less than 1</exception>
     /// <returns>A new array of transformed elements</returns>
     // Raw = true: passes raw args span to ExecuteParMap which also reads optional
     // maxConcurrency from args[2]. The variadic handling doesn't map cleanly to the
@@ -515,8 +515,8 @@ public static partial class ArrBuiltIns
     /// <summary>Like filter, but evaluates the predicate in parallel.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A predicate function that receives each element</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array or `fn` is not callable</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if `maxConcurrency` is less than 1</exception>
+    /// <exception cref="TypeError">if `array` is not an array or `fn` is not callable</exception>
+    /// <exception cref="ValueError">if `maxConcurrency` is less than 1</exception>
     /// <returns>A new array of elements where fn returned truthy</returns>
     // Raw = true: passes raw args span to ExecuteParFilter which also reads optional
     // maxConcurrency from args[2]. See ParMap comment above.
@@ -531,8 +531,8 @@ public static partial class ArrBuiltIns
     /// <summary>Like forEach, but executes the function in parallel.</summary>
     /// <param name="array">The array to iterate</param>
     /// <param name="fn">A function that receives each element</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array or `fn` is not callable</exception>
-    /// <exception cref="StashErrorTypes.ValueError">if `maxConcurrency` is less than 1</exception>
+    /// <exception cref="TypeError">if `array` is not an array or `fn` is not callable</exception>
+    /// <exception cref="ValueError">if `maxConcurrency` is less than 1</exception>
     /// <returns>null</returns>
     // Raw = true: passes raw args span to ExecuteParForEach which also reads optional
     // maxConcurrency from args[2]. See ParMap comment above.
@@ -580,7 +580,7 @@ public static partial class ArrBuiltIns
     /// <summary>Returns a new array with duplicate values removed. When fn is provided, uses fn(element) as the uniqueness key.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns the key used for uniqueness comparison</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A new array with duplicate elements removed</returns>
     // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
     // returned array, and has an optional callable parameter.
@@ -743,7 +743,7 @@ public static partial class ArrBuiltIns
     /// <summary>Returns a new array sorted by the key returned by fn.</summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its sort key</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type, or if elements have incompatible sort key types</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type, or if elements have incompatible sort key types</exception>
     /// <returns>A new sorted array</returns>
     // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
     // returned array. The typed form would receive a materialized List<StashValue> and
@@ -799,7 +799,7 @@ public static partial class ArrBuiltIns
 
     /// <summary>Returns the sum of all elements. All elements must be numbers.</summary>
     /// <param name="array">The array of numbers to sum</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any element is not a number</exception>
+    /// <exception cref="TypeError">if any element is not a number</exception>
     /// <returns>The sum of all elements</returns>
     [StashFn(ReturnType = "number")]
     private static StashValue Sum(IInterpreterContext ctx, List<StashValue> array)
@@ -819,8 +819,8 @@ public static partial class ArrBuiltIns
 
     /// <summary>Returns the smallest element. All elements must be numbers. Array must not be empty.</summary>
     /// <param name="array">The array of numbers</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the array is empty</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any element is not a number</exception>
+    /// <exception cref="ValueError">if the array is empty</exception>
+    /// <exception cref="TypeError">if any element is not a number</exception>
     /// <returns>The smallest element</returns>
     [StashFn(ReturnType = "number")]
     private static StashValue Min(IInterpreterContext ctx, List<StashValue> array)
@@ -841,8 +841,8 @@ public static partial class ArrBuiltIns
 
     /// <summary>Returns the largest element. All elements must be numbers. Array must not be empty.</summary>
     /// <param name="array">The array of numbers</param>
-    /// <exception cref="StashErrorTypes.ValueError">if the array is empty</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any element is not a number</exception>
+    /// <exception cref="ValueError">if the array is empty</exception>
+    /// <exception cref="TypeError">if any element is not a number</exception>
     /// <returns>The largest element</returns>
     [StashFn(ReturnType = "number")]
     private static StashValue Max(IInterpreterContext ctx, List<StashValue> array)
@@ -878,7 +878,7 @@ public static partial class ArrBuiltIns
     /// <summary>Splits the array into sub-arrays of the given size.</summary>
     /// <param name="array">The source array</param>
     /// <param name="size">The maximum size of each chunk</param>
-    /// <exception cref="StashErrorTypes.ValueError">if `size` is not positive</exception>
+    /// <exception cref="ValueError">if `size` is not positive</exception>
     /// <returns>A new array of chunk arrays</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Chunk(IInterpreterContext ctx, List<StashValue> array, long size)
@@ -896,7 +896,7 @@ public static partial class ArrBuiltIns
 
     /// <summary>Randomly reorders the array in place using Fisher-Yates. Mutates the original array.</summary>
     /// <param name="array">The array to shuffle</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `array` is not an array</exception>
+    /// <exception cref="TypeError">if `array` is not an array</exception>
     /// <returns>null</returns>
     [StashFn(ReturnType = "null")]
     private static void Shuffle(IInterpreterContext ctx, StashValue array)
@@ -929,7 +929,7 @@ public static partial class ArrBuiltIns
     /// <summary>Returns a new array with the first n elements.</summary>
     /// <param name="array">The source array</param>
     /// <param name="n">The number of elements to take</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A new array containing the first n elements</returns>
     // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
     // returned array. The typed form would receive a materialized List<StashValue> and
@@ -950,7 +950,7 @@ public static partial class ArrBuiltIns
     /// <summary>Returns a new array with the first n elements removed.</summary>
     /// <param name="array">The source array</param>
     /// <param name="n">The number of elements to skip</param>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>A new array with the first n elements omitted</returns>
     // Raw = true: inspects args[0] for StashTypedArray to preserve element type in the
     // returned array. The typed form would receive a materialized List<StashValue> and
@@ -1004,7 +1004,7 @@ public static partial class ArrBuiltIns
 
     /// <summary>Converts a typed array to a generic array.</summary>
     /// <param name="source">The typed array to convert</param>
-    /// <exception cref="StashErrorTypes.TypeError">if `source` is not a typed array</exception>
+    /// <exception cref="TypeError">if `source` is not a typed array</exception>
     /// <returns>A new generic array with the same elements</returns>
     // Raw = true: requires SvArgs.TypedArray extraction which is not in the typed parameter
     // type table. The function only accepts typed arrays (not plain lists).
@@ -1035,7 +1035,7 @@ public static partial class ArrBuiltIns
     /// <summary>Creates a new zero-initialized typed array with the specified size.</summary>
     /// <param name="elementType">The element type: "int", "float", "string", or "bool"</param>
     /// <param name="size">The number of elements (zero-initialized)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if `size` is negative</exception>
+    /// <exception cref="ValueError">if `size` is negative</exception>
     /// <returns>A new typed array</returns>
     [StashFn(ReturnType = "array")]
     private static StashValue Create(IInterpreterContext ctx, string elementType, long size)
@@ -1048,7 +1048,7 @@ public static partial class ArrBuiltIns
     /// <summary>Deprecated. Use <c>arr.create</c>. Creates a new zero-initialized typed array with the specified size.</summary>
     /// <param name="elementType">The element type: "int", "float", "string", or "bool"</param>
     /// <param name="size">The number of elements (zero-initialized)</param>
-    /// <exception cref="StashErrorTypes.ValueError">if `size` is negative</exception>
+    /// <exception cref="ValueError">if `size` is negative</exception>
     /// <returns>A new typed array</returns>
     [StashFn(ReturnType = "array")]
     [StashDeprecated("arr.create")]

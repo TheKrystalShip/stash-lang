@@ -3384,7 +3384,7 @@ public class VirtualMachineTests : BytecodeTestBase
     [Fact]
     public void Retry_ExhaustsAttempts_Throws()
     {
-        Assert.Throws<RuntimeError>(() => Execute("""
+        Assert.ThrowsAny<RuntimeError>(() => Execute("""
             let func = null;
             func = () => {
                 return retry (2) {

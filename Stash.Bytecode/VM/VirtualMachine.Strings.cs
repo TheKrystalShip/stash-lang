@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Stash.Bytecode;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -68,18 +69,9 @@ public sealed partial class VirtualMachine
             var (_, _, exitCode) = ExecPassthrough(program, arguments, span, _ct);
             if (isStrict && exitCode != 0)
             {
-                throw new RuntimeError(
+                throw new CommandError(
                     $"Command failed with exit code {exitCode}: {command}",
-                    span, StashErrorTypes.CommandError)
-                {
-                    Properties = new Dictionary<string, object?>
-                    {
-                        ["exitCode"] = (long)exitCode,
-                        ["stderr"] = "",
-                        ["stdout"] = "",
-                        ["command"] = command
-                    }
-                };
+                    (long)exitCode, "", "", command, span);
             }
             _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
             {
@@ -93,18 +85,9 @@ public sealed partial class VirtualMachine
             var (stdout, stderr, exitCode) = ExecCaptured(program, arguments, null, span, _ct);
             if (isStrict && exitCode != 0)
             {
-                throw new RuntimeError(
+                throw new CommandError(
                     $"Command failed with exit code {exitCode}: {command}",
-                    span, StashErrorTypes.CommandError)
-                {
-                    Properties = new Dictionary<string, object?>
-                    {
-                        ["exitCode"] = (long)exitCode,
-                        ["stderr"] = stderr,
-                        ["stdout"] = stdout,
-                        ["command"] = command
-                    }
-                };
+                    (long)exitCode, stderr, stdout, command, span);
             }
             _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
             {
@@ -125,9 +108,9 @@ public sealed partial class VirtualMachine
 
             var matches = GlobExpander.Expand(arguments[i]);
             if (matches.Count == 0)
-                throw new RuntimeError(
+                throw new CommandError(
                     $"glob pattern '{arguments[i]}' did not match any files",
-                    span, StashErrorTypes.CommandError);
+                    1, span: span);
 
             // Replace arg[i] with all matched paths
             arguments.RemoveAt(i);
@@ -229,17 +212,9 @@ public sealed partial class VirtualMachine
         int lastExitCode = exitCodes[^1];
         if (isStrict && lastExitCode != 0)
         {
-            throw new RuntimeError(
+            throw new CommandError(
                 $"Command failed with exit code {lastExitCode}.",
-                span, StashErrorTypes.CommandError)
-            {
-                Properties = new Dictionary<string, object?>
-                {
-                    ["exitCode"] = (long)lastExitCode,
-                    ["stderr"]   = stderr,
-                    ["stdout"]   = stdout,
-                }
-            };
+                (long)lastExitCode, stderr, stdout, span: span);
         }
 
         // 5. Store CommandResult

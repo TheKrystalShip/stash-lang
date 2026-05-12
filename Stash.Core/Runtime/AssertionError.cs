@@ -19,7 +19,7 @@ public class AssertionError : RuntimeError
     public object? Actual { get; }
 
     public AssertionError(string message, object? expected, object? actual, SourceSpan? span = null)
-        : base(message, span, "AssertionError")
+        : base(message, span)
     {
         Expected = expected;
         Actual = actual;

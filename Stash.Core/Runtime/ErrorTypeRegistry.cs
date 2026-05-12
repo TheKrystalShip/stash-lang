@@ -1,40 +1,14 @@
 namespace Stash.Runtime;
 
 using System;
-using System.Collections.Generic;
 
 /// <summary>
-/// Single source of truth for built-in error type names and matching semantics.
-/// All type-check sites (ExecuteIs, ExecuteCatchMatch) must delegate to this class.
+/// Single source of truth for the base error type name and the matching
+/// predicate used by both <c>is</c> and <c>catch</c>.
 /// </summary>
 public static class ErrorTypeRegistry
 {
     public const string BaseTypeName = "Error";
-
-    /// <summary>All known built-in error subtype names.</summary>
-    private static readonly HashSet<string> _subtypes = new(StringComparer.Ordinal)
-    {
-        StashErrorTypes.ValueError,
-        StashErrorTypes.TypeError,
-        StashErrorTypes.ParseError,
-        StashErrorTypes.IndexError,
-        StashErrorTypes.IOError,
-        StashErrorTypes.NotSupportedError,
-        StashErrorTypes.TimeoutError,
-        StashErrorTypes.CommandError,
-        StashErrorTypes.LockError,
-        StashErrorTypes.StateError,
-        StashErrorTypes.AliasError,
-        StashErrorTypes.CancellationError,
-    };
-
-    public static IReadOnlySet<string> BuiltInSubtypes => _subtypes;
-
-    // Note: Prefer BuiltInErrorRegistry.IsBuiltInName — BuiltInSubtypes will be removed in Phase E.
-
-    /// <summary>Returns true if the given type name is a known built-in error subtype.</summary>
-    public static bool IsBuiltInSubtype(string typeName)
-        => _subtypes.Contains(typeName);
 
     /// <summary>Returns true if the given type name is the base Error type.</summary>
     public static bool IsBaseType(string typeName)

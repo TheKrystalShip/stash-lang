@@ -19,7 +19,7 @@ public sealed class CommandError : RuntimeError
         string? stdout = null,
         string? command = null,
         SourceSpan? span = null)
-        : base(message, span, StashErrorTypes.CommandError)
+        : base(message, span)
     {
         ExitCode = exitCode;
         Stderr = stderr;

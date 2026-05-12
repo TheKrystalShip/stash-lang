@@ -37,9 +37,9 @@ public static partial class ReBuiltIns
     /// <summary>Returns the first regex match in the string, or null if none.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="TimeoutError">if the regex match does not complete within the configured timeout</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>Matched string or null</returns>
     [StashFn(ReturnType = "string")]
     private static StashValue Match(string s, string pattern)
@@ -63,9 +63,9 @@ public static partial class ReBuiltIns
     /// <summary>Returns an array of all regex matches in the string.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="TimeoutError">if the regex match does not complete within the configured timeout</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>Array of matched strings</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> MatchAll(string s, string pattern)
@@ -92,9 +92,9 @@ public static partial class ReBuiltIns
     /// <summary>Returns true if the string matches the regex pattern.</summary>
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="TimeoutError">if the regex match does not complete within the configured timeout</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>true if the string matches</returns>
     [StashFn]
     private static bool Test(string s, string pattern)
@@ -118,9 +118,9 @@ public static partial class ReBuiltIns
     /// <param name="s">The string</param>
     /// <param name="pattern">Regex pattern</param>
     /// <param name="replacement">Replacement string (backreferences supported)</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="TimeoutError">if the regex match does not complete within the configured timeout</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>Modified string</returns>
     [StashFn]
     private static string Replace(string s, string pattern, string replacement)
@@ -143,9 +143,9 @@ public static partial class ReBuiltIns
     /// <summary>Returns a RegexMatch struct for the first regex match with capture groups, or null if none.</summary>
     /// <param name="s">The string to search</param>
     /// <param name="pattern">Regex pattern (supports named groups via (?&lt;name&gt;...) syntax)</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="TimeoutError">if the regex match does not complete within the configured timeout</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>RegexMatch struct or null</returns>
     [StashFn(ReturnType = "RegexMatch")]
     private static StashValue Capture(string s, string pattern)
@@ -170,9 +170,9 @@ public static partial class ReBuiltIns
     /// <summary>Returns an array of RegexMatch structs for all regex matches with capture groups.</summary>
     /// <param name="s">The string to search</param>
     /// <param name="pattern">Regex pattern (supports named groups via (?&lt;name&gt;...) syntax)</param>
-    /// <exception cref="StashErrorTypes.ParseError">if the regex pattern is invalid</exception>
-    /// <exception cref="StashErrorTypes.TimeoutError">if the regex match does not complete within the configured timeout</exception>
-    /// <exception cref="StashErrorTypes.TypeError">if any argument has the wrong type</exception>
+    /// <exception cref="ParseError">if the regex pattern is invalid</exception>
+    /// <exception cref="TimeoutError">if the regex match does not complete within the configured timeout</exception>
+    /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>Array of RegexMatch structs</returns>
     [StashFn(ReturnType = "array")]
     private static List<StashValue> CaptureAll(string s, string pattern)
