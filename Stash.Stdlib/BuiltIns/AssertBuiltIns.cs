@@ -103,6 +103,7 @@ public static partial class AssertBuiltIns
     /// <summary>Asserts that a is greater than b. Throws AssertionError if not.</summary>
     /// <param name="a">The left-hand value</param>
     /// <param name="b">The right-hand value</param>
+    /// <exception cref="StashErrorTypes.TypeError">if 'a' or 'b' is not a number</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void Greater(IInterpreterContext ctx, StashValue a, StashValue b)
@@ -121,6 +122,7 @@ public static partial class AssertBuiltIns
     /// <summary>Asserts that a is less than b. Throws AssertionError if not.</summary>
     /// <param name="a">The left-hand value</param>
     /// <param name="b">The right-hand value</param>
+    /// <exception cref="StashErrorTypes.TypeError">if 'a' or 'b' is not a number</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void Less(IInterpreterContext ctx, StashValue a, StashValue b)
@@ -186,6 +188,7 @@ public static partial class AssertBuiltIns
     /// <param name="actual">The actual value</param>
     /// <param name="expected">The expected value</param>
     /// <param name="delta">The maximum allowed difference (must be non-negative)</param>
+    /// <exception cref="StashErrorTypes.TypeError">if 'actual', 'expected', or 'delta' is not a number</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void CloseTo(IInterpreterContext ctx, StashValue actual, StashValue expected, StashValue delta)

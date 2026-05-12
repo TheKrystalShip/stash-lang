@@ -16,6 +16,9 @@ public static partial class ConfigBuiltIns
     /// <summary>Reads and parses a config file. Format is auto-detected from extension if omitted.</summary>
     /// <param name="path">The file path</param>
     /// <param name="format">Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be read</exception>
+    /// <exception cref="StashErrorTypes.ParseError">if the file content is not valid for the detected format</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the file extension is not recognised and no format is given, or the format name is unknown</exception>
     /// <returns>Parsed dictionary</returns>
     [StashFn(ReturnType = "dict")]
     private static StashValue Read(string path, string? format = null)
@@ -39,6 +42,9 @@ public static partial class ConfigBuiltIns
     /// <param name="path">The file path</param>
     /// <param name="data">The data to write</param>
     /// <param name="format">Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <exception cref="StashErrorTypes.IOError">if the file cannot be written</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if the data type is incompatible with the format (INI and TOML require a dict; XML requires an XmlNode)</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the file extension is not recognised and no format is given, or the format name is unknown</exception>
     [StashFn]
     private static void Write(string path, StashValue data, string? format = null)
     {
@@ -58,6 +64,8 @@ public static partial class ConfigBuiltIns
     /// <summary>Parses a config string in the given format.</summary>
     /// <param name="text">The config text</param>
     /// <param name="format">The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <exception cref="StashErrorTypes.ParseError">if the text is not valid for the specified format</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the format name is unknown</exception>
     /// <returns>Parsed dictionary</returns>
     [StashFn(ReturnType = "dict")]
     private static StashValue Parse(string text, string format)
@@ -68,6 +76,8 @@ public static partial class ConfigBuiltIns
     /// <summary>Serializes a value to the given config format.</summary>
     /// <param name="data">The value to serialize</param>
     /// <param name="format">The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'</param>
+    /// <exception cref="StashErrorTypes.TypeError">if the data type is incompatible with the format (INI and TOML require a dict; XML requires an XmlNode)</exception>
+    /// <exception cref="StashErrorTypes.ValueError">if the format name is unknown</exception>
     /// <returns>Config string</returns>
     [StashFn]
     private static string Stringify(StashValue data, string format)

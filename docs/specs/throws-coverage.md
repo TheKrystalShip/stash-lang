@@ -51,18 +51,28 @@ The "untagged (intentional)" column counts pure query/predicate functions that g
 
 The "untagged (intentional)" column counts pure query/predicate functions that genuinely throw nothing (e.g. `buf.toHex`, `xml.valid`, `task.run`). Enforced by `Stash.Tests/Stdlib/SourceGenerator/Wave3ThrowsCoverageTests.cs`.
 
-## Wave 4 — Long Tail (Pending)
+## Wave 4 — Long Tail (Complete)
 
-`sys`, `term`, `alias`, `config`, `args`, `lock`, `test`, `assert`, and remaining utilities. ~100 throw sites.
+`sys`, `term`, `alias`, `config`, `args`, `test`, `assert`. (`lock` is not registered as a stdlib namespace and is omitted.)
 
-| Namespace | Functions | Tagged | Coverage | Notes                                                |
-| --------- | --------- | ------ | -------- | ---------------------------------------------------- |
-| `sys`     | —         | 0      | 0%       | `TypeError`, `NotSupportedError` documented in prose |
-| `term`    | —         | 0      | 0%       | `IOError`, `NotSupportedError` documented in prose   |
-| `alias`   | —         | 0      | 0%       | `AliasError` documented in prose                     |
-| `config`  | —         | 0      | 0%       | `IOError`, `ParseError` documented in prose          |
-| `args`    | —         | 0      | 0%       | `ValueError` documented in prose                     |
-| `lock`    | —         | 0      | 0%       | `LockError` documented in prose                      |
+| Namespace | Functions | Tagged | Untagged (intentional) | Coverage            |
+| --------- | --------- | ------ | ---------------------- | ------------------- |
+| `sys`     | 12        | 4      | 8                      | 100% (allow-listed) |
+| `term`    | 12        | 3      | 9                      | 100% (allow-listed) |
+| `args`    | 4         | 2      | 2                      | 100% (allow-listed) |
+| `alias`   | 15        | 8      | 7                      | 100% (allow-listed) |
+| `config`  | 4         | 4      | 0                      | 100%                |
+| `assert`  | 12        | 3      | 9                      | 100% (allow-listed) |
+| `test`    | 9         | 0      | 9                      | 100% (allow-listed) |
+| **Total** | **68**    | **24** | **44**                 | **100%**            |
+
+Notes on the "untagged (intentional)" column:
+
+- **`assert.*`** failures throw `AssertionError` (a `RuntimeError` subclass that is **not** a `StashErrorTypes` constant). Assertion-only functions (`assert.equal`, `assert.deepEqual`, `assert.throws`, etc.) are silent; only those that *also* throw user-catchable typed errors (e.g. `TypeError` for arg validation, like `assert.greater`) carry `<exception>` tags.
+- **`test.beforeAll` / `afterAll` / `beforeEach` / `afterEach`** currently throw `RuntimeError` without `errorType:` (pre-existing bug). They are silent until the throws are typed; once typed they will move to `<exception>`-tagged status.
+- Pure query/predicate functions (`sys.cpuCount`, `term.bold`, `args.list`, `alias.list`, etc.) genuinely throw nothing.
+
+Enforced by `Stash.Tests/Stdlib/SourceGenerator/Wave4ThrowsCoverageTests.cs`.
 
 ## User-Code Surface
 

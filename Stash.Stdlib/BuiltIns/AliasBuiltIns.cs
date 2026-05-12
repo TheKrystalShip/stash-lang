@@ -94,6 +94,8 @@ public static partial class AliasBuiltIns
     /// <param name="name">Alias name — must be a valid identifier</param>
     /// <param name="body">Template string or callable</param>
     /// <param name="opts">Optional AliasOptions struct</param>
+    /// <exception cref="StashErrorTypes.AliasError">if the alias name is not a valid identifier, or if overriding a built-in alias without <c>AliasOptions.override = true</c></exception>
+    /// <exception cref="StashErrorTypes.TypeError">if <c>body</c> is not a string or a callable</exception>
     /// <returns>null</returns>
     [StashFn]
     private static void Define(IInterpreterContext ctx, string name, StashValue body, params StashValue[] rest)
@@ -199,6 +201,7 @@ public static partial class AliasBuiltIns
 
     /// <summary>Removes the alias with the given name. Returns true if removed, false if not found. Throws AliasError if the alias is a built-in.</summary>
     /// <param name="name">Alias name</param>
+    /// <exception cref="StashErrorTypes.AliasError">if the named alias is a built-in and cannot be removed without <c>unalias --force</c></exception>
     /// <returns>bool</returns>
     [StashFn]
     private static bool Remove(IInterpreterContext ctx, string name)
@@ -217,6 +220,8 @@ public static partial class AliasBuiltIns
     /// <summary>Executes the alias with the given name and string arguments. For template aliases, delegates to the shell runner (requires shell mode). For function aliases, invokes the callable directly.</summary>
     /// <param name="name">Alias name</param>
     /// <param name="args">Array of string arguments</param>
+    /// <exception cref="StashErrorTypes.AliasError">if the alias is not defined, or if a template alias is invoked outside shell mode</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any element of <c>args</c> is not a string</exception>
     /// <returns>Exit code (int)</returns>
     [StashFn]
     private static long Exec(IInterpreterContext ctx, string name, List<StashValue> args)
@@ -257,6 +262,8 @@ public static partial class AliasBuiltIns
     /// <summary>Returns the expanded form of a template alias body with arguments substituted. For function aliases, returns a '&lt;function alias `name`&gt;' placeholder.</summary>
     /// <param name="name">Alias name</param>
     /// <param name="args">Array of string arguments</param>
+    /// <exception cref="StashErrorTypes.AliasError">if the alias is not defined</exception>
+    /// <exception cref="StashErrorTypes.TypeError">if any element of <c>args</c> is not a string</exception>
     /// <returns>Expanded string</returns>
     [StashFn]
     private static string Expand(IInterpreterContext ctx, string name, List<StashValue> args)
@@ -278,6 +285,7 @@ public static partial class AliasBuiltIns
 
     /// <summary>Persists one or all aliases to the managed aliases file. Function aliases must reference a top-level fn (lambdas cannot be saved). Returns the path written.</summary>
     /// <param name="name">(optional) Alias name to save; saves all non-builtin when omitted</param>
+    /// <exception cref="StashErrorTypes.NotSupportedError">if called outside shell mode (persistence handler not wired)</exception>
     /// <returns>Path written</returns>
     [StashFn]
     private static string Save(IInterpreterContext ctx, params StashValue[] rest)
@@ -297,6 +305,7 @@ public static partial class AliasBuiltIns
 
     /// <summary>Loads aliases from the managed aliases file (or a custom path). Evaluates each alias.define call tolerantly and tags loaded aliases as source='saved'.</summary>
     /// <param name="path">(optional) Custom file path; defaults to the managed aliases file</param>
+    /// <exception cref="StashErrorTypes.NotSupportedError">if called outside shell mode (persistence handler not wired)</exception>
     /// <returns>Count of aliases loaded</returns>
     [StashFn]
     private static long Load(IInterpreterContext ctx, params StashValue[] rest)
@@ -333,6 +342,7 @@ public static partial class AliasBuiltIns
 
     /// <summary>Internal: session-disables a built-in alias. Used by unalias --force sugar.</summary>
     /// <param name="name">Alias name</param>
+    /// <exception cref="StashErrorTypes.AliasError">if the alias does not exist or is already disabled</exception>
     /// <returns>null</returns>
     [StashFn(Name = "__forceDisable")]
     private static void ForceDisableInternal(IInterpreterContext ctx, string name)
@@ -342,6 +352,7 @@ public static partial class AliasBuiltIns
 
     /// <summary>Internal: removes a persisted alias entry from aliases.stash. Used by unalias --save sugar.</summary>
     /// <param name="name">Alias name</param>
+    /// <exception cref="StashErrorTypes.NotSupportedError">if called outside shell mode (persistence handler not wired)</exception>
     /// <returns>null</returns>
     [StashFn(Name = "__removeSaved")]
     private static void RemoveSavedInternal(IInterpreterContext ctx, string name)

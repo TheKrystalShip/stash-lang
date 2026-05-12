@@ -57,6 +57,7 @@ Test a specific namespace: `dotnet test --filter "FullyQualifiedName~ArrBuiltIns
 - **AST nodes:** Each has a `SourceSpan` for diagnostics. Expression nodes implement `IExprVisitor<T>`, statement nodes `IStmtVisitor<T>`
 - **Built-in namespaces:** One file per namespace in `Stash.Stdlib/BuiltIns/` (e.g., `ArrBuiltIns.cs`). Register functions via `BuiltInFunction` delegates
 - **Tests:** `{Feature}_{Scenario}_{Expected}()` naming in `Stash.Tests/`, one test file per namespace (`ArrBuiltInsTests.cs`, `DictBuiltInsTests.cs`, etc.)
+- **No magic strings or literals:** Never write a string (or other literal) inline when a named reference already exists — use the existing constant, property, or identifier. If no reference exists, create one before using the value. Duplicated literals scattered across the codebase are an absolute failure to follow this rule.
 
 ## Key Patterns
 
