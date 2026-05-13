@@ -1382,7 +1382,7 @@ public class Program
     /// <param name="ex">The runtime error to report.</param>
     private static void PrintRuntimeError(RuntimeError ex)
     {
-        string errorType = ex.ErrorType ?? "RuntimeError";
+        string errorType = ex.ErrorType;
 
         if (ex.CallStack is { Count: > 0 })
         {

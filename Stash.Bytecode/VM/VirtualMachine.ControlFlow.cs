@@ -327,7 +327,7 @@ public sealed partial class VirtualMachine
             {
                 bodyThrew = true;
                 retryLastError = rex;
-                var retryErr = new StashError(rex.Message, rex.ErrorType ?? "RuntimeError", null, rex.Properties);
+                var retryErr = StashError.FromRuntimeError(rex, (List<string>?)null);
                 retryErrors.Add(StashValue.FromObj(retryErr));
 
                 // Call onRetry only when this is not the last attempt.

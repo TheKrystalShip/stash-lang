@@ -35,7 +35,7 @@ public sealed partial class VirtualMachine
                 }
 
                 _sp = handler.StackLevel;
-                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                var stashError = StashError.FromRuntimeError(ex, (List<string>?)null);
                 _context.LastError = stashError;
                 ref CallFrame hf1 = ref _frames[_frameCount - 1];
                 _stack[hf1.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
@@ -192,9 +192,7 @@ public sealed partial class VirtualMachine
                 if (ex.SuppressedErrors is { Count: > 0 })
                     (suppressed ??= new()).AddRange(ex.SuppressedErrors);
 
-                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
-                if (suppressed != null)
-                    stashError.Suppressed = suppressed;
+                var stashError = StashError.FromRuntimeError(ex, (List<string>?)null, suppressed);
                 _context.LastError = stashError;
                 ref CallFrame hf2 = ref _frames[_frameCount - 1];
                 _stack[hf2.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
@@ -249,7 +247,7 @@ public sealed partial class VirtualMachine
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
                 _sp = handler.StackLevel;
-                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                var stashError = StashError.FromRuntimeError(ex, (List<string>?)null);
                 _context.LastError = stashError;
                 ref CallFrame handlerFrame = ref _frames[_frameCount - 1];
                 _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);

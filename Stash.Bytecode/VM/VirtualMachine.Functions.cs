@@ -829,7 +829,7 @@ public sealed partial class VirtualMachine
                     firstError = ex;
                 else
                     (suppressed ??= new()).Add(
-                        new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties));
+                        StashError.FromRuntimeError(ex, (List<string>?)null));
             }
         }
 
@@ -870,7 +870,7 @@ public sealed partial class VirtualMachine
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
                 _sp = handler.StackLevel;
-                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                var stashError = StashError.FromRuntimeError(ex, (List<string>?)null);
                 _context.LastError = stashError;
                 ref CallFrame hf = ref _frames[_frameCount - 1];
                 _stack[hf.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
@@ -904,7 +904,7 @@ public sealed partial class VirtualMachine
             catch (RuntimeError deferEx)
             {
                 (suppressed ??= new()).Add(
-                    new StashError(deferEx.Message, deferEx.ErrorType ?? "RuntimeError", null, deferEx.Properties));
+                    StashError.FromRuntimeError(deferEx, (List<string>?)null));
             }
         }
     }
