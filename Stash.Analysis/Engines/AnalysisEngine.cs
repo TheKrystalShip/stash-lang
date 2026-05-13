@@ -159,7 +159,8 @@ public class AnalysisEngine
 
         TypeInferenceEngine.InferTypes(symbols, statements);
 
-        DocCommentResolver.Resolve(tokens, symbols);
+        var docCommentDiagnostics = new System.Collections.Generic.List<SemanticDiagnostic>();
+        DocCommentResolver.Resolve(tokens, symbols, docCommentDiagnostics);
 
         // Load project config early so disabled rules can be pre-filtered
         var scriptDir = uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
@@ -187,6 +188,7 @@ public class AnalysisEngine
         var validator = new SemanticValidator(symbols, enabledRules);
         var semanticDiagnostics = validator.Validate(statements);
         semanticDiagnostics.AddRange(importDiagnostics);
+        semanticDiagnostics.AddRange(docCommentDiagnostics);
 
         // Parse suppression directives from trivia tokens
         var suppressionMap = SuppressionDirectiveParser.Parse(tokens);

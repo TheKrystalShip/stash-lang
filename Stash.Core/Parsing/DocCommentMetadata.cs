@@ -69,6 +69,30 @@ public static class DocCommentMetadata
     }
 
     /// <summary>
+    /// Returns <see langword="true"/> if the raw doc-comment text contains at least one
+    /// <c>@throws</c> tag line.
+    /// </summary>
+    /// <param name="raw">The joined doc-comment text, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when a <c>@throws</c> line is present; otherwise <see langword="false"/>.</returns>
+    public static bool HasThrowsLines(string? raw)
+    {
+        if (raw == null)
+            return false;
+
+        foreach (var line in raw.Split('\n'))
+        {
+            var trimmed = line.AsSpan().TrimStart();
+            if (trimmed.StartsWith("@throws", StringComparison.Ordinal)
+                && (trimmed.Length == 7 || trimmed[7] == ' '))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Parses the portion of a <c>@throws</c> line after the <c>@throws</c> keyword:
     /// one or more comma-separated identifiers followed by an optional description.
     /// </summary>

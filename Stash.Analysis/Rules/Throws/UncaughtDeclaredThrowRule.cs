@@ -117,6 +117,53 @@ public sealed class UncaughtDeclaredThrowRule : IAnalysisRule
             case BlockStmt block:
                 CollectThrowsFromBlock(block, scopeTree, results);
                 break;
+
+            case WhileStmt whileStmt:
+                CollectThrowsFromExpr(whileStmt.Condition, scopeTree, results);
+                CollectThrowsFromBlock(whileStmt.Body, scopeTree, results);
+                break;
+
+            case DoWhileStmt doWhile:
+                CollectThrowsFromBlock(doWhile.Body, scopeTree, results);
+                CollectThrowsFromExpr(doWhile.Condition, scopeTree, results);
+                break;
+
+            case ForStmt forStmt:
+                if (forStmt.Initializer != null)
+                    CollectThrowsFromStmt(forStmt.Initializer, scopeTree, results);
+                if (forStmt.Condition != null)
+                    CollectThrowsFromExpr(forStmt.Condition, scopeTree, results);
+                if (forStmt.Increment != null)
+                    CollectThrowsFromExpr(forStmt.Increment, scopeTree, results);
+                CollectThrowsFromBlock(forStmt.Body, scopeTree, results);
+                break;
+
+            case ForInStmt forIn:
+                CollectThrowsFromExpr(forIn.Iterable, scopeTree, results);
+                CollectThrowsFromBlock(forIn.Body, scopeTree, results);
+                break;
+
+            case SwitchStmt switchStmt:
+                CollectThrowsFromExpr(switchStmt.Subject, scopeTree, results);
+                foreach (var c in switchStmt.Cases)
+                {
+                    foreach (var pattern in c.Patterns)
+                        CollectThrowsFromExpr(pattern, scopeTree, results);
+                    CollectThrowsFromStmt(c.Body, scopeTree, results);
+                }
+                break;
+
+            case ThrowStmt throwStmt when throwStmt.Value != null:
+                CollectThrowsFromExpr(throwStmt.Value, scopeTree, results);
+                break;
+
+            case LockStmt lockStmt:
+                CollectThrowsFromBlock(lockStmt.Body, scopeTree, results);
+                break;
+
+            case DeferStmt deferStmt:
+                CollectThrowsFromStmt(deferStmt.Body, scopeTree, results);
+                break;
         }
     }
 

@@ -224,4 +224,93 @@ public class SA0164UncaughtThrowTests : AnalysisTestBase
             UncaughtDeclaredThrowRule.TestStdlibLookup = null;
         }
     }
+
+    // ── SA0164 fires inside control-flow statements ───────────────────────────
+
+    [Fact]
+    public void SA0164_CallInsideWhileLoop_Fires()
+    {
+        var diagnostics = AnalyzeWith164Enabled("""
+            struct IoError { message: string }
+
+            /// @throws IoError when foo
+            fn foo() {}
+
+            try {
+                while (true) { foo(); }
+            } catch (SomeOther e) {}
+            """);
+
+        Assert.Contains(diagnostics, d => d.Code == "SA0164" && d.Message.Contains("IoError"));
+    }
+
+    [Fact]
+    public void SA0164_CallInsideForLoop_Fires()
+    {
+        var diagnostics = AnalyzeWith164Enabled("""
+            struct IoError { message: string }
+
+            /// @throws IoError when foo
+            fn foo() {}
+
+            try {
+                for (let i = 0; i < 10; i = i + 1) { foo(); }
+            } catch (SomeOther e) {}
+            """);
+
+        Assert.Contains(diagnostics, d => d.Code == "SA0164" && d.Message.Contains("IoError"));
+    }
+
+    [Fact]
+    public void SA0164_CallInsideForInLoop_Fires()
+    {
+        var diagnostics = AnalyzeWith164Enabled("""
+            struct IoError { message: string }
+
+            /// @throws IoError when foo
+            fn foo() {}
+
+            try {
+                for (let x in [1, 2, 3]) { foo(); }
+            } catch (SomeOther e) {}
+            """);
+
+        Assert.Contains(diagnostics, d => d.Code == "SA0164" && d.Message.Contains("IoError"));
+    }
+
+    [Fact]
+    public void SA0164_CallInsideSwitchCase_Fires()
+    {
+        var diagnostics = AnalyzeWith164Enabled("""
+            struct IoError { message: string }
+
+            /// @throws IoError when foo
+            fn foo() {}
+
+            try {
+                switch (1) {
+                    case 1: { foo(); }
+                }
+            } catch (SomeOther e) {}
+            """);
+
+        Assert.Contains(diagnostics, d => d.Code == "SA0164" && d.Message.Contains("IoError"));
+    }
+
+    [Fact]
+    public void SA0164_CallInsideThrowStmt_Fires()
+    {
+        var diagnostics = AnalyzeWith164Enabled("""
+            struct IoError { message: string }
+
+            /// @throws IoError when foo
+            fn makeError() {}
+
+            try {
+                throw makeError();
+            } catch (SomeOther e) {}
+            """);
+
+        Assert.Contains(diagnostics, d => d.Code == "SA0164" && d.Message.Contains("IoError"));
+    }
 }

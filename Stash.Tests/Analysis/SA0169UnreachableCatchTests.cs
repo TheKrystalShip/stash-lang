@@ -161,4 +161,23 @@ public class SA0169UnreachableCatchTests : AnalysisTestBase
             UnreachableCatchRule.TestStdlibLookup = null;
         }
     }
+
+    [Fact]
+    public void SA0169_CallInsideWhileLoop_ContributesToUnion()
+    {
+        // The call is inside a while loop; SA0169 must NOT fire for a typed catch that matches
+        // the declared throw type (because the while-loop body is now walked by the rule).
+        var diagnostics = AnalyzeWith169Enabled("""
+            struct IoError { message: string }
+
+            /// @throws IoError when foo
+            fn foo() {}
+
+            try {
+                while (true) { foo(); }
+            } catch (IoError e) {}
+            """);
+
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0169" && d.Message.Contains("IoError"));
+    }
 }

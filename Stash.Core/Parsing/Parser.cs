@@ -247,6 +247,14 @@ public class Parser
             initializer = Expression();
         }
 
+        // Attach doc-comment throws metadata when the initializer is a lambda.
+        if (initializer is LambdaExpr lambdaVar && letToken.LeadingDoc != null)
+        {
+            var (docProse, throws) = DocCommentMetadata.Extract(letToken.LeadingDoc, lambdaVar.Span);
+            lambdaVar.Documentation = docProse;
+            lambdaVar.Throws = throws;
+        }
+
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after variable declaration.");
         return new VarDeclStmt(name, typeHint, initializer, MakeSpan(letToken.Span, semi.Span));
     }
@@ -279,6 +287,15 @@ public class Parser
         }
         Consume(TokenType.Equal, "Expected '=' after constant name (constants must be initialized).");
         Expr initializer = Expression();
+
+        // Attach doc-comment throws metadata when the initializer is a lambda.
+        if (initializer is LambdaExpr lambdaConst && constToken.LeadingDoc != null)
+        {
+            var (docProse, throws) = DocCommentMetadata.Extract(constToken.LeadingDoc, lambdaConst.Span);
+            lambdaConst.Documentation = docProse;
+            lambdaConst.Throws = throws;
+        }
+
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after constant declaration.");
         return new ConstDeclStmt(name, typeHint, initializer, MakeSpan(constToken.Span, semi.Span));
     }

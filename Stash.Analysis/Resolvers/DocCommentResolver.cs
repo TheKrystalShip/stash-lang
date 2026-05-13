@@ -36,6 +36,14 @@ public static class DocCommentResolver
     /// to matching symbols in the scope tree.
     /// </summary>
     public static void Resolve(List<Token> tokens, ScopeTree symbols)
+        => Resolve(tokens, symbols, null);
+
+    /// <summary>
+    /// Scans the token list for DocComment tokens, attaches their text
+    /// to matching symbols in the scope tree, and emits SA0166 diagnostics
+    /// for <c>@throws</c> tags on non-function declarations.
+    /// </summary>
+    public static void Resolve(List<Token> tokens, ScopeTree symbols, List<SemanticDiagnostic>? diagnostics)
     {
         for (int i = 0; i < tokens.Count; i++)
         {
@@ -81,6 +89,13 @@ public static class DocCommentResolver
                     var (_, throws) = DocCommentMetadata.Extract(docText, symbol.Span);
                     if (throws != null)
                         symbol.Throws = throws;
+                }
+
+                // SA0166: @throws tag has no effect outside a function declaration.
+                if (symbol.Kind is not (SymbolKind.Function or SymbolKind.Method)
+                    && DocCommentMetadata.HasThrowsLines(docText))
+                {
+                    diagnostics?.Add(DiagnosticDescriptors.SA0166.CreateDiagnostic(symbol.Span));
                 }
             }
 
