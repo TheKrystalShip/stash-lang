@@ -1,666 +1,388 @@
-# Stash — DAP (Debug Adapter Protocol)
+# DAP - Debug Adapter Protocol
 
-> **Status:** Draft v0.1
-> **Created:** March 2026
-> **Purpose:** Source of truth for the Stash DAP server — implementation details, capabilities, and editor integration.
+> **Status:** Stable protocol reference
+> **Audience:** Editor integrators, debugger maintainers, and contributors changing debug behavior.
+> **Purpose:** Defines the Stash Debug Adapter Protocol surface, launch configuration, debugger behavior, and known limits.
 >
 > **Companion documents:**
 >
-> - [Language Specification](../Stash%20—%20Language%20Specification.md) — syntax, type system, debugging hooks (`IDebugger`), interpreter architecture
-> - [Standard Library Reference](../Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions
-> - [LSP — Language Server Protocol](LSP%20—%20Language%20Server%20Protocol.md) — language server
-> - [TAP — Testing Infrastructure](TAP%20—%20Testing%20Infrastructure.md) — testing primitives and harness
+> - [Language Specification](Stash%20—%20Language%20Specification.md) - language syntax, runtime semantics, imports, values, and errors.
+> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) - built-in namespace APIs available while debugging.
+> - [LSP - Language Server Protocol](LSP%20—%20Language%20Server%20Protocol.md) - language intelligence protocol reference.
+> - [TAP - Testing Infrastructure](TAP%20—%20Testing%20Infrastructure.md) - test execution and TAP output contract.
 
-The Stash DAP server exposes a standard [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/) interface over stdio, enabling any DAP-compatible editor (VS Code, Neovim, Emacs, etc.) to debug Stash scripts with breakpoints, stepping, variable inspection, and expression evaluation.
+The Stash debug adapter exposes the standard [Debug Adapter Protocol](https://microsoft.github.io/debug-adapter-protocol/) over standard input and standard output. DAP clients use it to launch Stash programs, set breakpoints, control execution, inspect stack frames, evaluate expressions, and edit variables while execution is paused.
 
-For the language-level debugging hooks (`IDebugger` interface, `CallFrame`, `SourceSpan`) that the DAP server builds on, see [Section 11 of the Language Specification](../Stash%20—%20Language%20Specification.md#11-debugging-support). For runtime value types and their CLR mappings, see [Section 4 of the Language Specification](../Stash%20—%20Language%20Specification.md#4-type-system).
+This document describes the public debugger contract. It intentionally avoids VM architecture, implementation history, and roadmap material except where a current limitation affects client behavior.
 
----
+## 1. Roles
 
-## Architecture
+A Stash debug session has three participants:
 
-### Three-Player Model
+| Participant | Responsibility                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------ |
+| DAP client  | Editor or IDE that sends DAP requests and renders responses and events.                    |
+| `stash-dap` | Stash debug adapter process. It translates DAP requests into Stash VM debug operations.    |
+| Stash VM    | Executes the target program and calls debugger hooks at statement and function boundaries. |
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       DAP Client (e.g. VS Code)                 │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │  DAP protocol (JSON over stdio)
-┌──────────────────────────────▼──────────────────────────────────┐
-│                         Stash.Dap (DAP Server)                  │
-│                                                                 │
-│   StashDebugServer  ──registers──►  19 Request Handlers         │
-│          │                                                      │
-│          └──► DebugSession (IDebugger) ◄──── Interpreter calls  │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │  IDebugger interface
-┌──────────────────────────────▼──────────────────────────────────┐
-│                   Stash.Bytecode (bytecode VM)                  │
-│                                                                 │
-│   Calls OnBeforeExecute() before each statement                 │
-│   Calls OnFunctionEnter() / OnFunctionExit() around calls       │
-└─────────────────────────────────────────────────────────────────┘
-```
+The adapter is a launch adapter. The client starts `stash-dap`, sends `initialize`, configures the session, and then sends `launch`.
 
-There are three players:
+## 2. Transport
 
-1. **DAP Client** — the editor or IDE. Sends requests (`setBreakpoints`, `continue`, `variables`, …) and receives events (`stopped`, `output`, `terminated`).
-2. **Stash.Dap** — translates between the DAP wire format and the VM. Owns `DebugSession`, which is the central coordinator.
-3. **Stash.Bytecode** — the bytecode VM. It calls back into `DebugSession` via the `IDebugger` interface at every statement and function boundary.
+The adapter uses JSON DAP messages over stdio.
 
-The interpreter threads and the DAP I/O thread are distinct. Per-thread `ManualResetEventSlim` gates keep them synchronized independently.
+| Property            | Value                                                              |
+| ------------------- | ------------------------------------------------------------------ |
+| Transport           | Standard input and standard output                                 |
+| Server process      | `stash-dap` or `dotnet run --project Stash.Dap` during development |
+| Session model       | One debug adapter process per debug session                        |
+| Port usage          | None                                                               |
+| Manual terminal use | Not supported as a user interface                                  |
 
----
+The adapter writes protocol traffic to stdout. Diagnostic logging must not corrupt stdout; any diagnostic output belongs on stderr or in the configured client log channel.
 
-### Project Structure
+## 3. Lifecycle
 
-```
-Stash.Dap/
-├── Program.cs                          # Entry point — calls StashDebugServer.RunAsync()
-├── StashDebugServer.cs                 # Bootstrap: OmniSharp server + DI wiring
-├── DebugSession.cs                     # Core bridge, ~908 lines (IDebugger impl)
-└── Handlers/
-    ├── StashInitializeHandler.cs       # Capability negotiation
-    ├── StashLaunchHandler.cs           # Parse launch args, start interpreter
-    ├── StashConfigurationDoneHandler.cs
-    ├── StashDisconnectHandler.cs
-    ├── StashSetBreakpointsHandler.cs
-    ├── StashSetExceptionBreakpointsHandler.cs
-    ├── StashThreadsHandler.cs
-    ├── StashContinueHandler.cs
-    ├── StashNextHandler.cs             # Step over
-    ├── StashStepInHandler.cs
-    ├── StashStepOutHandler.cs
-    ├── StashPauseHandler.cs
-    ├── StashStackTraceHandler.cs
-    ├── StashScopesHandler.cs
-    ├── StashVariablesHandler.cs
-    ├── StashEvaluateHandler.cs
-    ├── StashSetVariableHandler.cs          # Variable modification
-    ├── StashSetFunctionBreakpointsHandler.cs # Function breakpoints
-    └── StashLoadedSourcesHandler.cs         # Loaded sources request
-```
+A normal launch session follows this sequence:
 
-**Dependencies:**
+1. The client starts the adapter process.
+2. The client sends `initialize`.
+3. The adapter responds with capabilities.
+4. The client sends `launch`.
+5. The adapter starts the target program on a background execution thread.
+6. The adapter sends `initialized`.
+7. The client sends initial breakpoint and exception configuration.
+8. The client sends `configurationDone`.
+9. The target program begins or resumes execution.
+10. The adapter sends `stopped`, `output`, `loadedSource`, `exited`, and `terminated` events as execution proceeds.
 
-| Package                                    | Version       | Role                                   |
-| ------------------------------------------ | ------------- | -------------------------------------- |
-| `Stash.Core`                               | (project ref) | Lexer and parser                       |
-| `Stash.Bytecode`                               | (project ref) | Bytecode VM and runtime values         |
-| `OmniSharp.Extensions.DebugAdapter.Server` | 0.19.9        | DAP protocol implementation            |
+The target program must not run past the initial configuration gate before `configurationDone` is received. This guarantees that breakpoints sent immediately after `initialized` can bind before the first statement executes.
 
----
-
-### Execution Flow
-
-```
-Editor sends "launch"
-        │
-        ▼
-StashLaunchHandler
-  → parse program/args/cwd/stopOnEntry from JSON
-  → DebugSession.Launch(...)
-        │
-        ▼
-  ┌─────────────────────────────────────────────────────┐
-  │  Background thread                                  │
-  │  Lex → Parse → Interpreter.Run()                    │
-  │        │                                            │
-  │        ▼  (at every statement)                      │
-  │  DebugSession.OnBeforeExecute(line, env, callStack) │
-  │        │                                            │
-  │        ├─ stopOnEntry? → pause (send "stopped")     │
-  │        ├─ breakpoint hit? → pause                   │
-  │        ├─ stepping? → check depth → pause           │
-  │        └─ _pauseGate.Wait()  ← blocks until resume  │
-  └─────────────────────────────────────────────────────┘
-        │
-        ▼
-SendInitialized event → editor sends "configurationDone"
-        │
-        ▼
-StashConfigurationDoneHandler
-  → DebugSession.ConfigurationDone() → signal _configurationDone
-        │
-        ▼
-Interpreter thread unblocks, execution begins
-```
-
----
-
-### Threading Model
-
-The main interpreter runs in a dedicated `System.Threading.Thread`. Each `task.run()` call spawns a child interpreter on the .NET ThreadPool, registered as a separate DAP thread. Parallel array operations (`arr.parMap`, `arr.parFilter`, `arr.parForEach`) run on ThreadPool threads but are NOT registered as debug threads — they execute without debugger attachment to avoid complexity.
-
-**Per-thread debug state:** Each thread has its own:
-- `ManualResetEventSlim` pause gate for independent pause/resume
-- Stepping state (`StepMode`, step depth)
-- Paused location (`SourceSpan`, `Environment`)
-
-**Thread lifecycle:**
-- The main thread (ID=1) is registered at launch
-- `task.run()` threads are registered via `IDebugger.OnThreadStarted()`
-- Threads are deregistered via `IDebugger.OnThreadExited()` when the task completes
-- The `threads` request returns all currently active threads
-
-**Synchronization:** `OnBeforeExecute()` runs on the interpreter's own thread and blocks that thread's pause gate independently. Breakpoints, stepping, and pause requests are all per-thread. Variable references are global — clearing on any thread's pause invalidates references for all threads (matching DAP semantics).
-
----
-
-### Multi-Threaded Debugging
-
-Stash supports debugging concurrent tasks spawned via `task.run()`. Each task appears as a separate thread in the DAP client (e.g., VS Code's Call Stack panel).
-
-**Supported features per thread:**
-- Independent breakpoint hitting
-- Independent stepping (Step In, Step Over, Step Out, Continue)
-- Independent pause/resume
-- Per-thread stack traces
-- Per-thread variable inspection (via frame IDs)
-
-**Parallel array operations** (`arr.parMap`, `arr.parFilter`, `arr.parForEach`) run without debugger attachment. Breakpoints inside their callbacks are not hit during debugging. This is intentional — these are short-lived parallel operations, not long-running threads.
-
-**Limitations:**
-- Variable references are global, not per-thread. When any thread pauses, previously cached variable references become invalid.
-- Thread events (`thread started`/`thread exited`) are not sent via DAP events (OmniSharp v0.19.9 limitation). The client discovers threads via the `threads` request.
-
----
-
-## Supported Features
-
-### Breakpoints
-
-#### Line Breakpoints
-
-Set a breakpoint on any line that contains a statement. The server normalizes file paths (resolves symlinks, normalizes separators) so paths from the editor match paths the interpreter reports.
-
-#### Conditional Breakpoints
-
-A condition is a Stash expression string evaluated in the scope at the breakpoint site. The breakpoint only pauses execution when the expression evaluates to a truthy value.
-
-```js
-// Only pause when i > 10
-i > 10;
-
-// Only pause when the variable matches
-name == "admin";
-```
-
-Falsy values in Stash: `false`, `null`, `0`, `0.0`, `""`. See [truthiness rules](../Stash%20—%20Language%20Specification.md#4-type-system).
-
-#### Hit Count Breakpoints
-
-Pause based on how many times the breakpoint has been hit. Supported operators:
-
-| Pattern    | Meaning                                                      |
-| ---------- | ------------------------------------------------------------ |
-| `N`        | Same as `== N`                                               |
-| `== N`     | Exactly on the Nth hit                                       |
-| `>= N`     | On the Nth hit and all subsequent hits                       |
-| `> N`      | After the Nth hit (hit N+1 onward)                           |
-| `<= N`     | On hits 1 through N                                          |
-| `< N`      | On hits 1 through N-1                                        |
-| `% M == R` | Every Mth hit, offset by R (e.g. `% 3 == 0` = every 3rd hit) |
-
-If the pattern cannot be parsed, the breakpoint is treated as always-hit.
-
-#### Logpoints
-
-Instead of pausing, logpoints emit a message to the debug console. The message template may contain `{expression}` placeholders, which are evaluated in the current scope.
-
-```
-Loop iteration {i}: value = {arr[i]}
-```
-
-The output appears as a `console` category output event in the client.
-
-#### Function Breakpoints
-
-Set a breakpoint that triggers when a named function is entered. The breakpoint matches the function name exactly as it appears in the call stack.
-
-```js
-// Function breakpoint names match function declaration names:
-// "greet" matches: fn greet() { ... }
-// "calculate" matches: fn calculate(x, y) { ... }
-```
-
-Function breakpoints support the same condition and hit-count features as line breakpoints:
-
-- **Condition**: A Stash expression evaluated in the function's local scope on entry. The breakpoint only fires when the condition is truthy.
-- **Hit condition**: Same operators as line breakpoints (`== N`, `>= N`, `> N`, `<= N`, `< N`, `% M == R`).
-
-When a function breakpoint fires, the client receives a `stopped` event with reason `"function breakpoint"`.
-
----
-
-### Stepping
-
-Four stepping modes are supported:
-
-| Command       | Behavior                                                                                     |
-| ------------- | -------------------------------------------------------------------------------------------- |
-| **Step In**   | Stops at the very next statement, following function calls into their bodies                 |
-| **Step Over** | Steps to the next statement at the same or shallower call depth (skips over function bodies) |
-| **Step Out**  | Runs until returning to a shallower call depth; at top-level, acts as Continue               |
-| **Continue**  | Resumes execution with no stepping constraint until the next breakpoint or end               |
-
-Stepping depth is tracked via the interpreter's call stack. `OnFunctionEnter` and `OnFunctionExit` increment and decrement the depth counter.
-
----
-
-### Variable Inspection
-
-When execution is paused, the client can inspect variables through a three-tier scope model.
-
-#### Scope Types
-
-| Scope       | Contents                                                      |
-| ----------- | ------------------------------------------------------------- |
-| **Local**   | Variables declared in the current function or innermost block |
-| **Closure** | Variables in enclosing scopes between local and global        |
-| **Global**  | Top-level variables and built-in functions                    |
-
-Each scope is backed by a `VariableContainer` with an integer reference ID. The client requests variables by container ID. Expandable values (arrays, dicts, struct instances) get their own container IDs for nested expansion.
-
-#### Value Display
-
-| Stash Type       | DAP `type`   | DAP `value`                     |
-| ---------------- | ------------ | ------------------------------- |
-| `null`           | `"null"`     | `"null"`                        |
-| `int` (long)     | `"int"`      | numeric string                  |
-| `float` (double) | `"float"`    | numeric string                  |
-| `bool`           | `"bool"`     | `"true"` / `"false"`            |
-| `string`         | `"string"`   | quoted string (e.g. `"hello"`)  |
-| `array`          | `"array"`    | `"array[N]"` — expandable       |
-| `dict`           | `"dict"`     | `"dict[N]"` — expandable        |
-| struct instance  | type name    | `"TypeName {...}"` — expandable |
-| function         | `"function"` | function's `ToString()`         |
-| lambda           | `"function"` | `"<lambda>"`                    |
-| enum member      | `"enum"`     | `"Type.Member"`                 |
-
-Arrays expand with numeric index names (`[0]`, `[1]`, …). Dicts expand with their key names. Struct instances expand with field names.
-
----
-
-### Expression Evaluation
-
-The `evaluate` request evaluates arbitrary Stash expressions in the current scope. This powers:
-
-- **Watch expressions** — evaluated at each pause
-- **Debug console REPL** — interactive evaluation while paused
-- **Hover evaluation** (`evaluateForHovers` capability) — editor hovering over a variable shows its value
-
-Evaluation errors are returned as a DAP error response with the error message, rather than crashing the session.
-
----
-
-### Set Variable
-
-The `setVariable` request allows modifying variable values from the debug UI while execution is paused. The new value is specified as a Stash expression string, which is evaluated in the current scope before assignment.
-
-#### Supported Containers
-
-| Container Type      | Behavior                                                                                |
-| ------------------- | --------------------------------------------------------------------------------------- |
-| **Environment**     | Assigns the new value to the named variable in the scope. Constants cannot be modified. |
-| **Array**           | Sets the element at the specified index (e.g., `[0]`, `[1]`).                           |
-| **Dictionary**      | Sets the value for the specified key.                                                   |
-| **Struct instance** | Sets the named field on the instance. Undefined fields are rejected.                    |
-
-#### Value Expressions
-
-The value parameter is parsed and evaluated as a Stash expression, not a raw literal. This means:
-
-- `42` — assigns integer 42
-- `"hello"` — assigns string "hello"
-- `x + 1` — evaluates the expression using the current scope
-- `[1, 2, 3]` — assigns a new array
-
-If the expression fails to parse or evaluate, the request returns an error message.
-
-#### Restrictions
-
-- Constants declared with `const` cannot be modified — the request returns an error.
-- Only variables visible in the selected variable container can be modified.
-- Namespace members cannot be modified.
-
----
-
-### Loaded Sources
-
-The `loadedSources` request returns all source files that have been loaded during the current debug session. This includes:
-
-- **Main script** — the `.stash` file specified in the launch configuration
-- **Imported modules** — any files loaded via `import { ... } from "file.stash"` or `import "file.stash" as alias`
-
-When a new source file is loaded (e.g., when an `import` statement executes), the server sends a `loadedSource` event with reason `"new"` to notify the client in real time. This enables editors to update their "Loaded Sources" panel as the script runs.
-
-#### Source Properties
-
-Each source in the response includes:
-
-| Property | Value                                       |
-| -------- | ------------------------------------------- |
-| `path`   | Normalized absolute path to the source file |
-| `name`   | File name only (e.g., `utils.stash`)        |
-
-Paths are normalized using `Path.GetFullPath()` for consistent matching across editors and platforms.
-
----
-
-### Exception Handling
-
-Two exception breakpoint filters are available:
-
-| Filter ID  | Label               | Behavior                                                    |
-| ---------- | ------------------- | ----------------------------------------------------------- |
-| `all`      | All Exceptions      | Pause on every runtime error, including caught ones         |
-| `uncaught` | Uncaught Exceptions | Pause on unhandled runtime errors (currently same as `all`) |
-
-When an exception breakpoint fires, the interpreter thread pauses and the client receives a `stopped` event with reason `"exception"` and the error message as description.
-
-If no exception filter is active, runtime errors print to stderr and terminate the session.
-
----
-
-### Stop on Entry
-
-When `stopOnEntry: true` is set in the launch configuration, the interpreter pauses at the very first statement before executing anything. The client receives a `stopped` event with reason `"entry"`.
-
-This is useful for inspecting initial variable state or setting breakpoints dynamically after launch.
-
----
-
-### Pause
-
-The client can send a `pause` request at any time to interrupt a running script. The interpreter will pause at the next statement it executes after the pause request is received.
-
----
-
-## Launch Configuration
+## 4. Launch Configuration
 
 The `launch` request accepts the following fields:
 
-| Field         | Type       | Required | Default          | Description                                                                  |
-| ------------- | ---------- | -------- | ---------------- | ---------------------------------------------------------------------------- |
-| `program`     | `string`   | **yes**  | —                | Path to the `.stash` script to debug                                         |
-| `stopOnEntry` | `boolean`  | no       | `false`          | If `true`, pause at the first statement before executing                     |
-| `cwd`         | `string`   | no       | script directory | Working directory for the script process                                     |
-| `args`        | `string[]` | no       | `[]`             | Command-line arguments passed to the script (accessible via `args` in Stash) |
+| Field         | Type         | Required | Default           | Meaning                                                            |
+| ------------- | ------------ | -------- | ----------------- | ------------------------------------------------------------------ |
+| `program`     | string       | yes      | none              | Path to the `.stash` script to execute.                            |
+| `cwd`         | string       | no       | Program directory | Working directory used by the target program.                      |
+| `args`        | string array | no       | `[]`              | Command-line arguments exposed to the Stash program as `args`.     |
+| `stopOnEntry` | boolean      | no       | `false`           | If true, execution stops before the first statement.               |
+| `testMode`    | boolean      | no       | `false`           | Internal test-runner mode used by the VS Code testing integration. |
+| `testFilter`  | string       | no       | none              | Internal test-runner filter used with `testMode`.                  |
 
-Example `launch.json`:
+Example:
 
 ```json
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "stash",
-      "request": "launch",
-      "name": "Debug Stash Script",
-      "program": "${file}",
-      "stopOnEntry": false,
-      "cwd": "${workspaceFolder}",
-      "args": []
-    }
-  ]
+  "type": "stash",
+  "request": "launch",
+  "name": "Debug Stash Script",
+  "program": "${file}",
+  "cwd": "${workspaceFolder}",
+  "args": [],
+  "stopOnEntry": false
 }
 ```
 
----
+The adapter supports `launch` only. It does not support attaching to an already-running Stash process.
 
-## VS Code Integration
+## 5. Capabilities
 
-The `stash-lang` VS Code extension includes built-in debugging support. The extension registers a `DebugAdapterDescriptorFactory` that launches the Stash DAP server as an executable process, communicating over stdio.
+The `initialize` response declares the following capabilities:
 
-### Setup
+| Capability                          | Supported |
+| ----------------------------------- | --------- |
+| `supportsConfigurationDoneRequest`  | Yes       |
+| `supportsConditionalBreakpoints`    | Yes       |
+| `supportsHitConditionalBreakpoints` | Yes       |
+| `supportsLogPoints`                 | Yes       |
+| `supportsFunctionBreakpoints`       | Yes       |
+| `supportsEvaluateForHovers`         | Yes       |
+| `supportsSetVariable`               | Yes       |
+| `supportsLoadedSourcesRequest`      | Yes       |
+| `exceptionBreakpointFilters`        | Yes       |
+| `supportsExceptionInfoRequest`      | No        |
+| Attach request support              | No        |
 
-1. **Publish the DAP server** so it's available as a standalone binary:
+The exception breakpoint filters are:
 
-   ```bash
-   dotnet publish Stash.Dap/ -c Release -r linux-x64 --self-contained
-   ```
+| Filter     | Label               | Default | Current behavior                     |
+| ---------- | ------------------- | ------- | ------------------------------------ |
+| `all`      | All Exceptions      | false   | Stops on runtime errors.             |
+| `uncaught` | Uncaught Exceptions | true    | Currently behaves the same as `all`. |
 
-2. **Make the binary accessible** — either:
-   - Add the publish directory to your system `PATH` and ensure the binary is named `stash-dap`, **or**
-   - Set the `stash.dapPath` extension setting to the absolute path of the published binary
+Clients must not assume support for `exceptionInfo` or attach workflows.
 
-3. **Start debugging** — open a `.stash` file and press `F5`, or use the Run and Debug panel. The extension provides two built-in launch configuration snippets:
-   - **Stash: Launch Script** — run the active file with the debugger
-   - **Stash: Launch with Stop on Entry** — pause at the first statement
+## 6. Breakpoints
 
-### Extension Settings
+### 6.1 Line Breakpoints
 
-| Setting         | Type     | Default | Description                                                                                              |
-| --------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `stash.dapPath` | `string` | `""`    | Absolute path to the Stash DAP binary. If empty, the extension looks for `stash-dap` on the system PATH. |
-| `stash.lspPath` | `string` | `""`    | Absolute path to the Stash LSP server binary. If empty, looks for `stash-lsp` on the system PATH.        |
+Line breakpoints are set with `setBreakpoints`. A line breakpoint applies to a source line in a normalized absolute file path.
 
-### How It Works
+The adapter normalizes source paths before storing or matching breakpoints. This allows clients to use relative paths, absolute paths, and platform-specific separators while the VM reports canonical source locations.
 
-When a debug session starts, the extension's `StashDebugAdapterFactory`:
+A breakpoint on a line with no executable statement may be returned as verified by the adapter, but it only stops when the VM reaches an executable statement whose source span matches the requested line.
 
-1. Reads the `stash.dapPath` setting (falls back to `"stash-dap"` on PATH)
-2. Returns a `vscode.DebugAdapterExecutable` pointing to the DAP binary
-3. VS Code manages the process lifecycle, piping stdin/stdout for DAP communication
+### 6.2 Conditional Breakpoints
 
-No manual server management or port configuration is needed.
+A conditional breakpoint includes a Stash expression in `condition`. The expression is evaluated in the current paused or executing scope when the breakpoint location is reached.
 
-### Neovim / nvim-dap
+The breakpoint stops only if the condition evaluates to a truthy value. The Stash truthiness rules are defined by the [Language Specification](Stash%20—%20Language%20Specification.md).
 
-For Neovim with [nvim-dap](https://github.com/mfussenegger/nvim-dap), add an adapter and configuration:
+Examples:
+
+```stash
+i > 10
+name == "admin"
+user.enabled && retries >= 3
+```
+
+If condition evaluation fails, the breakpoint is not considered hit and the adapter may emit diagnostic output for the failed condition.
+
+### 6.3 Hit Conditions
+
+A hit condition stops based on the number of times that breakpoint has been reached.
+
+| Pattern    | Meaning                         |
+| ---------- | ------------------------------- |
+| `N`        | Stop exactly on hit `N`.        |
+| `== N`     | Stop exactly on hit `N`.        |
+| `>= N`     | Stop on hit `N` and later hits. |
+| `> N`      | Stop after hit `N`.             |
+| `<= N`     | Stop on hits `1` through `N`.   |
+| `< N`      | Stop before hit `N`.            |
+| `% M == R` | Stop when `hitCount % M == R`.  |
+
+If a hit condition cannot be parsed, the adapter treats the breakpoint as if no hit condition were present.
+
+### 6.4 Logpoints
+
+A logpoint emits output instead of stopping execution. Logpoint messages may contain `{expression}` placeholders. Each placeholder is evaluated as a Stash expression in the current scope.
+
+Example:
+
+```text
+Loop iteration {i}: value = {items[i]}
+```
+
+Logpoint output is sent as a DAP `output` event with console-style categorization.
+
+### 6.5 Function Breakpoints
+
+Function breakpoints are set with `setFunctionBreakpoints`. The breakpoint name must match the function declaration name exactly.
+
+Function breakpoints support conditions and hit conditions with the same semantics as line breakpoints. When a function breakpoint stops execution, the adapter sends a `stopped` event with reason `function breakpoint`.
+
+## 7. Execution Control
+
+The adapter supports the standard execution-control requests:
+
+| Request    | Behavior                                                                                           |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `continue` | Resumes the selected thread until the next stop condition or program termination.                  |
+| `next`     | Steps over calls and stops at the next statement at the same or shallower call depth.              |
+| `stepIn`   | Stops at the next statement, including statements inside called functions.                         |
+| `stepOut`  | Runs until the current function returns to its caller. At top level, this behaves like `continue`. |
+| `pause`    | Requests that the selected thread stop at the next statement boundary.                             |
+
+Stepping is statement-based. The adapter does not promise instruction-level stepping or expression-level stepping.
+
+`stopOnEntry: true` stops before the first statement executes and sends a `stopped` event with reason `entry`.
+
+## 8. Threads
+
+The main script runs as DAP thread `1`. Each Stash `task.run()` child execution is registered as a separate DAP thread while the task is active.
+
+The `threads` request returns the currently active debug threads. Breakpoints, stepping state, paused locations, and pause gates are maintained per thread.
+
+Parallel array operations such as `arr.parMap`, `arr.parFilter`, and `arr.parForEach` are not registered as DAP threads. Breakpoints inside callbacks executed by these operations are not guaranteed to stop under the debugger.
+
+## 9. Stack Frames
+
+When execution is stopped, `stackTrace` returns the call stack for the selected thread. Stack frames include source path, line, column, and frame identity suitable for `scopes` and `evaluate`.
+
+Frame identifiers are valid only while the associated pause state remains current. Continuing or stepping invalidates frame-specific state and variable references from the previous stop.
+
+## 10. Scopes and Variables
+
+The `scopes` request exposes variables through three scope categories:
+
+| Scope   | Contents                                                        |
+| ------- | --------------------------------------------------------------- |
+| Local   | Variables declared in the current function or innermost block.  |
+| Closure | Captured or enclosing variables between local and global scope. |
+| Global  | Top-level variables and built-in functions.                     |
+
+The `variables` request expands a scope or expandable value by `variablesReference`.
+
+| Stash value     | DAP type    | Display form                |
+| --------------- | ----------- | --------------------------- |
+| `null`          | `null`      | `null`                      |
+| integer         | `int`       | Decimal integer text        |
+| float           | `float`     | Decimal floating-point text |
+| boolean         | `bool`      | `true` or `false`           |
+| string          | `string`    | Quoted string               |
+| array           | `array`     | `array[N]`                  |
+| dictionary      | `dict`      | `dict[N]`                   |
+| struct instance | Struct name | `TypeName {...}`            |
+| function        | `function`  | Function display text       |
+| lambda          | `function`  | `<lambda>`                  |
+| enum member     | `enum`      | `Type.Member`               |
+
+Arrays expand with numeric element names such as `[0]`. Dictionaries expand with key names. Struct instances expand with field names.
+
+Variable reference identifiers are transient. Clients must discard old references after `continue`, `next`, `stepIn`, or `stepOut`.
+
+## 11. Evaluation
+
+The `evaluate` request evaluates a Stash expression in the selected stack frame or current paused scope. It is used for watch expressions, debug console evaluation, and hover evaluation.
+
+Examples:
+
+```stash
+user.name
+items.len()
+total + tax
+```
+
+Evaluation must not resume the program. If parsing or evaluation fails, the adapter returns an error response or an empty result with error information, depending on the request path used by the DAP library.
+
+Evaluated values may be expandable and may receive their own `variablesReference`.
+
+## 12. Variable Mutation
+
+The `setVariable` request changes a variable or nested value while execution is paused. The new value is parsed and evaluated as a Stash expression, not as a raw string.
+
+Examples:
+
+| Input value | Assigned value                                    |
+| ----------- | ------------------------------------------------- |
+| `42`        | Integer `42`                                      |
+| `"ready"`   | String `ready`                                    |
+| `x + 1`     | Result of evaluating `x + 1` in the current scope |
+| `[1, 2, 3]` | New array value                                   |
+
+Supported mutation targets:
+
+| Container         | Mutation behavior                           |
+| ----------------- | ------------------------------------------- |
+| Environment scope | Assigns the named variable in that scope.   |
+| Array             | Assigns the element at the requested index. |
+| Dictionary        | Assigns the value for the requested key.    |
+| Struct instance   | Assigns the named field.                    |
+
+The adapter rejects mutation of constants, namespace members, undefined struct fields, invalid references, and values whose assignment expression fails to parse or evaluate.
+
+## 13. Exceptions
+
+Runtime errors may stop the debugger when an exception breakpoint filter is active. The adapter sends a `stopped` event with reason `exception` and includes the error message where the DAP client supports it.
+
+If no exception breakpoint filter applies, a runtime error is reported through normal program output and the session terminates.
+
+The adapter currently does not distinguish caught from uncaught exceptions for filter behavior. Both `all` and `uncaught` use the same stop behavior.
+
+## 14. Loaded Sources
+
+The `loadedSources` request returns all source files loaded by the current session:
+
+| Source kind               | Included |
+| ------------------------- | -------- |
+| Main script               | Yes      |
+| Imported `.stash` modules | Yes      |
+| Generated source maps     | No       |
+
+When an import loads a new file, the adapter sends a `loadedSource` event with reason `new`. Returned source paths are normalized absolute paths, and source names are file names.
+
+## 15. Output
+
+The adapter forwards relevant program and debugger output as DAP `output` events. Clients should treat output categories according to DAP conventions and must not infer language semantics from output formatting.
+
+Logpoint output is debugger output. Program output is target output.
+
+## 16. Editor Integration
+
+### 16.1 VS Code
+
+The VS Code extension registers the `stash` debug type and starts the adapter as an executable process.
+
+Relevant settings:
+
+| Setting                 | Default | Meaning                                                                                      |
+| ----------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `stash.dapPath`         | empty   | Absolute path to the DAP binary. If empty, the extension searches for `stash-dap` on `PATH`. |
+| `stash.lspPath`         | empty   | Absolute path to the LSP binary. If empty, the extension searches for `stash-lsp` on `PATH`. |
+| `stash.interpreterPath` | `stash` | Stash interpreter path used by non-debug run and test tasks.                                 |
+
+The extension can generate a launch configuration for the active `.stash` file.
+
+### 16.2 nvim-dap
+
+Example adapter configuration:
 
 ```lua
-local dap = require('dap')
+local dap = require("dap")
 
 dap.adapters.stash = {
-    type = 'executable',
-    command = '/path/to/publish/StashDap',
+  type = "executable",
+  command = "/path/to/stash-dap",
 }
 
 dap.configurations.stash = {
-    {
-        type = 'stash',
-        request = 'launch',
-        name = 'Debug Stash Script',
-        program = function()
-            return vim.fn.input('Path to script: ', vim.fn.getcwd() .. '/', 'file')
-        end,
-        stopOnEntry = false,
-        cwd = '${workspaceFolder}',
-    }
+  {
+    type = "stash",
+    request = "launch",
+    name = "Debug Stash Script",
+    program = function()
+      return vim.fn.input("Path to script: ", vim.fn.getcwd() .. "/", "file")
+    end,
+    cwd = "${workspaceFolder}",
+    stopOnEntry = false,
+    args = {},
+  },
 }
 ```
 
----
+## 17. Build and Test
 
-## Building & Running
-
-### Build
+Build the adapter:
 
 ```bash
-# Build only the DAP server
 dotnet build Stash.Dap/
-
-# Build the entire solution (recommended, validates all dependencies)
-dotnet build
 ```
 
-### Run
-
-The DAP server communicates over **stdin/stdout**. It is not meant to be run directly in a terminal — it is launched by the editor when a debug session starts.
-
-```bash
-# Launched by the editor automatically; for manual testing:
-dotnet run --project Stash.Dap/
-```
-
-### Publish
+Publish a standalone adapter:
 
 ```bash
 dotnet publish Stash.Dap/ -c Release -r linux-x64 --self-contained
 ```
 
-The DAP server is distributed as a **self-contained single-file binary** — no .NET runtime is required on target machines. The project is configured with ReadyToRun for fast startup and IL trimming for a smaller binary size.
-
----
-
-## Testing
-
-129 tests across 3 files in `Stash.Tests/Dap/`:
-
-### DebugSessionTests.cs (72 tests)
-
-Unit tests for `DebugSession` in isolation:
-
-- Breakpoint management (set, clear, normalize paths)
-- Variable formatting for all Stash types
-- Hit condition parsing and evaluation (`== N`, `>= N`, `% M == R`, …)
-- Logpoint message interpolation (`{expr}` template substitution)
-- Stepping state machine (step in, step over, step out, continue)
-- Exception breakpoint filter enable/disable
-- Launch argument validation
-- Pause/resume gate behavior
-- SetVariable validation (no interpreter, invalid reference)
-- Function breakpoint management (set, clear, replace, ShouldBreakOnFunctionEntry)
-- Loaded sources tracking (add, deduplicate, clear on disconnect)
-
-### DapHandlerTests.cs (30 tests)
-
-Handler-level tests that exercise the 19 request handlers:
-
-- `Initialize` — capabilities response shape
-- `Threads` — all active threads response (main + spawned tasks)
-- `SetBreakpoints` — breakpoint validation and confirmation
-- `Continue`, `Next`, `StepIn`, `StepOut` — step mode transitions
-- `Evaluate` — expression evaluation and error responses
-- `Disconnect` — session teardown
-- SetVariable handler — error response for invalid inputs
-- SetFunctionBreakpoints handler — single, multiple, and null breakpoints
-- LoadedSources handler — empty and populated responses
-
-### DapIntegrationTests.cs (27 tests)
-
-End-to-end tests that run real Stash scripts and validate DAP events:
-
-- Breakpoint hits on specific lines
-- Conditional breakpoint evaluation
-- Hit count breakpoints (all operators)
-- Logpoint output
-- Variable inspection (stack frames → scopes → variables)
-- Array and dict expansion
-- Nested call stack inspection
-- Stepping: step in, step over, step out
-- Stop on entry
-- Pause mid-execution
-- Disconnect during execution
-- Script arguments (`args`) passed correctly
-- Function breakpoint hits on function entry
-- Conditional function breakpoints
-- SetVariable modification at breakpoint
-- Array element modification via SetVariable
-- Multiple function breakpoints hit in sequence
-- Loaded sources tracking (main script, imported modules)
-
-### Running Tests
+Run DAP tests:
 
 ```bash
-# All DAP tests
 dotnet test --filter "FullyQualifiedName~Dap"
-
-# One test class
-dotnet test --filter "FullyQualifiedName~DapIntegrationTests"
-
-# One specific test
-dotnet test --filter "FullyQualifiedName~DapIntegrationTests.BreakpointHit"
-
-# All tests in the solution
-dotnet test
 ```
 
----
+Protocol behavior should be validated with handler tests and integration tests whenever launch, breakpoint, stepping, variable, expression, or source-loading behavior changes.
 
-## Design Decisions
+## 18. Limitations
 
-### Per-Thread Gate Synchronization
+| Limitation               | Contract                                                                              |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| Attach                   | Not supported. Scripts must be launched under the debugger.                           |
+| Parallel array callbacks | Not attached as debug threads. Breakpoints inside these callbacks are not guaranteed. |
+| Exception filters        | `all` and `uncaught` currently behave the same.                                       |
+| Source maps              | Not supported. Breakpoints bind directly to loaded `.stash` files.                    |
+| Variable references      | Valid only for the current pause state.                                               |
 
-The main interpreter and each `task.run()` child interpreter run on dedicated threads; the DAP I/O runs on a separate thread managed by OmniSharp. Rather than marshalling work items or using locks around every statement, each interpreter thread owns a `ManualResetEventSlim` pause gate that acts as a simple gate for that thread:
+Attach is not supported because the VM chooses debug dispatch when execution starts, and the distributed CLI/runtime model does not host an attachable in-process DAP server. The supported workflow is to launch the target under the debugger from the beginning.
 
-- **Running**: gate is _set_ — `gate.Wait()` returns immediately.
-- **Paused**: gate is _reset_ — the interpreter thread blocks inside `OnBeforeExecute()`.
-- **Resume**: any handler (Continue, Next, StepIn, StepOut) calls `gate.Set()` on the targeted thread's gate.
+## 19. Change Rules
 
-This avoids complex lock choreography while keeping each interpreter's inner loop clean. Threads pause and resume independently — pausing one task does not affect others.
+Changes to the DAP adapter should preserve these rules:
 
-### Configuration Done Gate
-
-A second `ManualResetEventSlim` (`_configurationDone`) prevents the interpreter from starting until the client has finished sending its initial configuration (breakpoints, exception filters, etc.). The sequence is:
-
-1. `launch` → start interpreter thread → interpreter calls `OnBeforeExecute` immediately
-2. `SendInitialized` event → client sends `setBreakpoints`, `setExceptionBreakpoints`, …
-3. `configurationDone` → `_configurationDone.Set()` → interpreter unblocks
-
-Without this gate, the interpreter could race past the first breakpoint before the client has set it.
-
-### Variable Reference IDs
-
-The DAP protocol uses integer "variable reference" IDs to navigate nested data structures. Each call to `GetScopes` or `GetVariables` can create new `VariableContainer` entries in a `ConcurrentDictionary<int, VariableContainer>`. IDs are assigned with `Interlocked.Increment` for thread safety. All variable reference state is cleared on every `Continue` / step (since the interpreter has moved on and old references are stale).
-
-### Normalized Path Matching for Breakpoints
-
-The editor and the interpreter may represent the same file with different path forms (relative vs. absolute, symlinks, mixed separators on Windows). Breakpoints are keyed by `Path.GetFullPath()` of the normalized path, and the interpreter reports statement locations using the same normalization. This ensures `source.path` from the client always matches the key in `_breakpoints`.
-
-### Control Flow via Exceptions
-
-Stash's `return`, `break`, and `continue` are implemented as C# exceptions (`ReturnException`, `BreakException`, `ContinueException`) that unwind the call stack. `DebugSession.OnFunctionExit` is hooked at `finally` blocks in the interpreter's function-call logic so the call depth counter stays accurate even when control flow unwinds non-linearly.
-
----
-
-## Capabilities
-
-The `Initialize` response declares the following capabilities:
-
-| Capability                                       | Supported |
-| ------------------------------------------------ | --------- |
-| `supportsConfigurationDoneRequest`               | ✅        |
-| `supportsEvaluateForHovers`                      | ✅        |
-| `supportsConditionalBreakpoints`                 | ✅        |
-| `supportsHitConditionalBreakpoints`              | ✅        |
-| `supportsLogPoints`                              | ✅        |
-| `exceptionBreakpointFilters` (`all`, `uncaught`) | ✅        |
-| `supportsSetVariable`                            | ✅        |
-| `supportsFunctionBreakpoints`                    | ✅        |
-| `supportsExceptionInfoRequest`                   | ❌        |
-| `supportsLoadedSourcesRequest`                   | ✅        |
-| `supportsAttachRequest`                          | ❌        |
-
----
-
-## Limitations & Future Work
-
-### Current Limitations
-
-| Limitation             | Notes                                                                                                                                                                         |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Launch only**        | `attach` mode is not supported; see [Why Attach Is Not Supported](#why-attach-is-not-supported) below                                                                         |
-| **Parallel ops**       | `arr.parMap`, `arr.parFilter`, and `arr.parForEach` callbacks run without debugger attachment — breakpoints inside them are not hit during debugging                              |
-| **`uncaught` = `all`** | Currently both exception filters behave identically; distinguishing caught vs. uncaught exceptions requires restructuring the interpreter's error model                       |
-| **No source maps**     | `import` statements load other `.stash` files; breakpoints in imported modules use the imported file's absolute path correctly, but there is no higher-level source-map layer |
-
-### Why Attach Is Not Supported
-
-Attaching a debugger to an already-running Stash script is not supported, and this is an intentional design constraint rather than an oversight.
-
-**The VM dispatch mode is fixed at startup.** The Stash bytecode VM uses a C# generic type parameter — `RunInner<DebugOff>` vs. `RunInner<DebugOn>` — that is resolved once when `Execute()` is called. In `DebugOff` mode, all debug checks are compiled out by the JIT; they don't exist in the hot loop at runtime. There is no mechanism to flip a switch and "enable" debugging on a running VM — doing so would require stopping execution, reinitializing the debug dispatch path, and resuming from exactly the right instruction with all transient state (registers, call stack, upvalues) intact. This is equivalent to implementing a live process migration, which is far beyond the scope of a debugger feature.
-
-**The CLI is compiled to a native AOT binary.** The DAP server (`stash-dap`) relies on OmniSharp, which requires reflection and cannot be compiled with Native AOT. Running scripts are executed by the AOT CLI binary. There is no way to embed the DAP protocol server inside the running script process without pulling OmniSharp into an AOT binary — which is architecturally prohibited.
-
-**The complexity cost is not justified.** Supporting attach correctly would require a new in-process TCP debug server (implementing a custom wire protocol), changes to the VM's hot dispatch loop, a safe-point restart mechanism, process discovery infrastructure, and authentication. This is a substantial parallel implementation that duplicates the existing DAP server logic — for a use case that is already handled by starting the script with the debugger from the beginning.
-
-**The right approach is to start with the debugger.** All scenarios where attach would be useful — long-running services, retry loops, background processes — are better handled by launching the script under the debugger from the start using VS Code's launch configuration. If you don't know in advance whether you'll need to debug, that is a signal to run the script under the debugger preemptively. The overhead is negligible for sysadmin workloads.
-
-### Potential Future Work
-
-- **Exception info request**: Return structured exception details (type, message, stack) when paused on an exception.
-- **Distinguish caught vs. uncaught**: Track a try/catch depth counter in the interpreter to implement true `uncaught`-only filtering.
-- **Data breakpoints**: Pause when a specific variable's value changes.
+- New request support must be reflected in the capability response where the DAP protocol requires it.
+- New launch fields must be documented in [Launch Configuration](#4-launch-configuration).
+- Changes to breakpoint, stepping, scope, evaluation, or mutation semantics must update this document and the corresponding tests.
+- Client-specific behavior belongs in editor integration docs or extension code unless it changes the DAP contract.
+- Implementation details belong in source comments or engineering notes, not in this protocol reference.
