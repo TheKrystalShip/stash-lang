@@ -1,196 +1,147 @@
-# Registry — Package Registry
+# Registry - Package Registry
 
-> **Status:** v1.0 — Complete
-> **Created:** March 2026
-> **Purpose:** Source of truth for the Stash Package Registry — architecture, REST API, configuration, storage, authentication, and CLI integration.
+> **Status:** Stable v1 registry reference
+> **Audience:** Registry operators, registry implementers, authors of alternate `stash pkg` clients, and contributors changing registry behavior.
+> **Purpose:** Defines the REST surface, authentication model, configuration, storage layout, and operational contract of the Stash package registry server.
 >
 > **Companion documents:**
 >
-> - [Language Specification](Stash%20—%20Language%20Specification.md) — language syntax, type system, interpreter architecture
-> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions
-> - [LSP — Language Server Protocol](LSP%20—%20Language%20Server%20Protocol.md) — language server
-> - [DAP — Debug Adapter Protocol](DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server
+> - [PKG - Package Manager CLI](PKG%20—%20Package%20Manager%20CLI.md) - the `stash pkg` client that consumes this API.
+> - [Language Specification](Stash%20—%20Language%20Specification.md) - import semantics and manifest grammar.
+> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) - the `pkg` namespace and runtime APIs.
 
----
+The Stash Package Registry is the server side of `stash pkg`. It is a self-hosted HTTP service that stores published package tarballs, exposes a versioned REST API, and authenticates clients with short-lived JWT access tokens and rotating refresh tokens. The default configuration (SQLite + filesystem storage + local password auth) requires no external dependencies; production deployments can swap in PostgreSQL, S3, and externally provisioned signing keys without code changes.
 
-## Table of Contents
+This document defines the public contract of the registry. It intentionally omits implementation history, roadmap material, and engineering rationale except where a current limitation affects client behavior.
 
-1. [Overview](#1-overview)
-2. [Architecture](#2-architecture)
-3. [REST API Reference](#3-rest-api-reference)
-4. [Authentication & Authorization](#4-authentication--authorization)
-5. [Configuration Reference](#5-configuration-reference)
-6. [Database](#6-database)
-7. [Package Storage](#7-package-storage)
-8. [Package Publishing Workflow](#8-package-publishing-workflow)
-9. [Rate Limiting](#9-rate-limiting)
-10. [Security](#10-security)
-11. [Audit Logging](#11-audit-logging)
-12. [CLI Integration](#12-cli-integration)
-13. [Implementation Status](#13-implementation-status)
-14. [Design Decisions](#14-design-decisions)
+## 1. Roles
 
----
+A registry deployment has three participants:
 
-## 1. Overview
+| Participant     | Responsibility                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| Registry server | The ASP.NET Core process that serves the REST API, manages packages and accounts, and signs tokens. |
+| Registry client | Any tool that calls the REST API. The canonical client is `stash pkg`.                              |
+| Storage backend | The filesystem directory or S3 bucket that stores package tarballs. Always paired with a database.  |
 
-The Stash Package Registry is a self-hosted package registry server for distributing and managing Stash language packages. It is the server counterpart to the `stash pkg` CLI commands — publishing, installing, and managing packages all go through this service.
+## 2. Transport
 
-**Technology stack:**
+| Property     | Value                                                                  |
+| ------------ | ---------------------------------------------------------------------- |
+| Protocol     | HTTP/1.1 or HTTP/2                                                     |
+| Encoding     | JSON for requests and responses; `application/gzip` for tarball bodies |
+| Auth scheme  | `Authorization: Bearer <jwt>`                                          |
+| Path prefix  | `/api/v1` (configurable via `Server.BasePath`)                         |
+| TLS          | Optional; configured by `Server.Tls` (PEM cert + key)                  |
+| Health probe | `GET /` (no auth)                                                      |
 
-- **Runtime:** ASP.NET Core on .NET 10
-- **Database:** EF Core with SQLite (default) or PostgreSQL
-- **Authentication:** JWT (HMAC-SHA256) with local, LDAP, and OIDC provider support
-- **Storage:** Local filesystem (default) or AWS S3
+All timestamps are ISO 8601 UTC. All sizes returned by the API are in bytes unless explicitly suffixed. Error responses are JSON objects with at least an `error` (machine code) or `message` (human description) field; both may be present.
 
-**Design goals:**
+## 3. Endpoint Summary
 
-- **Self-hosted first** — teams run their own registry with zero external dependencies using the SQLite + filesystem defaults
-- **Public hosting capable** — PostgreSQL and S3 backends support large-scale deployments
-- **CLI-native** — every operation maps directly to a `stash pkg` subcommand
-- **Secure by default** — JWT token scopes, rate limiting, integrity verification, and path traversal protection out of the box
+| Method | Path                                          | Auth          | Description                          |
+| ------ | --------------------------------------------- | ------------- | ------------------------------------ |
+| GET    | `/`                                           | None          | Health check                         |
+| POST   | `/api/v1/auth/login`                          | None          | Authenticate, receive token pair     |
+| POST   | `/api/v1/auth/register`                       | None          | Create account (when enabled)        |
+| POST   | `/api/v1/auth/tokens/refresh`                 | None          | Exchange refresh + access token pair |
+| GET    | `/api/v1/auth/whoami`                         | Bearer        | Current user info                    |
+| POST   | `/api/v1/auth/tokens`                         | Bearer        | Create scoped API token              |
+| GET    | `/api/v1/auth/tokens`                         | Bearer        | List API tokens                      |
+| DELETE | `/api/v1/auth/tokens/{id}`                    | Bearer        | Revoke token                         |
+| GET    | `/api/v1/packages/{name}`                     | None          | Package metadata and version list    |
+| GET    | `/api/v1/packages/{name}/{version}`           | None          | Version details                      |
+| GET    | `/api/v1/packages/{name}/{version}/download`  | None          | Download tarball                     |
+| PUT    | `/api/v1/packages/{name}`                     | publish scope | Publish a version                    |
+| DELETE | `/api/v1/packages/{name}/{version}`           | publish scope | Unpublish (within window)            |
+| PATCH  | `/api/v1/packages/{name}/deprecate`           | publish scope | Deprecate package                    |
+| DELETE | `/api/v1/packages/{name}/deprecate`           | publish scope | Undeprecate package                  |
+| PATCH  | `/api/v1/packages/{name}/{version}/deprecate` | publish scope | Deprecate version                    |
+| DELETE | `/api/v1/packages/{name}/{version}/deprecate` | publish scope | Undeprecate version                  |
+| GET    | `/api/v1/search`                              | None          | Search packages                      |
+| GET    | `/api/v1/admin/stats`                         | admin         | Registry statistics                  |
+| POST   | `/api/v1/admin/users`                         | admin         | Create user                          |
+| DELETE | `/api/v1/admin/users/{username}`              | admin         | Delete user                          |
+| PUT    | `/api/v1/admin/packages/{name}/owners`        | admin         | Add or remove owners                 |
+| GET    | `/api/v1/admin/audit-log`                     | admin         | Query audit log                      |
 
----
+## 4. Authentication
 
-## 2. Architecture
+### 4.1 Token Model
 
-### Project Structure
+The registry issues JWTs signed with HMAC-SHA256. Every protected endpoint validates the `Authorization: Bearer <token>` header, including a database lookup of the `jti` (JWT ID) claim on every request to support immediate revocation.
 
-```
-Stash.Registry/
-├── Program.cs                    # Entry point: Kestrel config, TLS, logging
-├── Startup.cs                    # DI registration, middleware pipeline
-├── appsettings.json                 # Default configuration
-├── Auth/                         # Authentication providers & JWT
-│   ├── IAuthProvider.cs          # Interface: Authenticate, CreateUser, UserExists
-│   ├── LocalAuthProvider.cs      # Built-in password auth (Argon2id)
-│   ├── LdapAuthProvider.cs       # LDAP integration (stub)
-│   ├── OidcAuthProvider.cs       # OpenID Connect (stub)
-│   └── JwtTokenService.cs        # JWT token creation & validation
-├── Configuration/                # Config models (JSON deserialization)
-│   ├── RegistryConfig.cs         # Root config loader
-│   ├── ServerConfig.cs           # Host, port, TLS
-│   ├── DatabaseConfig.cs         # SQLite/PostgreSQL
-│   ├── StorageConfig.cs          # Filesystem/S3
-│   ├── AuthConfig.cs             # Auth type, token expiry
-│   ├── SecurityConfig.cs         # Max package size, JWT key, unpublish window
-│   ├── TlsConfig.cs              # TLS cert/key paths
-│   └── RateLimitingConfig.cs     # Per-category rate limits
-├── Controllers/                  # REST API endpoints
-│   ├── AuthController.cs         # Login, register, tokens, whoami
-│   ├── PackagesController.cs     # Get, publish, unpublish, download
-│   ├── SearchController.cs       # Search with pagination
-│   └── AdminController.cs        # Stats, user/owner mgmt, audit log
-├── Contracts/                    # DTO classes
-│   ├── AuthContracts.cs          # Login/Register/Token request/response
-│   ├── PackageContracts.cs       # Package/version detail, publish/unpublish
-│   ├── SearchContracts.cs        # Search results, pagination
-│   ├── AdminContracts.cs         # User/owner management, stats, audit
-│   └── CommonContracts.cs        # ErrorResponse, SuccessResponse, HealthCheck
-├── Database/                     # EF Core data layer
-│   ├── RegistryDbContext.cs      # DbContext with 6 DbSets
-│   ├── IRegistryDatabase.cs      # 40+ CRUD methods
-│   ├── StashRegistryDatabase.cs  # EF Core implementation
-│   └── Models/                   # Entity models
-│       ├── PackageRecord.cs
-│       ├── VersionRecord.cs
-│       ├── UserRecord.cs
-│       ├── TokenRecord.cs
-│       ├── OwnerEntry.cs
-│       ├── AuditEntry.cs
-│       └── SearchResult.cs
-├── Services/                     # Business logic
-│   ├── PackageService.cs         # Publish/unpublish workflows
-│   ├── AuditService.cs           # Audit logging
-│   └── DeprecationService.cs     # Package/version deprecation
-├── Storage/                      # Package file storage
-│   ├── IPackageStorage.cs        # Store, Retrieve, Delete, Exists, GetSize
-│   ├── FileSystemStorage.cs      # Local disk with path traversal protection
-│   └── S3Storage.cs              # AWS S3 (stub)
-└── Middleware/
-    └── RateLimitingMiddleware.cs  # Per-category rate limiting
-```
+| Claim        | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `sub`        | Username.                                             |
+| `jti`        | Unique token ID. Removed from the database to revoke. |
+| `scope`      | `read`, `publish`, or `admin`.                        |
+| `role`       | `user` or `admin`.                                    |
+| `exp`        | Expiry timestamp.                                     |
+| `machine_id` | Machine fingerprint (only present for login tokens).  |
 
-### Request Flow
+The registry uses three token kinds:
 
-```
-Client (stash pkg CLI)
-    │
-    ▼
-┌─────────────────────────────┐
-│  RateLimitingMiddleware     │ ← IP/user-based throttling
-├─────────────────────────────┤
-│  JWT Authentication         │ ← Bearer token validation + revocation check
-├─────────────────────────────┤
-│  Authorization Policies     │ ← RequirePublishScope, RequireAdmin, etc.
-├─────────────────────────────┤
-│  Controllers                │ ← Auth, Packages, Search, Admin
-│    │                        │
-│    ├── PackageService       │ ← Business logic (publish, unpublish)
-│    ├── DeprecationService   │ ← Package/version deprecation
-│    ├── AuditService         │ ← Action logging
-│    └── IAuthProvider        │ ← Local / LDAP / OIDC
-├─────────────────────────────┤
-│  IRegistryDatabase (EF Core)│ ← SQLite or PostgreSQL
-│  IPackageStorage            │ ← Filesystem or S3
-└─────────────────────────────┘
-```
+| Kind          | Issued by                                | Default lifetime | Purpose                                               |
+| ------------- | ---------------------------------------- | ---------------- | ----------------------------------------------------- |
+| Access token  | `POST /auth/login`, refresh              | `1h`             | Authenticated API calls                               |
+| Refresh token | `POST /auth/login` (with `X-Machine-Id`) | `90d`            | Rotating renewal of access tokens                     |
+| API token     | `POST /auth/tokens`                      | `90d`            | Long-lived tokens for CI/automation, named and scoped |
 
----
+### 4.2 Scopes and Policies
 
-## 3. REST API Reference
+| Scope     | Grants                                                                 |
+| --------- | ---------------------------------------------------------------------- |
+| `read`    | All public read endpoints (currently no authenticated read endpoints). |
+| `publish` | Publish, unpublish, deprecate / undeprecate.                           |
+| `admin`   | All endpoints, including `/api/v1/admin/*`.                            |
 
-### Endpoint Summary
+| Policy                | Required claims                      |
+| --------------------- | ------------------------------------ |
+| `RequirePublishScope` | `scope ∈ { publish, admin }`         |
+| `RequireAdminScope`   | `scope == admin`                     |
+| `RequireAdmin`        | `scope == admin` AND `role == admin` |
 
-| Method | Path                                          | Auth          | Description                              |
-| ------ | --------------------------------------------- | ------------- | ---------------------------------------- |
-| GET    | `/`                                           | None          | Health check                             |
-| POST   | `/api/v1/auth/login`                          | None          | Authenticate and receive JWT             |
-| POST   | `/api/v1/auth/register`                       | None          | Create account (if registration enabled) |
-| GET    | `/api/v1/auth/whoami`                         | Bearer        | Get current user info                    |
-| POST   | `/api/v1/auth/tokens`                         | Bearer        | Create scoped token                      |
-| GET    | `/api/v1/auth/tokens`                         | Bearer        | List API tokens                          |
-| DELETE | `/api/v1/auth/tokens/{id}`                    | Bearer        | Revoke token                             |
-| GET    | `/api/v1/packages/{name}`                     | None          | Get package metadata and all versions    |
-| GET    | `/api/v1/packages/{name}/{version}`           | None          | Get specific version details             |
-| GET    | `/api/v1/packages/{name}/{version}/download`  | None          | Download tarball                         |
-| PUT    | `/api/v1/packages/{name}`                     | publish scope | Publish a package version                |
-| DELETE | `/api/v1/packages/{name}/{version}`           | publish scope | Unpublish version (within window)        |
-| PATCH  | `/api/v1/packages/{name}/deprecate`           | publish scope | Deprecate package                        |
-| DELETE | `/api/v1/packages/{name}/deprecate`           | publish scope | Undeprecate package                      |
-| PATCH  | `/api/v1/packages/{name}/{version}/deprecate` | publish scope | Deprecate version                        |
-| DELETE | `/api/v1/packages/{name}/{version}/deprecate` | publish scope | Undeprecate version                      |
-| GET    | `/api/v1/search?q=...&page=...&pageSize=...`  | None          | Search packages                          |
-| GET    | `/api/v1/admin/stats`                         | admin         | Registry statistics                      |
-| POST   | `/api/v1/admin/users`                         | admin         | Create user                              |
-| DELETE | `/api/v1/admin/users/{username}`              | admin         | Delete user                              |
-| PUT    | `/api/v1/admin/packages/{name}/owners`        | admin         | Add or remove package owners             |
-| GET    | `/api/v1/admin/audit-log`                     | admin         | Query audit log                          |
+### 4.3 Refresh Token Rotation
 
----
+Refresh tokens implement OAuth2-style rotation. Clients that supply `X-Machine-Id` on login receive a refresh-token pair; subsequent calls to `POST /auth/tokens/refresh` exchange a (refresh token, expired access token, machine ID) tuple for a new pair.
 
-### Health Check
+Each refresh consumes the prior refresh token. All refresh tokens issued from the same login share a `FamilyId`. If a consumed refresh token is presented again, the registry treats it as theft, revokes every token in the family, and writes a `token_theft_detected` audit entry.
 
-**GET /**
+Refresh tokens are bound to the machine fingerprint, which is a SHA-256 hash of `hostname:username:platform` supplied by the client. Requests from a different fingerprint are rejected.
 
-Returns a minimal health check response. No authentication required.
+### 4.4 Revocation
 
-```json
+Token revocation is database-driven. Every JWT carries a `jti` that matches the primary key of the `tokens` (or `refresh_tokens`) row. Deleting the row revokes the token at the next request, because the JWT bearer middleware performs a `jti` lookup during `OnTokenValidated`. There is no separate revocation list.
+
+### 4.5 Auth Provider Backends
+
+| Provider | Status        | Description                                                                          |
+| -------- | ------------- | ------------------------------------------------------------------------------------ |
+| `local`  | Supported     | Built-in password authentication. Passwords hashed with Argon2id (OWASP parameters). |
+| `ldap`   | Not supported | LDAP / Active Directory integration. Stub - configuration is accepted but unused.    |
+| `oidc`   | Not supported | OpenID Connect delegation. Stub - configuration is accepted but unused.              |
+
+All providers implement `IAuthProvider`:
+
+```csharp
+public interface IAuthProvider
 {
-  "status": "ok",
-  "version": "1.0.0"
+    bool Authenticate(string username, string password);
+    void CreateUser(string username, string password);
+    bool UserExists(string username);
 }
 ```
 
----
+User self-registration via `POST /auth/register` is controlled by `Auth.RegistrationEnabled`. When disabled, only admins can create accounts via `POST /admin/users`.
 
-### Auth Endpoints
+## 5. Auth Endpoints
 
-#### POST /api/v1/auth/login
+### 5.1 POST /api/v1/auth/login
 
-Authenticate with username and password. Returns a JWT.
+Authenticate with username and password. Returns an access token, and a refresh token when `X-Machine-Id` is supplied.
 
-**Request:**
+Request:
 
 ```json
 {
@@ -199,7 +150,11 @@ Authenticate with username and password. Returns a JWT.
 }
 ```
 
-**Response `200 OK`:**
+| Header         | Required | Description                                                                    |
+| -------------- | -------- | ------------------------------------------------------------------------------ |
+| `X-Machine-Id` | No       | SHA-256 machine fingerprint. When supplied, a refresh token is issued as well. |
+
+Response `200 OK`:
 
 ```json
 {
@@ -210,77 +165,81 @@ Authenticate with username and password. Returns a JWT.
 }
 ```
 
-**Headers:**
+When `X-Machine-Id` is omitted, `refreshToken` and `refreshTokenExpiresAt` are `null`. Access-token lifetime is `Auth.AccessTokenExpiry` (default `1h`); refresh-token lifetime is `Auth.RefreshTokenExpiry` (default `90d`).
 
-| Header         | Required | Description                                                                                       |
-| -------------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `X-Machine-Id` | No       | SHA-256 machine fingerprint. When provided, a refresh token is issued alongside the access token. |
+| Status | Meaning                       |
+| ------ | ----------------------------- |
+| 400    | Missing username or password. |
+| 401    | Invalid credentials.          |
+| 429    | Rate limit exceeded.          |
 
-When `X-Machine-Id` is omitted, only the access token is returned (`refreshToken` and `refreshTokenExpiresAt` will be `null`). The access token lifetime is controlled by `auth.accessTokenExpiry` (default `1h`); the refresh token lifetime by `auth.refreshTokenExpiry` (default `90d`).
+### 5.2 POST /api/v1/auth/register
 
-**Error responses:**
+Create a new user account. Available only when `Auth.RegistrationEnabled` is `true`.
 
-| Status | Description                  |
-| ------ | ---------------------------- |
-| 400    | Missing username or password |
-| 401    | Invalid credentials          |
-| 429    | Rate limit exceeded          |
+Request:
 
----
+```json
+{ "username": "alice", "password": "s3cr3tpassword" }
+```
 
-#### POST /api/v1/auth/register
+Response `201 Created`:
 
-Create a new user account. Only available when `auth.registrationEnabled` is `true`.
+```json
+{ "ok": true, "username": "alice" }
+```
 
-**Request:**
+| Status | Meaning                                                  |
+| ------ | -------------------------------------------------------- |
+| 400    | Validation failed (username format, password too short). |
+| 403    | Registration is disabled.                                |
+| 409    | Username already taken.                                  |
+| 429    | Rate limit exceeded.                                     |
+
+### 5.3 POST /api/v1/auth/tokens/refresh
+
+Exchange a refresh token and its paired (possibly expired) access token for a new pair. Implements OAuth2 token rotation.
+
+Request:
 
 ```json
 {
-  "username": "alice",
-  "password": "s3cr3tpassword"
+  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "machineId": "a1b2c3d4e5f6..."
 }
 ```
 
-**Response `201 Created`:**
+Response `200 OK`:
 
 ```json
 {
-  "ok": true,
-  "username": "alice"
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "bmV3IHJlZnJlc2ggdG9rZW4...",
+  "expiresAt": "2026-06-20T14:00:00Z",
+  "refreshTokenExpiresAt": "2026-09-18T13:00:00Z"
 }
 ```
 
-**Error responses:**
+| Status | Meaning                                                                                                                                                      |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 400    | Missing required fields.                                                                                                                                     |
+| 401    | Invalid signature, token pair mismatch, machine fingerprint mismatch, expired refresh token, or consumed refresh token (the entire token family is revoked). |
+| 429    | Rate limit exceeded.                                                                                                                                         |
 
-| Status | Description                                             |
-| ------ | ------------------------------------------------------- |
-| 400    | Validation failed (username format, password too short) |
-| 409    | Username already taken                                  |
-| 403    | Registration is disabled                                |
-| 429    | Rate limit exceeded                                     |
+### 5.4 GET /api/v1/auth/whoami
 
----
-
-#### GET /api/v1/auth/whoami
-
-Returns information about the currently authenticated user.
-
-**Response `200 OK`:**
+Returns the authenticated user's username and role.
 
 ```json
-{
-  "username": "alice",
-  "role": "user"
-}
+{ "username": "alice", "role": "user" }
 ```
 
----
+### 5.5 POST /api/v1/auth/tokens
 
-#### POST /api/v1/auth/tokens
+Create a named, scoped API token. Scope must be `"read"`, `"publish"`, or `"admin"`; only an `admin` role may create `admin` tokens.
 
-Create a new named, scoped token. Useful for CI/CD pipelines.
-
-**Request:**
+Request:
 
 ```json
 {
@@ -290,11 +249,9 @@ Create a new named, scoped token. Useful for CI/CD pipelines.
 }
 ```
 
-Scope must be `"read"`, `"publish"`, or `"admin"`. Only admin users can create admin-scoped tokens.
+`expiresIn` accepts duration strings (`Xd`, `Xh`, `Xm`). Minimum `1h`, maximum `365d`. When omitted, `Auth.ApiTokenExpiry` is used (default `90d`).
 
-**`expiresIn` field (optional):** Custom token lifetime. Accepted formats: `"Xd"` (days), `"Xh"` (hours), `"Xm"` (minutes). Examples: `"30d"`, `"12h"`, `"90m"`. Minimum: `1h`. Maximum: `365d`. When omitted, the server's configured `auth.apiTokenExpiry` is used (default: `90d`).
-
-**Response `201 Created`:**
+Response `201 Created`:
 
 ```json
 {
@@ -306,15 +263,11 @@ Scope must be `"read"`, `"publish"`, or `"admin"`. Only admin users can create a
 }
 ```
 
-**Note:** The `token` value is only returned at creation time and cannot be retrieved again. The `tokenId` can be used to revoke the token later.
+The `token` value is returned only at creation time and cannot be retrieved again. The `tokenId` can be used to revoke the token later.
 
----
+### 5.6 GET /api/v1/auth/tokens
 
-#### GET /api/v1/auth/tokens
-
-List all API tokens for the authenticated user. Returns metadata only — token values are never returned after creation.
-
-**Response `200 OK`:**
+List the authenticated user's API tokens. Token values are never returned.
 
 ```json
 {
@@ -325,90 +278,29 @@ List all API tokens for the authenticated user. Returns metadata only — token 
       "description": "CI deploy token",
       "createdAt": "2026-03-26T12:00:00Z",
       "expiresAt": "2026-04-25T12:00:00Z"
-    },
-    {
-      "tokenId": "661f9511-f30c-52e5-b827-557766551111",
-      "scope": "read",
-      "description": "Read-only pipeline",
-      "createdAt": "2026-03-01T09:00:00Z",
-      "expiresAt": "2026-05-30T09:00:00Z"
     }
   ]
 }
 ```
 
----
+### 5.7 DELETE /api/v1/auth/tokens/{id}
 
-#### DELETE /api/v1/auth/tokens/{id}
-
-Revoke a token by its ID. Takes effect immediately — the token record is removed from the database. Since the `OnTokenValidated` middleware checks the token's JTI against the database on every request, revocation takes effect on the next request.
-
-**Response `200 OK`:**
+Revoke a token. The token row is deleted; revocation takes effect on the next request.
 
 ```json
-{
-  "ok": true
-}
+{ "ok": true }
 ```
 
-**Error responses:**
+| Status | Meaning                                    |
+| ------ | ------------------------------------------ |
+| 403    | Token belongs to another user (non-admin). |
+| 404    | Token not found.                           |
 
-| Status | Description                               |
-| ------ | ----------------------------------------- |
-| 403    | Token belongs to another user (non-admin) |
-| 404    | Token not found                           |
+## 6. Package Endpoints
 
----
+### 6.1 GET /api/v1/packages/{name}
 
-#### POST /api/v1/auth/tokens/refresh
-
-Exchange a valid refresh token and its paired (possibly expired) access token for a new token pair. Implements OAuth2-style token rotation — each refresh consumes the old refresh token and issues a new one.
-
-**Request:**
-
-```json
-{
-  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "machineId": "a1b2c3d4e5f6..."
-}
-```
-
-**Response `200 OK`:**
-
-```json
-{
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "bmV3IHJlZnJlc2ggdG9rZW4...",
-  "expiresAt": "2026-06-20T14:00:00Z",
-  "refreshTokenExpiresAt": "2026-09-18T13:00:00Z"
-}
-```
-
-**Error responses:**
-
-| Status | Description                                                                                                                                           |
-| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Missing required fields                                                                                                                               |
-| 401    | Invalid access token signature, token pair mismatch, machine fingerprint mismatch, expired refresh token, or consumed refresh token (theft detection) |
-| 429    | Rate limit exceeded                                                                                                                                   |
-
-**Security features:**
-
-- **Token rotation:** Each refresh consumes the old refresh token and issues a new pair. The old refresh token cannot be reused.
-- **Theft detection:** If a consumed refresh token is presented, all tokens in the family are revoked and a `token_theft_detected` audit event is logged.
-- **Machine binding:** The `machineId` must match the fingerprint used during login. It is validated against both the JWT `machine_id` claim and the database record.
-- **Token pair binding:** The access token's JTI claim must match the refresh token's paired `AccessTokenId`.
-
----
-
-### Package Endpoints
-
-#### GET /api/v1/packages/{name}
-
-Returns package metadata and the full version list.
-
-**Response `200 OK`:**
+Returns package metadata and the full version dictionary. `versions` is keyed by version string, not an array.
 
 ```json
 {
@@ -429,16 +321,6 @@ Returns package metadata and the full version list.
       "publishedBy": "alice",
       "deprecated": false,
       "deprecationMessage": null
-    },
-    "1.1.0": {
-      "version": "1.1.0",
-      "stashVersion": ">=1.0.0",
-      "dependencies": {},
-      "integrity": "sha256-def456...",
-      "publishedAt": "2026-02-20T09:00:00.000Z",
-      "publishedBy": "alice",
-      "deprecated": false,
-      "deprecationMessage": null
     }
   },
   "deprecated": false,
@@ -450,73 +332,47 @@ Returns package metadata and the full version list.
 }
 ```
 
-Note: `versions` is a dictionary keyed by version string, not an array.
+| Status | Meaning            |
+| ------ | ------------------ |
+| 404    | Package not found. |
 
-**Error responses:**
+### 6.2 GET /api/v1/packages/{name}/{version}
 
-| Status | Description       |
-| ------ | ----------------- |
-| 404    | Package not found |
+Returns a single version entry, identical in shape to the elements of the `versions` dictionary above.
 
----
+| Status | Meaning                       |
+| ------ | ----------------------------- |
+| 404    | Package or version not found. |
 
-#### GET /api/v1/packages/{name}/{version}
+### 6.3 GET /api/v1/packages/{name}/{version}/download
 
-Returns details for a specific version.
+Returns the raw `.tar.gz` tarball.
 
-**Response `200 OK`:**
+| Property                | Value                                          |
+| ----------------------- | ---------------------------------------------- |
+| Response `Content-Type` | `application/gzip`                             |
+| Response `X-Integrity`  | `sha256-<base64>` integrity hash of the bytes. |
 
-```json
-{
-  "version": "1.2.0",
-  "stashVersion": ">=1.0.0",
-  "dependencies": {},
-  "integrity": "sha256-abc123...",
-  "publishedAt": "2026-03-10T14:00:00.000Z",
-  "publishedBy": "alice",
-  "deprecated": false,
-  "deprecationMessage": null
-}
-```
+| Status | Meaning                       |
+| ------ | ----------------------------- |
+| 404    | Package or version not found. |
 
-**Error responses:**
+### 6.4 PUT /api/v1/packages/{name}
 
-| Status | Description                  |
-| ------ | ---------------------------- |
-| 404    | Package or version not found |
+Publish a new version. The request body is the raw tarball. Requires a token with `publish` or `admin` scope, and the user must be an owner.
 
----
-
-#### GET /api/v1/packages/{name}/{version}/download
-
-Downloads the tarball for the specified version. Returns the raw `.tar.gz` binary.
-
-**Response `200 OK`:** Binary tarball (`application/gzip`). The `X-Integrity` response header contains the SHA-256 integrity hash.
-
-**Error responses:**
-
-| Status | Description                  |
-| ------ | ---------------------------- |
-| 404    | Package or version not found |
-
----
-
-#### PUT /api/v1/packages/{name}
-
-Publish a new version of a package. Requires a token with `publish` or `admin` scope. The request body is the raw tarball binary.
-
-**Request headers:**
+Headers:
 
 ```
 Content-Type: application/gzip
 X-Version: 1.2.0
-X-Integrity: sha256-abc123...   (optional — server verifies if present)
+X-Integrity: sha256-abc123...    (optional - verified if present)
 Authorization: Bearer <token>
 ```
 
-**Request body:** Raw `.tar.gz` tarball. Must contain a `stash.json` manifest and at least one `.stash` file.
+The tarball must contain a `stash.json` manifest and at least one `.stash` file. The version is read from the manifest. Versions are immutable; republishing an existing version returns `409`.
 
-**Response `201 Created`:**
+Response `201 Created`:
 
 ```json
 {
@@ -527,124 +383,44 @@ Authorization: Bearer <token>
 }
 ```
 
-**Error responses:**
+| Status | Meaning                                                                          |
+| ------ | -------------------------------------------------------------------------------- |
+| 400    | Missing manifest, no `.stash` files, or `X-Integrity` mismatch.                  |
+| 403    | Not a package owner.                                                             |
+| 409    | Version already exists. Body: `{ "error": "version_exists", "message": "..." }`. |
+| 413    | Tarball exceeds `Security.MaxPackageSize`.                                       |
+| 429    | Rate limit exceeded.                                                             |
 
-| Status | Description                                                                        |
-| ------ | ---------------------------------------------------------------------------------- |
-| 400    | Missing manifest, no `.stash` files, or integrity mismatch                         |
-| 403    | Not a package owner                                                                |
-| 409    | Version already exists — body: `{ "error": "version_exists", "message": "..." }`   |
-| 429    | Rate limit exceeded                                                                |
+### 6.5 DELETE /api/v1/packages/{name}/{version}
 
----
+Unpublish a version. The caller must be an owner, and the version must be within the unpublish window (`Security.UnpublishWindow`, default `72h`). After the window expires, the only path is deprecation.
 
-#### DELETE /api/v1/packages/{name}/{version}
+Removing the last version of a package does **not** delete the package row - the name remains reserved and the package shows up in metadata responses with an empty `versions` map.
 
-Unpublish a version. The caller must be a package owner, and publication must be within the `UnpublishWindow` (default 72 hours).
+| Status | Meaning                                         |
+| ------ | ----------------------------------------------- |
+| 400    | Unpublish window expired, or version not found. |
+| 403    | Not a package owner.                            |
 
-**Response `200 OK`:**
+### 6.6 Deprecation
 
-```json
-{
-  "ok": true,
-  "package": "stash-http",
-  "version": "1.2.0"
-}
-```
+Deprecation marks a package or version as discouraged without preventing installation. Existing dependents continue to resolve normally; clients are expected to surface the deprecation message to the user.
 
-**Error responses:**
+Requires `publish` scope and ownership (or `admin` role).
 
-| Status | Description                                        |
-| ------ | -------------------------------------------------- |
-| 400    | Unpublish window has expired, or version not found |
-| 403    | Not a package owner                                |
+| Method | Path                                          | Body                        | Effect                     |
+| ------ | --------------------------------------------- | --------------------------- | -------------------------- |
+| PATCH  | `/api/v1/packages/{name}/deprecate`           | `{ message, alternative? }` | Deprecate the package.     |
+| DELETE | `/api/v1/packages/{name}/deprecate`           | -                           | Clear package deprecation. |
+| PATCH  | `/api/v1/packages/{name}/{version}/deprecate` | `{ message }`               | Deprecate the version.     |
+| DELETE | `/api/v1/packages/{name}/{version}/deprecate` | -                           | Clear version deprecation. |
 
----
+| Body field    | Type   | Required | Description                         |
+| ------------- | ------ | -------- | ----------------------------------- |
+| `message`     | string | yes      | Non-empty deprecation reason.       |
+| `alternative` | string | no       | Suggested replacement package name. |
 
-### Deprecation Endpoints
-
-Deprecation marks a package or version as no longer recommended. Deprecated packages and versions remain fully installable — deprecation is purely informational. Requires a token with `publish` scope and package ownership, or the `admin` role.
-
-#### PATCH /api/v1/packages/{name}/deprecate
-
-Mark a package as deprecated with a message and optional alternative.
-
-**Request:**
-
-```json
-{
-  "message": "This package is no longer maintained.",
-  "alternative": "stash-http-v2"
-}
-```
-
-| Field         | Type   | Required | Description                        |
-| ------------- | ------ | -------- | ---------------------------------- |
-| `message`     | string | yes      | Deprecation reason (non-empty)     |
-| `alternative` | string | no       | Suggested replacement package name |
-
-**Response `200 OK`:**
-
-```json
-{
-  "ok": true,
-  "package": "stash-http",
-  "version": null,
-  "deprecated": true
-}
-```
-
-**Error responses:**
-
-| Status | Description                       |
-| ------ | --------------------------------- |
-| 400    | Empty message or validation error |
-| 403    | Not a package owner               |
-| 404    | Package not found                 |
-
----
-
-#### DELETE /api/v1/packages/{name}/deprecate
-
-Remove the deprecation status from a package.
-
-**Response `200 OK`:**
-
-```json
-{
-  "ok": true,
-  "package": "stash-http",
-  "version": null,
-  "deprecated": false
-}
-```
-
-**Error responses:**
-
-| Status | Description         |
-| ------ | ------------------- |
-| 403    | Not a package owner |
-| 404    | Package not found   |
-
----
-
-#### PATCH /api/v1/packages/{name}/{version}/deprecate
-
-Mark a specific version as deprecated.
-
-**Request:**
-
-```json
-{
-  "message": "Use 2.0.0 instead — this version has a known bug."
-}
-```
-
-| Field     | Type   | Required | Description                    |
-| --------- | ------ | -------- | ------------------------------ |
-| `message` | string | yes      | Deprecation reason (non-empty) |
-
-**Response `200 OK`:**
+Response (all four):
 
 ```json
 {
@@ -655,55 +431,19 @@ Mark a specific version as deprecated.
 }
 ```
 
-**Error responses:**
+`version` is `null` when the package itself is the deprecation target.
 
-| Status | Description                  |
-| ------ | ---------------------------- |
-| 400    | Empty message                |
-| 403    | Not a package owner          |
-| 404    | Package or version not found |
+## 7. Search
 
----
+### 7.1 GET /api/v1/search
 
-#### DELETE /api/v1/packages/{name}/{version}/deprecate
+Search package names and descriptions.
 
-Remove the deprecation status from a specific version.
-
-**Response `200 OK`:**
-
-```json
-{
-  "ok": true,
-  "package": "stash-http",
-  "version": "1.1.0",
-  "deprecated": false
-}
-```
-
-**Error responses:**
-
-| Status | Description                  |
-| ------ | ---------------------------- |
-| 403    | Not a package owner          |
-| 404    | Package or version not found |
-
----
-
-### Search Endpoint
-
-#### GET /api/v1/search
-
-Search packages by name or description.
-
-**Query parameters:**
-
-| Parameter  | Type    | Default | Description                |
-| ---------- | ------- | ------- | -------------------------- |
-| `q`        | string  | —       | Search query (required)    |
-| `page`     | integer | `1`     | Page number (1-based)      |
-| `pageSize` | integer | `20`    | Results per page (max 100) |
-
-**Response `200 OK`:**
+| Query parameter | Type    | Default | Description                 |
+| --------------- | ------- | ------- | --------------------------- |
+| `q`             | string  | -       | Search query (required).    |
+| `page`          | integer | `1`     | Page number (1-based).      |
+| `pageSize`      | integer | `20`    | Results per page (max 100). |
 
 ```json
 {
@@ -724,105 +464,64 @@ Search packages by name or description.
 }
 ```
 
----
+## 8. Admin Endpoints
 
-### Admin Endpoints
+All admin endpoints require `RequireAdmin` (scope `admin` AND role `admin`).
 
-All admin endpoints require a token with `admin` scope and the `admin` role.
-
-#### GET /api/v1/admin/stats
-
-Returns aggregate registry statistics.
-
-**Response `200 OK`:**
+### 8.1 GET /api/v1/admin/stats
 
 ```json
-{
-  "users": 15
-}
+{ "users": 15 }
 ```
 
-The current stats endpoint returns the total number of registered users.
+### 8.2 POST /api/v1/admin/users
 
----
+Create a user, bypassing `Auth.RegistrationEnabled`.
 
-#### POST /api/v1/admin/users
-
-Create a user account bypassing registration settings.
-
-**Request:**
+Request:
 
 ```json
-{
-  "username": "carol",
-  "password": "initialpassword",
-  "role": "user"
-}
+{ "username": "carol", "password": "initialpassword", "role": "user" }
 ```
 
-**Response `201 Created`:**
+Response `201 Created`:
 
 ```json
-{
-  "ok": true,
-  "username": "carol",
-  "role": "user"
-}
+{ "ok": true, "username": "carol", "role": "user" }
 ```
 
----
+### 8.3 DELETE /api/v1/admin/users/{username}
 
-#### DELETE /api/v1/admin/users/{username}
-
-Delete a user account and all associated owner entries. Tokens are removed via foreign key cascade.
-
-**Response `200 OK`:**
+Delete a user. Their owner entries are removed and their tokens are cascade-deleted from the `tokens` and `refresh_tokens` tables.
 
 ```json
-{
-  "ok": true
-}
+{ "ok": true }
 ```
 
----
+### 8.4 PUT /api/v1/admin/packages/{name}/owners
 
-#### PUT /api/v1/admin/packages/{name}/owners
+Add or remove package owners. The response is the new owner set.
 
-Add or remove package owners.
-
-**Request:**
+Request:
 
 ```json
-{
-  "add": ["carol"],
-  "remove": ["bob"]
-}
+{ "add": ["carol"], "remove": ["bob"] }
 ```
-
-**Response `200 OK`:**
 
 ```json
-{
-  "owners": ["alice", "carol"]
-}
+{ "owners": ["alice", "carol"] }
 ```
 
----
+### 8.5 GET /api/v1/admin/audit-log
 
-#### GET /api/v1/admin/audit-log
+Query the audit log. Entries are returned in descending chronological order.
 
-Query the audit log with optional filters.
-
-**Query parameters:**
-
-| Parameter  | Type    | Description                |
-| ---------- | ------- | -------------------------- |
-| `package`  | string  | Filter by package name     |
-| `action`   | string  | Filter by action type      |
-| `page`     | integer | Page number (1-based)      |
-| `pageSize` | integer | Results per page (max 100) |
-
-**Response `200 OK`:**
+| Query parameter | Type    | Description                               |
+| --------------- | ------- | ----------------------------------------- |
+| `package`       | string  | Filter by package name.                   |
+| `action`        | string  | Filter by action type (see [Section 12]). |
+| `page`          | integer | Page number (1-based).                    |
+| `pageSize`      | integer | Results per page (default 50, max 200).   |
 
 ```json
 {
@@ -845,95 +544,13 @@ Query the audit log with optional filters.
 }
 ```
 
-Audit log pagination defaults to `pageSize=50` with a maximum of `200`.
+[Section 12]: #12-audit-log
 
----
+## 9. Configuration
 
-## 4. Authentication & Authorization
+The registry reads configuration from `appsettings.json` in the working directory at startup. Every field has a default; the server starts with zero configuration for local development. Environment-variable overrides follow standard ASP.NET Core configuration binding rules.
 
-### JWT Tokens
-
-The registry uses JWT (JSON Web Tokens) with HMAC-SHA256 symmetric signing. Every protected endpoint validates the `Authorization: Bearer <token>` header. On each request, the token's JTI (JWT ID) claim is checked against the database to support immediate revocation.
-
-**Token claims:**
-
-| Claim        | Description                                |
-| ------------ | ------------------------------------------ |
-| `sub`        | Username                                   |
-| `jti`        | Unique token ID (for revocation)           |
-| `scope`      | Token scope: `read`, `publish`, or `admin` |
-| `role`       | User role: `user` or `admin`               |
-| `exp`        | Expiry timestamp                           |
-| `machine_id` | Machine fingerprint (optional)             |
-
-### Token Scopes
-
-| Scope     | Description                                                |
-| --------- | ---------------------------------------------------------- |
-| `read`    | Read-only access (currently all read endpoints are public) |
-| `publish` | Publish and unpublish packages                             |
-| `admin`   | Full access, including admin endpoints                     |
-
-### Authorization Policies
-
-| Policy                | Requirement                                                |
-| --------------------- | ---------------------------------------------------------- |
-| `RequirePublishScope` | Token must have `publish` or `admin` scope claim           |
-| `RequireAdminScope`   | Token must have `admin` scope claim                        |
-| `RequireAdmin`        | Token must have `admin` scope claim AND `admin` role claim |
-
-### Token Revocation
-
-Token revocation works through the token records table. Each JWT contains a `jti` claim whose value matches the `id` column of the `tokens` table. When a token is deleted (via `DELETE /api/v1/auth/tokens/{id}`), the corresponding record is removed from the database. The `OnTokenValidated` event in the JWT bearer middleware looks up every incoming token's `jti` in the database — if the record is missing, the request is rejected. Revocation takes effect on the next request.
-
-### Refresh Token Rotation
-
-The registry supports OAuth2-style refresh token rotation for CLI clients. When a client logs in with an `X-Machine-Id` header, the server issues both a short-lived access token (default: 1 hour) and a long-lived refresh token (default: 90 days).
-
-**Token lifecycle:**
-
-1. **Login** — Client sends credentials + machine fingerprint → server returns access token + refresh token
-2. **Use** — Client sends access token with each API request
-3. **Refresh** — When the access token nears expiry (within 5 minutes), the client calls `POST /auth/tokens/refresh` with the refresh token, expired access token, and machine fingerprint → server returns a new token pair
-4. **Rotation** — Each refresh consumes the old refresh token. The old tokens are invalidated.
-5. **Theft detection** — If a consumed refresh token is presented again, the server assumes token theft and revokes all tokens in the family (all rotations sharing the same `FamilyId`).
-
-**Token families:** All refresh tokens created from the same login share a `FamilyId`. This allows the server to revoke the entire chain when theft is detected, regardless of how many rotations have occurred.
-
-**Machine binding:** Refresh tokens are bound to the machine fingerprint provided during login. The fingerprint is a SHA-256 hash of `hostname:username:platform`. Refresh requests from a different machine are rejected.
-
-### Auth Provider Backends
-
-The registry supports three authentication provider backends, configured via `auth.type`:
-
-| Provider | Status | Description                                                                          |
-| -------- | ------ | ------------------------------------------------------------------------------------ |
-| `local`  | ✅     | Built-in password authentication. Passwords hashed with Argon2id (OWASP parameters). |
-| `ldap`   | ❌     | LDAP/Active Directory integration. Stub — not yet implemented.                       |
-| `oidc`   | ❌     | OpenID Connect delegation. Stub — not yet implemented.                               |
-
-All providers implement `IAuthProvider`:
-
-```csharp
-public interface IAuthProvider
-{
-    bool Authenticate(string username, string password);
-    void CreateUser(string username, string password);
-    bool UserExists(string username);
-}
-```
-
-### Registration
-
-User self-registration is controlled by `auth.registrationEnabled`. When disabled, only admins can create accounts via `POST /api/v1/admin/users`. Disable registration in production environments where user provisioning is centrally managed.
-
----
-
-## 5. Configuration Reference
-
-The registry reads configuration from `appsettings.json` in the working directory at startup. All values have defaults — the server runs with zero configuration changes for local development.
-
-### Full Default Configuration
+### 9.1 Defaults
 
 ```json
 {
@@ -962,13 +579,7 @@ The registry reads configuration from `appsettings.json` in the working director
     "RegistrationEnabled": true,
     "ApiTokenExpiry": "90d",
     "AccessTokenExpiry": "1h",
-    "RefreshTokenExpiry": "90d",
-    "LdapServer": "",
-    "LdapBaseDn": "",
-    "LdapUserFilter": "",
-    "OidcAuthority": "",
-    "OidcClientId": "",
-    "OidcClientSecret": ""
+    "RefreshTokenExpiry": "90d"
   },
   "Security": {
     "MaxPackageSize": "10MB",
@@ -1006,242 +617,96 @@ The registry reads configuration from `appsettings.json` in the working director
 }
 ```
 
----
-
-### Server
+### 9.2 Server
 
 | Property      | Type    | Default     | Description                                               |
 | ------------- | ------- | ----------- | --------------------------------------------------------- |
 | `Host`        | string  | `"0.0.0.0"` | Bind address. Use `"127.0.0.1"` to restrict to localhost. |
-| `Port`        | integer | `8080`      | TCP port to listen on.                                    |
+| `Port`        | integer | `8080`      | TCP port.                                                 |
 | `BasePath`    | string  | `"/api/v1"` | URL prefix for all API routes.                            |
 | `Tls.Enabled` | bool    | `false`     | Enable TLS termination.                                   |
-| `Tls.Cert`    | string  | `""`        | Path to PEM certificate file.                             |
-| `Tls.Key`     | string  | `""`        | Path to PEM private key file.                             |
+| `Tls.Cert`    | string  | `""`        | Path to PEM certificate.                                  |
+| `Tls.Key`     | string  | `""`        | Path to PEM private key.                                  |
 
----
+### 9.3 Storage
 
-### Storage
+| Property    | Type   | Default           | Description                                                                 |
+| ----------- | ------ | ----------------- | --------------------------------------------------------------------------- |
+| `Type`      | string | `"filesystem"`    | Storage backend: `"filesystem"` or `"s3"`. S3 is currently not implemented. |
+| `Path`      | string | `"data/packages"` | Root directory for filesystem storage.                                      |
+| `Bucket`    | string | `""`              | S3 bucket name.                                                             |
+| `Region`    | string | `""`              | AWS region.                                                                 |
+| `Endpoint`  | string | `""`              | Custom S3 endpoint URL (e.g., MinIO).                                       |
+| `AccessKey` | string | `""`              | AWS access key ID.                                                          |
+| `SecretKey` | string | `""`              | AWS secret access key.                                                      |
 
-| Property    | Type   | Default           | Description                                              |
-| ----------- | ------ | ----------------- | -------------------------------------------------------- |
-| `Type`      | string | `"filesystem"`    | Storage backend: `"filesystem"` or `"s3"`.               |
-| `Path`      | string | `"data/packages"` | Root directory for filesystem storage.                   |
-| `Bucket`    | string | `""`              | S3 bucket name.                                          |
-| `Region`    | string | `""`              | AWS region (e.g. `"us-east-1"`).                         |
-| `Endpoint`  | string | `""`              | Custom S3 endpoint URL for MinIO or compatible services. |
-| `AccessKey` | string | `""`              | AWS access key ID.                                       |
-| `SecretKey` | string | `""`              | AWS secret access key.                                   |
+### 9.4 Database
 
----
+| Property           | Type   | Default              | Description                                                           |
+| ------------------ | ------ | -------------------- | --------------------------------------------------------------------- |
+| `Type`             | string | `"sqlite"`           | `"sqlite"` or `"postgresql"`.                                         |
+| `Path`             | string | `"data/registry.db"` | SQLite file path. The `data/` directory is created automatically.     |
+| `ConnectionString` | string | `""`                 | PostgreSQL connection string. Required when `Type` is `"postgresql"`. |
 
-### Database
-
-| Property           | Type   | Default              | Description                                                                |
-| ------------------ | ------ | -------------------- | -------------------------------------------------------------------------- |
-| `Type`             | string | `"sqlite"`           | Database backend: `"sqlite"` or `"postgresql"`.                            |
-| `Path`             | string | `"data/registry.db"` | SQLite database file path. The `data/` directory is created automatically. |
-| `ConnectionString` | string | `""`                 | PostgreSQL connection string. Required when `Type` is `"postgresql"`.      |
-
-**PostgreSQL connection string example:**
+Example PostgreSQL connection string:
 
 ```
 Host=localhost;Port=5432;Database=stash_registry;Username=stash;Password=secret
 ```
 
----
+### 9.5 Auth
 
-### Auth
+| Property              | Type   | Default   | Description                                                     |
+| --------------------- | ------ | --------- | --------------------------------------------------------------- |
+| `Type`                | string | `"local"` | `"local"`, `"ldap"`, or `"oidc"`. Only `"local"` is functional. |
+| `RegistrationEnabled` | bool   | `true`    | Allow unauthenticated users to call `POST /auth/register`.      |
+| `ApiTokenExpiry`      | string | `"90d"`   | Default lifetime of API tokens created via `POST /auth/tokens`. |
+| `AccessTokenExpiry`   | string | `"1h"`    | Lifetime of access tokens issued at login or refresh.           |
+| `RefreshTokenExpiry`  | string | `"90d"`   | Lifetime of refresh tokens issued at login.                     |
+| `LdapServer`          | string | `""`      | LDAP URI. Used when `Type == "ldap"` (currently a stub).        |
+| `LdapBaseDn`          | string | `""`      | LDAP base DN.                                                   |
+| `LdapPort`            | int    | `389`     | LDAP server port.                                               |
+| `LdapUserFilter`      | string | `""`      | LDAP filter template, e.g., `"(uid={0})"`.                      |
+| `OidcAuthority`       | string | `""`      | OIDC issuer URL. Used when `Type == "oidc"` (currently a stub). |
+| `OidcClientId`        | string | `""`      | OIDC client ID.                                                 |
+| `OidcClientSecret`    | string | `""`      | OIDC client secret.                                             |
 
-| Property              | Type   | Default   | Description                                                                                      |
-| --------------------- | ------ | --------- | ------------------------------------------------------------------------------------------------ |
-| `Type`                | string | `"local"` | Auth provider: `"local"`, `"ldap"`, or `"oidc"`.                                                 |
-| `RegistrationEnabled` | bool   | `true`    | Allow unauthenticated users to create accounts.                                                  |
-| `ApiTokenExpiry`      | string | `"90d"`   | Lifetime of manually created API tokens (`POST /auth/tokens`). Accepts duration strings.         |
-| `AccessTokenExpiry`   | string | `"1h"`    | Lifetime of short-lived access tokens issued during login and refresh. Accepts duration strings. |
-| `RefreshTokenExpiry`  | string | `"90d"`   | Lifetime of long-lived refresh tokens issued during login. Accepts duration strings.             |
-| `LdapServer`          | string | `""`      | LDAP server URI (e.g. `"ldap://ldap.example.com"`). Used when `Type` is `"ldap"`.                |
-| `LdapBaseDn`          | string | `""`      | LDAP base DN for user searches.                                                                  |
-| `LdapPort`            | int    | `389`     | LDAP server port.                                                                                |
-| `LdapUserFilter`      | string | `""`      | LDAP filter template (e.g. `"(uid={0})"`).                                                       |
-| `OidcAuthority`       | string | `""`      | OIDC issuer URL. Used when `Type` is `"oidc"`.                                                   |
-| `OidcClientId`        | string | `""`      | OIDC client ID.                                                                                  |
-| `OidcClientSecret`    | string | `""`      | OIDC client secret.                                                                              |
+Duration strings accept the suffixes `m`, `h`, `d`.
 
----
+### 9.6 Security
 
-### Security
+| Property            | Type   | Default    | Description                                                                                                                                          |
+| ------------------- | ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MaxPackageSize`    | string | `"10MB"`   | Maximum tarball upload size. Suffixes `MB`, `GB`.                                                                                                    |
+| `RequiredIntegrity` | string | `"sha256"` | Integrity algorithm. Only `"sha256"` is currently supported.                                                                                         |
+| `UnpublishWindow`   | string | `"72h"`    | Window during which a freshly published version may be unpublished.                                                                                  |
+| `JwtSigningKey`     | string | `null`     | HMAC-SHA256 signing key. Must be at least 32 characters. If `null`, the server generates a random key at startup; tokens will not survive a restart. |
 
-| Property            | Type   | Default    | Description                                                                                                                               |
-| ------------------- | ------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `MaxPackageSize`    | string | `"10MB"`   | Maximum tarball upload size. Accepts `"MB"` and `"GB"` suffixes.                                                                          |
-| `RequiredIntegrity` | string | `"sha256"` | Integrity algorithm. Only `"sha256"` is currently supported.                                                                              |
-| `UnpublishWindow`   | string | `"72h"`    | How long after publishing a version can be unpublished.                                                                                   |
-| `JwtSigningKey`     | string | `null`     | HMAC-SHA256 signing key. Must be at least 32 characters. If `null`, a random key is generated at startup — tokens won't survive restarts. |
+### 9.7 RateLimiting
 
----
+`RateLimiting.{Category}.*` controls a sliding-window bucket per category. Categories are `Auth`, `Publish`, `Download`, `Search`. A separate `Refresh` bucket exists with built-in defaults that are not currently configurable.
 
-### RateLimiting
+| Property                   | Type    | Description                                    |
+| -------------------------- | ------- | ---------------------------------------------- |
+| `Enabled`                  | bool    | Disables the middleware entirely when `false`. |
+| `{Category}.MaxAttempts`   | integer | Maximum requests per `WindowSeconds`.          |
+| `{Category}.WindowSeconds` | integer | Sliding window length in seconds.              |
+| `{Category}.MaxPerHour`    | integer | Hard hourly cap.                               |
+| `{Category}.MaxPerMinute`  | integer | Hard per-minute cap.                           |
 
-Applies to all four category types (`Auth`, `Publish`, `Download`, `Search`).
+Rate-limited requests receive `429 Too Many Requests` with a `Retry-After` header indicating the earliest retry time.
 
-| Property                   | Type    | Description                               |
-| -------------------------- | ------- | ----------------------------------------- |
-| `Enabled`                  | bool    | Enable or disable rate limiting globally. |
-| `{Category}.MaxAttempts`   | integer | Maximum requests per window.              |
-| `{Category}.WindowSeconds` | integer | Sliding window duration in seconds.       |
-| `{Category}.MaxPerHour`    | integer | Hard hourly cap.                          |
-| `{Category}.MaxPerMinute`  | integer | Hard per-minute cap.                      |
+## 10. Storage Layout
 
----
+### 10.1 Filesystem
 
-## 6. Database
+The default backend stores tarballs under `{Storage.Path}/{safeName}/{version}.tar.gz`. `safeName` is the package name with all characters outside `[a-zA-Z0-9_-]` replaced, which combined with canonical-path verification prevents directory traversal. Every read or write resolves the canonical path via `Path.GetFullPath` and verifies that it lies within `Storage.Path`; otherwise the request is rejected.
 
-### Backends
+### 10.2 S3
 
-| Backend    | When to use                                                                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite     | Default. Zero-configuration, single-file. Suitable for small teams and local registries. The `data/` directory is created automatically. |
-| PostgreSQL | Production deployments with multiple concurrent writers, large package counts, or high traffic.                                          |
+Not yet implemented. The `IPackageStorage` interface is satisfied and the class compiles, but all methods throw `NotImplementedException`. The S3 configuration keys are accepted and validated, but no requests are made to AWS.
 
-### Schema Overview
-
-The database contains six tables managed by EF Core. Column names shown are the database column names (snake_case), as configured in `RegistryDbContext.OnModelCreating`.
-
-#### packages
-
-Stores one record per package name. The package name is the primary key — there is no auto-increment integer ID.
-
-| Column                    | Type     | Constraints   | Description                        |
-| ------------------------- | -------- | ------------- | ---------------------------------- |
-| `name`                    | string   | PK            | Package name (e.g. `"stash-http"`) |
-| `description`             | string   |               | Short description                  |
-| `license`                 | string   |               | SPDX license identifier            |
-| `repository`              | string   |               | Source repository URL              |
-| `readme`                  | string   |               | Extracted README.md content        |
-| `keywords`                | string   |               | JSON array stored as string        |
-| `latest`                  | string   | not null      | Latest published version tag       |
-| `created_at`              | datetime |               | First publication timestamp        |
-| `updated_at`              | datetime |               | Last modification timestamp        |
-| `deprecated`              | bool     | default false | Whether the package is deprecated  |
-| `deprecation_message`     | string   |               | Deprecation reason                 |
-| `deprecation_alternative` | string   |               | Suggested replacement package      |
-| `deprecated_by`           | string   |               | User who set the deprecation       |
-
-#### versions
-
-One record per published version. Composite primary key on `(package_name, version)`.
-
-| Column                | Type     | Constraints             | Description                        |
-| --------------------- | -------- | ----------------------- | ---------------------------------- |
-| `package_name`        | string   | PK, FK → packages(name) | Owning package                     |
-| `version`             | string   | PK                      | Semver version string              |
-| `stash_version`       | string   |                         | Required Stash interpreter version |
-| `dependencies`        | string   |                         | JSON object of dependencies        |
-| `integrity`           | string   | not null                | `sha256-<base64>` hash of tarball  |
-| `published_at`        | datetime |                         | Publication timestamp              |
-| `published_by`        | string   | not null                | Publishing username                |
-| `deprecated`          | bool     | default false           | Whether this version is deprecated |
-| `deprecation_message` | string   |                         | Deprecation reason                 |
-| `deprecated_by`       | string   |                         | User who set the deprecation       |
-
-Foreign key cascades on delete — removing a package removes all its versions.
-
-#### users
-
-Registry user accounts. Username is the primary key.
-
-| Column          | Type     | Constraints                | Description                        |
-| --------------- | -------- | -------------------------- | ---------------------------------- |
-| `username`      | string   | PK                         | Login name                         |
-| `password_hash` | string   | not null                   | Argon2id hash in PHC string format |
-| `role`          | string   | not null, default `"user"` | `"user"` or `"admin"`              |
-| `created_at`    | datetime |                            | Account creation timestamp         |
-
-#### tokens
-
-Scoped API tokens. Each token is identified by a GUID that also serves as the JWT's `jti` claim.
-
-| Column        | Type     | Constraints                    | Description                         |
-| ------------- | -------- | ------------------------------ | ----------------------------------- |
-| `id`          | string   | PK                             | Token ID (matches JWT `jti` claim)  |
-| `username`    | string   | FK → users(username), not null | Token owner                         |
-| `token_hash`  | string   | not null                       | SHA-256 hash of the token           |
-| `scope`       | string   | not null, default `"publish"`  | `"read"`, `"publish"`, or `"admin"` |
-| `created_at`  | datetime |                                | Creation timestamp                  |
-| `expires_at`  | datetime |                                | Expiry timestamp                    |
-| `description` | string   |                                | Human-readable label                |
-
-Foreign key cascades on delete — removing a user removes all their tokens.
-
-#### refresh_tokens
-
-OAuth2 refresh tokens for automatic token renewal. Each record is part of a token family that shares the same `family_id` across rotations.
-
-| Column            | Type     | Constraints                    | Description                                                 |
-| ----------------- | -------- | ------------------------------ | ----------------------------------------------------------- |
-| `id`              | string   | PK                             | Unique refresh token ID (UUID)                              |
-| `username`        | string   | FK → users(username), not null | Token owner                                                 |
-| `token_hash`      | string   | not null, indexed              | SHA-256 hash of the refresh token value                     |
-| `access_token_id` | string   | not null                       | ID of the paired access token                               |
-| `family_id`       | string   | not null, indexed              | Token family ID shared across all rotations                 |
-| `machine_id`      | string   | not null                       | SHA-256 machine fingerprint the token is bound to           |
-| `scope`           | string   | not null, default `"publish"`  | Inherited permission scope                                  |
-| `created_at`      | datetime |                                | Creation timestamp                                          |
-| `expires_at`      | datetime |                                | Expiry timestamp                                            |
-| `consumed`        | bool     | default false                  | Whether this token has been used (consumed during rotation) |
-
-Foreign key cascades on delete — removing a user removes all their refresh tokens. Indexes on `token_hash` and `family_id` for efficient lookup and family revocation.
-
-#### owners
-
-Package ownership mapping. Composite primary key on `(package_name, username)`.
-
-| Column         | Type   | Constraints             | Description    |
-| -------------- | ------ | ----------------------- | -------------- |
-| `package_name` | string | PK, FK → packages(name) | Package        |
-| `username`     | string | PK                      | Owner username |
-
-Foreign key cascades on delete — removing a package removes all its ownership entries.
-
-#### audit_log
-
-Immutable audit trail of all registry state changes.
-
-| Column      | Type     | Constraints        | Description                                       |
-| ----------- | -------- | ------------------ | ------------------------------------------------- |
-| `id`        | int      | PK, auto-increment | Internal identifier                               |
-| `action`    | string   | not null           | Action type (see [Section 11](#11-audit-logging)) |
-| `package`   | string   |                    | Affected package name                             |
-| `version`   | string   |                    | Affected version                                  |
-| `user`      | string   |                    | Actor username                                    |
-| `target`    | string   |                    | Secondary subject (e.g. target username)          |
-| `ip`        | string   |                    | Client IP address                                 |
-| `timestamp` | datetime |                    | Event time (UTC)                                  |
-
----
-
-## 7. Package Storage
-
-### FileSystemStorage
-
-The default backend. Stores tarballs on local disk under a configurable root directory (`data/packages/` by default).
-
-**Storage path format:**
-
-```
-{rootDir}/{safeName}/{version}.tar.gz
-```
-
-Where `{safeName}` is the package name with all characters outside `[a-zA-Z0-9_-]` replaced, preventing directory traversal via the package name field.
-
-**Path traversal protection:** Before any read or write, `FileSystemStorage` resolves the canonical path and verifies that it begins with the configured root directory. Requests with names that resolve outside the root are rejected.
-
-### S3Storage
-
-Stub — not yet implemented. The `IPackageStorage` interface is satisfied and the class compiles, but all methods throw `NotImplementedException`. The configuration keys (`Bucket`, `Region`, `Endpoint`, `AccessKey`, `SecretKey`) are accepted but unused.
-
-### IPackageStorage Interface
+### 10.3 Storage Interface
 
 ```csharp
 public interface IPackageStorage
@@ -1254,208 +719,218 @@ public interface IPackageStorage
 }
 ```
 
-Swapping storage backends requires only changing `storage.type` in `appsettings.json` — no code changes.
+Storage backends are selected by `Storage.Type` and bound at startup; switching backends requires only a configuration change.
 
----
+## 11. Database Schema
 
-## 8. Package Publishing Workflow
+Column names below are the on-disk snake_case names produced by `RegistryDbContext`. EF Core manages migrations.
 
-### Publish
+### 11.1 packages
 
-1. Client sends a `PUT /api/v1/packages/{name}` request with the tarball as the request body. An optional `X-Integrity` header can be included for client-side verification. The version is read from the `stash.json` manifest inside the tarball.
-2. Server validates tarball size against `security.maxPackageSize`. Returns `413` if exceeded.
-3. Server extracts `stash.json` from the tarball and validates it is a well-formed Stash manifest.
-4. Server verifies at least one `.stash` file exists in the tarball.
-5. Server computes the SHA-256 integrity hash of the tarball content.
-6. If the client sent an `X-Integrity` header, the server verifies the client's hash matches. Returns `400` on mismatch.
-7. Server checks that the version does not already exist (versions are immutable). Returns `409` if it does.
-8. Server creates a package record if this is the first version, then adds a version record.
-9. Server extracts `README.md` from the tarball and stores its content in the package record if present.
-10. Server stores the tarball in the configured storage backend.
-11. Server writes an audit log entry for the publish action.
+One row per package name. The name is the primary key.
 
-### Unpublish
+| Column                    | Type     | Constraints   | Description                     |
+| ------------------------- | -------- | ------------- | ------------------------------- |
+| `name`                    | string   | PK            | Package name.                   |
+| `description`             | string   |               | Short description.              |
+| `license`                 | string   |               | SPDX license identifier.        |
+| `repository`              | string   |               | Source repository URL.          |
+| `readme`                  | string   |               | Extracted README content.       |
+| `keywords`                | string   |               | JSON array stored as string.    |
+| `latest`                  | string   | not null      | Latest published version.       |
+| `created_at`              | datetime |               | First publication timestamp.    |
+| `updated_at`              | datetime |               | Last modification timestamp.    |
+| `deprecated`              | bool     | default false | Package-level deprecation flag. |
+| `deprecation_message`     | string   |               | Deprecation reason.             |
+| `deprecation_alternative` | string   |               | Suggested replacement package.  |
+| `deprecated_by`           | string   |               | User who set the deprecation.   |
 
-1. Client sends `DELETE /api/v1/packages/{name}/{version}` with a `publish`-scoped token.
-2. Server verifies the authenticated user is a package owner. Returns `403` if not.
-3. Server checks that the version's publication timestamp is within the `UnpublishWindow` (default 72 hours). Returns `409` if the window has expired.
-4. Server deletes the tarball from the storage backend.
-5. Server removes the version record from the database.
-6. If this was the last version, the package record remains in the database (it is not deleted — the name stays reserved).
-7. Server writes an audit log entry for the unpublish action.
+### 11.2 versions
 
----
+Composite primary key on `(package_name, version)`. Foreign-key cascade on delete from `packages`.
 
-## 9. Rate Limiting
+| Column                | Type     | Constraints             | Description                         |
+| --------------------- | -------- | ----------------------- | ----------------------------------- |
+| `package_name`        | string   | PK, FK → packages(name) | Owning package.                     |
+| `version`             | string   | PK                      | Semver version string.              |
+| `stash_version`       | string   |                         | Required Stash interpreter version. |
+| `dependencies`        | string   |                         | JSON object of dependencies.        |
+| `integrity`           | string   | not null                | `sha256-<base64>` hash of tarball.  |
+| `published_at`        | datetime |                         | Publication timestamp.              |
+| `published_by`        | string   | not null                | Publishing username.                |
+| `deprecated`          | bool     | default false           | Version-level deprecation flag.     |
+| `deprecation_message` | string   |                         | Deprecation reason.                 |
+| `deprecated_by`       | string   |                         | User who set the deprecation.       |
 
-`RateLimitingMiddleware` applies per-category limits before requests reach any controller. Requests that exceed the configured threshold receive a `429 Too Many Requests` response with a `Retry-After` header indicating the earliest time to retry.
+### 11.3 users
 
-### Categories
+| Column          | Type     | Constraints                | Description                         |
+| --------------- | -------- | -------------------------- | ----------------------------------- |
+| `username`      | string   | PK                         | Login name.                         |
+| `password_hash` | string   | not null                   | Argon2id hash in PHC string format. |
+| `role`          | string   | not null, default `"user"` | `"user"` or `"admin"`.              |
+| `created_at`    | datetime |                            | Account creation timestamp.         |
 
-| Category   | Key        | Applies to                    |
-| ---------- | ---------- | ----------------------------- |
-| `Auth`     | IP address | Login and register endpoints  |
-| `Publish`  | Username   | Package publish and unpublish |
-| `Download` | IP address | Package download              |
-| `Search`   | IP address | Search endpoint               |
-| `Refresh`  | IP address | Token refresh endpoint        |
+### 11.4 tokens
 
-### Behavior
+Scoped API tokens. The `id` column is the same value as the JWT `jti` claim.
 
-- Each category maintains a sliding-window bucket per key (IP or username).
-- Buckets are stored in memory. Stale buckets (last activity older than the window) are cleaned up every 1000 requests to bound memory usage.
-- `Enabled: false` in configuration disables the middleware entirely — no overhead.
-- Limits are independently configurable per category via `rateLimiting.{category}.*` in `appsettings.json`.
+| Column        | Type     | Constraints                    | Description                          |
+| ------------- | -------- | ------------------------------ | ------------------------------------ |
+| `id`          | string   | PK                             | Token ID (= JWT `jti`).              |
+| `username`    | string   | FK → users(username), not null | Token owner.                         |
+| `token_hash`  | string   | not null                       | SHA-256 hash of the token.           |
+| `scope`       | string   | not null, default `"publish"`  | `"read"`, `"publish"`, or `"admin"`. |
+| `created_at`  | datetime |                                | Creation timestamp.                  |
+| `expires_at`  | datetime |                                | Expiry timestamp.                    |
+| `description` | string   |                                | Human-readable label.                |
 
-### Rate Limit Response
+Foreign-key cascade on delete from `users`.
+
+### 11.5 refresh_tokens
+
+OAuth2 refresh tokens. All tokens issued from the same login share a `family_id`. Both `token_hash` and `family_id` are indexed.
+
+| Column            | Type     | Constraints                    | Description                                        |
+| ----------------- | -------- | ------------------------------ | -------------------------------------------------- |
+| `id`              | string   | PK                             | Unique refresh token ID.                           |
+| `username`        | string   | FK → users(username), not null | Token owner.                                       |
+| `token_hash`      | string   | not null, indexed              | SHA-256 hash of the refresh token value.           |
+| `access_token_id` | string   | not null                       | ID of the paired access token.                     |
+| `family_id`       | string   | not null, indexed              | Token family ID shared across all rotations.       |
+| `machine_id`      | string   | not null                       | SHA-256 machine fingerprint the token is bound to. |
+| `scope`           | string   | not null, default `"publish"`  | Inherited permission scope.                        |
+| `created_at`      | datetime |                                | Creation timestamp.                                |
+| `expires_at`      | datetime |                                | Expiry timestamp.                                  |
+| `consumed`        | bool     | default false                  | Set when the token has been rotated.               |
+
+Foreign-key cascade on delete from `users`.
+
+### 11.6 owners
+
+Package ownership. Composite primary key on `(package_name, username)`. Foreign-key cascade on delete from `packages`.
+
+| Column         | Type   | Constraints             | Description     |
+| -------------- | ------ | ----------------------- | --------------- |
+| `package_name` | string | PK, FK → packages(name) | Package.        |
+| `username`     | string | PK                      | Owner username. |
+
+### 11.7 audit_log
+
+Immutable record of all state-changing operations. Auto-incrementing primary key.
+
+| Column      | Type     | Constraints        | Description                                |
+| ----------- | -------- | ------------------ | ------------------------------------------ |
+| `id`        | int      | PK, auto-increment | Internal identifier.                       |
+| `action`    | string   | not null           | Action type (see [Section 12]).            |
+| `package`   | string   |                    | Affected package name.                     |
+| `version`   | string   |                    | Affected version.                          |
+| `user`      | string   |                    | Actor username.                            |
+| `target`    | string   |                    | Secondary subject (e.g., target username). |
+| `ip`        | string   |                    | Client IP at time of request.              |
+| `timestamp` | datetime |                    | Event time (UTC).                          |
+
+## 12. Audit Log
+
+All state-changing operations write a single immutable row. Read-only requests are not logged.
+
+| Action                 | Trigger                                                           |
+| ---------------------- | ----------------------------------------------------------------- |
+| `publish`              | Package version published.                                        |
+| `unpublish`            | Package version unpublished.                                      |
+| `user.create`          | User account created.                                             |
+| `user.disable`         | User account disabled.                                            |
+| `owner.add`            | Package owner added.                                              |
+| `owner.remove`         | Package owner removed.                                            |
+| `token.create`         | API token created.                                                |
+| `token.revoke`         | API token revoked.                                                |
+| `token_theft_detected` | Consumed refresh token replayed; entire token family was revoked. |
+| `package.deprecate`    | Package deprecated.                                               |
+| `package.undeprecate`  | Package deprecation cleared.                                      |
+| `version.deprecate`    | Version deprecated.                                               |
+| `version.undeprecate`  | Version deprecation cleared.                                      |
+
+## 13. Publishing Workflow
+
+A publish request is processed as follows. Failures at any step abort the operation and write no audit entry.
+
+1. Verify the request body size against `Security.MaxPackageSize`. Return `413` if exceeded.
+2. Parse the `stash.json` manifest from the tarball; reject malformed manifests with `400`.
+3. Verify at least one `.stash` file is present in the tarball; reject with `400` if not.
+4. Compute the SHA-256 integrity hash of the tarball bytes.
+5. If `X-Integrity` was supplied, verify it matches the computed hash; reject mismatch with `400`.
+6. Verify the version is not already published (versions are immutable); reject with `409` if it is.
+7. Verify the authenticated user is an owner (or is the first publisher of a new package name); reject with `403` if not.
+8. On a new package, create the package row and add the publishing user as the sole owner.
+9. Insert the version row, including the integrity hash and the manifest dependencies.
+10. Extract `README.md` from the tarball if present and store its content on the package row.
+11. Write the tarball to the storage backend.
+12. Write a `publish` audit entry.
+
+An unpublish request is processed symmetrically:
+
+1. Verify the authenticated user is an owner; reject with `403` if not.
+2. Verify the version's publication timestamp is within `Security.UnpublishWindow`; reject otherwise.
+3. Delete the tarball from the storage backend.
+4. Delete the version row.
+5. Leave the package row in place; the name remains reserved even when all versions are gone.
+6. Write an `unpublish` audit entry.
+
+## 14. Rate Limiting
+
+`RateLimitingMiddleware` applies per-category limits before requests reach any controller.
+
+| Category   | Bucket key | Applies to                     |
+| ---------- | ---------- | ------------------------------ |
+| `Auth`     | IP address | Login, register.               |
+| `Publish`  | Username   | Publish, unpublish, deprecate. |
+| `Download` | IP address | Tarball download.              |
+| `Search`   | IP address | Search.                        |
+| `Refresh`  | IP address | Token refresh.                 |
+
+Buckets are stored in memory and use a sliding window. Stale buckets (no activity for longer than the window) are cleaned up every 1000 requests to bound memory use. Setting `RateLimiting.Enabled` to `false` bypasses the middleware entirely.
+
+Rate-limited responses:
 
 ```
 HTTP/1.1 429 Too Many Requests
 Retry-After: 47
 Content-Type: application/json
 
-{
-  "error": "Rate limit exceeded. Try again in 47 seconds."
-}
+{ "error": "Rate limit exceeded. Try again in 47 seconds." }
 ```
 
----
+## 15. Security Contract
 
-## 10. Security
+| Surface                | Contract                                                                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| JWT signing key        | HMAC-SHA256, at least 32 characters. A `null` value generates a random key at startup; tokens do not survive restarts.                  |
+| Password hashing       | Argon2id with OWASP parameters, stored in PHC string format.                                                                            |
+| Integrity verification | Every published tarball stores a `sha256-<base64>` hash; downloads return it as `X-Integrity`. Optional client verification on publish. |
+| Path traversal         | `FileSystemStorage` canonicalizes every path before reading or writing and rejects paths that escape `Storage.Path`.                    |
+| Input validation       | Username `1-64` chars from `[a-zA-Z0-9_-]`. Password minimum 8 chars. Package name and version validated against `stash.json`.          |
+| Machine binding        | Refresh tokens are bound to a SHA-256 machine fingerprint of `hostname:username:platform`; mismatched fingerprints are rejected.        |
+| Token revocation       | Database-driven via `jti` lookup on every authenticated request.                                                                        |
 
-### JWT Signing Key
+## 16. CLI Integration
 
-The `security.jwtSigningKey` must be at least 32 characters long to satisfy HMAC-SHA256 requirements. If `null` or absent, the server generates a random key at startup and logs a warning:
-
-```
-WARN: No JwtSigningKey configured. A random key was generated.
-      Tokens will not survive a server restart.
-```
-
-For production, always set an explicit key and protect it as a secret.
-
-### Integrity Verification
-
-Every published package has a `sha256-<base64>` integrity hash stored in the version record. The hash covers the raw tarball bytes. Clients can supply an `X-Integrity` header when publishing — the server verifies the client's hash matches its own computation before storing the tarball. The same hash is returned in the `X-Integrity` response header on downloads, allowing clients to verify the download was not corrupted or tampered with.
-
-### Path Traversal Protection
-
-`FileSystemStorage` resolves all storage paths to their canonical form using `Path.GetFullPath` and checks that the result is prefixed by the configured root directory before performing any file operation. Package names and version strings that would escape the root are rejected.
-
-### Input Validation
-
-| Field        | Constraint                                    |
-| ------------ | --------------------------------------------- |
-| Username     | 1–64 characters, `[a-zA-Z0-9_-]` only         |
-| Password     | Minimum 8 characters                          |
-| Package name | Validated against `stash.json` manifest rules |
-| Version      | Semver string from `stash.json` manifest      |
-
-### Known Limitations
-
-- **LDAP and OIDC authentication:** LDAP and OIDC providers are stubs — only local authentication is currently functional.
-
----
-
-## 11. Audit Logging
-
-All state-changing operations produce an immutable audit log entry. No read-only operations are logged.
-
-### Logged Actions
-
-| Action                 | Trigger                                                             |
-| ---------------------- | ------------------------------------------------------------------- |
-| `publish`              | Package version published                                           |
-| `unpublish`            | Package version unpublished                                         |
-| `user.create`          | User account created                                                |
-| `user.disable`         | User account disabled                                               |
-| `owner.add`            | Package owner added                                                 |
-| `owner.remove`         | Package owner removed                                               |
-| `token.create`         | Token created                                                       |
-| `token.revoke`         | Token revoked                                                       |
-| `token_theft_detected` | Consumed refresh token presented — all tokens in the family revoked |
-| `package.deprecate`    | Package deprecated                                                  |
-| `package.undeprecate`  | Package deprecation removed                                         |
-| `version.deprecate`    | Version deprecated                                                  |
-| `version.undeprecate`  | Version deprecation removed                                         |
-
-### Entry Schema
-
-Each audit entry records:
-
-| Field       | Description                                             |
-| ----------- | ------------------------------------------------------- |
-| `action`    | Action type from the table above                        |
-| `package`   | Affected package name (may be null for user actions)    |
-| `version`   | Affected version string (may be null)                   |
-| `user`      | Username of the actor performing the action             |
-| `target`    | Secondary subject username (for user and owner actions) |
-| `ip`        | Client IP address at time of request                    |
-| `timestamp` | UTC timestamp of the action                             |
-
-### Querying the Audit Log
-
-The admin endpoint `GET /api/v1/admin/audit-log` supports filtering by `package` and `action`, with page-based pagination. Log entries are returned in descending chronological order (newest first).
-
----
-
-## 12. CLI Integration
-
-The `stash pkg` CLI commands map directly to registry API calls. Authentication tokens are stored in `~/.stash/config.json` with mode `0600` on Unix systems.
-
-### Command Reference
+The `stash pkg` CLI maps directly to the endpoints in [Section 3](#3-endpoint-summary). Credentials are stored at `~/.stash/config.json` with mode `0600` on Unix.
 
 | CLI Command           | HTTP Request                                     | Description                        |
 | --------------------- | ------------------------------------------------ | ---------------------------------- |
-| `stash pkg login`     | `POST /api/v1/auth/login`                        | Authenticate and store token       |
-| `stash pkg logout`    | —                                                | Remove stored credentials          |
-| `stash pkg publish`   | `PUT /api/v1/packages/{name}`                    | Upload tarball and publish version |
-| `stash pkg unpublish` | `DELETE /api/v1/packages/{name}/{version}`       | Unpublish a version                |
-| `stash pkg install`   | `GET /api/v1/packages/{name}/{version}/download` | Download and install packages      |
-| `stash pkg update`    | `GET /api/v1/packages/{name}/{version}/download` | Re-resolve and update dependencies |
-| `stash pkg search`    | `GET /api/v1/search`                             | Search for packages                |
-| `stash pkg info`      | `GET /api/v1/packages/{name}`                    | Display package metadata           |
-| `stash pkg owner`     | `PUT /api/v1/admin/packages/{name}/owners`       | Manage package owners              |
+| `stash pkg login`     | `POST /api/v1/auth/login`                        | Authenticate and store token pair. |
+| `stash pkg logout`    | -                                                | Remove stored credentials.         |
+| `stash pkg publish`   | `PUT /api/v1/packages/{name}`                    | Upload tarball and publish.        |
+| `stash pkg unpublish` | `DELETE /api/v1/packages/{name}/{version}`       | Unpublish.                         |
+| `stash pkg install`   | `GET /api/v1/packages/{name}/{version}/download` | Download and install.              |
+| `stash pkg update`    | `GET /api/v1/packages/{name}/{version}/download` | Re-resolve and update.             |
+| `stash pkg search`    | `GET /api/v1/search`                             | Search.                            |
+| `stash pkg info`      | `GET /api/v1/packages/{name}`                    | Display metadata.                  |
+| `stash pkg owner`     | `PUT /api/v1/admin/packages/{name}/owners`       | Manage owners.                     |
 
-### Registry Resolution
+The CLI targets exactly one registry per invocation. With no `--registry` flag it uses `defaultRegistry` from `~/.stash/config.json`; if no default is set, the command errors. `login` and `logout` always require an explicit `--registry` flag, since they configure the registry entry itself.
 
-Stash follows the npm/Cargo model: one default registry, explicit overrides. Every registry-facing command accepts `--registry <url>` to target a specific registry. When omitted, the CLI uses the `defaultRegistry` from `~/.stash/config.json`. The CLI always prints which registry is being used:
-
-```
-$ stash pkg search http-client
-Registry: https://registry.example.com/api/v1
-Found 3 packages (page 1/1):
-  ...
-```
-
-**Resolution order:**
-
-1. If `--registry <url>` is provided → use that registry exclusively
-2. If `--registry` is omitted → use `defaultRegistry` from `~/.stash/config.json`
-3. If no default is configured → error: `"No default registry configured. Run 'stash pkg login --registry <url>' to set one."`
-
-**Important:** The CLI never searches multiple registries. Each command invocation targets exactly one registry — either the explicit `--registry` value or the configured default.
-
-**Authentication commands** (`login`, `logout`) always require an explicit `--registry` flag — there is no fallback, since these commands establish the registry configuration itself:
-
-```bash
-stash pkg login --registry https://registry.example.com/api/v1    # required
-stash pkg logout --registry https://registry.example.com/api/v1   # required
-```
-
-**Default registry lifecycle:**
-
-- **Set automatically:** The first `stash pkg login --registry <url>` sets `defaultRegistry` if none is configured
-- **Cleared on logout:** Logging out of the current default clears the `defaultRegistry` field
-- **Manual override:** Edit `~/.stash/config.json` directly to change the default
-
-### Credential Storage
-
-```
-~/.stash/config.json    (Unix mode 0600)
-```
-
-Registries are stored as a URL-keyed dictionary. Each entry holds an optional authentication token:
+The config file is a URL-keyed dictionary:
 
 ```json
 {
@@ -1472,65 +947,28 @@ Registries are stored as a URL-keyed dictionary. Each entry holds an optional au
 }
 ```
 
-The CLI automatically refreshes access tokens when they are within 5 minutes of expiry. On successful refresh, both the new access token and new refresh token are persisted to the config file. If refresh fails (network error, expired refresh token), the CLI falls back to the existing access token silently.
+The CLI refreshes the access token automatically when it is within five minutes of expiry, persists the new pair to the config file, and falls back silently to the existing access token if refresh fails. The first successful `login` sets `defaultRegistry` if none was configured. Logging out of the current default clears `defaultRegistry`.
 
-Logging in to a registry adds an entry and sets `defaultRegistry` if none is configured. Logging out removes the token and clears `defaultRegistry` if it pointed to the logged-out registry.
+Full CLI semantics are documented in [PKG - Package Manager CLI](PKG%20—%20Package%20Manager%20CLI.md).
 
-### Typical Workflow
+## 17. Limitations
 
-```bash
-# 1. Log in to a registry
-stash pkg login --registry https://registry.example.com/api/v1
+| Limitation          | Contract                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| Auth providers      | Only `local` is functional. `ldap` and `oidc` configuration is accepted but unused.             |
+| Storage backends    | Only `filesystem` is functional. `s3` returns `NotImplementedException` on every operation.     |
+| Integrity algorithm | Only `sha256` is supported.                                                                     |
+| Stats endpoint      | `GET /admin/stats` currently returns only the user count.                                       |
+| Unpublish window    | After `Security.UnpublishWindow` expires, the only path to discourage a version is deprecation. |
 
-# 2. Initialize a new package
-stash pkg init
+## 18. Change Rules
 
-# 3. Install dependencies (uses default registry)
-stash pkg install http-client@1.2.0
+Changes to the registry must preserve these rules:
 
-# 4. Publish a package (uses default registry)
-stash pkg publish
-
-# 5. Search for packages on a different registry
-stash pkg search http-client --registry https://other-registry.example.com/api/v1
-```
-
----
-
-## 13. Implementation Status
-
-| Feature                              | Status  |
-| ------------------------------------ | ------- |
-| Package publishing & unpublishing    | ✅      |
-| Package search with pagination       | ✅      |
-| JWT authentication with token scopes | ✅      |
-| Local auth provider                  | ✅      |
-| SQLite database backend              | ✅      |
-| PostgreSQL database backend          | ✅      |
-| Filesystem package storage           | ✅      |
-| Rate limiting middleware             | ✅      |
-| Audit logging                        | ✅      |
-| Package ownership management         | ✅      |
-| TLS support                          | ✅      |
-| Configurable via JSON                | ✅      |
-| LDAP authentication                  | ❌ stub |
-| OIDC authentication                  | ❌ stub |
-| S3 package storage                   | ❌ stub |
-| Package deprecation                  | ✅      |
-| Argon2id password hashing            | ✅      |
-
----
-
-## 14. Design Decisions
-
-| Decision            | Choice                                   | Rationale                                                                                                                                                                                                                                                                               |
-| ------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Database ORM        | EF Core                                  | Type-safe queries, migration support, and transparent multi-provider (SQLite/PostgreSQL) via a single `DbContext`                                                                                                                                                                       |
-| Auth tokens         | JWT                                      | Stateless verification, standard claims format, scope embedding without database round-trips on every read request                                                                                                                                                                      |
-| Token revocation    | JTI database check on `OnTokenValidated` | Immediate revocation is required despite JWT being stateless — JTI lookup adds one indexed query per authenticated request                                                                                                                                                              |
-| Config format       | JSON file (`appsettings.json`)           | Simple, no external dependencies, consistent with the `stash.json` package manifest format already familiar to Stash users                                                                                                                                                              |
-| Storage abstraction | `IPackageStorage` interface              | Swap filesystem for S3 (or any other backend) via config alone, with no controller or service code changes                                                                                                                                                                              |
-| Rate limiting       | Custom middleware                        | Lightweight, no external service dependencies, category-aware (different limits for publish vs. download), and trivially disableable for development                                                                                                                                    |
-| API style           | Controller-based REST                    | Clear route-to-controller mapping, attribute-based authorization, straightforward unit testability via `WebApplicationFactory`                                                                                                                                                          |
-| API versioning      | URL prefix (`/api/v1/`)                  | Explicit, highly visible, no content negotiation complexity — the registry is a simple CRUD service, not an evolving multi-version API                                                                                                                                                  |
-| Circular deps       | Hard reject (all cycles)                 | Circular package dependencies are unconditionally rejected during resolution. DFS-based detection reports the full cycle path. Matches language-level circular import rejection and Cargo/Go conventions. Relaxing later is backward-compatible; tightening later would break packages. |
+- **Endpoint additions** must be documented in [Section 3](#3-endpoint-summary) before merging, and must use the existing `/api/v1` prefix; an incompatible change requires a new path prefix.
+- **Breaking changes to request or response shapes** are not allowed under `/api/v1`. Add a new field rather than rename or repurpose an existing one.
+- **New scopes, policies, or claims** must be documented in [Section 4](#4-authentication) and must not weaken any existing policy.
+- **New configuration keys** must be documented in [Section 9](#9-configuration) with a default that preserves existing behavior.
+- **New audit actions** must be added to [Section 12](#12-audit-log) and the schema must remain append-only.
+- **New database tables or columns** require an EF Core migration; existing columns must not be renamed or repurposed.
+- Implementation details (controller plumbing, DI registration, service internals, deployment topology) belong in source comments or engineering notes, not in this reference.

@@ -1,338 +1,247 @@
-# Stash — Browser Playground
+# Playground - Browser Playground
 
-> **Status:** v1.0
-> **Created:** March 2026
-> **Purpose:** Interactive browser-based environment for writing, running, and sharing Stash code — no installation required.
+> **Status:** Stable product and maintainer reference
+> **Audience:** Playground users, website maintainers, and contributors changing browser execution or editor intelligence.
+> **Purpose:** Defines the Stash browser playground experience, sandbox contract, editor features, sharing model, and maintenance rules.
 >
 > **Companion documents:**
 >
-> - [Language Specification](Stash%20—%20Language%20Specification.md) — language syntax, type system, interpreter architecture
-> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions
-> - [LSP — Language Server Protocol](LSP%20—%20Language%20Server%20Protocol.md) — language server
-> - [TAP — Testing Infrastructure](TAP%20—%20Testing%20Infrastructure.md) — built-in test runner
-> - [TPL — Templating Engine](TPL%20—%20Templating%20Engine.md) — templating engine
+> - [Language Specification](Stash%20%E2%80%94%20Language%20Specification.md) - syntax and language semantics.
+> - [Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md) - built-in namespace API surface.
+> - [LSP - Language Server Protocol](LSP%20%E2%80%94%20Language%20Server%20Protocol.md) - editor-intelligence behavior mirrored in the browser.
+> - [TAP - Testing Infrastructure](TAP%20%E2%80%94%20Testing%20Infrastructure.md) - test framework behavior.
+> - [TPL - Templating Engine](TPL%20%E2%80%94%20Templating%20Engine.md) - templating language behavior.
 
----
+The Stash Playground is a Blazor WebAssembly application for writing, analyzing, formatting, running, and sharing Stash code in the browser. Code runs client-side; the playground does not send user code to a server for execution.
 
-## Table of Contents
+## 1. Scope
 
-1. [Overview](#1-overview)
-2. [Getting Started](#2-getting-started)
-3. [Editor Features](#3-editor-features)
-4. [Curated Examples](#4-curated-examples)
-5. [Feature Showcases](#5-feature-showcases)
-6. [Toolbar & Actions](#6-toolbar--actions)
-7. [Sharing & Persistence](#7-sharing--persistence)
-8. [Sandbox Model](#8-sandbox-model)
-9. [Theme System](#9-theme-system)
-10. [Architecture](#10-architecture)
-11. [Development](#11-development)
+The playground is for learning, experimentation, demos, and small shareable snippets. It is not a replacement for the local CLI when code needs operating-system access.
 
----
+The browser runtime supports pure Stash computation and disables capability-gated host features such as shell execution, file I/O, networking, process control, and environment mutation.
 
-## 1. Overview
+## 2. User Experience
 
-The Stash Playground is an interactive browser application that lets users write, edit, and execute Stash code directly in the browser. It runs the full Stash interpreter compiled to WebAssembly — no server round-trips, no installation, no sign-up. Code executes entirely client-side.
+The first screen is the editor, toolbar, and output panel.
 
-The playground is designed for learning the language, experimenting with ideas, and sharing code snippets. It provides the same editing experience as a desktop IDE — syntax highlighting, autocomplete, hover documentation, signature help, real-time error diagnostics, and code formatting — all powered by the same analysis engine used by the VS Code extension.
+| Area               | Behavior                                                                |
+| ------------------ | ----------------------------------------------------------------------- |
+| Editor             | Monaco editor configured for Stash syntax.                              |
+| Toolbar            | Example loader, format, download, share, theme toggle, and run command. |
+| Output panel       | Program output, runtime errors, elapsed time, and step count.           |
+| Limitations banner | Explains which OS features are unavailable in the browser.              |
+| Showcases          | Read-only examples for non-sandboxed features.                          |
 
-**Key capabilities:**
-
-| Feature                 | Description                                                         |
-| ----------------------- | ------------------------------------------------------------------- |
-| **Code execution**      | Run Stash scripts instantly with Ctrl+Enter or the Run button       |
-| **IntelliSense**        | Autocomplete, hover info, signature help, and real-time diagnostics |
-| **Syntax highlighting** | Full Monarch tokenizer with Catppuccin color themes                 |
-| **10 curated examples** | Pre-built scripts covering core language features                   |
-| **Feature showcases**   | Read-only demonstrations of platform-dependent features             |
-| **Share via URL**       | Generate a shareable link that encodes your code in the URL         |
-| **Autosave**            | Code is automatically saved to browser storage                      |
-| **Format code**         | One-click code formatting using the built-in Stash formatter        |
-| **Download**            | Export your code as a `.stash` file                                 |
-| **Dark / light themes** | Toggle between Catppuccin Mocha (dark) and Catppuccin Latte (light) |
-
----
-
-## 2. Getting Started
-
-Open the playground in any modern browser. The editor loads with a "Hello World" example that demonstrates basic Stash features — variables, structs, arrays, and output.
-
-**Running code:**
-
-- Press **Ctrl+Enter** (or **Cmd+Enter** on macOS) to execute the current code
-- Or click the **▶ Run** button in the toolbar
-
-Output appears in the panel on the side of the editor, along with execution statistics (elapsed time and step count).
-
-**Exploring the language:**
-
-Use the **Examples** dropdown in the toolbar to load any of the 10 curated examples. Each example is self-contained and demonstrates a different aspect of Stash — from basic types to functional programming to algorithms.
-
-**Writing your own code:**
-
-Simply clear the editor and start typing. The editor provides autocomplete suggestions as you type — press `.` after a namespace name (like `arr`, `str`, `math`) to see all available functions with documentation.
-
----
+Run code with the Run button or `Ctrl+Enter` / `Cmd+Enter`.
 
 ## 3. Editor Features
 
-The playground uses the Monaco editor (the same editor that powers VS Code) with full Stash language support.
+The Monaco editor integrates with Stash analysis services compiled into WebAssembly.
 
-### Syntax Highlighting
+| Feature             | Source                                                  |
+| ------------------- | ------------------------------------------------------- |
+| Syntax highlighting | Monarch tokenizer in `wwwroot/js/stash-language.js`.    |
+| Diagnostics         | `PlaygroundAnalyzer.GetDiagnostics`.                    |
+| Completion          | `PlaygroundAnalyzer.GetCompletions`.                    |
+| Hover               | `PlaygroundAnalyzer.GetHover`.                          |
+| Signature help      | `PlaygroundAnalyzer.GetSignatureHelp`.                  |
+| Formatting          | `PlaygroundAnalyzer.FormatCode` using `StashFormatter`. |
 
-The Monarch tokenizer provides accurate highlighting for all Stash syntax:
+Diagnostics include lexer errors, parse errors, and semantic diagnostics. Completion and hover use the same analysis engine and standard-library metadata used by the rest of the tooling.
 
-- **Keywords** — `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `while`, `return`, `match`, etc.
-- **Namespaces** — All 24 built-in namespaces (`arr`, `dict`, `str`, `math`, `time`, `json`, `fs`, `http`, etc.)
-- **Types** — `int`, `float`, `string`, `bool`, `array`, `dict`, `Error`
-- **Strings** — Regular strings, interpolated strings (`"Hello, ${name}!"`), and triple-quoted strings
-- **Comments** — Single-line (`//`) and block comments (`/* */`)
-- **Operators** — Null-coalescing (`??`), optional chaining (`?.`), pipeline (`|>`), spread (`..`), arrow (`=>`)
+The editor uses `TabSize = 4`, spaces, automatic layout, no minimap, and a monospace font stack suitable for code.
 
-### Autocomplete
+## 4. Execution Model
 
-Intelligent code completion is triggered automatically as you type:
+Each run creates a fresh `StashEngine` and executes the current editor contents.
 
-- **Namespace members** — Type `arr.` to see all array functions with type signatures and documentation
-- **Keywords and built-ins** — Suggestions for language keywords, built-in functions, and type names
-- **Type completions** — After the `is` keyword, suggests available types for type checking
-- **User symbols** — Variables, functions, structs, and enums defined in your code
+| Guard           | Value                    | Contract                                                       |
+| --------------- | ------------------------ | -------------------------------------------------------------- |
+| Capabilities    | `StashCapabilities.None` | Disables capability-gated host namespaces and shell execution. |
+| Step limit      | `5,000,000`              | Stops runaway execution.                                       |
+| Output cap      | `512 KB`                 | Captures output up to the cap and appends a truncation note.   |
+| Engine lifetime | One engine per run       | Runtime globals do not persist between runs.                   |
 
-### Hover Information
+The executor captures stdout and stderr separately. Runtime errors are displayed in the output panel with line and column information when available.
 
-Hover over any identifier to see its type, signature, and documentation. Works for namespace functions, built-in types, and user-defined symbols.
+Step-limit failures are reported as execution failures. Browser cancellation is best-effort; the step limit is the primary loop guard in WebAssembly.
 
-### Signature Help
+## 5. What Works
 
-When calling a function, parameter hints appear showing the function's full signature with the current parameter highlighted. Triggered automatically when you type `(` or `,`.
+The sandbox supports language and standard-library features that do not require external host capabilities, including:
 
-### Real-Time Diagnostics
+- Variables, constants, functions, lambdas, closures, and recursion.
+- Structs, enums, interfaces, extend blocks, methods, and field access.
+- Arrays, dictionaries, ranges, loops, switch expressions, and pattern-style dispatch.
+- String processing, math, JSON-like in-memory data shaping, and pure transformations.
+- Error handling, `try` expressions, and first-class error values.
+- Static diagnostics, formatting, completion, hover, and signature help.
 
-As you type, the editor runs continuous analysis and underlines errors:
+## 6. What Does Not Run
 
-- **Red underlines** — Syntax errors and parse failures
-- **Yellow underlines** — Semantic warnings (e.g., referencing an undefined variable)
+The following are not executable in the browser sandbox:
 
-Diagnostics update in real-time with a short debounce (300ms) so they don't flicker during active typing.
+| Feature                                  | Reason                                                              |
+| ---------------------------------------- | ------------------------------------------------------------------- |
+| `$(...)` shell commands                  | Requires process execution.                                         |
+| `fs.*`                                   | Requires local file-system access.                                  |
+| `http.*`, sockets, SSH, SFTP, WebSockets | Requires network capabilities outside the browser sandbox contract. |
+| `process.*`                              | Requires process management.                                        |
+| `env.*` mutation                         | Requires host environment access.                                   |
+| Scheduler/service management             | Requires OS service APIs.                                           |
 
----
+The playground includes read-only showcases for representative OS-backed features instead of pretending they work in the browser.
 
-## 4. Curated Examples
+## 7. Examples
 
-The playground ships with 10 examples that progressively introduce Stash features:
+Examples are defined in `Stash.Playground/Pages/Playground.razor`. The current curated example set contains 12 runnable examples:
 
-| #   | Example                 | Concepts                                             |
-| --- | ----------------------- | ---------------------------------------------------- |
-| 1   | **Hello World**         | Variables, structs, array operations, `io.println`   |
-| 2   | **Variables & Types**   | Type system, `typeof`, nullish coalescing (`??`)     |
-| 3   | **Structs & Enums**     | Struct definitions, field access, enum values        |
-| 4   | **Arrays & Functional** | `filter`, `map`, `reduce`, `find`, `flatten`         |
-| 5   | **Dictionaries**        | Key access, `dict.merge`, traversal                  |
-| 6   | **Lambdas & Closures**  | Higher-order functions, closures, currying           |
-| 7   | **String Processing**   | `trim`, `upper`, `lower`, `split`, `join`, `replace` |
-| 8   | **Error Handling**      | Try expressions, error types, safe defaults          |
-| 9   | **Pattern Matching**    | Switch expressions, ternary chains, FizzBuzz         |
-| 10  | **Algorithms**          | Quicksort, Fibonacci, statistics                     |
+| Example             | Concepts                                                  |
+| ------------------- | --------------------------------------------------------- |
+| Hello World         | Variables, structs, arrays, and output.                   |
+| Variables & Types   | Types, `typeof`, nullish coalescing, ternary expressions. |
+| Structs & Enums     | Struct construction, field access, enum values.           |
+| Interfaces          | Interface contracts, methods, and type checks.            |
+| Arrays & Functional | Sorting, filtering, mapping, reducing, and flattening.    |
+| Dictionaries        | Dynamic keys, merge, traversal, remove.                   |
+| Lambdas & Closures  | Higher-order functions, closures, currying.               |
+| String Processing   | Trim, case conversion, split, join, search, replace.      |
+| Error Handling      | Throwing, `try`, error checks, safe defaults.             |
+| Pattern Matching    | Switch expressions, ternary chains, FizzBuzz.             |
+| Algorithms          | Quicksort, Fibonacci, statistics.                         |
+| Extend Blocks       | Methods added to built-in and user-defined types.         |
 
-Select any example from the dropdown in the toolbar. Each example replaces the current editor content and can be run immediately.
+Runnable examples must work with `StashCapabilities.None`, produce visible output, and complete within the step limit.
 
----
+## 8. Showcases
 
-## 5. Feature Showcases
+Showcases are collapsible, read-only examples with pre-rendered output. They document features that require a local Stash installation.
 
-Some Stash features require operating system access and cannot run in a browser sandbox — shell commands, file system operations, HTTP requests, and process management. The playground includes **read-only showcase cards** for these features, each displaying representative code alongside pre-rendered output.
+| Showcase                | Demonstrates                               |
+| ----------------------- | ------------------------------------------ |
+| Shell Command Execution | Command literals and shell-style output.   |
+| File System Operations  | Reading, writing, and listing files.       |
+| HTTP Requests           | HTTP client calls and response handling.   |
+| Process Management      | Spawning, checking, and killing processes. |
 
-Showcases are collapsible and appear below the main editor. They give users a preview of what Stash can do on a real system without pretending these features work in the browser.
+Showcases must not be wired to execute in the browser.
 
-| Showcase                    | What it demonstrates                                  |
-| --------------------------- | ----------------------------------------------------- |
-| **Shell Command Execution** | `$(...)` syntax for running system commands           |
-| **File System Operations**  | `fs.readFile`, `fs.writeFile`, directory operations   |
-| **HTTP Requests**           | `http.get`, `http.post`, API integration              |
-| **Process Management**      | `process.exec`, `process.spawn`, background processes |
+## 9. Sharing
 
----
+The Share action encodes the current editor text into the URL hash:
 
-## 6. Toolbar & Actions
-
-The toolbar sits at the top, on the right hand side of the screen, providing quick access to common actions:
-
-| Button         | Shortcut   | Description                                                |
-| -------------- | ---------- | ---------------------------------------------------------- |
-| **⚡ Format**  | —          | Formats the editor code using the built-in Stash formatter |
-| **⬇ Download** | —          | Downloads the current code as `script.stash`               |
-| **🔗 Share**   | —          | Copies a shareable URL to the clipboard                    |
-| **▶ Run**      | Ctrl+Enter | Executes the code and displays the output                  |
-
-The Share button generates a URL with the code encoded in the hash fragment. When someone opens the link, the playground automatically loads the shared code.
-
-The output panel includes a **📋 Copy** button for copying execution results to the clipboard.
-
----
-
-## 7. Sharing & Persistence
-
-### Share via URL
-
-Click **🔗 Share** to generate a link like:
-
-```
-https://playground.stash-lang.org/#code=bGV0IHggPSA0MjsKaW8ucHJpbnRsbih4KTs=
+```text
+https://playground.stash-lang.dev/#code=<base64>
 ```
 
-The code is Base64-encoded in the URL hash fragment. When someone opens this link, the playground decodes the hash and loads the code into the editor. This approach keeps everything client-side — no server storage, no expiration, no accounts.
+The code is stored in the fragment, not sent to a server. Opening a share URL decodes the hash and loads it into the editor.
 
-URL hash takes priority: if a share link is opened, the shared code loads regardless of what was previously autosaved.
+Load priority:
 
-### Autosave
+1. `#code=` hash fragment.
+2. Browser `localStorage`.
+3. Default example.
 
-The playground automatically saves your code to the browser's `localStorage` every time the content changes (with a 300ms debounce). When you return to the playground later, your last code is restored automatically.
+Large snippets can produce long URLs. The playground does not provide server-side snippet storage, expiration, accounts, or privacy controls.
 
-**Priority order on page load:**
+## 10. Persistence
 
-1. URL hash code (from a share link) — highest priority
-2. localStorage saved code — restored if no hash is present
-3. Default "Hello World" example — used on first visit
+Editor contents are saved to browser `localStorage` under `stash-playground-code`. Saving is triggered from the JavaScript editor integration. A later visit restores the saved code when no share hash is present.
 
----
+Clearing browser storage clears the autosaved snippet.
 
-## 8. Sandbox Model
+## 11. Actions
 
-Code runs in a restricted sandbox to ensure safety and responsiveness in the browser environment.
+| Action       | Behavior                                                                   |
+| ------------ | -------------------------------------------------------------------------- |
+| Run          | Executes current editor contents and updates the output panel.             |
+| Format       | Runs the Stash formatter and replaces editor contents with formatted code. |
+| Download     | Downloads the current editor contents as `playground.stash`.               |
+| Share        | Copies a URL hash link to the clipboard.                                   |
+| Copy output  | Copies current stdout text to the clipboard.                               |
+| Theme toggle | Switches between dark and light playground themes.                         |
 
-| Guard            | Limit                    | Purpose                                                  |
-| ---------------- | ------------------------ | -------------------------------------------------------- |
-| **Capabilities** | `StashCapabilities.None` | Disables shell, file system, network, and process access |
-| **Step limit**   | 5,000,000 steps          | Prevents infinite loops from freezing the browser tab    |
-| **Output cap**   | 512 KB                   | Prevents memory exhaustion from excessive output         |
+Clipboard actions depend on browser clipboard permissions and may fail.
 
-When the step limit is exceeded, execution stops and an error message is displayed. The output cap silently truncates output beyond 512 KB.
+## 12. Themes
 
-**What works in the sandbox:**
+The playground ships with two UI/editor themes:
 
-All pure computation — variables, functions, structs, enums, arrays, dictionaries, string operations, math, pattern matching, closures, error handling, type checking, and all functional programming features.
+| Theme         | Mode                                   |
+| ------------- | -------------------------------------- |
+| `stash-dark`  | Catppuccin Mocha-inspired dark theme.  |
+| `stash-light` | Catppuccin Latte-inspired light theme. |
 
-**What doesn't work in the sandbox:**
+CSS variables live in `wwwroot/css/app.css`. Monaco theme definitions and token styling live in `wwwroot/js/stash-language.js`. Theme changes should update both layers together.
 
-Anything requiring OS access — shell commands (`$(...)`), file I/O (`fs.*`), HTTP requests (`http.*`), process management (`process.*`), and environment variables (`env.*`). These features are demonstrated in the [Feature Showcases](#5-feature-showcases) instead.
+## 13. Architecture
 
----
+The playground is a `net10.0` Blazor WebAssembly app.
 
-## 9. Theme System
+| Layer              | Implementation                                   |
+| ------------------ | ------------------------------------------------ |
+| UI                 | `Pages/Playground.razor`                         |
+| Editor integration | BlazorMonaco plus `wwwroot/js/stash-language.js` |
+| Execution          | `Services/PlaygroundExecutor.cs`                 |
+| Analysis bridge    | `Services/PlaygroundAnalyzer.cs`                 |
+| Output cap         | `Services/CappedStringWriter.cs`                 |
+| Result DTO         | `Services/PlaygroundResult.cs`                   |
 
-The playground supports two color themes, toggled via the button in the top bar:
+Project references:
 
-| Theme                | Background | Style       |
-| -------------------- | ---------- | ----------- |
-| **Catppuccin Mocha** | `#1e1e2e`  | Dark theme  |
-| **Catppuccin Latte** | `#eff1f5`  | Light theme |
+| Project          | Purpose                                                    |
+| ---------------- | ---------------------------------------------------------- |
+| `Stash.Core`     | Lexer, parser, AST, common runtime contracts.              |
+| `Stash.Bytecode` | Compiler and VM execution.                                 |
+| `Stash.Analysis` | Diagnostics, completion, hover, signature help, formatter. |
+| `Stash.Stdlib`   | Built-in metadata and capability-gated runtime APIs.       |
 
-Both themes apply consistently to the entire UI — editor, output panel, toolbar, showcases, and all controls. The Monaco editor uses custom theme definitions that map Stash token types to Catppuccin palette colors (Mauve for keywords, Green for strings, Sky for operators, Peach for numbers, etc.).
+## 14. Data Flow
 
----
+Editor analysis flow:
 
-## 10. Architecture
+1. Monaco detects text changes or editor requests.
+2. JavaScript calls `[JSInvokable]` methods on `PlaygroundAnalyzer`.
+3. `AnalysisEngine` analyzes `file:///playground.stash`.
+4. JavaScript converts DTOs into Monaco diagnostics, completions, hovers, and signature help.
 
-The playground is a **Blazor WebAssembly** application that compiles the Stash interpreter to WebAssembly and runs it entirely in the browser.
+Run flow:
 
-### Technology Stack
+1. User clicks Run or presses `Ctrl+Enter` / `Cmd+Enter`.
+2. `Playground.razor` reads editor text.
+3. `PlaygroundExecutor` creates a fresh `StashEngine(StashCapabilities.None)`.
+4. Output is captured through `CappedStringWriter`.
+5. Result, errors, elapsed milliseconds, and step count are rendered in the output panel.
 
-| Layer                | Technology                                                 |
-| -------------------- | ---------------------------------------------------------- |
-| **UI framework**     | Blazor WebAssembly (.NET 10)                               |
-| **Code editor**      | Monaco Editor via BlazorMonaco 3.4.0                       |
-| **Language support** | Monarch tokenizer (syntax) + Stash.Analysis (IntelliSense) |
-| **Execution**        | Stash.Core (lexer/parser) + Stash.Bytecode (bytecode VM)   |
-| **Formatter**        | StashFormatter from Stash.Analysis                         |
+## 15. Development
 
-### How It Works
-
-The application compiles three Stash projects to WebAssembly:
-
-1. **Stash.Core** — The lexer and recursive-descent parser, producing AST nodes
-2. **Stash.Bytecode** — The bytecode VM that compiles and executes AST nodes
-3. **Stash.Analysis** — The analysis engine that provides diagnostics, completions, hover info, signature help, and formatting
-
-When the user clicks Run, the Blazor component calls `PlaygroundExecutor`, which creates a fresh `StashEngine` instance with sandbox restrictions (`StashCapabilities.None`, step limit, output cap), compiles and executes the code, and returns the captured output.
-
-IntelliSense features work through `PlaygroundAnalyzer` — a static C# service with `[JSInvokable]` methods that the Monaco editor's JavaScript providers call via .NET interop. The analysis engine parses the code, resolves symbols, and returns structured results (diagnostics, completions, hover info, signatures) that the JavaScript layer transforms into Monaco-compatible objects.
-
-### Project Structure
-
-```
-Stash.Playground/
-├── Pages/
-│   └── Playground.razor          # Main UI — editor, toolbar, output, examples, showcases
-├── Services/
-│   ├── PlaygroundExecutor.cs     # Sandboxed script execution
-│   ├── PlaygroundAnalyzer.cs     # IntelliSense bridge (C# ↔ JS interop)
-│   ├── PlaygroundResult.cs       # Execution result model
-│   └── CappedStringWriter.cs    # Output size limiter
-├── wwwroot/
-│   ├── index.html                # Host page with WASM loader
-│   ├── css/app.css               # Dual-theme styles (Catppuccin Mocha/Latte)
-│   └── js/stash-language.js      # Monarch tokenizer, Monaco providers, QoL helpers
-├── Layout/
-│   └── MainLayout.razor          # App shell
-├── Program.cs                    # Blazor WASM entry point
-└── Stash.Playground.csproj       # Project config (BlazorWebAssembly SDK)
-```
-
-### Data Flow
-
-```
-User types code
-    │
-    ├──→ Monaco onChange (300ms debounce)
-    │       ├──→ JS calls PlaygroundAnalyzer.GetDiagnostics() via DotNet.invokeMethodAsync
-    │       │       └──→ Returns markers → Monaco renders squiggles
-    │       └──→ Code saved to localStorage
-    │
-    ├──→ User triggers autocomplete (typing or '.')
-    │       └──→ JS calls PlaygroundAnalyzer.GetCompletions()
-    │               └──→ Returns suggestions → Monaco shows completion menu
-    │
-    ├──→ User hovers over identifier
-    │       └──→ JS calls PlaygroundAnalyzer.GetHover()
-    │               └──→ Returns docs → Monaco shows tooltip
-    │
-    └──→ User clicks Run (or Ctrl+Enter)
-            └──→ Blazor calls PlaygroundExecutor.Execute()
-                    ├──→ Lexer → Parser → Interpreter (sandboxed)
-                    └──→ Returns output + stats → rendered in output panel
-```
-
----
-
-## 11. Development
-
-### Build & Run
+Build:
 
 ```bash
-# Build the playground (and all dependencies)
 dotnet build Stash.Playground/
+```
 
-# Run the development server (hot reload enabled)
-dotnet watch run --project Stash.Playground/
+Run locally:
 
-# Publish for deployment
+```bash
+dotnet run --project Stash.Playground/
+```
+
+Publish:
+
+```bash
 dotnet publish Stash.Playground/ -c Release
 ```
 
-The dev server starts at `http://localhost:5111` by default.
+Use the URL printed by the development server. Do not hard-code a port in docs or tooling unless the project file pins one.
 
-### Adding Examples
+## 16. Maintenance Rules
 
-Examples are defined in `Playground.razor` as a list of `PlaygroundExample` records. Each example has a name, description, and code string. To add a new example:
+When changing the playground:
 
-1. Add a new entry to the `Examples` list in `Playground.razor`
-2. Ensure the code runs successfully in the sandbox (no OS-dependent features)
-3. Keep examples focused — each should demonstrate one concept clearly
-
-### Adding Showcases
-
-Showcases are defined in the same file as collapsible cards. Each has a title, description, code string, and pre-rendered output string. Showcases are for features that **cannot** run in the browser sandbox — they display code and expected output side by side without execution.
-
-### Theme Customization
-
-Theme colors are defined as CSS custom properties in `app.css` using the Catppuccin palette. The Monaco editor themes are defined in `stash-language.js`. Both must be updated together when changing the color scheme.
+- Keep runnable examples pure and sandbox-compatible.
+- Keep showcases read-only when they require OS, network, file-system, or process access.
+- Update this document when example counts, sandbox limits, share format, storage keys, or editor features change.
+- Update `Stash.Playground/README.md` when contributor workflow changes.
+- Keep Monaco tokenization and analysis behavior aligned with language syntax and standard-library metadata.
+- Test generated share links, autosave restore, formatting, diagnostics, and at least one successful and one failing run before release.

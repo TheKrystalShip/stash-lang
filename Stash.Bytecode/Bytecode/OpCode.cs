@@ -241,7 +241,7 @@ public enum OpCode : byte
     Defer = 93,
 
     // === Exception Type Matching ===
-    /// <summary>ABC: Check if caught error in R(A) matches type names K(B); if no match, jump by signed C offset to next clause.</summary>
+    /// <summary>ABx: Check if caught error in R(A) matches type names K(Bx); on match, skip the following jump.</summary>
     CatchMatch = 94,
     /// <summary>A: Re-throw the original RuntimeError that was caught into R(A)'s handler register.</summary>
     Rethrow = 95,
@@ -291,15 +291,19 @@ public static class OpCodeInfo
     {
         // ABx format: register + 16-bit constant/slot index
         OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
-        or OpCode.AddI    // AsBx but same extraction format
-        or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-        or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII or OpCode.IterLoop
         or OpCode.Closure or OpCode.TryBegin
         or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl or OpCode.Extend
         or OpCode.Import or OpCode.ImportAs
         or OpCode.Switch or OpCode.Destructure or OpCode.Retry or OpCode.Timeout
-        or OpCode.TypedWrap
+        or OpCode.TypedWrap or OpCode.CatchMatch
             => OpCodeFormat.ABx,
+
+        // AsBx format: register + signed 16-bit offset/immediate.
+        OpCode.AddI
+        or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
+        or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII
+        or OpCode.IterLoop
+            => OpCodeFormat.AsBx,
 
         // Ax format: 24-bit payload
         OpCode.TryEnd or OpCode.ElevateEnd or OpCode.LockEnd or OpCode.UnsetGlobal

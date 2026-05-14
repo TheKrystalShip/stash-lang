@@ -7,14 +7,14 @@ Stash is a cross-platform scripting language for system administration. The inte
 ```
 Stash.Core          -> Lexer (two-pointer scanner), Parser (recursive-descent), 54 AST node types
 Stash.Stdlib        -> Built-in metadata registry, model records, single source of truth for all namespaces
-Stash.Bytecode      -> Bytecode VM (compiler + register-based VM), 94 opcodes, 35 built-in namespaces
+Stash.Bytecode      -> Bytecode VM (compiler + register-based VM), 101 opcodes, 35 built-in namespaces
 Stash.Analysis      -> Static analysis engine, rules, resolvers, visitors for diagnostics and tooling
 Stash.Cli           -> REPL + script runner (Native AOT)
 Stash.Lsp           -> Language Server Protocol (OmniSharp - NOT AOT, requires reflection)
 Stash.Dap           -> Debug Adapter Protocol (OmniSharp - NOT AOT, requires reflection)
 Stash.Check         -> Static analysis CLI (Native AOT)
 Stash.Format        -> Code formatter CLI (Native AOT)
-Stash.Docs          -> Stdlib reference generator (reads StdlibDefinitions + BuiltInErrorRegistry -> writes docs/)
+Stash.Docs          -> Reference generators (stdlib metadata + bytecode opcode metadata -> writes docs/)
 Stash.Tap           -> TAP test framework runtime
 Stash.Tpl           -> Templating engine
 Stash.Scheduler     -> Cross-platform OS service management (systemd, launchd, Task Scheduler)
@@ -94,12 +94,13 @@ Detailed docs live in `docs/` - link to these instead of duplicating content:
 | Package registry            | `docs/Registry — Package Registry.md`        |
 | Design specs & analysis     | `docs/specs/`                                |
 
-**`docs/Stash — Standard Library Reference.md` is generated - do not edit it by hand.**
-It is written by `Stash.Docs` from `StdlibDefinitions` and `BuiltInErrorRegistry` metadata.
-To update it, change the metadata (attributes, XML docs) then run:
+**`docs/Stash — Standard Library Reference.md` and `docs/Bytecode VM — Instruction Set Reference.md` are generated - do not edit them by hand.**
+The stdlib reference is written from `StdlibDefinitions` and `BuiltInErrorRegistry` metadata.
+The bytecode instruction reference is written from `Stash.Bytecode/Bytecode/OpCode.cs` XML summaries, category comments, and runtime opcode metadata.
+To update generated docs, change the metadata then run:
 
 ```bash
 dotnet run --project Stash.Docs/
 ```
 
-The `StandardLibraryReferenceTests` test fails if the checked-in file is stale, so CI catches drift automatically.
+Use `--stdlib` or `--bytecode` to regenerate just one document. The generated-reference tests fail if the checked-in files are stale, so CI catches drift automatically.

@@ -4,9 +4,10 @@ using System;
 using System.IO;
 
 /// <summary>
-/// CLI entry point. Resolves the target Markdown path (CLI argument, then
-/// <c>STASH_DOCS_TARGET</c> env var, then walking up from the binary to find
-/// the repo's <c>docs/</c> directory) and overwrites the file in place.
+/// CLI entry point for generated Markdown references. With no arguments it
+/// overwrites every generated document in <c>docs/</c>. Use <c>--stdlib</c>,
+/// <c>--bytecode</c>, or <c>--all</c> for explicit generation modes. A single
+/// non-option argument remains a backward-compatible standard-library target path.
 /// </summary>
 internal static class Program
 {
@@ -14,9 +15,33 @@ internal static class Program
     {
         try
         {
-            string target = ResolveTarget(args);
-            ReferenceGenerator.WriteTo(target);
-            Console.WriteLine("Wrote " + target);
+            string repoRoot = FindRepoRoot();
+
+            if (args.Length == 0)
+            {
+                WriteStandardLibraryReference(Path.Combine(repoRoot, ReferenceGenerator.DefaultRelativePath));
+                WriteBytecodeReference(repoRoot, Path.Combine(repoRoot, BytecodeInstructionReferenceGenerator.DefaultRelativePath));
+            }
+            else if (args.Length == 1 && args[0] == "--all")
+            {
+                WriteStandardLibraryReference(Path.Combine(repoRoot, ReferenceGenerator.DefaultRelativePath));
+                WriteBytecodeReference(repoRoot, Path.Combine(repoRoot, BytecodeInstructionReferenceGenerator.DefaultRelativePath));
+            }
+            else if (args.Length == 1 && args[0] == "--stdlib")
+            {
+                WriteStandardLibraryReference(Path.Combine(repoRoot, ReferenceGenerator.DefaultRelativePath));
+            }
+            else if (args.Length == 1 && args[0] == "--bytecode")
+            {
+                WriteBytecodeReference(repoRoot, Path.Combine(repoRoot, BytecodeInstructionReferenceGenerator.DefaultRelativePath));
+            }
+            else
+            {
+                // Backward-compatible mode: a single path still means "write the
+                // standard-library reference there", matching the original CLI.
+                WriteStandardLibraryReference(Path.GetFullPath(args[0]));
+            }
+
             return 0;
         }
         catch (Exception ex)
@@ -26,14 +51,28 @@ internal static class Program
         }
     }
 
-    private static string ResolveTarget(string[] args)
+    private static void WriteStandardLibraryReference(string target)
     {
-        if (args.Length > 0 && !string.IsNullOrEmpty(args[0]))
-            return Path.GetFullPath(args[0]);
+        ReferenceGenerator.WriteTo(target);
+        Console.WriteLine("Wrote " + target);
+    }
 
-        string? fromEnv = Environment.GetEnvironmentVariable("STASH_DOCS_TARGET");
-        if (!string.IsNullOrEmpty(fromEnv))
-            return Path.GetFullPath(fromEnv!);
+    private static void WriteBytecodeReference(string repoRoot, string target)
+    {
+        string sourcePath = Path.Combine(repoRoot, BytecodeInstructionReferenceGenerator.DefaultSourceRelativePath);
+        BytecodeInstructionReferenceGenerator.WriteTo(target, sourcePath);
+        Console.WriteLine("Wrote " + target);
+    }
+
+    private static string FindRepoRoot()
+    {
+        string cwd = Directory.GetCurrentDirectory();
+        for (int i = 0; i < 10 && cwd != null; i++)
+        {
+            if (File.Exists(Path.Combine(cwd, "Stash.sln")))
+                return cwd;
+            cwd = Path.GetDirectoryName(cwd)!;
+        }
 
         // Walk up from the binary location looking for the repo root marker
         // (Stash.sln). Falling back to AppContext.BaseDirectory keeps the
@@ -43,7 +82,7 @@ internal static class Program
         for (int i = 0; i < 10 && current != null; i++)
         {
             if (File.Exists(Path.Combine(current, "Stash.sln")))
-                return Path.Combine(current, ReferenceGenerator.DefaultRelativePath);
+                return current;
             current = Path.GetDirectoryName(current)!;
         }
 

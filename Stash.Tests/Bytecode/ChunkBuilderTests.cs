@@ -14,8 +14,11 @@ public class ChunkBuilderTests
     [InlineData(OpCode.LoadNull, OpCodeFormat.ABC)]
     [InlineData(OpCode.LoadK, OpCodeFormat.ABx)]
     [InlineData(OpCode.GetGlobal, OpCodeFormat.ABx)]
-    [InlineData(OpCode.Jmp, OpCodeFormat.ABx)]
+    [InlineData(OpCode.Jmp, OpCodeFormat.AsBx)]
+    [InlineData(OpCode.AddI, OpCodeFormat.AsBx)]
+    [InlineData(OpCode.CatchMatch, OpCodeFormat.ABx)]
     [InlineData(OpCode.TryEnd, OpCodeFormat.Ax)]
+    [InlineData(OpCode.UnsetGlobal, OpCodeFormat.Ax)]
     public void OpCodeInfo_GetFormat_ReturnsExpectedFormat(OpCode opCode, OpCodeFormat expected)
     {
         Assert.Equal(expected, OpCodeInfo.GetFormat(opCode));

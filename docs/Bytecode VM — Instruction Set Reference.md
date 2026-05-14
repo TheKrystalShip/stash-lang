@@ -1,5 +1,27 @@
 # Bytecode VM — Instruction Set Reference
 
+> Generated reference for the Stash bytecode VM instruction set. Opcode names, numeric values,
+> categories, and effects are extracted from `Stash.Bytecode/Bytecode/OpCode.cs`; encoding
+> formats and table hash metadata come from `Stash.Bytecode`. The generator always overwrites
+> this file from source metadata; do not edit it by hand. Run
+> `dotnet run --project Stash.Docs/ --bytecode` to regenerate after changing opcodes.
+>
+> **Companion documents:**
+>
+> - [Bytecode VM — Binary Format (.stashc)](Bytecode%20VM%20—%20Binary%20Format%20%28.stashc%29.md)
+> - [Language Specification](Stash%20—%20Language%20Specification.md)
+> - [DAP — Debug Adapter Protocol](DAP%20—%20Debug%20Adapter%20Protocol.md)
+
+| Property             | Value        |
+| -------------------- | ------------ |
+| Opcode count         | `101`        |
+| Numeric range        | `0..100`     |
+| Opcode table hash    | `0xD2A262BE` |
+| Instruction width    | 32 bits      |
+| Register index width | 8 bits       |
+
+---
+
 ## Table of Contents
 
 1. [Architecture Overview](#1-architecture-overview)
@@ -7,2034 +29,370 @@
 3. [Register Model](#3-register-model)
 4. [Notation Conventions](#4-notation-conventions)
 5. [Instruction Reference](#5-instruction-reference)
-   - 5.1 [Loads & Data Movement](#51-loads--data-movement)
-   - 5.2 [Global Variables](#52-global-variables)
-   - 5.3 [Upvalues (Closure Captures)](#53-upvalues-closure-captures)
-   - 5.4 [Arithmetic](#54-arithmetic)
-   - 5.5 [Bitwise Operations](#55-bitwise-operations)
-   - 5.6 [Comparison](#56-comparison)
-   - 5.7 [Logic & Truthiness](#57-logic--truthiness)
-   - 5.8 [Control Flow](#58-control-flow)
-   - 5.9 [Numeric Iteration](#59-numeric-iteration)
-   - 5.10 [Generic Iteration](#510-generic-iteration)
-   - 5.11 [Collections & Indexing](#511-collections--indexing)
-   - 5.12 [Field Access](#512-field-access)
-   - 5.13 [Functions & Closures](#513-functions--closures)
-   - 5.14 [Type System](#514-type-system)
-   - 5.15 [Error Handling](#515-error-handling)
-   - 5.16 [Strings](#516-strings)
-   - 5.17 [Shell & Process](#517-shell--process)
-   - 5.18 [Modules](#518-modules)
-   - 5.19 [Concurrency](#519-concurrency)
-   - 5.20 [Miscellaneous](#520-miscellaneous)
-6. [Inline Caching](#6-inline-caching)
-7. [Constant Pool](#7-constant-pool)
-8. [Disassembly Format](#8-disassembly-format)
+   - [5.1 Loads & Constants](#51-loads--constants)
+   - [5.2 Global Variables](#52-global-variables)
+   - [5.3 Upvalues](#53-upvalues)
+   - [5.4 Arithmetic](#54-arithmetic)
+   - [5.5 Bitwise](#55-bitwise)
+   - [5.6 Comparison (produce bool in R(A))](#56-comparison-produce-bool-in-ra)
+   - [5.7 Logic](#57-logic)
+   - [5.8 Control Flow](#58-control-flow)
+   - [5.9 Iteration](#59-iteration)
+   - [5.10 Tables & Fields](#510-tables--fields)
+   - [5.11 Collections](#511-collections)
+   - [5.12 Closures & Types](#512-closures--types)
+   - [5.13 Error Handling](#513-error-handling)
+   - [5.14 Type Declarations](#514-type-declarations)
+   - [5.15 Shell](#515-shell)
+   - [5.16 Modules](#516-modules)
+   - [5.17 Strings](#517-strings)
+   - [5.18 Misc](#518-misc)
+   - [5.19 Specialized Iteration (compile-time)](#519-specialized-iteration-compile-time)
+   - [5.20 Constant Fusion](#520-constant-fusion)
+   - [5.21 Typed Arrays](#521-typed-arrays)
+   - [5.22 Defer](#522-defer)
+   - [5.23 Exception Type Matching](#523-exception-type-matching)
+   - [5.24 File-Based Mutual Exclusion (Lock)](#524-file-based-mutual-exclusion-lock)
+   - [5.25 Global Bindings](#525-global-bindings)
+   - [5.26 Iterator Cleanup](#526-iterator-cleanup)
+   - [5.27 Streaming Pipe Chains](#527-streaming-pipe-chains)
+6. [Companion Words](#6-companion-words)
+7. [Compatibility](#7-compatibility)
+8. [Change Rules](#8-change-rules)
 
 ---
 
 ## 1. Architecture Overview
 
-The Stash bytecode VM is a **register-based virtual machine** that executes fixed-width 32-bit instructions. It mirrors the fundamental architecture of a physical CPU:
+The Stash bytecode VM is a register-based virtual machine that executes fixed-width
+32-bit instruction words. A compiled chunk contains an instruction stream, constant pool,
+source maps, global metadata, closure metadata, and inline-cache metadata.
 
-| Physical CPU    | Stash VM                                                            |
-| --------------- | ------------------------------------------------------------------- |
-| Instruction Set | 95 opcodes across 14 categories                                     |
-| Registers       | Virtual registers `r0..rN` (windows into a flat value stack)        |
-| Machine code    | 32-bit instruction words                                            |
-| Program counter | `IP` (instruction pointer) per call frame                           |
-| Call stack      | `CallFrame[]` array with base slot, IP, chunk, and upvalue pointers |
-| RAM             | `StashValue[]` — flat stack array shared across all frames          |
-| CPU cache       | Inline cache slots (`ICSlot`) for field/method lookups              |
+| Physical CPU concept | Stash VM equivalent                                                         |
+| -------------------- | --------------------------------------------------------------------------- |
+| Instruction set      | `101` opcodes                                                               |
+| Registers            | Virtual registers `r0..rN` in the current call frame                        |
+| Machine code         | `uint` instruction words                                                    |
+| Program counter      | `IP` per call frame                                                         |
+| Call stack           | `CallFrame[]` with base slot, instruction pointer, chunk, and closure state |
+| Constant memory      | Per-chunk constant pool `K(i)`                                              |
+| Inline caches        | `ICSlot` entries used by selected field and built-in call opcodes           |
 
-The VM uses a **fetch-decode-execute** cycle: each iteration reads a 32-bit instruction word, extracts the opcode via bitmask, and dispatches to the appropriate handler through a switch statement. The dispatch loop uses generic specialization (`DebugOn`/`DebugOff`) to eliminate debug instrumentation at zero cost in release builds.
-
----
+The VM dispatch loop decodes an opcode from the low byte of each instruction word and
+dispatches to the matching handler. Some instructions consume companion words after the
+primary instruction; companion words are part of the instruction stream but do not contain
+an opcode in their low byte.
 
 ## 2. Instruction Encoding
 
-Every instruction is a single **32-bit unsigned integer** in one of four formats:
+All instructions use one 32-bit little-endian word in memory and on disk. The low byte
+always stores the opcode value.
 
-### ABC — Three-Operand
+| Format | Layout                  | Operand range                   | Typical use                             |
+| ------ | ----------------------- | ------------------------------- | --------------------------------------- |
+| `ABC`  | `[op:8][A:8][B:8][C:8]` | `A`, `B`, `C`: `0..255`         | Registers and small immediates          |
+| `ABx`  | `[op:8][A:8][Bx:16]`    | `A`: `0..255`, `Bx`: `0..65535` | Constant pool and metadata indexes      |
+| `AsBx` | `[op:8][A:8][sBx:16]`   | `sBx`: `-32767..32768`          | Relative jumps and signed immediates    |
+| `Ax`   | `[op:8][Ax:24]`         | `Ax`: `0..16777215`             | Large payload without register operands |
 
-```
- 31      24 23     16 15      8 7       0
-┌──────────┬─────────┬─────────┬─────────┐
-│  opcode  │    A    │    B    │    C    │
-│  (8 bit) │ (8 bit) │ (8 bit) │ (8 bit) │
-└──────────┴─────────┴─────────┴─────────┘
-```
-
-Used by most instructions. A, B, C are unsigned 8-bit values (0–255), typically register indices or small immediates.
-
-### ABx — Register + Unsigned 16-bit
-
-```
- 31      24 23     16 15                 0
-┌──────────┬─────────┬───────────────────┐
-│  opcode  │    A    │        Bx         │
-│  (8 bit) │ (8 bit) │     (16 bit)      │
-└──────────┴─────────┴───────────────────┘
-```
-
-Used when an instruction needs a register and a larger index (constant pool, global slot). Bx is unsigned (0–65535).
-
-### AsBx — Register + Signed 16-bit
-
-```
- 31      24 23     16 15                 0
-┌──────────┬─────────┬───────────────────┐
-│  opcode  │    A    │       sBx         │
-│  (8 bit) │ (8 bit) │  (16 bit signed)  │
-└──────────┴─────────┴───────────────────┘
-```
-
-Used for jump offsets. sBx is bias-encoded: stored as `(offset + 32767)`, giving a range of −32767 to +32768. Decode: `sBx = raw_value − 32767`.
-
-### Ax — 24-bit Payload
-
-```
- 31      24 23                           0
-┌──────────┬─────────────────────────────┐
-│  opcode  │            Ax               │
-│  (8 bit) │         (24 bit)            │
-└──────────┴─────────────────────────────┘
-```
-
-Rare. Used for instructions that need only a large immediate with no register operand (e.g., `try.end`, `elevate.end`).
-
----
+Signed `sBx` fields are bias-encoded with `32767`.
+Encoding and decoding helpers live in `Instruction`.
 
 ## 3. Register Model
 
-The VM uses a **register-window** architecture over a shared flat stack:
+Each call frame owns a register window over the VM stack. `R(i)` means register `i` in
+the current frame, implemented as `stack[frame.BaseSlot + i]`.
 
-```
-_stack:  [ Frame 0 registers | Frame 1 registers | Frame 2 registers | ... ]
-           ^BaseSlot=0         ^BaseSlot=8          ^BaseSlot=14
-```
-
-- Each function call gets a contiguous **window** of registers starting at `BaseSlot`.
-- `R(i)` in the current frame maps to `_stack[BaseSlot + i]`.
-- Registers `0..N` hold **parameters and local variables** (assigned at compile time).
-- Registers `N+1..` are **temporaries** for intermediate expression results.
-- Each compiled function records its `MaxRegs` — the total register slots required.
-- The stack grows dynamically (doubles capacity) when needed, using `ArrayPool<T>` to reduce GC pressure.
-
-### Calling Convention
-
-```
-Caller frame:        [ ... | callee | arg0 | arg1 | arg2 | ... ]
-                              ^R(A)   ^R(A+1) ^R(A+2)
-                                 ↓
-Callee frame:        [ callee | arg0 | arg1 | arg2 | locals... | temps... ]
-                      ^BaseSlot  ^R(0)  ^R(1)  ^R(2)
-```
-
-The callee's `BaseSlot` is set to `caller.BaseSlot + A + 1` (one past the callee register). Arguments are already positioned in the correct slots. The return value is written back to `R(A)` in the **caller's** frame (overwriting the callee reference).
-
-#### `call` — Standard Function Call (ABC)
-
-```
-Emission:    call R(A), 0, C
-Layout:      R(A)=callee  R(A+1)=arg0  R(A+2)=arg1  ...  R(A+C)=argC-1
-```
-
-- **C** = argument count
-- **A** = callee register (overwritten with return value after call)
-- Callee's new frame: `BaseSlot = caller.BaseSlot + A + 1`
-- Arguments occupy `R(0)..R(C-1)` in the callee's frame (they're already in position)
-- Return: `return R(A)` in the callee writes the value back to `caller.R(A)` via `frame.BaseSlot - 1`
-
-**Arity handling:**
-
-- If `argc == chunk.Arity` and no rest param / async: fast path (no arg validation)
-- If `argc < chunk.MinArity`: runtime error ("Expected at least N arguments")
-- If `argc < chunk.Arity`: default parameter values are loaded for missing args
-- If `chunk.HasRestParam`: excess arguments are collected into a rest array at `R(Arity-1)`
-
-#### `call.builtin` — Built-In Namespace Call (ABC + companion)
-
-```
-Emission:    call.builtin R(A), R(B), C    + companion(icSlot)
-Layout:      R(A)=result  R(B)=namespace  R(A+1)=arg0  ...  R(A+C)=argC-1
-```
-
-- **A** = destination register for the result
-- **B** = register holding the namespace object (used as IC guard)
-- **C** = argument count
-- Arguments are in `R(A+1)..R(A+C)`
-- The companion word holds the IC slot index
-
-**Fast path (IC hit):** Guard check `R(B) == ic.Guard` succeeds → call cached `BuiltInFunction` delegate directly with a `ReadOnlySpan<StashValue>` view over the argument registers. No field lookup overhead.
-
-**Slow path (IC miss):** Resolve the field name (from `K(ic.ConstantIndex)`) on the object in `R(B)`, call the resolved callable, then populate the IC if the receiver is a frozen namespace.
-
-#### `call.spread` — Call with Spread Arguments
-
-```
-Emission:    call.spread R(A), B
-```
-
-- **A** = callee register
-- **B** = total argument register count (including spread markers)
-- Arguments at `R(A+1)..R(A+B)` may include `SpreadMarker` sentinel values
-- The VM expands spread markers: arrays/iterables are flattened into the argument list
-- After expansion, the call proceeds as a standard `call`
-
-#### `self` — Method Binding (ABC)
-
-```
-Emission:    self R(A), R(B), K(C)
-Effect:      R(A) = R(B).K(C)  (the method/callable)
-             R(A+1) = R(B)      (the receiver, for subsequent call)
-```
-
-- **B** = receiver register
-- **C** = constant index of the method name
-- After `self`, a `call R(A), 0, N` follows, where `R(A+1)` is already the `self` receiver
-
-#### `closure` — Create Closure (ABx + N companions)
-
-```
-Emission:    closure R(A), K(Bx)   + N companion words
-```
-
-- **Bx** = constant pool index of the sub-chunk (`Chunk` object)
-- **N** = `Constants[Bx].Upvalues.Length`
-- Each companion word encodes one upvalue capture (see Companion Words section)
-- Creates a `VMFunction` with the captured upvalues attached
-
----
+- Function parameters and locals occupy low-numbered registers.
+- Temporary expression values occupy compiler-assigned registers above locals.
+- Function calls place the callee in `R(A)` and arguments in following registers.
+- Return values overwrite the caller's callee register.
 
 ## 4. Notation Conventions
 
-Throughout this document:
-
-| Notation | Meaning                                                    |
-| -------- | ---------------------------------------------------------- |
-| `R(A)`   | Register A in the current frame (`_stack[BaseSlot + A]`)   |
-| `K(i)`   | Constant pool entry at index `i`                           |
-| `G(i)`   | Global slot at index `i`                                   |
-| `UV(i)`  | Upvalue at index `i` in the current closure                |
-| `IP`     | Instruction pointer (post-increment: points to next instr) |
-| `sBx`    | Signed 16-bit bias-encoded offset                          |
-| `→`      | "produces" / "is assigned"                                 |
-| `[ic:N]` | Inline cache slot index N                                  |
-
-**Type shorthand:** `int` = 64-bit integer, `float` = 64-bit double, `numeric` = int or float.
-
----
+| Notation       | Meaning                                            |
+| -------------- | -------------------------------------------------- |
+| `R(A)`         | Register `A` in the current frame                  |
+| `K(i)`         | Constant pool entry `i`                            |
+| `G(i)`         | Global slot `i`                                    |
+| `UV(i)`        | Upvalue `i` in the current closure                 |
+| `IP`           | Instruction pointer, measured in instruction words |
+| companion word | Extra `uint` consumed after an opcode word         |
 
 ## 5. Instruction Reference
 
-### 5.1 Loads & Data Movement
+This section is generated from the `OpCode` enum. The **Encoding** column is the
+VM's decoded operand format. The **Operands** column is the operand shape documented
+on the opcode itself, including companion-word notes where applicable.
 
-#### `load.k` — Load Constant
+### 5.1 Loads & Constants
 
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** `R(A) → K(Bx)`
-
-Loads a value from the constant pool into a register. Constants include strings, integers, floats, and `null`.
-
-**Disassembly:** `load.k r0, k3` with the constant value shown as a comment (e.g., `; "hello"`, `; 42`).
-
----
-
-#### `load.null` — Load Null
-
-| Field    | Value  |
-| -------- | ------ |
-| Format   | A only |
-| Operands | `R(A)` |
-
-**Operation:** `R(A) → null`
-
-Sets register A to the null value.
-
----
-
-#### `load.bool` — Load Boolean
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), B, C` |
-
-**Operation:** `R(A) → (B ≠ 0)`. If `C ≠ 0`, skip the next instruction (`IP += 1`).
-
-Loads `true` (B=1) or `false` (B=0) into register A. The skip flag (C) is used to implement short-circuit patterns where a conditional branch needs to skip over a subsequent jump.
-
-**Disassembly:** `load.bool r0, true` or `load.bool r0, false skip next`.
-
----
-
-#### `move` — Copy Register
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → R(B)`
-
-Copies the value from register B into register A. This is a value copy for primitives and a reference copy for objects (arrays, dicts, struct instances).
-
----
+| Value | Opcode     | Encoding | Operands | Effect                                             |
+| ----: | ---------- | -------- | -------- | -------------------------------------------------- |
+|   `0` | `LoadK`    | `ABx`    | `ABx`    | R(A) = K(Bx) — load constant from pool.            |
+|   `1` | `LoadNull` | `ABC`    | `ABC`    | R(A) = null.                                       |
+|   `2` | `LoadBool` | `ABC`    | `ABC`    | R(A) = (B != 0); if C != 0, skip next instruction. |
+|   `3` | `Move`     | `ABC`    | `ABC`    | R(A) = R(B) — copy register.                       |
 
 ### 5.2 Global Variables
 
-#### `get.global` — Read Global
+| Value | Opcode            | Encoding | Operands | Effect                             |
+| ----: | ----------------- | -------- | -------- | ---------------------------------- |
+|   `4` | `GetGlobal`       | `ABx`    | `ABx`    | R(A) = Globals[Bx].                |
+|   `5` | `SetGlobal`       | `ABx`    | `ABx`    | Globals[Bx] = R(A).                |
+|   `6` | `InitConstGlobal` | `ABx`    | `ABx`    | Globals[Bx] = R(A), mark as const. |
 
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), G(Bx)` |
+### 5.3 Upvalues
 
-**Operation:** `R(A) → G(Bx)`
-
-Loads the value from global slot Bx into register A.
-
-- **Main script:** Direct array access into `_globalSlots[Bx]`.
-- **Module function:** Dictionary lookup via the frame's `ModuleGlobals` using the name from `GlobalNameTable[Bx]`.
-- **Error:** `"Undefined variable '{name}'."` if the slot contains the undefined sentinel.
-
-**Disassembly:** `get.global r3, [g0]` with the global name as comment (e.g., `; env`).
-
----
-
-#### `set.global` — Write Global
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `G(Bx), R(A)` |
-
-**Operation:** `G(Bx) → R(A)`
-
-Stores the value from register A into global slot Bx.
-
-- **Error:** `"Assignment to constant variable."` if the slot was initialized with `init.const.global`.
-- **Dual-write:** The value is written to both the fast-path slot array and the named globals dictionary (for module loading, debugger, and REPL compatibility).
-
-**Disassembly:** `set.global [g5], r0` with the global name as comment.
-
----
-
-#### `init.const.global` — Initialize Constant Global
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `G(Bx), R(A)` |
-
-**Operation:** `G(Bx) → R(A)`, mark slot Bx as read-only.
-
-Stores the value and marks the global slot as constant. Any subsequent `set.global` targeting this slot will throw. Only emitted during top-level `const` declarations.
-
-**Disassembly:** `init.const.global [g1], r0` with `; VarName (const)` as comment.
-
----
-
-### 5.3 Upvalues (Closure Captures)
-
-Upvalues are the mechanism by which closures capture variables from enclosing scopes. While the captured variable is still live on the stack, the upvalue points directly to the stack slot (**open**). When the enclosing function returns, the upvalue copies the value to a heap-allocated cell (**closed**).
-
-#### `get.upval` — Read Upvalue
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABC           |
-| Operands | `R(A), UV(B)` |
-
-**Operation:** `R(A) → UV(B).Value`
-
-Reads the captured variable from upvalue slot B.
-
-**Disassembly:** `get.upval r0, [uv2]` with the upvalue name as comment if available.
-
----
-
-#### `set.upval` — Write Upvalue
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABC           |
-| Operands | `UV(B), R(A)` |
-
-**Operation:** `UV(B).Value → R(A)`
-
-Writes the value from register A into upvalue slot B. This mutates the captured variable — if it's still open, the write goes directly to the original stack slot.
-
-**Disassembly:** `set.upval [uv2], r0`.
-
----
-
-#### `close.upval` — Close Upvalues
-
-| Field    | Value  |
-| -------- | ------ |
-| Format   | A only |
-| Operands | `R(A)` |
-
-**Operation:** Close all open upvalues that reference stack slots at or above `BaseSlot + A`.
-
-Promotes captured variables from stack references to heap-allocated cells. Emitted when a local variable goes out of scope and has been captured by a closure. After closing, the upvalue holds its own copy of the value independent of the stack.
-
----
+| Value | Opcode       | Encoding | Operands | Effect                        |
+| ----: | ------------ | -------- | -------- | ----------------------------- |
+|   `7` | `GetUpval`   | `ABC`    | `ABC`    | R(A) = Upvalues[B].           |
+|   `8` | `SetUpval`   | `ABC`    | `ABC`    | Upvalues[B] = R(A).           |
+|   `9` | `CloseUpval` | `ABC`    | `ABC`    | Close upvalue for register A. |
 
 ### 5.4 Arithmetic
 
-All arithmetic instructions follow the same type dispatch pattern:
-
-1. **Fast path (int + int):** Direct 64-bit integer operation, result is `int`. Aggressively inlined.
-2. **Slow path (numeric + numeric):** Both operands converted to `double`, result is `float`.
-3. **Fallback:** Delegates to `RuntimeOps` for type-specific behavior (e.g., string concatenation for `add`).
-
-#### `add` — Addition
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) + R(C)`
-
-- `int + int` → `int`
-- `numeric + numeric` → `float`
-- `string + string` → `string` (concatenation)
-- Other combinations: delegates to `RuntimeOps.Add()`
-
----
-
-#### `sub` — Subtraction
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) − R(C)`
-
-- `int − int` → `int`
-- `numeric − numeric` → `float`
-
----
-
-#### `mul` — Multiplication
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) × R(C)`
-
-- `int × int` → `int`
-- `numeric × numeric` → `float`
-
----
-
-#### `div` — Division
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) ÷ R(C)`
-
-- `int ÷ int` → `int` (integer division)
-- `numeric ÷ numeric` → `float`
-- **Error:** `"Division by zero."` if R(C) is `0` or `0.0`.
-
----
-
-#### `mod` — Modulo
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) % R(C)`
-
-- `int % int` → `int`
-- `numeric % numeric` → `float`
-- **Error:** `"Division by zero."` if R(C) is `0` or `0.0`.
-
----
-
-#### `pow` — Exponentiation
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) ** R(C)`
-
-- `int ** int` → `int` (cast from `Math.Pow` to `long`)
-- `numeric ** numeric` → `float`
-
----
-
-#### `neg` — Negation
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → −R(B)`
-
-- `int` → negated `int`
-- `float` → negated `float`
-
----
-
-#### `addi` — Add Signed Immediate
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-**Operation:** `R(A) → R(A) + sBx`
-
-Adds a signed 16-bit immediate value directly to the register without touching the constant pool. Used for `++` and `--` operators.
-
-- `int + sBx` → `int`
-- `float + sBx` → `float`
-- **Error:** `"Operand of '++' or '--' must be a number."` for non-numeric types.
-
-**Disassembly:** `addi r0, +1` or `addi r0, -1`.
-
----
-
-#### `addk` — Add with Constant Operand
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), K(C)` |
-
-**Operation:** `R(A) → R(B) + K(C)`
-
-Fused load-and-add: one operand comes from the constant pool instead of a register. Emitted when the compiler detects a literal on the right-hand side of `+` and the constant index fits in 8 bits (≤ 255).
-
-- Same type dispatch as `add`, but the second operand is `K(C)` instead of `R(C)`.
-
-**Disassembly:** `addk r0, r1, k3` with the constant value shown inline.
-
----
-
-#### `subk` — Subtract with Constant Operand
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), K(C)` |
-
-**Operation:** `R(A) → R(B) − K(C)`
-
-Same as `addk` but for subtraction.
-
----
-
-### 5.5 Bitwise Operations
-
-All bitwise operations require integer operands. Non-integer types delegate to `RuntimeOps`.
-
-#### `band` — Bitwise AND
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) & R(C)`
-
----
-
-#### `bor` — Bitwise OR
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) | R(C)`
-
----
-
-#### `bxor` — Bitwise XOR
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) ^ R(C)`
-
----
-
-#### `bnot` — Bitwise NOT
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → ~R(B)`
-
----
-
-#### `shl` — Shift Left
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) << R(C)`
-
----
-
-#### `shr` — Shift Right
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) >> R(C)`
-
----
-
-### 5.6 Comparison
-
-All comparison instructions produce a `bool` result. Each has a **constant-fused variant** (suffix `.k`) where operand C is a constant pool index instead of a register.
-
-**Equality semantics:** No type coercion. `5 != "5"`, `0 != false`, `0 != null`. Reference equality for dicts and struct instances.
-
-**Ordering semantics:** Fast path for `int` vs `int`. Mixed numeric types promote to `float`. Non-numeric ordering delegates to `RuntimeOps`.
-
-#### `eq` / `eq.k` — Equal
-
-| Field    | Value                                   |
-| -------- | --------------------------------------- |
-| Format   | ABC                                     |
-| Operands | `R(A), R(B), R(C)` / `R(A), R(B), K(C)` |
-
-**Operation:** `R(A) → (R(B) == R(C))` or `R(A) → (R(B) == K(C))`
-
-- **int == int:** Direct 64-bit comparison.
-- **Other types:** `RuntimeOps.IsEqual()` — value equality for primitives, reference equality for objects.
-
----
-
-#### `ne` / `ne.k` — Not Equal
-
-**Operation:** `R(A) → (R(B) != R(C))` or `R(A) → (R(B) != K(C))`
-
-Logical inverse of `eq`.
-
----
-
-#### `lt` / `lt.k` — Less Than
-
-**Operation:** `R(A) → (R(B) < R(C))` or `R(A) → (R(B) < K(C))`
-
----
-
-#### `le` / `le.k` — Less Than or Equal
-
-**Operation:** `R(A) → (R(B) <= R(C))` or `R(A) → (R(B) <= K(C))`
-
----
-
-#### `gt` / `gt.k` — Greater Than
-
-**Operation:** `R(A) → (R(B) > R(C))` or `R(A) → (R(B) > K(C))`
-
----
-
-#### `ge` / `ge.k` — Greater Than or Equal
-
-**Operation:** `R(A) → (R(B) >= R(C))` or `R(A) → (R(B) >= K(C))`
-
----
-
-### 5.7 Logic & Truthiness
-
-Stash's truthiness rules: **Falsy** values are `null`, `false`, `0`, `0.0`, and `""` (empty string). Everything else is **truthy**, including empty arrays and empty dicts.
-
-#### `not` — Logical NOT
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → !IsTruthy(R(B))`
-
-Returns `true` if the operand is falsy, `false` if truthy. Always produces a `bool`.
-
----
-
-#### `test.set` — Conditional Copy (Short-Circuit)
-
-| Field    | Value           |
-| -------- | --------------- |
-| Format   | ABC             |
-| Operands | `R(A), R(B), C` |
-
-**Operation:**
-
-```
-if IsTruthy(R(B)) == (C ≠ 0):
-    R(A) → R(B)           // copy the actual value, not a bool
-else:
-    IP += 1               // skip next instruction
-```
-
-The core instruction for `&&` and `||` operators. Critically, it copies the **operand value itself**, not a boolean — this is what makes `null || "default"` return `"default"` and `"a" && "b"` return `"b"`.
-
-- For `||` (logical OR): C=0. If R(B) is falsy, copy it and continue; if truthy, skip the jump to evaluate the right side.
-- For `&&` (logical AND): C=1. If R(B) is truthy, copy it and continue; if falsy, skip the jump.
-
-The skipped instruction is always a `jmp` to the right-hand operand.
-
----
-
-#### `test` — Conditional Skip
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), C` |
-
-**Operation:**
-
-```
-if IsTruthy(R(A)) != (C ≠ 0):
-    IP += 1               // skip next instruction
-```
-
-A branch-only variant of `test.set` — it tests the truthiness of R(A) but does **not** copy any value. The following instruction is typically a `jmp`. Used in conditional statement compilation where the value doesn't need to be preserved.
-
----
+| Value | Opcode | Encoding | Operands | Effect                                    |
+| ----: | ------ | -------- | -------- | ----------------------------------------- |
+|  `10` | `Add`  | `ABC`    | `ABC`    | R(A) = R(B) + R(C).                       |
+|  `11` | `Sub`  | `ABC`    | `ABC`    | R(A) = R(B) - R(C).                       |
+|  `12` | `Mul`  | `ABC`    | `ABC`    | R(A) = R(B) \* R(C).                      |
+|  `13` | `Div`  | `ABC`    | `ABC`    | R(A) = R(B) / R(C).                       |
+|  `14` | `Mod`  | `ABC`    | `ABC`    | R(A) = R(B) % R(C).                       |
+|  `15` | `Pow`  | `ABC`    | `ABC`    | R(A) = R(B) \*\* R(C).                    |
+|  `16` | `Neg`  | `ABC`    | `ABC`    | R(A) = -R(B).                             |
+|  `17` | `AddI` | `AsBx`   | `AsBx`   | R(A) = R(A) + sBx — add signed immediate. |
+
+### 5.5 Bitwise
+
+| Value | Opcode | Encoding | Operands | Effect               |
+| ----: | ------ | -------- | -------- | -------------------- |
+|  `18` | `BAnd` | `ABC`    | `ABC`    | R(A) = R(B) & R(C).  |
+|  `19` | `BOr`  | `ABC`    | `ABC`    | R(A) = R(B) \| R(C). |
+|  `20` | `BXor` | `ABC`    | `ABC`    | R(A) = R(B) ^ R(C).  |
+|  `21` | `BNot` | `ABC`    | `ABC`    | R(A) = ~R(B).        |
+|  `22` | `Shl`  | `ABC`    | `ABC`    | R(A) = R(B) << R(C). |
+|  `23` | `Shr`  | `ABC`    | `ABC`    | R(A) = R(B) >> R(C). |
+
+### 5.6 Comparison (produce bool in R(A))
+
+| Value | Opcode | Encoding | Operands | Effect                 |
+| ----: | ------ | -------- | -------- | ---------------------- |
+|  `24` | `Eq`   | `ABC`    | `ABC`    | R(A) = (R(B) == R(C)). |
+|  `25` | `Ne`   | `ABC`    | `ABC`    | R(A) = (R(B) != R(C)). |
+|  `26` | `Lt`   | `ABC`    | `ABC`    | R(A) = (R(B) < R(C)).  |
+|  `27` | `Le`   | `ABC`    | `ABC`    | R(A) = (R(B) <= R(C)). |
+|  `28` | `Gt`   | `ABC`    | `ABC`    | R(A) = (R(B) > R(C)).  |
+|  `29` | `Ge`   | `ABC`    | `ABC`    | R(A) = (R(B) >= R(C)). |
+
+### 5.7 Logic
+
+| Value | Opcode    | Encoding | Operands | Effect                                                               |
+| ----: | --------- | -------- | -------- | -------------------------------------------------------------------- |
+|  `30` | `Not`     | `ABC`    | `ABC`    | R(A) = !IsTruthy(R(B)).                                              |
+|  `31` | `TestSet` | `ABC`    | `ABC`    | if IsTruthy(R(B)) == C then R(A) = R(B) else skip next. For &&/\|\|. |
+|  `32` | `Test`    | `ABC`    | `ABC`    | if IsTruthy(R(A)) != C then skip next instruction.                   |
 
 ### 5.8 Control Flow
 
-#### `jmp` — Unconditional Jump
+| Value | Opcode     | Encoding | Operands | Effect                                                    |
+| ----: | ---------- | -------- | -------- | --------------------------------------------------------- |
+|  `33` | `Jmp`      | `AsBx`   | `AsBx`   | IP += sBx — unconditional jump.                           |
+|  `34` | `JmpFalse` | `AsBx`   | `AsBx`   | if !IsTruthy(R(A)) then IP += sBx.                        |
+|  `35` | `JmpTrue`  | `AsBx`   | `AsBx`   | if IsTruthy(R(A)) then IP += sBx.                         |
+|  `36` | `Loop`     | `AsBx`   | `AsBx`   | IP += sBx — backward jump with cancellation check.        |
+|  `37` | `Call`     | `ABC`    | `ABC`    | Call R(A) with C args starting at R(A+1); result in R(A). |
+|  `38` | `Return`   | `ABC`    | `ABC`    | Return R(A). B=0 means return null.                       |
+
+### 5.9 Iteration
+
+| Value | Opcode     | Encoding | Operands | Effect                                                                   |
+| ----: | ---------- | -------- | -------- | ------------------------------------------------------------------------ |
+|  `39` | `ForPrep`  | `AsBx`   | `AsBx`   | Numeric for init: R(A) -= R(A+2); IP += sBx.                             |
+|  `40` | `ForLoop`  | `AsBx`   | `AsBx`   | R(A) += R(A+2); if R(A) <= R(A+1) then { IP += sBx; R(A+3) = R(A) }.     |
+|  `41` | `IterPrep` | `ABC`    | `ABC`    | Create iterator from R(A), store state in R(A)..R(A+2).                  |
+|  `42` | `IterLoop` | `AsBx`   | `AsBx`   | Advance iterator; if exhausted, continue; else set values and IP += sBx. |
+
+### 5.10 Tables & Fields
+
+| Value | Opcode     | Encoding | Operands | Effect                                                   |
+| ----: | ---------- | -------- | -------- | -------------------------------------------------------- |
+|  `43` | `GetTable` | `ABC`    | `ABC`    | R(A) = R(B)[R(C)] — array index or dict key lookup.      |
+|  `44` | `SetTable` | `ABC`    | `ABC`    | R(A)[R(B)] = R(C) — array/dict element store.            |
+|  `45` | `GetField` | `ABC`    | `ABC`    | R(A) = R(B).K(C) — field access by constant key.         |
+|  `46` | `SetField` | `ABC`    | `ABC`    | R(A).K(B) = R(C) — field store by constant key.          |
+|  `47` | `Self`     | `ABC`    | `ABC`    | R(A+1) = R(B); R(A) = R(B)[K(C)] — method lookup + self. |
+
+### 5.11 Collections
+
+| Value | Opcode     | Encoding | Operands | Effect                                                         |
+| ----: | ---------- | -------- | -------- | -------------------------------------------------------------- |
+|  `48` | `NewArray` | `ABC`    | `ABC`    | R(A) = new array with B elements from R(A+1)..R(A+B).          |
+|  `49` | `NewDict`  | `ABC`    | `ABC`    | R(A) = new dict with B key-value pairs from R(A+1)..R(A+2\*B). |
+|  `50` | `NewRange` | `ABC`    | `ABC`    | R(A) = range(R(B), R(C)).                                      |
+|  `51` | `Spread`   | `ABC`    | `ABC`    | Expand R(B) into sequential registers starting at R(A).        |
+
+### 5.12 Closures & Types
+
+| Value | Opcode      | Encoding | Operands | Effect                                                                  |
+| ----: | ----------- | -------- | -------- | ----------------------------------------------------------------------- |
+|  `52` | `Closure`   | `ABx`    | `ABx`    | R(A) = new closure from Prototype[Bx], followed by upvalue descriptors. |
+|  `53` | `NewStruct` | `ABC`    | `ABC`    | R(A) = new instance of struct K(B) with C field values from R(A+1).     |
+|  `54` | `TypeOf`    | `ABC`    | `ABC`    | R(A) = typeof(R(B)) as string.                                          |
+|  `55` | `Is`        | `ABC`    | `ABC`    | R(A) = (R(B) is type K(C)).                                             |
+
+### 5.13 Error Handling
+
+| Value | Opcode     | Encoding | Operands | Effect                                                        |
+| ----: | ---------- | -------- | -------- | ------------------------------------------------------------- |
+|  `56` | `TryBegin` | `ABx`    | `ABx`    | Push exception handler; catch at IP + Bx; error value → R(A). |
+|  `57` | `TryEnd`   | `Ax`     | `Ax`     | Pop exception handler (no operands needed, Ax unused).        |
+|  `58` | `Throw`    | `ABC`    | `ABC`    | Throw R(A) as error.                                          |
+|  `59` | `TryExpr`  | `ABC`    | `ABC`    | R(A) = try evaluate R(B); null on error.                      |
+
+### 5.14 Type Declarations
+
+| Value | Opcode       | Encoding | Operands | Effect                                                                       |
+| ----: | ------------ | -------- | -------- | ---------------------------------------------------------------------------- |
+|  `60` | `StructDecl` | `ABx`    | `ABx`    | R(A) = declare struct with metadata K(Bx), methods from following registers. |
+|  `61` | `EnumDecl`   | `ABx`    | `ABx`    | R(A) = declare enum with metadata K(Bx).                                     |
+|  `62` | `IfaceDecl`  | `ABx`    | `ABx`    | R(A) = declare interface with metadata K(Bx).                                |
+|  `63` | `Extend`     | `ABx`    | `ABx`    | Extend type with metadata K(Bx), methods from registers.                     |
+
+### 5.15 Shell
+
+| Value | Opcode      | Encoding | Operands                  | Effect                                                                                                                                   |
+| ----: | ----------- | -------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+|  `64` | `Command`   | `ABC`    | `ABC`                     | R(A) = execute command with B parts from R(A+1)..R(A+B).                                                                                 |
+|  `65` | `PipeChain` | `ABC`    | `ABC + B companion words` | execute streaming pipe chain. A=dest, B=stageCount, C=partsBase. Each companion word: bits15-8=partCount, bits7-0=flags (bit0=isStrict). |
+|  `66` | `Redirect`  | `ABC`    | `ABC`                     | Redirect R(A) stream (B flags) to file R(C).                                                                                             |
+
+### 5.16 Modules
+
+| Value | Opcode     | Encoding | Operands | Effect                                         |
+| ----: | ---------- | -------- | -------- | ---------------------------------------------- |
+|  `67` | `Import`   | `ABx`    | `ABx`    | R(A) = import module with metadata K(Bx).      |
+|  `68` | `ImportAs` | `ABx`    | `ABx`    | R(A) = import module as alias, metadata K(Bx). |
+
+### 5.17 Strings
+
+| Value | Opcode        | Encoding | Operands | Effect                                          |
+| ----: | ------------- | -------- | -------- | ----------------------------------------------- |
+|  `69` | `Interpolate` | `ABC`    | `ABC`    | R(A) = interpolate B parts from R(A+1)..R(A+B). |
+
+### 5.18 Misc
+
+| Value | Opcode         | Encoding | Operands        | Effect                                                                                                               |
+| ----: | -------------- | -------- | --------------- | -------------------------------------------------------------------------------------------------------------------- |
+|  `70` | `In`           | `ABC`    | `ABC`           | R(A) = R(B) in R(C) — containment check.                                                                             |
+|  `71` | `Switch`       | `ABx`    | `ABx`           | Switch on R(A) with jump table K(Bx).                                                                                |
+|  `72` | `Destructure`  | `ABx`    | `ABx`           | Destructure R(A) per metadata K(Bx) into registers.                                                                  |
+|  `73` | `ElevateBegin` | `ABC`    | `ABC`           | R(A) = begin elevation from R(B).                                                                                    |
+|  `74` | `ElevateEnd`   | `Ax`     | `Ax`            | End elevation.                                                                                                       |
+|  `75` | `Retry`        | `ABx`    | `ABx`           | Retry block with metadata K(Bx), body/until/onRetry from registers.                                                  |
+|  `76` | `Timeout`      | `ABx`    | `ABx`           | Timeout block. R(A)=duration, body closure at R(A+1). Returns result in R(A).                                        |
+|  `77` | `Await`        | `ABC`    | `ABC`           | R(A) = await R(B).                                                                                                   |
+|  `78` | `CallSpread`   | `ABC`    | `ABC`           | Call R(A) with spread arguments.                                                                                     |
+|  `79` | `CheckNumeric` | `ABC`    | `ABC`           | Check that R(A) is numeric, throw if not.                                                                            |
+|  `80` | `GetFieldIC`   | `ABC`    | `ABC+companion` | R(A) = R(B).K(C) with inline cache; companion word = IC slot index.                                                  |
+|  `81` | `CallBuiltIn`  | `ABC`    | `ABC+companion` | Fused GetField+Call for namespace built-ins; R(A) = R(B).K[ic.ConstantIndex](<R(A+1)..R(A+C)>); companion = IC slot. |
 
-| Field    | Value |
-| -------- | ----- |
-| Format   | AsBx  |
-| Operands | `sBx` |
+### 5.19 Specialized Iteration (compile-time)
 
-**Operation:** `IP += sBx`
+| Value | Opcode      | Encoding | Operands | Effect                                                                                                                 |
+| ----: | ----------- | -------- | -------- | ---------------------------------------------------------------------------------------------------------------------- |
+|  `82` | `ForPrepII` | `AsBx`   | `AsBx`   | Integer-specialized ForPrep. R(A) -= R(A+2); IP += sBx. Skips type checks when counter/step are compile-time integers. |
+|  `83` | `ForLoopII` | `AsBx`   | `AsBx`   | Integer-specialized ForLoop. Guard-free: R(A) += R(A+2); if in-bounds: IP += sBx; R(A+3) = R(A).                       |
 
-Relative jump by signed offset. Forward jumps skip instructions; backward jumps are not used for loops (see `loop` instead).
+### 5.20 Constant Fusion
 
-**Disassembly:** `jmp .L003` with offset shown as comment (e.g., `; +5`).
+| Value | Opcode | Encoding | Operands | Effect                                                            |
+| ----: | ------ | -------- | -------- | ----------------------------------------------------------------- |
+|  `84` | `AddK` | `ABC`    | `ABC`    | R(A) = R(B) + K(C) — add constant from pool.                      |
+|  `85` | `SubK` | `ABC`    | `ABC`    | R(A) = R(B) - K(C) — subtract constant from pool.                 |
+|  `86` | `EqK`  | `ABC`    | `ABC`    | R(A) = (R(B) == K(C)) — equality with constant from pool.         |
+|  `87` | `NeK`  | `ABC`    | `ABC`    | R(A) = (R(B) != K(C)) — inequality with constant from pool.       |
+|  `88` | `LtK`  | `ABC`    | `ABC`    | R(A) = (R(B) < K(C)) — less-than with constant from pool.         |
+|  `89` | `LeK`  | `ABC`    | `ABC`    | R(A) = (R(B) <= K(C)) — less-or-equal with constant from pool.    |
+|  `90` | `GtK`  | `ABC`    | `ABC`    | R(A) = (R(B) > K(C)) — greater-than with constant from pool.      |
+|  `91` | `GeK`  | `ABC`    | `ABC`    | R(A) = (R(B) >= K(C)) — greater-or-equal with constant from pool. |
 
----
+### 5.21 Typed Arrays
 
-#### `jmp.false` — Jump if Falsy
+| Value | Opcode      | Encoding | Operands | Effect                                               |
+| ----: | ----------- | -------- | -------- | ---------------------------------------------------- |
+|  `92` | `TypedWrap` | `ABx`    | `ABx`    | R(A) = TypedArray(elementType=K(Bx), elements=R(A)). |
 
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
+### 5.22 Defer
 
-**Operation:** If `IsFalsy(R(A))`, then `IP += sBx`.
+| Value | Opcode  | Encoding | Operands | Effect                                                                  |
+| ----: | ------- | -------- | -------- | ----------------------------------------------------------------------- |
+|  `93` | `Defer` | `ABC`    | `A`      | Push deferred closure R(A) onto the current frame's defer stack (LIFO). |
 
-Conditional jump taken when R(A) is falsy. Falls through otherwise.
+### 5.23 Exception Type Matching
 
----
+| Value | Opcode       | Encoding | Operands | Effect                                                                                     |
+| ----: | ------------ | -------- | -------- | ------------------------------------------------------------------------------------------ |
+|  `94` | `CatchMatch` | `ABx`    | `ABx`    | Check if caught error in R(A) matches type names K(Bx); on match, skip the following jump. |
+|  `95` | `Rethrow`    | `ABC`    | `A`      | Re-throw the original RuntimeError that was caught into R(A)'s handler register.           |
 
-#### `jmp.true` — Jump if Truthy
+### 5.24 File-Based Mutual Exclusion (Lock)
 
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
+| Value | Opcode      | Encoding | Operands | Effect                                                                                                                          |
+| ----: | ----------- | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+|  `96` | `LockBegin` | `ABC`    | `ABC`    | Acquire exclusive file lock. A=errReg (scratch), B=pathReg, C=constIdx for LockMetadata. R(B+1)=waitOption, R(B+2)=staleOption. |
+|  `97` | `LockEnd`   | `Ax`     | `Ax`     | Release the top lock from VMContext.ActiveLocks. No operands (A=0).                                                             |
 
-**Operation:** If `IsTruthy(R(A))`, then `IP += sBx`.
+### 5.25 Global Bindings
 
-Conditional jump taken when R(A) is truthy. Falls through otherwise.
+| Value | Opcode        | Encoding | Operands | Effect                                                            |
+| ----: | ------------- | -------- | -------- | ----------------------------------------------------------------- |
+|  `98` | `UnsetGlobal` | `Ax`     | `Ax`     | Remove the global binding at slot Ax from the globals dictionary. |
 
----
+### 5.26 Iterator Cleanup
 
-#### `loop` — Loop Back-Edge
+| Value | Opcode      | Encoding | Operands | Effect                                                                                  |
+| ----: | ----------- | -------- | -------- | --------------------------------------------------------------------------------------- |
+|  `99` | `IterClose` | `ABC`    | `A`      | Dispose iterator at R(A) if IDisposable; clear R(A) to null. Used at for-in loop exits. |
 
-| Field    | Value |
-| -------- | ----- |
-| Format   | AsBx  |
-| Operands | `sBx` |
+### 5.27 Streaming Pipe Chains
 
-**Operation:** `IP += sBx` (always negative — jumps backward).
+| Value | Opcode              | Encoding | Operands                                  | Effect                                                                                                                                                                                                                                                         |
+| ----: | ------------------- | -------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `100` | `StreamingPipeline` | `ABC`    | `ABC + B companion words (one per stage)` | A=destReg, B=stageCount, C=partsBase. Each companion word: bits 15-8 = partCount, bits 7-0 = flags (bit 0x01 = strict on the last stage). Spawns all stages with intermediate stages captured-piped, exposes the last stage's stdout via a multi-stage handle. |
 
-Functionally identical to `jmp` but carries additional semantics: every 256 iterations, it checks the cancellation token and enforces the step limit. This prevents infinite loops without per-instruction overhead. Also triggers debug line resets in debug mode.
+## 6. Companion Words
 
----
+Most opcodes consume exactly one instruction word. The following opcodes consume
+additional companion words immediately after the primary opcode word:
 
-#### `call` — Function Call
+| Opcode              | Companion contract                                                                                                          |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `Closure`           | One companion word per upvalue descriptor in the target function prototype.                                                 |
+| `PipeChain`         | `B` companion words, one per pipeline stage. Bits `15..8` store part count; bits `7..0` store stage flags.                  |
+| `StreamingPipeline` | `B` companion words, one per pipeline stage. Bits `15..8` store part count; bit `0x01` marks strict mode on the last stage. |
+| `GetFieldIC`        | One companion word storing the inline-cache slot index.                                                                     |
+| `CallBuiltIn`       | One companion word storing the inline-cache slot index.                                                                     |
 
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), C` |
+Companion words are serialized in the code array and count toward bytecode offsets.
 
-**Operation:** Call the callable in R(A) with C arguments from R(A+1)..R(A+C). Result stored in R(A).
+## 7. Compatibility
 
-**Dispatch by callable type:**
+Serialized `.stashc` files store an opcode table hash in the binary header. The hash
+is computed from opcode names and numeric values. A reader rejects bytecode when its
+computed hash does not match the file header.
 
-| Callable Type     | Behavior                                                                        |
-| ----------------- | ------------------------------------------------------------------------------- |
-| `VMFunction`      | Push new call frame. BaseSlot = current base + A + 1. Args already in position. |
-| `VMBoundMethod`   | Shift args right by 1, insert receiver at R(0), push frame.                     |
-| `BuiltInFunction` | Call .NET delegate directly. No frame push. Result in R(A).                     |
-| `IStashCallable`  | Call via interface. No frame push. Result in R(A).                              |
+Changing an opcode name, numeric value, or order is therefore a bytecode compatibility
+change. Adding an opcode also changes the hash and requires regenerating this document.
 
-**Arity validation:**
+## 8. Change Rules
 
-- With rest parameter: `argc >= minArity` (excess collected into rest array)
-- Without rest parameter: `minArity <= argc <= arity` (missing optionals set to sentinel)
-- Async functions: spawn on background thread instead of pushing frame.
+When changing the instruction set:
 
----
-
-#### `return` — Function Return
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), B` |
-
-**Operation:** Return from current function. If B=1, return value is R(A); if B=0, return `null`.
-
-1. Close any open upvalues referencing this frame's locals.
-2. Pop the call frame.
-3. Write return value to caller's R(A) (the register that held the callee).
-4. Restore stack pointer to caller's frame extent.
-5. If this was the top-level frame, return the value to the host.
-
----
-
-### 5.9 Numeric Iteration
-
-Numeric for-loops use **4 consecutive registers** starting at R(A):
-
-| Register | Purpose       | Example: `for (let i = 0; i < 10; i++)` |
-| -------- | ------------- | --------------------------------------- |
-| R(A)     | Counter       | Internal counter (modified by step)     |
-| R(A+1)   | Limit         | `10`                                    |
-| R(A+2)   | Step          | `1`                                     |
-| R(A+3)   | Loop variable | `i` (visible to loop body)              |
-
-#### `for.prep` — Numeric For-Loop Init
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-**Operation:** `R(A) → R(A) − R(A+2)`, then `IP += sBx` (skip to loop end for first-iteration test).
-
-Pre-decrements the counter by the step value so that the first `for.loop` iteration will increment it back to the starting value. Validates that counter and step are numeric.
-
----
-
-#### `for.loop` — Numeric For-Loop Step
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-**Operation:**
-
-```
-R(A) → R(A) + R(A+2)           // increment counter by step
-if (step > 0 and R(A) <= R(A+1)) or (step < 0 and R(A) >= R(A+1)):
-    R(A+3) → R(A)              // assign loop variable
-    IP += sBx                  // jump back to loop body
-else:
-    fall through                // loop exit
-```
-
----
-
-#### `for.prepII` — Integer-Specialized For-Loop Init
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-Same as `for.prep` but only takes the fast path when all three registers (counter, limit, step) are `int`. Falls back to `for.prep` if any register is non-integer. Avoids float promotion overhead in pure-integer loops.
-
----
-
-#### `for.loopII` — Integer-Specialized For-Loop Step
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-Same as `for.loop` but optimized for all-integer operands. No type guards per iteration on the fast path.
-
----
-
-### 5.10 Generic Iteration
-
-Generic iteration (`for..in`) uses an iterator state object and supports arrays, dicts, strings, ranges, and enums.
-
-#### `iter.prep` — Initialize Iterator
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), B` |
-
-**Operation:** Create an `IteratorState` from the collection in R(A). B indicates indexed mode (0 = single variable, 1 = key-value pair).
-
-**Collection-specific initialization:**
-
-| Collection Type | Behavior                                                     |
-| --------------- | ------------------------------------------------------------ |
-| Array           | **Snapshots** the array (prevents mutation-during-iteration) |
-| Typed array     | Snapshots as `List<StashValue>`                              |
-| Dictionary      | Stores a dictionary enumerator                               |
-| String          | Stores string reference for character iteration              |
-| Range           | Stores range reference for value generation                  |
-| Enum            | Builds list of `StashEnumValue` members                      |
-
-**Error:** Throws if the value is not iterable.
-
----
-
-#### `iter.loop` — Advance Iterator
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-**Operation:** Advance the iterator state in R(A). Assign current element(s) to R(A+1) and optionally R(A+2). If exhausted, jump by sBx (to loop exit).
-
-**Per-collection output:**
-
-| Collection | R(A+1)                    | R(A+2)                    |
-| ---------- | ------------------------- | ------------------------- |
-| Array      | Element value             | Index (int)               |
-| Dictionary | Key (or value if indexed) | Value (or key if indexed) |
-| String     | Character (string)        | Index (int)               |
-| Range      | Current value (int)       | Iteration index           |
-| Enum       | Enum member value         | Index (int)               |
-
----
-
-### 5.11 Collections & Indexing
-
-#### `get.table` — Index Read
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B)[R(C)]`
-
-| Receiver Type | Key Type | Behavior                                         |
-| ------------- | -------- | ------------------------------------------------ |
-| Array         | int      | Negative indices wrap (`arr[-1]` → last element) |
-| Typed array   | int      | Same wrapping behavior                           |
-| Dictionary    | any      | Key lookup; returns `null` if key doesn't exist  |
-| String        | int      | Returns single-character string; negative wraps  |
-
-**Error:** `IndexError` if array/string index is out of bounds after wrapping. Null dictionary keys throw.
-
----
-
-#### `set.table` — Index Write
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A)[R(B)] → R(C)`
-
-| Receiver Type | Behavior                              |
-| ------------- | ------------------------------------- |
-| Array         | Negative indices wrap; bounds-checked |
-| Typed array   | Same; type validation on value        |
-| Dictionary    | Auto-inserts; null keys throw         |
-| String        | **Error** — strings are immutable     |
-
----
-
-#### `new.array` — Array Literal
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), B` |
-
-**Operation:** `R(A) → [R(A+1), R(A+2), ..., R(A+B)]`
-
-Collects B elements from consecutive registers into a new array. Elements marked as `SpreadMarker` are unpacked: their contents are flattened into the result array.
-
----
-
-#### `new.dict` — Dictionary Literal
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), B` |
-
-**Operation:** `R(A) → {R(A+1): R(A+2), R(A+3): R(A+4), ..., R(A+2B-1): R(A+2B)}`
-
-Collects B key-value pairs from consecutive registers. A null key signals a spread entry: the corresponding value (a dict or struct instance) is merged into the result.
-
----
-
-#### `new.range` — Range Construction
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → Range(R(B), R(C), step)`
-
-Creates a range from start (R(B)) to end (R(C)). Step is pre-loaded in R(A+1) by the compiler; if null, auto-inferred as `+1` (start ≤ end) or `−1` (start > end).
-
-**Error:** Step of `0` throws.
-
----
-
-#### `spread` — Spread Marker
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → SpreadMarker(R(B))`
-
-Wraps an iterable in a `SpreadMarker` sentinel. This marker is consumed by `new.array`, `new.dict`, and `call.spread` to unpack the contents at the call site. It is never visible to user code.
-
----
-
-#### `destructure` — Destructuring Assignment
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Unpack the value in R(A) into multiple registers according to the destructuring metadata at K(Bx).
-
-- **Array destructuring:** `[a, b, ...rest] = R(A)` — elements assigned to R(A)..R(A+N), rest collects remainder as new array.
-- **Object destructuring:** `{x, y, ...rest} = R(A)` — fields matched by name from struct instances or dict keys, rest collects unmatched entries.
-- Missing elements are padded with `null`.
-
----
-
-#### `in` — Membership Test
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → R(B) in R(C)`
-
-Delegates to `RuntimeOps.Contains()`. Result is `bool`.
-
----
-
-### 5.12 Field Access
-
-#### `get.field` — Field Read
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), K(C)` |
-
-**Operation:** `R(A) → R(B).fieldName` where fieldName = K(C) (a string constant).
-
-Resolves the named field on the receiver object. Resolution order:
-
-1. **StashInstance:** direct field access, method binding
-2. **StashDictionary:** extension methods, then key access
-3. **StashNamespace:** member lookup
-4. **StashStruct:** static method access
-5. **StashEnum:** enum member access
-6. **StashEnumValue:** properties (`typeName`, `memberName`)
-7. **StashError:** properties (`message`, `type`, `stack`, custom)
-8. **Built-in properties:** `duration.totalMs`, `bytesize.kb`, `string.length`, `array.length`, etc.
-9. **Extension methods:** registry lookup
-10. **UFCS:** fallback to namespace functions as methods
-
-**Disassembly:** `get.field r0, r1, k3` with `.fieldName` shown as comment.
-
----
-
-#### `get.field.ic` — Field Read with Inline Cache
-
-| Field    | Value                     |
-| -------- | ------------------------- |
-| Format   | ABC + companion word      |
-| Operands | `R(A), R(B), K(C) [ic:N]` |
-
-**Operation:** Same as `get.field` but with an inline cache slot for fast repeated access.
-
-Consumes a **companion word** (the next instruction word) which holds the inline cache slot index. See [Section 6: Inline Caching](#6-inline-caching) for the state machine.
-
-- **IC hit (State 1):** Guard matches → return cached value directly. No field lookup.
-- **IC miss (State 0 or guard mismatch):** Full lookup, then populate cache.
-- **Megamorphic (State 2):** Always full lookup, no caching.
-
-**Disassembly:** `get.field.ic r0, r1, k3` with `.fieldName [ic:0]` as comment.
-
----
-
-#### `set.field` — Field Write
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), K(B), R(C)` |
-
-**Operation:** `R(A).fieldName → R(C)` where fieldName = K(B).
-
-Sets a named field on the receiver. Only valid for struct instances and dictionaries. Immutable types (namespaces, enums, built-in types) throw.
-
----
-
-#### `self` — Method Binding
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), K(C)` |
-
-**Operation:** Look up method K(C) on receiver R(B) and store in R(A) as a bound method. Also stores the receiver in R(A+1) for the subsequent `call`.
-
-Used to compile method calls like `obj.method(args)` where the receiver needs to be passed as the implicit first argument.
-
----
-
-### 5.13 Functions & Closures
-
-#### `closure` — Create Closure
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Create a `VMFunction` from the chunk at K(Bx), capturing upvalues from the current scope.
-
-The instruction is followed by N **companion words** (one per upvalue), each encoding:
-
-- **Bits 0–7:** `isLocal` — 1 if capturing a local from this frame, 0 if inheriting an upvalue from the enclosing closure.
-- **Bits 8–15:** `index` — the register index (if local) or upvalue index (if inherited).
-
-For local captures, `CaptureUpvalue()` creates a new open upvalue pointing to the stack slot. For inherited captures, the existing upvalue reference is shared.
-
-**Disassembly:** `closure r0, k5` with `; <fn:myFunc(2p)>` as comment, followed by `; upvalue [0]: local 3` etc.
-
----
-
-#### `call.builtin` — Built-In Namespace Call with IC
-
-| Field    | Value                  |
-| -------- | ---------------------- |
-| Format   | ABC + companion word   |
-| Operands | `R(A), R(B), C [ic:N]` |
-
-**Operation:** Call a built-in namespace function. R(B) is the namespace/receiver, C is the argument count. Arguments are in R(A+1)..R(A+C). Result stored in R(A).
-
-This is a specialized call instruction that combines field access + function call with inline caching. The companion word holds the IC slot index.
-
-**Fast path (IC hit):**
-
-1. Guard check: `R(B)` is the same namespace object as cached.
-2. Call the cached `BuiltInFunction` delegate directly with args.
-3. No field lookup overhead.
-
-**Slow path (IC miss):**
-
-1. Resolve field name from `K(ic.ConstantIndex)` on the object in R(B).
-2. Execute the resolved callable.
-3. Populate IC if the receiver is a frozen namespace.
-
-**Disassembly:** `call.builtin r1, r3, 1` with `; (1 args) [ic:0]` as comment.
-
----
-
-#### `call.spread` — Call with Spread Arguments
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABx       |
-| Operands | `R(A), B` |
-
-**Operation:** Call R(A) with B arguments (some of which may be `SpreadMarker`s). Spread markers are expanded: their contents are flattened into the argument list before the call.
-
----
-
-### 5.14 Type System
-
-#### `typeof` — Get Type Name
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → typeof(R(B))` as a string.
-
-**Type mapping:**
-
-| Value Type      | Result String      |
-| --------------- | ------------------ |
-| null            | `"null"`           |
-| bool            | `"bool"`           |
-| int (long)      | `"int"`            |
-| float (double)  | `"float"`          |
-| string          | `"string"`         |
-| array (List)    | `"array"`          |
-| typed array     | `"ElementType[]"`  |
-| dict            | `"dict"`           |
-| range           | `"range"`          |
-| duration        | `"duration"`       |
-| byte size       | `"bytes"`          |
-| semver          | `"semver"`         |
-| secret          | `"secret"`         |
-| ip address      | `"ip"`             |
-| error           | `"Error"`          |
-| struct instance | Instance type name |
-| enum value      | Enum type name     |
-| struct def      | `"struct"`         |
-| enum def        | `"enum"`           |
-| interface def   | `"interface"`      |
-| namespace       | `"namespace"`      |
-| future          | `"Future"`         |
-| function        | `"function"`       |
-
----
-
-#### `is` — Runtime Type Check
-
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
-
-**Operation:** `R(A) → (R(B) is Type)` where the type is resolved from R(C).
-
-Bit 7 of the raw C operand encodes a `isDynamic` flag:
-
-- `isDynamic = true`: If the type name is unrecognized, throw `"Right-hand side of 'is' must be a type."`.
-- `isDynamic = false`: If the type name is unrecognized, return `false`.
-
-Supports all built-in type names, user-defined structs/enums/interfaces, and typed array syntax (`int[]`, `float[]`). Interface checks verify that the struct implements the interface.
-
----
-
-#### `struct.decl` — Declare Struct
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Create a `StashStruct` definition from metadata at K(Bx). Method closures are read from R(A+1)..R(A+N).
-
-Validates interface compliance: all required fields must be present, all required methods must exist with correct arity (excluding the implicit `self` parameter).
-
----
-
-#### `enum.decl` — Declare Enum
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Create a `StashEnum` from metadata at K(Bx). Stores in R(A).
-
----
-
-#### `iface.decl` — Declare Interface
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Create a `StashInterface` from metadata at K(Bx). Stores in R(A).
-
----
-
-#### `extend` — Extend Type
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Add methods to an existing type. Method closures read from R(A+1)..R(A+N).
-
-- **Built-in types:** Methods registered in the extension registry, accessible via UFCS.
-- **User-defined structs:** Methods added to the struct's method dictionary (existing methods not overwritten).
-
----
-
-#### `new.struct` — Instantiate Struct
-
-| Field    | Value           |
-| -------- | --------------- |
-| Format   | ABC             |
-| Operands | `R(A), K(B), C` |
-
-**Operation:** Create a `StashInstance` of the struct type from metadata at K(B) with C field values from registers.
-
-**Two layouts:**
-
-- Without type register: Type resolved from globals by name. Fields at R(A+1)..R(A+C).
-- With type register: Type reference in R(A+1). Fields at R(A+2)..R(A+1+C).
-
-**Validation:** All field names must exist in the struct definition. No duplicates.
-
----
-
-#### `check.numeric` — Numeric Guard
-
-| Field    | Value  |
-| -------- | ------ |
-| Format   | A only |
-| Operands | `R(A)` |
-
-**Operation:** If `R(A)` is not numeric, throw `"Operand of '++' or '--' must be a number."`.
-
-Emitted before `addi` to guard `++`/`--` on variables that might not be numbers.
-
----
-
-#### `typed.wrap` — Type Narrowing
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Narrow R(A) to the type specified by the string at K(Bx).
-
-- **Byte narrowing:** `int` or `float` → `byte` with range check [0, 255].
-- **Array wrapping:** `List<StashValue>` → `StashTypedArray` with element type validation.
-- **Null:** Passes through unchanged.
-
-**Error:** Out-of-range values, type mismatches.
-
----
-
-### 5.15 Error Handling
-
-The VM maintains an exception handler stack. Each handler records where to resume (catch IP), what stack state to restore, and which register receives the error.
-
-#### `try.begin` — Enter Try Block
-
-| Field    | Value       |
-| -------- | ----------- |
-| Format   | AsBx        |
-| Operands | `R(A), sBx` |
-
-**Operation:** Push an exception handler. A = error register (where the caught error will be stored). sBx = signed offset to the catch handler IP.
-
-The handler records the current stack pointer, frame count, and computed catch IP. If a `RuntimeError` occurs while this handler is active, the VM unwinds to this state.
-
----
-
-#### `try.end` — Exit Try Block
-
-| Field    | Value |
-| -------- | ----- |
-| Format   | Ax    |
-| Operands | none  |
-
-**Operation:** Pop the innermost exception handler from the stack.
-
-Emitted at the end of a try block's normal exit path. If execution reaches here, no error occurred and the handler is no longer needed.
-
----
-
-#### `throw` — Raise Error
-
-| Field    | Value  |
-| -------- | ------ |
-| Format   | A only |
-| Operands | `R(A)` |
-
-**Operation:** Throw the value in R(A) as an error.
-
-| Value Type | Behavior                                                       |
-| ---------- | -------------------------------------------------------------- |
-| StashError | Re-throw with properties preserved                             |
-| String     | Wrap in `RuntimeError` with the string as the message          |
-| Dictionary | Extract `"message"` and `"type"` fields, throw with properties |
-| Other      | Stringify and wrap in `RuntimeError`                           |
-
-The thrown `RuntimeError` is caught by the outermost VM loop. If an exception handler exists, control transfers to its catch IP; the error is stored in the handler's error register, and the stack/frame state is restored. If no handler exists, the error propagates to the host.
-
----
-
-#### `try.expr` — Try Expression Result
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → R(B)`
-
-Simple register copy used after a catch clause to move the exception handler's result to the destination register. Used in `try` expressions (as opposed to `try` statements).
-
----
-
-#### `catch.match` — Typed Catch Dispatch (Opcode 94)
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Multi-clause typed catch dispatch.
-
-- `R(A)` holds the caught `StashError`.
-- `K(Bx)` is a `string[]` constant containing the type names this clause handles (e.g., `["TypeError"]` or `["IOError", "ValueError"]`).
-
-Matching rules:
-
-1. If the type-name array is **empty** — this is a catch-all clause. Skip the following instruction (IP++) unconditionally.
-2. Otherwise, check if the error's `.type` string matches any name in the array (exact string comparison).
-   - **Match:** IP++ (skips the `Jmp` that would jump to the next clause).
-   - **No match:** Fall through to the `Jmp`, which transfers control to the next catch clause.
-
-If the last catch clause is typed (not catch-all) and no clause matched, a `Rethrow` is emitted after the final `Jmp` to propagate the original error.
-
-Used by: multi-clause typed `catch` dispatch in `try/catch` statements.
-
----
-
-#### `rethrow` — Bare Rethrow (Opcode 95)
-
-| Field    | Value  |
-| -------- | ------ |
-| Format   | A only |
-| Operands | `R(A)` |
-
-**Operation:** Re-throw the caught error, preserving its original exception, source span, and call stack.
-
-- `R(A)` holds the caught `StashError`.
-- If the error has an `OriginalException` (a C# `RuntimeError`), that exception is re-thrown directly — preserving the original IP, span, and C# call stack.
-- If there is no original exception (e.g., the error was constructed from a string or dict), a new `RuntimeError` is synthesised from the error's `.message` and `.type` and thrown.
-
-Used by: bare `throw;` inside catch bodies; also emitted when the final typed catch clause in a multi-clause chain does not match (implicit rethrow).
-
----
-
-### 5.16 Strings
-
-#### `interpolate` — String Interpolation
-
-| Field    | Value     |
-| -------- | --------- |
-| Format   | ABC       |
-| Operands | `R(A), B` |
-
-**Operation:** `R(A) → concat(R(A+1), R(A+2), ..., R(A+B))`
-
-Concatenates B parts from consecutive registers into a single string. Parts alternate between literal string fragments (pre-compiled) and expression results (stringified via `RuntimeOps.Stringify()`). This is the runtime implementation of `$"hello {name}"` string interpolation.
-
----
-
-### 5.17 Shell & Process
-
-#### `command` — Execute Shell Command
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), B, C` |
-
-**Operation:** Assemble command string from B parts in R(A+1)..R(A+B), execute it as a subprocess.
-
-**Tilde expansion:** `~` and `~/path` expanded to user home directory.
-
-**Elevation:** If an `elevate` block is active, the command is prefixed with the elevation command (`sudo`/`gsudo`).
-
-**Mode flags (C):**
-
-| Flag   | Meaning                                                |
-| ------ | ------------------------------------------------------ |
-| `0x01` | **Passthrough** — stream output to console, no capture |
-| `0x02` | **Strict** — throw if exit code ≠ 0                    |
-| `0x00` | **Default** — capture stdout/stderr silently           |
-
-**Result:** A `CommandResult` struct instance with fields `stdout`, `stderr`, `exitCode`.
-
----
-
-#### `pipe.chain` — Streaming Pipe Chain
-
-| Field    | Value                   |
-| -------- | ----------------------- |
-| Format   | ABC + B companion words |
-| Operands | `R(A), R(B), R(C)`      |
-
-Execute a streaming shell pipe chain. All stages run concurrently with OS-level pipes connecting them.
-
-| Field | Meaning                                         |
-| ----- | ----------------------------------------------- |
-| A     | Destination register (receives `CommandResult`) |
-| B     | Stage count (2–255)                             |
-| C     | Base register of the flattened parts block      |
-
-Followed immediately by B **companion words** (one per stage, in order):
-
-| Bits | Meaning                                                                                    |
-| ---- | ------------------------------------------------------------------------------------------ |
-| 15–8 | Part count for this stage (number of registers in the parts block)                         |
-| 7–1  | Reserved (must be 0)                                                                       |
-| 0    | Strict flag: if 1, a non-zero exit code from the **last stage only** throws `CommandError` |
-
-**Execution model:**
-
-1. Read B companion words from the instruction stream.
-2. Build command strings from contiguous registers starting at R(C).
-3. Start all N processes with OS pipes: `stdout[0] → stdin[1] → … → stdin[N-1]`.
-4. Drain all stderr streams concurrently (prevents OS buffer deadlock).
-5. Run N-1 pump tasks (`stdout[i] → stdin[i+1]`, 8 KiB char buffer).
-6. Collect final stage stdout; wait for all processes to exit.
-7. Apply strict mode check on the last stage's exit code only.
-8. Write `CommandResult` (stdout, stderr, exitCode) to R(A).
-
-**Notes:**
-
-- The exit code stored in `CommandResult.exitCode` is the last stage's exit code.
-- `stderr` in `CommandResult` is the last stage's stderr only; intermediate stages' stderr is drained and discarded.
-- If the downstream process exits early (e.g., `head -5`), the upstream pump gets an `IOException` (broken pipe) and terminates gracefully — this is the streaming termination signal.
-- Passthrough commands (`$>(...)`) are rejected at compile time.
-
----
-
-#### `redirect` — I/O Redirection
-
-| Field    | Value           |
-| -------- | --------------- |
-| Format   | ABC             |
-| Operands | `R(A), R(C), B` |
-
-**Operation:** Write command output to file.
-
-**Flags (B):**
-
-- Bits [1:0]: Stream selector — 0=stdout, 1=stderr, 2=both
-- Bit 2: Append mode — 0=overwrite, 1=append
-
-Extracts the selected stream(s) from the command result, writes to the file path in R(C), and clears the redirected stream in the result.
-
----
-
-### 5.18 Modules
-
-#### `import` — Selective Import
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Load module from path in R(A), import named exports into registers according to metadata at K(Bx).
-
-**Module loading:**
-
-1. Resolve path (relative to current file, with `.stash` extension auto-appended).
-2. Check module cache — if already loaded, reuse cached globals.
-3. Compile and execute module in an isolated child VM.
-4. Extract named exports from module globals.
-5. Assign each imported name to consecutive registers starting at R(A).
-
-**Error:** Throws if imported name not found in module. Circular imports detected and rejected.
-
-**Package resolution:** Non-path specifiers (no `.`, `/`, or `.stash`) resolve via the package system: walk up to find `stash.json`, look in `stashes/{packageName}/`.
-
----
-
-#### `import.as` — Import as Namespace
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Load module and wrap all its exports as a frozen namespace with the alias name from metadata at K(Bx).
-
-The resulting namespace is immutable — its members can be accessed but not modified. Built-in namespace names are excluded from the export.
-
----
-
-### 5.19 Concurrency
-
-#### `await` — Await Future
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** `R(A) → await R(B)`
-
-If R(B) is a `StashFuture`, blocks until the async task completes and stores the result in R(A). If R(B) is not a future, passes the value through unchanged (no-op).
-
----
-
-### 5.20 Miscellaneous
-
-#### `switch` — Switch Metadata (No-Op)
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** No operation at runtime.
-
-The compiler expands switch statements into comparison chains and conditional jumps. This opcode exists only to carry metadata for tooling (disassembler, debugger).
-
----
-
-#### `elevate.begin` — Enter Elevation Block
-
-| Field    | Value        |
-| -------- | ------------ |
-| Format   | ABC          |
-| Operands | `R(A), R(B)` |
-
-**Operation:** Activate privilege escalation. Subsequent `command` instructions will be prefixed with the elevation command.
-
-- R(B) specifies the elevation command. If null, defaults to `sudo` (Unix) or `gsudo` (Windows).
-- **Error:** Throws in embedded mode (privilege escalation not allowed).
-
----
-
-#### `elevate.end` — Exit Elevation Block
-
-| Field    | Value |
-| -------- | ----- |
-| Format   | Ax    |
-| Operands | none  |
-
-**Operation:** Deactivate privilege escalation. Clears the elevation command.
-
----
-
-#### `retry` — Retry Block
-
-| Field    | Value         |
-| -------- | ------------- |
-| Format   | ABx           |
-| Operands | `R(A), K(Bx)` |
-
-**Operation:** Execute a function repeatedly until success, a predicate passes, or max attempts exhausted.
-
-**Registers:**
-
-- R(A): max attempts (positive integer)
-- R(A+1): options (optional — struct with `delay` field)
-- Subsequent registers: body function, until predicate (optional), onRetry callback (optional)
-
-**Per-attempt:**
-
-1. Call body with attempt context: `{current, max, remaining, errors}`.
-2. On `RuntimeError`: wrap as `StashError`, call onRetry (if not final attempt), continue.
-3. Evaluate until predicate (if present): `until(result, attempt)` — must return truthy.
-4. Sleep `delay` milliseconds before next attempt (if configured).
-
-**Error:** `RetryExhaustedError` if all attempts fail.
-
----
-
-#### `timeout` — Timeout Block
-
-| Field    | Value          |
-| -------- | -------------- |
-| Format   | ABC            |
-| Operands | `R(A), R(A+1)` |
-
-**Operation:** Execute the function in R(A+1) with a time limit from R(A).
-
-- R(A): duration (`StashDuration` or numeric milliseconds, must be > 0).
-- R(A+1): body function.
-
-Creates a linked cancellation token with the timeout. If the body exceeds the time limit, throws `TimeoutError`. Result stored in R(A).
-
----
-
-## 6. Inline Caching
-
-Inline caching (IC) is a runtime optimization that caches the result of field lookups at specific call sites. Two instructions use IC: `get.field.ic` and `call.builtin`.
-
-### IC Slot Structure
-
-Each IC slot contains:
-
-| Field         | Type       | Description                                          |
-| ------------- | ---------- | ---------------------------------------------------- |
-| Guard         | object?    | Cached receiver identity (namespace or struct)       |
-| CachedValue   | StashValue | Resolved field value or field index                  |
-| State         | byte       | 0 = uninitialized, 1 = monomorphic, 2 = megamorphic  |
-| ConstantIndex | ushort     | Field name in constant pool (for slow-path fallback) |
-
-### State Machine
-
-```
-                   ┌─────────────────┐
-         first     │                 │  guard matches
-         access    │  Uninitialized  │──────────────────→ skip (populate on miss)
-                   │   (State = 0)   │
-                   └────────┬────────┘
-                            │ first successful lookup
-                            ▼
-                   ┌─────────────────┐
-                   │                 │  guard matches → fast path (return cached)
-                   │  Monomorphic    │
-                   │   (State = 1)   │  guard mismatch → transition ↓
-                   └────────┬────────┘
-                            │ different receiver type
-                            ▼
-                   ┌─────────────────┐
-                   │                 │
-                   │  Megamorphic    │  always slow path (no caching)
-                   │   (State = 2)   │
-                   └─────────────────┘
-```
-
-### Guard Types
-
-- **Namespace access:** Guard is the `StashNamespace` object reference. Cache stores the resolved member value (typically a `BuiltInFunction` delegate).
-- **Struct field access:** Guard is the `StashStruct` definition reference. Cache stores the field slot index for O(1) array access on instances.
-
-### Companion Words
-
-Several opcodes consume **companion words** — additional 32-bit words that immediately follow the primary instruction in the code array. Companion words are NOT executable instructions; they carry metadata that the opcode's handler reads by advancing IP.
-
-**Key rule:** When walking the code array (for disassembly, verification, or analysis), companion words must be skipped. They will not decode as valid instructions.
-
-#### Opcodes with Companion Words
-
-| Opcode              | Companion Count                 | Companion Encoding              | IP Advancement                          |
-| ------------------- | ------------------------------- | ------------------------------- | --------------------------------------- |
-| `get.field.ic` (80) | 1                               | IC slot index (u32)             | +2 (instruction + companion)            |
-| `call.builtin` (81) | 1                               | IC slot index (u32)             | +2 (instruction + companion)            |
-| `closure` (52)      | N (= sub-chunk's upvalue count) | Upvalue descriptor (u32)        | +1+N                                    |
-| `pipe.chain` (65)   | B (= stage count, from operand) | Stage descriptor (u32, see §5.17) | +1+B (instruction + B stage descriptors) |
-
-#### IC Slot Companion (get.field.ic, call.builtin)
-
-```
-Primary:    [op:8][A:8][B:8][C:8]    ← the opcode instruction
-Companion:  [        icSlot:32     ]  ← IC slot array index
-```
-
-The companion is read by the handler as `frame.Chunk.Code[frame.IP++]`, which:
-
-1. Reads the IC slot index
-2. Advances IP past the companion, so the next fetch gets the next real instruction
-
-The IC slot index references `Chunk.ICSlots[icSlot]`. Each IC slot stores:
-
-- `Guard` — object reference for identity check (e.g., the namespace object)
-- `CachedValue` — the resolved field/function value
-- `State` — 0 (uninitialized), 1 (monomorphic), 2 (megamorphic)
-- `ConstantIndex` — constant pool index of the field name (for slow-path fallback)
-
-#### Upvalue Descriptor Companion (closure)
-
-```
-Primary:    [op:8][A:8][   Bx:16  ]    ← Closure instruction, Bx = sub-chunk constant index
-Word 1:     [isLocal:8][index:8][ unused:16 ]  ← upvalue 0
-Word 2:     [isLocal:8][index:8][ unused:16 ]  ← upvalue 1
-...
-Word N:     [isLocal:8][index:8][ unused:16 ]  ← upvalue N-1
-```
-
-Each companion word encodes one upvalue capture:
-
-- **Bits 0–7 (`isLocal`):** 1 = capture a local variable from the immediately enclosing function's register window. 0 = inherit an upvalue from the enclosing closure's upvalue array.
-- **Bits 8–15 (`index`):** If `isLocal=1`, the register index in the enclosing frame. If `isLocal=0`, the upvalue array index in the enclosing closure.
-- **Bits 16–31:** Unused (zero).
-
-The number of companion words N equals the length of the sub-chunk's `Upvalues` array (`Constants[Bx].Upvalues.Length`).
-
----
-
-## 7. Constant Pool
-
-Each compiled function (`Chunk`) has a constant pool — an array of `StashValue` entries containing:
-
-- **String literals:** `"hello"`, field names, module paths
-- **Numeric literals:** integers and floats that don't fit in immediate operands
-- **Metadata records:** `StructMetadata`, `EnumMetadata`, `ImportMetadata`, `CommandMetadata`, `StructInitMetadata`, `DestructureMetadata`, `RetryMetadata`
-- **Sub-chunks:** Compiled function bodies referenced by `closure`
-- **Null/bool:** Canonical constant values
-
-Constants are **deduplicated** at compile time via a hash map in `ChunkBuilder`. The constant pool is immutable after compilation.
-
-Constants are referenced by:
-
-- `Bx` (16-bit unsigned) in ABx-format instructions — supports up to 65,536 constants.
-- `C` (8-bit unsigned) in ABC-format instructions with constant-fused variants — limited to 256 constants.
-
----
-
-## 8. Disassembly Format
-
-The disassembler produces human-readable output with the following structure:
-
-```
-  ADDR:  MNEMONIC            OPERANDS                ; COMMENT
-```
-
-### Example
-
-```
-.code:
-  ; 3: const HOME_DIR: string = env.get("HOME");
-  0000:  get.global          r3, [g0]                ; env
-  0001:  load.k              r2, k1                  ; "HOME"
-  0002:  call.builtin        r1, r3, 1               ; (1 args) [ic:0]
-  0004:  move                r0, r1
-  0005:  init.const.global   [g1], r0                ; HOME_DIR (const)
-```
-
-### Operand Notation
-
-| Notation   | Meaning                     |
-| ---------- | --------------------------- |
-| `r{N}`     | Register N                  |
-| `k{N}`     | Constant pool index N       |
-| `[g{N}]`   | Global slot N               |
-| `[uv{N}]`  | Upvalue slot N              |
-| `.L{N}`    | Label (jump target address) |
-| `[ic:{N}]` | Inline cache slot N         |
-
-### Source Mapping
-
-Lines starting with `; N:` are source comments showing the original Stash source line. The disassembler maps each instruction back to its source location via the chunk's `SourceMap`.
-
-### Address Gaps
-
-Instructions that consume companion words (like `call.builtin` and `get.field.ic`) cause visible gaps in the address sequence (e.g., 0002 → 0004). The companion word at address 0003 is not displayed as a separate instruction.
-
-### Labels
-
-Jump targets are displayed as `.L{N}` labels. Both the label and the signed offset are shown:
-
-```
-  0010:  jmp.false           r0, .L015               ; +5
-  0020:  loop                .L010                    ; -10
-```
-
----
-
-## 9. Compile-Time Optimizations
-
-The Stash compiler applies several compile-time optimization passes inside `ChunkBuilder.Build()` before the final `Chunk` is constructed. All passes are purely subtractive — they only remove or rewrite instructions using existing opcodes; they never introduce new opcodes, change the `.stashc` format, or alter observable semantics.
-
-### 9.1 Pass Pipeline
-
-```
-1. Peephole()           ← linear-scan fusion (Patterns 1–11)
-2. DeadCodeEliminate()  ← conservative linear DCE
-3. Peephole()           ← second run; catches opportunities exposed by DCE
-```
-
-The pipeline is bounded at two peephole runs to keep compile-time predictable. Both passes can be toggled via `StashEngine` flags:
-
-| Flag             | Default | Effect                    |
-| ---------------- | ------- | ------------------------- |
-| `EnablePeephole` | `true`  | Runs both peephole passes |
-| `EnableDce`      | `true`  | Runs the DCE pass         |
-
-Setting both flags to `false` produces bytecode identical to the pre-optimizer output (useful for A/B regression testing).
-
-### 9.2 Peephole Patterns
-
-All peephole patterns share three safety preconditions:
-
-1. Neither instruction index is a **jump target** (would cross a basic-block boundary).
-2. Neither instruction index is a **companion-word** slot (`GetFieldIC` / `CallBuiltIn` consume a companion word at `i+1`; those slots are never treated as instructions).
-3. Pattern-specific register matching (described below).
-
-When a pattern fires, the first instruction (`Move`) is added to a removal list and the second instruction is rewritten in place. `ApplyRemovals()` then compacts the code array, patches all jump offsets, and updates the source map.
-
-| Pattern | Shape                                           | Effect                                                                                                                                           |
-| ------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **1**   | `Move(A,B)` + `JmpFalse/JmpTrue(A, off)`        | Branch reads `B` directly; `Move` removed.                                                                                                       |
-| **2**   | `Move(A,B)` + `Return(A, C, 0)`                 | Return reads `B` directly; `Move` removed.                                                                                                       |
-| **3**   | `Move(A,B)` + `Move(C,D)` + `GetTable(X, A, C)` | Both moves fused; `GetTable(X, B, D)`; two `Move`s removed (3-instruction window).                                                               |
-| **4**   | `Move(A,B)` + `Move(C,D)` + `SetTable(A, C, E)` | Both moves fused; `SetTable(B, D, E)`; two `Move`s removed (3-instruction window).                                                               |
-| **5**   | `Move(A,B)` + `SetGlobal(A, slot)`              | Global write reads `B` directly; `Move` removed.                                                                                                 |
-| **6**   | `Move(A,B)` + `InitConstGlobal(A, slot)`        | Const-global init reads `B` directly; `Move` removed. Eliminates the intermediate temp register common in `const X = <expr>`.                    |
-| **7a**  | `Move(A,B)` + `SetTable(A, K, V)`               | Table register was moved; `SetTable(B, K, V)`; `Move` removed.                                                                                   |
-| **7b**  | `Move(A,B)` + `SetTable(T, K, A)`               | Value register was moved; `SetTable(T, K, B)`; `Move` removed.                                                                                   |
-| **8a**  | `Move(A,B)` + `GetTable(X, A, K)`               | Table register was moved; `GetTable(X, B, K)`; `Move` removed.                                                                                   |
-| **8b**  | `Move(A,B)` + `GetTable(X, T, A)`               | Index/key register was moved; `GetTable(X, T, B)`; `Move` removed.                                                                               |
-| **9a**  | `Move(A,B)` + `GetField(X, A, K)`               | Object register was moved; `GetField(X, B, K)`; `Move` removed. Also applies to `GetFieldIC` (companion word is preserved unchanged).            |
-| **9b**  | `Move(A,B)` + `SetField(A, K, V)`               | Object register was moved; `SetField(B, K, V)`; `Move` removed.                                                                                  |
-| **9c**  | `Move(A,B)` + `SetField(T, K, A)`               | Value register was moved; `SetField(T, K, B)`; `Move` removed.                                                                                   |
-| **9d**  | `Move(A,B)` + `Self(X, A, K)`                   | Object register was moved; `Self(X, B, K)`; `Move` removed. Guard: dest `X+1` must not collide with `B` (Self writes two consecutive registers). |
-| **11**  | `Move(A, A)`                                    | Self-move is a no-op; removed unconditionally (never emitted intentionally, but may appear after other rewrites).                                |
-
-> **Note on numbering:** Patterns 1–5 predate this spec; Patterns 6–11 were added together. Pattern 10 (`Move + Call` fusion) is intentionally deferred to the companion CFG/LVN optimizer because it requires proving that argument registers are co-located — something copy-propagation handles correctly.
-
-### 9.3 Dead Code Elimination Pass
-
-The DCE pass performs a **conservative backward linear scan** within each basic block (ranges split at jump targets and companion words). It maintains a `liveRegs` set and removes **pure** instructions whose destination register is not live (i.e., is overwritten before being read in the current block).
-
-#### Side-Effect Classification
-
-**Pure (eligible for removal):** `LoadK`, `LoadNull`, `LoadBool`, `Move`, `Eq`, `Ne`, `EqK`, `NeK`, `Not`, `TypeOf`.
-
-**Effectful (never removed):** Everything else, including:
-
-- All arithmetic (`Add`, `Sub`, `Mul`, `Div`, `Mod`, `Pow`, `Neg`, `AddI`, `AddK`, `SubK`) — can throw `TypeError` on operand-type mismatch.
-- All bitwise ops (`BAnd`, `BOr`, `BXor`, `BNot`, `Shl`, `Shr`) — can throw `TypeError`.
-- All ordered comparisons (`Lt`, `Le`, `Gt`, `Ge`, `LtK`, `LeK`, `GtK`, `GeK`) — can throw `TypeError` on incomparable operands.
-- `Is`, `In` — can throw `TypeError` on bad RHS.
-- `GetGlobal` — throws on undefined variable.
-- All stores, calls, allocations, control flow, I/O, exceptions, imports.
-- `GetFieldIC` (whose companion word would orphan an IC slot index if the main instruction were removed).
-
-A throwing instruction is observable even when its destination register is dead: removing it would prevent a `RuntimeError` from being raised or a `try/catch` handler from firing. Stash equality (`==`/`!=`) never throws — type mismatch returns `false` — so `Eq`/`Ne`/`EqK`/`NeK` remain pure. `Not` and `TypeOf` are total functions over all values.
-
-#### Conservative Block Boundary
-
-Liveness is **reset at every basic-block boundary** (jump target or companion-word). A register that appears dead within one block may be live on entry to the next block. This conservative choice is safe without a full data-flow analysis; it means DCE misses some cross-block dead writes (those are left to the companion CFG/LVN optimizer).
-
-#### Source Map Preservation
-
-When DCE removes an instruction, its source-map entry is redirected to the next surviving instruction via the shared `ApplyRemovals()` machinery. Debugger line-number resolution and static-analysis diagnostics remain accurate after DCE.
-
-### 9.4 Interaction with Inline Caching
-
-`GetFieldIC` and `CallBuiltIn` each consume a **companion word** at `i+1`. Both the peephole and DCE passes track companion-word positions via a `HashSet<int>`. The companion word is never inspected as an instruction, never rewritten, and never removed. IC slot indices stored in companion words therefore remain stable through all optimization passes.
-
-### 9.5 Measured Impact
-
-On `build.stash` (the project's own build script — representative of const-heavy, dict-population code):
-
-| Metric                              | Before | After |            Δ |
-| ----------------------------------- | -----: | ----: | -----------: |
-| Instruction count                   |    200 |   173 | −27 (−13.5%) |
-| `Move + InitConstGlobal` pairs      |      8 |     0 |           −8 |
-| `Move + SetTable` (value-reg) pairs |      6 |     0 |           −6 |
-| Dead `LoadK` instructions           |      8 |     0 |           −8 |
-
-Runtime benchmarks on a locked-clock system (median of 3 runs) showed 2–8% improvement on const-heavy and dict-population workloads with no regressions in tight-loop benchmarks.
-
-### 9.6 Basic Block Optimization Pipeline (CFG + LVN + Copy Propagation)
-
-When `EnableOptimizationPipeline = true` (the default), the compiler runs a 7-step pipeline
-**before** the Peephole/DCE passes described in §9.1–9.3:
-
-```
-1. BuildCfg()                  — construct control-flow graph from _code
-2. CopyPropagationPass         — forward register-copy chains within each basic block
-3. LocalValueNumberingPass     — eliminate redundant computations within each basic block
-4. DeadCodeEliminationPass     — remove dead instructions (enhanced by CopyProp + LVN)
-5. PeepholePass                — fuse adjacent instruction pairs (patterns §9.2)
-6. DeadCodeEliminationPass     — second run; LVN/CopyProp expose more dead code
-7. PeepholePass                — second run; DCE may expose more fusion opportunities
-   (+ IC Slot Compaction)      — post-pipeline: compact IC table if slots were orphaned
-```
-
-Setting `EnableOptimizationPipeline = false` drops back to the legacy `Peephole → DCE →
-Peephole` sequence as a rollback safety net.
-
-#### Pass Control Flags
-
-| Flag                         | Default | Controls                                       |
-| ---------------------------- | ------- | ---------------------------------------------- |
-| `EnableOptimizationPipeline` | `true`  | Entire CFG-based pipeline (master kill switch) |
-| `EnableCopyProp`             | `true`  | `CopyPropagationPass`                          |
-| `EnableLvn`                  | `true`  | `LocalValueNumberingPass`                      |
-| `EnableDce`                  | `true`  | Both `DeadCodeEliminationPass` runs            |
-| `EnablePeephole`             | `true`  | Both `PeepholePass` runs                       |
-
-#### Copy Propagation
-
-Runs first. Within each basic block, maintains a `copyOf[dest] → src` map. When
-`Move(A, B)` is encountered, subsequent uses of register `A` are replaced with `B`. A
-register overwrite kills the copy chain through that register. Running before LVN
-normalises expression operands so that LVN expression keys hit the value-number dictionary
-more often.
-
-#### Local Value Numbering (LVN)
-
-Assigns a _value number_ to each computed expression within a basic block. When the same
-expression is computed again with the same operand VNs, the second instruction is rewritten
-to `Move(dest, existingReg)`. Key invalidation rules:
-
-- **`const` global immortality:** `GetGlobal` of a `const`-declared global is numbered once
-  and its VN persists across `Call`/`CallBuiltIn` instructions within the block. This
-  collapses repeated loads of the same constant global to a single load plus cheap `Move`
-  copies — the optimisation that handles the §1.1 pattern of six repeated `get.global` loads.
-- **Mutable global invalidation:** `GetGlobal` of a mutable slot is invalidated by
-  `SetGlobal` to that specific slot, and conservatively by any call instruction.
-- **Field invalidation:** `GetField`/`GetFieldIC` VNs are conservatively invalidated by any
-  `SetField`/`SetTable` or call instruction.
-- **`GetFieldIC` on VN hit:** the instruction is rewritten to `Move`, its companion word
-  (IC slot index) is removed, and the `HasOrphanedICSlots` flag is set on the CFG for the
-  post-pipeline compaction step.
-
-#### IC Slot Compaction
-
-After the pipeline, if `HasOrphanedICSlots` is set, a compaction step renumbers the IC slot
-table. It scans all remaining `GetFieldIC`/`CallBuiltIn` companion words to collect the set
-of live slot indices, builds an old→new index remapping, patches companion words in `_code`,
-and shrinks `_icConstantIndices` to only the surviving entries. Cost: O(n) over instructions
-
-- O(k) over IC slots. Skipped when no slots were orphaned (clean fast path via the dirty flag).
-
-#### Measured Impact (Cumulative — Full Pipeline)
-
-On `build.stash` (representative const-heavy, dict-population script):
-
-| Metric                                     | Legacy path | Full pipeline |           Δ |
-| ------------------------------------------ | ----------: | ------------: | ----------: |
-| Instruction count                          |        ~200 |          ~152 |       ~−24% |
-| Repeated `get.global` loads (const global) |          6+ |             1 |         −5+ |
-| Dead `Move` instructions                   |        many |             0 | all removed |
-
-Benchmark impact (median of 3 runs on a locked-clock system): no regression > 3% on any
-benchmark; `bench_scope_lookup` and `bench_namespace_calls` show measurable improvement on
-const-heavy and field-access workloads.
+- Add or update the opcode in `Stash.Bytecode/Bytecode/OpCode.cs`.
+- Keep the XML summary in the form `FORMAT: effect`, for example `ABC: R(A) = R(B) + R(C)`.
+- Place the opcode under the correct `// === Category ===` comment.
+- Update `OpCodeInfo.GetFormat` when the encoded operand format is not the default `ABC`.
+- Update verifier, disassembler, optimizer, serializer, and VM dispatch behavior as required.
+- Run `dotnet run --project Stash.Docs/ --bytecode` and commit the regenerated Markdown.
+- Add or update tests for execution, verification, disassembly, and generated documentation.
