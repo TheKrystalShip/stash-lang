@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Runtime;
 
-[StashError(Properties = new[] { "aliasName", "detail" })]
+[StashError(
+    Description = "Alias name is invalid or conflicts with an existing definition.",
+    Properties = new[] { "aliasName", "detail" },
+    PropertyTypes = new[] { "string?", "string?" })]
 public sealed class AliasError : RuntimeError
 {
     public string? AliasName { get; }

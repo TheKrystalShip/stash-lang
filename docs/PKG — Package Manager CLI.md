@@ -1,110 +1,139 @@
-# PKG — Package Manager CLI
+# PKG - Package Manager CLI
 
-> **Status:** v1.0 — Complete
-> **Created:** March 2026
-> **Purpose:** User guide for the `stash pkg` CLI — installing, publishing, searching, and managing Stash packages.
->
-> **Companion documents:**
->
-> - [Language Specification](Stash%20—%20Language%20Specification.md) — language syntax, module/import system
-> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions
-> - [Registry — Package Registry](Registry%20—%20Package%20Registry.md) — self-hosted registry server (REST API, configuration, deployment)
+> **Status:** Stable v1 CLI reference
+> **Audience:** package authors, package consumers, registry operators, and CI maintainers
+> **Purpose:** reference for `stash pkg`, the package-management command group built into the Stash CLI.
 
----
+`stash pkg` manages Stash package manifests, dependency installation, lock files,
+publishing, registry authentication, owners, and API tokens. The short alias
+`stash p` is equivalent to `stash pkg`.
 
-## Table of Contents
+**Companion documents:**
 
-1. [Overview](#1-overview)
-2. [Quick Start](#2-quick-start)
-3. [Package Manifest — `stash.json`](#3-package-manifest--stashjson)
-4. [Command Reference](#4-command-reference)
-5. [Dependency Resolution](#5-dependency-resolution)
-6. [Lock File — `stash-lock.json`](#6-lock-file--stash-lockjson)
-7. [Project Layout](#7-project-layout)
-8. [Registry Management](#8-registry-management)
-9. [Git Dependencies](#9-git-dependencies)
-10. [Package Cache](#10-package-cache)
-11. [`.stashignore`](#11-stashignore)
-12. [Version Ranges](#12-version-ranges)
-13. [Security](#13-security)
-14. [Environment Variables](#14-environment-variables)
+- [Language Specification](Stash%20%E2%80%94%20Language%20Specification.md) - imports and module semantics
+- [Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md) - `pkg` namespace and stdlib APIs
+- [Registry - Package Registry](Registry%20%E2%80%94%20Package%20Registry.md) - registry server, REST API, auth, storage, and deployment
 
 ---
 
-## 1. Overview
+## Contents
 
-The Stash package manager is built into the `stash` CLI. All package management commands live under `stash pkg` (alias `stash p`):
+1. [Overview](#overview)
+2. [Quick Start](#quick-start)
+3. [Project Files](#project-files)
+4. [Manifest Reference](#manifest-reference)
+5. [Command Reference](#command-reference)
+6. [Dependency Resolution](#dependency-resolution)
+7. [Lock File](#lock-file)
+8. [Registry and Authentication](#registry-and-authentication)
+9. [Git Dependencies](#git-dependencies)
+10. [Publishing and Packaging](#publishing-and-packaging)
+11. [Cache](#cache)
+12. [Security](#security)
+13. [Environment Variables](#environment-variables)
+
+---
+
+## Overview
+
+The package manager is part of the `stash` executable.
 
 ```bash
 stash pkg <command> [options]
-stash p <command> [options]      # short alias
+stash p <command> [options]
 ```
 
-The package manager handles:
+It provides:
 
-- **Dependency management** — declare, install, update, and remove packages
-- **Registry interaction** — search, publish, and download packages from self-hosted registries
-- **Git dependencies** — install packages directly from Git repositories
-- **Integrity verification** — SHA-256 hashes on all tarballs
-- **Caching** — downloaded tarballs are cached locally to avoid redundant downloads
+- project initialization with `stash.json`
+- dependency installation into `stashes/`
+- deterministic locking with `stash-lock.json`
+- package search, info, publish, and unpublish
+- registry login/logout, owner management, and API token management
+- Git dependency installation
+- tarball packing, integrity verification, and local cache reuse
 
-No separate tool needs to be installed — the package manager ships as part of the `stash` binary.
+Package commands operate on the current working directory unless a command says
+otherwise. Commands that contact a registry target exactly one registry.
 
----
+## Quick Start
 
-## 2. Quick Start
-
-### Create a new project
-
-```bash
-mkdir my-project && cd my-project
-stash pkg init
-```
-
-This creates a `stash.json` manifest interactively. Use `--yes` (or `-y`) to accept all defaults:
+Create a project:
 
 ```bash
+mkdir my-project
+cd my-project
 stash pkg init --yes
 ```
 
-### Connect to a registry
+Log in to a registry:
 
 ```bash
 stash pkg login --registry https://registry.example.com/api/v1
 ```
 
-The first login automatically sets the default registry. All subsequent commands use it unless overridden with `--registry`.
-
-### Install a package
+Install a package:
 
 ```bash
-stash pkg install http-utils           # latest version
-stash pkg install http-utils@1.2.0     # specific version (adds ^1.2.0 constraint)
-stash pkg install http-utils@^2.0.0    # explicit constraint
+stash pkg install http-utils
+stash pkg install http-utils@1.2.0
+stash pkg install http-utils@^2.0.0
 ```
 
-### Use the installed package
+Use the package:
 
 ```stash
 import { get, post } from "http-utils";
 import "http-utils/lib/request" as req;
 ```
 
-Installed packages live in the `stashes/` directory and are importable by name.
-
-### Publish a package
+Publish the current package:
 
 ```bash
 stash pkg publish
 ```
 
----
+## Project Files
 
-## 3. Package Manifest — `stash.json`
+A typical package project contains:
 
-Every Stash project can have a `stash.json` at its root. This file defines the project metadata, dependencies, and entry point.
+```text
+my-project/
+├── stash.json
+├── stash-lock.json
+├── stashes/
+│   └── http-utils/
+│       ├── stash.json
+│       ├── .stash-version
+│       └── index.stash
+├── index.stash
+└── lib/
+    └── helpers.stash
+```
 
-### Minimal Example
+| Path                            | Purpose                                                 |
+| ------------------------------- | ------------------------------------------------------- |
+| `stash.json`                    | package manifest                                        |
+| `stash-lock.json`               | exact resolved dependency graph; commit this file       |
+| `stashes/`                      | installed packages; normally ignored by version control |
+| `stashes/{name}/.stash-version` | installed package version marker                        |
+| `.stashignore`                  | publish/pack exclusion rules                            |
+| `~/.stash/config.json`          | user registry credentials and default registry          |
+| `~/.stash/cache/`               | downloaded package tarball cache                        |
+
+Packages installed under `stashes/` are importable by package name or package
+subpath.
+
+```stash
+import { request } from "http-utils";
+import "http-utils/lib/request" as req;
+```
+
+## Manifest Reference
+
+`stash.json` describes a project or package.
+
+Minimal manifest:
 
 ```json
 {
@@ -113,7 +142,7 @@ Every Stash project can have a `stash.json` at its root. This file defines the p
 }
 ```
 
-### Full Example
+Full manifest:
 
 ```json
 {
@@ -136,699 +165,459 @@ Every Stash project can have a `stash.json` at its root. This file defines the p
 }
 ```
 
-### Field Reference
+| Field          | Required            | Meaning                                    |
+| -------------- | ------------------- | ------------------------------------------ |
+| `name`         | required to publish | package name                               |
+| `version`      | required to publish | SemVer package version                     |
+| `description`  | no                  | one-line registry/search description       |
+| `author`       | no                  | author name                                |
+| `license`      | no                  | SPDX license identifier                    |
+| `main`         | no                  | package entry point; default `index.stash` |
+| `repository`   | no                  | source repository URL                      |
+| `keywords`     | no                  | search keywords                            |
+| `stash`        | no                  | supported Stash version range              |
+| `dependencies` | no                  | package and Git dependency map             |
+| `files`        | no                  | publish whitelist                          |
+| `registries`   | no                  | registry aliases and URLs                  |
+| `private`      | no                  | when `true`, publishing is blocked         |
 
-| Field          | Required             | Description                                                                        |
-| -------------- | -------------------- | ---------------------------------------------------------------------------------- |
-| `name`         | Yes (for publishing) | Package name ([naming rules](#package-naming-rules) below)                         |
-| `version`      | Yes (for publishing) | SemVer string: `MAJOR.MINOR.PATCH` (pre-release tags allowed, e.g. `1.0.0-beta.1`) |
-| `description`  | No                   | One-line description (shown in search results)                                     |
-| `author`       | No                   | Author name                                                                        |
-| `license`      | No                   | SPDX license identifier (`MIT`, `Apache-2.0`, etc.)                                |
-| `main`         | No                   | Entry point file (default: `index.stash`)                                          |
-| `repository`   | No                   | Source repository URL                                                              |
-| `keywords`     | No                   | Array of strings for registry search                                               |
-| `stash`        | No                   | Compatible Stash version range (e.g. `>=1.0.0`)                                    |
-| `dependencies` | No                   | Map of package name to version constraint or git source                            |
-| `files`        | No                   | Whitelist of files/directories to include when publishing                          |
-| `registries`   | No                   | Map of registry aliases to URLs                                                    |
-| `private`      | No                   | If `true`, `stash pkg publish` is blocked                                          |
+Package names are case-sensitive and must follow one of these forms:
 
-### Package Naming Rules
+| Form     | Pattern                              | Example               |
+| -------- | ------------------------------------ | --------------------- |
+| unscoped | `^[a-z][a-z0-9-]*$`                  | `http-utils`          |
+| scoped   | `^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$` | `@myorg/deploy-tools` |
 
-- **Maximum length:** 64 characters
-- **Unscoped names:** Must match `^[a-z][a-z0-9-]*$` — lowercase, starts with a letter, alphanumeric and hyphens only
-- **Scoped names:** Must match `^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$` — format `@scope/package-name`
+Names may be at most 64 characters.
 
-Examples of valid names: `http-utils`, `config-loader`, `@myorg/deploy-tools`
-
----
-
-## 4. Command Reference
+## Command Reference
 
 ### `stash pkg init`
 
-Create a new `stash.json` interactively.
+Creates `stash.json` in the current directory.
 
 ```bash
-stash pkg init          # interactive prompts
-stash pkg init --yes    # accept all defaults
-stash pkg init -y       # short form
+stash pkg init
+stash pkg init --yes
+stash pkg init -y
 ```
 
-Prompts for: name (defaults to directory name), version (`1.0.0`), description, author, license (`MIT`), and entry point (`index.stash`). The directory name is sanitized to a valid package name automatically — lowercased, non-alphanumeric characters replaced with hyphens.
-
-Exits with an error if `stash.json` already exists.
-
----
+Interactive mode prompts for name, version, description, author, license, and entry
+point. `--yes` accepts defaults. The default name is derived from the directory name
+and sanitized into a valid package name. The command fails if `stash.json` already
+exists.
 
 ### `stash pkg install [specifier]`
 
-Install dependencies. Alias: `stash pkg i`.
-
-**Without arguments** — install all dependencies from `stash.json`:
+Installs dependencies. Alias: `stash pkg i`.
 
 ```bash
 stash pkg install
+stash pkg install http-utils
+stash pkg install http-utils@1.2.0
+stash pkg install http-utils@^2.0.0
+stash pkg install git:https://github.com/user/repo.git#v1.0.0
 ```
 
-This resolves the full dependency tree (including transitive dependencies), writes `stash-lock.json`, and installs packages to `stashes/`.
+Without a specifier, the command installs dependencies from `stash.json`. With a
+specifier, it adds the dependency to `stash.json`, resolves the full dependency
+tree, writes `stash-lock.json`, and extracts packages into `stashes/`.
 
-**With a package specifier** — install a specific package and add it to `stash.json`:
+When a bare version is provided, such as `http-utils@1.2.0`, the manifest
+constraint becomes `^1.2.0`. Explicit ranges are preserved as written.
 
-```bash
-stash pkg install http-utils             # latest version (constraint: *)
-stash pkg install http-utils@1.2.0       # adds constraint ^1.2.0
-stash pkg install http-utils@^2.0.0      # explicit constraint
-stash pkg install git:https://github.com/user/repo.git#v1.0.0   # git source
-```
+| Flag               | Meaning                                   |
+| ------------------ | ----------------------------------------- |
+| `--registry <url>` | use this registry for resolution/download |
 
-When a bare version number is given (e.g. `@1.2.0`), the caret range `^1.2.0` is used as the constraint. Otherwise the version part is used as-is.
-
-**Flags:**
-
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
-
-**Output:**
-
-```
-Registry: https://registry.example.com/api/v1
-Resolving dependencies...
-Installing http-utils@1.2.4
-Installing config-loader@0.5.3
-Installing json-schema@0.2.1 (transitive, via config-loader)
-Dependencies installed.
-```
-
-Already-installed packages (matching version) are skipped automatically.
-
----
+Already installed packages with the resolved version are skipped.
 
 ### `stash pkg uninstall <name>`
 
-Remove a package and its entry from `stash.json`. Alias: `stash pkg remove`.
+Removes a direct dependency. Alias: `stash pkg remove`.
 
 ```bash
 stash pkg uninstall http-utils
-stash pkg remove http-utils       # alias
+stash pkg remove http-utils
 ```
 
-This removes the package directory from `stashes/`, deletes the entry from `stash.json` dependencies, and updates `stash-lock.json`.
-
----
+The command removes the dependency from `stash.json`, deletes its installed package
+directory, and updates the lock file.
 
 ### `stash pkg update [name]`
 
-Update dependencies to the latest versions that satisfy their constraints.
+Updates dependency versions within declared constraints.
 
 ```bash
-stash pkg update              # update all dependencies
-stash pkg update http-utils   # update only http-utils
+stash pkg update
+stash pkg update http-utils
 ```
 
-When updating a specific package, only that package's lock entry is cleared. When updating all, the entire `stash-lock.json` is deleted. Dependencies are then re-resolved from scratch.
+Without a name, all lock entries are cleared and dependencies are re-resolved. With
+a name, only that package's lock entry is cleared.
 
-**Flags:**
-
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
-
----
+| Flag               | Meaning                                   |
+| ------------------ | ----------------------------------------- |
+| `--registry <url>` | use this registry for resolution/download |
 
 ### `stash pkg list`
 
-List installed packages as a dependency tree. Alias: `stash pkg ls`.
+Prints the installed dependency tree. Alias: `stash pkg ls`.
 
 ```bash
 stash pkg list
 ```
 
-**Output:**
-
-```
-my-project@1.0.0
-├── config-loader@0.5.3
-├── http-utils@1.2.4
-├── internal-tools@(git)
-└── json-schema@0.2.1 (transitive)
-```
-
-Transitive dependencies are marked with `(transitive)`. Git dependencies show `(git)` instead of a version number. Packages are sorted alphabetically.
-
----
+Transitive dependencies are marked with `(transitive)`. Git dependencies show
+`(git)` instead of a version. Packages are sorted alphabetically.
 
 ### `stash pkg outdated`
 
-Show packages with their current installed versions and declared constraints.
+Prints installed versions and declared constraints.
 
 ```bash
 stash pkg outdated
 ```
 
-**Output:**
-
-```
-Package                        Current         Constraint
-------------------------------------------------------------
-config-loader                  0.5.3           ~0.5.0
-http-utils                     1.2.4           ^1.2.0
-internal-tools                 (git)           git:https://...
-```
-
-If all dependencies are current: `"All dependencies are up to date."`
-
----
+If all dependencies are current, the command prints `All dependencies are up to
+date.`
 
 ### `stash pkg search <query>`
 
-Search the registry for packages.
+Searches the registry.
 
 ```bash
 stash pkg search http
 stash pkg search deploy --page 2
 ```
 
-**Flags:**
-
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
-| `--page <number>`  | Page number (default: 1)    |
-
-**Output:**
-
-```
-Registry: https://registry.example.com/api/v1
-Found 3 packages (page 1/1):
-
-  http-utils                     1.2.4        HTTP client utilities for Stash
-  http-server                    0.3.1        Simple HTTP server framework
-  http-mock                      1.0.0        HTTP request mocking for tests
-```
-
----
+| Flag               | Meaning                  |
+| ------------------ | ------------------------ |
+| `--registry <url>` | use this registry        |
+| `--page <number>`  | page number; default `1` |
 
 ### `stash pkg info <name>`
 
-Display detailed package metadata from the registry.
+Displays package metadata, versions, owners, and a truncated README.
 
 ```bash
 stash pkg info http-utils
 ```
 
-**Flags:**
-
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
-
-**Output:**
-
-```
-http-utils
-Latest: 1.2.4
-Description: HTTP client utilities for Stash
-License: MIT
-Repository: https://github.com/example/http-utils
-Owners: alice, bob
-
-Versions:
-  1.2.4           2026-03-15T10:30:00Z
-  1.2.3           2026-03-01T08:00:00Z
-  1.1.0           2026-02-10T14:00:00Z
-
-README:
-  # http-utils
-
-  HTTP client utilities for the Stash scripting language.
-  ...
-  ... (15 more lines)
-```
-
-The README is truncated to the first 10 lines, with a count of remaining lines shown.
-
----
+| Flag               | Meaning           |
+| ------------------ | ----------------- |
+| `--registry <url>` | use this registry |
 
 ### `stash pkg publish`
 
-Publish the current package to a registry.
+Publishes the current package.
 
 ```bash
 stash pkg publish
 stash pkg publish --registry https://registry.example.com/api/v1
 ```
 
-**Flags:**
+Requirements:
 
-| Flag               | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `--registry <url>` | Use a specific registry URL                      |
-| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
+- `stash.json` exists
+- `name` and `version` are present
+- `private` is not `true`
+- the user is authenticated for the target registry
 
-- `stash.json` must exist with `name` and `version` fields
-- `private` must not be `true`
-- You must be logged in to the target registry
+Publish flow:
 
-**What happens:**
+1. validate manifest
+2. create package tarball using `.stashignore` and `files`
+3. compute SHA-256 integrity
+4. upload tarball and metadata
+5. print the published package and registry
 
-1. The manifest is validated
-2. A tarball is created from the project (respecting `.stashignore`)
-3. A SHA-256 integrity hash is computed
-4. The tarball is uploaded to the registry with the integrity hash
-5. Output: `Published deploy-toolkit@2.1.0 to https://registry.example.com/api/v1.`
+Published versions are immutable. To release a fix, publish a new version. The
+first publisher becomes an owner. Only owners and registry admins can publish later
+versions.
 
-Published versions are immutable — you cannot republish the same version. To release a fix, bump the version in `stash.json` and publish again. The user who first publishes a package becomes its owner. Only owners and registry admins can publish new versions.
-
----
+| Flag               | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| `--registry <url>` | use this registry                              |
+| `--token <token>`  | auth token; overrides config and `STASH_TOKEN` |
 
 ### `stash pkg pack`
 
-Create a tarball of the package locally without publishing. Useful for inspecting what would be published.
+Creates a local tarball without publishing.
 
 ```bash
 stash pkg pack
 ```
 
-**Output:**
-
-```
-Packed 12 files into deploy-toolkit-2.1.0.tar.gz
-lib/deploy.stash
-lib/rollback.stash
-index.stash
-stash.json
-README.md
-LICENSE
-...
-Total size: 4.2 KB
-```
-
-The tarball is written to the current directory. File sizes are displayed as B, KB, or MB.
-
----
+The command writes `{name}-{version}.tar.gz` to the current directory and prints
+included files plus total size.
 
 ### `stash pkg unpublish <name>@<version>`
 
-Remove a published version from the registry. Subject to the registry's unpublish window (default: 72 hours after publishing).
+Removes a published package version, subject to the registry's unpublish policy.
 
 ```bash
 stash pkg unpublish http-utils@1.2.3
 ```
 
-**Flags:**
+The specifier must include both package name and exact version.
 
-| Flag               | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `--registry <url>` | Use a specific registry URL                      |
-| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
-
-Requires login. The specifier format is `name@version` — both parts are required.
-
----
+| Flag               | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| `--registry <url>` | use this registry                              |
+| `--token <token>`  | auth token; overrides config and `STASH_TOKEN` |
 
 ### `stash pkg login`
 
-Authenticate with a package registry.
+Authenticates to a registry.
 
 ```bash
 stash pkg login --registry https://registry.example.com/api/v1
 ```
 
-The `--registry` flag is **required** — there is no fallback for authentication commands.
-
-You are prompted for username and password (password input is hidden). On success, the JWT token is stored in `~/.stash/config.json`. If no default registry is configured, it is set automatically.
-
----
+`--registry` is required. The command prompts for username and password, hides
+password input, stores the returned token in `~/.stash/config.json`, and sets the
+default registry if none exists.
 
 ### `stash pkg logout`
 
-Remove stored credentials for a registry.
+Removes stored credentials for a registry.
 
 ```bash
 stash pkg logout --registry https://registry.example.com/api/v1
 ```
 
-The `--registry` flag is **required**. If the logged-out registry was the default, the default is cleared.
-
----
+`--registry` is required. If the registry was the default, the default registry is
+cleared.
 
 ### `stash pkg whoami`
 
-Show the username for the configured registry.
+Prints the authenticated username.
 
 ```bash
-stash pkg whoami                                               # default registry
+stash pkg whoami
 stash pkg whoami --registry https://registry.example.com/api/v1
 stash pkg whoami --verbose
 stash pkg whoami -v
 ```
 
-Prints the authenticated username to stdout (one line) and exits 0.  Mirrors `npm whoami` — output is script-friendly.
+By default, output is a single script-friendly line. With `--verbose`, the command
+also prints email, role, and registry URL. Missing optional fields are printed as
+`(none)`.
 
-With `--verbose` / `-v`, additional fields are printed:
+| Flag               | Meaning                        |
+| ------------------ | ------------------------------ |
+| `--registry <url>` | use this registry              |
+| `--verbose`, `-v`  | print extended account details |
 
-```
-alice
-email: alice@example.com
-role: admin
-registry: https://registry.example.com/api/v1
-```
-
-Missing optional fields (email, role) are shown as `(none)`.
-
-**Flags:**
-
-| Flag               | Description                                     |
-| ------------------ | ----------------------------------------------- |
-| `--registry <url>` | Use a specific registry URL                     |
-| `--verbose`, `-v`  | Print email, role, and registry URL as well     |
-
-Exits 1 (with a message to stderr) when not logged in or when the registry is unreachable.
-
----
+The command exits non-zero when not logged in or when the registry is unreachable.
 
 ### `stash pkg owner <action> <package> [username]`
 
-Manage package owners.
+Manages package owners.
 
 ```bash
-stash pkg owner list http-utils                   # list owners
-stash pkg owner ls http-utils                     # alias for list
-stash pkg owner add http-utils carol              # add an owner
-stash pkg owner remove http-utils bob             # remove an owner
+stash pkg owner list http-utils
+stash pkg owner ls http-utils
+stash pkg owner add http-utils carol
+stash pkg owner remove http-utils bob
 ```
 
-**Flags:**
+`add` and `remove` require authentication.
 
-| Flag               | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `--registry <url>` | Use a specific registry URL                      |
-| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
-
-The `add` and `remove` subcommands require login.
-
----
+| Flag               | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| `--registry <url>` | use this registry                              |
+| `--token <token>`  | auth token; overrides config and `STASH_TOKEN` |
 
 ### `stash pkg token`
 
-Manage API tokens on a Stash registry. Subcommands: `create`, `list` (alias `ls`), `revoke`.
+Manages registry API tokens.
 
-#### `stash pkg token create`
-
-Create a new scoped API token. The token value is printed once and never retrievable again.
+Create a token:
 
 ```bash
 stash pkg token create --scope publish --description "CI deploy token"
-stash pkg token create --scope publish --expires-in 30d --description "30-day CI token"
-stash pkg token create --scope read   --expires-in 12h
+stash pkg token create --scope publish --expires-in 30d
+stash pkg token create --scope read --expires-in 12h
 ```
 
-**Flags:**
+| Flag                      | Meaning                                                       |
+| ------------------------- | ------------------------------------------------------------- |
+| `--scope <scope>`         | `read`, `publish`, or `admin`; required                       |
+| `--description <text>`    | human-readable token label                                    |
+| `--expires-in <duration>` | lifetime such as `30d`, `12h`, or `90m`; min `1h`, max `365d` |
+| `--registry <url>`        | use this registry                                             |
+| `--token <token>`         | auth token for the request                                    |
 
-| Flag                     | Description                                                                 |
-| ------------------------ | --------------------------------------------------------------------------- |
-| `--scope <scope>`        | Token scope: `read`, `publish`, or `admin` (required)                       |
-| `--description <text>`   | Human-readable label for the token                                          |
-| `--expires-in <duration>`| Custom lifetime: `"30d"`, `"12h"`, `"90m"`. Min `1h`, max `365d`.          |
-| `--registry <url>`       | Use a specific registry URL                                                 |
-| `--token <token>`        | Auth token for the request (overrides config and `STASH_TOKEN`)             |
+The token value is printed once and cannot be retrieved again.
 
-**Output:**
-
-```
-Token created.
-  Token ID:   550e8400-e29b-41d4-a716-446655440000
-  Scope:      publish
-  Expires:    2026-04-25T12:00:00Z
-  Token:      eyJhbGciOiJIUzI1NiIs...
-
-Save this token now — it will not be shown again.
-```
-
-#### `stash pkg token list`
-
-List all tokens for the authenticated user. Alias: `stash pkg token ls`.
+List tokens:
 
 ```bash
 stash pkg token list
 stash pkg token ls
-stash pkg token list --registry https://registry.example.com/api/v1
 ```
 
-**Flags:**
+Token list output includes token IDs and metadata, never token values.
 
-| Flag               | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `--registry <url>` | Use a specific registry URL                      |
-| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
-
-**Output:**
-
-```
-Tokens for alice @ https://registry.example.com/api/v1:
-
-  ID                                    Scope     Expires                Description
-  550e8400-e29b-41d4-a716-446655440000  publish   2026-04-25T12:00:00Z  CI deploy token
-  661f9511-f30c-52e5-b827-557766551111  read      2026-05-30T09:00:00Z  Read-only pipeline
-```
-
-Token values are never shown in this output; only metadata is returned.
-
-#### `stash pkg token revoke <token-id>`
-
-Revoke a token immediately by its ID.
+Revoke a token:
 
 ```bash
 stash pkg token revoke 550e8400-e29b-41d4-a716-446655440000
 ```
 
-**Flags:**
+Revocation is immediate.
 
-| Flag               | Description                                      |
-| ------------------ | ------------------------------------------------ |
-| `--registry <url>` | Use a specific registry URL                      |
-| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
+## Dependency Resolution
 
-Revocation is immediate — the revoked token is rejected on the next request.
+Stash uses flat dependency resolution. Each package name is installed once at one
+version under `stashes/`.
 
----
+Resolution steps:
 
-## 5. Dependency Resolution
+1. collect direct and transitive constraints from the root manifest
+2. detect dependency cycles
+3. choose the latest version satisfying all constraints for each package
+4. validate the resolved graph
+5. write the lock file
 
-### Algorithm
+If two packages require incompatible versions of the same dependency, resolution
+fails with a version-conflict error.
 
-Stash uses a flat resolution strategy with version compatibility checking:
-
-1. **Collect constraints** — BFS traversal starting from the root manifest's dependencies. For each package, all version constraints from all dependents are accumulated.
-2. **Detect cycles** — DFS-based cycle detection on the dependency graph. Circular dependencies are rejected with a clear error message (e.g. `"Circular dependency detected: A → B → A"`).
-3. **Resolve versions** — For each package, find the latest version that satisfies all accumulated constraints. If no version satisfies all constraints, a version conflict error is reported.
-4. **Validate** — Verify that all transitive dependencies are present in the resolved set.
-5. **Generate lock file** — Record exact resolved versions, download URLs, and integrity hashes.
-
-### Flat Installation
-
-All packages are installed at the same level in `stashes/` — there is no nesting. Each package name can only appear once in the dependency tree, at a single version. If two packages require incompatible versions of a shared dependency, the resolver reports a conflict.
-
-### Error Messages
-
-**Version conflict:**
-
-```
+```text
 Version conflict for "json-parser"
   http-utils requires json-parser@^2.0.0
   config-loader requires json-parser@^1.0.0
   No version satisfies both constraints.
 ```
 
-**Circular dependency:**
+Circular dependencies are rejected.
 
-```
-Circular dependency detected: A → B → C → A
-```
-
-**Package not found:**
-
-```
-Package 'nonexistent' not found in any configured source.
+```text
+Circular dependency detected: A -> B -> C -> A
 ```
 
----
+### Version Ranges
 
-## 6. Lock File — `stash-lock.json`
+Dependency constraints use SemVer range syntax.
 
-The lock file pins every dependency (direct and transitive) to an exact version. It is auto-generated by `stash pkg install` and should be committed to version control.
+| Syntax           | Meaning                  |
+| ---------------- | ------------------------ |
+| `1.2.3`          | exact version            |
+| `^1.2.3`         | `>=1.2.3 <2.0.0`         |
+| `~1.2.3`         | `>=1.2.3 <1.3.0`         |
+| `>=1.0.0`        | minimum version          |
+| `>=1.0.0 <2.0.0` | range intersection       |
+| `*`              | latest available version |
 
-### Format
+For `0.x` packages, caret ranges are conservative:
+
+| Constraint | Range            |
+| ---------- | ---------------- |
+| `^0.2.3`   | `>=0.2.3 <0.3.0` |
+| `^0.0.3`   | `>=0.0.3 <0.0.4` |
+
+Pre-release versions are opt-in. Normal ranges do not match pre-releases unless the
+range itself includes a pre-release. `*` matches all versions, including
+pre-releases.
+
+## Lock File
+
+`stash-lock.json` pins every direct and transitive dependency to exact resolved
+metadata. It is generated by `stash pkg install` and should be committed.
 
 ```json
 {
   "lockVersion": 1,
   "stash": null,
   "resolved": {
-    "config-loader": {
-      "version": "0.5.3",
-      "resolved": "/api/v1/packages/config-loader/0.5.3/download",
-      "integrity": "sha256-abc123...",
-      "dependencies": {
-        "json-schema": "^0.2.0"
-      }
-    },
     "http-utils": {
       "version": "1.2.4",
       "resolved": "/api/v1/packages/http-utils/1.2.4/download",
       "integrity": "sha256-def456..."
-    },
-    "json-schema": {
-      "version": "0.2.1",
-      "resolved": "/api/v1/packages/json-schema/0.2.1/download",
-      "integrity": "sha256-ghi789..."
     }
   }
 }
 ```
 
-### Fields
+| Field         | Meaning                                                  |
+| ------------- | -------------------------------------------------------- |
+| `lockVersion` | lock format version; currently `1`                       |
+| `stash`       | Stash interpreter version used for resolution, or `null` |
+| `resolved`    | map of package name to resolved entry                    |
 
-| Field         | Description                                   |
-| ------------- | --------------------------------------------- |
-| `lockVersion` | Lock file format version (currently `1`)      |
-| `stash`       | Stash interpreter version used for resolution |
-| `resolved`    | Map of package name to resolved entry         |
+Resolved entries contain:
 
-Each resolved entry contains:
+| Field          | Meaning                                   |
+| -------------- | ----------------------------------------- |
+| `version`      | exact resolved version                    |
+| `resolved`     | download URL or Git source                |
+| `integrity`    | `sha256-<base64>` package hash            |
+| `dependencies` | transitive dependency constraints, if any |
 
-| Field          | Description                                |
-| -------------- | ------------------------------------------ |
-| `version`      | Exact resolved version                     |
-| `resolved`     | Download URL or git source string          |
-| `integrity`    | `sha256-<base64>` hash of the tarball      |
-| `dependencies` | Transitive dependency constraints (if any) |
+Lock keys are sorted alphabetically. If the lock file is current, `install` uses it
+without re-resolving. `update` clears lock entries to force resolution. Git
+dependencies use the Git source string as `resolved`.
 
-### Behavior
+## Registry and Authentication
 
-- Keys in the lock file are sorted alphabetically (deterministic output)
-- If `stash-lock.json` exists and is up to date, `stash pkg install` uses it directly without re-resolving
-- `stash pkg update` clears the lock file (or specific entries) to force re-resolution
-- Git dependencies appear with an empty version and the git URL as the resolved value
+### Registry Selection
 
----
+Registry commands target one registry.
 
-## 7. Project Layout
+Selection order:
 
-After installing dependencies, a typical project looks like this:
+1. `--registry <url>`
+2. `STASH_REGISTRY_URL`
+3. `defaultRegistry` in `~/.stash/config.json`
 
-```
-my-project/
-├── stash.json               ← package manifest
-├── stash-lock.json           ← auto-generated lock file (commit this)
-├── stashes/                  ← installed packages (add to .gitignore)
-│   ├── http-utils/
-│   │   ├── stash.json
-│   │   ├── .stash-version    ← version marker (e.g. "1.2.4")
-│   │   ├── index.stash
-│   │   └── lib/
-│   ├── config-loader/
-│   │   ├── stash.json
-│   │   ├── .stash-version
-│   │   └── index.stash
-│   └── json-schema/          ← transitive dependency
-│       ├── stash.json
-│       ├── .stash-version
-│       └── index.stash
-├── index.stash
-└── lib/
-    └── deploy.stash
-```
+If no registry is available, commands that require one fail and suggest
+`stash pkg login --registry <url>`.
 
-### Key Directories and Files
+### Credentials
 
-| Path                            | Purpose                                                         |
-| ------------------------------- | --------------------------------------------------------------- |
-| `stash.json`                    | Package manifest — dependencies, metadata, entry point          |
-| `stash-lock.json`               | Pinned dependency versions — commit to version control          |
-| `stashes/`                      | Installed packages — add to `.gitignore`                        |
-| `stashes/{name}/.stash-version` | Version marker file — prevents re-extraction if already correct |
-| `~/.stash/config.json`          | User credentials and registry configuration                     |
-| `~/.stash/cache/`               | Downloaded tarball cache                                        |
-
-### Importing Installed Packages
-
-Packages installed in `stashes/` are importable by name:
-
-```stash
-// Import from the package's main entry point (default: index.stash)
-import { get, post } from "http-utils";
-
-// Import a specific file within the package
-import "http-utils/lib/request" as req;
-
-// All .stash files in the package are importable by path
-import { validate } from "config-loader/lib/validator";
-```
-
----
-
-## 8. Registry Management
-
-### Credential Storage
-
-Registry credentials are stored in `~/.stash/config.json` with restricted permissions (mode `0600` on Unix):
+Credentials are stored in `~/.stash/config.json`.
 
 ```json
 {
   "defaultRegistry": "https://registry.example.com/api/v1",
   "registries": {
     "https://registry.example.com/api/v1": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-    },
-    "https://internal.corp/api/v1": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      "token": "eyJhbGciOiJIUzI1NiIs..."
     }
   }
 }
 ```
 
-### Default Registry
+On Unix, the file is written with restricted permissions. The first successful
+login sets the default registry if no default exists. Logging out of the default
+registry clears the default.
 
-The default registry is used when no `--registry` flag is provided. It is managed automatically:
+Auth token selection:
 
-- **Set on first login:** The first `stash pkg login --registry <url>` sets `defaultRegistry` if none is configured
-- **Cleared on logout:** Logging out of the current default clears the `defaultRegistry` field
-- **Manual override:** Edit `~/.stash/config.json` directly to change the default
+1. `--token <token>`
+2. `STASH_TOKEN`
+3. stored token for the target registry
 
-### Registry Resolution Order
+### Authentication Requirements
 
-1. If `--registry <url>` is provided → use that registry
-2. If `--registry` is omitted → use `defaultRegistry` from `~/.stash/config.json`
-3. If no default is configured → error:
+| Command                    | Auth required |
+| -------------------------- | ------------- |
+| `install`                  | no            |
+| `search`                   | no            |
+| `info`                     | no            |
+| `owner list`               | no            |
+| `publish`                  | yes           |
+| `unpublish`                | yes           |
+| `owner add`                | yes           |
+| `owner remove`             | yes           |
+| `token create/list/revoke` | yes           |
+| `whoami`                   | yes           |
 
-```
-No default registry configured. Run 'stash pkg login --registry <url>' to set one.
-```
+## Git Dependencies
 
-**Important:** The CLI never searches multiple registries. Each command targets exactly one registry.
-
-### Which Commands Need Authentication?
-
-| Command        | Auth Required? | Notes                                     |
-| -------------- | -------------- | ----------------------------------------- |
-| `install`      | No             | Read endpoints are public                 |
-| `search`       | No             | Search is public                          |
-| `info`         | No             | Package metadata is public                |
-| `publish`      | Yes            | Requires `publish` or `admin` token scope |
-| `unpublish`    | Yes            | Requires `publish` or `admin` token scope |
-| `owner add`    | Yes            | Requires admin privileges                 |
-| `owner remove` | Yes            | Requires admin privileges                 |
-| `owner list`   | No             | Package metadata is public                |
-
----
-
-## 9. Git Dependencies
-
-Packages can be installed directly from Git repositories using the `git:` prefix:
+Git dependencies use the `git:` source form.
 
 ```json
 {
@@ -838,227 +627,115 @@ Packages can be installed directly from Git repositories using the `git:` prefix
 }
 ```
 
-### Format
+Format:
 
-```
+```text
 git:<repository-url>#<ref>
 ```
 
-- `<repository-url>` — any URL that `git clone` accepts
-- `<ref>` — optional tag, branch, or commit SHA
+`<ref>` may be a tag, branch, or commit SHA. If omitted, the repository's default
+branch is used.
 
-Examples:
+Git dependencies are cloned to a temporary directory, optionally checked out at the
+ref, copied into `stashes/{name}/`, and required to contain a valid `stash.json`.
+They do not participate in version resolution and appear in `list` output as
+`(git)`.
 
-```
-git:https://github.com/user/repo.git#v2.0.0        # tag
-git:https://github.com/user/repo.git#main           # branch
-git:https://github.com/user/repo.git#abc1234         # commit
-git:https://github.com/user/repo.git                 # default branch (no ref)
-```
+The `git` executable must be available on `PATH`.
 
-### How Git Dependencies Work
+## Publishing and Packaging
 
-1. The repository is cloned to a temporary directory
-2. If a ref is specified, it is checked out
-3. The contents (excluding `.git/`) are copied into `stashes/{name}/`
-4. The repository must contain a valid `stash.json`
+### File Selection
 
-### Limitations
+`pack` and `publish` create a tarball from the current package.
 
-- Git dependencies do not participate in version resolution — they are installed as-is
-- They appear in `stash pkg list` as `(git)` instead of a version number
-- The `git` command must be available on PATH
+If the manifest has a `files` array, only those paths are included, subject to
+ignore rules. `.stashignore` excludes files using `.gitignore`-style syntax.
 
----
+Default ignore patterns always apply:
 
-## 10. Package Cache
-
-Downloaded tarballs are cached locally to avoid redundant downloads across projects and installs.
-
-### Cache Location
-
-```
-~/.stash/cache/{package-name}/{version}.tar.gz
-```
-
-The cache directory is created automatically on first use.
-
-### Behavior
-
-- When installing a package, the cache is checked first
-- If a cached tarball exists and its integrity hash matches, it is used directly
-- Otherwise, the tarball is downloaded and stored in the cache
-- The cache is shared across all projects on the system
-
-### Managing the Cache
-
-There are no dedicated CLI commands for cache management. The cache can be managed manually:
-
-```bash
-# View cache contents
-ls ~/.stash/cache/
-
-# Clear the entire cache
-rm -rf ~/.stash/cache/
-
-# Clear a specific package's cache
-rm -rf ~/.stash/cache/http-utils/
-```
-
----
-
-## 11. `.stashignore`
-
-The `.stashignore` file controls which files are excluded when creating tarballs (via `pack` and `publish`). It follows `.gitignore` syntax.
-
-### Default Ignore Patterns
-
-These patterns are **always** applied, even without a `.stashignore` file:
-
-```
+```text
 .git/
 stashes/
 stash-lock.json
 .env
 ```
 
-### Syntax
+`.stashignore` supports comments, globs, root-anchored paths, directory patterns,
+negation, `**`, and `?`. Rules are processed in order; the last matching rule wins.
 
-```
-# Comments start with #
-*.log                  # Glob pattern — matches any .log file
-build/                 # Directory pattern — excludes entire directory
-/secrets.json          # Anchored pattern — only matches at root
-!important.log         # Negation — re-includes a previously excluded file
-**/test/               # Double-star — matches in any directory
-```
-
-### Pattern Rules
-
-| Pattern    | Meaning                                     |
-| ---------- | ------------------------------------------- |
-| `*.ext`    | Match files with extension in any directory |
-| `dir/`     | Match a directory and all its contents      |
-| `/file`    | Match only at the project root (anchored)   |
-| `!pattern` | Negate a previous exclusion (re-include)    |
-| `**`       | Match zero or more path segments            |
-| `?`        | Match a single character (except `/`)       |
-
-Rules are processed in order — the last matching rule wins.
-
-### Example `.stashignore`
-
-```
-# Test files
+```text
 *.test.stash
 test/
-
-# Build artifacts
-*.log
-tmp/
-
-# IDE files
-.vscode/
-.idea/
-
-# Keep this specific test fixture
-!test/fixtures/sample.stash
+build/
+!/test/fixtures/sample.stash
 ```
-
----
-
-## 12. Version Ranges
-
-Dependency constraints in `stash.json` use SemVer range syntax:
-
-### Range Operators
-
-| Syntax           | Meaning                  | Resolves to                 |
-| ---------------- | ------------------------ | --------------------------- |
-| `1.2.3`          | Exact version            | Only `1.2.3`                |
-| `^1.2.3`         | Compatible (same major)  | `>=1.2.3` and `<2.0.0`      |
-| `~1.2.3`         | Approximate (same minor) | `>=1.2.3` and `<1.3.0`      |
-| `>=1.0.0`        | Minimum version          | `1.0.0` or higher           |
-| `>=1.0.0 <2.0.0` | Range (space = AND)      | Between `1.0.0` and `2.0.0` |
-| `*`              | Any version              | Latest available            |
-
-### 0.x Version Behavior
-
-For pre-1.0 packages, the caret operator `^` is more conservative:
-
-| Constraint | Range                  | Rationale                           |
-| ---------- | ---------------------- | ----------------------------------- |
-| `^1.2.3`   | `>=1.2.3` and `<2.0.0` | Major version is breaking           |
-| `^0.2.3`   | `>=0.2.3` and `<0.3.0` | Minor version is breaking for 0.x   |
-| `^0.0.3`   | `>=0.0.3` and `<0.0.4` | Patch version is breaking for 0.0.x |
-
-### Pre-release Versions
-
-Pre-release versions (e.g. `1.0.0-beta.1`) are **opt-in only**:
-
-- `^1.0.0` does **not** match `1.1.0-beta.1` — pre-releases are excluded from normal ranges
-- `^1.0.0-beta.1` **does** match `1.0.0-beta.2` and `1.0.0` — explicit pre-release opts in
-- Wildcard `*` matches all versions including pre-releases
-
-This prevents users from accidentally receiving unstable versions.
-
----
-
-## 13. Security
-
-### Integrity Verification
-
-Every package tarball has a SHA-256 integrity hash in the format `sha256-<base64>`. The hash is:
-
-- Computed by the CLI before upload and sent to the registry
-- Verified by the registry on publish
-- Stored in the lock file for each dependency
-- Verified against cached tarballs before extraction
 
 ### Tarball Safety
 
-The tarball extraction process includes path traversal protection:
+Tarball extraction rejects unsafe paths:
 
-- Entries containing `..` path components are rejected
-- Leading `/` and `./` are stripped from entry paths
-- All extracted paths are verified to remain within the target directory
+- entries containing `..`
+- absolute paths
+- paths that would escape the extraction directory
 
-### Credential Storage
+Leading `./` is stripped during extraction.
 
-- Credentials stored in `~/.stash/config.json` with restricted permissions (see [Section 8](#8-registry-management))
-- Tokens can be revoked server-side at any time via the registry API
+### Integrity
 
----
+Every package tarball uses a SHA-256 integrity string in the form
+`sha256-<base64>`.
 
-## 14. Environment Variables
+The CLI computes integrity before upload, the registry verifies it on publish, the
+lock file stores it, and install verifies cached/downloaded tarballs before
+extracting.
 
-The Stash CLI reads two environment variables for authentication and registry configuration. These take precedence over stored config where noted.
+## Cache
 
-| Variable              | Description                                                                 |
-| --------------------- | --------------------------------------------------------------------------- |
-| `STASH_TOKEN`         | Bearer token used for authenticated commands when no `--token` flag is set  |
-| `STASH_REGISTRY_URL`  | Default registry URL, overrides `defaultRegistry` in `~/.stash/config.json` |
+Downloaded tarballs are cached locally.
 
-### Priority order for auth token
+```text
+~/.stash/cache/{package-name}/{version}.tar.gz
+```
 
-1. `--token <value>` CLI flag
-2. `STASH_TOKEN` environment variable
-3. Token stored in `~/.stash/config.json` for the target registry
+When installing, the cache is checked first. If a cached tarball exists and its
+integrity matches the lock entry, it is reused. Otherwise it is downloaded again
+and stored in the cache. The cache is shared across projects.
 
-### Priority order for registry URL
+There are no dedicated cache-management commands. Delete cache files manually when
+needed.
 
-1. `--registry <url>` CLI flag
-2. `STASH_REGISTRY_URL` environment variable
-3. `defaultRegistry` in `~/.stash/config.json`
+```bash
+rm -rf ~/.stash/cache/
+rm -rf ~/.stash/cache/http-utils/
+```
 
-### Usage in CI/CD
+## Security
 
-Environment variables are the recommended approach for CI/CD pipelines — no config file setup required:
+Package-manager security properties:
+
+- published versions are immutable
+- publish/unpublish/owner/token commands require authenticated registry requests
+- credentials are stored in the user config file with restricted permissions where
+  supported by the platform
+- `STASH_TOKEN` and `--token` allow CI usage without writing config files
+- package tarballs are integrity checked
+- extraction prevents path traversal
+- `private: true` blocks accidental publishing
+
+Tokens can be revoked server-side with `stash pkg token revoke`.
+
+## Environment Variables
+
+| Variable             | Meaning                                                          |
+| -------------------- | ---------------------------------------------------------------- |
+| `STASH_TOKEN`        | bearer token for authenticated commands when `--token` is absent |
+| `STASH_REGISTRY_URL` | registry URL when `--registry` is absent                         |
+
+Environment variables are the recommended CI configuration mechanism.
 
 ```bash
 export STASH_TOKEN="$CI_SECRET_TOKEN"
 export STASH_REGISTRY_URL="https://registry.example.com/api/v1"
 stash pkg publish
 ```
-
-See the [CI/CD Integration Guide](../Stash.Registry/docs/CI-CD-Integration-Guide.md) for full pipeline examples.

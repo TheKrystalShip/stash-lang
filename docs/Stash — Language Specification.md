@@ -1,5988 +1,1550 @@
-# Stash — Language Specification
+# Stash - Language Specification
 
-> **Status:** Draft v0.1
-> **Created:** March 2026
-> **Purpose:** Source of truth for the design and implementation of **Stash**, a C-style interpreted shell scripting language.
->
-> **Companion documents:**
->
-> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions and argument parsing
-> - [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server implementation
-> - [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) — language server implementation
-> - [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md) — testing primitives, assert namespace, TAP output
+> **Status:** Draft v1 language specification
+> **Audience:** implementers, tool authors, and advanced users
+> **Purpose:** normative source of truth for Stash syntax and language semantics.
 
----
+Stash is a dynamically typed, interpreted scripting language with C-style syntax and
+first-class shell integration. This document specifies the behavior of the language
+itself. The standard library, tools, package manager, bytecode format, and editor
+protocols are specified separately.
 
-## Table of Contents
+**Companion documents:**
 
-1. [Vision & Goals](#1-vision--goals)
-2. [Language Design Decisions](#2-language-design-decisions)
-3. [Syntax Overview](#3-syntax-overview)
-4. [Type System](#4-type-system)
-5. [Structs & Objects](#5-structs--objects)
-6. [Shell Integration](#6-shell-integration)
-7. [Control Flow](#7-control-flow)
-8. [Functions](#8-functions)
-9. [Scoping Rules](#9-scoping-rules)
-10. [Interpreter Architecture](#10-interpreter-architecture)
-11. [Debugging Support](#11-debugging-support)
-12. [Performance Strategy](#12-performance-strategy)
-13. [Implementation Roadmap](#13-implementation-roadmap)
-14. [References & Resources](#14-references--resources)
-
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [7f. Timeout Blocks](#7f-timeout-blocks) · [7g. Defer](#7g-defer) · [7h. Lock Block](#7h-lock-block) · [7i. Unset Statement](#7i-unset-statement) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
-
-> **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
+- [Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md) - built-in namespaces, global functions, and library errors
+- [Shell - Interactive Shell Mode](Shell%20%E2%80%94%20Interactive%20Shell%20Mode.md) - interactive shell behavior
+- [Bytecode VM - Instruction Set Reference](Bytecode%20VM%20%E2%80%94%20Instruction%20Set%20Reference.md) - VM instruction semantics
+- [Bytecode VM - Binary Format](Bytecode%20VM%20%E2%80%94%20Binary%20Format%20%28.stashc%29.md) - compiled bytecode format
+- [LSP - Language Server Protocol](LSP%20%E2%80%94%20Language%20Server%20Protocol.md) - language server behavior
+- [DAP - Debug Adapter Protocol](DAP%20%E2%80%94%20Debug%20Adapter%20Protocol.md) - debug adapter behavior
+- [TAP - Testing Infrastructure](TAP%20%E2%80%94%20Testing%20Infrastructure.md) - test primitives and TAP output
+- [PKG - Package Manager CLI](PKG%20%E2%80%94%20Package%20Manager%20CLI.md) - package management
+- [Registry - Package Registry](Registry%20%E2%80%94%20Package%20Registry.md) - registry service behavior
 
 ---
 
-## 1. Vision & Goals
+## Contents
 
-**Stash** is a **dynamically typed, interpreted scripting language** that combines:
-
-- The **shell scripting power** of Bash (process spawning, pipes, file I/O)
-- The **syntax familiarity** of C/C++/C# (braces, semicolons, expressions)
-- The **structured data** capabilities missing from Bash (structs/objects)
-
-### Non-Goals (for v1)
-
-- Static typing
-- Compilation to native code or bytecode
-- Class-based OOP with inheritance (lightweight interfaces **are** supported — see [Section 5f](#5f-interfaces))
-- Concurrency primitives
-
----
-
-## 2. Language Design Decisions
-
-| Decision            | Choice                        | Rationale                                             |
-| ------------------- | ----------------------------- | ----------------------------------------------------- |
-| Typing              | Dynamic                       | Simpler to implement; appropriate for scripting       |
-| Syntax style        | C-style braces and semicolons | Familiar to C/C++/C# developers                       |
-| Primary focus       | Shell scripting               | Process execution, pipes, file I/O as first-class     |
-| Scoping             | Lexical                       | Predictable; standard in modern languages             |
-| Killer feature      | Structs/objects               | Structured data manipulation missing from Bash        |
-| Implementation lang | C#                            | Leverages existing expertise; strong standard library |
-| Interpreter type    | Bytecode VM                   | Compiled AST to opcodes; register-based dispatch      |
+1. [Conformance](#conformance)
+2. [Terminology](#terminology)
+3. [Lexical Structure](#lexical-structure)
+4. [Source Files and Modules](#source-files-and-modules)
+5. [Values and Types](#values-and-types)
+6. [Bindings and Scope](#bindings-and-scope)
+7. [Expressions](#expressions)
+8. [Statements and Control Flow](#statements-and-control-flow)
+9. [Functions, Closures, and Async](#functions-closures-and-async)
+10. [Aggregate Types and Members](#aggregate-types-and-members)
+11. [Shell Integration](#shell-integration)
+12. [Errors and Cleanup](#errors-and-cleanup)
+13. [Runtime Behavior](#runtime-behavior)
+14. [Appendix A: Grammar](#appendix-a-grammar)
+15. [Appendix B: Reserved and Contextual Syntax](#appendix-b-reserved-and-contextual-syntax)
 
 ---
 
-## 3. Syntax Overview
+## Conformance
 
-### Variables
+An implementation conforms to this specification if it accepts every syntactically
+valid program described here and gives it the observable behavior specified here.
+If this document says a construct "is a parse error", a conforming implementation
+must reject that source before execution. If this document says an operation
+"produces a runtime error", a conforming implementation must report an error during
+evaluation and must not continue as if the operation succeeded.
 
-```stash
-let name = "deploy";
-let count = 5;
-let verbose = true;
-let pending;              // declared without initializer (value is null)
-const MAX_RETRIES = 3;    // constant — cannot be reassigned
-```
+This document uses the following normative terms:
 
-Variables declared with `let` are **mutable** — they can be reassigned after declaration. Variables declared with `const` are **immutable** — any attempt to reassign a `const` produces a runtime error. `let` without an initializer sets the variable to `null`.
+- **must** and **must not** describe required behavior.
+- **may** describes permitted behavior.
+- **parse error** means the source text is not a valid Stash program.
+- **runtime error** means evaluation fails after parsing succeeds.
+- **implementation-defined** behavior must be documented by the implementation.
 
-### Operators
+Implementation architecture, bytecode opcodes, optimizer behavior, editor protocol
+details, and standard-library function contracts are outside the scope of this
+document unless they affect source-language semantics.
 
-Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Bitwise: `&` (AND), `|` (OR), `^` (XOR), `~` (NOT), `<<` (left shift), `>>` (right shift) — see [Section 3g](#3g-bitwise-operators). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=`, `&=`, `|=`, `^=`, `<<=`, `>>=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)). Type checking: `is` (see [Section 4c](#4c-the-is-operator)).
+## Terminology
 
-Keyword aliases: `and` is a synonym for `&&`, and `or` is a synonym for `||`. They are pure syntactic sugar — identical precedence, same short-circuit evaluation, identical semantics.
+A **program** is a sequence of declarations and statements. A **source file** is a
+program stored in a file. A **module** is a source file evaluated for import.
 
-The `++` and `--` operators work on numeric variables, both as prefix and postfix:
+A **binding** associates a name with a value. A binding declared with `let` is
+mutable. A binding declared with `const` is immutable after initialization.
 
-```stash
-let i = 0;
-i++;       // postfix: returns 0, then i becomes 1
-++i;       // prefix: i becomes 2, then returns 2
-i--;       // postfix: returns 2, then i becomes 1
---i;       // prefix: i becomes 0, then returns 0
-```
+An **expression** evaluates to a value or produces a runtime error. A **statement**
+performs control flow, creates bindings, or evaluates an expression for its effects.
 
-Prefix returns the value **after** the change; postfix returns the value **before** the change. Using `++`/`--` on a non-numeric value produces a runtime error.
+A value is **truthy** or **falsey** according to the truthiness rules in
+[Truthiness](#truthiness). A value is **nullish** only when it is `null`.
 
-### String Interpolation
+## Lexical Structure
 
-Both interpolation syntaxes are supported:
+### Source Text
 
-```stash
-let name = "world";
-let greeting = "Hello ${name}";      // embedded interpolation
-let greeting2 = $"Hello {name}";     // prefixed interpolation (C#-style)
-let plain = "Hello " + name;          // concatenation still works
-```
+Stash source text is Unicode text. The language syntax is defined in terms of
+characters and tokens. Implementations may normalize source text for diagnostics,
+but tokenization must preserve the program's lexical meaning.
 
-Both forms are explicit, intentional, and easy to read. Regular strings (without `$` prefix or `${}` markers) are never interpolated — no surprises.
+A semicolon terminates most declarations and expression statements. Blocks are
+delimited with `{` and `}`.
 
-The lexer treats `$"..."` as a special token type (`InterpolatedString`). Inside `"...${...}..."` strings, the lexer scans for `${` and switches to expression-parsing mode until the matching `}`.
+### Shebang
 
-### String Escape Sequences
-
-Double-quoted strings (both plain `"..."` and interpolated `$"..."` / `"...${...}..."`) support the following backslash escape sequences:
-
-| Escape | Character  | Description                                             |
-| ------ | ---------- | ------------------------------------------------------- |
-| `\\`   | `\`        | Literal backslash                                       |
-| `\"`   | `"`        | Double quote (avoids closing the string)                |
-| `\n`   | LF (0x0A)  | Newline                                                 |
-| `\t`   | TAB (0x09) | Horizontal tab                                          |
-| `\r`   | CR (0x0D)  | Carriage return                                         |
-| `\0`   | NUL (0x00) | Null character                                          |
-| `\$`   | `$`        | Literal dollar sign (suppresses `${...}` interpolation) |
+If a source file begins with `#!`, the first line is a shebang line. A shebang line
+must be ignored for language semantics.
 
 ```stash
-let msg = "Hello\nWorld";      // two lines when printed
-let path = "C:\\Users\\Admin"; // literal backslashes
-let tab = "col1\tcol2";        // tab-separated columns
-let raw = "Price: \$5.00";     // literal $, no interpolation
+#!/usr/bin/env stash
+io.println("hello");
 ```
-
-Any other `\X` sequence is a lex error. Multi-line strings (`"""..."""`) also process these escape sequences.
 
 ### Comments
 
+Line comments begin with `//` and continue to the end of the line. Block comments
+begin with `/*` and end with `*/`.
+
 ```stash
-// Single-line comment
-/* Multi-line
+// line comment
+/* block
    comment */
 ```
 
+Comments are trivia and must not affect program behavior.
+
 ### Documentation Comments
 
-Stash supports documentation comments that attach to the declaration immediately following them. They are surfaced by the language server on hover and in signature help.
-
-**Triple-slash** (`///`) — line-level doc comments:
+Documentation comments attach to the declaration immediately following them.
+Triple-slash comments use `///`. Block documentation comments use `/** ... */`.
 
 ```stash
-/// Adds two numbers together.
-/// @param a First number
-/// @param b Second number
-/// @return The sum of a and b
+/// Adds two numbers.
+/// @param a left operand
+/// @param b right operand
+/// @return the sum
 fn add(a, b) {
     return a + b;
 }
 ```
 
-**Block doc comments** (`/** ... */`) — multi-line doc comments:
+The supported documentation tags are `@param`, `@return`, `@returns`, and
+`@throws`. Four leading slashes (`////`) are a regular comment, not a documentation
+comment. An empty `/**/` is a regular block comment.
+
+### Identifiers and Keywords
+
+Identifiers name variables, constants, functions, parameters, fields, types,
+modules, and namespaces. Identifiers are case-sensitive.
+
+The following words are reserved keywords:
+
+```text
+as break case catch const continue default defer do else enum extend false
+finally fn for if import in interface is let lock null return struct switch
+throw true try while
+```
+
+The following words are contextual keywords. They have keyword meaning only in the
+positions specified by this document:
+
+```text
+and async await elevate from onRetry or retry timeout until
+```
+
+### Literals
+
+Stash has literal syntax for `null`, booleans, numbers, strings, arrays,
+dictionaries, command expressions, IP addresses, durations, byte sizes, and semantic
+versions.
 
 ```stash
-/**
- * Checks whether a value exceeds a threshold.
- * @param value The number to test
- * @param threshold Upper bound
- * @return true if value > threshold
- */
-fn exceeds(value, threshold) {
-    return value > threshold;
-}
+null;
+true;
+42;
+3.14;
+"text";
+[1, 2, 3];
+{ name: "web", port: 443 };
+@192.168.1.1;
+5m30s;
+128MB;
+@v1.2.3-beta.1;
 ```
 
-Documentation comments also attach to variables and constants (useful for documenting lambdas):
+### String Literals
+
+Double-quoted strings produce string values.
 
 ```stash
-/// Formats a greeting message.
-/// @param name The person's name
-/// @return A greeting string
-let greet = (name) => "Hello, ${name}!";
+let path = "C:\\Users\\Admin";
+let msg = "hello\nworld";
 ```
 
-**Supported tags:**
+The following escapes must be recognized:
 
-| Tag                       | Description                    |
-| ------------------------- | ------------------------------ |
-| `@param name description` | Documents a function parameter |
-| `@return description`     | Documents the return value     |
-| `@returns description`    | Alias for `@return`            |
+| Escape | Meaning         |
+| ------ | --------------- |
+| `\\`   | backslash       |
+| `\"`   | double quote    |
+| `\n`   | line feed       |
+| `\t`   | horizontal tab  |
+| `\r`   | carriage return |
+| `\0`   | NUL             |
+| `\$`   | dollar sign     |
 
-> **Note:** `////` (four slashes) is treated as a regular comment, not a doc comment. Similarly, `/**/` (empty block) is a regular block comment.
+Any other backslash escape is a lex error.
 
-### Sample Program
+### Interpolated Strings
+
+Stash supports embedded interpolation and prefixed interpolation.
 
 ```stash
-#!/usr/bin/env stash
-
-// Modular imports
-import { test } from "test.stash"
-
-// Enums
-enum Status {
-  Unknown,
-  Active,
-  Inactive,
-}
-
-// Structs
-struct Server {
-  host,
-  port,
-  status,
-}
-
-// Constants
-const DEFAULT_ADDRESS = "192.168.1.10";
-
-// Try expression
-let serverAddress = try fs.readFile("/path/to/addressFile") ?? DEFAULT_ADDRESS;
-
-// Struct type variables
-let srv = Server { host: serverAddress, port: 22, status: Status.Unknown };
-
-// Command execution
-let result = $(ping -c 1 ${srv.host});
-
-// Property assignment
-srv.status = result.exitCode == 0 ? Status.Active : Status.Inactive;
-
-// Function definition
-fn deploy(server, package) {
-  let r = $(scp ${package} ${server.host}:/opt/);
-  return r.exitCode == 0;
-}
-
-// Array
-let servers = [
-  Server { host: "10.0.0.1", port: 22, status: Status.Unknown },
-  Server { host: "10.0.0.2", port: 22, status: Status.Unknown }
-];
-
-let payload = "app.tar.gz";
-
-// For-in loop
-for (let srv in servers) {
-  // Conditional
-  if (deploy(srv, payload)) {
-    io.println("Deployed to " + srv.host);
-  } else {
-    io.println($"Error deploying {payload} to {srv.host}");
-  }
-}
-
-// While loop
-let index = 0
-while (index < 10) {
-  index++;
-}
-
-// C-style for loop
-for (let i = 0; i < len(servers); i++) {
-  io.println("Server " + conv.toStr(i));
-}
-
-// Output redirection — write command output to files
-$(ls -la /opt) > "/tmp/listing.txt";
-$(make build) 2> "/tmp/errors.log";
-$(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
+let name = "world";
+let a = "hello ${name}";
+let b = $"hello {name}";
 ```
 
----
+Interpolation slots contain Stash expressions. The expression is evaluated at
+runtime and converted to a string. A regular string without `$"..."` or `${...}`
+must not interpolate.
 
-## 4. Type System
+### Multi-line Strings
 
-Dynamically typed. Values carry their type at runtime. The following built-in types exist:
-
-| Type        | Examples                                   | Notes                                         |
-| ----------- | ------------------------------------------ | --------------------------------------------- |
-| `int`       | `42`, `-7`, `0`, `0xFF`, `0o755`, `0b1010` | Integer numbers (decimal, hex, octal, binary) |
-| `byte`      | `let b: byte = 0xFF`                       | Unsigned 8-bit integer (0–255)                |
-| `float`     | `3.14`, `-0.5`                             | Floating-point numbers                        |
-| `string`    | `"hello"`, `""`                            | Immutable strings                             |
-| `bool`      | `true`, `false`                            |                                               |
-| `null`      | `null`                                     | Absence of value                              |
-| `array`     | `[1, 2, 3]`, `["a", 42, true]`             | Ordered, mixed-type, dynamic-size             |
-| `int[]`     | `let a: int[] = [1, 2, 3]`                 | Typed array — homogeneous integers            |
-| `float[]`   | `let a: float[] = [1.0, 2.5]`              | Typed array — homogeneous floats              |
-| `string[]`  | `let a: string[] = ["a", "b"]`             | Typed array — homogeneous strings             |
-| `bool[]`    | `let a: bool[] = [true, false]`            | Typed array — homogeneous booleans            |
-| `byte[]`    | `let a: byte[] = buf.from("hello")`        | Typed array — homogeneous bytes (0–255)       |
-| `struct`    | `Server { host: "...", ... }`              | Named structured data (see Section 5)         |
-| `enum`      | `Status.Active`, `Color.Red`               | Named constants (see Section 5b)              |
-| `dict`      | `{ key: value }`, `dict.new()`             | Key-value map (see Section 5c)                |
-| `interface` | `interface Printable { ... }`              | Structural contract for structs (see §5f)     |
-| `range`     | `1..10`, `0..100..5`                       | Lazy integer sequence (see Section 3d)        |
-| `Error`     | `try failingFn()`                          | Error value (see Section 7b)                  |
-| `Future`    | `async fn() { return 42; }`                | Async computation (see Section 8c)            |
-| `ip`        | `@192.168.1.1`, `@::1`, `@10.0.0.0/24`     | IP address — IPv4/IPv6 with optional CIDR     |
-| `duration`  | `5s`, `500ms`, `2h30m`, `1.5h`             | Time duration with unit suffixes              |
-| `bytes`     | `100B`, `1.5KB`, `256MB`, `2GB`            | Byte size with binary unit suffixes           |
-
-### Typed Arrays
-
-Typed arrays are **homogeneous arrays** — every element must be the same primitive type. They provide type safety by validating elements on insertion and use native backing arrays for performance.
-
-#### Declaration Syntax
-
-Use a type annotation with the `T[]` suffix on variable or constant declarations:
+Triple-quoted strings may span multiple lines.
 
 ```stash
-let scores: int[] = [90, 85, 100];
-let prices: float[] = [9.99, 14.50, 3.25];
-let names: string[] = ["Alice", "Bob"];
-let flags: bool[] = [true, false, true];
-let data: byte[] = [0x48, 0x65, 0x6C, 0x6C, 0x6F];
-const PRIMES: int[] = [2, 3, 5, 7, 11];
-```
-
-The initializer must be an array literal (or any expression that evaluates to an array). The runtime wraps the generic array into a typed array, validating each element. If any element does not match the declared type, a runtime error is raised:
-
-```stash
-let nums: int[] = [1, "two", 3];  // Runtime error: expected int, got string
-```
-
-**`int[]` accepts only integers.** Floats are not silently truncated:
-
-```stash
-let a: int[] = [1, 2.5];   // Runtime error: expected int, got float
-```
-
-**`float[]` accepts integers** — they are promoted to floats automatically:
-
-```stash
-let a: float[] = [1, 2.5, 3];  // OK: stored as [1.0, 2.5, 3.0]
-```
-
-**`byte[]` accepts integers in the range 0–255** — they are narrowed to bytes:
-
-```stash
-let a: byte[] = [0x48, 0x65, 255];  // OK: stored as byte[0x48, 0x65, 0xff]
-let b: byte[] = [1, 256];           // Runtime error: 256 out of byte range (0–255)
-```
-
-#### Type Checking
-
-`typeof()` returns the typed array name. The `is` operator supports both generic `array` and specific `T[]` checks:
-
-```stash
-let a: int[] = [1, 2, 3];
-typeof(a)       // "int[]"
-a is int[]      // true
-a is array      // true  (typed arrays are arrays)
-a is string[]   // false
-[1, 2] is int[] // false (generic arrays are not typed)
-
-let b: byte[] = [0x48, 0x65];
-typeof(b)       // "byte[]"
-b is byte[]     // true
-b is array      // true
-```
-
-#### Mutation
-
-All `arr.*` mutation functions work transparently on typed arrays, with type validation:
-
-```stash
-let a: int[] = [1, 2, 3];
-arr.push(a, 4);       // OK: [1, 2, 3, 4]
-arr.push(a, "five");  // Runtime error: expected int, got string
-arr.insert(a, 0, 0);  // OK: [0, 1, 2, 3, 4]
-```
-
-Functions that return new arrays (`arr.filter`, `arr.slice`, `arr.unique`, `arr.sortBy`, `arr.take`, `arr.drop`, `arr.concat`) preserve the typed array type in the result.
-
-#### Conversion
-
-Convert between typed and generic arrays using `arr.typed()` and `arr.untyped()`:
-
-```stash
-let generic = [1, 2, 3];
-let typed = arr.typed(generic, "int");    // int[]
-let back = arr.untyped(typed);            // generic array
-arr.elementType(typed);                   // "int"
-arr.elementType(generic);                 // null
-```
-
-Create a zero-initialized typed array with a given size:
-
-```stash
-let buf: int[] = arr.new("int", 100);    // zero-initialized int[] with 100 elements
-```
-
-### The `byte` Type
-
-The `byte` type represents an unsigned 8-bit integer in the range 0–255. Byte values are created using a type annotation:
-
-```stash
-let b: byte = 0xFF;          // 255
-let zero: byte = 0;          // 0
-const MAX_BYTE: byte = 255;  // maximum byte value
-```
-
-The type annotation narrows an integer value to a byte at runtime. Values outside the range 0–255 produce a runtime error:
-
-```stash
-let b: byte = 256;   // Runtime error: value 256 out of byte range (0-255)
-let c: byte = -1;    // Runtime error: value -1 out of byte range (0-255)
-```
-
-#### Byte Arithmetic
-
-Byte values are promoted to `int` when used in arithmetic, comparison, or bitwise operations:
-
-```stash
-let a: byte = 100;
-let b: byte = 200;
-let sum = a + b;       // 300 (int, not byte)
-let product = a * 3;   // 300 (int)
-typeof(sum)            // "int"
-```
-
-#### Truthiness
-
-A byte value of `0` is falsy; all other byte values are truthy:
-
-```stash
-let b: byte = 0;
-if (b) { io.println("truthy"); } else { io.println("falsy"); }  // "falsy"
-```
-
-### Number Literals
-
-Stash supports integer literals in four bases and optional underscore digit separators for readability.
-
-| Format         | Prefix      | Digits              | Example                 |
-| -------------- | ----------- | ------------------- | ----------------------- |
-| Decimal        | _(none)_    | `0-9`               | `42`, `1_000_000`       |
-| Hexadecimal    | `0x` / `0X` | `0-9`, `a-f`, `A-F` | `0xFF`, `0x00FF_00FF`   |
-| Octal          | `0o` / `0O` | `0-7`               | `0o755`, `0o7_5_5`      |
-| Binary         | `0b` / `0B` | `0`, `1`            | `0b1010`, `0b1111_0000` |
-| Floating-point | _(none)_    | `0-9`, `.`          | `3.14`, `1_000.50`      |
-
-**Underscore separators (`_`):** An underscore may appear between any two digits for readability. Underscores are not allowed at the start or end of a literal, may not appear consecutively, may not appear adjacent to a decimal point, and may not appear immediately after a base prefix.
-
-```stash
-let permissions = 0o755;           // octal: 493
-let color = 0xFF00FF;              // hex: 16711935
-let flags = 0b1010;                // binary: 10
-let million = 1_000_000;           // underscore separator: 1000000
-let mask = 0xFF_FF_00_00;          // hex with separators
-let bits = 0b1111_0000_1010_0101;  // binary with separators
-```
-
-All hex, octal, and binary literals produce integer (`long`) values. Floating-point hex/octal/binary is not supported.
-
-### IP Address Literals
-
-IP address literals use the `@` prefix — a single character followed by the address with no quotes:
-
-```stash
-let addr   = @192.168.1.1;            // IPv4
-let v6     = @::1;                     // IPv6 loopback
-let mapped = @::ffff:192.168.1.1;     // IPv4-mapped IPv6
-let cidr   = @10.0.0.0/24;            // Subnet (CIDR notation)
-let link   = @fe80::1%eth0;           // IPv6 with zone ID
-```
-
-The `@` sigil means "at an address" — it already carries this meaning in networking contexts (SSH `user@host`, email `user@domain`). The lexer sees `@` and enters dedicated IP-address scanning mode, consuming hex digits, dots, colons (for IPv6), `/` (for CIDR), and `%` (for zone IDs), stopping at whitespace or any operator/delimiter.
-
-**Why not bare `192.168.1.1`?** Bare IP addresses create deep lexer ambiguity. `10.0` is a valid float. `192.168` would tokenize as `192`, `.`, `168` (integer-dot-integer). IPv6 is impossible without a delimiter — `::1` and `fe80::1%eth0` cannot be expressed as bare tokens.
-
-#### Type System
-
-IP addresses are a first-class type with value-based equality:
-
-```stash
-typeof(@192.168.1.1)                    // "ip"
-@192.168.1.1 is ip                      // true
-@192.168.1.1 == @192.168.1.1            // true (value equality)
-@192.168.1.1 == "192.168.1.1"           // false (no cross-type coercion)
-$"Server: {@192.168.1.1}"               // "Server: 192.168.1.1"
-```
-
-IP addresses with different CIDR prefixes are distinct: `@10.0.0.0/24 != @10.0.0.0/16`. An IP without a prefix is distinct from one with a prefix: `@10.0.0.0 != @10.0.0.0/24`.
-
-#### Operator Integration
-
-Bitwise, comparison, arithmetic, and containment operators work natively on IP addresses:
-
-**Bitwise** — subnet masking with `&`, `|`, `~`:
-
-```stash
-let addr = @192.168.1.100;
-let mask = @255.255.255.0;
-let network   = addr & mask;           // @192.168.1.0
-let broadcast = (addr & mask) | ~mask; // @192.168.1.255
-let wildcard  = ~mask;                 // @0.0.0.255
-```
-
-**Comparison** — lexicographic byte ordering with `<`, `>`, `<=`, `>=`:
-
-```stash
-@10.0.0.1 < @10.0.0.254               // true
-@192.168.1.1 > @10.0.0.1              // true
-```
-
-**Arithmetic** — address offset with `+` and `-`:
-
-```stash
-@10.0.0.0 + 42                        // @10.0.0.42
-@192.168.1.254 + 2                    // @192.168.2.0 (wraps octets)
-@10.0.0.42 - @10.0.0.0                // 42 (integer distance)
-@10.0.0.42 - 42                       // @10.0.0.0
-```
-
-**CIDR containment** — subnet membership with `in`:
-
-```stash
-@192.168.1.50 in @192.168.1.0/24      // true
-@192.168.2.1 in @192.168.1.0/24       // false
-```
-
-IPv4 and IPv6 addresses cannot be mixed in operators — `@192.168.1.1 & @::1` is a runtime error.
-
-### Duration Literals
-
-Duration literals express time spans directly in code with unit suffixes. The numeric value is followed immediately (no space) by a unit:
-
-| Unit         | Suffix | Example          |
-| ------------ | ------ | ---------------- |
-| Milliseconds | `ms`   | `500ms`, `100ms` |
-| Seconds      | `s`    | `5s`, `1.5s`     |
-| Minutes      | `m`    | `30m`, `2.5m`    |
-| Hours        | `h`    | `1h`, `1.5h`     |
-| Days         | `d`    | `7d`, `365d`     |
-
-**Compound durations** combine multiple units in descending order:
-
-```stash
-let timeout = 2h30m;               // 2 hours 30 minutes
-let precise = 1h30m15s;            // 1 hour 30 minutes 15 seconds
-let full    = 1d12h30m15s500ms;    // compound with all units
-```
-
-Underscore separators work in the leading number: `1_000ms`. Float values are supported for the first number only: `1.5h` (90 minutes). Compound continuation segments are integer-only.
-
-Internally, durations are stored as total milliseconds (a 64-bit integer).
-
-#### Type System
-
-```stash
-typeof(5s)                             // "duration"
-5s is duration                         // true
-5s == 5000ms                           // true (value equality by total ms)
-5s == 5                                // false (no cross-type coercion)
-$"timeout: {2h30m}"                    // "timeout: 2h30m"
-```
-
-#### Properties
-
-Durations support dot-access properties in two categories:
-
-**Component properties** — extract a single unit from the decomposed duration (like reading a clock):
-
-| Property        | Type  | Description                    | Example: `2h30m15s500ms` |
-| --------------- | ----- | ------------------------------ | ------------------------ |
-| `.days`         | `int` | Full days (0+)                 | `0`                      |
-| `.hours`        | `int` | Hours component (0–23)         | `2`                      |
-| `.minutes`      | `int` | Minutes component (0–59)       | `30`                     |
-| `.seconds`      | `int` | Seconds component (0–59)       | `15`                     |
-| `.milliseconds` | `int` | Milliseconds component (0–999) | `500`                    |
-
-**Total properties** — express the entire duration in a single unit:
-
-| Property        | Type    | Description        | Example: `2h30m` |
-| --------------- | ------- | ------------------ | ---------------- |
-| `.totalMs`      | `int`   | Total milliseconds | `9000000`        |
-| `.totalSeconds` | `float` | Total seconds      | `9000.0`         |
-| `.totalMinutes` | `float` | Total minutes      | `150.0`          |
-| `.totalHours`   | `float` | Total hours        | `2.5`            |
-| `.totalDays`    | `float` | Total days         | `0.104167`       |
-
-#### Operator Integration
-
-**Arithmetic:**
-
-```stash
-5s + 3s                                // 8s
-10s - 3s                               // 7s
-5s * 3                                 // 15s
-3 * 5s                                 // 15s (commutative)
-5s * 1.5                               // 7500ms
-15s / 3                                // 5s
-10s / 5s                               // 2.0 (float ratio)
--5s                                    // negation (-5000ms)
-```
-
-**Comparison:**
-
-```stash
-5s > 3s                                // true
-1h == 60m                              // true (both are 3600000ms)
-1h > 59m                               // true
-```
-
-Duration and non-duration types cannot be mixed in operators — `5s + 1KB` is a runtime error.
-
-### ByteSize Literals
-
-ByteSize literals express data sizes with binary unit suffixes (1 KB = 1024 bytes):
-
-| Unit      | Suffix | Bytes             | Example          |
-| --------- | ------ | ----------------- | ---------------- |
-| Bytes     | `B`    | 1                 | `100B`, `0KB`    |
-| Kilobytes | `KB`   | 1,024             | `1KB`, `1.5KB`   |
-| Megabytes | `MB`   | 1,048,576         | `256MB`, `512MB` |
-| Gigabytes | `GB`   | 1,073,741,824     | `2GB`, `1.5GB`   |
-| Terabytes | `TB`   | 1,099,511,627,776 | `1TB`            |
-
-```stash
-let maxSize  = 100MB;
-let diskSize = 2TB;
-let chunk    = 1.5KB;
-let buffer   = 1_024B;
-```
-
-Internally, byte sizes are stored as total bytes (a 64-bit integer). Float values are supported: `1.5GB`. Unlike durations, byte sizes do not have compound syntax — each literal uses a single unit.
-
-**Note:** `0b1010` and `0B1010` are binary literals (not byte sizes). The `B` suffix is only treated as a byte unit when not followed by a binary digit — so `0B` is zero bytes, while `0B1` is the binary literal for 1.
-
-#### Type System
-
-```stash
-typeof(1KB)                            // "bytes"
-1KB is bytes                           // true
-1KB == 1024B                           // true (value equality by total bytes)
-1KB == 1024                            // false (no cross-type coercion)
-$"size: {1536B}"                       // "size: 1.5KB"
-```
-
-#### Properties
-
-| Property | Type    | Description             | Example: `1536B` |
-| -------- | ------- | ----------------------- | ---------------- |
-| `.bytes` | `int`   | Total bytes (raw value) | `1536`           |
-| `.kb`    | `float` | Value in kilobytes      | `1.5`            |
-| `.mb`    | `float` | Value in megabytes      | `0.001465`       |
-| `.gb`    | `float` | Value in gigabytes      | `0.000001`       |
-| `.tb`    | `float` | Value in terabytes      | `0.0`            |
-
-#### Operator Integration
-
-**Arithmetic:**
-
-```stash
-1KB + 1KB                              // 2KB (2048 bytes)
-1MB - 512KB                            // 512KB
-1KB * 3                                // 3KB (3072 bytes)
-3 * 1KB                                // 3KB (commutative)
-1MB / 2                                // 512KB
-1MB / 512KB                            // 2.0 (float ratio)
--1KB                                   // negation (-1024 bytes)
-```
-
-**Comparison:**
-
-```stash
-1MB > 1KB                              // true
-1KB == 1024B                           // true
-1GB > 999MB                            // true
-```
-
-ByteSize and non-bytesize types cannot be mixed in operators — `1KB + 5s` is a runtime error.
-
-### Semantic Version Literals
-
-Semantic version literals use the `@v` prefix for inline version values following [SemVer 2.0.0](https://semver.org/):
-
-```stash
-let current    = @v2.4.1
-let minimum    = @v2.0.0
-let prerelease = @v3.0.0-beta.2
-let tagged     = @v1.0.0-rc.1+build.456
-let wildcard   = @v2.x                    // matches any 2.x.x
-```
-
-**Format:** `@v<major>.<minor>.<patch>` with optional `-<prerelease>` and `+<build>` suffixes. Wildcard patterns use `x` for minor or patch: `@v2.x` (any 2.x.x) or `@v2.4.x` (any 2.4.x).
-
-| Component  | Description                            | Example                                        |
-| ---------- | -------------------------------------- | ---------------------------------------------- |
-| Major      | Breaking changes                       | `@v2.0.0` → `.major` = 2                       |
-| Minor      | New features (backward-compatible)     | `@v2.4.0` → `.minor` = 4                       |
-| Patch      | Bug fixes                              | `@v2.4.1` → `.patch` = 1                       |
-| Prerelease | Pre-release identifier                 | `@v1.0.0-beta.2` → `.prerelease` = `"beta.2"`  |
-| Build      | Build metadata (ignored in comparison) | `@v1.0.0+build.123` → `.build` = `"build.123"` |
-
-#### Type System
-
-```stash
-typeof(@v1.0.0)                         // "semver"
-@v1.0.0 is semver                       // true
-@v1.0.0 == @v1.0.0                      // true
-@v1.0.0 == "1.0.0"                      // false (no cross-type coercion)
-$"version: {@v2.4.1}"                   // "version: 2.4.1"
-```
-
-#### Properties
-
-| Property        | Type     | Description                                   | Example: `@v2.4.1-beta.2+build.5` |
-| --------------- | -------- | --------------------------------------------- | --------------------------------- |
-| `.major`        | `int`    | Major version number                          | `2`                               |
-| `.minor`        | `int`    | Minor version number                          | `4`                               |
-| `.patch`        | `int`    | Patch version number                          | `1`                               |
-| `.prerelease`   | `string` | Pre-release identifier (empty string if none) | `"beta.2"`                        |
-| `.build`        | `string` | Build metadata (empty string if none)         | `"build.5"`                       |
-| `.isPrerelease` | `bool`   | Whether version has a pre-release tag         | `true`                            |
-
-#### Comparison
-
-Comparison follows the [SemVer 2.0.0 precedence rules](https://semver.org/#spec-item-11):
-
-1. Major → Minor → Patch compared numerically (not lexicographically: `@v1.10.0 > @v1.9.0`)
-2. A release version has **higher** precedence than its pre-release: `@v2.0.0 > @v2.0.0-alpha`
-3. Pre-release identifiers compared by dot-separated segments: numeric segments numerically, alphanumeric segments lexicographically
-4. Build metadata is **ignored** in all comparisons: `@v1.0.0+a == @v1.0.0+b`
-
-```stash
-@v2.0.0 > @v1.0.0                      // true
-@v1.10.0 > @v1.9.0                     // true (numeric, not string)
-@v2.0.0-alpha < @v2.0.0                // true (pre-release < release)
-@v1.0.0-alpha < @v1.0.0-beta           // true (lexicographic)
-@v1.0.0-alpha.1 < @v1.0.0-alpha.2     // true (numeric segment)
-@v1.0.0+build1 == @v1.0.0+build2      // true (build metadata ignored)
-```
-
-#### Wildcard Range Matching (`in`)
-
-Wildcard patterns match versions by major or major.minor using the `in` operator:
-
-```stash
-@v2.4.1 in @v2.x                       // true (major match)
-@v3.0.0 in @v2.x                       // false
-@v2.4.1 in @v2.4.x                     // true (minor match)
-@v2.5.0 in @v2.4.x                     // false
-```
-
-#### Parsing from Strings
-
-The global `semver()` function parses a string into a semver value:
-
-```stash
-let v = semver("2.4.1")                 // @v2.4.1
-let pre = semver("1.0.0-beta.2")        // @v1.0.0-beta.2
-```
-
-Invalid version strings cause a runtime error.
-
-#### Practical Use
-
-```stash
-let nodeVersion = semver($(node --version).stdout)
-if (nodeVersion < @v18.0.0) {
-    throw "Node 18+ required, found ${nodeVersion}"
-}
-
-// Deployment version gates
-let deployed = @v2.4.1
-if (deployed in @v2.x && deployed >= @v2.4.0) {
-    io.println("Version ${deployed} is compatible")
-}
-```
-
-### Secret
-
-The `secret` type wraps any value and auto-redacts it when converted to a string. This prevents accidental credential leakage through `println()`, string interpolation, error messages, and log output.
-
-**Creating secrets:**
-
-```stash
-let apiKey = secret("sk-abc123def456");
-let dbPassword = secret(env.get("DB_PASS"));
-```
-
-**Auto-redaction:**
-
-```stash
-println(apiKey);                    // prints: ******
-println("Key: ${apiKey}");          // prints: Key: ******
-```
-
-**Taint propagation:** String concatenation involving a secret produces a new secret:
-
-```stash
-let header = "Bearer " + apiKey;    // header is also a secret
-typeof(header);                     // "secret"
-println(header);                    // prints: ******
-```
-
-**Unwrapping with `reveal()`:** When the real value is needed (e.g., for HTTP requests or writing to authorized destinations), use `reveal()`:
-
-```stash
-let raw = reveal(apiKey);           // returns the original string
-```
-
-**Type operations:**
-
-```stash
-typeof(apiKey);                     // "secret"
-apiKey is secret;                   // true
-len(apiKey);                        // returns length of the underlying value
-```
-
-**Design notes:**
-
-- `secret(secret(value))` does not double-wrap — the inner value is preserved.
-- Comparison (`==`, `!=`) and `len()` operate on the underlying value.
-- The goal is preventing _accidental_ leakage, not adversarial extraction. Memory dumps can still access the raw value.
-
-### Type Coercion & Truthiness
-
-**Truthiness:** The following values are **falsy**: `false`, `null`, `0` (integer zero), `0.0` (float zero), `""` (empty string), and **error values** (see [Section 7b](#7b-error-handling)). All other values are **truthy** (including empty arrays and struct instances).
-
-**String concatenation (`+`):** When one operand of `+` is a string, the other operand is automatically converted to its string representation. `"count: " + 5` produces `"count: 5"`.
-
-**String repetition (`*`):** When one operand of `*` is a string and the other is an integer, the string is repeated that many times. `"ha" * 3` produces `"hahaha"`, and `3 * "ha"` produces the same result (commutative). `"x" * 0` produces `""`. A negative count is a runtime error.
-
-**Numeric type mixing:** When an `int` and a `float` are used in an arithmetic operation (`+`, `-`, `*`, `/`, `%`), the `int` is promoted to `float` and the result is a `float`. `5 + 3.14` produces `8.14`.
-
-**Equality:** `==` and `!=` never perform type coercion. Values of different types are never equal (`5 != "5"`, `0 != false`, `0 != null`). Enum values are compared by identity (type + member name). Dictionaries and struct instances use **reference equality** — two distinct dictionaries or instances with identical contents are not equal (`==` returns `false`). Neither type can be used as a dictionary key.
-
----
-
-## 5. Structs & Objects
-
-### Declaration
-
-```stash
-struct Server {
-    host,
-    port,
-    status
-}
-```
-
-A `struct` declaration registers a **template** — a name and a list of field names.
-
-### Instantiation
-
-```stash
-let srv = Server { host: "10.0.0.1", port: 22, status: "unknown" };
-```
-
-Creates a new instance with the given field values.
-
-#### Shorthand Initialization
-
-When a variable name matches the field name, the value can be omitted:
-
-```stash
-let host = "10.0.0.1";
-let port = 22;
-let status = "unknown";
-
-// Shorthand — equivalent to { host: host, port: port, status: status }
-let srv = Server { host, port, status };
-
-// Mixed — shorthand and explicit values can be combined
-let srv2 = Server { host, port: 8080, status };
-```
-
-This is purely syntactic sugar — the parser generates the same `(field, value)` pairs as explicit initialization. The field name is used as an identifier expression for the value.
-
-### Field Access
-
-```stash
-let h = srv.host;       // read
-srv.status = "up";       // write
-```
-
-Dot access is a dictionary lookup internally.
-
-**Note:** The dot operator (`.`) is parsed uniformly for both struct field access (`srv.host`) and enum member access (`Status.Active`). The parser produces a `DotExpr` in both cases. The resolver or interpreter determines at runtime whether the left-hand side is a struct instance (field lookup) or an enum type name (member lookup).
-
-### Internal Representation
-
-A struct instance is a **dictionary/hash map with a type tag**:
-
-```
-{ __type: "Server", host: "10.0.0.1", port: 22, status: "unknown" }
-```
-
-### Methods
-
-Structs support method declarations — functions defined inside the struct body that receive an implicit `self` parameter bound to the instance at call time.
-
-#### Syntax
-
-Methods are declared with `fn` inside the struct body, after any field declarations:
-
-```stash
-struct Counter {
-    count
-
-    fn increment() {
-        self.count = self.count + 1;
-    }
-
-    fn add(n) {
-        self.count = self.count + n;
-    }
-
-    fn get() {
-        return self.count;
-    }
-}
-```
-
-Fields and methods are separated naturally — fields are comma-separated identifiers, methods start with `fn`.
-
-#### Method Calls
-
-Methods are called via dot access on an instance:
-
-```stash
-let c = Counter { count: 0 };
-c.increment();
-c.add(5);
-io.println(c.get());  // 6
-```
-
-#### The `self` Parameter
-
-- `self` is **implicitly** bound when a method is called — it is not declared in the parameter list.
-- Inside a method body, `self` refers to the instance the method was called on.
-- `self` provides access to all fields and other methods of the instance.
-- `self` is **not** available outside method bodies.
-
-#### Method Storage
-
-Methods are stored on the **struct template**, not on individual instances. All instances of a struct share the same method definitions. This means:
-
-- Adding methods does not increase per-instance memory.
-- Methods cannot be overridden on individual instances.
-- When a method is accessed via dot notation (e.g., `c.increment`), it produces a **bound method** — an object that captures both the method function and the target instance.
-
-#### Field/Method Name Collision
-
-If a field and a method share the same name, the **field takes precedence** during dot access. The method is effectively shadowed.
-
-#### Methods Calling Other Methods
-
-Methods can call other methods on the same instance via `self`:
-
-```stash
-struct Rect {
-    w, h
-
-    fn area() {
-        return self.w * self.h;
-    }
-
-    fn describe() {
-        return $"Rect({self.w}x{self.h}, area={self.area()})";
-    }
-}
-```
-
-### Future Extensions (Not in v1)
-
-- **Nested structs:** Structs as field values of other structs.
-- **Default values:** Field declarations with default values.
-
----
-
-## 3b. Compound Assignment Operators
-
-Compound assignment operators combine an arithmetic or null-coalescing operation with assignment:
-
-```stash
-let count = 10;
-count += 5;        // count = count + 5  → 15
-count -= 3;        // count = count - 3  → 12
-count *= 2;        // count = count * 2  → 24
-count /= 4;        // count = count / 4  → 6
-count %= 4;        // count = count % 4  → 2
-```
-
-**The `??=` (null-coalescing assignment)** assigns only if the variable is currently `null` or an error value:
-
-```stash
-let name = null;
-name ??= "default";   // name is now "default"
-name ??= "other";     // name is still "default" (was not null)
-```
-
-### Supported Operators
-
-| Operator | Equivalent   | Description              |
-| -------- | ------------ | ------------------------ |
-| `+=`     | `x = x + y`  | Add and assign           |
-| `-=`     | `x = x - y`  | Subtract and assign      |
-| `*=`     | `x = x * y`  | Multiply and assign      |
-| `/=`     | `x = x / y`  | Divide and assign        |
-| `%=`     | `x = x % y`  | Modulo and assign        |
-| `??=`    | `x = x ?? y` | Null-coalesce and assign |
-| `&=`     | `x = x & y`  | Bitwise AND and assign   |
-| `\|=`    | `x = x \| y` | Bitwise OR and assign    |
-| `^=`     | `x = x ^ y`  | Bitwise XOR and assign   |
-| `<<=`    | `x = x << y` | Left shift and assign    |
-| `>>=`    | `x = x >> y` | Right shift and assign   |
-
-### Semantics
-
-Compound assignment is **desugared by the parser** into the equivalent assignment. `x += 1` is parsed as `x = x + 1`. This means compound assignment shares all the validation and behavior of regular assignment — it cannot reassign `const` variables, and it follows the same scoping rules.
-
-Compound assignment works on variables, struct fields, dictionary entries, and array elements:
-
-```stash
-srv.port += 1;          // struct field
-config["retries"] -= 1; // dict entry by index
-nums[0] *= 10;          // array element
-```
-
----
-
-## 3c. Multi-line Strings
-
-Triple-quoted strings (`"""..."""`) allow string literals that span multiple lines, preserving newlines and automatically handling indentation.
-
-### Basic Usage
-
-```stash
-let text = """
-    Hello,
-    World!
-""";
-// Result: "Hello,\nWorld!\n"
-```
-
-The opening `"""` must be followed by a newline. The closing `"""` must appear on its own line. Leading whitespace is stripped based on the common indentation of all non-empty lines.
-
-### Indentation Stripping
-
-The lexer determines the minimum indentation across all non-empty lines and strips that prefix from every line:
-
-```stash
-let sql = """
-    SELECT *
-    FROM users
-    WHERE active = true
-""";
-// Each line has 4 spaces of indent stripped → no leading spaces in the result
-```
-
-Lines with deeper indentation retain the extra spaces:
-
-```stash
-let code = """
-    fn main() {
-        println("hello");
-    }
-""";
-// "fn main() {\n    println(\"hello\");\n}\n"
-```
-
-### Interpolation
-
-Use the `$"""..."""` prefix for interpolation within multi-line strings:
-
-```stash
-let table = "users";
-let query = $"""
-    SELECT *
-    FROM {table}
-    WHERE active = true
+let script = """
+    set -e
+    echo "deploy"
 """;
 ```
 
-This follows the same `{expr}` interpolation syntax as `$"..."` strings.
+Multi-line strings support the same escape sequences as ordinary strings.
+Interpolation is allowed where the string form is explicitly interpolated. Common
+indentation may be stripped by the implementation according to the documented
+multi-line string indentation rule; this transformation must be deterministic.
 
-### Implementation
+### Numeric Literals
 
-Multi-line strings are handled entirely in the lexer. The lexer detects `"""` (or `$"""`) and scans until the closing `"""`. The `StripCommonIndent` method removes the shared whitespace prefix. The result is a standard `String` or `InterpolatedString` token — no parser or interpreter changes required.
-
----
-
-## 3d. Range Expressions
-
-Range expressions create lazy integer sequences using the `..` operator:
-
-```stash
-let r = 1..5;        // range: 1, 2, 3, 4 (end-exclusive)
-let r2 = 0..10..2;   // range with step: 0, 2, 4, 6, 8
-let r3 = 5..0;       // descending: 5, 4, 3, 2, 1 (auto step -1)
-```
-
-### Syntax
-
-```
-start..end             // step defaults to 1 (or -1 if start > end)
-start..end..step       // explicit step
-```
-
-Both `start` and `end` must evaluate to integers. `step`, if provided, must also be an integer and must not be zero.
-
-### Semantics
-
-1. Ranges are **end-exclusive** — `1..5` produces `1, 2, 3, 4` (not including 5). This matches Python's `range()` behavior.
-2. If `start > end` and no step is given, the step defaults to `-1` (automatic descending).
-3. An explicit step of 0 is a runtime error.
-4. Ranges are a distinct runtime type (`"range"` via `typeof()`).
-5. Ranges are **lazy** — they do not allocate an array. Values are generated on demand during iteration.
-
-### Iteration
-
-Ranges are iterable with `for-in`:
+Integer literals produce integer values. Floating-point literals produce floating
+values. Number literals may use decimal, binary (`0b`), octal (`0o`), and
+hexadecimal (`0x`) notation where accepted by the lexer.
 
 ```stash
-for (let i in 1..5) {
-    io.println(i);    // 1, 2, 3, 4
-}
+let dec = 42;
+let bin = 0b101010;
+let oct = 0o52;
+let hex = 0x2A;
+let pi = 3.14159;
+```
 
-for (let i in 0..10..2) {
-    io.println(i);    // 0, 2, 4, 6, 8
-}
+### Domain Literals
 
-for (let i in 10..0) {
-    io.println(i);    // 10, 9, 8, ..., 1
+IP address literals begin with `@` and produce IP address values.
+
+```stash
+@127.0.0.1;
+@::1;
+@10.0.0.0/24;
+```
+
+Duration literals produce duration values.
+
+```stash
+500ms;
+5s;
+2h30m;
+```
+
+Byte-size literals produce byte-size values.
+
+```stash
+100B;
+1.5MB;
+2GB;
+```
+
+Semantic-version literals begin with `@v`.
+
+```stash
+@v1.0.0;
+@v1.0.0-rc.1+build.456;
+```
+
+Semantic-version comparison must compare major, minor, and patch numerically.
+Prerelease identifiers sort before the corresponding release version. Build metadata
+must be ignored for ordering and equality.
+
+## Source Files and Modules
+
+### Program Structure
+
+A source file is parsed as a sequence of declarations and statements until end of
+file.
+
+```stash
+import { readConfig } from "config.stash";
+
+const DEFAULT_PORT = 443;
+
+fn main() {
+    io.println(DEFAULT_PORT);
 }
 ```
+
+Top-level statements execute in source order when the file is evaluated as a
+program or module.
+
+### Imports
+
+Selective imports bind names exported by another module into the current scope.
+
+```stash
+import { deploy, rollback } from "ops.stash";
+```
+
+Namespace imports bind the evaluated module to a namespace name.
+
+```stash
+import "ops.stash" as ops;
+ops.deploy();
+```
+
+The module path expression must evaluate to a string. An implementation must resolve
+relative module paths relative to the importing file unless it documents a different
+module resolution base.
+
+Import cycles produce a runtime error unless an implementation explicitly documents
+cycle handling.
+
+## Values and Types
+
+### Type Model
+
+Stash is dynamically typed. Values carry runtime type information. Type hints may
+appear in declarations and signatures; unless a feature states otherwise, type
+hints are checked at runtime and by static analysis tools rather than by a separate
+compile-time type checker.
+
+The core value categories are:
+
+| Type name   | Description                                  |
+| ----------- | -------------------------------------------- |
+| `null`      | absence of a value                           |
+| `bool`      | `true` or `false`                            |
+| `int`       | integer number                               |
+| `float`     | floating-point number                        |
+| `byte`      | integer value in the range 0..255            |
+| `string`    | text value                                   |
+| `array`     | ordered mutable sequence                     |
+| typed array | primitive homogeneous array such as `byte[]` |
+| `dict`      | key-value mapping                            |
+| `struct`    | user-defined aggregate instance              |
+| `enum`      | enum member value                            |
+| `interface` | interface type used for conformance checks   |
+| `namespace` | standard-library or imported namespace       |
+| `function`  | callable function or lambda                  |
+| `Future`    | asynchronous computation                     |
+| `Error`     | throwable error value                        |
+| `secret`    | redaction wrapper                            |
+| `ip`        | IP address or network                        |
+| `duration`  | elapsed time duration                        |
+| `bytesize`  | byte quantity                                |
+| `semver`    | semantic version                             |
+
+### `typeof` and `nameof`
+
+`typeof(value)` returns a string naming the runtime category of `value`.
+`nameof(value)` returns the declared type or binding name where available. For user
+types, `nameof` must preserve the user-visible struct, enum, or interface name.
+
+```stash
+typeof(1);        // "int"
+typeof(null);     // "null"
+nameof(Server);   // "Server"
+```
+
+The complete standard-library contract for these functions is in the
+[Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md).
+
+### Truthiness
+
+The following values are falsey:
+
+- `null`
+- `false`
+- numeric zero
+- empty string
+- empty array
+- empty dictionary
+
+All other values are truthy. Conditions in `if`, `while`, `do while`, ternary
+expressions, logical operators, and retry predicates use these rules.
+
+### Equality
+
+`==` evaluates to `true` when its operands are equal. `!=` evaluates to the logical
+negation of `==`.
+
+Primitive values compare by value. Struct instances, arrays, dictionaries, errors,
+futures, namespaces, and functions compare according to their runtime representation
+unless a more specific rule is defined by the implementation. Semantic-version
+values compare according to semantic-version rules.
+
+Cross-type coercion must not be performed for equality unless explicitly specified
+for a type.
+
+### Type Coercion
+
+Stash does not perform broad implicit conversion between unrelated types. Operators
+may define narrow coercions, such as string concatenation with `+`. Library
+functions in the `conv` namespace provide explicit conversions.
+
+### Secret Values
+
+`secret(value)` wraps a value for redaction. A secret value must display as redacted
+when printed, stringified, interpolated, or concatenated. `reveal(secretValue)`
+returns the wrapped value.
+
+```stash
+let token = secret("abc123");
+io.println(token);       // redacted
+let raw = reveal(token); // "abc123"
+```
+
+## Bindings and Scope
+
+### Variable Declarations
+
+`let` creates a mutable binding. If no initializer is present, the binding is
+initialized to `null`.
+
+```stash
+let name = "deploy";
+let pending;
+pending = true;
+```
+
+Assignment to an undeclared name produces a runtime error.
+
+### Constant Declarations
+
+`const` creates an immutable binding and must have an initializer.
+
+```stash
+const MAX_RETRIES = 3;
+```
+
+Assigning to a `const` binding produces a runtime error.
+
+### Type Hints
+
+Bindings, parameters, fields, and return positions may include type hints.
+
+```stash
+let port: int = 443;
+fn open(path: string) -> bool {
+    return fs.exists(path);
+}
+```
+
+A type hint names a runtime type, user-defined type, interface, or array type such
+as `int[]`. If a checked value does not match its type hint, evaluation produces a
+runtime error.
+
+### Destructuring Declarations
+
+Array destructuring binds elements by position.
+
+```stash
+let [host, port] = ["localhost", 8080];
+```
+
+Dictionary destructuring binds fields by key.
+
+```stash
+let { name, status } = server;
+```
+
+The rest operator captures remaining values.
+
+```stash
+let [first, ...rest] = values;
+let { name, ...meta } = record;
+```
+
+A destructuring declaration that cannot match its source value produces a runtime
+error.
+
+### Lexical Scope
+
+Stash uses lexical scope. Blocks create nested scopes. A name lookup begins in the
+innermost scope and proceeds outward.
+
+```stash
+let x = 1;
+{
+    let x = 2;
+    io.println(x); // 2
+}
+io.println(x);     // 1
+```
+
+Closures capture bindings from their lexical environment.
+
+### `unset`
+
+`unset` removes mutable bindings or dictionary entries.
+
+```stash
+unset temp;
+unset config.debug, config.trace;
+```
+
+Unsetting a missing binding, immutable binding, or unsupported target produces a
+runtime error.
+
+## Expressions
+
+### Evaluation Order
+
+Expressions evaluate left to right unless a construct explicitly short-circuits.
+Function arguments evaluate before the call. Assignment evaluates the right-hand
+side before updating the target.
+
+### Primary Expressions
+
+Primary expressions include literals, identifiers, grouped expressions, arrays,
+dictionaries, struct literals, command expressions, and lambdas.
+
+```stash
+(1 + 2);
+[1, 2, 3];
+{ host: "localhost", port: 5432 };
+Server { host: "web", port: 443 };
+```
+
+### Arrays
+
+Array literals create mutable ordered sequences.
+
+```stash
+let xs = [1, 2, 3];
+let empty = [];
+```
+
+Indexing an array uses zero-based indexes. Indexing outside the valid range
+produces a runtime error.
+
+```stash
+xs[0];      // 1
+xs[1] = 9;
+```
+
+Spread syntax inserts the elements of an iterable into an array or call argument
+list.
+
+```stash
+let all = [0, ...xs, 4];
+fn callAll(args) {
+    run(...args);
+}
+```
+
+### Dictionaries
+
+Dictionary literals create mutable key-value mappings.
+
+```stash
+let server = {
+    host: "localhost",
+    port: 8080,
+};
+```
+
+Dictionary keys may be written as identifiers for string keys or as bracket access
+for computed keys.
+
+```stash
+server.host;
+server["host"];
+server.port = 443;
+```
+
+Dot access is equivalent to string-key lookup for valid identifier keys. Missing
+keys evaluate to `null` for reads unless a stricter dictionary mode is documented by
+the implementation.
+
+### Member Access and Optional Chaining
+
+`expr.name` accesses a field, method, namespace member, or dictionary key.
+`expr?.name` evaluates to `null` when `expr` evaluates to `null`; otherwise it
+performs the same access as `.`.
+
+```stash
+server?.config?.port ?? 443;
+```
+
+Optional chaining must not suppress errors other than a null receiver.
+
+### Calls
+
+A call evaluates the callee and arguments, then invokes the callee.
+
+```stash
+deploy("prod", retries: 3);
+```
+
+Calling a non-callable value produces a runtime error.
+
+### Operators
+
+The following table lists operators from highest to lowest precedence.
+
+| Precedence      | Operators and forms                                                        |
+| --------------- | -------------------------------------------------------------------------- |
+| postfix         | call, index, member access, `expr++`, `expr--`, switch expression          |
+| prefix          | `!`, `-`, `~`, `++expr`, `--expr`, `try`, `await`                          |
+| multiplicative  | `*`, `/`, `%`                                                              |
+| additive        | `+`, `-`                                                                   |
+| range           | `..`, `start..end..step`                                                   |
+| shift           | `<<`, `>>`                                                                 |
+| comparison      | `<`, `>`, `<=`, `>=`, `in`, `is`                                           |
+| equality        | `==`, `!=`                                                                 |
+| bitwise AND     | `&`                                                                        |
+| bitwise XOR     | `^`                                                                        |
+| bitwise OR      | `\|` outside command-pipe context                                          |
+| logical AND     | `&&`, `and`                                                                |
+| logical OR      | `\|\| `, `or`                                                              |
+| pipe            | `\|` in command-pipe context                                               |
+| redirection     | `>`, `>>`, `2>`, `2>>`, `&>`, `&>>`                                        |
+| null coalescing | `??`                                                                       |
+| ternary         | `? :`                                                                      |
+| assignment      | `=`, `+=`, `-=`, `*=`, `/=`, `%=`, `??=`, `&=`, `\| =`, `^=`, `<<=`, `>>=` |
+
+Where `|` could be either a command pipe or bitwise OR, command expressions take
+priority in command-pipe context.
+
+### Arithmetic and Bitwise Operators
+
+`+`, `-`, `*`, `/`, and `%` operate on numeric values. `+` may also concatenate
+strings. Invalid operand types produce a runtime error.
+
+Bitwise operators operate on integer values.
+
+```stash
+1 + 2;
+"a" + "b";
+flags & mask;
+flags |= 0x10;
+~bits;
+```
+
+### Logical Operators
+
+`&&` and `and` are equivalent. `||` and `or` are equivalent.
+
+Logical AND evaluates its right operand only if the left operand is truthy. Logical
+OR evaluates its right operand only if the left operand is falsey.
+
+### Null Coalescing
+
+`a ?? b` evaluates to `a` if `a` is not `null`; otherwise it evaluates to `b`.
+The right operand must not be evaluated when the left operand is not `null`.
+
+`target ??= value` assigns `value` to `target` only when `target` currently
+evaluates to `null`.
+
+### Ternary Operator
+
+The ternary operator evaluates one of two branches.
+
+```stash
+let mode = debug ? "debug" : "release";
+```
+
+Only the selected branch is evaluated.
+
+### Range Expressions
+
+`start..end` creates a range. `start..end..step` creates a stepped range.
+
+```stash
+1..5;
+10..0..-1;
+```
+
+Ranges may be iterated with `for` and tested with `in`. A zero step produces a
+runtime error.
 
 ### Membership
 
-The `in` operator tests whether an integer falls within a range:
+`value in collection` tests membership. Strings test substring membership. Arrays
+test element membership. Dictionaries test key membership. Ranges test whether the
+value falls within the range and aligns with the step.
 
 ```stash
-println(3 in 1..10);    // true
-println(10 in 1..10);   // false (end-exclusive)
-println(5 in 0..10..2); // false (5 is not a step multiple)
+"sh" in "stash";
+"host" in config;
+3 in 1..5;
 ```
 
-### Precedence
+Using `in` with an unsupported right operand produces a runtime error.
 
-The `..` operator sits between comparison and addition in the precedence table:
+### Type Checks
 
-```
-... → Comparison → Range → Term → ...
-```
-
-This means `1..2+3` parses as `1..(2+3)` → `1..5`, and `x in 1..10` parses as `x in (1..10)`.
-
-### Internal Representation
-
-A range is backed by a `StashRange` class holding `Start`, `End`, and `Step` values (all `long`). The `Iterate()` method yields values lazily. `ToString()` formats as `start..end` or `start..end..step`.
-
----
-
-## 3e. Destructuring Assignment
-
-Destructuring allows unpacking arrays and dictionaries into individual variables in a single declaration:
-
-### Array Destructuring
+`value is TypeName` evaluates to `true` when the value has the named type or
+conforms to the named interface.
 
 ```stash
-let [a, b, c] = [1, 2, 3];
-io.println(a);  // 1
-io.println(b);  // 2
-io.println(c);  // 3
+value is string;
+server is Runnable;
+null is null;
 ```
 
-Binds variables by **position** — the first variable gets the first element, and so on.
+Unknown type names produce a runtime error.
 
-### Dictionary Destructuring
+### Assignment
+
+Assignment targets must be assignable locations: mutable bindings, fields,
+dictionary entries, or indexed elements.
 
 ```stash
-let config = dict.new();
-config["host"] = "localhost";
-config["port"] = 8080;
-
-let {host, port} = config;
-io.println(host);  // "localhost"
-io.println(port);  // 8080
+count = count + 1;
+server.port = 443;
+items[0] = "first";
 ```
 
-Binds variables by **key name** — the variable name is used as the dictionary key for lookup.
+Assignment to any non-assignable expression is a parse error or runtime error.
 
-### Const Destructuring
+Compound assignment evaluates the target once, applies the corresponding operator,
+and stores the result.
+
+### Increment and Decrement
+
+`++` and `--` operate on numeric assignable targets. Prefix forms evaluate to the
+value after the update. Postfix forms evaluate to the value before the update.
 
 ```stash
-const [x, y] = [10, 20];
-// x and y are immutable — reassignment is a runtime error
+let i = 0;
+i++;  // evaluates to 0, then i is 1
+++i;  // i is 2, expression evaluates to 2
 ```
 
-### Partial Destructuring
+Using `++` or `--` on a non-numeric value produces a runtime error.
+
+### Switch Expressions
+
+A switch expression matches a subject against arms and evaluates the first matching
+arm.
 
 ```stash
-// Extra elements are ignored
-let [first, second] = [1, 2, 3, 4];    // first=1, second=2
-
-// Missing elements become null
-let [a, b, c] = [1];                    // a=1, b=null, c=null
-```
-
-### Rest in Destructuring
-
-The rest syntax `...name` in destructuring patterns collects remaining elements:
-
-#### Array Destructuring with Rest
-
-```stash
-let [first, ...rest] = [1, 2, 3, 4];
-io.println(first);  // 1
-io.println(rest);   // [2, 3, 4]
-
-let [head, ...tail] = [1];
-io.println(tail);   // []
-
-let [...all] = [1, 2, 3];
-io.println(all);    // [1, 2, 3]
-```
-
-#### Dictionary Destructuring with Rest
-
-```stash
-let data = { name: "Alice", age: 30, role: "admin" };
-let { name, ...rest } = data;
-io.println(name);  // "Alice"
-io.println(rest);  // { age: 30, role: "admin" }
-```
-
-The rest binding in dictionary destructuring collects all keys not explicitly named into a new dictionary. Works with struct instances too — the rest becomes a dictionary.
-
-**Rules:**
-
-- The rest element must be last in the pattern
-- Only one rest element is allowed per pattern
-- Works with both `let` and `const` declarations
-
-### Implementation
-
-Destructuring is a dedicated AST node (`DestructureStmt`) with a `PatternKind` (Array or Object), a list of variable names, a `const` flag, and an initializer expression. The parser detects destructuring when it sees `let [` or `let {` (similarly for `const`). At runtime, the interpreter evaluates the initializer and distributes values to each named variable.
-
----
-
-## 3g. Bitwise Operators
-
-Bitwise operators perform bit-level manipulation on integer values. All bitwise operators require integer (`long`) or byte operands — byte values are promoted to `int` before the operation. Applying them to any other type produces a runtime error.
-
-### Binary Operators
-
-| Operator | Name        | Example            | Result        |
-| -------- | ----------- | ------------------ | ------------- |
-| `&`      | Bitwise AND | `0b1100 & 0b1010`  | `0b1000` (8)  |
-| `\|`     | Bitwise OR  | `0b1100 \| 0b1010` | `0b1110` (14) |
-| `^`      | Bitwise XOR | `0b1100 ^ 0b1010`  | `0b0110` (6)  |
-| `<<`     | Left shift  | `1 << 4`           | `16`          |
-| `>>`     | Right shift | `128 >> 3`         | `16`          |
-
-### Unary NOT
-
-The `~` (bitwise NOT) operator inverts every bit of its integer operand:
-
-```stash
-let mask = 0xFF;
-let inverted = ~mask;   // all bits flipped (two's complement)
-let cleared = 0b1111 & ~0b0100;  // clear bit 2 → 0b1011 (11)
-```
-
-### Precedence
-
-Within the bitwise group, operators follow C-standard relative precedence: `&` binds tighter than `^`, which binds tighter than `|`. Note that `&&`/`||` sit outside this group at separate levels — see the full table below.
-
-```
-... → Comparison → Shift (<<, >>) → Range (..) → Term (+, -) → ...
-... → And (&&) → Bitwise AND (&) → Bitwise XOR (^) → Bitwise OR (|) → Or (||) → ...
-... → Unary (!, -, ~) → ...
-```
-
-The full precedence chain from lowest to highest:
-
-| Level | Operators                        | Associativity |
-| ----- | -------------------------------- | ------------- |
-| 1     | `=` and compound assignments     | Right         |
-| 2     | `? :` (ternary)                  | Right         |
-| 3     | `??` (null-coalesce)             | Right         |
-| 4     | `\|` (pipe — command context)    | Left          |
-| 5     | `\|\|`, `or`                     | Left          |
-| 6     | `\|` (bitwise OR)                | Left          |
-| 7     | `^` (bitwise XOR)                | Left          |
-| 8     | `&` (bitwise AND)                | Left          |
-| 9     | `&&`, `and`                      | Left          |
-| 10    | `==`, `!=`                       | Left          |
-| 11    | `<`, `>`, `<=`, `>=`, `in`, `is` | Left          |
-| 12    | `<<`, `>>`                       | Left          |
-| 13    | `..` (range)                     | Left          |
-| 14    | `+`, `-`                         | Left          |
-| 15    | `*`, `/`, `%`                    | Left          |
-| 16    | `!`, `-`, `~` (unary)            | Right         |
-| 17    | `.`, `()`, `[]`                  | Left          |
-
-### Context-Sensitive `|` and `>>`
-
-The `|` and `>>` tokens are shared with shell pipe and redirect syntax. The parser disambiguates based on context:
-
-- **`|` is a pipe** when the left operand is a command expression (`CommandExpr`, `PipeExpr`, or `RedirectExpr`). Otherwise it is bitwise OR.
-- **`>>` is a redirect** when the left operand is a command expression. Otherwise it is right shift.
-
-```stash
-$(ls) | $(grep ".txt")    // pipe: left is a command
-let x = 0xFF | 0x0F;      // bitwise OR: left is an integer expression
-$(echo "log") >> "file";   // redirect: left is a command
-let y = 128 >> 3;          // right shift: left is an integer expression
-```
-
-### Type Restrictions
-
-Bitwise operators require integer, byte, or IP address operands. Byte values are promoted to `int` before the operation. Both integer/byte operands are compatible; both IP address operands must be the same type — mixing integers with IP addresses is a runtime error. Applying bitwise operators to floats, strings, booleans, or any other type produces a runtime error:
-
-```stash
-let x = 5 & 3;                        // OK: both integers
-let y = @192.168.1.100 & @255.255.255.0;  // OK: both IP addresses → @192.168.1.0
-let z = ~@255.255.255.0;              // OK: IP bitwise NOT → @0.0.0.255
-let w = 5.0 & 3;                      // Runtime error: operands must be two integers or two IP addresses
-let v = 5 & @192.168.1.1;             // Runtime error: operands must be two integers or two IP addresses
-```
-
-### Compound Assignment
-
-Bitwise compound assignment operators desugar to the equivalent operation (see [Section 3b](#3b-compound-assignment-operators)):
-
-```stash
-let flags = 0b0000;
-flags |= 0b0100;    // set bit 2    → 0b0100
-flags |= 0b0001;    // set bit 0    → 0b0101
-flags &= ~0b0100;   // clear bit 2  → 0b0001
-flags ^= 0b0011;    // toggle bits  → 0b0010
-flags <<= 2;        // shift left 2 → 0b1000
-flags >>= 1;        // shift right 1→ 0b0100
-```
-
----
-
-## 4b. The `in` Operator
-
-The `in` operator tests membership or containment:
-
-```stash
-println(3 in [1, 2, 3, 4]);     // true  — array membership
-println(5 in [1, 2, 3, 4]);     // false
-println("o" in "hello");        // true  — substring/char check
-println("key" in myDict);       // true  — dictionary key existence
-println(3 in 1..10);            // true  — range membership
-println(10 in 1..10);           // false (end-exclusive)
-```
-
-### Semantics by Type
-
-| Right-hand side | Test performed                                     |
-| --------------- | -------------------------------------------------- |
-| `array`         | Element equality (`==`) against each item          |
-| `string`        | Substring / character containment                  |
-| `dict`          | Key existence (equivalent to `dict.has(d, key)`)   |
-| `range`         | Integer falls within the range respecting the step |
-| `ip` (CIDR)     | IP address falls within the CIDR subnet            |
-
-```stash
-// CIDR containment with the `in` operator:
-let subnet = @192.168.1.0/24;
-io.println(@192.168.1.50 in subnet);     // true  — address is in subnet
-io.println(@192.168.2.1 in subnet);      // false — different network
-io.println(@10.0.0.1 in @10.0.0.0/8);   // true  — /8 covers 10.x.x.x
-```
-
-Using `in` against any other type is a runtime error.
-
-### Precedence
-
-`in` has the same precedence as the comparison operators (`<`, `>`, `<=`, `>=`) and is non-associative with them. `x in a..b` is parsed as `x in (a..b)` because `..` binds tighter. The `is` operator shares this same precedence level — see [Section 4c](#4c-the-is-operator).
-
----
-
-## 4c. The `is` Operator
-
-The `is` operator tests the **type** of a value at runtime, returning `true` if the value matches the given type name, `false` otherwise.
-
-```stash
-42 is int          // true
-"hello" is string  // true
-3.14 is int        // false
-null is null       // true
-[1, 2] is array    // true
-```
-
-### Syntax
-
-```
-expression is typeName
-expression is typeExpression
-```
-
-`typeName` is a **bare identifier** — a built-in type name (`int`, `string`, `null`, etc.) or a user-defined struct, enum, or interface name. For built-in type keywords and simple names, the identifier is used directly.
-
-When the RHS identifier is immediately followed by `(`, `[`, or `.`, or when the RHS starts with a non-identifier token (e.g. a parenthesized expression), it is parsed as an **expression** — allowing array subscripts, function calls, and property access. The expression must evaluate to a type value (a `StashInterface`, `StashStruct`, or `StashEnum`). If it evaluates to something else, a runtime error is raised.
-
-### Valid Type Names
-
-| Type name       | Matches                                                           |
-| --------------- | ----------------------------------------------------------------- |
-| `int`           | Integer values                                                    |
-| `float`         | Floating-point values                                             |
-| `string`        | String values                                                     |
-| `bool`          | Boolean values (`true` / `false`)                                 |
-| `null`          | The `null` value                                                  |
-| `array`         | Array values                                                      |
-| `int[]`         | Typed integer arrays                                              |
-| `float[]`       | Typed float arrays                                                |
-| `string[]`      | Typed string arrays                                               |
-| `bool[]`        | Typed boolean arrays                                              |
-| `byte`          | Byte values (0–255)                                               |
-| `byte[]`        | Typed byte arrays                                                 |
-| `dict`          | Dictionary values                                                 |
-| `struct`        | Struct instances (any struct type)                                |
-| `enum`          | Enum values (any enum type)                                       |
-| `function`      | Functions and lambdas                                             |
-| `range`         | Range values (`1..10`)                                            |
-| `ip`            | IP address values (`@192.168.1.1`)                                |
-| `namespace`     | Namespace values (e.g. `io`, `fs`)                                |
-| `Error`         | Error values returned by `try`                                    |
-| `Future`        | Future values returned by async functions                         |
-| _StructName_    | Instances of the named struct (e.g. `Point`)                      |
-| _EnumName_      | Values of the named enum (e.g. `Color`)                           |
-| _InterfaceName_ | Struct instances that conform to the interface (e.g. `Printable`) |
-
-An unrecognised type name evaluates to `false` (no runtime error).
-
-### Relationship to `typeof()` and `nameof()`
-
-For built-in types, `x is T` is equivalent to `typeof(x) == "T"`. For user-defined struct and enum names, `is` performs a specific type-name match (e.g. `p is Point` checks whether `p` is specifically a `Point` instance, not just any struct). The `is` operator is a concise inline alternative to `typeof()`:
-
-```stash
-// These are equivalent:
-typeof(value) == "string"
-value is string
-```
-
-The companion `nameof()` function returns the **declared name** rather than the meta-type — `nameof(Printable)` returns `"Printable"` where `typeof(Printable)` returns `"interface"`. See [The `nameof()` Function](#the-nameof-function) below.
-
-### Precedence
-
-`is` has the same precedence as the comparison operators (`<`, `>`, `<=`, `>=`) and `in` — they all sit at the comparison level. `is` is non-associative with the other comparison operators.
-
-### Examples
-
-```stash
-// Basic type checks
-42 is int          // true
-"hello" is string  // true
-3.14 is int        // false
-null is null       // true
-[1, 2] is array    // true
-
-// Typed arrays
-let nums: int[] = [1, 2, 3];
-nums is int[]      // true
-nums is array      // true  (typed arrays match 'array')
-nums is string[]   // false
-[1, 2] is int[]    // false (generic arrays are not typed)
-
-// User-defined struct types
-struct Point { x: int, y: int }
-let p = Point { x: 1, y: 2 };
-p is Point         // true
-p is struct        // true  (matches any struct)
-
-// User-defined enum types
-enum Color { Red, Green, Blue }
-let c = Color.Red;
-c is Color         // true
-c is enum          // true  (matches any enum)
-
-// Interface conformance check
-interface Printable { toString() }
-struct Label : Printable {
-    text
-    fn toString() { return self.text; }
-}
-let lbl = Label { text: "hello" };
-lbl is Printable   // true
-lbl is Label       // true  (struct type check still works)
-
-// Use in conditions
-if (value is string) {
-    io.println("It's a string!");
-}
-
-// Combine with logical operators
-if (x is int && x > 0) {
-    io.println("Positive integer");
-}
-
-// Negation
-if (!(x is null)) {
-    io.println("Not null");
-}
-```
-
-### Dynamic Type Checking
-
-When the RHS of `is` is a **variable** holding a type value (interface, struct, or enum), the check resolves the variable at runtime:
-
-```stash
-interface Printable { display() }
-struct Foo : Printable {
-    fn display() { return "hi"; }
-}
-
-let f = Foo {};
-let iface = Printable;
-f is iface              // true — resolves variable to interface
-
-let structType = Foo;
-f is structType          // true — resolves variable to struct type
-```
-
-When the RHS is an **expression** (array index, function call, property access), it is evaluated and the result checked:
-
-```stash
-let types = [Printable, Serializable, Identifiable];
-item is types[0]         // true if item conforms to Printable
-
-fn getType() { return Printable; }
-item is getType()        // true if item conforms to Printable
-
-struct TypeHolder { myType }
-let h = TypeHolder { myType: Printable };
-item is h.myType         // true if item conforms to Printable
-```
-
-This enables data-driven type checking — iterate over a collection of types instead of writing repetitive `if` chains:
-
-```stash
-let checks = [Printable, Serializable, Identifiable];
-for (let item in inventory) {
-    let tags = "";
-    for (let iface in checks) {
-        if (item is iface) {
-            tags += $"  {nameof(iface)}";
-        }
-    }
-    io.println($"    [{item.name}]{tags}");
-}
-```
-
-### The `nameof()` Function
-
-`nameof(value)` returns the **declared name** of a value. For user-defined types it returns the specific type or instance name; for primitives it behaves like `typeof()`:
-
-| Value                        | `typeof()`    | `nameof()`    |
-| ---------------------------- | ------------- | ------------- |
-| `42`                         | `"int"`       | `"int"`       |
-| `"hi"`                       | `"string"`    | `"string"`    |
-| `let a: int[] = [1]`         | `"int[]"`     | `"int[]"`     |
-| `null`                       | `"null"`      | `"null"`      |
-| `Printable` (interface)      | `"interface"` | `"Printable"` |
-| `Product` (struct def)       | `"struct"`    | `"Product"`   |
-| `Product { ... }` (instance) | `"struct"`    | `"Product"`   |
-| `Color` (enum def)           | `"enum"`      | `"Color"`     |
-| `Color.Red` (enum value)     | `"enum"`      | `"Color.Red"` |
-| `myFn` (named function)      | `"function"`  | `"myFn"`      |
-| `typeof` (built-in)          | `"function"`  | `"typeof"`    |
-
-`nameof()` is especially useful with dynamic `is` — when iterating over types, you can print the type name without maintaining a parallel string array.
-
----
-
-## 5b. Enums
-
-Enums provide named constants that eliminate magic strings and arbitrary integer values, making code self-documenting.
-
-### Declaration
-
-```stash
-enum Status {
-    Active,
-    Inactive,
-    Pending
-}
-
-enum Color {
-    Red,
-    Green,
-    Blue
-}
-```
-
-### Usage
-
-```stash
-let current = Status.Active;
-
-if (current == Status.Pending) {
-    io.println("Still waiting...");
-}
-```
-
-### Comparison & Equality
-
-Enum values are compared by identity — `Status.Active == Status.Active` is `true`, `Status.Active == Status.Inactive` is `false`. Enum values from different enum types are never equal (`Status.Active != Color.Red` even if both are the "first" member).
-
-### Internal Representation
-
-An enum value is stored as a pair: `(typeName, memberName)`. Dot access on the enum type name returns the corresponding value. The backing representation is opaque to the user — no integer mapping is exposed.
-
-### Future Extensions (Not in v1)
-
-- **Enum with associated values:** `enum Result { Ok(value), Err(message) }` — algebraic data types.
-- **Iteration:** `for (let s in Status) { ... }` — iterating over all members.
-- **String conversion:** `conv.toStr(Status.Active)` → `"Active"`.
-
----
-
-## 5c. Dictionaries
-
-Dictionaries provide dynamic key-value mappings — the complement to arrays for keyed lookups. While structs offer fixed-schema structured data, dictionaries allow keys to be added and removed at runtime.
-
-### Creation
-
-Dictionaries can be created with **literal syntax** using `{ key: value }` pairs, or via the `dict` namespace:
-
-```stash
-// Dict literal — concise inline initialization
-let config = { host: "localhost", port: 8080, debug: true };
-
-// Empty dict literal
-let empty = {};
-
-// Equivalent using dict.new()
-let d = dict.new();
-d["name"] = "Alice";      // set via index syntax
-d.age = 30;               // set via dot access
-```
-
-#### Dict Literal Details
-
-Keys in dict literals are **bare identifiers** interpreted as string keys:
-
-```stash
-let d = { name: "Stash", version: 1 };
-d["name"];     // "Stash" — key is the string "name"
-d.version;     // 1
-```
-
-Values can be any expression — variables, function calls, nested literals:
-
-```stash
-let x = 10;
-let d = {
-    computed: x * 2,
-    nested: { inner: true },
-    items: [1, 2, 3]
+let label = code switch {
+    200 => "ok",
+    404 => "missing",
+    _ => "error",
 };
-d.computed;        // 20
-d.nested.inner;    // true
-len(d.items);      // 3
 ```
 
-Dict literals produce the same `dict` type as `dict.new()` — all dict namespace functions work on them:
+The discard pattern `_` matches any subject. If no arm matches and no discard arm
+exists, evaluation produces a runtime error.
+
+## Statements and Control Flow
+
+### Blocks
+
+A block is a sequence of declarations and statements enclosed in braces.
 
 ```stash
-let d = { a: 1, b: 2 };
-typeof(d);          // "dict"
-len(d);             // 2
-dict.has(d, "a");   // true
-dict.keys(d);       // ["a", "b"]
-```
-
-#### Disambiguation
-
-Dict literals can only appear in **expression context** (right side of `=`, function arguments, array elements, etc.). A `{` at the **start of a statement** is always parsed as a block:
-
-```stash
-// Block — { at statement start
 {
-    let x = 1;
-}
-
-// Dict literal — { in expression context
-let d = { x: 1 };
-fn process(d) { ... }
-process({ timeout: 30 });
-```
-
-Struct initialization uses a **name prefix** to disambiguate:
-
-```stash
-// Struct init — name before {
-let srv = Server { host: "10.0.0.1", port: 22 };
-
-// Dict literal — no name before {
-let config = { host: "10.0.0.1", port: 22 };
-```
-
-### Key Types
-
-Dictionary keys must be **value types**: `string`, `int`, `float`, or `bool`. Using any other type as a key (arrays, structs, functions, `null`) produces a runtime error.
-
-### Access
-
-Dictionaries support index syntax (`d[key]`) for both reading and writing:
-
-```stash
-let d = dict.new();
-
-// Write
-d["host"] = "10.0.0.1";
-d["port"] = 8080;
-d[42] = "answer";
-
-// Read — returns null for missing keys
-let host = d["host"];       // "10.0.0.1"
-let missing = d["nope"];    // null
-
-// Check existence
-dict.has(d, "host");        // true
-dict.has(d, "nope");        // false
-```
-
-### Iteration
-
-Dictionaries are iterable — `for-in` iterates over keys:
-
-```stash
-let config = dict.new();
-config["host"] = "localhost";
-config["port"] = 8080;
-
-for (let key in config) {
-    io.println(key + " = " + config[key]);
+    let tmp = compute();
+    io.println(tmp);
 }
 ```
 
-### Built-in Integration
+### Expression Statements
+
+An expression followed by a semicolon is evaluated for its effects.
 
 ```stash
-typeof(dict.new())    // "dict"
-len(d)                // number of key-value pairs
+deploy();
+count += 1;
 ```
 
-### Internal Representation
+### Conditional Statements
 
-A dictionary is backed by a hash map (`Dictionary<object, object?>` in C#). Key lookup is O(1) average. The `dict` namespace provides all manipulation functions (see Section 8).
-
----
-
-## 5d. Dictionary Dot Access
-
-Dictionaries support **dot notation** for reading and writing string-keyed entries, providing a convenient alternative to bracket notation when keys are valid identifiers.
-
-### Reading
+`if` evaluates its condition using truthiness. If the condition is truthy, the
+then-branch executes. Otherwise, the `else` branch executes if present.
 
 ```stash
-let d = dict.new();
-d["name"] = "Alice";
-d["age"] = 30;
-
-// These are equivalent:
-let name1 = d["name"];   // bracket notation
-let name2 = d.name;      // dot notation
-```
-
-Dot access returns `null` for missing keys — the same behavior as bracket notation:
-
-```stash
-let missing = d.nonexistent;  // null (no error)
-```
-
-### Writing
-
-```stash
-let d = dict.new();
-d.host = "localhost";    // creates the key "host"
-d.port = 8080;           // creates the key "port"
-d.host = "10.0.0.1";    // overwrites existing key
-```
-
-### Nested Access
-
-Dot notation chains naturally for nested dictionaries:
-
-```stash
-let cfg = json.parse("{\"database\": {\"host\": \"localhost\", \"port\": 5432}}");
-
-// Nested dot access
-let host = cfg.database.host;    // "localhost"
-let port = cfg.database.port;    // 5432
-
-// Nested dot assignment
-cfg.database.port = 3306;
-```
-
-This is especially powerful with `config.read()` and `ini.parse()`, where config files are loaded as nested dictionaries and accessed with a clean, natural syntax.
-
-### When to Use Bracket vs. Dot Notation
-
-| Syntax     | Use when                                                 |
-| ---------- | -------------------------------------------------------- |
-| `d["key"]` | Key is dynamic, computed, or contains special characters |
-| `d.key`    | Key is a known identifier — cleaner and more readable    |
-
-Both notations are fully interchangeable for string keys. Bracket notation is required for non-string keys (`d[42]`).
-
-### Interaction with Other Types
-
-Dot notation works on **dictionaries**, **struct instances**, **enums**, and **namespaces**. For struct instances, dot access validates that the field exists (throws if not). For dictionaries, dot access simply performs a string key lookup (returns `null` if missing — no error).
-
----
-
-## 5e. Optional Chaining
-
-The `?.` operator provides safe member access on potentially-null values. If the left-hand side is `null`, the expression short-circuits to `null` instead of throwing a runtime error:
-
-```stash
-let port = config?.database?.port;       // null if config or database is null
-let port = config?.database?.port ?? 3306;  // with default via null-coalescing
-```
-
-### Semantics
-
-1. `a?.b` evaluates `a`. If `a` is `null`, the result is `null` — `b` is never accessed.
-2. If `a` is not `null`, `a?.b` behaves identically to `a.b` — field access on struct instances, key lookup on dictionaries, member access on enums and namespaces.
-3. Multiple `?.` operators can be chained: `a?.b?.c` — each link independently checks for `null`.
-4. Composes naturally with `??` (null-coalescing): `a?.b ?? default` returns `default` when any step is `null`.
-
-### Comparison with Regular Dot
-
-| Syntax | Left is `null` | Left is non-null |
-| ------ | -------------- | ---------------- |
-| `a.b`  | Runtime error  | Field/key access |
-| `a?.b` | Returns `null` | Field/key access |
-
-### Examples
-
-```stash
-// Safe navigation through nested config
-let d = dict.new();
-d["db"] = null;
-let host = d?.db?.host;       // null (db is null, no error)
-let host2 = d?.db?.host ?? "localhost";  // "localhost"
-
-// Struct field access
-struct Server { host, port }
-let srv = Server { host: "10.0.0.1", port: 22 };
-let h = srv?.host;            // "10.0.0.1"
-
-let empty = null;
-let h2 = empty?.host;         // null (no error)
-```
-
-### Implementation
-
-The `?.` operator is implemented as a `QuestionDot` token type. `DotExpr` has an `IsOptional` boolean flag (default `false`). When the parser encounters `?.`, it creates a `DotExpr` with `IsOptional = true`. At runtime, the interpreter checks this flag: if the object evaluates to `null` and `IsOptional` is `true`, it returns `null` immediately instead of throwing.
-
----
-
-## 5f. Interfaces
-
-Interfaces define lightweight contracts — a set of required fields and methods that a struct must provide. They enable type-safe polymorphism without inheritance.
-
-### Declaration
-
-```stash
-interface Printable {
-    toString(),
-    toJson()
-}
-```
-
-With fields:
-
-```stash
-interface Identifiable {
-    id,
-    name,
-    getDisplayName()
-}
-```
-
-Methods list name and parameters (excluding `self`) — no bodies. Fields are bare identifiers. Members are comma-separated. Empty interfaces are not allowed.
-
-### Struct Implementation
-
-A struct declares conformance with `: InterfaceName` after its name. Multiple interfaces are comma-separated:
-
-```stash
-struct User : Printable, Identifiable {
-    id,
-    name,
-    email
-
-    fn toString() {
-        return $"{self.name} <{self.email}>";
-    }
-
-    fn toJson() {
-        return json.stringify({
-            id: self.id,
-            name: self.name,
-            email: self.email
-        });
-    }
-
-    fn getDisplayName() {
-        return self.name;
-    }
-}
-```
-
-Conformance is checked at struct definition time. If a required field or method is missing, or a method has the wrong parameter count, a runtime error is raised immediately.
-
-### Type Checking with `is`
-
-```stash
-let user = User { id: 1, name: "Alice", email: "alice@example.com" };
-user is Printable      // true
-user is Identifiable   // true
-user is User           // true  (struct type check still works)
-```
-
-### Multiple Interface Implementation
-
-A struct can implement any number of interfaces and must satisfy all of their contracts:
-
-```stash
-struct Document : Printable, Identifiable, Serializable {
-    // must satisfy all three contracts
-}
-```
-
-### The `typeof()` Function
-
-```stash
-typeof(Printable)    // "interface"
-```
-
-### Conformance Rules
-
-- All fields listed in the interface must exist as fields in the struct.
-- All methods listed in the interface must exist as methods in the struct.
-- Method parameter count must match (excluding `self`).
-- Methods with default parameters satisfy interfaces requiring fewer parameters — a method `fn format(style, indent)` with a default on `indent` satisfies an interface requiring `format(style)`.
-
-### Import/Export
-
-Interfaces participate in the module system like structs and enums:
-
-```stash
-// shapes.stash
-interface Drawable {
-    draw(),
-    getBounds()
-}
-
-// main.stash
-import { Drawable } from "shapes.stash";
-```
-
-### Internal Representation
-
-An interface is stored as a named contract: a list of required field names and a list of required method signatures (name + parameter count). Interfaces carry no runtime data and add no overhead to struct instances.
-
-### Future Extensions (Not in v1)
-
-- **Interface composition:** `interface Foo : Bar, Baz { ... }` — extending other interfaces.
-- **Default implementations:** Methods with bodies that structs inherit if not overridden.
-
----
-
-## 6. Shell Integration
-
-### Process Execution
-
-Commands are executed via **command literals** — a dedicated syntax that makes shell commands first-class in the language without wrapping them in strings.
-
-#### Syntax: `$(command)` — Command Literals
-
-```stash
-let result = $(ls -la);
-io.println(result);             // stringifies to stdout contents
-io.println(result.stdout);      // captured standard output
-io.println(result.stderr);      // captured standard error
-io.println(result.exitCode);    // process exit code
-```
-
-`$(...)` is **always raw mode**. When the lexer encounters `$(`, it enters "command mode" and collects everything as raw text until the matching `)`. The content is not parsed as a Stash expression — it is treated as a command string that is split into a program name and arguments. Programs are invoked directly, not through a system shell.
-
-To inject dynamic values into a command, use interpolation with `${...}`:
-
-```stash
-// Raw mode — command text is written directly
-let r1 = $(ls -la);
-
-// Dynamic values via interpolation
-let flags = buildFlags();
-let r2 = $(ls ${flags});
-
-// Full dynamic command — interpolate the entire string
-let cmd = "echo hello";
-let r3 = $(${cmd});
-```
-
-This makes `$(...)` the **single, unified way** to execute commands. The `${...}` interpolation syntax within commands is consistent with how interpolation works elsewhere in the language.
-
-`$(...)` returns a struct-like object with `stdout`, `stderr`, and `exitCode` fields.
-
-#### Interpolation in Commands
-
-Variables and expressions can be embedded using `${...}`:
-
-```stash
-let host = "192.168.1.10";
-let result = $(ping -c 1 ${host});
-
-let file = "/var/log/syslog";
-let pattern = "error";
-let matches = $(grep ${pattern} ${file});
-```
-
-This feels natural — commands read like commands, not like strings, but you still get dynamic values where needed.
-
-#### Comparison With Alternatives
-
-| Syntax        | Example          | Verdict                                                                      |
-| ------------- | ---------------- | ---------------------------------------------------------------------------- |
-| `exec("cmd")` | `exec("ls -la")` | Rejected — commands look like strings, not commands                          |
-| `` `cmd` ``   | `` `ls -la` ``   | Viable but conflicts with potential future use of backticks                  |
-| `$(cmd)`      | `$(ls -la)`      | **Chosen** — familiar from Bash, always raw mode, `${...}` for interpolation |
-| `$>(cmd)`     | `$>(ls -la)`     | Passthrough variant — inherited I/O for interactive commands                 |
-
-Implementation: backed by `System.Diagnostics.Process` in C#.
-
-#### Passthrough Commands: `$>(command)`
-
-While `$(...)` captures stdout and stderr into a `CommandResult`, some commands need to interact directly with the terminal — displaying real-time output, showing progress bars, or prompting the user for input. The **passthrough** syntax `$>(...)` runs a command with inherited I/O:
-
-```stash
-// Captured mode — output is buffered, not visible during execution
-let result = $(dotnet build);
-io.println(result);               // stringifies to stdout contents
-io.println(result.stdout);        // explicit field access also works
-
-// Passthrough mode — output streams directly to terminal, user can respond to prompts
-let result = $>(dotnet build);
-// result.stdout and result.stderr are empty (output went to terminal)
-// result.exitCode contains the actual exit code
-```
-
-`$>(...)` mirrors how Bash runs commands in direct execution mode: the child process inherits the parent's stdin, stdout, and stderr file descriptors. This means:
-
-- **Output is visible in real time** — progress bars, colored output, and streaming logs work naturally
-- **Interactive prompts work** — commands like `npx tsc` or `apt install` that ask for confirmation receive user input
-- **TTY detection works** — programs that check `isatty()` see a real terminal and behave accordingly (colors, formatting)
-- **No output is captured** — `result.stdout` and `result.stderr` are always empty strings
-
-The returned `CommandResult` still provides `exitCode` for error checking.
-
-When stringified (e.g., in `io.println()`, string interpolation, or `conv.toStr()`), a `CommandResult` returns its `stdout` field. This eliminates the need for explicit `.stdout` access in the common case:
-
-```stash
-let r = $(echo hello);
-io.println(r);                    // prints "hello\n" — implicitly uses stdout
-io.println($"output: ${r}");     // "output: hello\n" — works in interpolation
-let text = conv.toStr(r);        // "hello\n" — works with conv.toStr
-// Fields are still directly accessible:
-io.println(r.stdout);            // "hello\n"
-io.println(r.stderr);            // ""
-io.println(r.exitCode);          // 0
-```
-
-```stash
-let result = $>(make install);
-if (result.exitCode != 0) {
-    io.println("Installation failed!");
-    env.exit(1);
-}
-```
-
-Interpolation works identically to `$(...)`:
-
-```stash
-let target = "release";
-$>(cargo build --profile ${target});
-```
-
-**When to use which:**
-
-| Syntax    | Output   | Input    | Use case                                                 |
-| --------- | -------- | -------- | -------------------------------------------------------- |
-| `$(cmd)`  | Captured | None     | Parse output, check stderr, pipe between commands        |
-| `$>(cmd)` | Terminal | Terminal | Build tools, installers, interactive prompts, long tasks |
-
-> **Note:** Passthrough commands cannot be used with pipes (`|`) or output redirection (`>`, `>>`), since their output is not captured. Use `$(...)` for commands that participate in pipes or redirections.
-
-### Strict Commands
-
-The strict command syntax `$!(...)` is an opt-in alternative to `$(...)` that **throws a `CommandError` on non-zero exit codes**. It is syntactic sugar for executing a command, checking the exit code, and throwing on failure.
-
-#### Syntax
-
-```stash
-$!(command args...)
-```
-
-All existing command features work: string interpolation, pipes, environment variables.
-
-```stash
-$!(mkdir -p /opt/myapp)
-$!(docker push ${registry}/${image}:${tag})
-$!(cat /etc/hosts | grep ${hostname})
-```
-
-#### Success (Exit Code 0)
-
-When the command exits with code 0, `$!(...)` returns a `CommandResult` — identical to `$(...)`:
-
-```stash
-let result = $!(echo "hello")
-io.println(result.stdout)     // "hello"
-io.println(result.exitCode)   // 0
-```
-
-#### Failure (Non-Zero Exit Code)
-
-When the command exits with a non-zero code, `$!(...)` throws a `CommandError`:
-
-```stash
-try {
-    $!(curl -f https://unreachable.example.com)
-} catch (e) {
-    io.println(e.type)        // "CommandError"
-    io.println(e.message)     // "Command failed with exit code 7: curl -f https://unreachable.example.com"
-    io.println(e.exitCode)    // 7
-    io.println(e.stderr)      // "curl: (7) Failed to connect..."
-    io.println(e.command)     // "curl -f https://unreachable.example.com"
-}
-```
-
-The `CommandError` provides these properties:
-
-| Property    | Type     | Description                                    |
-| ----------- | -------- | ---------------------------------------------- |
-| `.type`     | `string` | Always `"CommandError"`                        |
-| `.message`  | `string` | Human-readable: includes exit code and command |
-| `.exitCode` | `int`    | The non-zero exit code                         |
-| `.stderr`   | `string` | The command's stderr output                    |
-| `.stdout`   | `string` | The command's stdout output                    |
-| `.command`  | `string` | The command string that was executed           |
-
-#### Strict Passthrough Commands
-
-The strict passthrough variant `$!>(...)` combines strict mode with inherited I/O:
-
-```stash
-$!>(apt install -y nginx)  // throws if install fails
-```
-
-#### Composition
-
-Strict commands compose naturally with `try` expressions and `try/catch`:
-
-```stash
-// With try expression:
-let version = try $!(node --version) ?? "unknown"
-
-// With try/catch:
-try {
-    $!(systemctl restart nginx)
-} catch (e) {
-    if (e.exitCode == 3) {
-        io.eprintln("Service not found")
-    } else {
-        throw e
-    }
-}
-```
-
-The `$(...)` contract is unchanged — it continues to never throw.
-
-### Streaming Command Output
-
-Stash adds a third axis to the command sigil grid — **streaming** — alongside the existing capture/passthrough and lenient/strict axes. Streaming commands return a handle whose stdout can be iterated line-by-line in real time, with guaranteed child cleanup on every exit path. Use them for long-running producers like `tail -f`, `kubectl logs -f`, or `journalctl -f`.
-
-#### Sigil Grid
-
-|              | Capture (default) | Streaming (`<`) | Passthrough (`>`) |
-| ------------ | ----------------- | --------------- | ----------------- |
-| Lenient      | `$(cmd)`          | `$<(cmd)`       | `$>(cmd)`         |
-| Strict (`!`) | `$!(cmd)`         | `$!<(cmd)`      | `$!>(cmd)`        |
-
-The modifier order is `$` then optional `!` then optional direction marker (`<` or `>`) then `(`. The combinations `$<>(` and `$><(` do not exist — streaming and passthrough are mutually exclusive.
-
-#### The `StreamingProcess` Handle
-
-`$<(cmd)` evaluates immediately to a `StreamingProcess` handle — the process is spawned, but no output is consumed until you iterate or call a method.
-
-| Field      | Type      | Description                                                                |
-| ---------- | --------- | -------------------------------------------------------------------------- |
-| `pid`      | `int`     | OS process ID                                                              |
-| `exitCode` | `int?`    | `null` while running; populated after the child exits                      |
-| `signal`   | `Signal?` | `null` on clean exit; populated on signal-killed exit; `null` on Windows   |
-
-Methods:
-
-- `.kill(signal: Signal = Signal.Term)` — send a signal. PID-reuse-safe (no-op if already exited). On Windows only `Signal.Term` and `Signal.Kill` are supported; other signals throw `NotSupportedError`.
-- `.wait()` — block until the child exits.
-- `.lines()` — explicit iterator over stdout lines.
-- `.json()` — iterator over JSON values, one per line. Throws `ParseError` on malformed input.
-- `.bytes(size: int)` — iterator over fixed-size binary chunks.
-- `.framed(delim: string)` — iterator over delimiter-separated records.
-
-#### Iteration Forms
-
-```stash
-// 1. Single-var — stdout lines (stderr discarded)
-for (let line in $<(tail -f /var/log/nginx/access.log)) {
-    io.println(line);
-}
-
-// 2. Strict — throws CommandError on non-zero exit at natural completion
-for (let line in $!<(make build)) { io.println(line); }
-
-// 3. Dual — interleaved stdout / stderr (mirrors `for (k, v in dict)`)
-//    Exactly one of `out` / `err` is non-null per iteration.
-for (let out, err in $<(kubectl logs -f my-pod)) {
-    if (out != null) { handle(out); }
-    if (err != null) { log.warn("kubectl: ${err}"); }
-}
-
-// 4. Framing methods produce alternative iterables
-for (let event in $<(kubectl get pods -w -o json).json()) { ... }
-for (let chunk in $<(cat big.bin).bytes(4096))            { ... }
-for (let record in $<(some-cmd).framed("\0"))             { ... }
-
-// 5. Inspect handle after iteration
-let s = $<(make build);
-for (let line in s) { io.println(line); }
-io.println(s.exitCode);   // 0 on clean exit
-io.println(s.signal);     // null on clean exit
-```
-
-#### Cleanup Contract
-
-When iteration exits early — `break`, `return`, an uncaught exception, or `timeout` cancellation — the runtime sends `SIGTERM`, waits 5 seconds, then sends `SIGKILL`. File descriptors are closed and the child is reaped. **All early-exit causes use the same code path.**
-
-**Windows behavior:** Best-effort. There is no SIGTERM equivalent for arbitrary children, so the runtime calls `Process.Kill()` after the 5-second grace period. The `signal` field stays `null` on Windows when cleanup-killed.
-
-#### Single-Consumption Rule
-
-A `StreamingProcess` handle's iterator and stream content can be consumed exactly once. The following operations consume the handle:
-
-- Iterating it directly (`for (let line in s) { ... }`)
-- Calling `.lines()`, `.json()`, `.bytes(n)`, or `.framed(delim)` and iterating the returned wrapper
-- Calling `.wait()`
-
-A second consumption throws `StateError`. The fields `pid`, `exitCode`, `signal` and the methods `.kill()` / `.wait()` (subject to the rule above) remain accessible.
-
-#### Composition
-
-- **`timeout`:** Cancellation triggers the same SIGTERM → 5 s grace → SIGKILL cleanup as `break`, then `TimeoutError` propagates out of the `timeout` block. Cancellation latency is bounded at approximately 50 ms — the worst-case poll-tick before the blocking read observes the cancellation signal.
-- **External cancellation (Ctrl-C, programmatic `CancellationTokenSource`):** Also wires into the same cleanup contract. The child process is killed via SIGTERM → 5 s grace → SIGKILL; the error surfaces as `CancellationError` rather than `TimeoutError`.
-- **`secret`:** Stdout lines are not retroactively tainted. The command string remains redacted in error messages if it was built from a secret.
-
-#### Pipe Chains in Streaming Sigils
-
-`$<(stage1 | stage2 | ... | stageN)` and `$!<(stage1 | ... | stageN)` are first-class
-streaming pipelines. All stages spawn at iteration start; intermediate stages are
-captured-piped to the next stage's stdin via OS pipes; the **last stage's stdout** feeds
-the `StreamingProcess` handle line-by-line.
-
-```stash
-// Streams matching lines as `grep` produces them — no temp file, no shell wrap.
-for (let line in $<(cat huge.log | grep ERROR)) {
-    io.println(line);
-}
-
-// Strict mode: throws CommandError if the last stage exits non-zero at natural completion.
-$!<(make 2>&1 | tee build.log)
-```
-
-Semantics of a streaming pipeline:
-
-- **`s.pid`** is the **last stage's** PID (matching bash's `${PIPESTATUS[-1]}` and `$!`
-  for `cmd | tail`). The full PID array is exposed as **`s.pids`** for diagnostic logging.
-- **`s.exitCode`** is the **last stage's** exit code only. Intermediate-stage failures
-  are not surfaced (no `pipefail` semantics).
-- **`s.signal`** reflects the **last stage's** signal disposition.
-- **`$!<(...)` strict mode** throws `CommandError` only on a non-zero **last-stage** exit
-  at natural completion. Intermediate stages with non-zero exit codes do not throw, matching
-  `$!(stage1 | stage2)` behaviour.
-- **Stderr handling:** in single-var iteration `for (let line in s)`, every stage's stderr
-  is silently drained on per-stage tasks (preventing pipe-buffer deadlock). In dual-var
-  iteration `for (let out, err in s)`, every stage's stderr is interleaved into the
-  bounded channel in arrival order; stderr lines are not tagged by stage.
-- **Cleanup contract** applies to the whole pipeline. On early exit (break, return, throw,
-  iterator dispose) the runtime sends `SIGTERM` to **every stage**, waits 5 seconds, then
-  sends `SIGKILL` to any survivors. All FDs are closed and all stages are reaped. Order:
-  signal all → wait → kill survivors (not stage-by-stage, to minimise total termination
-  latency).
-- **`s.kill(signal)`** signals **every stage**, not just the last. Killing only the last
-  stage would leave intermediates alive (often hanging on a closed downstream pipe, but not
-  always — `cat /dev/zero | head -n 1` can outlive `head`). PID-reuse safety still applies:
-  `.kill()` is a no-op once `exitCode` is non-null.
-
-Mixed pipelines are not allowed: a single chain must be either wholly streaming
-(`$<(a | b | c)`) or wholly captured (`$(a | b | c)`). Mixing streaming and capture stages
-(`$<(a) | $(b)` or `$(a) | $<(b)`) is rejected as **SA0711** — the outer pipe would try
-to read a streaming handle as if it were a string.
-
-### Safe Shell Interpolation
-
-All six `$(...)`-family sigils desugar at **compile time** into calls to the stdlib functions `process.exec` and `process.pipeline`. The standard library is the single source of truth for command execution; the `$(...)` surface syntax is purely a convenient shorthand.
-
-#### Desugaring Table
-
-| Source                                      | Desugars to                                                                         |
-| ------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `$(ls -la)`                                 | `process.exec("ls", ["-la"], ExecOptions{})`                                        |
-| `$(ls -la ${dir})`                          | `process.exec("ls", ["-la", dir], ExecOptions{})`                                   |
-| `$(ls ${...flags} ${dir})`                  | `process.exec("ls", [...flags, dir], ExecOptions{})`                                |
-| `$!(make build)`                            | `process.exec("make", ["build"], ExecOptions{ strict: true })`                      |
-| `$>(apt install -y ${pkg})`                 | `process.exec("apt", ["install", "-y", pkg], ExecOptions{ mode: ExecMode.Passthrough })` |
-| `$<(tail -f ${log})`                        | `process.exec("tail", ["-f", log], ExecOptions{ mode: ExecMode.Stream })`           |
-| `$(grep ${pat} \| wc -l)`                   | `process.pipeline([PipelineStage{ program: "grep", args: [pat] }, PipelineStage{ program: "wc", args: ["-l"] }], ExecOptions{})` |
-| `$(make build > ${out})`                    | `process.exec("make", ["build"], ExecOptions{ redirect: RedirectSpec{ target: out } })` |
-
-The desugaring is performed by the compiler, not the VM. The existing sigil syntax — with all its modes, pipes, redirects, and strict variants — is preserved unchanged at the surface level.
-
-#### Tokenization Rule
-
-**Literal source text** inside `$(...)` is tokenized at compile time using a whitespace-and-quote-aware splitter. Source-level quotes group literal tokens and are then stripped:
-
-```stash
-$(grep "hello world" file.txt)
-// program = "grep", args = ["hello world", "file.txt"]
-// "hello world" → single token (quotes stripped at compile time)
-```
-
-**Interpolation slots are atomic argv entries.** A `${expr}` slot becomes exactly one argument regardless of the value's content. The runtime never re-tokenizes an interpolated value:
-
-```stash
-let userInput = "; rm -rf ~";
-$(ls ${userInput});
-// program = "ls", args = ["; rm -rf ~"]   ← single literal arg, ~ NOT expanded
-```
-
-#### Glob and Tilde Apply Only to Literal Tokens
-
-Glob (`*`, `?`, `[...]`) and tilde (`~`) expansion apply only to argv entries that originated from **literal source text**. They never apply to interpolated values.
-
-| Source                              | Result                                                   |
-| ----------------------------------- | -------------------------------------------------------- |
-| `$(ls *.log)`                       | Glob runs (literal token)                                |
-| `let p = "*.log"; $(ls ${p})`       | No glob — `ls` receives literal `"*.log"`                |
-| `$(ls ~)` / `$(ls ~/Downloads)`     | Tilde runs (literal token)                               |
-| `let p = "~/Downloads"; $(ls ${p})` | No tilde — `ls` receives literal `"~/Downloads"`         |
-
-To glob or tilde-expand a runtime value, call the explicit helpers:
-
-```stash
-let p = "*.log";
-$(ls ${...fs.glob(p)});        // explicit glob expansion
-
-let home = "~/.config";
-$(cat ${path.expand(home)});   // explicit tilde expansion
-```
-
-#### Array Splatting
-
-When an interpolation value is an **array**, its elements are spliced into the argv list as separate entries. Both implicit (`${arr}`) and explicit (`${...arr}`) splat work; the explicit form is preferred and prompted by SA0816:
-
-```stash
-let flags = ["-la", "--color=always"];
-$(ls ${...flags} /tmp);
-// program = "ls", args = ["-la", "--color=always", "/tmp"]
-
-let kubectl = ["kubectl", "--context=prod", "--namespace=app"];
-$(${...kubectl} get pods);
-// program = "kubectl", args = ["--context=prod", "--namespace=app", "get", "pods"]
-```
-
-Scalars (`string`, `int`, `bool`, etc.) become a single argv element via standard stringification.
-
-#### Glued Slots
-
-A literal-adjacent slot (`--name=${user}`) concatenates at runtime into one argv entry. Arrays in glued slots are stringified rather than splatted:
-
-```stash
-let user = "alice";
-$(echo --name=${user});
-// args = ["--name=alice"]
-
-let tags = ["a", "b"];
-$(echo --tags=${tags});
-// args = ["--tags=a,b"]   (array stringified)
-```
-
-#### Program-Name Slot
-
-The first slot — whether literal or interpolated — is a single literal program name. No tokenization occurs on a string value; arrays splat normally:
-
-```stash
-let tool = "ls";         $(${tool})           // program = "ls"
-let tool = "ls -la";    $(${tool})           // tries to exec binary named "ls -la" — fails
-let cmd = ["ls", "-la"]; $(${...cmd})        // program = "ls", args = ["-la"]
-```
-
-#### Migration Guide
-
-> **Breaking change.** Interpolated values inside `$(...)` are now passed as **single literal argv entries**. They are no longer split on whitespace, glob-expanded, or tilde-expanded. Source-level quotes around an interpolation slot (`"${x}"`) are now inert.
-
-| Before (old semantics)                               | After (new semantics — safe form)                           |
-| ---------------------------------------------------- | ----------------------------------------------------------- |
-| `let opts = "-la /tmp"; $(ls ${opts})`               | `$(ls ${...str.split(opts, " ")})`                         |
-| `let p = "*.log"; $(ls ${p})`                        | `$(ls ${...fs.glob(p)})`                                   |
-| `let p = "~/foo"; $(cat ${p})`                       | `$(cat ${path.expand(p)})`                                 |
-| `let cmd = "git status"; $(${cmd})`                  | `let cmd = ["git", "status"]; $(${...cmd})`                |
-
-The analyzer emits **SA0817** (Warning) for likely-broken sites where it can detect them statically.
-
-#### Interaction With Existing Features
-
-All six sigils, strict mode (`$!`), passthrough (`$>`), streaming (`$<`), pipe chains, and redirects continue to work identically at the source level — their behavior is unchanged; only the implementation mechanism (now routing through `process.exec` / `process.pipeline`) differs.
-
-### Pipes
-
-Pipelines can be written in two equivalent forms:
-
-```stash
-// Inline pipe syntax (recommended)
-let lines = $(cat /var/log/syslog | grep error | wc -l);
-
-// External pipe syntax (alternative)
-let lines = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
-```
-
-Both produce the same AST and execute identically. The two syntaxes can also be mixed:
-
-```stash
-let result = $(cmd1 | cmd2) | $(cmd3);
-```
-
-**Inline pipes:** The lexer splits `$(...)` on unquoted `|` characters at the source level. Each segment becomes a separate pipeline stage. The following characters do **not** trigger splitting:
-
-- `||` — treated as a token boundary, not a pipe (use `||` for logical OR outside `$(...)`)
-- `|` inside quotes — `$(grep "a|b")` passes the literal string to `grep`
-- `|` inside `$>(...)` — passthrough commands do not split on pipes; the character is passed as-is to the shell
-
-The `|` operator is **exclusive to command chaining** — it cannot be used between non-command expressions. For logical OR, use `||`.
-
-#### Inline Pipe Syntax
-
-The formal grammar for the inline pipe variant:
-
-```ebnf
-InlinePipe   ::= "$(" PipedCommand ")"
-               | "$!(" PipedCommand ")"
-PipedCommand ::= CommandPart ("|" CommandPart)*
-CommandPart  ::= <whitespace-trimmed command text with ${} interpolations>
-```
-
-String interpolation (`${}`) works in any stage of an inline pipe:
-
-```stash
-let pattern = "world";
-let filtered = $(echo "hello world" | grep ${pattern});
-io.println(filtered.stdout);  // → "hello world"
-
-// Multi-stage transformation
-let result = $(echo "hello world" | tr 'a-z' 'A-Z' | rev);
-io.println(result.stdout);    // → "DLROW OLLEH"
-```
-
-Inline and external pipe syntax mix freely in the same expression — the result is a single pipeline:
-
-```stash
-// 3-stage chain: inline stage followed by external stage
-let lines = $(seq 1 100 | grep "^5") | $(wc -l);
-io.println(lines.stdout);     // → "11"
-```
-
-#### Execution Semantics
-
-Pipe chains use **streaming concurrent execution**. All stages in the chain launch simultaneously as OS-level processes, connected by OS-level pipes — stdout of each stage flows directly into stdin of the next with no buffering in between.
-
-```stash
-let result = $(cat /var/log/syslog | grep error | wc -l);
-// All three processes start concurrently.
-// result.exitCode is the exit code of 'wc -l' (the last command).
-// result.stdout and result.stderr are captured from 'wc -l'.
-```
-
-Because data streams directly between processes, infinite producers work correctly:
-
-```stash
-let first5 = $(yes | head -5);
-// 'yes' runs concurrently with 'head -5'.
-// 'head -5' reads 5 lines then exits, causing 'yes' to terminate naturally.
-```
-
-The exit code of the entire pipe expression is the exit code of the **last command** in the chain (standard POSIX behavior). All stages run to completion regardless of earlier stages' exit codes — there is no short-circuit on failure.
-
-**Strict mode:** The strict variant `$!(...)` applies only to the last stage. A non-zero exit code from the last stage throws `CommandError`; exit codes from intermediate stages are ignored.
-
-```stash
-let result = $!(cat /var/log/syslog | grep error | wc -l);
-// Throws CommandError only if 'wc -l' exits with a non-zero code.
-// 'grep' returning exit code 1 (no matches found) does not throw.
-```
-
-**Stderr capture:** Only the last stage's stderr is captured in `CommandResult.stderr`. Intermediate stages' stderr is drained concurrently and discarded (preventing OS pipe buffer deadlock).
-
-**Passthrough commands** (`$>(...)` and `$!>(...)`) cannot appear in a pipe chain. This is both a static analysis error (SA0710) and a compile-time error. Passthrough commands run with inherited terminal I/O — the OS never routes their stdout into a pipe buffer. Use `$(cmd)` or `$!(cmd)` for commands that participate in pipe chains.
-
-#### Strict Mode in Pipe Chains
-
-The strict modifier (`$!`) determines whether the pipe chain throws a `CommandError` on non-zero exit. Only the **last stage's exit code** is checked — intermediate exit codes are ignored regardless of whether intermediate stages use `$!()`.
-
-```stash
-// Last stage determines outcome
-let r = $(false) | $!(echo "ran");    // succeeds — echo exits 0
-let r = $(echo "hi") | $!(false);     // throws CommandError — false exits 1
-
-// Inline: all stages get $! from the lexer, but only the last matters
-let r = $!(cmd1 | cmd2 | cmd3);      // throws only if cmd3 exits non-zero
-
-// External chain with explicit last-stage strict
-let r = $(cmd1) | $(cmd2) | $!(cmd3); // equivalent semantics
-```
-
-#### Passthrough Commands Cannot Be Piped
-
-```stash
-$>(vim file.txt);          // VALID — standalone passthrough, inherits terminal I/O
-
-$(echo hello) | $>(cat);  // SA0710: passthrough cannot appear in a pipe chain
-$>(cmd1) | $(cmd2);        // SA0710: passthrough cannot appear in a pipe chain
-
-// Use $! for strict captured pipe — not $>
-$(echo hello) | $!(cat);  // valid: strict captured pipe
-```
-
-#### Output Redirection
-
-Command output can be redirected to files using `>` (write) and `>>` (append). See [Section 6c](#6c-output-redirection) for details.
-
-```stash
-$(ls -la) > "output.txt";       // write stdout to file
-$(ls -la) >> "log.txt";         // append stdout to file
-$(make build) 2> "errors.txt";  // stderr to file
-$(make build) &> "all.txt";     // both streams to file
-```
-
----
-
-## 6b. Shebang Support
-
-Stash scripts can start with a shebang line for direct execution on Unix systems:
-
-```stash
-#!/usr/bin/env stash
-
-let name = "world";
-io.println("Hello, " + name);
-```
-
-### Implementation
-
-The lexer checks if the first two characters of the source are `#!`. If so, it skips everything until the next newline. The shebang line is never tokenized — it is treated as a comment. This is a one-line check at the start of `ScanTokens()` and has zero impact on the rest of the lexer.
-
-### Usage
-
-```bash
-chmod +x script.stash
-./script.stash
-```
-
----
-
-## 6b-2. Command-Line Execution Modes
-
-Stash supports multiple ways to execute code beyond script files and the interactive REPL.
-
-### Inline Code (`-c`)
-
-Execute code passed directly as a command-line argument, similar to `bash -c` or `python -c`:
-
-```bash
-stash -c 'io.println("hello");'
-stash --command 'let x = 2 + 2; io.println(x);'
-```
-
-Arguments after the command string are passed to the script:
-
-```bash
-stash -c 'io.println(args.list());' foo bar
-# Output: [foo, bar]
-```
-
-The source is identified as `<command>` in error diagnostics.
-
-### Standard Input (Piping)
-
-Stash reads and executes code from standard input when input is piped or redirected:
-
-```bash
-echo 'io.println("hello from stdin");' | stash
-cat deploy.stash | stash
-curl -sL https://example.com/script.stash | stash
-```
-
-Pass arguments to piped scripts using the `--` separator:
-
-```bash
-echo 'io.println(args.list());' | stash -- arg1 arg2
-# Output: [arg1, arg2]
-```
-
-The source is identified as `<stdin>` in error diagnostics.
-
-### Execution Mode Summary
-
-| Mode        | Command                      | Source Name |
-| ----------- | ---------------------------- | ----------- |
-| REPL        | `stash`                      | `<stdin>`   |
-| Script file | `stash script.stash`         | file path   |
-| Inline code | `stash -c 'code'`            | `<command>` |
-| Piped stdin | `echo 'code' \| stash`       | `<stdin>`   |
-| Debug       | `stash --debug script.stash` | file path   |
-| Test runner | `stash --test script.stash`  | file path   |
-
-### Exit Codes
-
-| Code | Meaning           |
-| ---- | ----------------- |
-| 0    | Success           |
-| 1    | Test failures     |
-| 64   | Invalid CLI usage |
-| 65   | Lex/parse error   |
-| 66   | File not found    |
-| 70   | Runtime error     |
-
----
-
-## 6c. Output Redirection
-
-Stash supports output redirection operators for writing command output directly to files, mirroring Bash's familiar `>` and `>>` syntax.
-
-### Syntax
-
-```stash
-// Write stdout to file (creates or overwrites)
-$(ls -la) > "output.txt";
-
-// Append stdout to file
-$(ls -la) >> "log.txt";
-
-// Works with pipe chains — redirects the final output
-$(cat /var/log/syslog) | $(grep error) > "filtered.txt";
-$(cat log) | $(grep error) >> "errors.log";
-
-// Interpolated file paths
-let logDir = "/var/log";
-$(dmesg) > "${logDir}/kernel.txt";
-
-// Stderr redirection
-$(make build) 2> "errors.txt";
-$(make build) 2>> "errors.txt";
-
-// Both streams to same file
-$(make build) &> "all_output.txt";
-$(make build) &>> "all_output.txt";
-
-// Both streams to separate files
-$(make build) > "stdout.txt" 2> "stderr.txt";
-```
-
-### Semantics
-
-1. `>` and `>>` are parsed as **postfix redirection operators** that bind after pipe chains are resolved — redirection applies to the final result of the entire pipe chain.
-2. They are **only valid** when the left operand is a `CommandExpr`, `PipeExpr`, or another `RedirectExpr` (for chaining stdout + stderr redirects). Using them after any other expression type is a parse error.
-3. The right operand is **any expression that evaluates to a string** (the file path).
-4. Redirection is **process-level** — the stream is written directly to the file, not buffered in memory. This handles arbitrarily large outputs efficiently.
-5. The expression **still returns a `CommandResult`** struct. The redirected stream's field (`stdout` or `stderr`) will be an empty string since it went to the file. `exitCode` is always available.
-6. `>` creates or overwrites the file; `>>` creates or appends to it.
-
-### Stream Selectors
-
-| Operator | Stream | Description                             |
-| -------- | ------ | --------------------------------------- |
-| `>`      | stdout | Write stdout to file (overwrite)        |
-| `>>`     | stdout | Append stdout to file                   |
-| `2>`     | stderr | Write stderr to file (overwrite)        |
-| `2>>`    | stderr | Append stderr to file                   |
-| `&>`     | both   | Write stdout+stderr to file (overwrite) |
-| `&>>`    | both   | Append stdout+stderr to file            |
-
-### Parsing
-
-The `>` operator is context-sensitive — it is parsed as **redirection** only when the left operand is a `CommandExpr`, `PipeExpr`, or `RedirectExpr`. In all other contexts, `>` remains the greater-than comparison operator. This is unambiguous because comparing a raw command result with `>` is nonsensical (`$(ls) > 5`), and meaningful comparisons like `$(ls).exitCode > 0` work because `.exitCode` produces a `DotExpr`, not a `CommandExpr`.
-
-The `2>`, `2>>`, `&>`, and `&>>` operators are scanned as distinct tokens by the lexer.
-
-### Implementation
-
-A `RedirectExpr` AST node wraps the command expression:
-
-```
-RedirectExpr:
-  expression: Expr              // left side (CommandExpr, PipeExpr, or RedirectExpr)
-  stream: Stdout | Stderr | All // which stream(s) to redirect
-  append: bool                  // true for >>, false for >
-  target: Expr                  // right side (evaluates to file path string)
-```
-
-At runtime, the interpreter executes the inner command and writes the selected stream(s) to the target file. The `CommandResult` is returned with empty strings for redirected streams.
-
----
-
-## 6d. Privilege Elevation (`elevate`)
-
-The `elevate` block provides scoped privilege elevation for command execution. Commands inside the block are automatically prefixed with the platform's elevation program (`sudo` on Linux/macOS, `gsudo` on Windows), with credentials acquired once at block entry. No passwords or credentials ever pass through Stash data structures — authentication is handled entirely by the OS.
-
-### Syntax
-
-```stash
-// Platform default elevator (sudo on Unix, gsudo on Windows)
-elevate {
-    $(apt update);
-    $(apt upgrade -y);
-}
-
-// Named elevator — for doas, pkexec, or other tools
-elevate("doas") {
-    $(pkg install nginx);
-}
-```
-
-`elevate` is a **statement**, like `while` or `if`. The optional parenthesized argument specifies the elevation program; omitting it uses the platform default. The block body is a standard block — any statements are valid inside it.
-
-### What Gets Elevated
-
-Only `$()` and `$>()` command expressions are affected by elevation. Low-level process functions are explicitly excluded:
-
-| Expression                    | Elevated? | Reason                                         |
-| ----------------------------- | --------- | ---------------------------------------------- |
-| `$(ufw enable)`               | ✅ Yes    | Auto-prefixed with elevator                    |
-| `$>(systemctl restart nginx)` | ✅ Yes    | Auto-prefixed with elevator                    |
-| `$(sudo ufw enable)`          | ✅ No-op  | Already prefixed — no double-prefix            |
-| `process.spawn("ufw", [...])` | ❌ No     | Low-level escape hatch — user has full control |
-| `process.exec("ufw enable")`  | ❌ No     | Low-level escape hatch — user has full control |
-
-Commands that already start with an elevation program (`sudo`, `doas`, `gsudo`, `runas`) are left unchanged to prevent double-prefixing like `sudo sudo ufw enable`.
-
-### Dynamic Scope
-
-The elevation context is **dynamic**, not lexical. It propagates through function calls and into imported modules:
-
-```stash
-fn restart_service(name) {
-    $(systemctl restart ${name});   // elevated if called inside elevate { }
-}
-
-elevate {
-    restart_service("nginx");       // the $(systemctl ...) inside is elevated
-}
-
-restart_service("nginx");           // NOT elevated — outside the block
-```
-
-This is the critical property that makes `elevate` useful for libraries. A package like `@stash/ufw` can call `$(ufw enable)` internally — the consumer wraps the call in `elevate { }` and the elevation propagates automatically.
-
-### Nesting
-
-`elevate` inside `elevate` is a **no-op**. The inner block executes normally under the outer elevation context. Credentials are acquired only once, when the outermost block is entered. The semantic analyzer emits a **warning** for nested `elevate` blocks:
-
-```stash
-elevate {
-    elevate {           // Warning: nested elevate has no effect
-        $(ufw enable);  // elevated — outer context applies
-    }
-}
-```
-
-### Already-Elevated Process
-
-If the interpreter is already running as a privileged user (root on Unix, Administrator on Windows), the `elevate` block is completely transparent — no credential prompts appear, no command prefixing occurs. The block executes exactly as if the `elevate` keyword were not present.
-
-### Credential Acquisition
-
-When entering an `elevate` block, the interpreter performs the following steps:
-
-1. **Privilege check** — If the process is already privileged, skip all remaining steps and execute the body directly.
-2. **Elevator resolution** — Determine the elevation program from the optional argument or the platform default.
-3. **Elevator discovery** — Verify the program exists on the system PATH. On Unix, if `sudo` is not found, `doas` is attempted as a fallback.
-4. **Interactive authentication** — Run the credential validation command in passthrough mode so the user can interact with the OS prompt:
-   - Unix (`sudo`): `$>(sudo -v)` — validates cached credentials or prompts for password
-   - Unix (`doas`): `$>(doas true)` — runs a no-op command as root, prompting if needed
-   - Windows (`gsudo`): `$>(gsudo cache on -d -1)` — activates credential caching and triggers the UAC consent dialog
-5. **Block execution** — Commands inside the block are auto-prefixed with the elevator.
-6. **Cleanup** — On block exit (including exceptions), the elevation context is cleared.
-
-If credential acquisition fails (user cancels the prompt, wrong password, UAC denied), a `RuntimeError` is thrown.
-
-### Cross-Platform Behavior
-
-| Platform | Default Elevator | Credential Command     | Fallback                    |
-| -------- | ---------------- | ---------------------- | --------------------------- |
-| Linux    | `sudo`           | `sudo -v`              | `doas` if `sudo` not found  |
-| macOS    | `sudo`           | `sudo -v`              | None                        |
-| Windows  | `gsudo`          | `gsudo cache on -d -1` | None (install instructions) |
-
-On Windows, `gsudo` is an open-source elevation tool available via `winget install gerardog.gsudo` or `scoop install gsudo`. If `gsudo` is not found, the error message includes install instructions.
-
-### Checking Results Inside the Block
-
-Commands inside `elevate` return `CommandResult` normally. Assign results and check exit codes as usual:
-
-```stash
-elevate {
-    let update = $(apt update);
-    let upgrade = $(apt upgrade -y);
-    if (upgrade.exitCode != 0) {
-        io.println("Upgrade failed: " + str.trim(upgrade.stderr));
-    }
-}
-```
-
-### Library Usage Pattern
-
-The primary motivation for `elevate` is clean library consumption. Libraries that wrap privileged commands don't need to handle sudo logic — the consumer provides the elevation context:
-
-```stash
-import "@stash/ufw" as ufw;
-import "@stash/systemd" as systemd;
-
-elevate {
-    ufw.config.enable();
-    ufw.rules.allow("22/tcp");
-    ufw.rules.allow("443/tcp");
-    systemd.service.restart("nginx");
-}
-```
-
-A single credential prompt occurs at block entry. All library calls inside are automatically elevated.
-
-### Embedded Mode
-
-`elevate` throws a `RuntimeError` in embedded mode (Playground, WASM), matching the existing `$>()` guard pattern:
-
-```
-RuntimeError: Privilege elevation is not available in embedded mode.
-```
-
-### Implementation
-
-`elevate` is an `ElevateStmt` AST node with two children:
-
-```
-ElevateStmt:
-  elevator: Expr?     // optional elevator program expression (null for platform default)
-  body: BlockStmt      // the block of statements to execute with elevation
-```
-
-The elevation state is stored on `ExecutionContext` as two properties: `ElevationActive` (bool) and `ElevationCommand` (string). This context propagates into function calls and forked interpreters automatically. At the `ProcessStartInfo` level, the command's program name is replaced with the elevator and the original program is prepended to the argument list.
-
-> **Design spec:** See [Elevate — Scoped Privilege Elevation](specs/Elevate%20—%20Scoped%20Privilege%20Elevation.md) for the full design document covering edge cases, security analysis, and implementation roadmap.
-
----
-
-## 7. Control Flow
-
-### If / Else
-
-```stash
-if (condition) {
-    // ...
-} else if (other) {
-    // ...
+if (ok) {
+    deploy();
+} else if (dryRun) {
+    preview();
 } else {
-    // ...
+    fail();
 }
 ```
 
-### While Loop
+### Loops
+
+`while` repeats while its condition is truthy.
 
 ```stash
-while (condition) {
-    // ...
+while (queue.length > 0) {
+    process(queue.pop());
 }
 ```
 
-### Do-While Loop
-
-A `do-while` loop executes its body **at least once**, then repeats while the condition remains truthy:
+`do while` executes the body once before testing its condition.
 
 ```stash
 do {
-    let input = io.readLine("Enter 'yes': ");
-} while (input != "yes");
+    retryOnce();
+} while (again);
 ```
 
-Standard `break` and `continue` are supported inside `do-while` loops. The semicolon after the closing `)` is required.
-
-### For Loop
-
-Stash supports two forms of `for` loop: the **for-in** loop for collection iteration, and the **C-style for** loop for counted/general iteration.
-
-#### C-Style For
+C-style `for` loops contain initializer, condition, and increment clauses.
 
 ```stash
 for (let i = 0; i < 10; i++) {
-    io.println(conv.toStr(i));
+    io.println(i);
 }
 ```
 
-The three clauses inside the parentheses are:
-
-1. **Initializer** — executed once before the loop begins. May be a `let` declaration, an expression, or empty.
-2. **Condition** — evaluated before each iteration. If falsy, the loop exits. If omitted, the loop runs forever (use `break` to exit).
-3. **Increment** — executed after each iteration (including after `continue`).
-
-All three clauses are optional. An infinite loop: `for (;;) { ... }`.
-
-The initializer creates a new scope — variables declared with `let` in the initializer are scoped to the loop and not accessible afterward:
+`for in` loops iterate over iterable values.
 
 ```stash
-for (let i = 0; i < 5; i++) {
-    io.println(conv.toStr(i));  // i is accessible here
+for (let item in items) {
+    io.println(item);
 }
-// i is NOT accessible here
-```
-
-`break` exits the loop. `continue` skips the rest of the body but **still executes the increment** before re-checking the condition:
-
-```stash
-let sum = 0;
-for (let i = 0; i < 10; i++) {
-    if (i % 2 == 0) { continue; }  // i++ still runs
-    sum = sum + i;
-}
-// sum = 25 (1 + 3 + 5 + 7 + 9)
-```
-
-#### For-In
-
-```stash
-for (let item in collection) {
-    // ...
-}
-```
-
-#### For-in with Index
-
-A two-variable form provides the iteration index alongside each value:
-
-```stash
-for (let i, item in ["a", "b", "c"]) {
-    io.println($"{i}: {item}");
-}
-// Output: 0: a, 1: b, 2: c
-```
-
-The first variable (`i`) receives the zero-based index (as an integer), and the second variable (`item`) receives the element value. This works with arrays, strings, and ranges:
-
-```stash
-for (let i, ch in "hello") {
-    io.println($"{i}: {ch}");   // 0: h, 1: e, 2: l, ...
-}
-```
-
-The index is independent of the collection's values — for ranges, the index counts iterations while the value yields range elements:
-
-```stash
-for (let i, val in 5..8) {
-    io.println($"index={i}, value={val}");
-}
-// index=0, value=5
-// index=1, value=6
-// index=2, value=7
-```
-
-#### Dictionary Key-Value Iteration
-
-For dictionaries, the two-variable form iterates over **key-value pairs** instead of index-key pairs:
-
-```stash
-let config = dict.new();
-config["host"] = "localhost";
-config["port"] = 8080;
 
 for (let key, value in config) {
-    io.println($"{key} = {value}");
-}
-// host = localhost
-// port = 8080
-```
-
-This follows Go's `for k, v := range m` pattern. The first variable receives the dictionary key and the second receives the corresponding value. Single-variable iteration still yields keys only:
-
-```stash
-for (let key in config) {
-    io.println(key);  // "host", "port"
+    io.println("${key}=${value}");
 }
 ```
 
-#### Iterable Types
+Using `for in` with a non-iterable value produces a runtime error.
 
-- **`array`** — iterates over elements in order: `for (let item in [1, 2, 3]) { ... }`
-- **`string`** — iterates over characters: `for (let ch in "hello") { ... }` yields `"h"`, `"e"`, `"l"`, `"l"`, `"o"`
-- **`dict`** — iterates over keys: `for (let key in myDict) { ... }`. With two variables, iterates key-value pairs: `for (let key, value in myDict) { ... }`
-- **`range`** — iterates over integer values: `for (let i in 1..10) { ... }` yields `1` through `9` (end-exclusive)
+### Break and Continue
 
-All other types produce a runtime error when used as the right-hand side of `for-in`.
+`break;` exits the innermost loop or switch statement. `continue;` skips to the
+next iteration of the innermost loop. Using either outside an allowed construct is a
+parse error or static error.
 
-#### Snapshot Safety
+### Return
 
-All `for-in` loops iterate over a **snapshot** of the collection taken at loop entry. Modifications to the collection during iteration (adding, removing, or replacing elements) do not affect the loop's iteration order or count:
+`return expr;` exits the current function and yields `expr`. `return;` yields
+`null`. Returning outside a function produces a runtime error unless the
+implementation defines top-level returns.
 
-```stash
-let items = [1, 2, 3];
-for (let item in items) {
-    arr.push(items, item * 10);  // safe — does not affect iteration
-    io.println(item);            // prints 1, 2, 3
-}
-// items is now [1, 2, 3, 10, 20, 30]
+### Switch Statements
 
-let d = dict.new();
-d["a"] = 1; d["b"] = 2;
-for (let key in d) {
-    dict.remove(d, key);  // safe — snapshot preserves original keys
-}
-// d is now empty
-```
-
-This applies to arrays and dictionaries. Strings and ranges are inherently safe (strings are immutable; ranges yield computed values).
-
-#### Per-Iteration Binding
-
-The `let` declaration in a `for-in` loop header creates a **fresh binding for each iteration**. Closures captured during one iteration retain that iteration's value, even if the loop variable is later mutated by subsequent iterations:
+A switch statement executes the first matching case body.
 
 ```stash
-let fns = [];
-for (let n in 0..5) {
-    arr.push(fns, () => n);
-}
-io.println(fns[0]());  // 0  (not 4)
-io.println(fns[3]());  // 3  (not 4)
-```
-
-This matches JavaScript's `let`-in-`for` semantics and avoids the classic "all closures share the final loop value" footgun that plagues capture-by-reference loop variables. The same guarantee applies to `task.run`, `arr.parForEach`, and any other API that escapes a closure created inside the loop body.
-
-### Break / Continue
-
-Standard `break` and `continue` within loops.
-
-### Null-Coalescing Operator (`??`)
-
-The `??` operator returns the left operand if it is neither `null` nor an error value, otherwise returns the right operand:
-
-```stash
-let name = inputName ?? "default";
-let config = try fs.readFile("/etc/app.conf") ?? "fallback config";
-```
-
-The right operand is only evaluated if the left operand is `null` **or an error value** (short-circuit evaluation). This makes `??` the natural companion to `try` — a failed `try` returns an error (which is falsy), so `??` provides the default.
-
----
-
-## 7b. Error Handling
-
-Stash uses a **`try` expression** model with first-class **error values** — lightweight, no exception machinery, no Go-style verbosity.
-
-### Philosophy
-
-By default, runtime errors **crash the script** with a stack trace. This is the right behavior for most scripting — fail loudly, fix the problem. When you _expect_ an operation might fail, you opt in to error handling with `try`.
-
-The CLI renders uncaught errors with **source context** — three lines of source around the error site — making it easy to locate the failure without opening a separate file.
-
-### The `try` Expression
-
-`try` is a **prefix expression** that wraps any expression. On success, `try` returns the value normally. On failure, `try` catches the error and returns an **Error value** instead of crashing.
-
-```stash
-// Without try — script crashes if the conversion fails
-let n = conv.toInt("not-a-number");
-
-// With try — returns an Error value on failure
-let n = try conv.toInt("not-a-number");
-io.println(n);           // "RuntimeError: Cannot parse 'not-a-number' as integer."
-io.println(n.message);   // "Cannot parse 'not-a-number' as integer."
-io.println(n.type);      // "RuntimeError"
-
-// On success — returns the value directly
-let n = try conv.toInt("42");
-io.println(n);           // 42
-```
-
-### Error Values
-
-Error values are first-class values with their own type. They carry three fields:
-
-| Field      | Type       | Description                                                                                         |
-| ---------- | ---------- | --------------------------------------------------------------------------------------------------- |
-| `.message` | `string`   | Human-readable error description                                                                    |
-| `.type`    | `string`   | Error type name (e.g. `"TypeError"`, `"IOError"`) — see [Error Type Taxonomy](#error-type-taxonomy) |
-| `.stack`   | `string[]` | Call stack frames at the point of failure — each entry like `"  at fn (file:line:col)"`             |
-
-Error values are **falsy** — they evaluate to `false` in boolean contexts. This makes them compose naturally with `??`:
-
-```stash
-// try + ?? — elegant defaults for fallible operations
-let port = try conv.toInt(input) ?? 3000;
-let config = try fs.readFile("/etc/app.conf") ?? "fallback";
-
-// Type checking
-typeof(err) == "Error"    // true
-err is Error              // true
-
-// lastError() returns the most recent Error value
-let data = try conv.toInt("abc");
-let last = lastError();
-io.println(last.message);    // "Cannot parse 'abc' as integer."
-```
-
-**Note:** `lastError()` returns only the single most recent error. If multiple `try` expressions execute in sequence, only the last error is retained.
-
-### The `throw` Statement
-
-`throw` raises a runtime error from user code. The throw value determines the error's type and message:
-
-```stash
-// Throw a named error struct — preferred; type-safe, completion-friendly
-throw ValueError { message: "age must be between 0 and 150" };
-throw TypeError { message: "expected a string, got int" };
-throw IOError { message: "cannot read /etc/config: permission denied" };
-
-// Throw a dict — works too; required for dynamic type names at runtime
-throw { type: "ValidationError", message: "age must be >= 0" };
-
-// Throw a string — becomes a RuntimeError
-throw "something went wrong";
-
-// Any other value is stringified and thrown as a RuntimeError
-throw 42;    // RuntimeError with message "42"
-```
-
-Thrown errors are caught by `try` just like built-in errors:
-
-```stash
-fn validateAge(age) {
-    if (age < 0) {
-        throw { type: "ValidationError", message: "age must be >= 0" };
-    }
-    return age;
-}
-
-let result = try validateAge(-5);
-io.println(result.type);       // "ValidationError"
-io.println(result.message);    // "age must be >= 0"
-
-let safe = try validateAge(-1) ?? 0;  // falls back to 0
-```
-
-### Rethrow Pattern
-
-Catch an error with `try`, inspect it, and rethrow to add context. The error type is preserved:
-
-```stash
-fn parsePositive(s) {
-    let n = try conv.toInt(s);
-    if (n is Error) {
-        throw { type: n.type, message: $"parsePositive: {n.message}" };
-    }
-    if (n < 0) {
-        throw { type: "RangeError", message: $"expected positive, got {n}" };
-    }
-    return n;
-}
-
-let err = try parsePositive("abc");
-io.println(err.type);      // "RuntimeError" (preserved from conv.toInt)
-io.println(err.message);   // "parsePositive: Cannot parse 'abc' as integer."
-
-let err2 = try parsePositive("-3");
-io.println(err2.type);     // "RangeError"
-```
-
-### Shell Commands Don't Need `try`
-
-Shell command results already carry structured error information via `exitCode` and `stderr` — they never crash the script:
-
-```stash
-let result = $(ping -c 1 ${host});
-if (result.exitCode != 0) {
-    io.println("Host unreachable: " + result.stderr);
-}
-```
-
-### Complete Example
-
-```stash
-fn loadConfig(path) {
-    let raw = try fs.readFile(path) ?? "host=localhost\nport=8080";
-    let cfg = dict.new();
-    for (let line in str.split(raw, "\n")) {
-        let trimmed = str.trim(line);
-        if (trimmed == "") { continue; }
-        if (!("=" in trimmed)) { continue; }
-        let parts = str.split(trimmed, "=");
-        cfg[str.trim(parts[0])] = str.trim(parts[1]);
-    }
-
-    let port = try conv.toInt(cfg["port"]);
-    if (port is Error) {
-        throw { type: "ConfigError", message: $"invalid port: {cfg["port"]}" };
-    }
-
-    cfg["port"] = port;
-    return cfg;
-}
-
-let config = try loadConfig("/etc/app.conf");
-if (config is Error) {
-    io.println($"Config failed: {config.message}");
-} else {
-    io.println($"Server: {config["host"]}:{config["port"]}");
-}
-```
-
-### The `try`/`catch`/`finally` Statement
-
-For situations that need **scoped error handling** or **guaranteed cleanup**, Stash provides `try`/`catch`/`finally` blocks. These coexist with `try expr` — use whichever fits the situation:
-
-```stash
-try {
-    let handle = fs.open("/tmp/data.lock");
-    doWork(handle);
-} catch (e) {
-    io.eprintln("Work failed: " + e.message);
-} finally {
-    fs.delete("/tmp/data.lock");  // ALWAYS runs
-}
-```
-
-#### Syntax
-
-```stash
-try { ... }                                         // bare try — error suppression
-try { ... } catch (e) { ... }                       // catch-all
-try { ... } catch (TypeError e) { ... }             // typed catch — specific type only
-try { ... } catch (IOError | ValueError e) { ... }  // union catch — either type
-try { ... } catch (TypeError e) { ... } catch (e) { ... }  // multi-clause
-try { ... } finally { ... }                         // guaranteed cleanup
-try { ... } catch (e) { ... } finally { ... }       // both
-```
-
-Multiple `catch` clauses are evaluated in order. The **first matching clause** handles the error; remaining clauses are skipped. If no clause matches, the error propagates to the next enclosing handler.
-
-The `catch` clause declares a variable scoped to its body that receives the Error value (`.message`, `.type`, `.stack`). The `finally` clause runs unconditionally — after the try body on success, after the catch body on error.
-
-#### Catch Forms
-
-| Clause form                           | Matches                                            |
-| ------------------------------------- | -------------------------------------------------- |
-| `catch (e) { }`                       | Catch-all — matches any error                      |
-| `catch (Error e) { }`                 | Catch-all — `Error` is reserved and always matches |
-| `catch (TypeError e) { }`             | Only matches `TypeError`                           |
-| `catch (IOError \| ValueError e) { }` | Matches `IOError` or `ValueError` (union)          |
-
-> **Note:** `Error` is a reserved identifier in catch clauses — it always acts as a catch-all, matching any error regardless of type. Using `catch (Error e)` is equivalent to `catch (e)`.
-
-#### Multi-clause Catch
-
-```stash
-try {
-    // ...
-} catch (TypeError e) {
-    // only handles TypeError
-} catch (ValueError | ParseError e) {
-    // handles either ValueError or ParseError
-} catch (e) {
-    // catch-all — handles anything not matched above
-}
-```
-
-**Clause ordering rules:**
-
-- More specific types must come before catch-all clauses.
-- A typed clause after a catch-all is unreachable (static analysis error `SA0161`).
-- Duplicate catch-all clauses produce static analysis warning `SA0162`.
-
-#### Error Type Taxonomy
-
-Stash assigns every runtime error a **type string** accessible via `e.type`. The built-in taxonomy:
-
-| Type                 | Trigger                                                     |
-| -------------------- | ----------------------------------------------------------- |
-| `TypeError`          | Wrong type passed to a function                             |
-| `ValueError`         | Valid type, invalid value (e.g. out-of-range, empty string) |
-| `IndexError`         | Array or string index out of bounds                         |
-| `IOError`            | File or network I/O failure                                 |
-| `ParseError`         | Parsing failure (JSON, config files, number conversion)     |
-| `CommandError`       | Shell command exited with a non-zero exit code              |
-| `NotSupportedError`  | Operation not supported on this platform                    |
-| `TimeoutError`       | Network or async operation timed out                        |
-| `LockError`          | File lock acquisition failed                                |
-| `AliasError`         | Alias definition or execution failure                       |
-| `StateError`         | Object accessed in an invalid state (e.g. consumed iterator)|
-| `CancellationError`  | Operation cancelled via external cancellation token         |
-| `RuntimeError`       | Default / uncategorized error (catch-all)                   |
-
-> **Note:** Catching `RuntimeError` by name is discouraged — it is the default catch-all type in the taxonomy. Prefer specific types where possible. The static analysis engine emits `SA0163` (warning) when `RuntimeError` is caught by name.
-
-#### Struct Throw Form
-
-Named error types can be thrown using struct literal syntax — the preferred form:
-
-```stash
-// Struct form — type-safe, IDE completion works on fields
-throw ValueError { message: "index must be positive" };
-throw ParseError { message: $"cannot parse '{input}'" };
-throw CommandError { message: "deploy failed", exitCode: 1, stderr: "permission denied", stdout: "", command: "kubectl apply" };
-
-// Equivalent dict form — still supported
-throw { type: "ValueError", message: "index must be positive" };
-```
-
-> **SA0860 — Static analysis warning:** When `throw` is followed by a dict literal whose `type` key is a string literal matching a built-in error type name, the static analyzer emits `SA0860` (Warning). Use the struct form above or suppress with `// stash-disable SA0860` if intentional.
-
-Both forms produce the same runtime error — the struct's `TypeName` becomes `e.type` in the catch clause. Typed catch works identically with both forms:
-
-```stash
-try {
-    throw ValueError { message: "invalid range" };
-} catch (ValueError e) {
-    io.println(e.message);  // "invalid range"
-    io.println(e.type);     // "ValueError"
-}
-```
-
-`CommandError` carries additional structured fields accessible after a typed catch:
-
-```stash
-try {
-    $!(git push origin main)
-} catch (CommandError e) {
-    io.println($"exit: {e.exitCode}");    // e.g. "exit: 128"
-    io.println($"stderr: {e.stderr}");
-    io.println($"command: {e.command}");
-}
-```
-
-#### Four Forms
-
-| Form                                    | Behavior                                              |
-| --------------------------------------- | ----------------------------------------------------- |
-| `try { } catch (e) { }`                 | Catch-all; `e` is the Error value                     |
-| `try { } catch (T e) { }`               | Typed catch; only matches type `T`                    |
-| `try { } catch (T \| U e) { }`          | Union catch; matches type `T` or `U`                  |
-| `try { } catch (T e) { } catch (e) { }` | Multi-clause; first match wins                        |
-| `try { } finally { }`                   | No catch — errors propagate after `finally` runs      |
-| `try { } catch (e) { } finally { }`     | Catches errors, then `finally` always runs            |
-| `try { }`                               | Bare try — silently suppresses errors (use sparingly) |
-
-#### Catch Variable Scoping
-
-The catch variable is scoped to the catch block — it does not leak into the surrounding scope:
-
-```stash
-try {
-    throw "boom";
-} catch (e) {
-    io.println(e.message);  // "boom"
-}
-// e is not accessible here
-```
-
-#### Finally Guarantees
-
-`finally` executes even when control flow leaves the try/catch via `return`, `break`, or `continue`:
-
-```stash
-fn loadData() {
-    try {
-        return fs.readFile("/tmp/data");
-    } finally {
-        io.println("Cleanup runs even after return");
-    }
-}
-```
-
-If the `catch` block itself throws, `finally` still runs before the new error propagates.
-
-#### Rethrow in Catch
-
-Re-signal a caught error in two ways:
-
-**`throw e`** — throw the error value explicitly. Re-raises with the type and message preserved, but the call stack resets to the point of rethrow:
-
-```stash
-try {
-    riskyOperation();
-} catch (e) {
-    io.eprintln("Failed: " + e.message);
-    throw e;  // re-throws the error value
-}
-```
-
-**`throw;`** — bare rethrow. Re-throws the original `RuntimeError`, preserving the original source span and call stack. This is the preferred form when you want to rethrow without any modification:
-
-```stash
-try {
-    riskyOperation();
-} catch (ParseError e) {
-    io.eprintln("Parse failed, logging and rethrowing");
-    throw;  // re-throws ParseError with original stack intact
-}
-```
-
-`throw;` is only valid inside a `catch` block. Using it outside a catch block is a static analysis error (`SA0160`).
-
-**Stack trace access** — use `e.stack` to inspect or log the call stack before rethrowing:
-
-```stash
-try {
-    conv.toInt("bad");
-} catch (e) {
-    io.println("Error type: " + e.type);
-    for (frame in e.stack) {
-        io.println(frame);  // "  at fn (file:line:col)"
-    }
-    throw;
-}
-```
-
-#### Nesting
-
-`try`/`catch`/`finally` blocks can be nested. Inner catches handle errors first; uncaught errors propagate to outer handlers:
-
-```stash
-try {
-    try {
-        throw "inner";
-    } catch (e) {
-        io.println("Caught inner: " + e.message);
-        throw "re-thrown";
-    }
-} catch (e) {
-    io.println("Caught outer: " + e.message);  // "re-thrown"
-}
-```
-
-#### When to Use Which
-
-| Pattern                                 | Use case                                              |
-| --------------------------------------- | ----------------------------------------------------- |
-| `try expr ?? default`                   | Quick fallback for a single fallible expression       |
-| `try expr` + `is Error`                 | Inspect error details for a single expression         |
-| `try { } catch (e) { }`                 | Handle any error across multiple statements           |
-| `try { } catch (TypeError e) { }`       | Handle a specific error type                          |
-| `try { } catch (T e) { } catch (e) { }` | Multi-clause: specific types + catch-all fallback     |
-| `try { } finally { }`                   | Guaranteed resource cleanup (files, locks, temp dirs) |
-| `try { } catch (e) { } finally { }`     | Both error handling and cleanup                       |
-
-Both patterns are first-class — `try expr` is lightweight and composable; `try/catch/finally` is structured and scoped. Choose based on complexity.
-
-### Static Analysis
-
-The following diagnostics apply to typed catch:
-
-| Code     | Severity | Description                                                         |
-| -------- | -------- | ------------------------------------------------------------------- |
-| `SA0160` | Error    | Bare `throw;` outside a catch block                                 |
-| `SA0161` | Error    | Typed catch clause after a catch-all — the clause is unreachable    |
-| `SA0162` | Warning  | Duplicate catch-all clauses in the same try statement               |
-| `SA0163` | Warning  | Catching `RuntimeError` by name — prefer a more specific error type |
-
-### Implementation
-
-**`try expr`:** A single AST node (`TryExpr`) wrapping another expression. On failure, the interpreter catches the internal `RuntimeError`, converts it to a `StashError` value (with message, type, and stack trace), stores it for `lastError()`, and returns it. Error values are falsy, making them compatible with `??` for default-value patterns.
-
-**`try/catch/finally`:** A statement AST node (`TryCatchStmt`) with a try body, one or more catch clauses, and an optional finally clause. Each catch clause carries a type-name list (empty = catch-all), a variable name, and a body. The parser disambiguates at the `try` keyword: if the next token is `{`, it parses a `TryCatchStmt`; otherwise, it parses a `try expr` (`TryExpr`).
-
-**Typed catch dispatch:** The compiler emits a `CatchMatch` instruction (opcode 94) for each catch clause. `CatchMatch` compares the error's `.type` string against the clause's type-name array; an empty array is a catch-all. A match skips the following `Jmp`; a miss falls through to the `Jmp` leading to the next clause. If the last clause is typed and none matched, a `Rethrow` (opcode 95) re-raises the original exception.
-
-**Bare rethrow:** `throw;` compiles to `Rethrow` (opcode 95). It re-throws the `StashError`'s original `RuntimeError` (preserving span and call stack), or synthesises a new `RuntimeError` from the error's message and type if no original exception is available.
-
-**`throw`:** A statement node (`ThrowStmt`) that raises a `RuntimeError` from user code. Typed error constructors (e.g. `throw TypeError("msg")`) are sugar for constructing a `StashError` with the given type and message.
-
-### Design History
-
-The original design used only `try expr` — lightweight, no exception machinery, no Go-style verbosity. After a gap analysis revealed that the absence of structured error handling blocked reliable deploy scripts and resource cleanup patterns, `try/catch/finally` was added as a **complement** (not a replacement). The `try expr` pattern remains the recommended choice for simple fallible expressions.
-
-### Documenting Throws
-
-Functions can document the errors they may raise using the `@throws` doc-comment tag. This is advisory metadata — it does not change runtime semantics, but it enriches LSP hover tooltips, signature help, and completion items, and enables static analysis.
-
-#### Syntax
-
-```stash
-/// Reads a file from disk.
-/// @param path the file path to read
-/// @return the file contents as a string
-/// @throws IOError if the file does not exist or cannot be read
-/// @throws ValueError if path is empty
-fn readFile(path) { ... }
-```
-
-One `@throws` tag per line; multiple tags are allowed. A comma-separated shorthand lists multiple types that share the same condition:
-
-```stash
-/// @throws ParseError, ValueError if the input is malformed
-fn parse(input) { ... }
-```
-
-The description after the type name is optional free-form prose. The `@throws` lines are removed from the prose `Documentation` string — they do not appear in the rendered summary.
-
-#### Resolution Rules
-
-A type name in `@throws` is valid if it resolves to one of:
-
-1. A built-in error type: `ValueError`, `TypeError`, `ParseError`, `IndexError`, `IOError`, `NotSupportedError`, `TimeoutError`, `CommandError`, `LockError`, `AliasError`, `StateError`, `CancellationError`, `RuntimeError`.
-2. A user-declared struct that has a `message: string` field (the error-shape convention).
-
-If neither condition is met, the static analyser emits:
-
-| Code     | Severity | Description                                                                                                  |
-| -------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `SA0167` | Info     | `@throws` references a known struct that does not have a `message: string` field — not an error-shape type.  |
-| `SA0168` | Warning  | `@throws` references a type that is not known at the function's declaration site.                             |
-
-Neither diagnostic is a compilation error; both are purely advisory.
-
-#### Opt-In Diagnostic Rules
-
-Two additional analysis rules interact with throws metadata but are **disabled by default** and must be explicitly enabled via `enable=SA0164` (or `SA0169`) in a `.stashcheck` file:
-
-| Code     | Severity | Trigger                                                                                                       |
-| -------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `SA0164` | Warning  | A `try` block calls a function with declared throws that are not covered by any catch clause or catch-all.    |
-| `SA0169` | Info     | A catch clause covers an error type that no call in the try body declares in its throws metadata (dead catch). |
-
-`SA0164` fires only when at least one function in the try body has explicit throws metadata. `SA0169` fires only when the union of declared throw types across all calls in the try body is non-empty. Both rules stay silent when metadata is absent (silent-fallback posture).
-
-#### Tooling Integration
-
-When `@throws` metadata is present, the language server enriches several surfaces:
-
-- **Hover** — appends a `**Throws:**` section with one bullet per declared type and its description.
-- **Signature help** — the same section appears in the function's parameter-assistance popup.
-- **Completion** — the function's `documentation` field includes the throws section so the error contract is visible before the call is written.
-
-Example hover output for `readFile`:
-
-```
-fn readFile(path: string) -> string
-
-Reads a file from disk.
-@param path the file path to read
-@return the file contents as a string
-
-**Throws:**
-- `IOError` — if the file does not exist or cannot be read
-- `ValueError` — if path is empty
-```
-
----
-
-## 7d. Retry Blocks
-
-The `retry` keyword introduces a language-level construct that re-executes a block of code when it fails, with configurable attempt limits, delays, backoff strategies, and failure predicates. It is a keyword, not a library function, to compose naturally with `try`, access block scope, and provide retry-aware diagnostics.
-
-### Syntax
-
-```stash
-// Minimal form
-retry (<maxAttempts>) {
-    <body>
-}
-
-// Full options (inline fields)
-retry (<maxAttempts>, delay: <duration>, backoff: Backoff.<strategy>, maxDelay: <duration>, jitter: <bool>, timeout: <duration>, on: [<ErrorTypes>]) {
-    <body>
-}
-
-// With until clause (predicate-based retry)
-retry (<maxAttempts>) until <predicate> {
-    <body>
-}
-
-// With onRetry hook
-retry (<maxAttempts>) onRetry (<attempt>, <error>) {
-    <hook body>
-} {
-    <retry body>
-}
-
-// Combined
-retry (<maxAttempts>, <options...>) onRetry <hookFn> until <predicateFn> {
-    <body>
-}
-```
-
-### Success and Failure Determination
-
-**Exception-based (default):** The body retries when it throws an uncaught `RuntimeError`. If the body completes without throwing, the result is returned. On exhaustion, the last `RuntimeError` is re-thrown transparently.
-
-**Predicate-based (`until` clause):** After the body completes without throwing, its return value is passed to the `until` predicate. If the predicate returns truthy, the result is returned (success). If falsy, the body is retried. On exhaustion, a `RetryExhaustedError` is thrown. The `until` clause layers on top of exception-based retry — blocks with `until` retry on both exceptions and predicate failures.
-
-**Error type filtering (`on` option):** Restricts which error types trigger a retry. Errors not in the list propagate immediately without consuming an attempt.
-
-### Options
-
-| Option     | Type       | Default         | Description                                  |
-| ---------- | ---------- | --------------- | -------------------------------------------- |
-| `delay`    | `duration` | `0s`            | Wait time before each retry                  |
-| `backoff`  | `Backoff`  | `Backoff.Fixed` | Backoff strategy: Fixed, Linear, Exponential |
-| `maxDelay` | `duration` | unlimited       | Upper bound on computed delay                |
-| `jitter`   | `bool`     | `false`         | ±25% random jitter on delay                  |
-| `timeout`  | `duration` | none            | Wall-clock deadline for all attempts         |
-| `on`       | `array`    | all error types | Error type names to retry                    |
-
-Options can be passed as inline named fields or as a pre-built `RetryOptions` struct instance.
-
-### Backoff Enum
-
-```stash
-enum Backoff { Fixed, Linear, Exponential }
-```
-
-- **Fixed:** Every retry waits `delay`.
-- **Linear:** Delay increases by `delay` each retry (delay × attempt).
-- **Exponential:** Delay doubles each retry (delay × 2^(attempt-1)).
-
-### Signal Enum
-
-```stash
-enum Signal { Hup, Int, Quit, Kill, Usr1, Usr2, Term }
-```
-
-The global `Signal` enum identifies POSIX signals for use with `process.signal()`. Each member maps to a POSIX signal number:
-
-| Member        | POSIX Signal | Value | Description             |
-| ------------- | ------------ | ----- | ----------------------- |
-| `Signal.Hup`  | SIGHUP       | 1     | Hangup                  |
-| `Signal.Int`  | SIGINT       | 2     | Interrupt (Ctrl+C)      |
-| `Signal.Quit` | SIGQUIT      | 3     | Quit                    |
-| `Signal.Kill` | SIGKILL      | 9     | Kill (cannot be caught) |
-| `Signal.Term` | SIGTERM      | 15    | Terminate (graceful)    |
-| `Signal.Usr1` | SIGUSR1      | 10    | User-defined signal 1   |
-| `Signal.Usr2` | SIGUSR2      | 12    | User-defined signal 2   |
-
-`process.signal(handle, sig)` accepts both `Signal` enum members and raw integers. `Signal.Term` and `15` are equivalent.
-
-### Attempt Context
-
-Inside the retry body, `attempt` is bound to a `RetryContext` value:
-
-| Field       | Type       | Description                         |
-| ----------- | ---------- | ----------------------------------- |
-| `current`   | `int`      | Current attempt number (1-indexed)  |
-| `max`       | `int`      | Maximum attempts configured         |
-| `remaining` | `int`      | Attempts remaining after this one   |
-| `elapsed`   | `duration` | Wall-clock time since retry started |
-| `errors`    | `array`    | All errors from previous attempts   |
-
-### `until` Clause
-
-The predicate receives 1 or 2 parameters: `(result)` or `(result, attemptNumber)`. Accepts inline lambdas or named function references. If the predicate itself throws, the error propagates immediately (not retried).
-
-### `onRetry` Hook
-
-Executes between retries — after a failure, before the next delay. Receives the failed attempt number and the error. Accepts inline blocks or named function references. The hook is NOT called after the last failed attempt. If the hook throws, the error propagates immediately.
-
-### Expression Value
-
-`retry` is an expression. The body's last expression is the return value:
-
-```stash
-let data = retry (3) { http.get(url) }
-let safe = try retry (3) { riskyOp() } ?? fallback
-```
-
-### Composability
-
-- **`try retry`:** Catches exhaustion as an Error value.
-- **`retry` inside `try/catch`:** Exhaustion caught by enclosing handler.
-- **`try/catch` inside `retry`:** Only uncaught exceptions trigger retry.
-- **Nested retry:** Inner and outer blocks are independent.
-
-### Control Flow
-
-`return` inside a retry body returns from the enclosing function. `break` and `continue` affect the enclosing loop. These propagate through the retry block — it is not a function boundary.
-
-### Scope
-
-The retry body creates a fresh block scope for each attempt. Variables declared inside the body are local to that attempt. The body has read/write access to variables in enclosing scopes.
-
-### Error Types
-
-| Error Type            | Thrown When                                           | Key Properties                       |
-| --------------------- | ----------------------------------------------------- | ------------------------------------ |
-| `RetryExhaustedError` | All attempts fail the `until` predicate               | `.attempts`, `.lastValue`, `.errors` |
-| `RetryTimeoutError`   | Wall-clock `timeout` exceeded                         | `.elapsed`, `.completedAttempts`     |
-| `RetryPredicateError` | (Internal) Passed to `onRetry` for predicate failures | `.message`                           |
-
-Exception-based exhaustion re-throws the original error transparently — no wrapping, no new types.
-
----
-
-## 7c. Switch Expressions
-
-Switch expressions provide concise multi-way branching based on value matching. Inspired by C#'s switch expressions, they evaluate the subject once and compare it against each arm's pattern in order.
-
-### Syntax
-
-```stash
-let result = value switch {
-    pattern1 => result1,
-    pattern2 => result2,
-    _ => defaultResult
-};
-```
-
-### Examples
-
-```stash
-let day = "Monday";
-let type = day switch {
-    "Saturday" => "weekend",
-    "Sunday" => "weekend",
-    _ => "weekday"
-};
-io.println(type);  // "weekday"
-```
-
-```stash
-let status = exitCode switch {
-    0 => "success",
-    1 => "warning",
-    2 => "error",
-    _ => "unknown"
-};
-```
-
-Switch expressions work with any value type — integers, strings, booleans, null, and enum values:
-
-```stash
-let label = status switch {
-    Status.Active => "running",
-    Status.Inactive => "stopped",
-    Status.Pending => "waiting",
-    _ => "unknown"
-};
-```
-
-### Semantics
-
-1. The subject expression is evaluated **once**.
-2. Arms are tested **in order** — the first matching arm wins.
-3. Patterns are compared using **value equality** (`==` semantics, no type coercion).
-4. Only the matched arm's body expression is evaluated (short-circuit).
-5. The `_` discard pattern matches any value and serves as the default arm.
-6. If no arm matches and no discard arm is present, a **runtime error** is raised.
-
-### Body Expressions
-
-Each arm's body is a single expression (not a block). Use parentheses for complex expressions if needed:
-
-```stash
-let score = grade switch {
-    "A" => 100,
-    "B" => 85,
-    "C" => 70,
-    _ => 0
-};
-```
-
-### Trailing Commas
-
-A trailing comma after the last arm is permitted:
-
-```stash
-let x = val switch {
-    1 => "one",
-    2 => "two",
-    _ => "other",  // trailing comma OK
-};
-```
-
-### Implementation
-
-A switch expression is parsed as a **postfix operator** on the subject expression, at the same precedence level as `.` (member access), `()` (calls), and `[]` (indexing). The parser produces a `SwitchExpr` AST node containing the subject and a list of `SwitchArm` entries. At runtime, the interpreter evaluates the subject, walks the arms in order, and returns the body of the first arm whose pattern equals the subject.
-
----
-
-## 7e. Switch Statements
-
-The switch **statement** provides multi-branch control flow for executing blocks of code based on a value. Unlike the switch expression (which returns a value), the switch statement executes statements in the matched case.
-
-### Syntax
-
-```stash
-switch (subject) {
-    case pattern1: {
-        // statements
-    }
-    case pattern2, pattern3: {
-        // multiple patterns - matches any
-    }
-    default: {
-        // optional default case
-    }
-}
-```
-
-### Semantics
-
-1. The subject expression is evaluated **once**.
-2. Cases are tested **in order** — the first matching case wins.
-3. Patterns use **value equality** (`==` semantics, no type coercion).
-4. Only the matched case body executes (no fallthrough).
-5. Each case requires a block body `{ ... }`.
-6. Multiple patterns per case are separated by commas — any match triggers the case.
-7. A `default` case matches any value not covered by preceding cases.
-8. If no case matches and there is no `default`, execution continues after the switch.
-
-### Examples
-
-```stash
-// Basic switch statement
-let status = "active";
 switch (status) {
     case "active": {
-        io.println("User is active");
+        start();
     }
-    case "inactive": {
-        io.println("User is inactive");
+    case "inactive", "paused": {
+        stop();
     }
     default: {
-        io.println("Unknown status");
+        report(status);
     }
 }
 ```
 
-```stash
-// Multiple patterns per case
-let day = "Saturday";
-switch (day) {
-    case "Monday", "Tuesday", "Wednesday", "Thursday", "Friday": {
-        io.println("Weekday");
-    }
-    case "Saturday", "Sunday": {
-        io.println("Weekend");
-    }
-}
-```
+Cases are tested in source order. `default` matches any subject not matched by an
+earlier case. Switch statement arms do not fall through.
+
+### Lock Blocks
+
+`lock` acquires file-based mutual exclusion for the duration of a block.
 
 ```stash
-// Switch with numeric values
-let code = 404;
-switch (code) {
-    case 200: {
-        io.println("OK");
-    }
-    case 404: {
-        io.println("Not Found");
-    }
-    case 500: {
-        io.println("Server Error");
-    }
+lock "/tmp/deploy.lock" {
+    deploy();
+}
+
+lock "/tmp/deploy.lock" (wait: 30s, stale: 5m) {
+    deploy();
 }
 ```
 
-> **Switch statement vs. switch expression:** Use the switch statement (`switch (x) { case ... }`) when you need to execute statements in each branch. Use the switch expression (`x switch { ... => ... }`) when you need to produce a value.
+Failure to acquire or release the lock produces a runtime error. The lock must be
+released when control leaves the block, including via `return`, `throw`, `break`, or
+`continue`.
 
----
+### Elevate Blocks
 
-## 7f. Timeout Blocks
-
-The `timeout` expression bounds the execution time of a block. If the block does not complete within the specified duration, a `TimeoutError` is thrown.
-
-### Syntax
-
-```
-timeout <duration> { <body> }
-```
-
-Where `<duration>` is any expression that evaluates to a duration value (e.g., `30s`, `5m`, `100ms`) or an integer number of milliseconds. The block returns the value of its last expression.
-
-### Basic Usage
+`elevate` executes a block with elevated privileges.
 
 ```stash
-let result = timeout 30s {
-  http.get("https://slow-api.example.com/data");
+elevate {
+    fs.writeFile("/etc/app.conf", config);
+}
+
+elevate("sudo") {
+    process.exec("systemctl restart app");
 }
 ```
 
-### Error Handling
+The elevation mechanism is implementation-defined and platform-specific. If
+elevation is unavailable or denied, evaluation produces a runtime error.
 
-Timeout errors are catchable with `try`:
+## Functions, Closures, and Async
+
+### Function Declarations
+
+Functions are declared with `fn`.
 
 ```stash
-let data = try timeout 10s {
-  json.parse(http.get(url).body);
-}
-if (data is Error) {
-  io.println("Request timed out or failed: ${data.message}");
-}
-```
-
-The error has type `"TimeoutError"` and a message like `"Operation timed out after 10000ms."`.
-
-### Nesting
-
-Timeout blocks can be nested. Inner timeouts create their own deadline, linked to the parent timeout. The inner timeout fires first if it's shorter:
-
-```stash
-timeout 60s {
-  for (let server in servers) {
-    timeout 10s {
-      healthCheck(server);
-    }
-  }
-}
-```
-
-### Composition
-
-Timeout composes naturally with `retry` and `try`:
-
-```stash
-retry (3, delay: 2s) {
-  timeout 5s {
-    $(ssh deploy@prod "systemctl status nginx");
-  }
-}
-```
-
-### Cleanup
-
-Use `try/finally` inside timeout blocks for cleanup:
-
-```stash
-timeout 30s {
-  try {
-    let conn = connect();
-    doWork(conn)
-  } finally {
-    conn.close();
-  }
-}
-```
-
-### Semantics
-
-- Timeout only guarantees interruption of I/O operations (`http.*`, `$()`, `process.*`, `time.sleep`, `fs.*`). CPU-bound code checks for cancellation at loop boundaries.
-- The duration must be positive. Zero or negative durations throw a `RuntimeError`.
-- The block executes in the same scope — closures and variable captures work normally.
-
----
-
-## 7g. Defer
-
-The `defer` statement registers a cleanup action to execute when the enclosing **function** returns — whether by a normal `return`, by falling off the end, or because an exception propagates through it. Multiple defers in a function execute in **LIFO order** (last registered runs first). `defer` is a statement keyword, not a function, so it integrates cleanly with the language's scope rules and diagnostics.
-
-### Syntax
-
-```stash
-// Single-statement form — most common
-defer <expression>
-
-// Block form — for multi-step or conditional cleanup
-defer { <statements> }
-
-// Async variant — inside async functions
-defer await <expression>
-defer await { <statements> }
-```
-
-### Scope
-
-A `defer` statement is **function-scoped**: registered defers always run when the enclosing function exits, regardless of which control flow path is taken. They are not block-scoped (a defer inside an `if` branch fires at function exit, not at the end of the `if`).
-
-```stash
-fn example() {
-    defer io.println("3: runs last registered, exits first");
-    defer io.println("2: middle");
-    defer io.println("1: first registered, exits last");
-    io.println("body");
-}
-// Output:
-//   body
-//   3: runs last registered, exits first
-//   2: middle
-//   1: first registered, exits last
-```
-
-A defer registered inside a conditional branch only fires if that branch was reached:
-
-```stash
-fn conditionalCleanup(acquired) {
-    if (acquired) {
-        defer releaseResource();   // only runs if acquired == true
-    }
-    doWork();
-}
-```
-
-### Evaluation: Eager vs Late Binding
-
-The two forms differ in **when expressions are evaluated**:
-
-**Single-statement (`defer expr`):** The callee and all argument values are evaluated **immediately** at the defer site (eager binding). The captured values are frozen — later mutations to variables do not affect what the deferred call will receive.
-
-**Block (`defer { ... }`):** The block is compiled as a **closure** over the enclosing scope. Variables are captured by reference and read at the time the block executes (late binding) — i.e., when the function exits.
-
-```stash
-fn eagerVsLate() {
-    let x = 10;
-    defer io.println("eager: " + conv.toStr(x));   // captures x = 10 now
-    defer { io.println("late: " + conv.toStr(x)); } // reads x at exit time
-    x = 20;
-}
-// Output:
-//   late: 20
-//   eager: 10
-```
-
-### Error Handling
-
-Defers run even when an exception propagates out of the function. After all defers complete, the exception continues to unwind up the call stack.
-
-```stash
-fn riskyOp() {
-    defer io.println("cleanup always runs");
-    throw "something went wrong";
-}
-
-try { riskyOp(); } catch (e) { io.println("caught: " + e.message); }
-// Output:
-//   cleanup always runs
-//   caught: something went wrong
-```
-
-**Suppressed errors:** If a deferred action itself throws, the error is caught and attached to the propagating exception's `.suppressed` array — it does not replace the original error or stop other defers from running.
-
-```stash
-fn example() {
-    defer throw "cleanup error";   // suppressed — stored in exception.suppressed
-    throw "original error";
-}
-let err = try example();
-io.println(err.message);                     // "original error"
-io.println(err.suppressed[0].message);       // "cleanup error"
-```
-
-### Interactions
-
-**With `try/finally`:** `defer` and `finally` are complementary. Use `finally` for cleanup scoped to a single `try` block; use `defer` for cleanup scoped to the function lifetime. Defers run **after** any `finally` clause in the body.
-
-**With `retry`:** Defers are not re-registered on each retry attempt. Register defers before the `retry` block to ensure they fire once at function exit. Inside the retry body, `try/finally` is the right tool for per-attempt cleanup.
-
-**With `timeout`:** Defers registered before a `timeout` block run when the enclosing function exits — not when the timeout fires. Resources acquired inside a `timeout` block should use `try/finally` for cleanup in the timeout handler.
-
-**With closures and lambdas:** `defer` applies to the immediately enclosing `fn` declaration. A `defer` inside a lambda registered from within a function runs when the **lambda** exits, not the outer function.
-
-```stash
-fn outer() {
-    let cleanup = () => {
-        defer io.println("lambda cleanup");  // runs when lambda exits
-        doWork();
-    }
-    cleanup();   // "lambda cleanup" prints here
-}
-```
-
-### Defer in Loops
-
-A defer registered inside a loop accumulates for the **entire function lifetime** — all instances fire when the function returns, not at the end of each iteration. This is usually unintentional. Use `try/finally` for per-iteration cleanup:
-
-```stash
-// Footgun — 3 defers accumulate, all fire at function exit
-fn processAll(items) {
-    for (let item in items) {
-        defer cleanup(item);    // fires at function return, not end of loop body
-    }
-}
-
-// Correct — cleanup runs after each iteration
-fn processAll(items) {
-    for (let item in items) {
-        try {
-            process(item);
-        } finally {
-            cleanup(item);
-        }
-    }
-}
-```
-
-### Multi-Resource Cleanup Pattern
-
-Register a `defer` immediately after acquiring each resource. LIFO order guarantees that the most-recently acquired resource is released first — mirroring correct manual cleanup order without requiring nested `try/finally` blocks.
-
-```stash
-fn deploy() {
-    defer deleteTempFiles();         // runs 3rd
-    let tmp = acquireTempDir();
-
-    defer closeConnection();         // runs 2nd
-    let conn = openConnection();
-
-    defer releaseLock();             // runs 1st
-    acquireLock();
-
-    doDeployWork(tmp, conn);
-    // All three defers fire here, LIFO: releaseLock → closeConnection → deleteTempFiles
-}
-```
-
-### Implementation Notes
-
-- Each call frame maintains a list of deferred closures (initially `null`; allocated lazily on the first `defer`).
-- The `OpCode.Defer` instruction pushes a compiled closure onto the current frame's defer list.
-- At return (normal or exception), the VM executes defers in reverse registration order before popping the frame.
-- Errors thrown by defers are caught by the VM and attached to the propagating exception's `.suppressed` array.
-
----
-
-## 7h. Lock Block
-
-The `lock` block acquires an **exclusive, OS-level advisory file lock** on a specified path for the duration of its body. Lock release is guaranteed on all exit paths — normal completion, `return`, `throw`, or unhandled exception. `lock` is a statement keyword; it does not produce a value.
-
-Use `lock` when multiple processes or script instances must not run a critical section concurrently — for example, deployment scripts, cron jobs, or maintenance tasks.
-
-### Syntax
-
-```stash
-lock <path> [(<options>)] {
-    <body>
-}
-```
-
-Options (all optional):
-
-| Option  | Type       | Default | Description                                                                                       |
-| ------- | ---------- | ------- | ------------------------------------------------------------------------------------------------- |
-| `wait`  | `duration` | forever | Maximum time to wait for lock acquisition. `0s` means non-blocking (throw immediately if locked). |
-| `stale` | `duration` | none    | Steal the lock if the holder process is dead and the lock file is older than this duration.       |
-
-### Examples
-
-```stash
-// Minimal — block until the lock is acquired (no timeout):
-lock "/var/run/deploy.lock" {
-    deploy(version);
-}
-
-// Non-blocking — throw LockError immediately if already held:
-lock "/var/run/backup.lock" (wait: 0s) {
-    backup();
-}
-
-// Wait up to 30 seconds before giving up:
-lock "/var/run/job.lock" (wait: 30s) {
-    runJob();
-}
-
-// Stale lock recovery — steal if holder is dead and file is older than 1 hour:
-lock "/var/run/nightly.lock" (stale: 1h) {
-    nightlyMaintenance();
-}
-
-// Combined — wait up to 10s, steal stale locks older than 2 hours:
-lock "/var/run/sync.lock" (wait: 10s, stale: 2h) {
-    syncData();
-}
-```
-
-### Semantics
-
-**Acquisition:** `lock` opens the file at `<path>` (creating it if absent) and acquires an exclusive OS file lock. On Linux/macOS this is `flock(2)` (`LOCK_EX`); on Windows this is `LockFileEx`. The lock file is **never deleted** on release — deleting and recreating lock files introduces TOCTOU races. The file persists as a marker; only the OS lock is released.
-
-**Wait behavior:**
-
-- No `wait` option → block indefinitely until the lock is acquired (matches `flock(2)` default).
-- `wait: 0s` → attempt once; throw `LockError` immediately if locked.
-- `wait: Xs` → poll every 50 ms for up to `Xs`; throw `LockError` on timeout.
-
-**Stale detection:** When the lock cannot be acquired, if `stale` is set, the VM inspects the PID written in the lock file. If the process is dead **and** the file's mtime is older than the stale duration, the lock is stolen and the current process takes ownership.
-
-**Lock file contents:** The VM writes `<PID>\n` (current process ID, ASCII decimal) into the lock file on acquisition. This enables stale detection by subsequent processes.
-
-**Guaranteed release:** The OS lock is released in all cases:
-
-1. Normal block exit → `LockEnd` opcode.
-2. Exception inside block → compiler-generated try/finally ensures `LockEnd` runs before the exception propagates.
-3. Normal process exit → `AppDomain.ProcessExit` handler releases all active locks.
-4. SIGINT / SIGTERM / SIGHUP (Unix) → `PosixSignalRegistration` handler releases all active locks.
-5. Unhandled exception → `AppDomain.UnhandledException` handler.
-
-> **SIGKILL / TerminateProcess:** Cannot be caught. The lock file remains but contains a dead PID. The `stale` option exists for recovery in this case.
-
-**Path normalization:** The path is passed through `Path.GetFullPath()` before use, so `"./deploy.lock"` and `"/cwd/deploy.lock"` are treated as the same path for deadlock detection.
-
-### No Return Value
-
-`lock` is a statement — it cannot appear in expression position. `let x = lock ... { }` is a parse error.
-
-To extract a value from a critical section, declare the variable outside and assign inside. This pattern also makes shared-mutable state intent explicit:
-
-```stash
-let previousVersion = null;
-lock "/var/run/version.lock" {
-    previousVersion = str.trim(fs.readFile("current_version.txt"));
-    fs.writeFile("current_version.txt", "v2.0.0");
-}
-io.println("Previous version: ${previousVersion}");
-```
-
-### Nested Locks
-
-Multiple `lock` blocks may be nested on **different paths**:
-
-```stash
-lock "/var/run/outer.lock" {
-    lock "/var/run/inner.lock" {
-        // both locks held here
-    }
-}
-```
-
-Nesting on the **same path** deadlocks and is rejected at both static analysis time (SA0812) and runtime (throws `LockError`).
-
-### Errors
-
-Throws `LockError` when:
-
-- The lock cannot be acquired within the `wait` window.
-- Non-blocking mode (`wait: 0s`) finds the lock already held.
-- The same path is already locked by the current process (would deadlock).
-- Running in the Playground sandbox (file I/O unavailable).
-
-`LockError` has two fields: `message` (string) and `path` (string — the normalized lock file path).
-
-File system errors (permission denied, path not found, disk full) throw `IOError` as usual.
-
-```stash
-try {
-    lock "/var/run/job.lock" (wait: 0s) {
-        runJob();
-    }
-} catch (LockError e) {
-    io.println("Job already running at: " + e.path);
-}
-```
-
-### Composition
-
-`lock` composes cleanly with other control flow:
-
-```stash
-// retry + lock — poll for the lock using retry's delay
-retry (5, delay: 10s) {
-    lock "/var/run/deploy.lock" (wait: 0s) {
-        deploy(version);
-    }
-}
-
-// timeout + lock — cap total wait including body execution
-timeout 60s {
-    lock "/var/run/job.lock" (wait: 30s) {
-        runLongJob();
-    }
-}
-
-// defer inside lock — deferred cleanup runs while the lock is still held
-lock "/var/run/deploy.lock" {
-    defer cleanup(tmpDir);    // runs before LockEnd — lock is still active
-    doDeployWork(tmpDir);
-}
-```
-
-> **Note:** `lock`'s `wait` option is independent of an enclosing `timeout` — the outer `timeout` cancels the entire operation (lock wait + body), while `wait` caps only the acquisition phase.
-
-### Embedded Mode
-
-`lock` is unavailable in embedded mode (when Stash runs as a library inside another process). Acquiring process-level file locks from an embedded VM could conflict with the host process's file handles. `lock` in embedded mode throws `NotSupportedError` at runtime.
-
-### Dry Mode
-
-When `sys.isDry()` is `true`, the lock block prints `DRY: Would acquire lock: <path>` and executes the body **without** acquiring the OS file lock. This allows dry-running deployment scripts that contain `lock` blocks.
-
-### Static Analysis
-
-| Code   | Severity | Condition                                                                                                                         |
-| ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| SA0810 | Warning  | `lock` path expression is not a string literal and cannot be statically validated.                                                |
-| SA0811 | Warning  | `lock` body is empty — the lock serves no purpose.                                                                                |
-| SA0812 | Error    | A `lock` block on the same path is nested inside another `lock` on that path — will deadlock at runtime.                          |
-| SA0813 | Info     | A `lock` without a `wait` option is not enclosed in a `timeout` block — will wait indefinitely if another process holds the lock. |
-| SA0814 | Warning  | A `lock` with `wait: 0s` is not enclosed in a `try` block — `LockError` will be unhandled if the lock is already held.            |
-
-### Cross-Platform Notes
-
-| Aspect            | Linux / macOS                      | Windows                             |
-| ----------------- | ---------------------------------- | ----------------------------------- |
-| Lock primitive    | `flock(2)` — advisory              | `LockFileEx` — mandatory            |
-| Signal cleanup    | SIGINT, SIGTERM, SIGHUP registered | `Console.CancelKeyPress`            |
-| Lock semantics    | Only Stash processes coordinated   | OS enforces against all processes   |
-| Recommended paths | `/var/run/` or `/tmp/`             | `%TEMP%` or well-known app data dir |
-
----
-
-## 7i. Unset Statement
-
-`unset name1, name2, …;` removes one or more named bindings from the **top-level global scope**. After the statement executes, the names are gone: reading them raises `NameError`, the shell classifier stops treating them as Stash symbols (enabling PATH lookup again), and `is StructName` / `is EnumName` return `false`. A later `let name = …` re-declares the name cleanly.
-
-`unset` is a **soft keyword** — it is recognised as a statement keyword only when the parser sees `unset` followed by a bare identifier at statement position. In any other position (`let unset = 1;`, `unset()`, `obj.unset`) it is a regular identifier.
-
-### Syntax
-
-```stash
-unset name;
-unset name1, name2, name3;
-```
-
-At least one target is required. Trailing commas and dotted paths (`unset foo.bar;`) are parse errors. Targets must be bare identifiers.
-
-### Allowed Targets
-
-| Target kind                   | REPL      | Script    | Notes                                                            |
-| ----------------------------- | --------- | --------- | ---------------------------------------------------------------- |
-| User `let` global             | ✅        | ✅        | Primary use case.                                                |
-| User `fn` global              | ✅        | ✅        | Function lives in the same global slot.                          |
-| User `struct` global          | ✅        | ✅        | Removes type registry entry; `is MyStruct` → false.              |
-| User `enum` global            | ✅        | ✅        | Removes type registry entry; `is MyEnum` → false.                |
-| User `const` global           | ✅        | ❌        | SA0843. `const` is inviolable in scripts; REPL permits fix-typo. |
-| Imported module / alias       | ❌        | ❌        | SA0842. Remove or refactor the `import` instead.                 |
-| Built-in namespace / function | ❌        | ❌        | SA0841. Runtime fixtures cannot be removed.                      |
-| Unknown / never-declared name | ⚠ warning | ⚠ warning | SA0840; runtime no-op. Bash precedent.                           |
-
-When a statement lists several targets and one is invalid, the diagnostic is **per-target** — the others still proceed.
-
-### Examples
-
-```stash
-// Remove a binding and re-declare
-let x = 1;
-unset x;
-let x = "hello";        // OK — same slot, fresh value
-io.println(x);          // "hello"
-```
-
-```stash
-// Remove multiple temporaries at once
-let tmp1 = computeA();
-let tmp2 = computeB();
-let tmp3 = computeC();
-// ... use them ...
-unset tmp1, tmp2, tmp3;
-```
-
-```stash
-// Unset a function or struct type
-fn helper() { return 42; }
-struct Cfg { host, port }
-
-unset helper, Cfg;
-// subsequent: helper() → NameError; let c = Cfg {...} → NameError
-```
-
-```stash
-// REPL only — remove a const to fix a typo
-const TIMOUT_MS = 500;  // typo
-unset TIMOUT_MS;
-const TIMEOUT_MS = 500; // correct spelling
-```
-
-### REPL Behaviour
-
-In the REPL, the primary motivation for `unset` is **un-shadowing a PATH executable** that was accidentally overwritten by a `let` declaration:
-
-```text
-shell> let ls = "test"      # accidentally shadows /bin/ls
-shell> ls                   # Stash variable lookup → "test"
-shell> unset ls             # binding removed
-shell> ls                   # PATH executable runs again
-```
-
-`unset` is exactly what the shell classifier sees at the prompt — no backslash prefix or special syntax required.
-
-### Static Analysis
-
-| Code   | Level   | Condition                                                       |
-| ------ | ------- | --------------------------------------------------------------- |
-| SA0840 | Warning | Target is not defined; `unset` has no effect.                   |
-| SA0841 | Error   | Target is a built-in namespace or function.                     |
-| SA0842 | Error   | Target is an imported binding or alias.                         |
-| SA0843 | Error   | Target is a `const` binding in a script (allowed in REPL only). |
-| SA0844 | Error   | `unset` appears inside a function or block (top-level only).    |
-
-The analyzer also removes the target from its symbol table so subsequent references in the same compilation unit produce SA0202 ("undefined name"). A `let x = …` followed only by `unset x;` does **not** trigger the unused-variable diagnostic — the `unset` counts as a use.
-
-### Relationship to `env.unset`
-
-`unset` removes a **Stash binding**. It does not affect environment variables. To delete an environment variable, call [`env.unset(name)`](Stash%20—%20Standard%20Library%20Reference.md#envunsetname) explicitly.
-
----
-
-## 8. Functions
-
-### Declaration
-
-```stash
-fn greet(name) {
-    io.println("Hello, " + name);
-}
-
 fn add(a, b) {
     return a + b;
 }
 ```
 
-### Default Parameter Values
-
-Function parameters can have **default values** — if the caller omits an argument, the default is used instead. Default parameters must be **trailing** (right-to-left), same as C#.
+Parameters may have type hints and default values.
 
 ```stash
-fn greet(name, greeting = "Hello") {
-    io.println(greeting + ", " + name);
+fn connect(host: string, port: int = 443) {
+    return "${host}:${port}";
 }
-
-greet("Alice");           // "Hello, Alice"
-greet("Alice", "Hi");     // "Hi, Alice"
 ```
 
-Default values work with optional type annotations:
+Default parameter expressions are evaluated when the function is called and the
+argument is omitted.
+
+### Rest Parameters and Spread Arguments
+
+A rest parameter captures remaining positional arguments as an array.
 
 ```stash
-fn connect(host: string, port: int = 8080, secure: bool = false) {
-    io.println("Connecting to " + host + ":" + conv.toStr(port));
-}
-
-connect("localhost");                  // port=8080, secure=false
-connect("localhost", 443);             // secure=false
-connect("localhost", 443, true);       // all provided
-```
-
-**Rules:**
-
-- Once a parameter has a default value, all subsequent parameters must also have defaults
-- Default values are expressions evaluated at **call time** (not definition time)
-- Calling with too few required arguments or too many total arguments is a runtime error
-
-```stash
-// Parse error — non-default after default
-fn bad(a = 1, b) { }
-
-// Runtime error — 'a' is required
-fn f(a, b = 5) { return a + b; }
-f();  // Error: Expected 1 to 2 arguments but got 0
-```
-
-### Rest Parameters
-
-Rest parameters collect any remaining arguments into an array using the `...` prefix:
-
-```stash
-fn log(level, ...messages) {
-    for (let msg in messages) {
-        io.println("[" + level + "] " + msg);
+fn sum(...values) {
+    let total = 0;
+    for (let value in values) {
+        total += value;
     }
+    return total;
 }
-
-log("INFO", "Server started", "Listening on port 8080");
-// [INFO] Server started
-// [INFO] Listening on port 8080
 ```
 
-**Rules:**
-
-- Only one rest parameter is allowed per function
-- The rest parameter must be the last parameter
-- Rest parameters cannot have default values
-- Rest parameters can follow default parameters: `fn f(a, b = 5, ...rest)`
-- When no extra arguments are passed, the rest parameter is an empty array `[]`
-- Rest parameters work in both function declarations and lambda expressions
+Spread arguments expand an iterable into positional arguments.
 
 ```stash
-// Rest with leading required and default params
-fn format(template, separator = ", ", ...values) {
-    return str.replace(template, "{}", arr.join(values, separator));
-}
-
-// Lambda with rest parameter
-let sum = (...nums) => arr.reduce(nums, (acc, n) => acc + n, 0);
-io.println(sum(1, 2, 3, 4));  // 10
-
-// Arity enforcement — required params still required
-fn process(name, ...items) { }
-process();  // Runtime error: Expected at least 1 argument
+sum(...[1, 2, 3]);
 ```
 
-### Spread Syntax
+### Lambdas
 
-The spread operator `...` expands arrays and dictionaries in several contexts:
-
-#### Spread in Function Calls
-
-Spread an array as individual arguments:
+Lambda expressions create anonymous functions.
 
 ```stash
-fn add(a, b, c) { return a + b + c; }
-let args = [1, 2, 3];
-io.println(add(...args));  // 6
-
-// Mix spread with regular args
-let pair = [2, 3];
-io.println(add(1, ...pair));  // 6
-
-// Multiple spreads
-io.println(add(...[1], ...[2, 3]));  // 6
+let double = (x) => x * 2;
+let logAll = (items) => {
+    for (let item in items) {
+        io.println(item);
+    }
+};
 ```
 
-#### Spread in Array Literals
-
-Expand arrays inline to concatenate or insert elements:
-
-```stash
-let a = [1, 2];
-let b = [3, 4];
-let combined = [...a, ...b];        // [1, 2, 3, 4]
-let inserted = [0, ...a, 99, ...b]; // [0, 1, 2, 99, 3, 4]
-```
-
-Spreading is shallow — nested arrays remain references, not copies.
-
-#### Spread in Dictionary Literals
-
-Merge dictionaries or struct instances into a new dictionary:
-
-```stash
-let defaults = { host: "localhost", port: 8080 };
-let overrides = { port: 3000, debug: true };
-let config = { ...defaults, ...overrides };
-// { host: "localhost", port: 3000, debug: true }
-```
-
-Last-wins semantics: when keys conflict, the later entry wins. Struct instances can also be spread:
-
-```stash
-struct Point { x, y }
-let p = Point { x: 1, y: 2 };
-let dict = { ...p, z: 3 };  // { x: 1, y: 2, z: 3 }
-```
-
-#### Spreading `null`
-
-In **function call** and **array literal** contexts, `...null` splices **zero entries** —
-it is treated the same as spreading an empty array. This is symmetric with empty-array
-splat and matches Stash's general null-tolerance pattern for collection-like operations:
-
-```stash
-fn f(...args) { return args; }
-f(...null);              // []  — zero entries spliced
-f(1, ...null, 2);        // [1, 2]
-let arr = [1, ...null, 2];   // [1, 2]
-
-let extra = env.get("EXTRA_FLAGS") ?? "";
-$(builder ${...str.words(extra)} target);   // 0 extra args when env unset
-```
-
-In **dictionary literal** contexts, `...null` is still a runtime error — dict spread
-requires key/value pairs.
-
-#### Spreading Strings
-
-Spreading a string is **not supported**. The spread operator expects an array, and
-strings are deliberately not auto-iterated as character arrays. Use one of the explicit
-helpers and spread the result:
-
-| Helper                   | What it does                                                          |
-| ------------------------ | --------------------------------------------------------------------- |
-| `str.words(s)`           | Naive Unicode-whitespace split. Best for static flag strings.         |
-| `str.shellSplit(s)`      | POSIX-shell-style split honoring `'...'`, `"..."`, and `\` escapes.   |
-
-```stash
-let opts = "-la --color=always";
-$(ls ${...str.words(opts)});                  // ["-la", "--color=always"]
-
-let line = $"-e \"import sys\" -c print";
-$(python ${...str.shellSplit(line)});         // ["-e", "import sys", "-c", "print"]
-
-fn run(prog, ...args) { /* ... */ }
-let flags = "-v --quiet";
-run("mytool", ...str.words(flags));           // run("mytool", "-v", "--quiet")
-```
-
-The `...str` form is **reserved for future use** — if Stash ever grows char-iterable
-strings, `...str` will splat characters (matching JS / Python semantics). It is
-deliberately left unsupported today rather than overloaded with whitespace-split
-semantics.
-
-#### Runtime Errors
-
-Spreading a non-array, non-null value is a runtime error:
-
-```stash
-[...5];        // RuntimeError: Cannot spread non-array value; expected array.
-[..."abc"];    // RuntimeError: Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.
-{ ...5 };      // RuntimeError: Cannot spread a non-dict/struct value in dict literal
-{ ...null };   // RuntimeError: dict spread requires key/value pairs
-```
-
-### Implicit Return Value
-
-Functions that do not execute a `return` statement implicitly return `null`:
-
-```stash
-fn greet(name) {
-    io.println("Hello, " + name);
-}
-
-let result = greet("world");  // result is null
-```
+Expression-body lambdas return the expression value. Block-body lambdas return
+`null` unless a `return` statement is executed.
 
 ### Closures
 
-Functions capture their enclosing lexical environment:
+Functions and lambdas capture lexical bindings they reference.
 
 ```stash
 fn makeCounter() {
     let count = 0;
-    fn increment() {
-        count = count + 1;
+    return () => {
+        count++;
         return count;
-    }
-    return increment;
+    };
+}
+```
+
+Captured mutable bindings remain mutable through the closure.
+
+### Async Functions and Await
+
+`async fn` declares an asynchronous function. Calling an async function returns a
+`Future`.
+
+```stash
+async fn fetchAll(urls) {
+    return await http.get(urls[0]);
 }
 
-let counter = makeCounter();
-io.println(counter()); // 1
-io.println(counter()); // 2
-```
-
-### Built-in Functions
-
-| Function      | Description                                                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `typeof(val)` | Return the type of a value as string. See also the `is` operator ([Section 4c](#4c-the-is-operator)) for inline type checking. |
-| `len(val)`    | Length of a string or array                                                                                                    |
-| `lastError()` | Last error value (Error object) or null                                                                                        |
-
-All other built-in functions are organized into namespaces (see below).
-
-### Built-in Namespaces
-
-Stash organizes built-in functions into **namespaces** accessed via dot notation. A small set of fundamental functions remain global (see above); everything else lives in a namespace.
-
-Available namespaces: `io`, `conv`, `env`, `fs`, `path`, `str`, `arr`, `dict`, `math`, `time`, `json`, `ini`, `config`, `http`, `process`, `assert`, `test`.
-
-Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
-
-See the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) for complete documentation of all namespace functions.
-
----
-
-## 8b. Lambda Expressions
-
-Lambda expressions (arrow functions) provide a concise syntax for creating anonymous functions. They are first-class values that can be assigned to variables, passed as arguments, and returned from functions.
-
-### Syntax
-
-**Expression body** — implicit return of a single expression:
-
-```stash
-let double = (x) => x * 2;
-let add = (a, b) => a + b;
-let greet = () => "hello";
-```
-
-**Block body** — explicit `return` for multi-statement logic:
-
-```stash
-let abs = (x) => {
-    if (x < 0) {
-        return -x;
-    }
-    return x;
-};
-```
-
-### Parameters
-
-Lambdas support zero or more parameters, with optional type annotations and default values:
-
-```stash
-let noParams = () => 42;
-let oneParam = (x) => x + 1;
-let typed = (x: int, y: int) => x + y;
-let withDefault = (x, factor = 2) => x * factor;
-```
-
-Default values follow the same trailing-only rules as named functions:
-
-```stash
-let connect = (host: string, port: int = 8080) => host + ":" + conv.toStr(port);
-connect("localhost");        // "localhost:8080"
-connect("localhost", 443);   // "localhost:443"
-```
-
-Lambdas support the same parameter features as functions, including default values and rest parameters:
-
-```stash
-let sum = (...args) => arr.reduce(args, (a, b) => a + b, 0);
-```
-
-### Closures
-
-Lambdas capture their enclosing lexical environment, just like named functions:
-
-```stash
-fn makeMultiplier(factor) {
-    return (x) => x * factor;
-}
-
-let triple = makeMultiplier(3);
-io.println(triple(5));  // 15
-```
-
-### Higher-Order Usage
-
-Lambdas are particularly useful when passed as arguments to other functions:
-
-```stash
-fn apply(f, x) {
-    return f(x);
-}
-
-let result = apply((x) => x * x, 4);  // 16
-```
-
-### Internal Representation
-
-A lambda expression is evaluated to a `StashLambda` — an `IStashCallable` that stores the parameter list and body along with the closure environment at the point of definition. Expression-body lambdas implicitly return their expression; block-body lambdas require explicit `return` and default to `null`.
-
----
-
-## 8c. Async Functions & Await
-
-Stash supports **language-level asynchronous programming** via `async` and `await` keywords. Async functions run their body on the .NET thread pool and return a `Future` immediately. `await` blocks until a `Future` resolves and returns its value.
-
-### Async Function Declaration
-
-Prefix any function declaration with `async` to make it asynchronous:
-
-```stash
-async fn fetchData(url) {
-    let response = http.get(url);
-    return response;
-}
-
-// Calling returns a Future immediately
-let future = fetchData("https://api.example.com/data");
-io.println(typeof(future));  // "Future"
-
-// await blocks until the Future resolves
-let data = await future;
-```
-
-### Async Lambdas
-
-Lambdas can also be async — prefix the parameter list with `async`:
-
-```stash
-let double = async (x) => x * 2;
-let result = await double(21);  // 42
-
-let process = async (data) => {
-    let parsed = json.parse(data);
-    return parsed;
-};
-```
-
-### The `await` Expression
-
-`await` is a **prefix expression** (same precedence as `try`) that blocks until a `Future` resolves:
-
-```stash
-// Await a Future from an async function
-let result = await asyncFn();
-
-// task.run() also returns a Future
-let future = task.run(() => 42);
+let future = fetchAll(urls);
 let result = await future;
-
-// Await a non-Future value — returns it as-is (transparent await)
-let result = await 42;  // 42
 ```
 
-### Parallel Execution
-
-Async functions enable composable parallelism. Call multiple async functions without awaiting, then await all results:
+`async` lambdas are also allowed.
 
 ```stash
-async fn fetch(url) {
-    return http.get(url);
+let work = async () => await task.delay(1s);
+```
+
+`await expr` evaluates `expr`. If the result is a `Future`, `await` waits for it to
+resolve and evaluates to its result. Awaiting a non-`Future` value evaluates to that
+value.
+
+If a future fails with an error, `await` produces that error.
+
+### Methods
+
+Struct declarations and extension blocks may define methods. A method call binds
+the receiver as `self`.
+
+```stash
+struct Server {
+    host,
+
+    fn url() {
+        return "https://${self.host}";
+    }
+}
+```
+
+The receiver expression is evaluated before arguments.
+
+### Uniform Function Call Syntax
+
+Uniform function call syntax permits namespace functions to be called as if they
+were methods on the first argument.
+
+```stash
+str.trim(name);
+name.trim();
+```
+
+The method form must resolve to the same callable and argument list as the
+corresponding namespace call. If both an inherent method and a UFCS candidate exist,
+the method resolution order in [Method Resolution](#method-resolution) applies.
+
+## Aggregate Types and Members
+
+### Structs
+
+A struct declaration introduces a user-defined aggregate type.
+
+```stash
+struct Server {
+    host: string,
+    port: int,
+
+    fn endpoint() {
+        return "${self.host}:${self.port}";
+    }
+}
+```
+
+Struct literals instantiate structs.
+
+```stash
+let server = Server {
+    host: "localhost",
+    port: 8080,
+};
+```
+
+Missing required fields or unknown fields produce a runtime error. Field access uses
+dot syntax.
+
+### Enums
+
+An enum declaration introduces named members.
+
+```stash
+enum Status {
+    Unknown,
+    Active,
+    Inactive,
 }
 
-// Spawn three parallel requests
-let f1 = fetch("https://api1.example.com");
-let f2 = fetch("https://api2.example.com");
-let f3 = fetch("https://api3.example.com");
-
-// Wait for all — total time ≈ slowest request, not sum
-let results = await task.all([f1, f2, f3]);
+let s = Status.Active;
 ```
 
-Use `task.race()` to get the first result:
+Enum members compare by enum type and member identity.
+
+### Interfaces
+
+An interface declares a structural contract.
 
 ```stash
-let fastest = await task.race([
-    fetch("https://primary.example.com"),
-    fetch("https://replica.example.com")
-]);
-```
-
-### Error Handling
-
-Errors thrown inside async functions propagate when awaited. Use `try` to catch them:
-
-```stash
-async fn riskyOp() {
-    throw "something went wrong";
+interface Runnable {
+    fn run() -> int,
+    name: string,
 }
+```
 
-// Without try — crashes the script
-let result = await riskyOp();
+A struct may declare interface conformance after its name.
 
-// With try — returns an Error value
-let result = try await riskyOp();
+```stash
+struct Job: Runnable {
+    name,
+
+    fn run() {
+        return 0;
+    }
+}
+```
+
+Conformance requires every interface field and method to be present with compatible
+signatures. `value is InterfaceName` evaluates to `true` for conforming values.
+
+### Extension Blocks
+
+An extension block adds methods to an existing type.
+
+```stash
+extend string {
+    fn quoted() {
+        return "\"${self}\"";
+    }
+}
+```
+
+Extensions may target built-in types, structs, and dictionaries where supported.
+Extension methods participate in normal method lookup.
+
+### Method Resolution
+
+When resolving `receiver.name(...)`, the implementation must search in this order:
+
+1. Inherent methods declared on the receiver's type.
+2. Extension methods in scope.
+3. UFCS candidates from imported or built-in namespaces.
+4. Dictionary key lookup when the receiver is a dictionary and `name` is a key.
+
+Ambiguous extension or UFCS matches produce a runtime error or static diagnostic.
+
+## Shell Integration
+
+### Command Expressions
+
+Command expressions execute external commands.
+
+```stash
+let output = $(git status --short);
+```
+
+A normal command expression captures stdout as a string and does not throw solely
+because the command exits non-zero.
+
+### Strict Commands
+
+Strict command expressions produce a runtime error when the command exits non-zero.
+
+```stash
+$!(npm test);
+```
+
+The runtime error must expose command, exit code, stdout, and stderr when available.
+
+### Passthrough Commands
+
+Passthrough command expressions stream process output directly to the current
+standard streams.
+
+```stash
+$>(npm test);
+$!>(npm test);
+```
+
+The strict passthrough form produces a runtime error on non-zero exit.
+
+### Streaming Commands
+
+Streaming command expressions return a stream-like handle or iterable process value.
+
+```stash
+for (let line in $<(tail -f app.log)) {
+    io.println(line);
+}
+```
+
+The strict streaming form produces a runtime error when the command fails.
+
+```stash
+$!<(grep ERROR app.log);
+```
+
+### Shell Interpolation
+
+Command expressions may contain interpolation slots.
+
+```stash
+let branch = "main";
+$(git checkout ${branch});
+$(printf '%s\n' ${...items});
+```
+
+Interpolated values must be passed as safe command arguments, not concatenated into
+an unsafe shell string, unless the command mode explicitly documents raw shell
+evaluation.
+
+### Pipes
+
+The pipe operator connects command output to command input.
+
+```stash
+$(cat access.log) | $(grep ERROR) | $(wc -l);
+```
+
+The following syntax is also valid and de-sugars into the separate command pipe chain at runtime.
+
+```stash
+$(cat access.log | grep ERROR | wc -l);
+```
+
+When all operands are command expressions, `|` is a command pipe. In non-command
+integer expression context, `|` is bitwise OR.
+
+### Output Redirection
+
+Command output may be redirected to files.
+
+```stash
+$(generate) > "out.txt";
+$(generate) >> "out.txt";
+$(generate) 2> "err.txt";
+$(generate) 2>> "err.txt";
+$(generate) &> "all.txt";
+$(generate) &>> "all.txt";
+```
+
+Redirection targets must evaluate to paths. Redirection failures produce runtime
+errors.
+
+### Command-Line Execution Modes
+
+An implementation may support inline execution and standard-input execution.
+
+```text
+stash -c 'io.println("hello");'
+echo 'io.println("hello");' | stash
+```
+
+When supported, these modes must parse and evaluate their input as normal Stash
+programs.
+
+## Errors and Cleanup
+
+### Error Values
+
+Stash errors are values. The standard built-in error types are specified in the
+[Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md).
+
+An error value must expose a message. Caught errors also expose `.type` and `.stack`
+where supported.
+
+### Throw
+
+`throw expr;` evaluates `expr` and raises it as an error.
+
+```stash
+throw ValueError { message: "invalid port" };
+```
+
+`throw;` inside a catch clause rethrows the current error. A bare `throw;` outside a
+catch clause produces a runtime error.
+
+### Try Expressions
+
+`try expr` evaluates `expr`. If evaluation succeeds, the expression evaluates to the
+result. If evaluation produces an error, the expression evaluates to the error value
+instead of throwing it.
+
+```stash
+let result = try fs.readFile("missing.txt");
 if (result is Error) {
-    io.println(result.message);  // "something went wrong"
+    io.eprintln(result.message);
 }
 ```
 
-### Future Type
+### Try/Catch/Finally Statements
 
-A `Future` is a first-class value representing an in-progress async computation:
-
-- **Type checking:** `value is Future` → `true` / `false`
-- **typeof:** `typeof(future)` → `"Future"`
-- **Truthiness:** Futures are truthy
-- **Stringification:** `<Future:Running>`, `<Future:Completed>`, `<Future:Faulted>`
-
-### Async Struct Methods
-
-Struct methods can be declared async:
+`try` statements handle thrown errors.
 
 ```stash
-struct ApiClient {
-    base_url: string
+try {
+    deploy();
+} catch (CommandError e) {
+    io.eprintln(e.stderr);
+} catch (e) {
+    io.eprintln(e.message);
+} finally {
+    cleanup();
+}
+```
 
-    async fn get(path) {
-        return http.get($"{self.base_url}/{path}");
+Catch clauses are tested in source order. A typed catch matches errors of that type.
+An untyped catch matches any error. The `finally` block executes whenever control
+leaves the `try` statement.
+
+### Retry Expressions
+
+`retry` re-executes a block until it succeeds, reaches the maximum attempt count, or
+an `until` predicate stops it.
+
+```stash
+let result = retry (3, backoff: Backoff.Exponential, delay: 1s)
+    onRetry (attempt, error) {
+        log.warn("retrying", { attempt: attempt, error: error.message });
     }
-}
-
-let client = ApiClient { base_url: "https://api.example.com" };
-let resp = await client.get("users");
-```
-
-### Companion Functions
-
-The `task` namespace provides utility functions for working with Futures (see Standard Library Reference):
-
-| Function             | Description                                                  |
-| -------------------- | ------------------------------------------------------------ |
-| `task.all(futures)`  | Returns a Future that resolves to an array of all results    |
-| `task.race(futures)` | Returns a Future that resolves to the first completed result |
-| `task.resolve(val)`  | Creates an already-resolved Future                           |
-| `task.delay(secs)`   | Creates a Future that resolves to `null` after a delay       |
-
-### Internal Representation
-
-An `async fn` declaration sets `IsAsync = true` on the `FnDeclStmt` AST node. When called, `StashFunction.Call()` forks the interpreter via `interpreter.Fork()`, snapshots the environment via `Environment.Snapshot()`, runs the body on the .NET `ThreadPool`, and returns a `StashFuture` wrapping the resulting `Task<object?>`.
-
-`await` is parsed as an `AwaitExpr` prefix expression. The interpreter's `VisitAwaitExpr` calls `StashFuture.GetResult()` which blocks on the underlying task and unwraps exceptions. If the awaited value is not a `Future`, it is returned as-is (transparent await).
-
----
-
-## 8c. UFCS — Uniform Function Call Syntax
-
-UFCS (Uniform Function Call Syntax) allows namespace functions to be called as methods on values, enabling left-to-right chaining syntax alongside the existing `namespace.function(value)` syntax.
-
-### Motivation
-
-Stash organizes built-in functions into namespaces: `str.upper(s)`, `arr.push(a, v)`. While consistent, this forces inside-out nesting for chained operations:
-
-```stash
-// Without UFCS: inside-out — read right-to-left
-let result = str.split(str.upper(str.trim(input)), ",");
-
-// With UFCS: left-to-right chaining
-let result = input.trim().upper().split(",");
-```
-
-### Syntax
-
-Given an expression `receiver.method(arg1, arg2, ...)`, if the receiver is not a struct instance, dictionary, enum, or namespace, the interpreter maps the receiver's type to its corresponding namespace and looks up `method` as a function. The receiver is implicitly prepended as the first argument.
-
-```stash
-// These pairs are equivalent:
-str.upper(s)           ↔  s.upper()
-str.split(s, ",")      ↔  s.split(",")
-arr.push(a, 42)        ↔  a.push(42)
-arr.map(a, (x) => x*2) ↔  a.map((x) => x*2)
-```
-
-### Type-to-Namespace Mapping
-
-Only type-centric namespaces participate in UFCS:
-
-| Runtime Type | Namespace |
-| ------------ | --------- |
-| `string`     | `str`     |
-| `array`      | `arr`     |
-
-All other namespaces (`dict`, `math`, `conv`, `fs`, `http`, `env`, `io`, etc.) are **not** eligible for UFCS. Dictionary dot access resolves to key lookup, not UFCS — `d.keys` returns the dict entry at key `"keys"`, not `dict.keys(d)`.
-
-### Resolution Rules
-
-When evaluating `receiver.name`, the interpreter follows this precedence:
-
-1. **StashError** — access `.message`, `.type`, `.stack` fields
-2. **Struct instance** — field or method lookup
-3. **Dictionary** — key lookup
-4. **Enum** — member lookup
-5. **Namespace** — member lookup
-6. **UFCS** — map receiver type to namespace, return bound method
-7. **Error** — "No method 'name' on type 'typename'"
-
-Existing resolution (steps 1–5) always takes priority. UFCS is a **fallback**, not an override.
-
-### Arity Adjustment
-
-UFCS-bound methods report arity reduced by 1 since the receiver is implicit:
-
-```stash
-str.upper     // namespace function: arity 1 (takes s)
-s.upper       // UFCS method: arity 0 (receiver is implicit)
-
-str.split     // namespace function: arity 2 (takes s, delimiter)
-s.split       // UFCS method: arity 1 (takes delimiter)
-```
-
-### Chaining
-
-Each UFCS call returns a value that can be the receiver of the next call:
-
-```stash
-// String chaining
-let slug = title.trim().lower().replaceAll(" ", "-");
-
-// Array pipelines
-let names = users
-    .filter((u) => u.active)
-    .sortBy((u) => u.name)
-    .map((u) => u.email);
-
-// Mixed: namespace call result → UFCS
-let words = fs.readFile("data.txt").trim().split("\n");
-```
-
-### Limitations
-
-```stash
-// No UFCS on dictionaries (ambiguous with key lookup)
-d.keys()          // dict key lookup, NOT dict.keys(d) — use dict.keys(d)
-
-// No UFCS on null
-null.upper()      // ERROR — null has no methods
-
-// No UFCS on numbers or booleans
-42.abs()          // ERROR — use math.abs(42)
-true.toStr()      // ERROR — use conv.toStr(true)
-
-// Variadic/factory functions not reachable via UFCS
-str.format("{0}", val)  // use namespace syntax
-arr.zip(a, b)           // use namespace syntax
-```
-
-### Both Syntaxes Coexist
-
-Neither syntax is deprecated. Use whichever is clearer for the context:
-
-```stash
-// UFCS for chaining
-let result = input.trim().upper().split(",");
-
-// Namespace for standalone calls
-let upper = str.upper(name);
-
-// Mixed in a single expression
-let count = len(lines.filter((l) => l.contains("ERROR")));
-```
-
----
-
-## 8d. Extend Blocks — Type Extension Methods
-
-Extend blocks allow adding new methods to existing types — both built-in types (`string`, `array`, `dict`, `int`, `float`) and user-defined structs. Extension methods receive an implicit `self` parameter bound to the receiver value at call time.
-
-### Syntax
-
-```stash
-extend string {
-    fn isPalindrome() {
-        let reversed = self.split("").reverse().join("");
-        return self.lower() == reversed.lower();
-    }
-
-    fn shout() {
-        return self.upper() + "!!!";
-    }
-}
-
-"hello".shout();              // "HELLO!!!"
-"racecar".isPalindrome();     // true
-```
-
-### Target Types
-
-The following types can be extended:
-
-| Type keyword | Description           | Example                                                       |
-| ------------ | --------------------- | ------------------------------------------------------------- |
-| `string`     | String values         | `extend string { fn shout() { return self.upper() + "!"; } }` |
-| `array`      | Array values          | `extend array { fn second() { return self[1]; } }`            |
-| `dict`       | Dictionary values     | `extend dict { fn hasKey(k) { return k in self; } }`          |
-| `int`        | Integer values        | `extend int { fn isEven() { return self % 2 == 0; } }`        |
-| `float`      | Floating-point values | `extend float { fn doubled() { return self * 2.0; } }`        |
-| User structs | Any struct in scope   | `extend MyStruct { fn greet() { return self.name; } }`        |
-
-Types that **cannot** be extended: `bool`, `null`, `function`, `range`, `enum`, `namespace`, `Error`.
-
-### The `self` Binding
-
-Inside extension methods, `self` refers to the receiver value:
-
-```stash
-extend int {
-    fn clamp(min, max) {
-        if (self < min) { return min; }
-        if (self > max) { return max; }
-        return self;
-    }
-}
-
-150.clamp(0, 100);    // 100
-
-extend string {
-    fn initials() {
-        return self.split(" ")
-            .map((w) => w[0].upper() + ".")
-            .join(" ");
-    }
-}
-
-"John Michael Doe".initials();    // "J. M. D."
-```
-
-For built-in types, `self` is **read-only** — reassigning `self` produces a runtime error:
-
-```stash
-extend string {
-    fn broken() {
-        self = "modified";   // ERROR — cannot reassign constant 'self'
-    }
-}
-```
-
-For struct types, `self` is a reference to the instance — field mutation via `self.field = value` is allowed, but reassigning `self` itself is not.
-
-### Extending Structs
-
-Extension methods on structs have full access to struct fields via `self`:
-
-```stash
-struct User { name, email, age }
-
-extend User {
-    fn isAdult() {
-        return self.age >= 18;
-    }
-
-    fn displayName() {
-        return self.name + " <" + self.email + ">";
-    }
-}
-
-let user = User { name: "Alice", email: "alice@example.com", age: 30 };
-user.isAdult();        // true
-user.displayName();    // "Alice <alice@example.com>"
-```
-
-Extension methods can coexist with methods defined in the struct declaration:
-
-```stash
-struct Counter {
-    count
-
-    fn increment() {
-        self.count = self.count + 1;
-    }
-}
-
-extend Counter {
-    fn reset() {
-        self.count = 0;
-    }
-}
-
-let c = Counter { count: 5 };
-c.increment();    // count → 6
-c.reset();        // count → 0
-```
-
-### Multiple Extend Blocks
-
-Multiple `extend` blocks for the same type accumulate their methods:
-
-```stash
-extend string {
-    fn isPalindrome() { ... }
-}
-
-extend string {
-    fn isBlank() { ... }
-}
-
-// Both methods are available
-"racecar".isPalindrome();    // true
-"   ".isBlank();              // true
-```
-
-### Method Resolution Order
-
-When evaluating `receiver.name(args)`, the interpreter checks in this order:
-
-| Priority | Source                   | Example                                     |
-| -------- | ------------------------ | ------------------------------------------- |
-| 1        | Struct fields            | `instance.fieldName`                        |
-| 2        | Struct methods           | `instance.method()` from struct declaration |
-| 3        | Dict key lookup          | `myDict.key`                                |
-| 4        | Enum member lookup       | `Status.Active`                             |
-| 5        | Namespace member lookup  | `fs.readFile`                               |
-| 6        | **Extension methods**    | Methods from `extend` blocks in scope       |
-| 7        | UFCS namespace functions | `str.upper(s)` called as `s.upper()`        |
-| 8        | Error                    | `"No method 'name' on type 'typename'"`     |
-
-> **Dict exception:** For dictionaries, extension methods are checked _before_ key lookup (priority 6 beats priority 3). Without this, any dict key matching an extension method name would shadow the extension, making dict extensions effectively unusable. The `dict.get(d, "key")` namespace function is available when you need explicit key access.
-
-Key ordering rules:
-
-- **Struct methods before extensions** — methods defined in the original struct declaration take priority over extensions. Extensions cannot silently override the struct author's methods.
-- **Extensions before UFCS** — extension methods can shadow UFCS namespace functions:
-
-```stash
-extend string {
-    fn upper() {
-        return "CUSTOM: " + str.upper(self);
-    }
-}
-
-"hello".upper();        // "CUSTOM: HELLO" — extension wins
-str.upper("hello");     // "HELLO" — namespace call unaffected
-```
-
-- **Last-registration-wins on conflict** — when two `extend` blocks define a method with the same name for the same type, the last one loaded wins.
-
-### Dict Extensions
-
-Extension methods on dictionaries take priority over key lookup for the same name:
-
-```stash
-extend dict {
-    fn isEmpty() {
-        return len(dict.keys(self)) == 0;
-    }
-}
-
-let d = dict.new();
-d.isEmpty();     // true — calls extension method, not key lookup
-```
-
-### Constraints
-
-1. **Methods only** — no fields, constants, or nested types inside `extend` blocks:
-
-```stash
-extend string {
-    fn valid() { ... }     // OK
-    let x = 5;             // ERROR — only fn declarations allowed
-}
-```
-
-2. **Top-level only** — `extend` cannot appear inside functions, if-blocks, loops, or other scopes:
-
-```stash
-fn setup() {
-    extend string { ... }  // ERROR — extend must be at top level
-}
-```
-
-3. **Target type must exist** — the type name must resolve at the point of declaration:
-
-```stash
-extend UnknownType { ... }     // ERROR — not a known type
-struct User { name }
-extend User { ... }             // OK — User is defined above
-```
-
-4. **Forward references not allowed** — the struct must be declared before the `extend` block:
-
-```stash
-extend Config { ... }          // ERROR — Config not yet defined
-struct Config { host, port }
-```
-
-### Scoping & Imports
-
-Extension methods follow Stash's import model:
-
-```stash
-// string-extras.stash
-extend string {
-    fn shout() { return self.upper() + "!"; }
-}
-
-// main.stash
-import "string-extras.stash";
-"hello".shout();    // "HELLO!" — extension is active
-```
-
-Extensions propagate transitively through imports. Without an import, extensions defined in other files are not visible.
-
----
-
-## 9. Scoping Rules
-
-**Lexical scoping.** A variable is visible in the block where it's declared and all nested blocks.
-
-```stash
-let x = 10;           // global scope
+    until (value) => value.ok
 {
-    let y = 20;        // block scope
-    io.println(x + y);    // x is visible here (30)
-}
-// y is NOT visible here
+    http.get(url);
+};
 ```
 
-### Implementation
+The retry body evaluates to the successful result. If all attempts fail, evaluation
+produces the last error.
 
-A **chain of `Environment` objects**, each with a reference to its parent:
+### Timeout Expressions
 
-```
-Global Env ← Function Env ← Block Env
-```
-
-Variable lookup walks up the chain. A resolver pass at parse time binds each variable reference to a (depth, slot) pair for efficient runtime access.
-
----
-
-## 9b. Module / Import System
-
-Stash supports **selective imports** — you can import specific declarations from another script file rather than sourcing the entire file.
-
-### Syntax
-
-**Selective import** — import specific names into the current scope:
+`timeout duration { block }` bounds execution time.
 
 ```stash
-import { deploy, Server } from "utils.stash";
-import { Status } from "enums.stash";
-
-// Use imported names directly
-let srv = Server { host: "10.0.0.1", port: 22, status: Status.Active };
-deploy(srv, "app.tar.gz");
+let result = timeout 30s {
+    deploy();
+};
 ```
 
-Only the names listed in `{ ... }` are made available in the importing script's scope. Other declarations in the imported file are not visible.
+If the body completes before the duration, the expression evaluates to the body's
+value. If time expires, evaluation produces a timeout error.
 
-**Namespace import** — import an entire module as a namespace:
+### Defer
+
+`defer` registers cleanup code to run when the current function scope exits.
 
 ```stash
-import "utils.stash" as utils;
-import "enums.stash" as enums;
-
-// Access via dot notation
-let srv = utils.Server { host: "10.0.0.1", port: 22, status: Status.Active };
-utils.deploy(srv, "app.tar.gz");
-let status = enums.Status.Active;
-```
-
-All top-level declarations from the module are wrapped in a `StashNamespace` object and bound to the given alias. Members are accessed with dot notation. The alias is a regular value — `typeof(utils)` returns `"namespace"`.
-
-**Dynamic import paths** — the path in both forms can be any expression, not just a string literal:
-
-```stash
-// Variable path
-let modulePath = "utils.stash";
-import { deploy } from modulePath;
-
-// Concatenation
-let dir = "./lib/";
-import { Parser } from dir + "parser.stash";
-
-// String interpolation
-let env = env.get("DEPLOY_ENV") ?? "dev";
-import { config } from $"./config/{env}.stash";
-
-// Dynamic namespace import
-let pluginPath = "./plugins/" + pluginName + ".stash";
-import pluginPath as plugin;
-plugin.init();
-```
-
-The path expression is evaluated at runtime and must produce a string value. If it evaluates to a non-string type, a runtime error is raised.
-
-> **Editor note:** Dynamic import paths cannot be statically analyzed. The language server (LSP) will show an informational hint on dynamic paths indicating that autocomplete, go-to-definition, and other editor features are unavailable for dynamically imported names. Use static string literal paths when possible for the best editor experience.
-
-### Semantics
-
-1. The import path expression is evaluated. For string literals, this is the literal value. For dynamic expressions (variables, concatenation, interpolation), the expression is evaluated at runtime and must produce a string. The resulting path is resolved relative to the importing script's directory.
-2. If the file has not been imported before, it is **lexed, parsed, and executed** in an isolated module environment.
-3. Each imported file is **executed only once** — subsequent imports of the same file reuse the cached module environment (no re-execution).
-4. The requested names are looked up in the module's top-level environment. If a name is not found, a runtime error is raised.
-5. The resolved values (functions, structs, enums, variables) are bound into the importing script's current scope.
-
-### What Can Be Imported
-
-- Functions (`fn`)
-- Struct declarations (`struct`)
-- Enum declarations (`enum`)
-- Top-level variables (`let`) and constants (`const`)
-
-### Implementation
-
-The interpreter maintains a `Dictionary<string, Environment>` of already-loaded modules (keyed by absolute file path). When an `ImportStmt` is executed:
-
-1. Resolve the file path and check the module cache.
-2. If not cached: read the file, lex, parse, resolve, and execute it into a fresh `Environment`. Cache the result.
-3. For each name in the import list, look it up in the module's environment and bind it into the current scope.
-
-This is straightforward to implement — no new parsing concepts beyond the `ImportStmt`, and the module execution reuses the entire existing interpreter pipeline.
-
-### Circular Imports
-
-Circular dependencies are **detected and rejected**. During import resolution, the interpreter tracks the set of files currently being loaded (the "import stack"). If a file appears in its own import chain, a compile-time error is raised before execution begins:
-
-```
-Error: circular import detected
-  a.stash imports b.stash
-  b.stash imports a.stash
-```
-
-This is checked during the resolve/import phase, not at runtime.
-
-### Future Extensions (Not in v1)
-
-- **Wildcard imports:** `import * from "utils.stash";` — imports everything (bash-style, for convenience).
-- **Per-name aliased imports:** `import { deploy as remoteDeploy } from "utils.stash";` — rename individual names on import.
-
----
-
-## 9c. Code Formatter
-
-The `stash-format` tool reformats Stash source files to a consistent style. It is non-breaking: only whitespace and punctuation are modified — semantics are preserved.
-
-### Formatter Ignore Comments
-
-Two special single-line comments tell the formatter to leave code untouched:
-
-**File-level ignore** — place on the very first line of a file to skip the entire file:
-
-```stash
-// stash-ignore-all format
-```
-
-The formatter reads the first line only; if the directive is present it exits immediately without modifying the file.
-
-**Statement-level ignore** — place on the line immediately before a statement to preserve that statement's original formatting:
-
-```stash
-// stash-ignore format
-let ugly=1+2;   // this statement is left exactly as-is
-let normal = 3  // this one is still formatted
-```
-
-Only `//` single-line comments are recognised. `/* */` and `///` comments do not trigger either directive.
-
-### `.stashformat` Configuration File
-
-A `.stashformat` file at any directory level configures formatter behaviour for all files in that directory tree. The format is `key=value` (one per line); `#` begins a comment:
-
-```ini
-# .stashformat
-indentSize=2
-useTabs=false
-trailingComma=none
-endOfLine=lf
-bracketSpacing=true
-```
-
-**Options:**
-
-| Key              | Values                   | Default | Description                                                                             |
-| ---------------- | ------------------------ | ------- | --------------------------------------------------------------------------------------- |
-| `indentSize`     | positive integer         | `4`     | Number of spaces per indent level (ignored when `useTabs=true`)                         |
-| `useTabs`        | `true` / `false`         | `false` | Use hard tab characters instead of spaces for indentation                               |
-| `trailingComma`  | `none` \| `all`          | `none`  | `all` adds a trailing comma after the last element in multi-line arrays/dicts/structs   |
-| `endOfLine`      | `lf` \| `crlf` \| `auto` | `lf`    | `auto` preserves the line ending style already used in the file                         |
-| `bracketSpacing` | `true` / `false`         | `true`  | When `true`, single-line dict/struct literals include a space inside braces: `{ a: 1 }` |
-
-**Config file discovery:** when formatting a file the formatter walks up the directory tree from the file's location toward the filesystem root, using the first `.stashformat` found. If no config file exists, built-in defaults are used.
-
-**CLI flags override config:** options passed on the command line always win over the config file:
-
-```bash
-stash-format --trailing-comma all --end-of-line crlf --bracket-spacing false file.stash
-stash-format --config path/to/.stashformat file.stash   # explicit config path
-```
-
----
-
-## 9d. Diagnostic Codes & Suppression
-
-The static analysis engine emits **structured diagnostics** — each with a code, message, severity, and source span.
-
-### Code Format
-
-```
-SA{CC}{NN}
-```
-
-- `SA` — Stash Analysis prefix (2 letters, always uppercase)
-- `CC` — 2-digit category number
-- `NN` — 2-digit sequential number within the category
-
-**Category ranges:**
-
-| Range    | Category                                      |
-| -------- | --------------------------------------------- |
-| `SA00xx` | Infrastructure (suppression meta-diagnostics) |
-| `SA01xx` | Control flow                                  |
-| `SA02xx` | Variables & names                             |
-| `SA03xx` | Types                                         |
-| `SA04xx` | Functions & calls                             |
-| `SA05xx` | Spread / rest                                 |
-| `SA06xx` | _(reserved)_                                  |
-| `SA07xx` | Shell / retry / elevate                       |
-| `SA08xx` | Modules & imports                             |
-| `SA09xx` | Style                                         |
-| `SA10xx` | Complexity                                    |
-| `SA11xx` | Best practices                                |
-| `SA12xx` | _(reserved)_                                  |
-| `SA13xx` | _(reserved)_                                  |
-| `SA14xx` | Suggestions                                   |
-
-### Inline Suppression Directives
-
-Suppression directives are **single-line `//` comments only** — `/* */` and `///` block/doc comments are not recognised.
-
-**Next-line suppression** — suppresses the diagnostic on the immediately following line:
-
-```stash
-// stash-disable-next-line SA0201
-let unused = 42;
-```
-
-**Same-line suppression** — trailing comment on the line that emits the diagnostic:
-
-```stash
-let unused = 42; // stash-disable-line SA0201
-```
-
-**Range suppression** — suppresses from `disable` until the matching `restore`:
-
-```stash
-// stash-disable SA0201
-let a = 1;
-let b = 2;
-// stash-restore SA0201
-```
-
-**Suppress all diagnostics** — omit the code to suppress everything on the affected line(s):
-
-```stash
-// stash-disable-next-line
-let anything = doSomething();
-
-// stash-disable
-let x = 1;
-let y = 2;
-// stash-restore
-```
-
-### Project-Level Configuration (`.stashcheck`)
-
-A `.stashcheck` file at the project root configures analysis defaults. It is an INI-style file with `key = value` pairs:
-
-```ini
-# Globally suppress specific codes
-disable = SA0201, SA0202
-
-# Override severity for individual codes (error | warning | info | off)
-severity.SA0501 = error
-severity.SA0201 = off
-
-# Require a reason comment after every suppression directive (opt-in)
-require-suppression-reason = true
-```
-
-When `require-suppression-reason = true` is set, every suppression directive should include a reason — any non-whitespace text after the code list:
-
-```stash
-// stash-disable-next-line SA0201 — legacy variable, removal tracked in #123
-let unused = 42;
-```
-
-> **Note:** Reason enforcement is not yet active — the flag is parsed and stored for future use.
-
-### Resolution Order
-
-Diagnostic severity and suppression are resolved in this priority order (later entries win):
-
-1. **Built-in defaults** — the severity assigned to each `SA` code in the analysis engine
-2. **`.stashcheck` project config** — `disable` list and `severity.*` overrides
-3. **Inline directives** — `stash-disable-*` / `stash-restore` comments in source
-
-### Meta-Diagnostics
-
-The suppression system itself can emit diagnostics:
-
-| Code     | Description                                        |
-| -------- | -------------------------------------------------- |
-| `SA0001` | Unknown diagnostic code in suppression directive   |
-| `SA0002` | Malformed diagnostic code in suppression directive |
-
----
-
-## 10. Interpreter Architecture
-
-### Pipeline
-
-```
-Source Code → Lexer → Tokens → Parser → AST → Interpreter → Execution
-                                          ↑
-                                    Resolver Pass
-                                 (variable binding)
-```
-
-### Components
-
-| Component       | Responsibility                                                                |
-| --------------- | ----------------------------------------------------------------------------- |
-| **Lexer**       | Reads source text, produces stream of tokens                                  |
-| **Parser**      | Recursive descent; consumes tokens, produces AST                              |
-| **Resolver**    | Post-parse pass; binds variables to scope depth/slot                          |
-| **Interpreter** | Bytecode VM; compiles AST to opcodes and executes via register-based dispatch |
-| **Environment** | Stores variable bindings; supports lexical scope chain                        |
-| **REPL**        | Interactive read-eval-print loop                                              |
-
-### Token Types
-
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`
-
-`and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
-
-Contextual keywords (soft keywords — recognised as keywords only in specific syntactic positions; valid identifiers elsewhere): `from` (only reserved after `import`), `async` (only before `fn` or `(` starting a lambda), `await` (only before an expression starter), `defer` (only before a block or expression statement), `lock` (only before `(` followed by a lock path), `elevate` (only before `{`), `retry` (only before `{`), `timeout` (only before a duration expression followed by `{`)
-
-Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`, `=>`, `>>`, `2>`, `2>>`, `&>`, `&>>`
-
-Note: `|` (pipe) is not listed as a general operator — it is a special syntactic form exclusive to command chaining (see Section 6).
-
-Note: `>` and `>>` serve dual roles depending on context. After a command expression (`CommandExpr`, `PipeExpr`, or `RedirectExpr`), they are output redirection operators (see Section 6c). Everywhere else, `>` is the greater-than comparison operator. `>>` is exclusively a redirection operator.
-
-Delimiters: `(`, `)`, `{`, `}`, `[`, `]`, `,`, `.`, `;`
-
-Literals: integer, float, string, interpolated string, command literal `$(...)`
-
-Identifiers: user-defined names
-
-### AST Node Types
-
-**Expressions:**
-
-- `LiteralExpr` — numbers, strings, booleans, null
-- `IdentifierExpr` — variable reference
-- `BinaryExpr` — `a + b`, `a == b`, etc.
-- `UnaryExpr` — `-x`, `!x`
-- `PrefixExpr` — `++x`, `--x`
-- `PostfixExpr` — `x++`, `x--`
-- `CallExpr` — `fn(args)`
-- `DotExpr` — `obj.field`
-- `AssignExpr` — `x = val`
-- `DotAssignExpr` — `obj.field = val`
-- `ArrayExpr` — `[1, 2, 3]`
-- `DictLiteralExpr` — `{ key: value, key2: value2 }`
-- `IndexExpr` — `arr[i]`
-- `IndexAssignExpr` — `arr[i] = val`
-- `TernaryExpr` — `cond ? a : b`
-- `PipeExpr` — `$(cmd1) | $(cmd2)`
-- `RedirectExpr` — `$(cmd) > "file"`, `$(cmd) >> "file"`, `$(cmd) 2> "file"`, `$(cmd) &> "file"`
-- `StructInitExpr` — `Server { host: "..." }`
-- `CommandExpr` — `$(ls -la)`, `$(grep ${pattern} ${file})`
-- `InterpolatedStringExpr` — `$"Hello {name}"`, `"Hello ${name}"`
-- `TryExpr` — `try expr`
-- `AwaitExpr` — `await expr`
-- `NullCoalesceExpr` — `a ?? b`
-- `SwitchExpr` — `subject switch { pattern => result, ... }`
-- `LambdaExpr` — `(params) => expr` or `(params) => { body }`
-
-**Statements:**
-
-- `ExprStmt` — expression as statement
-- `VarDeclStmt` — `let x = ...;` or `let x;`
-- `ConstDeclStmt` — `const X = ...;`
-- `BlockStmt` — `{ ... }`
-- `IfStmt` — `if (...) { ... } else { ... }`
-- `WhileStmt` — `while (...) { ... }`
-- `ForInStmt` — `for (let x in y) { ... }`
-- `ForStmt` — `for (init; condition; increment) { ... }`
-- `FnDeclStmt` — `fn name(params) { ... }`
-- `ReturnStmt` — `return expr;`
-- `BreakStmt` — `break;`
-- `ContinueStmt` — `continue;`
-- `StructDeclStmt` — `struct Name { fields, fn methods... }`
-- `EnumDeclStmt` — `enum Name { Member1, Member2 }`
-- `ImportStmt` — `import { name1, name2 } from "file.stash";`
-- `ImportAsStmt` — `import "file.stash" as name;`
-
-All AST nodes carry a `SourceSpan` for debugging (see Section 11).
-
----
-
-## 11. Debugging Support
-
-### Day-One Requirements
-
-Two things must be built into the architecture from the start:
-
-#### 1. Source Location Tracking
-
-Every token and AST node carries a `SourceSpan`:
-
-```csharp
-public record SourceSpan(
-    string File,
-    int StartLine,
-    int StartColumn,
-    int EndLine,
-    int EndColumn
-);
-```
-
-This enables meaningful error messages, stack traces, and future debugger integration.
-
-#### 2. Call Stack
-
-The interpreter maintains a stack of `CallFrame` objects:
-
-```csharp
-public class CallFrame
-{
-    public string FunctionName { get; init; }
-    public SourceSpan CallSite { get; init; }
-    public Environment LocalScope { get; init; }
+fn useFile(path) {
+    let handle = fs.open(path);
+    defer handle.close();
+    return handle.readAll();
 }
 ```
 
-Produces stack traces on error:
+Deferred actions run in last-in, first-out order. Deferred actions run on normal
+return and on error unwinding.
 
-```
-Error: cannot access field 'port' on null
-  at deploy() in scripts/deploy.stash:14:5
-  at main() in scripts/main.stash:42:9
-```
+## Runtime Behavior
 
-### Debug Hook Interface
+### Diagnostics
 
-A debug hook in the interpreter's execution loop, called before each statement:
+Parse errors, runtime errors, and static diagnostics must report source location
+when location information is available. Diagnostic code formats and suppression
+directives are specified by the analysis tooling, not by this language
+specification.
 
-```csharp
-public interface IDebugger
-{
-    void OnBeforeExecute(SourceSpan span, Environment env);
-    void OnFunctionEnter(string name, SourceSpan callSite, Environment env);
-    void OnFunctionExit(string name);
-    void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack);
-}
-```
+### Formatting
 
-When no debugger is attached, the hook is a null check (zero overhead).
+The formatter must preserve program semantics. Formatter configuration and ignore
+directives are specified by the formatter documentation and analysis tooling.
 
-### Debugger Features (Layered)
+### Debugging
 
-| Feature            | How It Works                                                      |
-| ------------------ | ----------------------------------------------------------------- |
-| **Breakpoints**    | Debugger checks if current `SourceSpan.Line` has a breakpoint set |
-| **Step Over**      | Pause when `callStack.Count <= pausedDepth`                       |
-| **Step Into**      | Pause on next `OnBeforeExecute` unconditionally                   |
-| **Step Out**       | Pause when `callStack.Count < pausedDepth`                        |
-| **Variable Watch** | Read `Environment` and walk parent chain                          |
-| **Struct Expand**  | Enumerate dictionary fields of a struct instance                  |
+Debugger-visible behavior must correspond to the source-language control flow in
+this document. DAP wire behavior is specified in the
+[DAP document](DAP%20%E2%80%94%20Debug%20Adapter%20Protocol.md).
 
-### DAP (Debug Adapter Protocol)
+### Embedded Mode and Side Effects
 
-The debug hook interface above enables integration with VS Code and other editors through the Debug Adapter Protocol. The DAP server (`Stash.Dap`) is a thin translation layer on top of these hooks. For full DAP server documentation, see [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md).
+Host applications may embed the Stash runtime. Embedded hosts may restrict process
+execution, file access, privilege elevation, networking, or other side effects. A
+restricted side effect must produce a runtime error or documented host diagnostic.
 
-### Testing Hooks
+## Appendix A: Grammar
 
-The testing infrastructure follows the same architectural pattern — an `ITestHarness` interface with the same null-guard approach for zero overhead. For testing built-ins (`test.it()`, `test.describe()`, `assert` namespace) and TAP output, see [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md).
-
----
-
-## 12. Performance Strategy
-
-### Philosophy
-
-Build correct first, measure, then optimize the hot path. The bytecode VM compiles AST to opcodes before execution and is already significantly faster than Bash.
-
-### Where Time Is Spent
-
-```
-Lexing/Parsing:  ~10-20%  (runs once per script load)
-Execution:       ~80-90%  (runs repeatedly)
-  ├── Dispatch:  which AST node to execute next
-  ├── Lookups:   variable and field resolution
-  └── Allocs:    creating values, strings, intermediates
-```
-
-### Optimization Tiers
-
-#### Tier 1 — Easy Wins (Apply During Development)
-
-| Optimization                             | Where              | Impact  | Status                                                                            |
-| ---------------------------------------- | ------------------ | ------- | --------------------------------------------------------------------------------- |
-| String interning                         | Lexer              | High    | ✅ Done — `string.Intern()` in `ScanIdentifier()`                                 |
-| `FrozenDictionary` for keywords/builtins | Lexer, Interpreter | Low-Med | ✅ Done — Lexer keywords + `StashNamespace.Freeze()` for all built-in namespaces  |
-| `ReadOnlySpan<char>` in lexer            | Lexer              | Medium  | ✅ Done — Span-based `ScanNumber()` parsing + `GetAlternateLookup` keyword lookup |
-
-#### Tier 2 — Architectural (Apply After v1 Works)
-
-| Optimization                                      | Where                  | Impact  | Status                                                                                      |
-| ------------------------------------------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| Variable resolution at parse time (resolver pass) | Resolver + Interpreter | Highest | ✅ Done — `Resolver` class computes scope distances; `GetAt()`/`AssignAt()` used at runtime |
-| Slot-based environments (array, not dictionary)   | Environment            | High    | ❌ Not started — `Dictionary<string, object?>` backing                                      |
-| Pre-sized argument lists for function calls       | Interpreter            | Low     | ✅ Done — `List<object?>(expr.Arguments.Count)` pre-allocation                              |
-
-#### Tier 3 — Nuclear Option
-
-The bytecode VM compiles the AST to a flat array of opcodes, and a tight `switch`-dispatch loop executes them. ✅ Done.
-
-### What NOT to Optimize
-
-- `stackalloc` everywhere (only for fixed-size small buffers)
-- `Unsafe` code / raw pointers (marginal gain, high bug risk)
-- Custom memory allocators (over-engineered for v1)
-- Premature async in the core execution loop
-
----
-
-## 13. Implementation Roadmap
-
-### Phase 1 — Foundation
-
-| Step | Milestone                           | Key Concepts                                     |
-| ---- | ----------------------------------- | ------------------------------------------------ |
-| 1.1  | Lexer                               | Token types, source spans, string interning      |
-| 1.2  | Parser + AST                        | Recursive descent, Pratt parsing for expressions |
-| 1.3  | Tree-walk interpreter (expressions) | Arithmetic, comparisons, booleans                |
-| 1.4  | REPL                                | Read-Eval-Print loop                             |
-
-**Milestone:** Evaluate `1 + 2 * 3` correctly in the REPL.
-
-### Phase 2 — Language Core
-
-| Step | Milestone                           | Key Concepts                              |
-| ---- | ----------------------------------- | ----------------------------------------- |
-| 2.1  | Variables (`let`, `const`)          | Environment, variable binding, mutability |
-| 2.2  | Control flow (`if`, `while`, `for`) | Statement execution, truthiness           |
-| 2.3  | Functions (`fn`, `return`)          | Call stack, frames, closures              |
-| 2.4  | Resolver pass                       | Variable resolution at parse time         |
-
-**Milestone:** Recursive fibonacci function works.
-
-### Phase 3 — Structured Data
-
-| Step | Milestone          | Key Concepts                                 |
-| ---- | ------------------ | -------------------------------------------- |
-| 3.1  | Arrays             | Array literals, indexing, `len()`            |
-| 3.2  | Structs            | Declaration, instantiation, dot access       |
-| 3.3  | Enums              | Declaration, dot access, identity comparison |
-| 3.4  | Built-in functions | `println`, `typeof`, `len`, `toStr`, etc.    |
-
-**Milestone:** Create a struct, populate it, iterate over an array of structs. Use enums for status values.
-
-### Phase 4 — Shell Integration
-
-| Step | Milestone              | Key Concepts                                                                  |
-| ---- | ---------------------- | ----------------------------------------------------------------------------- |
-| 4.1  | Command literals `$()` | Lexer command mode (always raw + interpolation), `System.Diagnostics.Process` |
-| 4.2  | Pipe operator          | Chaining process stdout → stdin                                               |
-| 4.3  | File I/O built-ins     | `fs.readFile`, `fs.writeFile`                                                 |
-| 4.4  | Environment variables  | `env.get("PATH")`, `env.set("KEY", "val")`                                    |
-
-**Milestone:** A script that SSHs into a server, checks a service, and reports status.
-
-### Phase 5 — Polish
-
-| Step | Milestone             | Key Concepts                                          |
-| ---- | --------------------- | ----------------------------------------------------- |
-| 5.1  | Error handling        | `try` expression, `lastError()`, `??` null-coalescing |
-| 5.2  | Script file execution | `./stash script.stash`, shebang support               |
-| 5.3  | Selective imports     | `import { fn1, fn2 } from "utils.stash";`             |
-| 5.4  | CLI debugger          | `break`, `step`, `print`, `continue`                  |
-
-### Phase 6 — Future
-
-- Bytecode VM (if performance requires it)
-- ~~Methods on structs~~ ✅ Implemented
-- C-style `for(;;)` loops
-- Regular expressions
-
----
-
-## 14. References & Resources
-
-### Essential Reading
-
-| Resource                                         | Description                                                                                                      |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| **Crafting Interpreters** — Robert Nystrom       | The definitive guide. Free at craftinginterpreters.com. Covers tree-walk interpreter (Java) and bytecode VM (C). |
-| **Writing An Interpreter In Go** — Thorsten Ball | Concise, practical. Builds "Monkey" language step-by-step.                                                       |
-| **Writing A Compiler In Go** — Thorsten Ball     | Sequel. Converts the tree-walk interpreter to a bytecode compiler + VM.                                          |
-
-### Supplementary
-
-| Resource                                                     | Description                                                           |
-| ------------------------------------------------------------ | --------------------------------------------------------------------- |
-| **Engineering a Compiler** — Cooper & Torczon                | Academic depth on parsing theory and optimization.                    |
-| **Structure and Interpretation of Computer Programs** (SICP) | Classic. Builds a Scheme interpreter.                                 |
-| **Immo Landwerth's "Minsk" YouTube series**                  | Builds a compiler live in C#. Directly applicable to your tech stack. |
-
-### Specifications & Protocols
-
-| Resource                                                                          | Description                                                   |
-| --------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md)     | Stash debug adapter server — breakpoints, stepping, variables |
-| [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) | Stash language server — diagnostics, completion, navigation   |
-| [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md)       | Testing primitives, assert namespace, TAP output              |
-
----
-
-## 15. REPL Shell Mode
-
-> **Primary reference:** [Shell — Interactive Shell Mode](Shell%20—%20Interactive%20Shell%20Mode.md)
-
-Shell mode lets the Stash REPL accept bare command invocations directly at the prompt (e.g. `ls -la`, `git status | head -5`) without requiring the `$(…)` wrapper. It is a **REPL-only** feature — script files (`.stash` files invoked non-interactively) are **untouched** and always parse as Stash.
-
-### 15.1 Activation
-
-Shell mode is opt-in via `--shell` flag, `STASH_SHELL=1` env var, or implicitly when an RC file is present. It can be disabled with `--no-shell`. See [Shell — Interactive Shell Mode §1](Shell%20—%20Interactive%20Shell%20Mode.md#1-overview).
-
-### 15.2 Line Classification
-
-Every REPL line is classified as **Stash mode** or **shell mode** before evaluation. Stash keywords, literals, and delimiters are always Stash. Declared Stash symbols always shadow PATH binaries — use `\cmd` to bypass. See [Shell — Interactive Shell Mode §2](Shell%20—%20Interactive%20Shell%20Mode.md#2-line-classification).
-
-### 15.3 `$?` REPL Preprocessor
-
-Inside the REPL only, `$?` is syntactic sugar for `shell.lastExitCode()`. It is desugared by the REPL preprocessor before lexing. `$?` is **not** part of the Stash language and is not valid in `.stash` scripts. See [Shell — Interactive Shell Mode §9](Shell%20—%20Interactive%20Shell%20Mode.md#9--repl-sugar).
-
-### 15.4 `$(…)` Glob Auto-Expansion — Breaking Change
-
-**Before this feature shipped:** `$(…)` command literals passed argument strings literally — no glob expansion. `$(rm *.tmp)` passed the literal string `*.tmp` to `rm`.
-
-**After this feature:** glob auto-expansion applies inside `$(…)` command literals **and** in bare shell-mode commands.
-
-**Migration:** quote the glob to preserve literal behavior: `$(rm "*.tmp")`. The static analyzer rule SA0820 warns on unquoted globs in `$(…)` expressions. See [Shell — Interactive Shell Mode §3.5](Shell%20—%20Interactive%20Shell%20Mode.md#35-glob-expansion----) and [§13.3](Shell%20—%20Interactive%20Shell%20Mode.md#133--glob-auto-expansion--breaking-change).
-
----
-
-## Appendix A — Open Questions
-
-- [x] ~~Language name~~ → **Stash**
-- [x] ~~File extension~~ → `.stash` (default), `.sth` (short form, tentative)
-- [x] ~~String interpolation syntax~~ → Both `"Hello ${name}"` and `$"Hello {name}"` supported
-- [x] ~~Enums~~ → Included in v1 (see Section 5b)
-- [x] ~~Command syntax~~ → `$(command)` literals — always raw mode, `${expr}` for interpolation
-- [x] C-style `for(;;)` loop — Implemented. Supports `for (init; cond; update) { ... }` alongside `for-in`.
-- [x] ~~Error handling model~~ → `try` expression + `??` null-coalescing (see Section 7b)
-- [x] ~~Null handling~~ → `??` null-coalescing operator included (see Section 7)
-- [x] ~~Shebang support~~ → Yes. Lexer skips `#!` lines (see Section 6b)
-- [x] ~~Module/import system~~ → Selective imports: `import { a, b } from "file.stash";` (see Section 9b)
-- [x] ~~Argument parsing~~ → Declarative `args` block with flags, options, positionals, subcommands (see Section 9c)
-
-## Appendix B — Grammar (Draft, EBNF)
+This grammar is normative for broad source shape and operator precedence. Where the
+grammar and the prose disagree, the prose semantics control.
 
 ```ebnf
-program        → shebang? declaration* EOF ;
-shebang        → "#!" <everything until newline> ;
+program             = shebang? declaration* EOF ;
+shebang             = "#!" textUntilNewline ;
 
-declaration    → structDecl | enumDecl | fnDecl | varDecl | importDecl | statement ;
+declaration         = asyncFunctionDecl
+                    | functionDecl
+                    | variableDecl
+                    | constDecl
+                    | structDecl
+                    | enumDecl
+                    | interfaceDecl
+                    | extendDecl
+                    | importDecl
+                    | statement ;
 
-structDecl     → "struct" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
-enumDecl       → "enum" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
-fnDecl         → "async"? "fn" IDENTIFIER "(" parameters? ")" block ;
-varDecl        → "let" ( IDENTIFIER | destructurePattern ) "=" expression ";" ;
-destructurePattern → "[" IDENTIFIER ("," IDENTIFIER)* "]" | "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
-importDecl     → "import" "{" IDENTIFIER ("," IDENTIFIER)* "}" "from" STRING ";"
-               | "import" STRING "as" IDENTIFIER ";" ;
+variableDecl        = "let" (identifier typed? | destructurePattern) initializer? ";" ;
+constDecl           = "const" (identifier typed? | destructurePattern) "=" expression ";" ;
+initializer         = "=" expression ;
+typed               = ":" typeHint ;
+typeHint            = identifier ("[]")? | "[" typeHint "]" ;
 
-statement      → exprStmt | ifStmt | whileStmt | forStmt | returnStmt | breakStmt | continueStmt | block ;
+destructurePattern  = arrayPattern | dictPattern ;
+arrayPattern        = "[" patternItemList? "]" ;
+dictPattern         = "{" patternItemList? "}" ;
+patternItemList     = patternItem ("," patternItem)* ","? ;
+patternItem         = identifier | "..." identifier ;
 
-exprStmt       → expression ";" ;
-ifStmt         → "if" "(" expression ")" block ( "else" (ifStmt | block) )? ;
-whileStmt      → "while" "(" expression ")" block ;
-forStmt        → forInStmt | forCStyleStmt ;
-forInStmt      → "for" "(" "let" IDENTIFIER ( "," IDENTIFIER )? ( ":" IDENTIFIER )? "in" expression ")" block ;
-forCStyleStmt  → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" block ;
-returnStmt     → "return" expression? ";" ;
-breakStmt      → "break" ";" ;
-continueStmt   → "continue" ";" ;
-block          → "{" declaration* "}" ;
+functionDecl        = "fn" identifier "(" parameterList? ")" returnHint? block ;
+asyncFunctionDecl   = "async" functionDecl ;
+parameterList       = parameter ("," parameter)* ","? ;
+parameter           = restParameter | identifier typed? defaultValue? ;
+restParameter       = "..." identifier typed? ;
+defaultValue        = "=" expression ;
+returnHint          = "->" typeHint ;
 
-expression     → assignment ;
-assignment     → (call ".")? IDENTIFIER ("=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=") assignment | ternary ;
-ternary        → nullCoalesce ( "?" expression ":" ternary )? ;
-nullCoalesce   → redirect ( "??" redirect )* ;
-redirect       → pipe ( redirectOp expression )* ;
-redirectOp     → ">" | ">>" | "2>" | "2>>" | "&>" | "&>>" ;
-pipe           → logic_or ( "|" logic_or )* ;
-logic_or       → logic_and ( "||" | "or" logic_and )* ;
-logic_and      → equality ( "&&" | "and" equality )* ;
-equality       → comparison ( ("==" | "!=") comparison )* ;
-comparison     → range ( ("<" | ">" | "<=" | ">=" | "in" | "is") range )* ;
-range          → term ( ".." term ( ".." term )? )? ;
-term           → factor ( ("+" | "-") factor )* ;
-factor         → unary ( ("*" | "/" | "%") unary )* ;
-unary          → ("!" | "-") unary | prefix ;
-prefix         → ("++" | "--") IDENTIFIER | awaitExpr ;
-awaitExpr      → "await" unary | tryExpr ;
-tryExpr        → "try" unary | postfix ;
-postfix        → call ("++" | "--")? ;
-call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" | "switch" "{" switchArm ("," switchArm)* ","? "}" )* ;
-switchArm      → ( "_" | expression ) "=>" expression ;
-primary        → NUMBER | STRING | INTERPOLATED_STRING | "true" | "false" | "null"
-               | IDENTIFIER | lambdaExpr | "(" expression ")"
-               | "[" (expression ("," expression)*)? "]"
-               | (call ".")? IDENTIFIER "{" (IDENTIFIER ":" expression ("," IDENTIFIER ":" expression)*)? "}"
-               | "$(" COMMAND_TEXT ")" ;
-lambdaExpr     → "async"? "(" parameters? ")" "=>" ( block | assignment ) ;
+structDecl          = "struct" identifier interfaceList? "{"
+                      structFieldList? functionDecl* asyncFunctionDecl* "}" ;
+interfaceList       = ":" identifier ("," identifier)* ;
+structFieldList     = structField ("," structField)* ","? ;
+structField         = identifier typed? ;
 
-parameter      → IDENTIFIER ( ":" IDENTIFIER )? ( "=" expression )? ;
-parameters     → parameter ( "," parameter )* ;
-arguments      → expression ( "," expression )* ;
+enumDecl            = "enum" identifier "{" identifier ("," identifier)* ","? "}" ;
+
+interfaceDecl       = "interface" identifier "{" interfaceMemberList? "}" ;
+interfaceMemberList = interfaceMember ("," interfaceMember)* ","? ;
+interfaceMember     = identifier typed?
+                    | "fn"? identifier "(" parameterList? ")" returnHint? ;
+
+extendDecl          = "extend" typeHint "{" functionDecl* asyncFunctionDecl* "}" ;
+
+importDecl          = "import" "{" identifier ("," identifier)* ","? "}" "from" expression ";"
+                    | "import" expression "as" identifier ";" ;
+
+statement           = block
+                    | ifStmt
+                    | whileStmt
+                    | doWhileStmt
+                    | forStmt
+                    | switchStmt
+                    | tryStmt
+                    | returnStmt
+                    | throwStmt
+                    | breakStmt
+                    | continueStmt
+                    | deferStmt
+                    | lockStmt
+                    | elevateStmt
+                    | unsetStmt
+                    | expressionStmt ;
+
+block               = "{" declaration* "}" ;
+ifStmt              = "if" "(" expression ")" block ("else" (ifStmt | block))? ;
+whileStmt           = "while" "(" expression ")" block ;
+doWhileStmt         = "do" block "while" "(" expression ")" ";" ;
+forStmt             = forInStmt | forCStyleStmt ;
+forInStmt           = "for" "(" "let" identifier ("," identifier)? typed? "in" expression ")" block ;
+forCStyleStmt       = "for" "(" (variableDecl | expressionStmt | ";")
+                      expression? ";" expression? ")" block ;
+switchStmt          = "switch" "(" expression ")" "{"
+                      (caseArm | defaultArm)* "}" ;
+caseArm             = "case" expression ("," expression)* ":" block ;
+defaultArm          = "default" ":" block ;
+tryStmt             = "try" block catchClause* finallyClause? ;
+catchClause         = "catch" "(" catchTypeList? identifier ")" block ;
+catchTypeList       = identifier ("|" identifier)* ;
+finallyClause       = "finally" block ;
+returnStmt          = "return" expression? ";" ;
+throwStmt           = "throw" expression? ";" ;
+breakStmt           = "break" ";" ;
+continueStmt        = "continue" ";" ;
+deferStmt           = "defer" (block | expressionStmt) ;
+lockStmt            = "lock" expression lockOptions? block ;
+lockOptions         = "(" namedArgumentList? ")" ;
+elevateStmt         = "elevate" ("(" expression ")")? block ;
+unsetStmt           = "unset" assignable ("," assignable)* ";" ;
+expressionStmt      = expression ";" ;
+
+expression          = assignment ;
+assignment          = assignable assignmentOp assignment | ternary ;
+assignmentOp        = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??="
+                    | "&=" | "|=" | "^=" | "<<=" | ">>=" ;
+ternary             = nullCoalesce ("?" expression ":" expression)? ;
+nullCoalesce        = redirect ("??" redirect)* ;
+redirect            = pipe (redirectOp expression)* ;
+redirectOp          = ">" | ">>" | "2>" | "2>>" | "&>" | "&>>" ;
+pipe                = logicalOr ("|" logicalOr)* ;
+logicalOr           = logicalAnd (("||" | "or") logicalAnd)* ;
+logicalAnd          = bitwiseOr (("&&" | "and") bitwiseOr)* ;
+bitwiseOr           = bitwiseXor ("|" bitwiseXor)* ;
+bitwiseXor          = bitwiseAnd ("^" bitwiseAnd)* ;
+bitwiseAnd          = equality ("&" equality)* ;
+equality            = comparison (("==" | "!=") comparison)* ;
+comparison          = shift ((compareOp | "in") shift)* ("is" typeHint)? ;
+compareOp           = "<" | ">" | "<=" | ">=" ;
+shift               = range (("<<" | ">>") range)* ;
+range               = term (".." term (".." term)?)? ;
+term                = factor (("+" | "-") factor)* ;
+factor              = unary (("*" | "/" | "%") unary)* ;
+unary               = ("!" | "-" | "~" | "try" | "await") unary
+                    | ("++" | "--") assignable
+                    | postfix ;
+postfix             = primary postfixPart* ("++" | "--")? ;
+postfixPart         = "(" argumentList? ")"
+                    | "[" expression "]"
+                    | ("." | "?.") identifier
+                    | switchExprTail ;
+switchExprTail      = "switch" "{" switchExprArm ("," switchExprArm)* ","? "}" ;
+switchExprArm       = (expression | "_") "=>" expression ;
+
+primary             = literal
+                    | identifier
+                    | arrayLiteral
+                    | dictLiteral
+                    | structLiteral
+                    | commandLiteral
+                    | lambda
+                    | "(" expression ")" ;
+
+arrayLiteral        = "[" argumentList? "]" ;
+dictLiteral         = "{" dictEntryList? "}" ;
+dictEntryList       = dictEntry ("," dictEntry)* ","? ;
+dictEntry           = (identifier | stringLiteral | "[" expression "]") ":" expression ;
+structLiteral       = identifier "{" dictEntryList? "}" ;
+lambda              = "async"? "(" parameterList? ")" "=>" (block | expression) ;
+argumentList        = argument ("," argument)* ","? ;
+argument            = spreadArgument | namedArgument | expression ;
+spreadArgument      = "..." expression ;
+namedArgument       = identifier ":" expression ;
+
+literal             = "null" | "true" | "false" | numberLiteral | stringLiteral
+                    | interpolatedString | ipLiteral | durationLiteral
+                    | byteSizeLiteral | semVerLiteral ;
+commandLiteral      = "$(" commandText ")"
+                    | "$!(" commandText ")"
+                    | "$>(" commandText ")"
+                    | "$!>(" commandText ")"
+                    | "$<(" commandText ")"
+                    | "$!<(" commandText ")" ;
+
+assignable          = identifier
+                    | postfix "." identifier
+                    | postfix "[" expression "]" ;
 ```
 
----
+## Appendix B: Reserved and Contextual Syntax
 
-_This is a living document. Update as design decisions are finalized and implementation progresses._
+The following syntax is part of the language surface and must remain reserved for
+the behavior specified in this document:
+
+- `async fn`, `async (...) => ...`
+- `await expr`
+- `retry (...) ... { ... }`
+- `timeout duration { ... }`
+- `defer`
+- `lock`
+- `elevate`
+- `extend`
+- `switch` expressions and statements
+- command literals beginning with `$(`, `$!(`, `$>(`, `$!>(`, `$<(`, and `$!<(`
+
+Implementations must not assign incompatible meanings to reserved or contextual
+syntax. Future revisions may refine the semantics of reserved forms while
+preserving source compatibility where practical.

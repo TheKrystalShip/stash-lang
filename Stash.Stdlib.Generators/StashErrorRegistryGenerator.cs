@@ -133,9 +133,11 @@ public sealed class StashErrorRegistryGenerator : IIncrementalGenerator
             }
         }
 
-        // Extract [StashError(Name = "...", Properties = new[] {...})]
+        // Extract [StashError(Name = "...", Properties = new[] {...}, PropertyTypes = new[] {...}, Description = "...")]
         string? nameOverride = null;
         string[] properties = System.Array.Empty<string>();
+        string[] propertyTypes = System.Array.Empty<string>();
+        string description = string.Empty;
 
         foreach (var namedArg in attrData.NamedArguments)
         {
@@ -151,6 +153,18 @@ public sealed class StashErrorRegistryGenerator : IIncrementalGenerator
                     props[i] = (string)values[i].Value!;
                 properties = props;
             }
+            else if (namedArg.Key == "PropertyTypes" && !namedArg.Value.IsNull)
+            {
+                var values = namedArg.Value.Values;
+                var types = new string[values.Length];
+                for (int i = 0; i < values.Length; i++)
+                    types[i] = (string)values[i].Value!;
+                propertyTypes = types;
+            }
+            else if (namedArg.Key == "Description" && namedArg.Value.Value is string d)
+            {
+                description = d;
+            }
         }
 
         string canonicalName = nameOverride ?? classSym.Name;
@@ -161,6 +175,8 @@ public sealed class StashErrorRegistryGenerator : IIncrementalGenerator
             canonicalName: canonicalName,
             fullTypeName: fullTypeName,
             properties: properties,
+            propertyTypes: propertyTypes,
+            description: description,
             location: loc);
 
         return new BuildResult(model, diags.ToImmutable());
@@ -215,15 +231,14 @@ public sealed class StashErrorRegistryGenerator : IIncrementalGenerator
         sb.AppendLine("    {");
         foreach (var m in models)
         {
-            if (m.Properties.Length > 0)
-            {
-                string propList = string.Join(", ", m.Properties.Select(p => $"\"{p}\""));
-                sb.AppendLine($"        [\"{m.CanonicalName}\"] = new BuiltInErrorMetadata(\"{m.CanonicalName}\", typeof({m.FullTypeName}), new[] {{ {propList} }}),");
-            }
-            else
-            {
-                sb.AppendLine($"        [\"{m.CanonicalName}\"] = new BuiltInErrorMetadata(\"{m.CanonicalName}\", typeof({m.FullTypeName}), Array.Empty<string>()),");
-            }
+            string propList = m.Properties.Length > 0
+                ? "new[] { " + string.Join(", ", m.Properties.Select(p => $"\"{p}\"")) + " }"
+                : "Array.Empty<string>()";
+            string typeList = m.PropertyTypes.Length > 0
+                ? "new[] { " + string.Join(", ", m.PropertyTypes.Select(t => $"\"{t}\"")) + " }"
+                : "Array.Empty<string>()";
+            string desc = m.Description.Replace("\"", "\\\"");
+            sb.AppendLine($"        [\"{m.CanonicalName}\"] = new BuiltInErrorMetadata(\"{m.CanonicalName}\", typeof({m.FullTypeName}), {propList}, {typeList}, \"{desc}\"),");
         }
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -253,14 +268,18 @@ public sealed class StashErrorRegistryGenerator : IIncrementalGenerator
         public string CanonicalName { get; }
         public string FullTypeName { get; }
         public string[] Properties { get; }
+        public string[] PropertyTypes { get; }
+        public string Description { get; }
         public Location? Location { get; }
 
-        public ErrorModel(string className, string canonicalName, string fullTypeName, string[] properties, Location? location)
+        public ErrorModel(string className, string canonicalName, string fullTypeName, string[] properties, string[] propertyTypes, string description, Location? location)
         {
             ClassName = className;
             CanonicalName = canonicalName;
             FullTypeName = fullTypeName;
             Properties = properties;
+            PropertyTypes = propertyTypes;
+            Description = description;
             Location = location;
         }
     }

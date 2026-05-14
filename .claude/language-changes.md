@@ -4,14 +4,36 @@ Every change to the Stash language or its standard library MUST complete **all**
 
 ## 1. Documentation (MANDATORY)
 
-| What changed                                                        | Update this file                             |
-| ------------------------------------------------------------------- | -------------------------------------------- |
-| Syntax, types, operators, literals, keywords, control flow, scoping | `docs/Stash — Language Specification.md`     |
-| Namespace functions, signatures, return types, new namespaces       | `docs/Stash — Standard Library Reference.md` |
+| What changed                                                        | How to update                                                                                       |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Syntax, types, operators, literals, keywords, control flow, scoping | Edit `docs/Stash — Language Specification.md` directly                                              |
+| Namespace functions, signatures, return types, new namespaces       | Update metadata (see below), then run `dotnet run --project Stash.Docs/` to regenerate the reference |
+| Built-in error types (`[StashError]`)                               | Update `Description`, `Properties`, `PropertyTypes` on the attribute, then regenerate               |
 
-- Add the feature to the correct section with full syntax, semantics, and examples.
-- If a new section is needed, add it and update the Table of Contents.
-- Removals or breaking changes must be reflected — delete or update the affected section.
+**`docs/Stash — Standard Library Reference.md` is generated — never edit it by hand.**
+Its API inventory is produced from `StdlibDefinitions` and `BuiltInErrorRegistry` metadata by `Stash.Docs`.
+Editing the Markdown directly will cause `StandardLibraryReferenceTests` to fail on the next run.
+
+### Updating stdlib metadata
+
+For namespace functions and signatures:
+- Add or update `[StashFn]`, `[StashParam]`, `[StashDeprecated]` attributes on the built-in method.
+- Add or update XML `<summary>`, `<param>`, `<returns>`, `<exception>` comments on the method.
+- Register the function in the namespace builder (`Stash.Stdlib/BuiltIns/<Namespace>BuiltIns.cs`).
+
+For built-in error types:
+- Add `Description = "..."` to `[StashError]` for the "when thrown" text.
+- Add `Properties` and `PropertyTypes` for any extra Stash-accessible fields.
+
+After updating metadata, regenerate and commit both the metadata change and the updated reference:
+
+```bash
+dotnet run --project Stash.Docs/
+```
+
+- Add the feature to the language specification with full syntax, semantics, and examples.
+- If a new section is needed in the spec, add it and update the Table of Contents.
+- Removals or breaking changes must be reflected in both the spec and the metadata.
 
 ## 2. Tooling Compatibility (MANDATORY — verify each)
 

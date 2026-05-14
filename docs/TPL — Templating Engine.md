@@ -1,407 +1,390 @@
-# Stash — Templating Engine
+# TPL - Templating Engine
 
-> **Status:** v1.0
-> **Created:** June 2025
-> **Purpose:** Source of truth for the `tpl` namespace — Stash's built-in Jinja2-style templating engine.
->
-> **Companion documents:**
->
-> - [Language Specification](Stash%20—%20Language%20Specification.md) — language syntax, type system, interpreter architecture
-> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions
-> - [DAP — Debug Adapter Protocol](DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server
-> - [LSP — Language Server Protocol](LSP%20—%20Language%20Server%20Protocol.md) — language server
-> - [TAP — Testing Infrastructure](TAP%20—%20Testing%20Infrastructure.md) — built-in test runner
+> **Status:** Stable v1 templating reference
+> **Audience:** template authors, package authors, and tool implementers
+> **Purpose:** reference for Stash's built-in template language and the `tpl` namespace.
 
----
+TPL is Stash's Jinja-style text templating engine. It renders template strings or
+template files using Stash dictionaries as data, Stash expressions as embedded
+logic, and a small set of template-specific control-flow tags.
 
-## Table of Contents
+**Companion documents:**
 
-1. [Overview](#1-overview)
-2. [API — `tpl` Namespace](#2-api--tpl-namespace)
-3. [Template Syntax](#3-template-syntax)
-4. [Variable Output](#4-variable-output)
-5. [Filters](#5-filters)
-6. [Conditionals](#6-conditionals)
-7. [Loops](#7-loops)
-8. [Includes](#8-includes)
-9. [Whitespace Control](#9-whitespace-control)
-10. [Raw Blocks](#10-raw-blocks)
-11. [Comments](#11-comments)
-12. [Architecture](#12-architecture)
-13. [Error Handling](#13-error-handling)
+- [Language Specification](Stash%20%E2%80%94%20Language%20Specification.md) - Stash expression semantics
+- [Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md) - generated `tpl` namespace reference
+- [TAP - Testing Infrastructure](TAP%20%E2%80%94%20Testing%20Infrastructure.md) - testing rendered output
 
 ---
 
-## 1. Overview
+## Contents
 
-Stash provides a built-in Jinja2-style templating engine via the `tpl` namespace. Templates use `{{ }}` for output, `{% %}` for logic, and `{# #}` for comments.
-
-Expressions inside templates are evaluated by Stash's own interpreter, giving templates access to the full expression language — arithmetic, ternary, null-coalescing, function calls, namespace access, and more. The engine is designed for config file generation, report rendering, and text transformation, not web/HTML templating.
-
-**File extension:** Template files use the `.tpl` extension by convention (e.g., `report.tpl`, `nginx.conf.tpl`). The Stash VS Code extension provides syntax highlighting for `.tpl` files with template-aware coloring of delimiters, tags, filters, and embedded Stash expressions.
-
-| Feature                    | Example                                                | Purpose                                       |
-| -------------------------- | ------------------------------------------------------ | --------------------------------------------- |
-| **Variable interpolation** | `{{ name }}`                                           | Inject values into output                     |
-| **Dot access**             | `{{ user.name }}`                                      | Access nested properties                      |
-| **Conditionals**           | `{% if active %}...{% endif %}`                        | Conditional rendering                         |
-| **Iteration**              | `{% for item in items %}...{% endfor %}`               | Loop over collections                         |
-| **Comments**               | `{# ignored #}`                                        | Template-only comments (stripped from output) |
-| **Filters/pipes**          | `{{ name \| upper }}`                                  | Transform values inline                       |
-| **Else/else-if**           | `{% if x %}...{% elif y %}...{% else %}...{% endif %}` | Multi-branch conditionals                     |
-| **Template includes**      | `{% include "header.html" %}`                          | Compose templates from fragments              |
-| **Default values**         | `{{ name \| default("Anon") }}`                        | Fallback for missing values                   |
-| **Whitespace control**     | `{%- trim -%}`                                         | Control newlines around tags                  |
-| **Raw/escape blocks**      | `{% raw %}{{ not parsed }}{% endraw %}`                | Output literal delimiters                     |
+1. [Overview](#overview)
+2. [API](#api)
+3. [Template Syntax](#template-syntax)
+4. [Expressions and Data](#expressions-and-data)
+5. [Filters](#filters)
+6. [Conditionals](#conditionals)
+7. [Loops](#loops)
+8. [Includes](#includes)
+9. [Whitespace Control](#whitespace-control)
+10. [Raw Blocks and Comments](#raw-blocks-and-comments)
+11. [Errors](#errors)
+12. [Examples](#examples)
 
 ---
 
-## 2. API — `tpl` Namespace
+## Overview
 
-### `tpl.render(template, data)`
+Templates are ordinary text with embedded delimiters:
 
-Render a template string with a data dictionary. `template` can be a string or a pre-compiled template object (from `tpl.compile`). `data` must be a Stash dictionary — its keys become template variables.
+| Delimiter       | Meaning                                          |
+| --------------- | ------------------------------------------------ |
+| `{{ expr }}`    | evaluate a Stash expression and write the result |
+| `{% tag %}`     | execute template control flow                    |
+| `{# comment #}` | comment, removed from output                     |
 
-```stash
-let data = dict.new();
-data["name"] = "Alice";
-let result = tpl.render("Hello, {{ name }}!", data);
-// result: "Hello, Alice!"
+Example:
+
+```tpl
+Hello, {{ user.name | default("guest") }}.
+
+{% if servers | length > 0 %}
+Servers:
+{% for server in servers %}
+- {{ loop.index }}. {{ server.host }}:{{ server.port }}
+{% endfor %}
+{% else %}
+No servers configured.
+{% endif %}
 ```
 
-### `tpl.renderFile(path, data)`
+TPL is intended for configuration generation, reports, scripts, and text
+transforms. It does not provide HTML-specific escaping or web-template security
+features by default.
 
-Render a template file (conventionally with a `.tpl` extension). Path supports `~` expansion. The file's directory becomes the base path for `{% include %}` resolution.
+Template files conventionally use `.tpl`.
+
+## API
+
+The `tpl` namespace exposes three functions.
+
+### `tpl.render(template, data) -> string`
+
+Renders a template string or compiled template with a data dictionary.
 
 ```stash
-let output = tpl.renderFile("templates/report.tpl", data);
+let output = tpl.render("Hello, {{ name }}!", {
+    name: "Alice",
+});
 ```
 
-### `tpl.compile(template)`
+`template` must be a string or a compiled template returned by `tpl.compile`.
+`data` must be a dictionary. Dictionary keys become template variables.
 
-Pre-compile a template string for repeated use. Returns a compiled template object that can be passed to `tpl.render()` instead of a string. Useful when the same template is rendered many times with different data, avoiding repeated lexing and parsing.
+### `tpl.renderFile(path, data) -> string`
+
+Reads a template file and renders it.
+
+```stash
+let rendered = tpl.renderFile("templates/nginx.conf.tpl", data);
+```
+
+A leading `~` in `path` expands to the current user's home directory. When a file is
+rendered this way, include paths resolve relative to the rendered file's directory.
+
+### `tpl.compile(template) -> function`
+
+Compiles a template string for repeated rendering.
 
 ```stash
 let compiled = tpl.compile("Hello, {{ name }}!");
-let r1 = tpl.render(compiled, data1);
-let r2 = tpl.render(compiled, data2);
+let a = tpl.render(compiled, { name: "Alice" });
+let b = tpl.render(compiled, { name: "Bob" });
 ```
 
----
+The compiled value is opaque to Stash code and should be passed back to
+`tpl.render`.
 
-## 3. Template Syntax
+## Template Syntax
 
-Templates mix literal text with three types of delimiters:
+Everything outside template delimiters is emitted as literal text.
 
-| Delimiter       | Purpose                        | Example           |
-| --------------- | ------------------------------ | ----------------- |
-| `{{ expr }}`    | Output expression              | `{{ user.name }}` |
-| `{% tag %}`     | Logic/control flow             | `{% if active %}` |
-| `{# comment #}` | Comment (stripped from output) | `{# TODO #}`      |
-
-Everything outside a delimiter is emitted as literal text. Delimiters can appear anywhere in a template — inline, on their own line, or mixed with text.
-
----
-
-## 4. Variable Output
-
-The `{{ }}` delimiter evaluates a Stash expression and emits its string representation:
-
-```
-{{ name }}                   — simple variable
-{{ user.name }}              — dot access (struct fields, dict keys)
-{{ items[0] }}               — index access
-{{ count + 1 }}              — arithmetic expressions
-{{ active ? "yes" : "no" }}  — ternary operator
-{{ name ?? "default" }}      — null-coalescing
-{{ str.upper(name) }}        — function calls
+```tpl
+literal text
+{{ output }}
+{% if condition %}conditional text{% endif %}
+{# comment #}
 ```
 
-Template expressions are full Stash expressions — any valid Stash expression can appear inside `{{ }}`. The data dictionary's keys are bound as variables in the expression scope.
+Delimiter contents are trimmed before parsing, so `{{name}}` and `{{ name }}` are
+equivalent.
 
----
+Supported tags:
 
-## 5. Filters
+| Tag                        | Purpose                       |
+| -------------------------- | ----------------------------- |
+| `{% if expr %}`            | start conditional block       |
+| `{% elif expr %}`          | additional conditional branch |
+| `{% else %}`               | fallback branch               |
+| `{% endif %}`              | end conditional block         |
+| `{% for name in expr %}`   | start loop                    |
+| `{% endfor %}`             | end loop                      |
+| `{% include "path.tpl" %}` | include another template      |
+| `{% raw %}`                | start raw literal block       |
+| `{% endraw %}`             | end raw literal block         |
 
-Filters transform values using pipe syntax. The value on the left becomes the input to the filter on the right:
+Unknown tags are template errors.
 
+## Expressions and Data
+
+Output expressions and conditional expressions are Stash expressions.
+
+```tpl
+{{ name }}
+{{ user.name }}
+{{ items[0] }}
+{{ count + 1 }}
+{{ active ? "yes" : "no" }}
+{{ name ?? "default" }}
+{{ str.upper(name) }}
 ```
-{{ name | upper }}
-{{ items | length }}
+
+The render data dictionary is the template's primary variable scope. Template
+variables may use dot access for struct fields and dictionary keys.
+
+```stash
+let data = {
+    user: {
+        name: "Ada",
+        active: true,
+    },
+};
+
+tpl.render("{{ user.name }}", data); // "Ada"
+```
+
+Template evaluation may also access available Stash globals and namespaces exposed
+by the active interpreter.
+
+Rendered values are converted to strings with Stash stringification rules.
+
+## Filters
+
+Filters transform output values using single-pipe syntax.
+
+```tpl
 {{ name | trim | upper }}
+{{ items | length }}
+{{ tags | join(", ") }}
+```
+
+The expression before the first pipe is evaluated, then filters are applied from
+left to right. Filter arguments are parsed from the parenthesized argument list.
+
+The single pipe for filters is distinct from Stash logical OR `||`.
+
+```tpl
+{{ enabled || fallback }}  {# logical OR #}
+{{ name | upper }}         {# filter #}
 ```
 
 ### Built-in Filters
 
-| Filter              | Arguments | Description                       | Example                           |
-| ------------------- | --------- | --------------------------------- | --------------------------------- |
-| `upper`             | —         | Uppercase string                  | `{{ name \| upper }}`             |
-| `lower`             | —         | Lowercase string                  | `{{ name \| lower }}`             |
-| `trim`              | —         | Strip leading/trailing whitespace | `{{ name \| trim }}`              |
-| `capitalize`        | —         | Capitalize first letter           | `{{ name \| capitalize }}`        |
-| `title`             | —         | Title Case each word              | `{{ name \| title }}`             |
-| `length`            | —         | Length of string or array         | `{{ items \| length }}`           |
-| `reverse`           | —         | Reverse string or array           | `{{ name \| reverse }}`           |
-| `first`             | —         | First element of array            | `{{ items \| first }}`            |
-| `last`              | —         | Last element of array             | `{{ items \| last }}`             |
-| `sort`              | —         | Sort array                        | `{{ items \| sort }}`             |
-| `join(sep)`         | separator | Join array elements to string     | `{{ items \| join(", ") }}`       |
-| `split(sep)`        | separator | Split string into array           | `{{ csv \| split(",") }}`         |
-| `replace(old, new)` | old, new  | Replace substring                 | `{{ name \| replace("_", " ") }}` |
-| `default(val)`      | fallback  | Fallback value for null           | `{{ name \| default("N/A") }}`    |
-| `round`             | —         | Round to nearest integer          | `{{ price \| round }}`            |
-| `abs`               | —         | Absolute value                    | `{{ diff \| abs }}`               |
-| `keys`              | —         | Dictionary keys as array          | `{{ config \| keys }}`            |
-| `values`            | —         | Dictionary values as array        | `{{ config \| values }}`          |
-| `json`              | —         | JSON-encode value                 | `{{ data \| json }}`              |
+| Filter              | Input               | Result                                     |
+| ------------------- | ------------------- | ------------------------------------------ |
+| `upper`             | string              | uppercase string                           |
+| `lower`             | string              | lowercase string                           |
+| `trim`              | string              | string without leading/trailing whitespace |
+| `capitalize`        | string              | string with first character uppercased     |
+| `title`             | string              | title-cased string                         |
+| `length`            | string, array, dict | length/count as int                        |
+| `reverse`           | string, array       | reversed string or array copy              |
+| `first`             | array               | first element                              |
+| `last`              | array               | last element                               |
+| `sort`              | array               | sorted array                               |
+| `join(sep)`         | array               | joined string                              |
+| `split(sep)`        | string              | array of string parts                      |
+| `replace(old, new)` | string              | string with replacements                   |
+| `default(value)`    | any                 | fallback when input is `null`              |
+| `round`             | number              | rounded number                             |
+| `abs`               | number              | absolute value                             |
+| `keys`              | dict                | array of keys                              |
+| `values`            | dict                | array of values                            |
+| `json`              | any                 | JSON-encoded string                        |
 
-### Filter Chaining
+Invalid input types or missing filter arguments produce template errors.
 
-Filters can be chained — each filter receives the output of the previous one:
+## Conditionals
 
-```
-{{ name | trim | upper | default("N/A") }}
-```
+Conditionals choose between template branches.
 
-### Filters vs. Logical OR
-
-The pipe `|` for filters is distinct from the logical OR operator `||`. The engine disambiguates based on whether a filter name follows the single `|`:
-
-- `{{ x || y }}` — logical OR, evaluates as a boolean expression
-- `{{ x | upper }}` — filter application, transforms `x`
-
----
-
-## 6. Conditionals
-
-```
+```tpl
 {% if user.isAdmin %}
-  Welcome, admin!
+Welcome, admin.
 {% elif user.isActive %}
-  Welcome back, {{ user.name }}.
+Welcome back, {{ user.name }}.
 {% else %}
-  Please log in.
+Please log in.
 {% endif %}
 ```
 
-`{% elif %}` and `{% else %}` are optional. Multiple `{% elif %}` branches are allowed.
+`elif` and `else` are optional. Multiple `elif` branches are allowed.
 
-### Condition Expressions
+Conditions use Stash truthiness and operators.
 
-Conditions support all Stash logical operators:
-
-```
+```tpl
 {% if count > 0 && status == "active" %}
-{% if items | length > 0 %}
 {% if name != null && name != "" %}
+{% if "admin" in user.roles %}
 ```
 
-Supported operators: `&&`, `||`, `!`, `==`, `!=`, `>`, `<`, `>=`, `<=`, `in`.
+## Loops
 
-**Truthiness rules:** `false`, `null`, `0`, `0.0`, and `""` are falsy. Everything else — including empty arrays and empty dicts — is truthy.
+Loops iterate over an expression.
 
----
-
-## 7. Loops
-
-```
+```tpl
 {% for server in servers %}
-  {{ server.host }}: {{ server.status }}
+{{ server.host }}: {{ server.port }}
 {% endfor %}
 ```
 
-### Loop Metadata
+Supported iterable values follow Stash iteration behavior. Common cases are arrays,
+ranges, strings, and dictionaries. Dictionary iteration yields keys.
 
-Inside a `{% for %}` block, a `loop` variable is automatically available:
+Inside a loop, the `loop` variable exposes metadata.
 
-| Variable      | Type | Description                   |
-| ------------- | ---- | ----------------------------- |
-| `loop.index`  | int  | Current iteration (1-based)   |
-| `loop.index0` | int  | Current iteration (0-based)   |
-| `loop.first`  | bool | `true` on the first iteration |
-| `loop.last`   | bool | `true` on the last iteration  |
-| `loop.length` | int  | Total number of items         |
+| Field         | Meaning                     |
+| ------------- | --------------------------- |
+| `loop.index`  | 1-based iteration number    |
+| `loop.index0` | 0-based iteration number    |
+| `loop.first`  | true on the first iteration |
+| `loop.last`   | true on the last iteration  |
+| `loop.length` | total item count            |
 
-```
+```tpl
 {% for item in items %}
-  {{ loop.index }}. {{ item.name }}{% if !loop.last %},{% endif %}
+{{ loop.index }}. {{ item }}{% if !loop.last %},{% endif %}
 {% endfor %}
 ```
 
-### Iterable Types
+Nested loops each have their own `loop` variable. The inner loop's `loop` refers to
+the inner iteration while the inner body is rendering.
 
-| Type           | Behavior                    |
-| -------------- | --------------------------- |
-| Array          | Iterates elements           |
-| Range (`1..5`) | Iterates integers inclusive |
-| String         | Iterates characters         |
-| Dictionary     | Iterates keys               |
+## Includes
 
-### Nested Loops
+`include` renders another template using the current data context.
 
-Each loop has its own independent `loop` variable. Inner loops do not shadow the outer `loop`:
-
-```
-{% for group in groups %}
-  Group {{ loop.index }}: {{ group.name }}
-  {% for item in group.items %}
-    {{ loop.index }}. {{ item }}
-  {% endfor %}
-{% endfor %}
+```tpl
+{% include "partials/header.tpl" %}
+{% include "partials/footer.tpl" %}
 ```
 
----
+Include paths must be quoted string literals.
 
-## 8. Includes
+Path resolution:
 
-```
-{% include "header.tpl" %}
-{% include "partials/nav.tpl" %}
-```
+- In `tpl.renderFile`, includes are resolved relative to the current template file.
+- In string-based `tpl.render`, includes are resolved relative to the current working
+  directory.
 
-Included templates receive the same data context as the parent template. All variables bound in the parent are accessible in the included file.
+The renderer rejects include paths that escape the template root.
 
-**Path resolution:** When using `tpl.renderFile`, include paths are resolved relative to the directory of the current template file. When using `tpl.render` (string-based), include paths are resolved relative to the current working directory.
+## Whitespace Control
 
-**Security:** Path traversal outside the template root directory is blocked. Paths such as `../../../etc/passwd` are rejected at render time with a `RuntimeError`.
+By default, template tags leave surrounding whitespace intact. Add `-` inside a
+delimiter to trim adjacent whitespace.
 
----
+| Marker | Effect                           |
+| ------ | -------------------------------- |
+| `{%-`  | trim whitespace before a tag     |
+| `-%}`  | trim whitespace after a tag      |
+| `{{-`  | trim whitespace before output    |
+| `-}}`  | trim whitespace after output     |
+| `{#-`  | trim whitespace before a comment |
+| `-#}`  | trim whitespace after a comment  |
 
-## 9. Whitespace Control
-
-By default, a tag on its own line produces a blank line in the output. Add `-` to delimiters to trim surrounding whitespace (including newlines):
-
-| Marker | Effect                                       |
-| ------ | -------------------------------------------- |
-| `{%-`  | Trim whitespace **before** the tag           |
-| `-%}`  | Trim whitespace **after** the tag            |
-| `{{-`  | Trim whitespace before the output expression |
-| `-}}`  | Trim whitespace after the output expression  |
-| `{#-`  | Trim whitespace before the comment           |
-| `-#}`  | Trim whitespace after the comment            |
-
-```
+```tpl
 {% for item in items -%}
-  {{ item }}
+{{ item }}
 {%- endfor %}
 ```
 
-Trim markers remove all adjacent whitespace — spaces, tabs, and newlines — up to and including the trim boundary. Both sides can be trimmed simultaneously: `{%- tag -%}`.
+Trim markers remove adjacent spaces, tabs, and newlines. Both sides can be trimmed
+at once.
 
----
-
-## 10. Raw Blocks
-
+```tpl
+{{- name -}}
+{%- if active -%}
 ```
+
+## Raw Blocks and Comments
+
+Raw blocks emit their contents literally without processing delimiters.
+
+```tpl
 {% raw %}
-  This {{ is not }} parsed.
+This {{ is not }} evaluated.
 {% endraw %}
 ```
 
-Content inside `{% raw %}...{% endraw %}` is emitted literally — no delimiter processing occurs. Useful for:
+Raw blocks are useful for documenting template syntax or generating templates for
+another engine.
 
-- Outputting template syntax as documentation or example text
-- Generating templates that will be processed by another engine (e.g., a Jinja2 template that Stash generates)
-- Escaping sequences that would otherwise be interpreted
+Comments are removed from output.
 
-Raw blocks correctly preserve all delimiter variants including whitespace-trimming markers (`{{-`, `-%}`, `{#-`, etc.).
-
----
-
-## 11. Comments
-
-```
-{# This is stripped from output #}
+```tpl
+{# single-line comment #}
 
 {#
-   Multi-line comments
-   are also supported
+  multi-line comment
 #}
 ```
 
-Comments are completely removed from the rendered output, including any surrounding whitespace if whitespace-trim markers are used (`{#-` / `-#}`). Comments cannot be nested.
+Comments cannot be nested. Whitespace trim markers may be used with comments.
 
----
+## Errors
 
-## 12. Architecture
+Template errors are raised to Stash code as runtime errors. Where available,
+messages include template line and column information.
 
-```
-Template String
-    → Template Lexer   (scans for {{ }}, {% %}, {# #}, literal text)
-    → Template Parser  (builds template AST)
-    → Template Renderer (walks AST, evaluates expressions via Stash Interpreter)
-    → Output String
-```
+Common errors:
 
-### Key Design Decisions
+| Error                     | Example                                 |
+| ------------------------- | --------------------------------------- | ----------- |
+| unterminated output block | `{{ name`                               |
+| unterminated tag block    | `{% if active %}` without `{% endif %}` |
+| unterminated comment      | `{# note`                               |
+| unknown tag               | `{% unless x %}`                        |
+| invalid include           | `{% include path %}`                    |
+| unknown filter            | `{{ name                                | slugify }}` |
+| filter type error         | `{{ 42                                  | upper }}`   |
+| runtime expression error  | `{{ 1 / 0 }}`                           |
+| file not found            | `tpl.renderFile("missing.tpl", data)`   |
+| path traversal            | `{% include "../../../etc/passwd" %}`   |
 
-**1. Reuses the Stash expression evaluator.**
-Expressions inside `{{ }}` and `{% if %}` / `{% for %}` are parsed and evaluated by the Stash interpreter. Templates get all Stash operators, function calls, and namespace access for free — without duplicating expression logic in the template engine.
-
-**2. Data context is a Stash dictionary.**
-Variable lookups resolve against the data dictionary first, then fall back to the interpreter's global scope. This makes built-in functions like `len()` and namespaces like `str.*` accessible inside templates without explicit import.
-
-**3. Template AST is separate from the language AST.**
-The template engine has its own lexer, parser, and AST node types, keeping the core language pipeline clean. Template nodes (`TextNode`, `OutputNode`, `IfNode`, `ForNode`, `IncludeNode`, `RawNode`) are distinct from `Expr` and `Stmt` nodes.
-
-**4. `tpl.compile()` enables pre-compilation.**
-Templates can be parsed once and rendered multiple times with different data, avoiding repeated lexing and parsing overhead. The compiled template object is opaque to Stash scripts.
-
-### Implementation Files
-
-```
-Stash.Stdlib/BuiltIns/
-└── TplBuiltIns.cs                    — tpl namespace registration
-Stash.Tpl/
-├── TemplateAst.cs                    — AST node types
-├── TemplateException.cs              — template-specific errors
-├── TemplateLexer.cs                  — template tokenizer
-├── TemplateParser.cs                 — template parser
-├── TemplateFilters.cs                — filter registry
-└── TemplateRenderer.cs               — AST walker / renderer
-```
-
----
-
-## 13. Error Handling
-
-Template errors include source location (line and column within the template string or file):
-
-| Error                    | Example                               | When        |
-| ------------------------ | ------------------------------------- | ----------- |
-| Unterminated expression  | `{{ name` without `}}`                | Parse time  |
-| Unterminated block       | `{% if x %}` without `{% endif %}`    | Parse time  |
-| Unknown filter           | `{{ x \| foo }}`                      | Render time |
-| Runtime expression error | `{{ 1 / 0 }}`                         | Render time |
-| File not found           | `tpl.renderFile("missing.tpl", data)` | Render time |
-| Type error               | `tpl.render(123, data)`               | Render time |
-| Path traversal           | `{% include "../../../etc/passwd" %}` | Render time |
-
-All errors are raised as `RuntimeError` at the Stash script level, with a message that includes the template source location. The underlying `TemplateException` is wrapped and its location information is preserved.
-
----
+`tpl.render` requires a template string or compiled template and a dictionary. Wrong
+argument types produce runtime type errors.
 
 ## Examples
 
-### Config File Generation
+### Configuration File
 
 ```stash
-let servers = [
-    { host: "web1", port: 80 },
-    { host: "web2", port: 443 }
-];
+let data = {
+    generated: time.now(),
+    servers: [
+        { host: "web1", port: 80 },
+        { host: "web2", port: 443 },
+    ],
+};
 
-let data = dict.new();
-data["servers"] = servers;
-data["generated"] = time.now();
-
-let nginx = tpl.renderFile("templates/nginx.conf.tpl", data);
-fs.writeFile("/etc/nginx/sites-enabled/app.conf", nginx);
+let output = tpl.renderFile("templates/nginx.conf.tpl", data);
+fs.writeFile("/etc/nginx/sites-enabled/app.conf", output);
 ```
 
-**templates/nginx.conf.tpl:**
+`templates/nginx.conf.tpl`:
 
-```
+```tpl
 # Generated {{ generated }}
 {% for srv in servers %}
 server {
@@ -411,14 +394,9 @@ server {
 {% endfor %}
 ```
 
-### Report Generation
+### Report Template
 
 ```stash
-let data = dict.new();
-data["status"] = "success";
-data["duration"] = 42;
-data["failures"] = [];
-
 let report = tpl.render("""
 === Build Report ===
 Status: {{ status | upper }}
@@ -432,5 +410,19 @@ Failures ({{ failures | length }}):
 {%- else -%}
 All tests passed!
 {%- endif %}
-""", data);
+""", {
+    status: "success",
+    duration: 42,
+    failures: [],
+});
+```
+
+### Precompiled Template
+
+```stash
+let compiled = tpl.compile("Hello, {{ name | default(\"guest\") }}!");
+
+for (let name in ["Ada", "Grace", null]) {
+    io.println(tpl.render(compiled, { name: name }));
+}
 ```

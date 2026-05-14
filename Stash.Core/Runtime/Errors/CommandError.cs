@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Runtime;
 
-[StashError(Properties = new[] { "exitCode", "stderr", "stdout", "command" })]
+[StashError(
+    Description = "Strict command ($!(...)) exited with a non-zero exit code.",
+    Properties = new[] { "exitCode", "stderr", "stdout", "command" },
+    PropertyTypes = new[] { "int", "string", "string", "string" })]
 public sealed class CommandError : RuntimeError
 {
     public long ExitCode { get; }

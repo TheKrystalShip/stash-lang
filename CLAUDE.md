@@ -14,6 +14,7 @@ Stash.Lsp           → Language Server Protocol (OmniSharp — NOT AOT, require
 Stash.Dap           → Debug Adapter Protocol (OmniSharp — NOT AOT, requires reflection)
 Stash.Check         → Static analysis CLI (Native AOT)
 Stash.Format        → Code formatter CLI (Native AOT)
+Stash.Docs          → Stdlib reference generator (reads StdlibDefinitions + BuiltInErrorRegistry → writes docs/)
 Stash.Tap           → TAP test framework runtime
 Stash.Tpl           → Templating engine
 Stash.Scheduler     → Cross-platform OS service management (systemd, launchd, Task Scheduler)
@@ -32,7 +33,7 @@ The VS Code extension lives at `.vscode/extensions/stash-lang/` (TypeScript — 
 Layer 0 (Foundation)  → Stash.Core (no dependencies)
 Layer 1 (Libraries)   → Stash.Stdlib, Stash.Analysis, Stash.Tpl, Stash.Scheduler
 Layer 2 (Runtime)     → Stash.Bytecode (depends on Core + Stdlib + Tpl)
-Layer 3 (Tooling)     → Stash.Cli, Stash.Lsp, Stash.Dap, Stash.Check, Stash.Format, Stash.Playground, Stash.Registry
+Layer 3 (Tooling)     → Stash.Cli, Stash.Lsp, Stash.Dap, Stash.Check, Stash.Format, Stash.Docs, Stash.Playground, Stash.Registry
 Layer 4 (Tests)       → Stash.Tests, Stash.Tap
 ```
 
@@ -90,6 +91,16 @@ Detailed docs live in `docs/` — link to these instead of duplicating content:
 | Package manager CLI           | `docs/PKG — Package Manager CLI.md`          |
 | Package registry              | `docs/Registry — Package Registry.md`        |
 | Design specs & analysis       | `docs/specs/`                                |
+
+**`docs/Stash — Standard Library Reference.md` is generated — do not edit it by hand.**
+It is written by `Stash.Docs` from `StdlibDefinitions` and `BuiltInErrorRegistry` metadata.
+To update it, change the metadata (attributes, XML docs) then run:
+
+```bash
+dotnet run --project Stash.Docs/
+```
+
+The `StandardLibraryReferenceTests` test fails if the checked-in file is stale, so CI catches drift automatically.
 
 ## Specialized Agents
 

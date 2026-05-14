@@ -4,7 +4,10 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Runtime;
 
-[StashError(Properties = new[] { "path" })]
+[StashError(
+    Description = "File-lock acquisition failed.",
+    Properties = new[] { "path" },
+    PropertyTypes = new[] { "string" })]
 public sealed class LockError : RuntimeError
 {
     public string? Path { get; }

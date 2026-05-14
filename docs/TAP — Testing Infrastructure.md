@@ -1,435 +1,438 @@
-# Stash — Testing Infrastructure
+# TAP - Testing Infrastructure
 
-> **Status:** Draft v0.1
-> **Created:** March 2026
-> **Purpose:** Source of truth for Stash's built-in testing primitives, TAP output, and test harness architecture.
->
-> **Companion documents:**
->
-> - [Language Specification](../Stash%20—%20Language%20Specification.md) — language syntax, type system, interpreter architecture
-> - [Standard Library Reference](../Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions
-> - [DAP — Debug Adapter Protocol](DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server
-> - [LSP — Language Server Protocol](LSP%20—%20Language%20Server%20Protocol.md) — language server
+> **Status:** Stable v1 testing reference
+> **Audience:** test authors, CI maintainers, tool authors, and implementers
+> **Purpose:** reference for Stash's built-in `test` and `assert` namespaces, TAP output, and CLI test mode.
 
----
+Stash tests are ordinary Stash programs. Test cases are declared with the `test`
+namespace, checked with the `assert` namespace, and run with the CLI test harness.
+When the harness is active, failures are collected and reported as TAP instead of
+stopping the entire script at the first assertion failure.
 
-## Table of Contents
+**Companion documents:**
 
-1. [Overview](#1-overview)
-2. [Architecture](#2-architecture)
-3. [Running Tests](#3-running-tests)
-4. [Test Registration](#4-test-registration)
-5. [`assert` Namespace](#5-assert-namespace)
-6. [TAP Output](#6-tap-output)
-7. [Output Capture](#7-output-capture)
-8. [Setup & Teardown Hooks](#8-setup--teardown-hooks)
-9. [Implementation Details](#9-implementation-details)
-10. [Future Extensions](#10-future-extensions)
+- [Language Specification](Stash%20%E2%80%94%20Language%20Specification.md) - language semantics used by test code
+- [Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md) - generated `test` and `assert` API reference
+- [DAP - Debug Adapter Protocol](DAP%20%E2%80%94%20Debug%20Adapter%20Protocol.md) - debugger behavior
+- [LSP - Language Server Protocol](LSP%20%E2%80%94%20Language%20Server%20Protocol.md) - diagnostics and editor integration
 
 ---
 
-## 1. Overview
+## Contents
 
-Stash provides built-in testing primitives that enable structured, tooling-friendly test execution. Test scripts are ordinary Stash scripts — no special file format, no magic. `test.it()` and `assert.equal()` are regular function calls. The language provides the hooks; users can build full testing frameworks on top.
-
-By default, runtime errors crash the script. The testing harness changes this: in test mode (`--test`), assertion failures inside `test.it()` blocks are caught and recorded rather than crashing. Execution continues to the next test, collecting all results.
-
-**Key design goals:**
-
-- **TAP compliance** — output integrates directly with CI/CD pipelines and standard reporting tools
-- **Zero overhead** — no cost when not in test mode; the harness field is a null-checked optional
-- **Structured assertion errors** — every failure captures expected vs. actual values and source location
-- **Composability** — built on top of the existing interpreter architecture with no special-casing in the core
+1. [Overview](#overview)
+2. [Running Tests](#running-tests)
+3. [Writing Tests](#writing-tests)
+4. [Assertions](#assertions)
+5. [Lifecycle Hooks](#lifecycle-hooks)
+6. [Output Capture](#output-capture)
+7. [TAP Output](#tap-output)
+8. [Failures and Exit Behavior](#failures-and-exit-behavior)
+9. [Patterns](#patterns)
+10. [Tooling Contract](#tooling-contract)
 
 ---
 
-## 2. Architecture
+## Overview
 
-### Parallel with the Debugger
+The testing API has two namespaces:
 
-The testing infrastructure follows the same architectural pattern as the [debugging hooks](../Stash%20—%20Language%20Specification.md#11-debugging-support). The interpreter holds an `ITestHarness?` field alongside `IDebugger?`, guarded by the same null-check pattern for zero overhead during normal execution.
+| Namespace | Purpose                                                                           |
+| --------- | --------------------------------------------------------------------------------- |
+| `test`    | declares tests, suites, hooks, exclusive tests, skipped tests, and output capture |
+| `assert`  | raises assertion failures with structured messages and source locations           |
 
-| Debugging                        | Testing                               |
-| -------------------------------- | ------------------------------------- |
-| `IDebugger` interface            | `ITestHarness` interface              |
-| `CliDebugger` (interactive)      | `TapReporter` (TAP output)            |
-| `DebugSession` (DAP for VS Code) | Future IDE test explorer adapter      |
-| `--debug` CLI flag               | `--test` CLI flag                     |
-| `OnBeforeExecute()` hook         | `OnTestStart()` / `OnTestEnd()` hooks |
-| `OnError()` hook                 | `OnAssertionFail()` hook              |
-| Zero overhead when null          | Zero overhead when null               |
+Basic example:
 
-### `ITestHarness` Interface
+```stash
+test.describe("math", () => {
+    test.it("adds numbers", () => {
+        assert.equal(1 + 1, 2);
+    });
 
-```csharp
-public interface ITestHarness
-{
-    void OnTestStart(string name, SourceSpan span);
-    void OnTestPass(string name, TimeSpan duration);
-    void OnTestFail(string name, string message, SourceSpan span, TimeSpan duration);
-    void OnTestSkip(string name, string? reason);
-    void OnAssertionFail(object? expected, object? actual, string message, SourceSpan span);
-    void OnSuiteStart(string name);
-    void OnSuiteEnd(string name, int passed, int failed, int skipped);
-}
+    test.it("keeps types distinct", () => {
+        assert.notEqual(5, "5");
+    });
+});
 ```
 
-### `TapReporter`
-
-`TapReporter` implements `ITestHarness` and emits TAP-compliant output to stdout. It tracks test count and result state to produce the plan line (`1..N`) and individual `ok` / `not ok` lines. Located in `Stash.Tap/`.
-
----
-
-## 3. Running Tests
+Run it with:
 
 ```bash
-stash --test math_test.stash          # Run tests with TAP output
-stash --test tests/                    # Run all .stash files in directory
+stash --test math_test.stash
 ```
 
-The `--test` flag activates test mode: a `TapReporter` is attached as the test harness, execution proceeds normally, and `test.it()` calls run through the harness. Scripts not using `test.it()` can still be run with `--test` without side effects.
+Assertions are usable outside test mode too. Without a test harness, assertion
+failures behave like ordinary runtime errors and stop the script.
 
----
+## Running Tests
 
-## 4. Test Registration
+### CLI Modes
 
-### `test.it(name, fn)` — Register and Run a Test Case
+| Command                                     | Behavior                                             |
+| ------------------------------------------- | ---------------------------------------------------- |
+| `stash --test file.stash`                   | run a test file and emit TAP                         |
+| `stash --test-list file.stash`              | discover and list tests without running bodies       |
+| `stash --test-filter=<patterns> file.stash` | run/discover tests whose full names match the filter |
+
+`--test-list` implies `--test`. Test mode requires a script file. It cannot be used
+with `-c`, stdin execution, `--compile`, `--debug`, or `--disassemble`.
+
+Test filters are semicolon-separated name prefixes.
+
+```bash
+stash --test-filter="math > adds;strings" tests.stash
+```
+
+A filtered-out test emits no TAP result. A filtered-out `describe` block is skipped
+entirely when none of its descendant names can match.
+
+### Test Names
+
+Every test has a full hierarchical name.
 
 ```stash
-test.it("addition works", () => {
-    assert.equal(1 + 1, 2);
+test.describe("parser", () => {
+    test.it("accepts literals", () => {});
 });
 ```
 
-Each `test.it()` call:
+The full name includes the file name and describe path:
 
-1. Notifies the harness that a test is starting.
-2. Executes the lambda in an error-catching wrapper.
-3. Reports pass or fail to the harness.
-4. **Continues execution** — failures do not crash the script.
+```text
+parser_test.stash > parser > accepts literals
+```
 
-### `test.describe(name, fn)` — Group Tests
+Nested `test.describe` blocks append with `>`.
+
+## Writing Tests
+
+### `test.it(name, fn)`
+
+Defines and executes a test case.
 
 ```stash
-test.describe("math operations", () => {
-    test.it("addition", () => {
-        assert.equal(2 + 3, 5);
+test.it("loads config", () => {
+    let cfg = config.parse("port = 8080", "toml");
+    assert.equal(cfg.port, 8080);
+});
+```
+
+In test mode, runtime errors and assertion failures inside the body are reported as
+test failures. Execution continues to later tests.
+
+### `test.describe(name, fn)`
+
+Groups tests under a suite name.
+
+```stash
+test.describe("deployment", () => {
+    test.it("validates target", () => {
+        assert.true(validate("prod"));
     });
-    test.it("multiplication", () => {
-        assert.equal(3 * 4, 12);
+});
+```
+
+Suites may be nested. Hook scope follows the describe nesting.
+
+### `test.skip(name, fn)`
+
+Registers a skipped test without running its body.
+
+```stash
+test.skip("rollback is not implemented", () => {
+    assert.fail("body is not executed");
+});
+```
+
+Skipped tests emit an `ok` TAP line with a `# SKIP` directive.
+
+### `test.only(name, fn)`
+
+Defines an exclusive test. When one or more `test.only` calls are present,
+ordinary `test.it` tests are skipped with reason `test.only active`; `test.only`
+tests still run.
+
+```stash
+test.only("current failure", () => {
+    assert.deepEqual(build(), expected);
+});
+```
+
+Use `test.only` for local debugging. It should not be committed in normal test
+suites unless the intent is deliberately narrow.
+
+## Assertions
+
+Assertion functions throw `AssertionError` on failed expectations.
+
+| Function                                  | Contract                                   |
+| ----------------------------------------- | ------------------------------------------ |
+| `assert.equal(actual, expected)`          | strict equality, no type coercion          |
+| `assert.notEqual(actual, expected)`       | strict inequality                          |
+| `assert.true(value)`                      | value is truthy                            |
+| `assert.false(value)`                     | value is falsey                            |
+| `assert.null(value)`                      | value is `null`                            |
+| `assert.notNull(value)`                   | value is not `null`                        |
+| `assert.greater(a, b)`                    | numeric `a > b`                            |
+| `assert.less(a, b)`                       | numeric `a < b`                            |
+| `assert.throws(fn)`                       | callable throws; returns the error message |
+| `assert.fail(message?)`                   | immediately fails                          |
+| `assert.deepEqual(actual, expected)`      | recursive structural equality              |
+| `assert.closeTo(actual, expected, delta)` | numeric tolerance check                    |
+
+### Equality
+
+`assert.equal` uses Stash equality rules and does not coerce unrelated types.
+
+```stash
+assert.equal(5, 5);
+assert.notEqual(5, "5");
+assert.notEqual(0, false);
+```
+
+Use `assert.deepEqual` for arrays, dictionaries, and structs when structural
+comparison is intended.
+
+```stash
+assert.deepEqual([1, [2, 3]], [1, [2, 3]]);
+assert.deepEqual({ host: "localhost", port: 5432 },
+                 { host: "localhost", port: 5432 });
+```
+
+On failure, `assert.deepEqual` reports the failing path when available.
+
+### Numeric Assertions
+
+`assert.greater`, `assert.less`, and `assert.closeTo` require numeric arguments.
+Passing non-numeric values produces a runtime type error.
+
+```stash
+assert.greater(10, 5);
+assert.less(3, 4);
+assert.closeTo(3.14159, 3.14, 0.01);
+```
+
+`assert.closeTo` requires a non-negative `delta`.
+
+### Error Assertions
+
+`assert.throws(fn)` succeeds when `fn` throws a runtime error and returns the error
+message.
+
+```stash
+let msg = assert.throws(() => {
+    throw ValueError { message: "bad input" };
+});
+assert.true(str.contains(msg, "bad input"));
+```
+
+If the function does not throw, `assert.throws` fails.
+
+## Lifecycle Hooks
+
+Hooks must be registered inside `test.describe`.
+
+| Hook                  | Timing                                                         |
+| --------------------- | -------------------------------------------------------------- |
+| `test.beforeAll(fn)`  | executes immediately when encountered inside the describe body |
+| `test.afterAll(fn)`   | runs when the current describe block exits                     |
+| `test.beforeEach(fn)` | runs before each test in the current describe scope            |
+| `test.afterEach(fn)`  | runs after each test in the current describe scope             |
+
+```stash
+test.describe("counter", () => {
+    let state = [0];
+
+    test.beforeEach(() => {
+        state[0] = 0;
+    });
+
+    test.afterEach(() => {
+        state[0] = -1;
+    });
+
+    test.it("starts clean", () => {
+        assert.equal(state[0], 0);
     });
 });
 ```
 
-`test.describe()` blocks produce hierarchical test names (e.g., `math operations > addition`). Nesting is supported.
+Using a hook outside `test.describe` produces a runtime error.
 
-### `test.skip(name, fn)` — Register a Skipped Test
+### Nested Hook Order
 
-```stash
-test.skip("not yet implemented", () => {
-    // Body is never executed
-    assert.fail("should not reach here");
-});
-```
-
-`test.skip()` registers a test that is intentionally not run. The test body is provided for documentation but is never executed. In TAP output, skipped tests emit `ok N - <name> # SKIP skipped`.
-
-Use `test.skip()` for:
-
-- Work-in-progress tests that aren't ready yet
-- Tests for features that are known broken
-- Platform-specific tests that don't apply to the current environment
-
-### `test.only(name, fn)` — Exclusive Test
+`beforeEach` hooks run outermost to innermost. `afterEach` hooks run innermost to
+outermost.
 
 ```stash
-test.only("critical path", () => {
-    assert.equal(compute(), 42);
+test.describe("outer", () => {
+    test.beforeEach(() => io.println("outer setup"));
+    test.afterEach(() => io.println("outer cleanup"));
+
+    test.describe("inner", () => {
+        test.beforeEach(() => io.println("inner setup"));
+        test.afterEach(() => io.println("inner cleanup"));
+
+        test.it("example", () => {});
+    });
 });
-test.it("other test", () => {
-    // This will be skipped — test.only is active
-});
 ```
 
-When one or more `test.only()` calls appear in a test run, all `test.it()` calls are skipped (counted as skipped in TAP output). `test.skip()` tests remain skipped as normal. This mirrors the behavior of `it.only` / `test.only` in Jest.
+Order for the test body:
 
-Use `test.only()` to:
+1. outer `beforeEach`
+2. inner `beforeEach`
+3. test body
+4. inner `afterEach`
+5. outer `afterEach`
 
-- Focus on a single failing test during debugging
-- Run a subset of tests without commenting out others
+`afterAll` hooks run in the `finally` path of their describe block.
 
-### `test` Namespace Functions Summary
+## Output Capture
 
-| Function                  | Description                                                             |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `test.it(name, fn)`       | Register and run a test case                                            |
-| `test.only(name, fn)`     | Exclusive test — only `test.only` tests run when any exist              |
-| `test.skip(name, fn)`     | Register a skipped test (body is not executed)                          |
-| `test.describe(name, fn)` | Group tests under a descriptive name                                    |
-| `test.beforeAll(fn)`      | Run `fn()` once before tests in the current `test.describe` block       |
-| `test.afterAll(fn)`       | Run `fn()` once after all tests in the current `test.describe` block    |
-| `test.beforeEach(fn)`     | Run `fn()` before each `test.it()` in the current `test.describe` scope |
-| `test.afterEach(fn)`      | Run `fn()` after each `test.it()` in the current `test.describe` scope  |
-| `test.captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string          |
-
-These functions are accessed via the `test` namespace.
-
----
-
-## 5. `assert` Namespace
-
-| Function                                  | Description                                            |
-| ----------------------------------------- | ------------------------------------------------------ | ----------------- | --------- |
-| `assert.equal(actual, expected)`          | Assert `actual == expected` (no type coercion)         |
-| `assert.notEqual(actual, expected)`       | Assert `actual != expected`                            |
-| `assert.true(value)`                      | Assert value is truthy                                 |
-| `assert.false(value)`                     | Assert value is falsy                                  |
-| `assert.null(value)`                      | Assert value is `null`                                 |
-| `assert.notNull(value)`                   | Assert value is not `null`                             |
-| `assert.greater(a, b)`                    | Assert `a > b`                                         |
-| `assert.less(a, b)`                       | Assert `a < b`                                         |
-| `assert.throws(fn)`                       | Assert `fn()` throws; returns error message            |
-| `assert.fail(message?)`                   | Unconditionally fail                                   |
-| `assert.deepEqual(actual, expected)`      | Recursive structural equality (arrays, dicts, structs) |
-| `assert.closeTo(actual, expected, delta)` | Assert `                                               | actual - expected | <= delta` |
-
-> **Note:** Equality uses Stash's strict equality — no type coercion. For truthiness rules, see the [Language Specification](../Stash%20—%20Language%20Specification.md#4-type-system).
-
-### Assertion Error Format
-
-When an assertion fails, the error message includes the expected and actual values along with the source location:
-
-```
-assert.equal failed: expected 42 but got 17
-  at test_math.stash:14:5
-```
-
-When running **outside test mode** (no `--test`), assertion failures are regular `RuntimeError` exceptions — the script crashes on first failure. This makes assertions usable as lightweight guards in non-test scripts.
-
----
-
-## 6. TAP Output
-
-Stash emits [TAP version 14](https://testanything.org/tap-version-14-specification.html) — a standard protocol supported by CI/CD systems and reporting tools (Jest, prove, tap-junit, GitHub Actions, etc.).
-
-```
-TAP version 14
-1..3
-ok 1 - math operations > addition
-not ok 2 - string equality
-  ---
-  message: "assert.equal failed: expected \"hello\" but got \"world\""
-  severity: fail
-  at:
-    file: test_strings.stash
-    line: 14
-    column: 5
-  ...
-ok 3 - null handling
-```
-
-**Format rules:**
-
-- The plan line (`1..N`) is emitted after all tests complete, once the total count is known.
-- Passing tests emit `ok N - <name>`.
-- Failing tests emit `not ok N - <name>` followed by a YAML diagnostics block.
-- Skipped tests emit `ok N - <name> # SKIP <reason>`.
-
----
-
-## 7. Output Capture
-
-`test.captureOutput(fn)` temporarily redirects the interpreter's output writer to an in-memory string buffer, executes `fn()`, then restores the original writer and returns the captured string.
+`test.captureOutput(fn)` redirects Stash output to an in-memory buffer while `fn`
+runs, restores the previous output writer, and returns the captured string.
 
 ```stash
 let output = test.captureOutput(() => {
     io.println("hello");
     io.print("world");
 });
+
 assert.equal(output, "hello\nworld");
 ```
 
-This allows tests to assert on what a function prints without polluting the TAP output stream. Captured output does not appear in TAP results.
+Captured output does not appear in TAP output. Nested output capture is supported:
+the inner capture temporarily replaces the outer capture and then restores it.
 
----
+## TAP Output
 
-## 8. Setup & Teardown Hooks
+Stash emits TAP version 14.
 
-Lifecycle hooks provide setup and teardown logic scoped to `test.describe()` blocks. All four hooks must be called inside a `test.describe()` block — using them at the top level throws a `RuntimeError`.
+```text
+TAP version 14
+# math_test.stash > math
+ok 1 - math_test.stash > math > adds numbers
+not ok 2 - math_test.stash > math > string equality
+  ---
+  message: "assert.equal failed: expected \"hello\" but got \"world\""
+  severity: fail
+  at:
+    file: math_test.stash
+    line: 14
+    column: 5
+  ...
+ok 3 - math_test.stash > math > skipped case # SKIP skipped
+1..3
+```
 
-### `test.beforeAll(fn)` — One-Time Setup
+Output rules:
+
+- the first test or suite writes `TAP version 14`
+- suites are emitted as TAP comments beginning with `#`
+- passing tests emit `ok N - <name>`
+- failing tests emit `not ok N - <name>` followed by a YAML diagnostic block
+- skipped tests emit `ok N - <name> # SKIP <reason>`
+- the plan line `1..N` is emitted when the run completes
+
+`--test-list` uses TAP comments instead of result lines.
+
+```text
+TAP version 14
+# discovered: math_test.stash > math > adds numbers [math_test.stash:3:1]
+1..0
+```
+
+## Failures and Exit Behavior
+
+Inside `test.it` or `test.only`, assertion failures and runtime errors are converted
+to failed TAP tests when a test harness is active. Later tests continue to run.
+
+Outside a test case, runtime errors behave normally and may abort the script.
+Failures in `test.describe` setup code before a test starts are not reported as a
+test failure unless they occur inside a test body or hook executed as part of a test.
+
+Assertions outside test mode throw normally.
 
 ```stash
-test.describe("database tests", () => {
-    let items = [];
-
-    test.beforeAll(() => {
-        arr.push(items, "initialized");
-    });
-
-    test.it("items is initialized", () => {
-        assert.equal(items[0], "initialized");
-    });
-});
+assert.equal(1, 2); // crashes a normal script
 ```
 
-`test.beforeAll(fn)` executes `fn()` immediately when encountered. Since Stash executes synchronously and top-to-bottom, placing `test.beforeAll()` at the top of a `test.describe()` block ensures it runs before any tests.
+The process exit code is controlled by the CLI test runner. A run with any failed
+tests exits non-zero. A run with only passing and skipped tests exits zero.
 
-### `test.afterAll(fn)` — One-Time Teardown
-
-```stash
-test.describe("resources", () => {
-    test.afterAll(() => {
-        // Runs after all tests in this describe block finish
-    });
-
-    test.it("uses resource", () => { /* ... */ });
-});
-```
-
-`test.afterAll(fn)` registers `fn` to run when the `test.describe()` block ends. It runs in the `finally` block, so it executes even if a test fails.
-
-### `test.beforeEach(fn)` / `test.afterEach(fn)` — Per-Test Hooks
-
-```stash
-test.describe("counter", () => {
-    let count = [0];
-
-    test.beforeEach(() => {
-        count[0] = 0;  // Reset before each test
-    });
-
-    test.afterEach(() => {
-        // Runs after each test body completes
-    });
-
-    test.it("starts at zero", () => {
-        assert.equal(count[0], 0);
-    });
-
-    test.it("is reset between tests", () => {
-        assert.equal(count[0], 0);
-    });
-});
-```
-
-### Hook Inheritance in Nested Describes
-
-Hooks from parent `test.describe()` blocks are inherited by nested blocks. `test.beforeEach` hooks run outermost-to-innermost; `test.afterEach` hooks run innermost-to-outermost:
-
-```stash
-test.describe("outer", () => {
-    test.beforeEach(() => { /* runs first */ });
-    test.afterEach(() => { /* runs last */ });
-
-    test.describe("inner", () => {
-        test.beforeEach(() => { /* runs second */ });
-        test.afterEach(() => { /* runs first in cleanup */ });
-
-        test.it("example", () => {
-            // Execution order:
-            // 1. outer beforeEach
-            // 2. inner beforeEach
-            // 3. test body
-            // 4. inner afterEach
-            // 5. outer afterEach
-        });
-    });
-});
-```
-
-Hooks do **not** leak between sibling `test.describe()` blocks — each block manages its own hook scope.
-
----
-
-## 9. Implementation Details
-
-### Project Structure
-
-```
-Stash.Core/
-├── Runtime/
-│   ├── ITestHarness.cs        # Interface — 7 callback methods
-│   └── AssertionError.cs      # Structured assertion failure exception
-Stash.Tap/
-└── TapReporter.cs         # TAP output implementation
-Stash.Stdlib/
-└── BuiltIns/
-    └── TestBuiltIns.cs        # test.it(), test.skip(), test.describe(), hooks, assert.*, test.captureOutput()
-```
-
-The `test.it()`, `test.skip()`, `test.describe()`, lifecycle hooks, and the `assert` namespace are registered in `TestBuiltIns.cs`, following the same pattern as other [built-in function registries](../Stash%20—%20Standard%20Library%20Reference.md#overview).
-
-### Integration Points
-
-- **CLI (`Program.cs`)** — The `--test` flag instantiates a `TapReporter` and assigns it to the VM's test harness before script execution.
-- **VM** — Exposes `ITestHarness? TestHarness { get; set; }` via `IInterpreterContext`. All harness calls are guarded: `TestHarness?.OnTestStart(...)`.
-- **`test.it()` built-in** — Catches `RuntimeError` and `AssertionException` inside the test lambda and routes them to `OnTestFail`. Runs `beforeEach`/`afterEach` hooks around the test body. All other exceptions propagate normally.
-- **`test.skip()` built-in** — Calls `OnTestSkip` on the harness without executing the test body.
-- **`test.describe()` built-in** — Pushes hook layers on entry and pops them on exit. Runs `afterAll` hooks in a `finally` block.
-- **Lifecycle hooks** — `beforeAll` executes immediately. `afterAll` defers to the `test.describe` `finally` block. `beforeEach`/`afterEach` append to a per-`test.describe` hook stack; `test.it()` iterates all levels.
-- **`assert.*` functions** — In test mode, throw `AssertionException` (caught by the `test.it()` wrapper). Outside test mode, throw `RuntimeError` (crashes the script).
-
----
-
-## 10. Future Extensions
-
-- **`test.only(name, fn)`** — Run only this test (for focused debugging); all other tests are skipped.
-- **`assert.deepEqual(a, b)`** — Recursive equality for arrays, dicts, and struct instances.
-- **`assert.closeTo(a, b, delta)`** — Float comparison with tolerance (avoids floating-point precision issues).
-- **`--test-format=tap|json|junit`** — Alternate output formats for different CI/CD consumers.
-- **Test discovery** — `stash --test tests/` discovers and runs all `*_test.stash` or `test_*.stash` files automatically.
+## Patterns
 
 ### Complete Example
 
 ```stash
 #!/usr/bin/env stash
 
-import { deploy, Server } from "deploy.stash";
-
 test.describe("deployment", () => {
     let srv = null;
 
     test.beforeEach(() => {
-        srv = Server { host: "localhost", port: 22, status: "unknown" };
+        srv = { host: "localhost", port: 22 };
     });
 
-    test.afterAll(() => {
-        srv = null;  // Cleanup
-    });
-
-    test.it("creates server instance", () => {
+    test.it("creates server fixture", () => {
         assert.equal(srv.host, "localhost");
         assert.equal(srv.port, 22);
     });
 
-    test.it("deploy returns boolean", () => {
-        let result = deploy(srv, "app.tar.gz");
-        assert.equal(typeof(result), "bool");
+    test.it("captures output", () => {
+        let output = test.captureOutput(() => {
+            io.println("deploying ${srv.host}");
+        });
+        assert.equal(output, "deploying localhost\n");
     });
 
-    test.skip("rollback not implemented yet", () => {
-        let result = rollback(srv);
-        assert.true(result);
-    });
-});
-
-test.describe("language features", () => {
-    test.it("null coalescing works", () => {
-        let val = null ?? "default";
-        assert.equal(val, "default");
-    });
-
-    test.it("type coercion does not happen", () => {
-        assert.notEqual(5, "5");
-        assert.notEqual(0, false);
-        assert.notEqual(0, null);
+    test.skip("rollback not implemented", () => {
+        assert.fail("not reached");
     });
 });
 ```
 
-Running: `stash --test deploy_test.stash`
+### Testing Errors
 
----
+```stash
+test.it("rejects invalid input", () => {
+    let msg = assert.throws(() => validatePort(70000));
+    assert.true(str.contains(msg, "port"));
+});
+```
 
-_This is a living document. Update as the testing infrastructure evolves._
+### Testing Floating Point Results
+
+```stash
+test.it("computes ratio", () => {
+    assert.closeTo(computeRatio(), 0.3333, 0.001);
+});
+```
+
+### Focused Debugging
+
+```stash
+test.only("failing case", () => {
+    assert.deepEqual(actual(), expected());
+});
+```
+
+Remove `test.only` before committing broad test suites.
+
+## Tooling Contract
+
+Tooling may rely on these stable surfaces:
+
+- test execution is requested with `stash --test <file>`
+- discovery is requested with `stash --test-list <file>`
+- filtering uses `--test-filter=<semicolon-separated-prefixes>`
+- TAP output is version 14
+- test names are hierarchical strings separated by `>`
+- failures include message, severity, and source location when available
+- `test` and `assert` API signatures are defined in the
+  [Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md)
+
+Future alternate output formats, if added, should preserve the same logical test
+events: discovered, suite start, test start, pass, fail, skip, and run complete.

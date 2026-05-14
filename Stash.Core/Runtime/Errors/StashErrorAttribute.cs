@@ -27,4 +27,18 @@ public sealed class StashErrorAttribute : Attribute
     /// Used by the source generator to emit struct field metadata in the registry.
     /// </summary>
     public string[]? Properties { get; init; }
+
+    /// <summary>
+    /// Stash-facing types for each property listed in <see cref="Properties"/>,
+    /// in the same order. Use Stash type labels: <c>"int"</c>, <c>"string"</c>,
+    /// <c>"string?"</c>, <c>"bool"</c>, <c>"float"</c>, etc.
+    /// Must have the same length as <see cref="Properties"/> when both are set.
+    /// </summary>
+    public string[]? PropertyTypes { get; init; }
+
+    /// <summary>
+    /// Short description of when this error is thrown, used in the generated
+    /// standard library reference. Plain text; no Markdown.
+    /// </summary>
+    public string? Description { get; init; }
 }
