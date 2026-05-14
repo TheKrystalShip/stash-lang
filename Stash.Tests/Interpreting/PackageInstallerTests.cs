@@ -825,7 +825,7 @@ public class IntegrityVerificationTests : IDisposable
 // ── DeprecationWarningTests ───────────────────────────────────────────────────
 
 /// <summary>
-/// Tests that <see cref="PackageInstaller.Install"/> prints a warning to stderr
+/// Tests that <c>PackageInstaller.Install</c> prints a warning to stderr
 /// for each deprecated dependency discovered during resolution.
 /// </summary>
 public class DeprecationWarningTests : IDisposable

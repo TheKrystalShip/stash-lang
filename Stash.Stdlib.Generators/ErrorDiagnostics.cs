@@ -9,7 +9,7 @@ internal static class ErrorDiagnostics
     public static readonly DiagnosticDescriptor WrongNamespace = new(
         id: "STSE001",
         title: "[StashError] class must be in Stash.Runtime.Errors namespace",
-        messageFormat: "[StashError] class '{0}' must be declared in the '{1}' namespace.",
+        messageFormat: "[StashError] class '{0}' must be declared in the '{1}' namespace",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -17,7 +17,7 @@ internal static class ErrorDiagnostics
     public static readonly DiagnosticDescriptor MustInheritRuntimeError = new(
         id: "STSE002",
         title: "[StashError] class must inherit RuntimeError",
-        messageFormat: "[StashError] class '{0}' must directly or indirectly inherit from '{1}'.",
+        messageFormat: "[StashError] class '{0}' must directly or indirectly inherit from '{1}'",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

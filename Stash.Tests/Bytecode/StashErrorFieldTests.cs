@@ -5,7 +5,7 @@ using Stash.Runtime.Types;
 namespace Stash.Tests.Bytecode;
 
 /// <summary>
-/// Guards the invariant that every VM catch handler uses <see cref="StashError.FromRuntimeError"/>
+/// Guards the invariant that every VM catch handler uses <c>StashError.FromRuntimeError</c>
 /// rather than constructing <see cref="StashError"/> directly. Direct construction silently omits
 /// <see cref="StashError.BuiltInClrType"/> (required for typed-catch CLR-identity matching) and
 /// <see cref="StashError.OriginalException"/> (required for bare <c>throw;</c> to preserve source

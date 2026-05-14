@@ -5,14 +5,14 @@ namespace Stash.Tests.Bytecode;
 /// <summary>
 /// Tests for the Stash error type hierarchy — covering three previously-broken behaviours:
 ///
-/// 1. <c>is Error</c> must return <see langword="true"/> for ANY <see cref="StashError"/> value
+/// 1. <c>is Error</c> must return <see langword="true"/> for ANY <see cref="Stash.Runtime.Types.StashError"/> value
 ///    (regression: adding a runtime "Error" struct shadowed the built-in StashError C# check).
 ///
 /// 2. <c>is ParseError</c> / <c>is ValueError</c> / etc. must return <see langword="true"/>
-///    for a <see cref="StashError"/> whose <c>.type</c> matches the struct name
+///    for a <see cref="Stash.Runtime.Types.StashError"/> whose <c>.type</c> matches the struct name
 ///    (previously always false because errors are StashError, not StashInstance).
 ///
-/// 3. <c>catch (Error e)</c> must catch ANY <see cref="StashError"/> regardless of its concrete
+/// 3. <c>catch (Error e)</c> must catch ANY <see cref="Stash.Runtime.Types.StashError"/> regardless of its concrete
 ///    type — base-type catch semantics, consistent with Java / C# / Python conventions
 ///    (previously only caught errors whose exact <c>.type</c> field was "Error").
 ///

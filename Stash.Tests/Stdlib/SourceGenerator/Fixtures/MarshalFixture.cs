@@ -83,6 +83,7 @@ public static partial class MarshalFixture
     public static string OptionalNullable(string? s = null) => s ?? "default";
 
     /// <summary>Returns n + 1 to prove ctx injection works.</summary>
+    /// <param name="ctx">Interpreter context.</param>
     /// <param name="n">The number.</param>
     [StashFn]
     public static long WithCtx(IInterpreterContext ctx, long n) => n + 1;

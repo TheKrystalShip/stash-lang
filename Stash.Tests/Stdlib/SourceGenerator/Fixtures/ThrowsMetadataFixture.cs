@@ -30,6 +30,8 @@ public static partial class ThrowsMetadataFixture
     /// <summary>Does something that may fail; attribute and doc-comment disagree on throws type.</summary>
     /// <param name="path">The path.</param>
     /// <exception cref="ValueError">if value is wrong</exception>
+#pragma warning disable STSG010
     [StashFn(ThrowsTypes = new[] { typeof(IOError) })]
     public static string WithBothDisagree(string path) => path;
+#pragma warning restore STSG010
 }

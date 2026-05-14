@@ -13,7 +13,7 @@ namespace Stash.Tests.Cli.Completion;
 /// Tests for the Tab state machine (spec §4) via the <see cref="TabCompletionAction"/>
 /// helper and the <see cref="LineEditor"/> completion properties (spec §10.3, §15.8).
 /// Strategy A: the Tab logic is extracted into a testable static class so no
-/// <see cref="Console.ReadKey"/> simulation is required.
+/// <c>Console.ReadKey</c> simulation is required.
 /// </summary>
 public class LineEditorTabTests
 {

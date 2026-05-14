@@ -10,7 +10,7 @@ namespace Stash.Tests.Bytecode;
 
 /// <summary>
 /// Tests for IC slot compaction (Phase 4A of the basic-block optimizer spec §9.4).
-/// When <see cref="LocalValueNumberingPass"/> rewrites a <c>GetFieldIC</c> to <c>Move</c>
+/// When <c>LocalValueNumberingPass</c> rewrites a <c>GetFieldIC</c> to <c>Move</c>
 /// and removes the orphaned companion word, the post-pipeline compaction step must shrink
 /// the IC slot table to remove the now-unreferenced entries.
 /// </summary>

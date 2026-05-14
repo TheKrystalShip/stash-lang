@@ -25,7 +25,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor InterpreterContextPosition = new(
         id: "STASH_GEN003",
         title: "IInterpreterContext must be the first parameter",
-        messageFormat: "'IInterpreterContext' parameter must be the first parameter of [StashFn] method '{0}'.",
+        messageFormat: "'IInterpreterContext' parameter must be the first parameter of [StashFn] method '{0}'",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -33,7 +33,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor DuplicateFunctionName = new(
         id: "STASH_GEN005",
         title: "Duplicate Stash function name in namespace",
-        messageFormat: "Two [StashFn] methods in namespace '{0}' produce the same Stash name '{1}'.",
+        messageFormat: "Two [StashFn] methods in namespace '{0}' produce the same Stash name '{1}'",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -57,7 +57,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor NamespaceClassMustBePartialStatic = new(
         id: "STASH_GEN008",
         title: "[StashNamespace] class must be partial and static",
-        messageFormat: "[StashNamespace] class '{0}' must be 'partial' and 'static'.",
+        messageFormat: "[StashNamespace] class '{0}' must be 'partial' and 'static'",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -65,7 +65,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor InaccessibleStructOrEnum = new(
         id: "STASH_GEN009",
         title: "[StashStruct]/[StashEnum] type not accessible from generated Define()",
-        messageFormat: "[StashStruct]/[StashEnum] type '{0}' is not accessible from the generated Define() method.",
+        messageFormat: "[StashStruct]/[StashEnum] type '{0}' is not accessible from the generated Define() method",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -73,7 +73,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor MissingSummaryDoc = new(
         id: "STASH_DOC001",
         title: "[StashFn] missing <summary> doc comment",
-        messageFormat: "[StashFn] method '{0}' is missing an XML <summary> doc comment.",
+        messageFormat: "[StashFn] method '{0}' is missing an XML <summary> doc comment",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
@@ -81,7 +81,7 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor MissingParamDoc = new(
         id: "STASH_DOC002",
         title: "[StashFn] parameter missing <param> doc comment",
-        messageFormat: "[StashFn] parameter '{0}' of method '{1}' is missing a <param> doc comment.",
+        messageFormat: "[StashFn] parameter '{0}' of method '{1}' is missing a <param> doc comment",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
