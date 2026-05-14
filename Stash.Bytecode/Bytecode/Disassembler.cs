@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
@@ -666,6 +667,9 @@ public static class Disassembler
                 ? "string[0] <catch-all>"
                 : $"string[] {{{string.Join(", ", types)}}}",
             LockMetadata m => FormatLockMetaConst(m),
+            StashLiteralArg la => la.ShouldExpand
+                ? $"LiteralArg(\"{EscapeString(la.Text)}\")"
+                : $"LiteralArg(\"{EscapeString(la.Text)}\", verbatim)",
             _              => value.AsObj?.GetType().Name ?? "obj",
         },
         _ => "?"
