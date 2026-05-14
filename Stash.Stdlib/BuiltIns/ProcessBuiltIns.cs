@@ -293,11 +293,11 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>A CommandResult with stdout, stderr, and exitCode</returns>
     [StashFn(ReturnType = "CommandResult")]
-    private static StashValue Wait(IInterpreterContext ctx, StashValue handleVal)
+    private static StashValue Wait(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
         var handle = ExtractProcessHandle(handleVal, "process.wait");
 
@@ -345,12 +345,12 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Waits up to the given number of milliseconds for a process to exit. Returns a CommandResult on success, or null if the timeout expires.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <param name="ms">Maximum wait time in milliseconds</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>A CommandResult, or null if timed out</returns>
     [StashFn]
-    private static StashValue WaitTimeout(IInterpreterContext ctx, StashValue handleVal, long ms)
+    private static StashValue WaitTimeout(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, long ms)
     {
         var handle = ExtractProcessHandle(handleVal, "process.waitTimeout");
 
@@ -393,11 +393,11 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if the signal was sent, false if the process was not running</returns>
     [StashFn]
-    private static StashValue Kill(IInterpreterContext ctx, StashValue handleVal)
+    private static StashValue Kill(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
         var handle = ExtractProcessHandle(handleVal, "process.kill");
 
@@ -419,11 +419,11 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Returns true if the process is still running, false if it has exited.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if the process is running</returns>
     [StashFn]
-    private static StashValue IsAlive(IInterpreterContext ctx, StashValue handleVal)
+    private static StashValue IsAlive(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
         var handle = ExtractProcessHandle(handleVal, "process.isAlive");
 
@@ -438,24 +438,24 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Returns the OS process ID for a spawned Process handle.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>The integer process ID</returns>
     [StashFn]
-    private static StashValue Pid(IInterpreterContext ctx, StashValue handleVal)
+    private static StashValue Pid(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
         var handle = ExtractProcessHandle(handleVal, "process.pid");
         return handle.GetField("pid", null);
     }
 
     /// <summary>Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL, etc. as signal number constants. Returns true on success.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
-    /// <param name="signum">The POSIX signal number (1–64)</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
+    /// <param name="sigArg">The POSIX signal number (1–64)</param>
     /// <exception cref="ValueError">if the Signal enum member is unknown, or the signal number is outside the range 1–64</exception>
     /// <exception cref="TypeError">if handle is not a Process, or the signal argument is not an integer or Signal enum value</exception>
     /// <returns>True if the signal was sent successfully</returns>
     [StashFn]
-    private static StashValue Signal(IInterpreterContext ctx, StashValue handleVal, StashValue sigArg)
+    private static StashValue Signal(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, [StashParam(Name = "signum")] StashValue sigArg)
     {
         var handle = ExtractProcessHandle(handleVal, "process.signal");
 
@@ -514,11 +514,11 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.</summary>
-    /// <param name="handle">The Process handle to detach</param>
+    /// <param name="handleVal">The Process handle to detach</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if the handle was found and removed</returns>
     [StashFn]
-    private static StashValue Detach(IInterpreterContext ctx, StashValue handleVal)
+    private static StashValue Detach(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
         var handle = ExtractProcessHandle(handleVal, "process.detach");
 
@@ -547,11 +547,11 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>A string chunk, or null if no data is available</returns>
     [StashFn]
-    private static StashValue Read(IInterpreterContext ctx, StashValue handleVal)
+    private static StashValue Read(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
         var handle = ExtractProcessHandle(handleVal, "process.read");
 
@@ -580,12 +580,12 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Writes a string to a process's stdin. Returns true on success, false if the process has already exited.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <param name="data">The string data to write to stdin</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
     /// <returns>True if written successfully</returns>
     [StashFn]
-    private static StashValue Write(IInterpreterContext ctx, StashValue handleVal, string data)
+    private static StashValue Write(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, string data)
     {
         var handle = ExtractProcessHandle(handleVal, "process.write");
 
@@ -608,12 +608,12 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Registers a callback function to be called when the process exits. The callback receives a CommandResult as its argument.</summary>
-    /// <param name="handle">The Process handle returned by process.spawn()</param>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <param name="callback">A function that accepts a CommandResult</param>
     /// <exception cref="TypeError">if handle is not a Process, or the callback requires more than one argument</exception>
     /// <returns>null</returns>
     [StashFn]
-    private static StashValue OnExit(IInterpreterContext ctx, StashValue handleVal, IStashCallable callback)
+    private static StashValue OnExit(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, IStashCallable callback)
     {
         var handle = ExtractProcessHandle(handleVal, "process.onExit");
 
@@ -726,8 +726,8 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order as the input.</summary>
-    /// <param name="handles">An array of Process handles</param>
-    /// <exception cref="TypeError">if any element in the handles array is not a Process</exception>
+    /// <param name="procs">An array of Process handles</param>
+    /// <exception cref="TypeError">if any element in the array is not a Process</exception>
     /// <returns>An array of CommandResult values</returns>
     [StashFn]
     private static StashValue WaitAll(IInterpreterContext ctx, List<StashValue> procs)
@@ -780,9 +780,9 @@ public static partial class ProcessBuiltIns
     }
 
     /// <summary>Waits until any process in the array exits. Returns the CommandResult of the first process to finish.</summary>
-    /// <param name="handles">A non-empty array of Process handles</param>
-    /// <exception cref="ValueError">if the handles array is empty</exception>
-    /// <exception cref="TypeError">if any element in the handles array is not a Process</exception>
+    /// <param name="procs">A non-empty array of Process handles</param>
+    /// <exception cref="ValueError">if the array is empty</exception>
+    /// <exception cref="TypeError">if any element in the array is not a Process</exception>
     /// <returns>The CommandResult of the first process to exit</returns>
     [StashFn]
     private static StashValue WaitAny(IInterpreterContext ctx, List<StashValue> procs)

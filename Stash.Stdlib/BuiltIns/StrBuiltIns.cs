@@ -215,7 +215,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the string with up to count occurrences of old replaced by new (default 1).</summary>
     /// <param name="s">The string</param>
     /// <param name="old">The substring to replace</param>
-    /// <param name="new">The replacement</param>
+    /// <param name="newValue">The replacement</param>
     /// <param name="count">Optional maximum number of replacements (default 1)</param>
     /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>Modified string</returns>
@@ -238,7 +238,7 @@ public static partial class StrBuiltIns
     /// <summary>Returns the string with all occurrences of old replaced by new.</summary>
     /// <param name="s">The string</param>
     /// <param name="old">The substring to replace</param>
-    /// <param name="new">The replacement</param>
+    /// <param name="newValue">The replacement</param>
     /// <returns>Modified string</returns>
     [StashFn]
     private static string ReplaceAll(string s, string old, [StashParam(Name = "new")] string newValue)

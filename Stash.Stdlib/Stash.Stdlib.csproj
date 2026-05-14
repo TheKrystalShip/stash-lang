@@ -7,7 +7,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>embedded</DebugType>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <NoWarn>$(NoWarn);CS1591;CS1572;CS1573;CS1574</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
