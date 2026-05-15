@@ -1,0 +1,444 @@
+/// Internal edit-script engine for @stash/diff.
+///
+/// Exposes `_computeEditScript(a_lines, b_lines, algorithm)` which returns a
+/// flat `[Edit]` stream covering every line of both inputs in canonical
+/// order: equal and deleted lines preserve `a`'s order; inserted lines
+/// preserve `b`'s order; for any interleaving, deletions are emitted before
+/// insertions at the same anchor (matches `diff -u` output convention).
+///
+/// v1.0 ships MYERS and PATIENCE. HISTOGRAM falls back to PATIENCE.
+
+import { Op, Edit, DiffAlgorithm } from "types.stash";
+
+// ── Public dispatch entry point ──────────────────────────────────────────
+
+/// Compute the canonical edit script for two arrays of lines.
+/// `algorithm` selects the engine; unknown values fall back to MYERS.
+fn _computeEditScript(a, b, algorithm) -> array {
+  let raw;
+  if (algorithm == DiffAlgorithm.PATIENCE) {
+    raw = _patience(a, b);
+  } else {
+    if (algorithm == DiffAlgorithm.HISTOGRAM) {
+      // Histogram is deferred to v1.1; route to patience for v1.0.
+      raw = _patience(a, b);
+    } else {
+      raw = _myers(a, b);
+    }
+  }
+  return _normalizeOrder(raw);
+}
+
+// ── Edit constructors ────────────────────────────────────────────────────
+
+fn _mkEqual(text, oldLine, newLine) -> Edit {
+  return Edit { op: Op.EQUAL, oldLine: oldLine, newLine: newLine, text: text };
+}
+
+fn _mkInsert(text, newLine) -> Edit {
+  return Edit { op: Op.INSERT, oldLine: null, newLine: newLine, text: text };
+}
+
+fn _mkDelete(text, oldLine) -> Edit {
+  return Edit { op: Op.DELETE, oldLine: oldLine, newLine: null, text: text };
+}
+
+// ── Myers O((N+M)D) shortest-edit-script ─────────────────────────────────
+
+/// Standard Myers diff. Builds the SES via the V-band, then backtracks
+/// the trace to produce a forward edit list.
+///
+/// Reference: Eugene W. Myers, "An O(ND) Difference Algorithm and Its
+/// Variations" (1986), Algorithm 2.
+fn _myers(a, b) -> array {
+  let n = len(a);
+  let m = len(b);
+  let max = n + m;
+
+  // Fast paths
+  if (n == 0 && m == 0) {
+    return [];
+  }
+  if (n == 0) {
+    let result = [];
+    for (let j in 0..m) {
+      arr.push(result, _mkInsert(b[j], j + 1));
+    }
+    return result;
+  }
+  if (m == 0) {
+    let result = [];
+    for (let i in 0..n) {
+      arr.push(result, _mkDelete(a[i], i + 1));
+    }
+    return result;
+  }
+
+  // V[k] holds the furthest x reached for diagonal k, offset by `max`
+  // so we can index a flat array with non-negative integers.
+  let size = 2 * max + 1;
+  let offset = max;
+
+  // v_current and trace use parallel arrays.
+  let v = [];
+  for (let i in 0..size) {
+    arr.push(v, 0);
+  }
+
+  let trace = [];
+
+  let d = 0;
+  let found = false;
+  let finalD = 0;
+
+  while (d <= max && !found) {
+    // Snapshot v at the start of step d
+    let snap = [];
+    for (let i in 0..size) {
+      arr.push(snap, v[i]);
+    }
+    arr.push(trace, snap);
+
+    let k = -d;
+    while (k <= d) {
+      let x;
+      // Choose the direction we came from: down (insert) or right (delete).
+      if (k == -d) {
+        x = v[k + 1 + offset];
+      } else {
+        if (k == d) {
+          x = v[k - 1 + offset] + 1;
+        } else {
+          let down = v[k + 1 + offset];
+          let right = v[k - 1 + offset] + 1;
+          if (down > right) {
+            x = down;
+          } else {
+            x = right;
+          }
+        }
+      }
+
+      let y = x - k;
+      // Walk diagonal as far as lines match.
+      while (x < n && y < m && a[x] == b[y]) {
+        x = x + 1;
+        y = y + 1;
+      }
+      v[k + offset] = x;
+
+      if (x >= n && y >= m) {
+        found = true;
+        finalD = d;
+        break;
+      }
+      k = k + 2;
+    }
+    d = d + 1;
+  }
+
+  // Backtrack the trace to recover the edit script (in reverse).
+  let reverse = [];
+  let x = n;
+  let y = m;
+  let dd = finalD;
+
+  while (dd > 0) {
+    let snap = trace[dd];
+    let k = x - y;
+    let prevK;
+    if (k == -dd) {
+      prevK = k + 1;
+    } else {
+      if (k == dd) {
+        prevK = k - 1;
+      } else {
+        let down = snap[k + 1 + offset];
+        let right = snap[k - 1 + offset] + 1;
+        if (down > right) {
+          prevK = k + 1;
+        } else {
+          prevK = k - 1;
+        }
+      }
+    }
+
+    let prevX = snap[prevK + offset];
+    let prevY = prevX - prevK;
+
+    // Walk the diagonal back, emitting EQUAL edits.
+    while (x > prevX && y > prevY) {
+      arr.push(reverse, _mkEqual(a[x - 1], x, y));
+      x = x - 1;
+      y = y - 1;
+    }
+
+    if (dd > 0) {
+      if (x == prevX) {
+        // Came from down: INSERT b[prevY]
+        arr.push(reverse, _mkInsert(b[prevY], prevY + 1));
+      } else {
+        // Came from right: DELETE a[prevX]
+        arr.push(reverse, _mkDelete(a[prevX], prevX + 1));
+      }
+    }
+
+    x = prevX;
+    y = prevY;
+    dd = dd - 1;
+  }
+
+  // Any leading common prefix on diagonal 0.
+  while (x > 0 && y > 0) {
+    arr.push(reverse, _mkEqual(a[x - 1], x, y));
+    x = x - 1;
+    y = y - 1;
+  }
+  while (x > 0) {
+    arr.push(reverse, _mkDelete(a[x - 1], x));
+    x = x - 1;
+  }
+  while (y > 0) {
+    arr.push(reverse, _mkInsert(b[y - 1], y));
+    y = y - 1;
+  }
+
+  // reverse[] is in tail-to-head order; flip it. _normalizeOrder is
+  // applied by the public _computeEditScript dispatcher.
+  let result = [];
+  let i = len(reverse) - 1;
+  while (i >= 0) {
+    arr.push(result, reverse[i]);
+    i = i - 1;
+  }
+  return result;
+}
+
+/// Within each run of changes the diff convention is DELETE-first then
+/// INSERT. Myers' backtrack does NOT guarantee that ordering, so we
+/// post-process runs of non-EQUAL edits and emit all DELETEs first.
+fn _normalizeOrder(edits) -> array {
+  let result = [];
+  let i = 0;
+  let n = len(edits);
+  while (i < n) {
+    if (edits[i].op == Op.EQUAL) {
+      arr.push(result, edits[i]);
+      i = i + 1;
+    } else {
+      // Collect the contiguous change run
+      let dels = [];
+      let ins = [];
+      while (i < n && edits[i].op != Op.EQUAL) {
+        if (edits[i].op == Op.DELETE) {
+          arr.push(dels, edits[i]);
+        } else {
+          arr.push(ins, edits[i]);
+        }
+        i = i + 1;
+      }
+      for (let k in 0..len(dels)) {
+        arr.push(result, dels[k]);
+      }
+      for (let k in 0..len(ins)) {
+        arr.push(result, ins[k]);
+      }
+    }
+  }
+  return result;
+}
+
+// ── Patience diff ────────────────────────────────────────────────────────
+
+/// Patience diff: find unique-line anchors, recurse on the bands between
+/// them, and fall back to Myers for tail bands or pieces with no anchors.
+///
+/// Reference: Bram Cohen, "Patience Diff Advantages" (2009).
+fn _patience(a, b) -> array {
+  return _patienceRange(a, b, 0, len(a), 0, len(b));
+}
+
+/// Diff a[aStart..aEnd) against b[bStart..bEnd) using patience.
+fn _patienceRange(a, b, aStart, aEnd, bStart, bEnd) -> array {
+  // Trim common prefix
+  let prefix = [];
+  while (aStart < aEnd && bStart < bEnd && a[aStart] == b[bStart]) {
+    arr.push(prefix, _mkEqual(a[aStart], aStart + 1, bStart + 1));
+    aStart = aStart + 1;
+    bStart = bStart + 1;
+  }
+  // Trim common suffix
+  let suffix = [];
+  while (aStart < aEnd && bStart < bEnd && a[aEnd - 1] == b[bEnd - 1]) {
+    arr.push(suffix, _mkEqual(a[aEnd - 1], aEnd, bEnd));
+    aEnd = aEnd - 1;
+    bEnd = bEnd - 1;
+  }
+
+  let middle = [];
+  if (aStart >= aEnd && bStart >= bEnd) {
+    middle = [];
+  } else {
+    if (aStart >= aEnd) {
+      // Only insertions
+      for (let j in bStart..bEnd) {
+        arr.push(middle, _mkInsert(b[j], j + 1));
+      }
+    } else {
+      if (bStart >= bEnd) {
+        // Only deletions
+        for (let i in aStart..aEnd) {
+          arr.push(middle, _mkDelete(a[i], i + 1));
+        }
+      } else {
+        // Find longest common subsequence of unique-anchor lines
+        let anchors = _patienceAnchors(a, b, aStart, aEnd, bStart, bEnd);
+        if (len(anchors) == 0) {
+          // No anchors — fall back to Myers on this sub-range.
+          let subA = arr.slice(a, aStart, aEnd);
+          let subB = arr.slice(b, bStart, bEnd);
+          let sub = _myers(subA, subB);
+          // Re-number to absolute coordinates
+          for (let k in 0..len(sub)) {
+            let e = sub[k];
+            if (e.op == Op.EQUAL) {
+              arr.push(middle, _mkEqual(e.text, e.oldLine + aStart, e.newLine + bStart));
+            } else {
+              if (e.op == Op.DELETE) {
+                arr.push(middle, _mkDelete(e.text, e.oldLine + aStart));
+              } else {
+                arr.push(middle, _mkInsert(e.text, e.newLine + bStart));
+              }
+            }
+          }
+        } else {
+          // Recurse on bands between anchors
+          let prevA = aStart;
+          let prevB = bStart;
+          for (let k in 0..len(anchors)) {
+            let pair = anchors[k];
+            let ai = pair[0];
+            let bi = pair[1];
+            let band = _patienceRange(a, b, prevA, ai, prevB, bi);
+            for (let m in 0..len(band)) {
+              arr.push(middle, band[m]);
+            }
+            arr.push(middle, _mkEqual(a[ai], ai + 1, bi + 1));
+            prevA = ai + 1;
+            prevB = bi + 1;
+          }
+          // Tail band after the last anchor
+          let tail = _patienceRange(a, b, prevA, aEnd, prevB, bEnd);
+          for (let m in 0..len(tail)) {
+            arr.push(middle, tail[m]);
+          }
+        }
+      }
+    }
+  }
+
+  // Suffix was collected tail-first — reverse it.
+  let result = [];
+  for (let i in 0..len(prefix)) {
+    arr.push(result, prefix[i]);
+  }
+  for (let i in 0..len(middle)) {
+    arr.push(result, middle[i]);
+  }
+  let i = len(suffix) - 1;
+  while (i >= 0) {
+    arr.push(result, suffix[i]);
+    i = i - 1;
+  }
+  return result;
+}
+
+/// Find ordered (a_index, b_index) pairs for lines that occur exactly
+/// once in both a[aStart..aEnd) and b[bStart..bEnd), forming the longest
+/// increasing subsequence of B-positions.
+fn _patienceAnchors(a, b, aStart, aEnd, bStart, bEnd) -> array {
+  // Count occurrences in a
+  let aCount = {};
+  let aIndex = {};
+  for (let i in aStart..aEnd) {
+    let line = a[i];
+    if (dict.has(aCount, line)) {
+      aCount[line] = aCount[line] + 1;
+    } else {
+      aCount[line] = 1;
+      aIndex[line] = i;
+    }
+  }
+  // Count occurrences in b
+  let bCount = {};
+  let bIndex = {};
+  for (let j in bStart..bEnd) {
+    let line = b[j];
+    if (dict.has(bCount, line)) {
+      bCount[line] = bCount[line] + 1;
+    } else {
+      bCount[line] = 1;
+      bIndex[line] = j;
+    }
+  }
+
+  // Collect unique-in-both lines, sorted by their position in b
+  let pairs = [];
+  for (let j in bStart..bEnd) {
+    let line = b[j];
+    if (bCount[line] == 1 && dict.has(aCount, line) && aCount[line] == 1) {
+      arr.push(pairs, [aIndex[line], j]);
+    }
+  }
+  if (len(pairs) == 0) {
+    return [];
+  }
+
+  // Patience sort over a-positions to extract the longest increasing
+  // subsequence. `piles` holds the smallest tail a-position per pile;
+  // `parent` chains predecessors so we can backtrack the LIS.
+  let piles = [];      // each entry: index into `pairs`
+  let parent = [];
+  for (let i in 0..len(pairs)) {
+    arr.push(parent, -1);
+  }
+
+  for (let i in 0..len(pairs)) {
+    let ai = pairs[i][0];
+    // Binary search for leftmost pile whose tail >= ai
+    let lo = 0;
+    let hi = len(piles);
+    while (lo < hi) {
+      let mid = (lo + hi) / 2;
+      if (pairs[piles[mid]][0] < ai) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    if (lo > 0) {
+      parent[i] = piles[lo - 1];
+    }
+    if (lo == len(piles)) {
+      arr.push(piles, i);
+    } else {
+      piles[lo] = i;
+    }
+  }
+
+  // Reconstruct LIS from the last pile
+  let chain = [];
+  let idx = piles[len(piles) - 1];
+  while (idx != -1) {
+    arr.push(chain, pairs[idx]);
+    idx = parent[idx];
+  }
+  // chain is tail-to-head; reverse it
+  let result = [];
+  let i = len(chain) - 1;
+  while (i >= 0) {
+    arr.push(result, chain[i]);
+    i = i - 1;
+  }
+  return result;
+}

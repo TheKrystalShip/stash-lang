@@ -1,0 +1,20 @@
+/// @stash/diff — Line-oriented diff for files and strings.
+///
+/// Import the whole package:
+///   import "@stash/diff" as diff;
+///   let result = diff.lines(a, b, null);
+///   io.println(diff.render.renderUnified(result));
+///
+/// Or import individual modules:
+///   import { lines, files, equal } from "@stash/diff/lib/diff.stash";
+///   import { renderUnified, colorize } from "@stash/diff/lib/render.stash";
+///   import { DiffAlgorithm, DiffOptions, Op } from "@stash/diff/lib/types.stash";
+
+// stash-disable SA0201
+// stash-disable SA0802
+// stash-disable SA0804
+
+import "lib/types.stash" as types;
+import "lib/constants.stash" as constants;
+import "lib/render.stash" as render;
+import { lines, files, equal } from "lib/diff.stash";

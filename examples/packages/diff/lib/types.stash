@@ -1,0 +1,77 @@
+/// Type definitions for @stash/diff.
+///
+/// All enums and structs are public — callers that build custom renderers
+/// or inspect diff results programmatically need access to every shape.
+
+/// Operation tag for each line in a diff result.
+/// Bare strings ("add", "delete") are forbidden — always use this enum.
+enum Op {
+  EQUAL,
+  INSERT,
+  DELETE
+}
+
+/// Which algorithm to run. Caller-selected so we can ship more later
+/// without breaking signatures.
+enum DiffAlgorithm {
+  /// O((N+M)D) edit script — default
+  MYERS,
+  /// Anchored on unique lines — nicer hunks for source code
+  PATIENCE,
+  /// Patience variant — reserved for v1.1
+  HISTOGRAM
+}
+
+/// How `ignoreWhitespace` interprets "whitespace differences".
+/// Replaces the bool form recommended in §9.2 of the design spec.
+enum WhitespaceMode {
+  /// No whitespace handling — exact comparison
+  NONE,
+  /// Collapse all runs of whitespace to a single space (Git's -w)
+  IGNORE_ALL,
+  /// Trim trailing whitespace only (Git's -b style)
+  IGNORE_TRAILING
+}
+
+/// A single edit in the diff stream.
+struct Edit {
+  op: Op,          // Op
+  oldLine: int,    // int | null — 1-based line number in `a`, null for INSERT
+  newLine: int,    // int | null — 1-based line number in `b`, null for DELETE
+  text: string     // string — line content WITHOUT trailing newline
+
+}
+
+/// A contiguous run of changes plus its surrounding context.
+struct Hunk {
+  oldStart: int, // int — 1-based start line in `a` (0 if oldCount is 0)
+  oldCount: int, // int
+  newStart: int, // int — 1-based start line in `b` (0 if newCount is 0)
+  newCount: int, // int
+  edits: Edit[]  // [Edit]
+}
+
+/// Top-level result returned by lines / files.
+struct DiffResult{
+  hunks: Hunk [],         // [Hunk]
+  insertions: int ,       // int — total INSERT count
+  deletions: int,         // int — total DELETE count
+  equal: bool,            // bool — true iff hunks is empty
+  aLabel: string,         // string — label used in headers (e.g. file path or "a")
+  bLabel: string,         // string
+  aMissingNewline: bool,  // bool — true iff input `a` did not end in a newline
+  bMissingNewline: bool   // bool — true iff input `b` did not end in a newline
+}
+
+/// Caller-supplied options.
+struct DiffOptions {
+  algorithm: DiffAlgorithm,     // DiffAlgorithm — default MYERS
+  contextLines: int ,           // int — default 3 (lines of unchanged context around hunks)
+  whitespace: WhitespaceMode,   // WhitespaceMode — default NONE
+  ignoreCase: bool,             // bool — default false
+  ignoreBlankLines: bool,       // bool — default false; lines that are empty after trim are skipped
+  preserveLineEndings: bool,    // bool — default false; if true, input CRLF is preserved on output
+  maxLines: int,                // int — default 0 (unlimited); fail fast on inputs larger than this
+  aLabel: string,               // string — default "a"
+  bLabel: string                // string — default "b"
+}

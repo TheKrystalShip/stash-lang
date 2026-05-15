@@ -1,0 +1,77 @@
+// examples/diff.stash — Demonstrates the @stash/diff package.
+//
+// The package lives in examples/packages/diff/. We import it by relative
+// path here so this script works straight out of the repo. Once installed
+// via `stash pkg install @stash/diff`, the import becomes simply:
+//
+//   import "@stash/diff" as diff;
+
+import "packages/diff/index.stash" as diff;
+
+io.println("── 1. Identical inputs ─────────────────────────────────────────────");
+let same = diff.diff.diffLines("foo\nbar\nbaz\n", "foo\nbar\nbaz\n", null);
+io.println($"  equal:      {same.equal}");
+io.println($"  hunks:      {len(same.hunks)}");
+io.println($"  insertions: {same.insertions}");
+io.println($"  deletions:  {same.deletions}");
+
+io.println("");
+io.println("── 2. Single-line change in the middle ─────────────────────────────");
+let a = "foo\nbar\nqux\n";
+let b = "foo\nbaz\nqux\n";
+let r = diff.diff.diffLines(a, b, null);
+io.println($"  insertions={r.insertions}, deletions={r.deletions}");
+io.println("");
+io.println(diff.render.renderUnified(r));
+
+io.println("── 3. Patience algorithm with custom labels ────────────────────────");
+let opts = diff.types.DiffOptions {
+  algorithm: diff.types.DiffAlgorithm.PATIENCE,
+  contextLines: 1,
+  whitespace: diff.types.WhitespaceMode.NONE,
+  ignoreCase: false,
+  ignoreBlankLines: false,
+  preserveLineEndings: false,
+  maxLines: 0,
+  aLabel: "before.txt",
+  bLabel: "after.txt"
+};
+let pr = diff.diff.diffLines(
+  "alpha\nbeta\ngamma\ndelta\nepsilon\n",
+  "alpha\nbeta\nDELTA\ngamma\nepsilon\n",
+  opts
+);
+io.println(diff.render.renderUnified(pr));
+
+io.println("── 4. Ignore-case and ignore-whitespace ────────────────────────────");
+let normOpts = diff.types.DiffOptions {
+  algorithm: diff.types.DiffAlgorithm.MYERS,
+  contextLines: 3,
+  whitespace: diff.types.WhitespaceMode.IGNORE_ALL,
+  ignoreCase: true,
+  ignoreBlankLines: false,
+  preserveLineEndings: false,
+  maxLines: 0,
+  aLabel: "a",
+  bLabel: "b"
+};
+let nr = diff.diff.diffLines("Foo Bar\n", "foo   bar\n", normOpts);
+io.println($"  equal under IGNORE_ALL+ignoreCase: {nr.equal}");
+
+io.println("");
+io.println("── 5. INSERT-only filter (log-triage idiom) ────────────────────────");
+let oldLog = "[INFO] started\n[INFO] tick\n[INFO] tick\n";
+let newLog = "[INFO] started\n[INFO] tick\n[WARN] disk 80%\n[INFO] tick\n[ERROR] timeout\n";
+let logResult = diff.diff.diffLines(oldLog, newLog, null);
+io.println("  new entries:");
+for (let h in logResult.hunks) {
+  for (let e in h.edits) {
+    if (e.op == diff.types.Op.INSERT) {
+      io.println("    " + e.text);
+    }
+  }
+}
+
+io.println("");
+io.println("── 6. Colorized unified diff ───────────────────────────────────────");
+io.println(diff.render.colorize(diff.render.renderUnified(r), true));

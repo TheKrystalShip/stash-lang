@@ -1,0 +1,175 @@
+/// Rendering for @stash/diff.
+///
+/// Unified-diff output matches `diff -u` output for line numbers, hunk
+/// headers, and the "\ No newline at end of file" marker. ANSI colorization
+/// is opt-in.
+///
+/// `renderSideBySide` is deferred to v1.1 per the design spec (§9.6).
+
+import { MARKER_INSERT, MARKER_DELETE, MARKER_EQUAL, MARKER_NO_NEWLINE, HUNK_HEADER_OPEN, HUNK_HEADER_CLOSE, FILE_HEADER_A, FILE_HEADER_B, RANGE_SEPARATOR, RANGE_PREFIX_OLD, RANGE_PREFIX_NEW, LINE_SEPARATOR_LF, ANSI_RESET, ANSI_RED, ANSI_GREEN, ANSI_CYAN, ANSI_BOLD } from "constants.stash";
+import { Op, Edit, Hunk, DiffResult } from "types.stash";
+
+// ── Internal helpers (declared first so renderUnified can call them) ─────
+
+/// Find the largest oldLine and newLine across all hunks/edits.
+/// Returns a 2-element array [maxOld, maxNew]. Combined into one pass
+/// because two separate top-level helpers triggered a parameter-aliasing
+/// issue when called back-to-back from renderUnified.
+fn _maxLinesOf(dr: DiffResult) -> array {
+  let maxOld = 0;
+  let maxNew = 0;
+
+  for (let h in 0..len(dr.hunks)) {
+    const edits = dr.hunks[h].edits;
+
+    for (let i in 0..len(edits)) {
+      const e = edits[i];
+
+      if (e.oldLine != null && e.oldLine > maxOld) {
+        maxOld = e.oldLine;
+      }
+
+      if (e.newLine != null && e.newLine > maxNew) {
+        maxNew = e.newLine;
+      }
+    }
+  }
+
+  return [maxOld, maxNew];
+}
+
+fn _hunkHeader(hunk: Hunk) -> string {
+  const oldRange = _formatRange(hunk.oldStart, hunk.oldCount);
+  const newRange = _formatRange(hunk.newStart, hunk.newCount);
+  return HUNK_HEADER_OPEN + RANGE_PREFIX_OLD + oldRange + " " + RANGE_PREFIX_NEW + newRange + HUNK_HEADER_CLOSE;
+}
+
+fn _formatRange(start: int, count: int) -> string {
+  if (count == 1) {
+    return conv.toStr(start);
+  }
+
+  return conv.toStr(start) + RANGE_SEPARATOR + conv.toStr(count);
+}
+
+// ── Unified renderer ─────────────────────────────────────────────────────
+
+/// Produce a standard unified-diff string, suitable for `patch(1)`
+/// consumers, Slack/email payloads, or commit messages.
+///
+/// Output ends with a trailing LF, matching GNU diff. When `result.equal`
+/// is true an empty string is returned.
+fn unified(result: DiffResult) -> string {
+  if (result.equal) {
+    return "";
+  }
+
+  const lines = [];
+
+  arr.push(lines, FILE_HEADER_A + result.aLabel);
+  arr.push(lines, FILE_HEADER_B + result.bLabel);
+
+  const hunks: Hunk[] = result.hunks;
+
+  // Precompute the last 1-based line number of `a` and `b`. The "no newline"
+  // marker is emitted immediately after the edit that touches the final
+  // line of the corresponding side, when that side lacks a trailing newline.
+  const limits: array = _maxLinesOf(result);
+  const aLastLine = limits[0];
+  const bLastLine = limits[1];
+
+  for (let h in 0..len(hunks)) {
+    const hunk: Hunk = hunks[h];
+
+    arr.push(lines, _hunkHeader(hunk));
+
+    const edits: Edit[] = hunk.edits;
+
+    for (let i in 0..len(edits)) {
+      const e: Edit = edits[i];
+
+      let marker: string;
+
+      if (e.op == Op.EQUAL) {
+        marker = MARKER_EQUAL;
+      } else {
+        if (e.op == Op.INSERT) {
+          marker = MARKER_INSERT;
+        } else {
+          marker = MARKER_DELETE;
+        }
+      }
+
+      arr.push(lines, marker + e.text);
+
+      // Emit the marker right after the line that represents the final
+      // line of the corresponding side, when that side has no trailing newline.
+      if (e.op == Op.DELETE && result.aMissingNewline && e.oldLine == aLastLine) {
+        arr.push(lines, MARKER_NO_NEWLINE);
+      }
+
+      if (e.op == Op.INSERT && result.bMissingNewline && e.newLine == bLastLine) {
+        arr.push(lines, MARKER_NO_NEWLINE);
+      }
+
+      if (e.op == Op.EQUAL) {
+        // EQUAL touches both sides; the marker applies if either side's
+        // final line is missing the newline AND this edit is the matching
+        // final line on that side.
+        if (result.aMissingNewline && result.bMissingNewline && e.oldLine == aLastLine && e.newLine == bLastLine) {
+          arr.push(lines, MARKER_NO_NEWLINE);
+        }
+      }
+    }
+  }
+
+  return arr.join(lines, LINE_SEPARATOR_LF) + LINE_SEPARATOR_LF;
+}
+
+// ── ANSI colorization ────────────────────────────────────────────────────
+
+/// Wraps each line of a rendered unified diff with ANSI color escapes.
+/// Pass `enable = false` (typically `enable = term.supportsColor()`) to
+/// short-circuit to a no-op so callers do not need to branch.
+///
+/// File headers go bold; hunk headers go cyan; INSERT lines green;
+/// DELETE lines red; "\ No newline" and EQUAL lines are untouched.
+fn colorize(text: string, enable: bool) -> string {
+  if (!enable || text == "") {
+    return text;
+  }
+
+  const lines = str.split(text, LINE_SEPARATOR_LF);
+  const out = [];
+
+  for (let i in 0..len(lines)) {
+    const line = lines[i];
+    arr.push(out, _colorizeLine(line));
+  }
+
+  return arr.join(out, LINE_SEPARATOR_LF);
+}
+
+fn _colorizeLine(line: string) -> string {
+  if (line == "") {
+    return line;
+  }
+
+  if (line.startsWith(FILE_HEADER_A) || line.startsWith(FILE_HEADER_B)) {
+    return ANSI_BOLD + line + ANSI_RESET;
+  }
+
+  if (line.startsWith(HUNK_HEADER_OPEN)) {
+    return ANSI_CYAN + line + ANSI_RESET;
+  }
+
+  if (line.startsWith(MARKER_INSERT)) {
+    return ANSI_GREEN + line + ANSI_RESET;
+  }
+
+  if (line.startsWith(MARKER_DELETE)) {
+    return ANSI_RED + line + ANSI_RESET;
+  }
+
+  return line;
+}

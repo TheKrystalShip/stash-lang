@@ -1,0 +1,405 @@
+/// Public entry points for @stash/diff.
+///
+///   lines(a, b, opts?)   -> DiffResult
+///   files(pathA, pathB, opts?) -> DiffResult
+///   equal(a, b, opts?)       -> bool
+///
+/// Hunk assembly applies the configured `contextLines` window around each
+/// run of changes; overlapping context windows are merged into a single
+/// hunk (matches GNU diff -u behavior).
+
+import { LINE_SEPARATOR_LF, LINE_SEPARATOR_CRLF, DEFAULT_CONTEXT_LINES, DEFAULT_LABEL_A, DEFAULT_LABEL_B, DEFAULT_MAX_LINES, UNLIMITED } from "constants.stash";
+import { _computeEditScript } from "lcs.stash";
+import { Op, Edit, Hunk, DiffResult, DiffOptions, DiffAlgorithm, WhitespaceMode } from "types.stash";
+
+// ── Option defaulting ────────────────────────────────────────────────────
+
+fn _defaultOpts() -> DiffOptions {
+  return DiffOptions {
+    algorithm: DiffAlgorithm.MYERS,
+    contextLines: DEFAULT_CONTEXT_LINES,
+    whitespace: WhitespaceMode.NONE,
+    ignoreCase: false,
+    ignoreBlankLines: false,
+    preserveLineEndings: false,
+    maxLines: DEFAULT_MAX_LINES,
+    aLabel: DEFAULT_LABEL_A,
+    bLabel: DEFAULT_LABEL_B
+  };
+}
+
+fn _coalesceOpts(opts: DiffOptions = null) -> DiffOptions {
+  if (opts == null) {
+    return _defaultOpts();
+  }
+
+  const d = _defaultOpts();
+
+  return DiffOptions {
+    algorithm: opts.algorithm == null ? d.algorithm : opts.algorithm,
+    contextLines: opts.contextLines == null ? d.contextLines : opts.contextLines,
+    whitespace: opts.whitespace == null ? d.whitespace : opts.whitespace,
+    ignoreCase: opts.ignoreCase == null ? d.ignoreCase : opts.ignoreCase,
+    ignoreBlankLines: opts.ignoreBlankLines == null ? d.ignoreBlankLines : opts.ignoreBlankLines,
+    preserveLineEndings: opts.preserveLineEndings == null ? d.preserveLineEndings : opts.preserveLineEndings,
+    maxLines: opts.maxLines == null ? d.maxLines : opts.maxLines,
+    aLabel: opts.aLabel == null ? d.aLabel : opts.aLabel,
+    bLabel: opts.bLabel == null ? d.bLabel : opts.bLabel
+  };
+}
+
+// ── Line splitting and normalization ─────────────────────────────────────
+
+/// Split a string into lines without trailing newline characters.
+/// CRLF is normalized to LF when scanning so the splitter handles either
+/// style uniformly. Returns the lines array; trailing-newline information
+/// is reported separately via `_endsWithNewline(s)`.
+
+fn _splitLines(s: string) -> array {
+  if (s == "") {
+    return [];
+  }
+
+  // Normalize CRLF -> LF
+  const normalized = str.replaceAll(s, LINE_SEPARATOR_CRLF, LINE_SEPARATOR_LF);
+  const parts = str.split(normalized, LINE_SEPARATOR_LF);
+
+  // If the input ended in a newline, `split` produces a trailing empty
+  // string — drop it so the line count matches "lines of text".
+  if (len(parts) > 0 && parts[len(parts) - 1] == "" && _endsWithNewline(s)) {
+    arr.pop(parts);
+  }
+
+  return parts;
+}
+
+fn _endsWithNewline(s: string) -> bool {
+  if (s == "") {
+    return false;
+  }
+
+  return s.endsWith(LINE_SEPARATOR_LF) || s.endsWith(LINE_SEPARATOR_CRLF);
+}
+
+// ── Normalization for comparison ─────────────────────────────────────────
+
+/// Produce the comparison-form of a line under `opts`. The original text
+/// is preserved on the Edit; only the comparison key is normalized.
+
+fn _normalizeForCompare(line: string, opts: DiffOptions) -> string {
+  let out = line;
+
+  if (opts.whitespace == WhitespaceMode.IGNORE_ALL) {
+    out = _collapseWhitespace(out);
+  } else {
+    if (opts.whitespace == WhitespaceMode.IGNORE_TRAILING) {
+      out = str.trimEnd(out);
+    }
+  }
+
+  if (opts.ignoreCase) {
+    out = str.lower(out);
+  }
+
+  return out;
+}
+
+fn _collapseWhitespace(s: string) -> string {
+  let result = "";
+  let inWs = false;
+  const chars = str.chars(s);
+  const trimmed = str.trim(s);
+
+  if (trimmed == "") {
+    return "";
+  }
+
+  for (let i in 0..len(chars)) {
+    const c = chars[i];
+
+    if (c == " " || c == "\t") {
+      if (!inWs) {
+        result = result + " ";
+        inWs = true;
+      }
+    } else {
+      result = result + c;
+      inWs = false;
+    }
+  }
+
+  return str.trim(result);
+}
+
+/// Build parallel arrays:
+///   originals[i]  -> the original line text (preserved for Edits)
+///   compare[i]    -> the line text used for equality during diffing
+///   origIndex[i]  -> the original 1-based line number in the source
+///
+/// When `ignoreBlankLines` is on, blank lines are filtered out of the
+/// compare stream — but their original line numbers are still tracked so
+/// edits report the correct line.
+
+struct _PreparedLines {
+  originals, // [string] — original text per filtered line
+  compare, // [string] — comparison key per filtered line
+  origIndex, // [int]    — 1-based original line number per filtered line
+  rawLines // [string] — full unfiltered original line list
+}
+
+fn _prepare(lines: string[], opts: DiffOptions) -> _PreparedLines {
+  const originals: string[] = [];
+  const compare: string[] = [];
+  const origIndex: int[] = [];
+
+  for (let i in 0..len(lines)) {
+    const line = lines[i];
+
+    if (opts.ignoreBlankLines && str.trim(line) == "") {
+      continue;
+    }
+
+    arr.push(originals, line);
+    arr.push(compare, _normalizeForCompare(line, opts));
+    arr.push(origIndex, i + 1);
+  }
+
+  return _PreparedLines {
+    originals: originals,
+    compare: compare,
+    origIndex: origIndex,
+    rawLines: lines
+  };
+}
+
+// ── Hunk assembly ────────────────────────────────────────────────────────
+
+/// Walk the edit list and emit `Hunk` records covering each run of
+/// non-EQUAL edits plus up to `contextLines` of surrounding EQUAL context.
+/// Adjacent or overlapping context windows merge into a single hunk.
+
+fn _assembleHunks(edits: Edit[], contextLines: int) -> Hunk[] {
+  const hunks: Hunk[] = [];
+  const n: int = len(edits);
+
+  if (n == 0) {
+    return hunks;
+  }
+
+  // Locate indices of every non-EQUAL edit
+  const changeIndices: int[] = [];
+
+  for (let i in 0..n) {
+    if (edits[i].op != Op.EQUAL) {
+      arr.push(changeIndices, i);
+    }
+  }
+
+  if (len(changeIndices) == 0) {
+    return hunks;
+  }
+
+  let groupStart = changeIndices[0];
+  let groupEnd = changeIndices[0];
+
+  for (let k in 1..len(changeIndices)) {
+    const idx = changeIndices[k];
+
+    // If the gap of EQUAL edits between the current group and this change
+    // is <= 2*contextLines, merge.
+    if (idx - groupEnd - 1 <= 2 * contextLines) {
+      groupEnd = idx;
+    } else {
+      arr.push(hunks, _buildHunk(edits, groupStart, groupEnd, contextLines, n));
+      groupStart = idx;
+      groupEnd = idx;
+    }
+  }
+
+  arr.push(hunks, _buildHunk(edits, groupStart, groupEnd, contextLines, n));
+
+  return hunks;
+}
+
+fn _buildHunk(edits: Edit[], groupStart: int, groupEnd: int, contextLines: int, n: int) -> Hunk {
+  let from = groupStart - contextLines;
+
+  if (from < 0) {
+    from = 0;
+  }
+
+  let to = groupEnd + contextLines;
+  if (to >= n) {
+    to = n - 1;
+  }
+
+  const slice: Edit[] = [];
+  let oldStart = 0;
+  let newStart = 0;
+  let oldCount = 0;
+  let newCount = 0;
+  let firstOld = -1;
+  let firstNew = -1;
+
+  for (let i in from..(to + 1)) {
+    const e = edits[i];
+    arr.push(slice, e);
+
+    if (e.op == Op.EQUAL) {
+      if (firstOld == -1) {
+        firstOld = e.oldLine;
+      }
+
+      if (firstNew == -1) {
+        firstNew = e.newLine;
+      }
+
+      oldCount = oldCount + 1;
+      newCount = newCount + 1;
+    } else {
+      if (e.op == Op.DELETE) {
+        if (firstOld == -1) {
+          firstOld = e.oldLine;
+        }
+
+        oldCount = oldCount + 1;
+      } else {
+        if (firstNew == -1) {
+          firstNew = e.newLine;
+        }
+
+        newCount = newCount + 1;
+      }
+    }
+  }
+
+  // If the hunk contains no old-side lines at all, GNU diff reports
+  // oldStart as 0; same for new-side.
+  if (oldCount == 0) {
+    oldStart = 0;
+  } else {
+    oldStart = firstOld;
+  }
+
+  if (newCount == 0) {
+    newStart = 0;
+  } else {
+    newStart = firstNew;
+  }
+
+  return Hunk {
+    oldStart: oldStart,
+    oldCount: oldCount,
+    newStart: newStart,
+    newCount: newCount,
+    edits: slice
+  };
+}
+
+// ── Entry points ─────────────────────────────────────────────────────────
+
+/// Compare two strings as line streams. Always returns a DiffResult,
+/// even when the inputs are line-equal (hunks=[], equal=true).
+fn lines(a: string, b: string, opts: DiffOptions = null) -> DiffResult {
+  const o = _coalesceOpts(opts);
+  const aLines = _splitLines(a);
+  const bLines = _splitLines(b);
+
+  if (o.maxLines != UNLIMITED) {
+    const total = len(aLines) + len(bLines);
+    if (total > o.maxLines) {
+      throw ValueError {
+        message: "diff: input exceeds maxLines (${total} > ${o.maxLines})"
+      };
+    }
+  }
+
+  const aPrep = _prepare(aLines, o);
+  const bPrep = _prepare(bLines, o);
+  const rawEdits = _computeEditScript(aPrep.compare, bPrep.compare, o.algorithm);
+
+  // Map compare-stream indices back to original line numbers + text.
+  const edits: Edit[] = [];
+
+  for (let i in 0..len(rawEdits)) {
+    const e: Edit = rawEdits[i];
+
+    if (e.op == Op.EQUAL) {
+      const oi = e.oldLine - 1;
+      const ni = e.newLine - 1;
+      arr.push(edits, Edit {
+        op: Op.EQUAL,
+        oldLine: aPrep.origIndex[oi],
+        newLine: bPrep.origIndex[ni],
+        text: aPrep.originals[oi]
+      });
+    } else {
+      if (e.op == Op.DELETE) {
+        const oi = e.oldLine - 1;
+        arr.push(edits, Edit {
+          op: Op.DELETE,
+          oldLine: aPrep.origIndex[oi],
+          newLine: null,
+          text: aPrep.originals[oi]
+        });
+      } else {
+        const ni = e.newLine - 1;
+        arr.push(edits, Edit {
+          op: Op.INSERT,
+          oldLine: null,
+          newLine: bPrep.origIndex[ni],
+          text: bPrep.originals[ni]
+        });
+      }
+    }
+  }
+
+  const hunks = _assembleHunks(edits, o.contextLines);
+  let insertions = 0;
+  let deletions = 0;
+
+  for (let i in 0..len(edits)) {
+    const e = edits[i];
+    if (e.op == Op.INSERT) {
+      insertions = insertions + 1;
+    }
+    if (e.op == Op.DELETE) {
+      deletions = deletions + 1;
+    }
+  }
+
+  return DiffResult {
+    hunks: hunks,
+    insertions: insertions,
+    deletions: deletions,
+    equal: len(hunks) == 0,
+    aLabel: o.aLabel,
+    bLabel: o.bLabel,
+    aMissingNewline: !_endsWithNewline(a) && a != "",
+    bMissingNewline: !_endsWithNewline(b) && b != ""
+  };
+}
+
+/// Read both files via fs.* and diff them. Labels default to the
+/// supplied paths when the caller has not overridden them.
+fn files(pathA: string, pathB: string, opts: DiffOptions = null) -> DiffResult {
+  const a = fs.readFile(pathA);
+  const b = fs.readFile(pathB);
+  const o = _coalesceOpts(opts);
+
+  // If the caller did not customize labels, default them to the paths.
+  if (o.aLabel == DEFAULT_LABEL_A) {
+    o.aLabel = pathA;
+  }
+
+  if (o.bLabel == DEFAULT_LABEL_B) {
+    o.bLabel = pathB;
+  }
+
+  return lines(a, b, o);
+}
+
+/// True iff `a` and `b` are line-equal under the supplied options.
+fn equal(a: string, b: string, opts: DiffOptions = null) -> bool {
+  return lines(a, b, opts).equal;
+}
