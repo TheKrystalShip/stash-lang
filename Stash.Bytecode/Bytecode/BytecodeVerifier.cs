@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Stash.Bytecode;
 
@@ -11,12 +10,12 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed class BytecodeVerifier
 {
-    // Maximum defined opcode value, computed once from the OpCode enum.
-    // Using Enum.GetValues keeps this in sync automatically when new opcodes are added,
-    // avoiding the recurring drift bug where this constant lagged behind the enum
-    // (e.g., CatchMatch, Rethrow, LockEnd, UnsetGlobal were each rejected as "invalid"
-    // for a period after being added).
-    private static readonly byte MaxOpcode = Enum.GetValues<OpCode>().Max(op => (byte)op);
+    // Opcode-defined-ness is checked via OpCodeMetadata, which builds its lookup
+    // table from the [OpCode(...)] attributes on the enum and verifies full
+    // coverage at process start. This eliminates the recurring drift bug where a
+    // hardcoded upper bound lagged behind the enum (e.g., CatchMatch, Rethrow,
+    // LockEnd, UnsetGlobal were each rejected as "invalid" for a period after
+    // being added).
     /// <summary>
     /// Verifies a chunk and all its nested sub-chunks (closures).
     /// Returns a result indicating whether the bytecode is valid.
@@ -45,8 +44,8 @@ public sealed class BytecodeVerifier
             uint word = chunk.Code[i];
             var op = Instruction.GetOp(word);
 
-            // 1. Validate opcode range against the actual OpCode enum extent.
-            if ((byte)op > MaxOpcode || !Enum.IsDefined(op))
+            // 1. Validate opcode is defined via the central metadata table.
+            if (!OpCodeMetadata.IsDefined((byte)op))
             {
                 AddError(errors, instrIdx, prefix, $"Invalid opcode {(byte)op}.");
                 lastInstrIdx = instrIdx;

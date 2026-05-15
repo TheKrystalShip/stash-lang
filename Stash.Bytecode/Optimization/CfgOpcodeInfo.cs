@@ -2,6 +2,17 @@ namespace Stash.Bytecode.Optimization;
 
 /// <summary>
 /// Shared opcode classification helpers used by CFG construction and linear lowering.
+/// <para>
+/// All classifications derive from <see cref="OpCodeMetadata"/> — the
+/// <see cref="OpCodeAttribute"/> decoration on each enum member is the single source
+/// of truth. Adding a new opcode without filling in the required metadata fails fast
+/// at process start, so this helper cannot drift out of sync.
+/// </para>
+/// <para>
+/// Undefined opcodes (e.g. raw companion-word payloads encountered while linearly
+/// scanning a code array) return <c>false</c> from every predicate — matching the
+/// silent-default behaviour of the previous switch-based implementation.
+/// </para>
 /// </summary>
 internal static class CfgOpcodeInfo
 {
@@ -11,27 +22,29 @@ internal static class CfgOpcodeInfo
     /// words and must be handled separately by the CFG builder's pre-scan.
     /// </summary>
     public static bool IsCompanionBearer(OpCode op)
-        => op == OpCode.GetFieldIC || op == OpCode.CallBuiltIn;
+        => OpCodeMetadata.IsDefined((byte)op)
+           && OpCodeMetadata.GetCompanionWords(op) == CompanionWordKind.OneIC;
 
-    /// <summary>Returns true if <paramref name="op"/> carries an sBx relative jump offset.</summary>
-    public static bool IsJumpWithSBx(OpCode op) => op switch
+    /// <summary>
+    /// Returns true if <paramref name="op"/> carries an sBx relative jump offset.
+    /// Most such opcodes are formatted as <see cref="OpCodeFormat.AsBx"/>; <c>TryBegin</c>
+    /// is classified as <see cref="OpCodeFormat.ABx"/> by the documentation generator for
+    /// historical reasons but the VM decodes its operand with <c>Instruction.GetSBx</c>,
+    /// so it is included here explicitly.
+    /// </summary>
+    public static bool IsJumpWithSBx(OpCode op)
     {
-        OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-            or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII
-            or OpCode.IterLoop or OpCode.TryBegin => true,
-        _ => false,
-    };
+        if (!OpCodeMetadata.IsDefined((byte)op))
+            return false;
+        return (OpCodeMetadata.GetFormat(op) == OpCodeFormat.AsBx
+                && OpCodeMetadata.IsBranching(op))
+               || op == OpCode.TryBegin;
+    }
 
     /// <summary>
     /// Returns true if <paramref name="op"/> terminates a basic block, meaning the
     /// instruction immediately following it (if any) is a block leader.
     /// </summary>
-    public static bool IsBlockTerminator(OpCode op) => op switch
-    {
-        OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-            or OpCode.Return or OpCode.Throw or OpCode.Rethrow
-            or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII
-            or OpCode.IterLoop or OpCode.TryBegin or OpCode.TryEnd => true,
-        _ => false,
-    };
+    public static bool IsBlockTerminator(OpCode op)
+        => OpCodeMetadata.IsDefined((byte)op) && OpCodeMetadata.IsTerminator(op);
 }

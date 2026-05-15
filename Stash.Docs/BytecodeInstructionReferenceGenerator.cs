@@ -329,10 +329,21 @@ public static class BytecodeInstructionReferenceGenerator
                 continue;
             }
 
+            // Attribute lines such as `[OpCode(Mnemonic = "...", ...)]` (and their
+            // continuations on subsequent lines for multi-line attribute calls) sit
+            // between the doc comment and the enum member. They are not the
+            // enum member themselves and must not clear the pending summary.
+            // A summary is treated as alive — and any non-blank non-member line is
+            // tolerated as attribute syntax — until either a member declaration is
+            // matched (summary consumed) or a category comment is seen (summary
+            // already cleared above).
             var memberMatch = MemberRegex.Match(rawLine);
             if (!memberMatch.Success)
             {
-                if (line.Length > 0)
+                // If no summary is pending, treat a non-blank line as a real
+                // statement and clear (preserves the original semantics for any
+                // future stray lines between members).
+                if (summaryLines.Count == 0 && line.Length > 0)
                     summaryLines.Clear();
                 continue;
             }

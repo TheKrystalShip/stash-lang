@@ -42,134 +42,23 @@ public static class Disassembler
         public const string DimGreen    = "\x1b[2;32m";
     }
 
-    // ─── Opcode Display Name Map ──────────────────────────────────────────────
-
-    private static readonly Dictionary<OpCode, string> _opNames = new()
-    {
-        [OpCode.LoadK]          = "load.k",
-        [OpCode.LoadNull]       = "load.null",
-        [OpCode.LoadBool]       = "load.bool",
-        [OpCode.Move]           = "move",
-        [OpCode.GetGlobal]      = "get.global",
-        [OpCode.SetGlobal]      = "set.global",
-        [OpCode.InitConstGlobal]= "init.const.global",
-        [OpCode.GetUpval]       = "get.upval",
-        [OpCode.SetUpval]       = "set.upval",
-        [OpCode.CloseUpval]     = "close.upval",
-        [OpCode.Add]            = "add",
-        [OpCode.Sub]            = "sub",
-        [OpCode.Mul]            = "mul",
-        [OpCode.Div]            = "div",
-        [OpCode.Mod]            = "mod",
-        [OpCode.Pow]            = "pow",
-        [OpCode.Neg]            = "neg",
-        [OpCode.AddI]           = "addi",
-        [OpCode.BAnd]           = "band",
-        [OpCode.BOr]            = "bor",
-        [OpCode.BXor]           = "bxor",
-        [OpCode.BNot]           = "bnot",
-        [OpCode.Shl]            = "shl",
-        [OpCode.Shr]            = "shr",
-        [OpCode.Eq]             = "eq",
-        [OpCode.Ne]             = "ne",
-        [OpCode.Lt]             = "lt",
-        [OpCode.Le]             = "le",
-        [OpCode.Gt]             = "gt",
-        [OpCode.Ge]             = "ge",
-        [OpCode.Not]            = "not",
-        [OpCode.TestSet]        = "test.set",
-        [OpCode.Test]           = "test",
-        [OpCode.Jmp]            = "jmp",
-        [OpCode.JmpFalse]       = "jmp.false",
-        [OpCode.JmpTrue]        = "jmp.true",
-        [OpCode.Loop]           = "loop",
-        [OpCode.Call]           = "call",
-        [OpCode.Return]         = "return",
-        [OpCode.ForPrep]        = "for.prep",
-        [OpCode.ForLoop]        = "for.loop",
-        [OpCode.IterPrep]       = "iter.prep",
-        [OpCode.IterLoop]       = "iter.loop",
-        [OpCode.IterClose]      = "iter.close",
-        [OpCode.GetTable]       = "get.table",
-        [OpCode.SetTable]       = "set.table",
-        [OpCode.GetField]       = "get.field",
-        [OpCode.SetField]       = "set.field",
-        [OpCode.Self]           = "self",
-        [OpCode.NewArray]       = "new.array",
-        [OpCode.NewDict]        = "new.dict",
-        [OpCode.NewRange]       = "new.range",
-        [OpCode.Spread]         = "spread",
-        [OpCode.Closure]        = "closure",
-        [OpCode.NewStruct]      = "new.struct",
-        [OpCode.TypeOf]         = "typeof",
-        [OpCode.Is]             = "is",
-        [OpCode.TryBegin]       = "try.begin",
-        [OpCode.TryEnd]         = "try.end",
-        [OpCode.Throw]          = "throw",
-        [OpCode.TryExpr]        = "try.expr",
-        [OpCode.StructDecl]     = "struct.decl",
-        [OpCode.EnumDecl]       = "enum.decl",
-        [OpCode.IfaceDecl]      = "iface.decl",
-        [OpCode.Extend]         = "extend",
-        [OpCode.Command]        = "command",
-        [OpCode.PipeChain]      = "pipe.chain",
-        [OpCode.StreamingPipeline] = "stream.pipe",
-        [OpCode.Redirect]       = "redirect",
-        [OpCode.Import]         = "import",
-        [OpCode.ImportAs]       = "import.as",
-        [OpCode.Interpolate]    = "interpolate",
-        [OpCode.In]             = "in",
-        [OpCode.Switch]         = "switch",
-        [OpCode.Destructure]    = "destructure",
-        [OpCode.ElevateBegin]   = "elevate.begin",
-        [OpCode.ElevateEnd]     = "elevate.end",
-        [OpCode.Retry]          = "retry",
-        [OpCode.Timeout]        = "timeout",
-        [OpCode.Await]          = "await",
-        [OpCode.CallSpread]     = "call.spread",
-        [OpCode.CheckNumeric]   = "check.numeric",
-        [OpCode.GetFieldIC]     = "get.field.ic",
-        [OpCode.CallBuiltIn]    = "call.builtin",
-        [OpCode.ForPrepII]      = "for.prepII",
-        [OpCode.ForLoopII]      = "for.loopII",
-        [OpCode.AddK]           = "addk",
-        [OpCode.SubK]           = "subk",
-        [OpCode.EqK]            = "eq.k",
-        [OpCode.NeK]            = "ne.k",
-        [OpCode.LtK]            = "lt.k",
-        [OpCode.LeK]            = "le.k",
-        [OpCode.GtK]            = "gt.k",
-        [OpCode.GeK]            = "ge.k",
-        [OpCode.TypedWrap]      = "typed.wrap",
-        [OpCode.Defer]          = "defer",
-        [OpCode.CatchMatch]     = "catch.match",
-        [OpCode.Rethrow]        = "rethrow",
-        [OpCode.LockBegin]      = "lock.begin",
-        [OpCode.LockEnd]        = "lock.end"
-    };
-
-    // ─── Instruction Format Classification ───────────────────────────────────
+    // ─── Mnemonic & Format Lookup ────────────────────────────────────────────
+    //
+    // The mnemonic table, the instruction-format classification, the operand-role
+    // flags, and the companion-word kind all live as [OpCode(...)] attributes on
+    // the OpCode enum itself (single source of truth). See OpCodeMetadata.cs.
+    //
+    // The local alias `InstrFmt` keeps the rest of this file readable; it maps
+    // directly to OpCodeFormat from OpCodeMetadata.GetFormat.
 
     private enum InstrFmt { ABC, ABx, AsBx, Ax }
 
-    private static InstrFmt GetFormat(OpCode op) => op switch
+    private static InstrFmt GetFormat(OpCode op) => OpCodeMetadata.GetFormat(op) switch
     {
-        // ABx
-        OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
-            or OpCode.Closure or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl
-            or OpCode.Extend or OpCode.Import or OpCode.ImportAs or OpCode.Switch
-            or OpCode.Destructure or OpCode.Retry or OpCode.Timeout or OpCode.TryBegin
-            or OpCode.TypedWrap or OpCode.CatchMatch => InstrFmt.ABx,
-
-        // AsBx (signed offset)
-        OpCode.AddI or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-            or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII
-            or OpCode.IterPrep or OpCode.IterLoop => InstrFmt.AsBx,
-
-        // Ax
-        OpCode.TryEnd or OpCode.ElevateEnd or OpCode.LockEnd => InstrFmt.Ax,
-
-        // ABC (everything else)
+        OpCodeFormat.ABC  => InstrFmt.ABC,
+        OpCodeFormat.ABx  => InstrFmt.ABx,
+        OpCodeFormat.AsBx => InstrFmt.AsBx,
+        OpCodeFormat.Ax   => InstrFmt.Ax,
         _ => InstrFmt.ABC,
     };
 
@@ -276,51 +165,49 @@ public static class Disassembler
 
             EmitInstruction(chunk, options, labels, idx, word, op, sb);
 
-            // Closure: skip inline upvalue descriptor words
-            if (op == OpCode.Closure)
+            // Companion-word handling — driven by OpCodeMetadata so any new opcode
+            // that declares CompanionWords is handled without touching this loop.
+            CompanionWordKind cwKind = OpCodeMetadata.IsDefined((byte)op)
+                ? OpCodeMetadata.GetCompanionWords(op)
+                : CompanionWordKind.None;
+            switch (cwKind)
             {
-                ushort protoIdx = Instruction.GetBx(word);
-                int uvCount = 0;
-                if (protoIdx < chunk.Constants.Length && chunk.Constants[protoIdx].AsObj is Chunk fn)
-                    uvCount = fn.Upvalues.Length;
-                for (int u = 0; u < uvCount; u++)
+                case CompanionWordKind.UpvalueDescriptors:
                 {
-                    idx++;
-                    uint uvWord = chunk.Code[idx];
-                    byte isLocal = (byte)(uvWord & 0xFF);
-                    byte uvIdx   = (byte)((uvWord >> 8) & 0xFF);
-                    if (!options.Compact)
-                        sb.AppendLine($"                    ; upvalue [{u}]: {(isLocal != 0 ? "local" : "upval")} {uvIdx}");
-                }
-            }
-
-            // GetFieldIC: skip companion word (IC slot index)
-            if (op == OpCode.GetFieldIC)
-            {
-                idx++;
-            }
-
-            // CallBuiltIn: skip companion word (IC slot index)
-            if (op == OpCode.CallBuiltIn)
-            {
-                idx++;
-            }
-
-            // PipeChain / StreamingPipeline: skip and annotate B companion words (one per stage)
-            if (op == OpCode.PipeChain || op == OpCode.StreamingPipeline)
-            {
-                byte stageCount = Instruction.GetB(word);
-                for (int s = 0; s < stageCount; s++)
-                {
-                    idx++;
-                    if (idx < chunk.Code.Length)
+                    ushort protoIdx = Instruction.GetBx(word);
+                    int uvCount = 0;
+                    if (protoIdx < chunk.Constants.Length && chunk.Constants[protoIdx].AsObj is Chunk fn)
+                        uvCount = fn.Upvalues.Length;
+                    for (int u = 0; u < uvCount; u++)
                     {
-                        uint cwWord = chunk.Code[idx];
-                        int partCount = (int)((cwWord >> 8) & 0xFF);
-                        byte flags = (byte)(cwWord & 0xFF);
+                        idx++;
+                        uint uvWord = chunk.Code[idx];
+                        byte isLocal = (byte)(uvWord & 0xFF);
+                        byte uvIdx   = (byte)((uvWord >> 8) & 0xFF);
                         if (!options.Compact)
-                            sb.AppendLine($"                    ; stage[{s}]: parts={partCount} flags=0x{flags:x2}");
+                            sb.AppendLine($"                    ; upvalue [{u}]: {(isLocal != 0 ? "local" : "upval")} {uvIdx}");
                     }
+                    break;
+                }
+                case CompanionWordKind.OneIC:
+                    idx++;
+                    break;
+                case CompanionWordKind.PipeStages:
+                {
+                    byte stageCount = Instruction.GetB(word);
+                    for (int s = 0; s < stageCount; s++)
+                    {
+                        idx++;
+                        if (idx < chunk.Code.Length)
+                        {
+                            uint cwWord = chunk.Code[idx];
+                            int partCount = (int)((cwWord >> 8) & 0xFF);
+                            byte flags = (byte)(cwWord & 0xFF);
+                            if (!options.Compact)
+                                sb.AppendLine($"                    ; stage[{s}]: parts={partCount} flags=0x{flags:x2}");
+                        }
+                    }
+                    break;
                 }
             }
         }
@@ -413,7 +300,9 @@ public static class Disassembler
     private static void EmitInstruction(Chunk chunk, DisassemblerOptions options,
         Dictionary<int, string> labels, int idx, uint word, OpCode op, StringBuilder sb)
     {
-        string mnem = _opNames.TryGetValue(op, out string? n) ? n : $"op_{(byte)op:x2}";
+        string mnem = OpCodeMetadata.IsDefined((byte)op)
+            ? OpCodeMetadata.GetMnemonic(op)
+            : $"op_{(byte)op:x2}";
         (string operands, string? comment) = FormatInstruction(chunk, labels, idx, word, op);
 
         string offsetStr = options.Compact
@@ -517,7 +406,7 @@ public static class Disassembler
             OpCode.ForLoop     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
             OpCode.ForPrepII   => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
             OpCode.ForLoopII   => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-            OpCode.IterPrep    => ($"r{a}", null),
+            OpCode.IterPrep    => ($"r{a}, {b}", b != 0 ? "indexed" : null),
             OpCode.IterLoop    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
 
             // Tables
@@ -581,6 +470,9 @@ public static class Disassembler
             OpCode.LockBegin   => ($"r{a}, r{b}, k{c}", FormatLockMeta(chunk, c)),
             OpCode.LockEnd     => ("", null),
 
+            // Globals (Ax-format unset)
+            OpCode.UnsetGlobal => ($"[g{Instruction.GetAx(word)}]", FormatGlobal(chunk, (ushort)Instruction.GetAx(word))),
+
             _ => (fmt switch
             {
                 InstrFmt.ABC  => $"r{a}, r{b}, r{c}",
@@ -601,28 +493,37 @@ public static class Disassembler
         {
             uint word = chunk.Code[idx];
             var op = Instruction.GetOp(word);
-            var fmt = GetFormat(op);
-            if (fmt == InstrFmt.AsBx)
+            if (!OpCodeMetadata.IsDefined((byte)op))
+                continue;
+
+            // AsBx jump targets — driven by metadata format, not a hardcoded list.
+            if (OpCodeMetadata.GetFormat(op) == OpCodeFormat.AsBx)
             {
                 int sbx = Instruction.GetSBx(word);
                 targets.Add(idx + 1 + sbx);
             }
-            if (op == OpCode.Closure)
+
+            // Companion-word skip — driven by metadata.
+            switch (OpCodeMetadata.GetCompanionWords(op))
             {
-                ushort protoIdx = Instruction.GetBx(word);
-                int uvCount = 0;
-                if (protoIdx < chunk.Constants.Length && chunk.Constants[protoIdx].AsObj is Chunk fn)
-                    uvCount = fn.Upvalues.Length;
-                idx += uvCount; // skip upvalue descriptors
-            }
-            if (op == OpCode.GetFieldIC)
-                idx++; // skip companion word
-            if (op == OpCode.CallBuiltIn)
-                idx++; // skip companion word
-            if (op == OpCode.PipeChain || op == OpCode.StreamingPipeline)
-            {
-                byte stageCount = Instruction.GetB(word);
-                idx += stageCount; // skip companion words
+                case CompanionWordKind.UpvalueDescriptors:
+                {
+                    ushort protoIdx = Instruction.GetBx(word);
+                    int uvCount = 0;
+                    if (protoIdx < chunk.Constants.Length && chunk.Constants[protoIdx].AsObj is Chunk fn)
+                        uvCount = fn.Upvalues.Length;
+                    idx += uvCount;
+                    break;
+                }
+                case CompanionWordKind.OneIC:
+                    idx++;
+                    break;
+                case CompanionWordKind.PipeStages:
+                {
+                    byte stageCount = Instruction.GetB(word);
+                    idx += stageCount;
+                    break;
+                }
             }
         }
 
