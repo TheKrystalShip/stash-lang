@@ -251,8 +251,8 @@ public enum OpCode : byte
     Is = 55,
 
     // === Error Handling ===
-    /// <summary>ABx: Push exception handler; catch at IP + Bx; error value → R(A).</summary>
-    [OpCode(Mnemonic = "try.begin", Format = OpCodeFormat.ABx, Operands = OperandTemplate.Bespoke, Summary = "Push exception handler", Writes = OperandRole.RegA, IsBranching = true, IsTerminator = true)]
+    /// <summary>AsBx: Push exception handler; catch at IP + sBx; error value → R(A).</summary>
+    [OpCode(Mnemonic = "try.begin", Format = OpCodeFormat.AsBx, Operands = OperandTemplate.Bespoke, Summary = "Push exception handler", Writes = OperandRole.RegA, IsBranching = true, IsTerminator = true)]
     TryBegin = 56,
 
     /// <summary>Ax: Pop exception handler (no operands needed, Ax unused).</summary>

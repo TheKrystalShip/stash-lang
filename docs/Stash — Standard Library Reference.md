@@ -6523,13 +6523,13 @@ Spawns a child process with redirected stdio. Returns a Process handle. Use proc
 
 - `IOError` — if the process cannot be started
 
-#### `process.wait(handleVal: any) -> CommandResult`
+#### `process.wait(handle: any) -> CommandResult`
 
 Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 
 **Returns:** `CommandResult` — A CommandResult with stdout, stderr, and exitCode
 
@@ -6537,13 +6537,13 @@ Waits for a spawned process to exit and returns a CommandResult with stdout, std
 
 - `TypeError` — if handle is not a Process
 
-#### `process.waitTimeout(handleVal: any, ms: int) -> any`
+#### `process.waitTimeout(handle: any, ms: int) -> any`
 
 Waits up to the given number of milliseconds for a process to exit. Returns a CommandResult on success, or null if the timeout expires.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 - `ms`: `int` — Maximum wait time in milliseconds
 
 **Returns:** `any` — A CommandResult, or null if timed out
@@ -6552,13 +6552,13 @@ Waits up to the given number of milliseconds for a process to exit. Returns a Co
 
 - `TypeError` — if handle is not a Process
 
-#### `process.kill(handleVal: any) -> any`
+#### `process.kill(handle: any) -> any`
 
 Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 
 **Returns:** `any` — True if the signal was sent, false if the process was not running
 
@@ -6566,13 +6566,13 @@ Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on 
 
 - `TypeError` — if handle is not a Process
 
-#### `process.isAlive(handleVal: any) -> any`
+#### `process.isAlive(handle: any) -> any`
 
 Returns true if the process is still running, false if it has exited.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 
 **Returns:** `any` — True if the process is running
 
@@ -6580,13 +6580,13 @@ Returns true if the process is still running, false if it has exited.
 
 - `TypeError` — if handle is not a Process
 
-#### `process.pid(handleVal: any) -> any`
+#### `process.pid(handle: any) -> any`
 
 Returns the OS process ID for a spawned Process handle.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 
 **Returns:** `any` — The integer process ID
 
@@ -6594,14 +6594,14 @@ Returns the OS process ID for a spawned Process handle.
 
 - `TypeError` — if handle is not a Process
 
-#### `process.signal(handleVal: any, sigArg: any) -> any`
+#### `process.signal(handle: any, signum: any) -> any`
 
 Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL, etc. as signal number constants. Returns true on success.
 
 **Parameters:**
 
-- `handleVal`: `any`
-- `sigArg`: `any`
+- `handle`: `any`
+- `signum`: `any`
 
 **Returns:** `any` — True if the signal was sent successfully
 
@@ -6610,13 +6610,13 @@ Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL,
 - `ValueError` — if the Signal enum member is unknown, or the signal number is outside the range 1–64
 - `TypeError` — if handle is not a Process, or the signal argument is not an integer or Signal enum value
 
-#### `process.detach(handleVal: any) -> any`
+#### `process.detach(handle: any) -> any`
 
 Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 
 **Returns:** `any` — True if the handle was found and removed
 
@@ -6630,13 +6630,13 @@ Returns an array of all Process handles currently tracked by this script.
 
 **Returns:** `array` — An array of Process handles
 
-#### `process.read(handleVal: any) -> any`
+#### `process.read(handle: any) -> any`
 
 Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 
 **Returns:** `any` — A string chunk, or null if no data is available
 
@@ -6644,13 +6644,13 @@ Non-blocking read from a process's stdout. Returns a string chunk if data is ava
 
 - `TypeError` — if handle is not a Process
 
-#### `process.write(handleVal: any, data: string) -> any`
+#### `process.write(handle: any, data: string) -> any`
 
 Writes a string to a process's stdin. Returns true on success, false if the process has already exited.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 - `data`: `string` — The string data to write to stdin
 
 **Returns:** `any` — True if written successfully
@@ -6659,13 +6659,13 @@ Writes a string to a process's stdin. Returns true on success, false if the proc
 
 - `TypeError` — if handle is not a Process
 
-#### `process.onExit(handleVal: any, callback: function) -> any`
+#### `process.onExit(handle: any, callback: function) -> any`
 
 Registers a callback function to be called when the process exits. The callback receives a CommandResult as its argument.
 
 **Parameters:**
 
-- `handleVal`: `any`
+- `handle`: `any`
 - `callback`: `function` — A function that accepts a CommandResult
 
 **Returns:** `any` — null
@@ -6714,13 +6714,13 @@ Waits for all processes in the array to exit. Returns an array of CommandResult 
 
 **Parameters:**
 
-- `procs`: `array`
+- `procs`: `array` — An array of Process handles
 
 **Returns:** `any` — An array of CommandResult values
 
 **Throws:**
 
-- `TypeError` — if any element in the handles array is not a Process
+- `TypeError` — if any element in the array is not a Process
 
 #### `process.waitAny(procs: array) -> any`
 
@@ -6728,14 +6728,14 @@ Waits until any process in the array exits. Returns the CommandResult of the fir
 
 **Parameters:**
 
-- `procs`: `array`
+- `procs`: `array` — A non-empty array of Process handles
 
 **Returns:** `any` — The CommandResult of the first process to exit
 
 **Throws:**
 
-- `ValueError` — if the handles array is empty
-- `TypeError` — if any element in the handles array is not a Process
+- `ValueError` — if the array is empty
+- `TypeError` — if any element in the array is not a Process
 
 #### `process.chdir(path: string) -> null`
 
@@ -7972,7 +7972,7 @@ Returns the string with up to count occurrences of old replaced by new (default 
 
 - `s`: `string` — The string
 - `old`: `string` — The substring to replace
-- `new`: `string` — The replacement
+- `new`: `string`
 - `rest`: `...any`
 
 **Returns:** `string` — Modified string
@@ -7989,7 +7989,7 @@ Returns the string with all occurrences of old replaced by new.
 
 - `s`: `string` — The string
 - `old`: `string` — The substring to replace
-- `new`: `string` — The replacement
+- `new`: `string`
 
 **Returns:** `string` — Modified string
 

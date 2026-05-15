@@ -76,13 +76,17 @@ public static class OpCodeMetadata
         "Trimming",
         "IL2026:RequiresUnreferencedCode",
         Justification = "Enum fields and OpCodeAttribute are preserved by the DynamicDependency below.")]
+    [UnconditionalSuppressMessage(
+        "AOT",
+        "IL3050:RequiresDynamicCode",
+        Justification = "OpCode is a closed enum with a fixed underlying byte type; Enum.GetValues<OpCode>() returns OpCode[] which the AOT compiler always emits.")]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(OpCode))]
     [DynamicDependency(DynamicallyAccessedMemberTypes.All, typeof(OpCodeAttribute))]
     private static OpCodeAttribute?[] BuildTable()
     {
         var table = new OpCodeAttribute?[256];
         Type enumType = typeof(OpCode);
-        foreach (OpCode op in Enum.GetValuesAsUnderlyingType<OpCode>())
+        foreach (OpCode op in Enum.GetValues<OpCode>())
         {
             string name = op.ToString();
             FieldInfo? field = enumType.GetField(name, BindingFlags.Public | BindingFlags.Static);

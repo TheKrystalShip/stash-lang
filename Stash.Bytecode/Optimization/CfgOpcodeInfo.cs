@@ -27,18 +27,13 @@ internal static class CfgOpcodeInfo
 
     /// <summary>
     /// Returns true if <paramref name="op"/> carries an sBx relative jump offset.
-    /// Most such opcodes are formatted as <see cref="OpCodeFormat.AsBx"/>; <c>TryBegin</c>
-    /// is classified as <see cref="OpCodeFormat.ABx"/> by the documentation generator for
-    /// historical reasons but the VM decodes its operand with <c>Instruction.GetSBx</c>,
-    /// so it is included here explicitly.
     /// </summary>
     public static bool IsJumpWithSBx(OpCode op)
     {
         if (!OpCodeMetadata.IsDefined((byte)op))
             return false;
-        return (OpCodeMetadata.GetFormat(op) == OpCodeFormat.AsBx
-                && OpCodeMetadata.IsBranching(op))
-               || op == OpCode.TryBegin;
+        return OpCodeMetadata.GetFormat(op) == OpCodeFormat.AsBx
+               && OpCodeMetadata.IsBranching(op);
     }
 
     /// <summary>

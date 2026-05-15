@@ -245,7 +245,7 @@ on the opcode itself, including companion-word notes where applicable.
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
-| `56` | `TryBegin` | `ABx` | `ABx` | Push exception handler; catch at IP + Bx; error value → R(A). |
+| `56` | `TryBegin` | `AsBx` | `AsBx` | Push exception handler; catch at IP + sBx; error value → R(A). |
 | `57` | `TryEnd` | `Ax` | `Ax` | Pop exception handler (no operands needed, Ax unused). |
 | `58` | `Throw` | `ABC` | `ABC` | Throw R(A) as error. |
 | `59` | `TryExpr` | `ABC` | `ABC` | R(A) = try evaluate R(B); null on error. |
