@@ -247,7 +247,7 @@ public enum OpCode : byte
     TypeOf = 54,
 
     /// <summary>ABC: R(A) = (R(B) is type K(C)).</summary>
-    [OpCode(Mnemonic = "is", Format = OpCodeFormat.ABC, Operands = "R(A), R(B), K(C)", Summary = "Type check", Writes = OperandRole.RegA, Reads = OperandRole.RegB | OperandRole.ConstC)]
+    [OpCode(Mnemonic = "is", Format = OpCodeFormat.ABC, Operands = "R(A), R(B), KN(C)", Summary = "Type check", Writes = OperandRole.RegA, Reads = OperandRole.RegB | OperandRole.ConstC)]
     Is = 55,
 
     // === Error Handling ===
@@ -269,19 +269,19 @@ public enum OpCode : byte
 
     // === Type Declarations ===
     /// <summary>ABx: R(A) = declare struct with metadata K(Bx), methods from following registers.</summary>
-    [OpCode(Mnemonic = "struct.decl", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Declare struct", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "struct.decl", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Declare struct", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
     StructDecl = 60,
 
     /// <summary>ABx: R(A) = declare enum with metadata K(Bx).</summary>
-    [OpCode(Mnemonic = "enum.decl", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Declare enum", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "enum.decl", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Declare enum", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
     EnumDecl = 61,
 
     /// <summary>ABx: R(A) = declare interface with metadata K(Bx).</summary>
-    [OpCode(Mnemonic = "iface.decl", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Declare interface", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "iface.decl", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Declare interface", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
     IfaceDecl = 62,
 
     /// <summary>ABx: Extend type with metadata K(Bx), methods from registers.</summary>
-    [OpCode(Mnemonic = "extend", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Extend type", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "extend", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Extend type", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
     Extend = 63,
 
     // === Shell ===
@@ -299,11 +299,11 @@ public enum OpCode : byte
 
     // === Modules ===
     /// <summary>ABx: R(A) = import module with metadata K(Bx).</summary>
-    [OpCode(Mnemonic = "import", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Import module", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "import", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Import module", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
     Import = 67,
 
     /// <summary>ABx: R(A) = import module as alias, metadata K(Bx).</summary>
-    [OpCode(Mnemonic = "import.as", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Import module as alias", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "import.as", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Import module as alias", Writes = OperandRole.RegA, Reads = OperandRole.ConstBx)]
     ImportAs = 68,
 
     // === Strings ===
@@ -317,11 +317,11 @@ public enum OpCode : byte
     In = 70,
 
     /// <summary>ABx: Switch on R(A) with jump table K(Bx).</summary>
-    [OpCode(Mnemonic = "switch", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Switch with jump table", Writes = OperandRole.None, Reads = OperandRole.RegA | OperandRole.ConstBx, IsBranching = true)]
+    [OpCode(Mnemonic = "switch", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Switch with jump table", Writes = OperandRole.None, Reads = OperandRole.RegA | OperandRole.ConstBx, IsBranching = true)]
     Switch = 71,
 
     /// <summary>ABx: Destructure R(A) per metadata K(Bx) into registers.</summary>
-    [OpCode(Mnemonic = "destructure", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Destructure", Writes = OperandRole.RegA, Reads = OperandRole.RegA | OperandRole.ConstBx)]
+    [OpCode(Mnemonic = "destructure", Format = OpCodeFormat.ABx, Operands = "R(A), KN(Bx)", Summary = "Destructure", Writes = OperandRole.RegA, Reads = OperandRole.RegA | OperandRole.ConstBx)]
     Destructure = 72,
 
     /// <summary>ABC: R(A) = begin elevation from R(B).</summary>

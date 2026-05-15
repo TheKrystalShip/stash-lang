@@ -323,165 +323,61 @@ public static class Disassembler
     }
 
     // ─── Operand Formatter ───────────────────────────────────────────────────
+    //
+    // FormatInstruction is driven by the OpCodeAttribute.Operands template string:
+    //
+    //   1. Empty template  → ("", null)
+    //   2. Bespoke token   → dispatch to BespokeOperandFormatters.Registry[op]
+    //   3. Grammar tokens  → evaluate via OperandTemplateRenderer.Render(...)
+    //
+    // The per-opcode switch that previously lived here has been replaced by the
+    // two supporting files (OperandTemplateParser.cs, BespokeOperandFormatters.cs).
+    // Adding a new opcode no longer requires touching this method — only the
+    // OpCodeAttribute on the enum member and (if needed) a bespoke registry entry.
 
-    private static (string operands, string? comment) FormatInstruction(Chunk chunk, Dictionary<int, string> labels, int idx, uint word, OpCode op)
+    private static (string operands, string? comment) FormatInstruction(
+        Chunk chunk, Dictionary<int, string> labels, int idx, uint word, OpCode op)
     {
-        InstrFmt fmt = GetFormat(op);
-        byte a = Instruction.GetA(word);
-        byte b = Instruction.GetB(word);
-        byte c = Instruction.GetC(word);
-        ushort bx = Instruction.GetBx(word);
-        int sbx = Instruction.GetSBx(word);
+        string template = OpCodeMetadata.IsDefined((byte)op)
+            ? OpCodeMetadata.GetOperandTemplate(op)
+            : OperandTemplate.Bespoke;
 
-        return op switch
+        // Empty operand list (TryEnd, ElevateEnd, LockEnd, …)
+        if (template == OperandTemplate.Empty)
+            return (string.Empty, null);
+
+        // Bespoke — opcode renders itself
+        if (template == OperandTemplate.Bespoke)
         {
-            // Loads
-            OpCode.LoadK       => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
-            OpCode.LoadNull    => ($"r{a}", null),
-            OpCode.LoadBool    => ($"r{a}, {(b != 0 ? "true" : "false")}", c != 0 ? "skip next" : null),
-            OpCode.Move        => ($"r{a}, r{b}", null),
+            if (BespokeOperandFormatters.Registry.TryGetValue(op, out BespokeFormatter? fmt))
+                return fmt(chunk, labels, idx, word);
 
-            // Globals
-            OpCode.GetGlobal      => ($"r{a}, [g{bx}]", FormatGlobal(chunk, bx)),
-            OpCode.SetGlobal      => ($"[g{bx}], r{a}", FormatGlobal(chunk, bx)),
-            OpCode.InitConstGlobal=> ($"[g{bx}], r{a}", $"{FormatGlobal(chunk, bx)} (const)"),
-
-            // Upvalues
-            OpCode.GetUpval    => ($"r{a}, [uv{b}]", GetUpvalueName(chunk, b)),
-            OpCode.SetUpval    => ($"[uv{b}], r{a}", GetUpvalueName(chunk, b)),
-            OpCode.CloseUpval  => ($"r{a}", null),
-
-            // Arithmetic
-            OpCode.Add         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Sub         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Mul         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Div         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Mod         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Pow         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Neg         => ($"r{a}, r{b}", null),
-            OpCode.AddI        => ($"r{a}, {sbx}", null),
-            OpCode.AddK        => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.SubK        => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.EqK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.NeK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.LtK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.LeK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.GtK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-            OpCode.GeK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
-
-            // Bitwise
-            OpCode.BAnd        => ($"r{a}, r{b}, r{c}", null),
-            OpCode.BOr         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.BXor        => ($"r{a}, r{b}, r{c}", null),
-            OpCode.BNot        => ($"r{a}, r{b}", null),
-            OpCode.Shl         => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Shr         => ($"r{a}, r{b}, r{c}", null),
-
-            // Comparisons
-            OpCode.Eq          => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Ne          => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Lt          => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Le          => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Gt          => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Ge          => ($"r{a}, r{b}, r{c}", null),
-
-            // Logic
-            OpCode.Not         => ($"r{a}, r{b}", null),
-            OpCode.TestSet     => ($"r{a}, r{b}, {c}", null),
-            OpCode.Test        => ($"r{a}, {c}", null),
-
-            // Jumps
-            OpCode.Jmp         => (GetLabelRef(labels, idx + 1 + sbx), $"{sbx:+0;-0}"),
-            OpCode.JmpFalse    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", $"{sbx:+0;-0}"),
-            OpCode.JmpTrue     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", $"{sbx:+0;-0}"),
-            OpCode.Loop        => (GetLabelRef(labels, idx + 1 + sbx), $"{sbx:+0;-0}"),
-
-            // Calls
-            OpCode.Call        => ($"r{a}, {c}", null),
-            OpCode.Return      => (b != 0 ? $"r{a}" : "null", null),
-            OpCode.CallSpread  => ($"r{a}", null),
-
-            // Iteration
-            OpCode.ForPrep     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-            OpCode.ForLoop     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-            OpCode.ForPrepII   => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-            OpCode.ForLoopII   => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-            OpCode.IterPrep    => ($"r{a}, {b}", b != 0 ? "indexed" : null),
-            OpCode.IterLoop    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-
-            // Tables
-            OpCode.GetTable    => ($"r{a}, r{b}, r{c}", null),
-            OpCode.SetTable    => ($"r{a}, r{b}, r{c}", null),
-            OpCode.GetField    => ($"r{a}, r{b}, k{c}", $".{FormatFieldName(chunk, c)}"),
-            OpCode.GetFieldIC  => ($"r{a}, r{b}, k{c}", $".{FormatFieldName(chunk, c)} [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]"),
-            OpCode.CallBuiltIn => ($"r{a}, r{b}, {c}", $"({c} args) [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]"),
-            OpCode.SetField    => ($"r{a}, r{c}, k{b}", $".{FormatFieldName(chunk, b)}"),
-            OpCode.Self        => ($"r{a}, r{b}, k{c}", $".{FormatFieldName(chunk, c)}"),
-
-            // Collections
-            OpCode.NewArray    => ($"r{a}, {b}", null),
-            OpCode.NewDict     => ($"r{a}, {b}", null),
-            OpCode.NewRange    => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Spread      => ($"r{a}, r{b}", null),
-            OpCode.Destructure => ($"r{a}, k{bx}", null),
-
-            // Closures & Types
-            OpCode.Closure     => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
-            OpCode.NewStruct   => ($"r{a}, k{b}, {c}", null),
-            OpCode.TypeOf      => ($"r{a}, r{b}", null),
-            OpCode.Is          => ($"r{a}, r{b}, k{c}", null),
-
-            // Error handling
-            OpCode.TryBegin    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
-            OpCode.TryEnd      => ("", null),
-            OpCode.Throw       => ($"r{a}", null),
-            OpCode.TryExpr     => ($"r{a}, r{b}", null),
-            OpCode.CatchMatch  => ($"r{a}, k{bx}", FormatCatchTypes(chunk, bx)),
-            OpCode.Rethrow     => ($"r{a}", null),
-
-            // Type decls
-            OpCode.StructDecl  => ($"r{a}, k{bx}", null),
-            OpCode.EnumDecl    => ($"r{a}, k{bx}", null),
-            OpCode.IfaceDecl   => ($"r{a}, k{bx}", null),
-            OpCode.Extend      => ($"r{a}, k{bx}", null),
-
-            // Shell
-            OpCode.Command     => ($"r{a}, {b}, {c}", null),
-            OpCode.PipeChain   => ($"r{a}, {b} stages, r{c}", $"parts from r{c}"),
-            OpCode.StreamingPipeline => ($"r{a}, {b} stages, r{c}", $"streaming parts from r{c}"),
-            OpCode.Redirect    => ($"r{a}, r{c}, {b}", null),
-            OpCode.Interpolate => ($"r{a}, {b}", null),
-
-            // Modules
-            OpCode.Import      => ($"r{a}, k{bx}", null),
-            OpCode.ImportAs    => ($"r{a}, k{bx}", null),
-
-            // Misc
-            OpCode.In          => ($"r{a}, r{b}, r{c}", null),
-            OpCode.Switch      => ($"r{a}, k{bx}", null),
-            OpCode.ElevateBegin=> ($"r{a}, r{b}", null),
-            OpCode.ElevateEnd  => ("", null),
-            OpCode.Retry       => ($"k{bx}", null),
-            OpCode.Timeout     => ($"r{a}, r{(byte)(a+1)}", null),
-            OpCode.Await       => ($"r{a}, r{b}", null),
-            OpCode.TypedWrap   => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
-
-            // Lock
-            OpCode.LockBegin   => ($"r{a}, r{b}, k{c}", FormatLockMeta(chunk, c)),
-            OpCode.LockEnd     => ("", null),
-
-            // Globals (Ax-format unset)
-            OpCode.UnsetGlobal => ($"[g{Instruction.GetAx(word)}]", FormatGlobal(chunk, (ushort)Instruction.GetAx(word))),
-
-            _ => (fmt switch
+            // Unknown opcode with no bespoke handler — produce a safe fallback.
+            InstrFmt fallbackFmt = GetFormat(op);
+            byte   fa  = Instruction.GetA(word);
+            byte   fb  = Instruction.GetB(word);
+            byte   fc  = Instruction.GetC(word);
+            ushort fbx = Instruction.GetBx(word);
+            int    fsb = Instruction.GetSBx(word);
+            return (fallbackFmt switch
             {
-                InstrFmt.ABC  => $"r{a}, r{b}, r{c}",
-                InstrFmt.ABx  => $"r{a}, k{bx}",
-                InstrFmt.AsBx => $"r{a}, {sbx:+0;-0}",
-                InstrFmt.Ax   => "",
-                _ => ""
-            }, (string?)null)
-        };
+                InstrFmt.ABC  => $"r{fa}, r{fb}, r{fc}",
+                InstrFmt.ABx  => $"r{fa}, k{fbx}",
+                InstrFmt.AsBx => $"r{fa}, {fsb:+0;-0}",
+                InstrFmt.Ax   => string.Empty,
+                _             => string.Empty,
+            }, null);
+        }
+
+        // Template-driven path — parse tokens (cached) and render
+        OperandToken[]? tokens = OperandTemplateCache.Get(op);
+        if (tokens is null)
+        {
+            // Template was not pre-parsed (shouldn't happen for defined opcodes).
+            return (string.Empty, null);
+        }
+
+        return OperandTemplateRenderer.Render(tokens, chunk, labels, idx, word);
     }
 
     // ─── Label Collection ────────────────────────────────────────────────────
@@ -535,26 +431,47 @@ public static class Disassembler
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
+    //
+    // These helpers are internal so that BespokeOperandFormatters and
+    // OperandTemplateRenderer (in separate files) can call them without
+    // duplicating logic.  The "Public" suffix distinguishes the callable
+    // aliases from any future private overloads — within this file the
+    // private wrapper name is kept for backward compatibility with callers
+    // that already exist in this file.
 
     private static string GetLabelRef(Dictionary<int, string> labels, int target)
+        => GetLabelRefPublic(labels, target);
+
+    internal static string GetLabelRefPublic(Dictionary<int, string> labels, int target)
         => labels.TryGetValue(target, out string? lbl) ? lbl : $"@{target}";
 
     private static string FormatGlobal(Chunk chunk, ushort slot)
+        => FormatGlobalPublic(chunk, slot);
+
+    internal static string FormatGlobalPublic(Chunk chunk, ushort slot)
         => chunk.GlobalNameTable != null && slot < chunk.GlobalNameTable.Length
             ? chunk.GlobalNameTable[slot]
             : slot.ToString();
 
     private static string GetUpvalueName(Chunk chunk, int slot)
+        => GetUpvalueNamePublic(chunk, slot);
+
+    internal static string GetUpvalueNamePublic(Chunk chunk, int slot)
         => chunk.UpvalueNames != null && slot < chunk.UpvalueNames.Length
             ? chunk.UpvalueNames[slot]
             : slot.ToString();
 
     private static string FormatFieldName(Chunk chunk, byte constIdx)
+        => FormatFieldNamePublic(chunk, constIdx);
+
+    internal static string FormatFieldNamePublic(Chunk chunk, byte constIdx)
         => constIdx < chunk.Constants.Length && chunk.Constants[constIdx].AsObj is string s
             ? s
             : constIdx.ToString();
 
-    private static string FormatConstant(StashValue value) => value.Tag switch
+    private static string FormatConstant(StashValue value) => FormatConstantPublic(value);
+
+    internal static string FormatConstantPublic(StashValue value) => value.Tag switch
     {
         StashValueTag.Null  => "null",
         StashValueTag.Bool  => value.AsBool ? "true" : "false",
@@ -603,6 +520,9 @@ public static class Disassembler
     }
 
     private static string FormatCatchTypes(Chunk chunk, ushort idx)
+        => FormatCatchTypesPublic(chunk, idx);
+
+    internal static string FormatCatchTypesPublic(Chunk chunk, ushort idx)
     {
         if (idx < chunk.Constants.Length && chunk.Constants[idx].AsObj is string[] types)
             return types.Length == 0 ? "catch-all" : string.Join(" | ", types);
@@ -610,6 +530,9 @@ public static class Disassembler
     }
 
     private static string FormatLockMeta(Chunk chunk, byte idx)
+        => FormatLockMetaPublic(chunk, idx);
+
+    internal static string FormatLockMetaPublic(Chunk chunk, byte idx)
     {
         if (idx < chunk.Constants.Length && chunk.Constants[idx].AsObj is LockMetadata meta)
         {
