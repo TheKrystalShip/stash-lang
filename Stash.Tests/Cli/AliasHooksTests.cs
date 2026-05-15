@@ -257,7 +257,7 @@ public sealed class AliasHooksTests : IDisposable
             """, _vm);
 
         _vm.AliasRegistry.TryGet("failbody", out var entry);
-        Assert.Throws<RuntimeError>(
+        Assert.Throws<UserRuntimeError>(
             () => AliasDispatcher.ExecuteAlias(_runner, _vm, entry!, []));
 
         Assert.Contains("after-code:1", Output, StringComparison.Ordinal);
@@ -356,7 +356,7 @@ public sealed class AliasHooksTests : IDisposable
             """, _vm);
 
         _vm.AliasRegistry.TryGet("boomba", out var entry);
-        Assert.Throws<RuntimeError>(
+        Assert.Throws<AliasError>(
             () => AliasDispatcher.ExecuteAlias(_runner, _vm, entry!, []));
 
         Assert.DoesNotContain("after-called", Output, StringComparison.Ordinal);

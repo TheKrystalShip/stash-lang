@@ -57,7 +57,7 @@ public class ProcessExecApiTests : TempDirectoryFixture
     public void Exec_StrictMode_FailingCommand_Throws()
     {
         if (OperatingSystem.IsWindows()) return;
-        Assert.Throws<Stash.Runtime.RuntimeError>(() =>
+        Assert.Throws<Stash.Runtime.Errors.CommandError>(() =>
             RunStatements(@"process.exec(""false"", [], ExecOptions { strict: true });"));
     }
 
@@ -82,14 +82,14 @@ public class ProcessExecApiTests : TempDirectoryFixture
     [Fact]
     public void Exec_NullProgramArg_ThrowsTypeError()
     {
-        Assert.Throws<Stash.Runtime.RuntimeError>(() =>
+        Assert.Throws<Stash.Runtime.Errors.TypeError>(() =>
             RunStatements("process.exec(null, []);"));
     }
 
     [Fact]
     public void Exec_EmptyProgramArg_ThrowsValueError()
     {
-        Assert.Throws<Stash.Runtime.RuntimeError>(() =>
+        Assert.Throws<Stash.Runtime.Errors.ValueError>(() =>
             RunStatements(@"process.exec("""", []);"));
     }
 

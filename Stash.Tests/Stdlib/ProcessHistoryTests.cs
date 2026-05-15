@@ -119,7 +119,7 @@ public sealed class ProcessHistoryTests : Stash.Tests.Interpreting.StashTestBase
             }
             """);
 
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<UserRuntimeError>(ex);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public sealed class ProcessHistoryTests : Stash.Tests.Interpreting.StashTestBase
             }
             """);
 
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<UserRuntimeError>(ex);
     }
 
     [Fact]
