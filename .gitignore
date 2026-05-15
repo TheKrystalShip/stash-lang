@@ -18,6 +18,7 @@ examples/packages/**/stashes/
 .vs/
 *.user
 *.suo
+*.lscache
 
 # JetBrains Rider
 .idea/
