@@ -893,7 +893,6 @@ public sealed class ChunkBuilder
             case OpCode.UnsetGlobal:
             case OpCode.Switch:
             case OpCode.Test:
-            case OpCode.TypedWrap:
             case OpCode.CheckNumeric:
             case OpCode.CatchMatch:
             case OpCode.IterClose:

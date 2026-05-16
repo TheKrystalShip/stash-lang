@@ -31,8 +31,9 @@ public sealed class VariableTypeMismatchRule : IAnalysisRule
         var actualType = TypeInferenceEngine.InferExpressionType(context.ScopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
         if (actualType != null && actualType != "null" && actualType != expectedType)
         {
-            // Don't warn when expected is a typed array and actual is generic array —
-            // the TypedWrap opcode validates element types at runtime.
+            // Under the erasure model annotations do not coerce at runtime. A literal
+            // `[1, 2, 3]` always infers as `array`; if the user annotated `T[]` we treat
+            // the array literal as a compatible shape and only warn on a non-array RHS.
             if (expectedType.EndsWith("[]") && actualType == "array")
                 return;
 

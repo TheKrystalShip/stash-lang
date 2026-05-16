@@ -14,9 +14,9 @@
 
 | Property | Value |
 | --- | --- |
-| Opcode count | `101` |
+| Opcode count | `100` |
 | Numeric range | `0..100` |
-| Opcode table hash | `0xD2A262BE` |
+| Opcode table hash | `0xE905CD26` |
 | Instruction width | 32 bits |
 | Register index width | 8 bits |
 
@@ -49,13 +49,12 @@
    - [5.18 Misc](#518-misc)
    - [5.19 Specialized Iteration (compile-time)](#519-specialized-iteration-compile-time)
    - [5.20 Constant Fusion](#520-constant-fusion)
-   - [5.21 Typed Arrays](#521-typed-arrays)
-   - [5.22 Defer](#522-defer)
-   - [5.23 Exception Type Matching](#523-exception-type-matching)
-   - [5.24 File-Based Mutual Exclusion (Lock)](#524-file-based-mutual-exclusion-lock)
-   - [5.25 Global Bindings](#525-global-bindings)
-   - [5.26 Iterator Cleanup](#526-iterator-cleanup)
-   - [5.27 Streaming Pipe Chains](#527-streaming-pipe-chains)
+   - [5.21 Defer](#521-defer)
+   - [5.22 Exception Type Matching](#522-exception-type-matching)
+   - [5.23 File-Based Mutual Exclusion (Lock)](#523-file-based-mutual-exclusion-lock)
+   - [5.24 Global Bindings](#524-global-bindings)
+   - [5.25 Iterator Cleanup](#525-iterator-cleanup)
+   - [5.26 Streaming Pipe Chains](#526-streaming-pipe-chains)
 6. [Companion Words](#6-companion-words)
 7. [Compatibility](#7-compatibility)
 8. [Change Rules](#8-change-rules)
@@ -70,7 +69,7 @@ source maps, global metadata, closure metadata, and inline-cache metadata.
 
 | Physical CPU concept | Stash VM equivalent |
 | --- | --- |
-| Instruction set | `101` opcodes |
+| Instruction set | `100` opcodes |
 | Registers | Virtual registers `r0..rN` in the current call frame |
 | Machine code | `uint` instruction words |
 | Program counter | `IP` per call frame |
@@ -317,45 +316,39 @@ on the opcode itself, including companion-word notes where applicable.
 | `90` | `GtK` | `ABC` | `ABC` | R(A) = (R(B) > K(C)) — greater-than with constant from pool. |
 | `91` | `GeK` | `ABC` | `ABC` | R(A) = (R(B) >= K(C)) — greater-or-equal with constant from pool. |
 
-### 5.21 Typed Arrays
-
-| Value | Opcode | Encoding | Operands | Effect |
-| ---: | --- | --- | --- | --- |
-| `92` | `TypedWrap` | `ABx` | `ABx` | R(A) = TypedArray(elementType=K(Bx), elements=R(A)). |
-
-### 5.22 Defer
+### 5.21 Defer
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
 | `93` | `Defer` | `ABC` | `A` | Push deferred closure R(A) onto the current frame's defer stack (LIFO). |
 
-### 5.23 Exception Type Matching
+### 5.22 Exception Type Matching
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
 | `94` | `CatchMatch` | `ABx` | `ABx` | Check if caught error in R(A) matches type names K(Bx); on match, skip the following jump. |
 | `95` | `Rethrow` | `ABC` | `A` | Re-throw the original RuntimeError that was caught into R(A)'s handler register. |
 
-### 5.24 File-Based Mutual Exclusion (Lock)
+### 5.23 File-Based Mutual Exclusion (Lock)
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
 | `96` | `LockBegin` | `ABC` | `ABC` | Acquire exclusive file lock. A=errReg (scratch), B=pathReg, C=constIdx for LockMetadata. R(B+1)=waitOption, R(B+2)=staleOption. |
 | `97` | `LockEnd` | `Ax` | `Ax` | Release the top lock from VMContext.ActiveLocks. No operands (A=0). |
 
-### 5.25 Global Bindings
+### 5.24 Global Bindings
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
 | `98` | `UnsetGlobal` | `Ax` | `Ax` | Remove the global binding at slot Ax from the globals dictionary. |
 
-### 5.26 Iterator Cleanup
+### 5.25 Iterator Cleanup
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
 | `99` | `IterClose` | `ABC` | `A` | Dispose iterator at R(A) if IDisposable; clear R(A) to null. Used at for-in loop exits. |
 
-### 5.27 Streaming Pipe Chains
+### 5.26 Streaming Pipe Chains
 
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |

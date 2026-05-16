@@ -2,6 +2,21 @@
 
 Stash is a cross-platform scripting language for system administration. The interpreter is .NET-based and compiles to native binaries for Linux, macOS, and Windows. It combines C-style syntax with first-class shell command execution (`$(...)` syntax), built-in data structures (structs, enums, dictionaries), and 35 namespaces of standard library functions. Language features and standard library additions must work across all three platforms.
 
+## Release Status — Pre-1.0, No Backwards Compatibility
+
+Stash is **not released yet**. There are no users, no published scripts in the wild, and no stability guarantees. Every change — syntax, semantics, stdlib signatures, AST shape, bytecode format, namespace layout — is free to break previous behavior.
+
+**Implications when implementing changes:**
+
+- **Do not write compatibility shims, deprecation aliases, or migration paths.** If a name, signature, or syntax form changes, update every call site and delete the old form outright. Nothing depends on it.
+- **Do not preserve old field/property names "just in case."** Rename freely; the compiler will surface every consumer.
+- **Do not gate new behavior behind feature flags or opt-in toggles** unless the flag itself is the feature being designed.
+- **Do not leave `// kept for backwards compat` comments or re-export removed types.** Delete them.
+- **When refactoring, the goal is the cleanest end state**, not the smallest diff. Touching 40 call sites to rename a parameter is fine; leaving a wrapper that forwards to the new name is not.
+- **Existing tests and examples are the only consumers.** If a test asserts the old behavior, update the test to assert the new behavior — don't preserve old behavior to keep the test green.
+
+This applies until the project explicitly declares a v1.0 stability commitment in this file.
+
 ## Architecture
 
 ```

@@ -46,7 +46,8 @@ partial class Compiler
         else
             _builder.EmitA(OpCode.LoadNull, reg);
 
-        EmitTypeWrapping(reg, stmt.TypeHint);
+        // Type annotations are erased — they are metadata only and produce no runtime
+        // wrapping / coercion. Use conv.byte() and friends for explicit narrowing.
 
         _scope.MarkInitialized();
 
@@ -88,7 +89,7 @@ partial class Compiler
             CompileExprTo(stmt.Initializer, reg);
         }
 
-        EmitTypeWrapping(reg, stmt.TypeHint);
+        // Type annotations on const are erased — same erasure semantics as let.
 
         _scope.MarkInitialized();
 

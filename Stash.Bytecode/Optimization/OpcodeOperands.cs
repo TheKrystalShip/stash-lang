@@ -227,7 +227,6 @@ internal static class OpcodeOperands
             case OpCode.SetUpval:
             case OpCode.Switch:
             case OpCode.Test:
-            case OpCode.TypedWrap:
             case OpCode.CheckNumeric:
             case OpCode.CatchMatch:
             case OpCode.Defer:

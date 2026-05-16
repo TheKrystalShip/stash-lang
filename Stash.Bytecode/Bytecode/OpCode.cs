@@ -402,11 +402,6 @@ public enum OpCode : byte
     [OpCode(Mnemonic = "ge.k", Format = OpCodeFormat.ABC, Operands = "R(A), R(B), K(C)", Summary = "Greater or equal fused-K", Writes = OperandRole.RegA, Reads = OperandRole.RegB | OperandRole.ConstC)]
     GeK = 91,
 
-    // === Typed Arrays ===
-    /// <summary>ABx: R(A) = TypedArray(elementType=K(Bx), elements=R(A)).</summary>
-    [OpCode(Mnemonic = "typed.wrap", Format = OpCodeFormat.ABx, Operands = "R(A), K(Bx)", Summary = "Wrap typed array", Writes = OperandRole.RegA, Reads = OperandRole.RegA | OperandRole.ConstBx)]
-    TypedWrap = 92,
-
     // === Defer ===
     /// <summary>A: Push deferred closure R(A) onto the current frame's defer stack (LIFO).</summary>
     [OpCode(Mnemonic = "defer", Format = OpCodeFormat.ABC, Operands = "R(A)", Summary = "Push deferred closure", Writes = OperandRole.None, Reads = OperandRole.RegA)]

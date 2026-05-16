@@ -208,7 +208,6 @@ public sealed class BytecodeVerifier
                 case OpCode.Switch:
                 case OpCode.Destructure:
                 case OpCode.Retry:
-                case OpCode.TypedWrap:
                     CheckConstBx(errors, instrIdx, prefix, chunk, bx);
                     break;
 

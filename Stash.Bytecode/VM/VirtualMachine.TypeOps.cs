@@ -20,7 +20,11 @@ public sealed partial class VirtualMachine
         "int", "float", "string", "bool", "array", "dict", "null", "function",
         "range", "duration", "bytes", "semver", "secret", "ip", "Error", "struct", "enum",
         "interface", "namespace", "Future",
-        "byte", "int[]", "float[]", "string[]", "bool[]", "byte[]"
+        "byte",
+        // Note: T[] forms no longer appear here under the erasure model. Annotations like
+        // `let arr: int[] = [...]` produce a plain `array`, so `arr is int[]` is false.
+        // The general endsWith("[]") arm below still matches stdlib-produced StashTypedArrays
+        // (e.g. arr.slice on a typed array preserves element typing).
     };
 
     private static bool InstanceImplementsInterfaceName(StashInstance inst, string ifaceName)
@@ -107,6 +111,14 @@ public sealed partial class VirtualMachine
                 };
             }
             else if (_knownTypeNames.Contains(typeName))
+            {
+                result = CheckIsType(value, typeName);
+            }
+            // Typed array names (e.g. `int[]`, `string[]`) are not in _knownTypeNames under
+            // the erasure model (since `let arr: int[] = [...]` no longer wraps), but stdlib
+            // factories like arr.typed / arr.new / arr.slice still produce StashTypedArray
+            // values. Route those through CheckIsType so `xs is int[]` works for them.
+            else if (typeName.EndsWith("[]"))
             {
                 result = CheckIsType(value, typeName);
             }

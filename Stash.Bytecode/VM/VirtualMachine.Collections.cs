@@ -502,63 +502,6 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(new SpreadMarker(iterable!));
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void ExecuteTypedWrap(ref CallFrame frame, uint inst)
-    {
-        byte a = Instruction.GetA(inst);
-        ushort bx = Instruction.GetBx(inst);
-        int @base = frame.BaseSlot;
-
-        string elementType = (string)frame.Chunk.Constants[bx].AsObj!;
-        StashValue source = _stack[@base + a];
-
-        if (source.IsNull)
-            return; // null stays null — runtime will catch type errors later
-
-        // Scalar byte narrowing: let b: byte = 42 → narrow int to byte
-        if (elementType == "byte" && !source.IsObj)
-        {
-            if (source.IsByte)
-                return; // already a byte, nothing to do
-            if (source.IsInt)
-            {
-                long val = source.AsInt;
-                if (val < 0 || val > 255)
-                    throw new RuntimeError($"Value {val} is out of byte range [0, 255].", GetCurrentSpan(ref frame));
-                _stack[@base + a] = StashValue.FromByte((byte)val);
-                return;
-            }
-            if (source.IsFloat)
-            {
-                long val = (long)source.AsFloat;
-                if (val < 0 || val > 255)
-                    throw new RuntimeError($"Value {val} is out of byte range [0, 255].", GetCurrentSpan(ref frame));
-                _stack[@base + a] = StashValue.FromByte((byte)val);
-                return;
-            }
-            throw new RuntimeError($"Cannot narrow {source.Tag} to byte.", GetCurrentSpan(ref frame));
-        }
-
-        if (source.IsObj && source.AsObj is List<StashValue> list)
-        {
-            StashTypedArray typed = StashTypedArray.Create(elementType, list);
-            _stack[@base + a] = StashValue.FromObj(typed);
-            return;
-        }
-
-        if (source.IsObj && source.AsObj is StashTypedArray existing)
-        {
-            if (existing.ElementTypeName != elementType)
-                throw new RuntimeError(
-                    $"Cannot assign {existing.ElementTypeName}[] to variable of type {elementType}[].",
-                    GetCurrentSpan(ref frame));
-            return; // Already the right type
-        }
-
-        throw new RuntimeError(
-            $"Cannot create {elementType}[] \u2014 value is not an array.",
-            GetCurrentSpan(ref frame));
-    }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteDestructure(ref CallFrame frame, uint inst)
