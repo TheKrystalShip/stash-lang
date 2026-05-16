@@ -123,7 +123,7 @@ dotnet test Stash.Tests/Stash.Tests.csproj --filter "FullyQualifiedName~SA1403_I
 ## F03 — [MINOR] Phase 1B modified `Stash.Analysis/Visitors/SemanticValidator.cs` outside its declared `files` scope
 
 **Status:** fixed
-**Fixed in:** (this commit)
+**Fixed in:** eb70c6a
 **Files:** `.kanban/2-in-progress/sa1403-configurable-threshold/plan.yaml:61-66`
 **Phase:** 1B
 **Commit:** 78ca35f
