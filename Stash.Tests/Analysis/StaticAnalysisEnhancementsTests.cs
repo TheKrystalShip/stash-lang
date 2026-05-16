@@ -558,6 +558,68 @@ public class StaticAnalysisEnhancementsTests : AnalysisTestBase
         Assert.Contains("3", diag.Message);
     }
 
+    [Fact]
+    public void SA1403_ChainInsideCallArgInsidePlusChain_Fires()
+    {
+        // "a" + x + "b" + y + "c" is nested inside a call argument that is inside an outer + chain.
+        // _parentBinaryOperator must not leak through VisitCallExpr — the inner chain must fire.
+        var source = """
+            let name = "x";
+            let x = "a";
+            let y = "b";
+            fn f(s) { return s; }
+            let result = name + f("a" + x + "b" + y + "c");
+            """;
+        var diagnostics = Validate(source);
+        Assert.Contains(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ChainInsideGroupingInsidePlusChain_Fires()
+    {
+        // "a" + x + "b" + y + "c" is nested inside a GroupingExpr that is an operand of an outer + chain.
+        // _parentBinaryOperator must not leak through VisitGroupingExpr — the inner chain must fire.
+        var source = """
+            let name = "x";
+            let x = "a";
+            let y = "b";
+            let result = name + ("a" + x + "b" + y + "c");
+            """;
+        var diagnostics = Validate(source);
+        Assert.Contains(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ChainInsideTernaryBranchInsidePlusChain_Fires()
+    {
+        // "a" + x + "b" + y + "c" is in a ternary branch inside an outer + chain.
+        // _parentBinaryOperator must not leak through VisitTernaryExpr — the inner chain must fire.
+        var source = """
+            let name = "x";
+            let x = "a";
+            let y = "b";
+            let cond = true;
+            let other = "z";
+            let result = name + (cond ? "a" + x + "b" + y + "c" : other);
+            """;
+        var diagnostics = Validate(source);
+        Assert.Contains(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_TwoLiteralChainInsideCallArgInsidePlusChain_DoesNotFire()
+    {
+        // "a" + x + "b" has only 2 literals — below threshold — must NOT fire even when nested.
+        var source = """
+            let name = "x";
+            let x = "a";
+            fn f(s) { return s; }
+            let result = name + f("a" + x + "b");
+            """;
+        var diagnostics = Validate(source);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
+    }
+
     // ── Suppression Reason Field ──────────────────────────────────────────────
 
     [Fact]

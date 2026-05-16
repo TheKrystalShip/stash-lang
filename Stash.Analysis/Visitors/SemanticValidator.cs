@@ -649,13 +649,19 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitAssignExpr(AssignExpr expr)
     {
         DispatchNodeRules(expr);
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Value.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitCallExpr(CallExpr expr)
     {
         DispatchNodeRules(expr);
+
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
 
         // Visit callee only when not handled by arity/type rules
         if (expr.Callee is not IdentifierExpr
@@ -671,6 +677,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             arg.Accept(this);
         }
 
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
@@ -680,7 +687,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Right.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
@@ -703,93 +713,126 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitIsExpr(IsExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Left.Accept(this);
         expr.TypeExpr?.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitGroupingExpr(GroupingExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Expression.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
         DispatchNodeRules(expr);
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Condition.Accept(this);
         expr.ThenBranch.Accept(this);
         expr.ElseBranch.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitSwitchExpr(SwitchExpr expr)
     {
         DispatchNodeRules(expr);
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Subject.Accept(this);
         foreach (var arm in expr.Arms)
         {
             arm.Pattern?.Accept(this);
             arm.Body.Accept(this);
         }
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitArrayExpr(ArrayExpr expr)
     {
         DispatchNodeRules(expr);
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         foreach (var el in expr.Elements)
         {
             el.Accept(this);
         }
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitDictLiteralExpr(DictLiteralExpr expr)
     {
         DispatchNodeRules(expr);
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         foreach (var (_, value) in expr.Entries)
         {
             value.Accept(this);
         }
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitIndexExpr(IndexExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Object.Accept(this);
         expr.Index.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitIndexAssignExpr(IndexAssignExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Object.Accept(this);
         expr.Index.Accept(this);
         expr.Value.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         foreach (var (_, value) in expr.FieldValues)
         {
             value.Accept(this);
         }
+        _parentBinaryOperator = savedParent;
         return null;
     }
 
     public object? VisitDotExpr(DotExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Object.Accept(this);
+        _parentBinaryOperator = savedParent;
         DispatchNodeRules(expr);
         return null;
     }
 
     public object? VisitDotAssignExpr(DotAssignExpr expr)
     {
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = null;
         expr.Object.Accept(this);
         expr.Value.Accept(this);
+        _parentBinaryOperator = savedParent;
         DispatchNodeRules(expr);
         return null;
     }
