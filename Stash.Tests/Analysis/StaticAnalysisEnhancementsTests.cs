@@ -559,6 +559,20 @@ public class StaticAnalysisEnhancementsTests : AnalysisTestBase
     }
 
     [Fact]
+    public void SA1403_InterpolationOperand_NotCountedAsLiteral()
+    {
+        // "a" + "b=${x}" + name — "b=${x}" is a StringInterpolationExpr, not a LiteralExpr,
+        // so only 1 string literal is counted → no fire at default threshold of 3.
+        var source = """
+            let x = "world";
+            let name = "test";
+            let s = "a" + "b=${x}" + name;
+            """;
+        var diagnostics = Validate(source);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
     public void SA1403_ChainInsideCallArgInsidePlusChain_Fires()
     {
         // "a" + x + "b" + y + "c" is nested inside a call argument that is inside an outer + chain.
