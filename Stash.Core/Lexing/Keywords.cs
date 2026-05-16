@@ -21,7 +21,7 @@ public static class Keywords
     /// </summary>
     public static readonly FrozenSet<string> SoftKeywords = new[]
     {
-        "defer", "async", "await", "retry", "timeout", "elevate", "lock"
+        "defer", "async", "await", "retry", "timeout", "elevate", "lock", "export"
     }.ToFrozenSet();
 
     /// <summary>Union of <see cref="HardKeywords"/> and <see cref="SoftKeywords"/>, sorted.</summary>

@@ -147,4 +147,18 @@ public interface IStmtVisitor<T>
     /// Visits an <see cref="UnsetStmt"/> node (<c>unset name1, name2, …;</c>).
     /// </summary>
     T VisitUnsetStmt(UnsetStmt stmt);
+
+    /// <summary>
+    /// Visits an <see cref="ExportDeclStmt"/> node (<c>export fn/const/struct/enum/interface …;</c>).
+    /// Implementations are added in Phase 1B; until then the default throws <see cref="System.NotImplementedException"/>.
+    /// </summary>
+    T VisitExportDeclStmt(ExportDeclStmt stmt) =>
+        throw new System.NotImplementedException($"{GetType().Name} has not yet implemented VisitExportDeclStmt.");
+
+    /// <summary>
+    /// Visits an <see cref="ExportBlockStmt"/> node (<c>export { name1, name2, … };</c>).
+    /// Implementations are added in Phase 1B; until then the default throws <see cref="System.NotImplementedException"/>.
+    /// </summary>
+    T VisitExportBlockStmt(ExportBlockStmt stmt) =>
+        throw new System.NotImplementedException($"{GetType().Name} has not yet implemented VisitExportBlockStmt.");
 }

@@ -178,6 +178,13 @@ public class Parser
                 return FnDeclaration(isAsync: true, asyncToken: asyncToken);
             }
 
+            // Soft keyword: 'export' — recognized when followed by a declaration-starting token
+            if (Check(TokenType.Identifier) && Peek().Lexeme == "export" && IsExportKeyword())
+            {
+                Advance(); // consume 'export'
+                return ExportDeclaration();
+            }
+
             switch (Peek().Type)
             {
                 case TokenType.Let:
@@ -728,6 +735,91 @@ public class Parser
         Token alias = Consume(TokenType.Identifier, "Expected namespace name after 'as'.");
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
         return new ImportAsStmt(path, alias, MakeSpan(importToken.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses an export declaration. The <c>export</c> soft-keyword token has already been consumed.
+    /// Supports two forms:
+    /// <list type="bullet">
+    ///   <item><description><c>export fn/const/struct/enum/interface …</c> — declaration-site form</description></item>
+    ///   <item><description><c>export { name1, name2, … };</c> — block form</description></item>
+    /// </list>
+    /// Raises SX001 immediately when followed by <c>let</c>, SX002 when followed by <c>extend</c>,
+    /// and SX003 when followed by <c>import</c>.
+    /// </summary>
+    private Stmt ExportDeclaration()
+    {
+        Token exportKeyword = Previous();
+
+        // export let → SX001
+        if (Check(TokenType.Let))
+        {
+            throw Error(Peek(), "SX001: Exporting mutable bindings is not allowed. Use 'const' instead of 'let'.");
+        }
+
+        // export extend → SX002
+        if (Check(TokenType.Extend))
+        {
+            throw Error(Peek(), "SX002: 'extend' blocks cannot be exported. Extension methods are registered globally at module-load time.");
+        }
+
+        // export import → SX003
+        if (Check(TokenType.Import))
+        {
+            throw Error(Peek(), "SX003: Import declarations cannot be exported.");
+        }
+
+        // export { name1, name2 } — block form
+        if (Check(TokenType.LeftBrace))
+        {
+            Advance(); // consume '{'
+
+            List<Token> names = new();
+            if (!Check(TokenType.RightBrace))
+            {
+                do
+                {
+                    names.Add(Consume(TokenType.Identifier, "Expected identifier in export block."));
+                } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
+            }
+
+            Token closeBrace = Consume(TokenType.RightBrace, "Expected '}' after export names.");
+            Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after export block.");
+            return new ExportBlockStmt(exportKeyword, names, MakeSpan(exportKeyword.Span, finalSemi.Span));
+        }
+
+        // export async fn — declaration-site form
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "async"
+            && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Fn)
+        {
+            Advance(); // consume 'async'
+            Token asyncToken = Previous();
+            Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
+            Stmt inner = FnDeclaration(isAsync: true, asyncToken: asyncToken);
+            return new ExportDeclStmt(exportKeyword, inner, MakeSpan(exportKeyword.Span, inner.Span));
+        }
+
+        // export fn/const/struct/enum/interface — declaration-site form
+        switch (Peek().Type)
+        {
+            case TokenType.Fn:
+                Advance();
+                return new ExportDeclStmt(exportKeyword, FnDeclaration(), MakeSpan(exportKeyword.Span, Previous().Span));
+            case TokenType.Const:
+                Advance();
+                return new ExportDeclStmt(exportKeyword, ConstDeclaration(), MakeSpan(exportKeyword.Span, Previous().Span));
+            case TokenType.Struct:
+                Advance();
+                return new ExportDeclStmt(exportKeyword, StructDeclaration(), MakeSpan(exportKeyword.Span, Previous().Span));
+            case TokenType.Enum:
+                Advance();
+                return new ExportDeclStmt(exportKeyword, EnumDeclaration(), MakeSpan(exportKeyword.Span, Previous().Span));
+            case TokenType.Interface:
+                Advance();
+                return new ExportDeclStmt(exportKeyword, InterfaceDeclaration(), MakeSpan(exportKeyword.Span, Previous().Span));
+            default:
+                throw Error(Peek(), "Expected a declaration after 'export'.");
+        }
     }
 
     /// <summary>
@@ -2776,6 +2868,38 @@ public class Parser
     {
         if (_current + 1 >= _tokens.Count) return false;
         return _tokens[_current + 1].Type == TokenType.Identifier;
+    }
+
+    /// <summary>
+    /// Returns true when <c>export</c> at the current position is used as a soft keyword (not an identifier).
+    /// The follow-set that activates the keyword is: <c>fn</c>, <c>const</c>, <c>struct</c>, <c>enum</c>,
+    /// <c>interface</c>, <c>let</c>, <c>extend</c>, <c>import</c>, <c>{</c>, or <c>async</c> followed by <c>fn</c>.
+    /// </summary>
+    private bool IsExportKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        TokenType next = _tokens[_current + 1].Type;
+
+        switch (next)
+        {
+            case TokenType.Fn:
+            case TokenType.Const:
+            case TokenType.Struct:
+            case TokenType.Enum:
+            case TokenType.Interface:
+            case TokenType.Let:
+            case TokenType.Extend:
+            case TokenType.Import:
+            case TokenType.LeftBrace:
+                return true;
+            case TokenType.Identifier:
+                // 'export async fn' — async followed by fn
+                return _tokens[_current + 1].Lexeme == "async"
+                    && _current + 2 < _tokens.Count
+                    && _tokens[_current + 2].Type == TokenType.Fn;
+            default:
+                return false;
+        }
     }
 
     /// <summary>Returns true if the token type can start an expression (used for await keyword disambiguation).</summary>
