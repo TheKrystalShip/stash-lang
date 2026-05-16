@@ -27,7 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
-_(none active)_
+- sa1403-configurable-threshold — SA1403 Configurable String Concatenation Threshold | .kanban/2-in-progress/sa1403-configurable-threshold/ | 2 phases | started 2026-05-16
 
 ---
 
