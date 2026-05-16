@@ -48,13 +48,13 @@ public class DiffPackageTests : StashTestBase
     [Fact]
     public void DiffLines_IdenticalInputs_IsEqual()
     {
-        Assert.True(RunDiffBool("let r = diff.diff.diffLines(\"foo\\nbar\\n\", \"foo\\nbar\\n\", null); let result = r.equal;"));
+        Assert.True(RunDiffBool("let r = diff.lines(\"foo\\nbar\\n\", \"foo\\nbar\\n\", null); let result = r.equal;"));
     }
 
     [Fact]
     public void DiffLines_IdenticalInputs_ZeroHunks()
     {
-        Assert.Equal(0L, RunDiffInt("let r = diff.diff.diffLines(\"foo\\nbar\\n\", \"foo\\nbar\\n\", null); let result = len(r.hunks);"));
+        Assert.Equal(0L, RunDiffInt("let r = diff.lines(\"foo\\nbar\\n\", \"foo\\nbar\\n\", null); let result = len(r.hunks);"));
     }
 
     [Fact]
@@ -67,7 +67,7 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let r = diff.diff.diffLines(""foo\nbar\nbaz\n"", ""foo\nbar\nbaz\n"", opts);
+let r = diff.lines(""foo\nbar\nbaz\n"", ""foo\nbar\nbaz\n"", opts);
 let result = r.equal;";
         Assert.True(RunDiffBool(body));
     }
@@ -77,8 +77,8 @@ let result = r.equal;";
     [Fact]
     public void DiffLines_FullyDisjoint_CountsMatch()
     {
-        long ins = RunDiffInt("let r = diff.diff.diffLines(\"a\\nb\\nc\\n\", \"x\\ny\\nz\\n\", null); let result = r.insertions;");
-        long del = RunDiffInt("let r = diff.diff.diffLines(\"a\\nb\\nc\\n\", \"x\\ny\\nz\\n\", null); let result = r.deletions;");
+        long ins = RunDiffInt("let r = diff.lines(\"a\\nb\\nc\\n\", \"x\\ny\\nz\\n\", null); let result = r.insertions;");
+        long del = RunDiffInt("let r = diff.lines(\"a\\nb\\nc\\n\", \"x\\ny\\nz\\n\", null); let result = r.deletions;");
         Assert.Equal(3L, ins);
         Assert.Equal(3L, del);
     }
@@ -88,9 +88,9 @@ let result = r.equal;";
     [Fact]
     public void DiffLines_SingleMiddleChange_OneHunkOneInsertOneDelete()
     {
-        long hunks = RunDiffInt("let r = diff.diff.diffLines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = len(r.hunks);");
-        long ins = RunDiffInt("let r = diff.diff.diffLines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.insertions;");
-        long del = RunDiffInt("let r = diff.diff.diffLines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.deletions;");
+        long hunks = RunDiffInt("let r = diff.lines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = len(r.hunks);");
+        long ins = RunDiffInt("let r = diff.lines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.insertions;");
+        long del = RunDiffInt("let r = diff.lines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.deletions;");
         Assert.Equal(1L, hunks);
         Assert.Equal(1L, ins);
         Assert.Equal(1L, del);
@@ -99,8 +99,8 @@ let result = r.equal;";
     [Fact]
     public void DiffLines_SingleInsertInMiddle_HasOneInsertZeroDelete()
     {
-        long ins = RunDiffInt("let r = diff.diff.diffLines(\"a\\nc\\n\", \"a\\nb\\nc\\n\", null); let result = r.insertions;");
-        long del = RunDiffInt("let r = diff.diff.diffLines(\"a\\nc\\n\", \"a\\nb\\nc\\n\", null); let result = r.deletions;");
+        long ins = RunDiffInt("let r = diff.lines(\"a\\nc\\n\", \"a\\nb\\nc\\n\", null); let result = r.insertions;");
+        long del = RunDiffInt("let r = diff.lines(\"a\\nc\\n\", \"a\\nb\\nc\\n\", null); let result = r.deletions;");
         Assert.Equal(1L, ins);
         Assert.Equal(0L, del);
     }
@@ -108,8 +108,8 @@ let result = r.equal;";
     [Fact]
     public void DiffLines_SingleDeleteInMiddle_HasOneDeleteZeroInsert()
     {
-        long ins = RunDiffInt("let r = diff.diff.diffLines(\"a\\nb\\nc\\n\", \"a\\nc\\n\", null); let result = r.insertions;");
-        long del = RunDiffInt("let r = diff.diff.diffLines(\"a\\nb\\nc\\n\", \"a\\nc\\n\", null); let result = r.deletions;");
+        long ins = RunDiffInt("let r = diff.lines(\"a\\nb\\nc\\n\", \"a\\nc\\n\", null); let result = r.insertions;");
+        long del = RunDiffInt("let r = diff.lines(\"a\\nb\\nc\\n\", \"a\\nc\\n\", null); let result = r.deletions;");
         Assert.Equal(0L, ins);
         Assert.Equal(1L, del);
     }
@@ -130,7 +130,7 @@ let opts = diff.types.DiffOptions {
 };
 let a = ""1\n2\n3\n4\n5\n6\n7\n"";
 let b = ""X\n2\n3\n4\n5\n6\nY\n"";
-let r = diff.diff.diffLines(a, b, opts);
+let r = diff.lines(a, b, opts);
 let result = len(r.hunks);";
         Assert.Equal(2L, RunDiffInt(body));
     }
@@ -148,7 +148,7 @@ let opts = diff.types.DiffOptions {
 };
 let a = ""1\n2\n3\n4\n5\n"";
 let b = ""X\n2\n3\n4\nY\n"";
-let r = diff.diff.diffLines(a, b, opts);
+let r = diff.lines(a, b, opts);
 let result = len(r.hunks);";
         Assert.Equal(1L, RunDiffInt(body));
     }
@@ -158,8 +158,8 @@ let result = len(r.hunks);";
     [Fact]
     public void DiffLines_EmptyA_AllInsert()
     {
-        long ins = RunDiffInt("let r = diff.diff.diffLines(\"\", \"a\\nb\\nc\\n\", null); let result = r.insertions;");
-        long del = RunDiffInt("let r = diff.diff.diffLines(\"\", \"a\\nb\\nc\\n\", null); let result = r.deletions;");
+        long ins = RunDiffInt("let r = diff.lines(\"\", \"a\\nb\\nc\\n\", null); let result = r.insertions;");
+        long del = RunDiffInt("let r = diff.lines(\"\", \"a\\nb\\nc\\n\", null); let result = r.deletions;");
         Assert.Equal(3L, ins);
         Assert.Equal(0L, del);
     }
@@ -167,8 +167,8 @@ let result = len(r.hunks);";
     [Fact]
     public void DiffLines_EmptyB_AllDelete()
     {
-        long ins = RunDiffInt("let r = diff.diff.diffLines(\"a\\nb\\nc\\n\", \"\", null); let result = r.insertions;");
-        long del = RunDiffInt("let r = diff.diff.diffLines(\"a\\nb\\nc\\n\", \"\", null); let result = r.deletions;");
+        long ins = RunDiffInt("let r = diff.lines(\"a\\nb\\nc\\n\", \"\", null); let result = r.insertions;");
+        long del = RunDiffInt("let r = diff.lines(\"a\\nb\\nc\\n\", \"\", null); let result = r.deletions;");
         Assert.Equal(0L, ins);
         Assert.Equal(3L, del);
     }
@@ -176,14 +176,14 @@ let result = len(r.hunks);";
     [Fact]
     public void DiffLines_BothEmpty_IsEqual()
     {
-        Assert.True(RunDiffBool("let r = diff.diff.diffLines(\"\", \"\", null); let result = r.equal;"));
+        Assert.True(RunDiffBool("let r = diff.lines(\"\", \"\", null); let result = r.equal;"));
     }
 
     [Fact]
     public void DiffLines_NoTrailingNewline_RecordedOnResult()
     {
-        bool aMiss = RunDiffBool("let r = diff.diff.diffLines(\"foo\\nbar\", \"foo\\nbar\\n\", null); let result = r.aMissingNewline;");
-        bool bMiss = RunDiffBool("let r = diff.diff.diffLines(\"foo\\nbar\", \"foo\\nbar\\n\", null); let result = r.bMissingNewline;");
+        bool aMiss = RunDiffBool("let r = diff.lines(\"foo\\nbar\", \"foo\\nbar\\n\", null); let result = r.aMissingNewline;");
+        bool bMiss = RunDiffBool("let r = diff.lines(\"foo\\nbar\", \"foo\\nbar\\n\", null); let result = r.bMissingNewline;");
         Assert.True(aMiss);
         Assert.False(bMiss);
     }
@@ -192,7 +192,7 @@ let result = len(r.hunks);";
     public void DiffLines_CRLF_NormalizedToLF_NoChange()
     {
         // Same content, different line endings — should be equal.
-        Assert.True(RunDiffBool("let r = diff.diff.diffLines(\"foo\\r\\nbar\\r\\n\", \"foo\\nbar\\n\", null); let result = r.equal;"));
+        Assert.True(RunDiffBool("let r = diff.lines(\"foo\\r\\nbar\\r\\n\", \"foo\\nbar\\n\", null); let result = r.equal;"));
     }
 
     // ── 6. Option flags ──────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let r = diff.diff.diffLines(""foo  bar\n"", ""foo bar\n"", opts);
+let r = diff.lines(""foo  bar\n"", ""foo bar\n"", opts);
 let result = r.equal;";
         Assert.True(RunDiffBool(body));
     }
@@ -222,7 +222,7 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let r = diff.diff.diffLines(""foo   \n"", ""foo\n"", opts);
+let r = diff.lines(""foo   \n"", ""foo\n"", opts);
 let result = r.equal;";
         Assert.True(RunDiffBool(body));
     }
@@ -237,7 +237,7 @@ let opts = diff.types.DiffOptions {
   ignoreCase: true, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let r = diff.diff.diffLines(""Foo\nBar\n"", ""foo\nbar\n"", opts);
+let r = diff.lines(""Foo\nBar\n"", ""foo\nbar\n"", opts);
 let result = r.equal;";
         Assert.True(RunDiffBool(body));
     }
@@ -252,7 +252,7 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: true, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let r = diff.diff.diffLines(""foo\n\nbar\n"", ""foo\nbar\n\n"", opts);
+let r = diff.lines(""foo\n\nbar\n"", ""foo\nbar\n\n"", opts);
 let result = r.equal;";
         Assert.True(RunDiffBool(body));
     }
@@ -267,7 +267,7 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 1, aLabel: ""a"", bLabel: ""b""
 };
-let result = diff.diff.diffLines(""a\nb\nc\n"", ""d\ne\nf\n"", opts).equal;";
+let result = diff.lines(""a\nb\nc\n"", ""d\ne\nf\n"", opts).equal;";
         var ex = Assert.ThrowsAny<RuntimeError>(() => RunDiff(body));
         Assert.Contains("maxLines", ex.Message);
     }
@@ -281,14 +281,14 @@ let result = diff.diff.diffLines(""a\nb\nc\n"", ""d\ne\nf\n"", opts).equal;";
         string body = @"
 let a = ""alpha\nbeta\ngamma\ndelta\nepsilon\n"";
 let b = ""alpha\nbeta\nGAMMA\ndelta\nepsilon\n"";
-let m = diff.diff.diffLines(a, b, null);
+let m = diff.lines(a, b, null);
 let pOpts = diff.types.DiffOptions {
   algorithm: diff.types.DiffAlgorithm.PATIENCE,
   contextLines: 3, whitespace: diff.types.WhitespaceMode.NONE,
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let p = diff.diff.diffLines(a, b, pOpts);
+let p = diff.lines(a, b, pOpts);
 let result = (m.insertions == p.insertions) && (m.deletions == p.deletions);";
         Assert.True(RunDiffBool(body));
     }
@@ -300,8 +300,8 @@ let result = (m.insertions == p.insertions) && (m.deletions == p.deletions);";
     {
         // The canonical "foo/bar/qux -> foo/baz/qux" fixture from §5 of the spec.
         string body = @"
-let r = diff.diff.diffLines(""foo\nbar\nqux\n"", ""foo\nbaz\nqux\n"", null);
-let result = diff.render.renderUnified(r);";
+let r = diff.lines(""foo\nbar\nqux\n"", ""foo\nbaz\nqux\n"", null);
+let result = diff.render.unified(r);";
         string expected =
             "--- a\n" +
             "+++ b\n" +
@@ -316,7 +316,7 @@ let result = diff.render.renderUnified(r);";
     [Fact]
     public void RenderUnified_EqualInputs_ReturnsEmptyString()
     {
-        string body = "let r = diff.diff.diffLines(\"x\\ny\\n\", \"x\\ny\\n\", null); let result = diff.render.renderUnified(r);";
+        string body = "let r = diff.lines(\"x\\ny\\n\", \"x\\ny\\n\", null); let result = diff.render.unified(r);";
         Assert.Equal("", RunDiffString(body));
     }
 
@@ -324,8 +324,8 @@ let result = diff.render.renderUnified(r);";
     public void RenderUnified_MissingTrailingNewline_EmitsMarker()
     {
         string body = @"
-let r = diff.diff.diffLines(""foo\nbar"", ""foo\nbaz\n"", null);
-let result = diff.render.renderUnified(r);";
+let r = diff.lines(""foo\nbar"", ""foo\nbaz\n"", null);
+let result = diff.render.unified(r);";
         string output = RunDiffString(body);
         Assert.Contains("\\ No newline at end of file", output);
     }
@@ -334,8 +334,8 @@ let result = diff.render.renderUnified(r);";
     public void RenderUnified_HunkHeaderUsesCommaSeparator()
     {
         string body = @"
-let r = diff.diff.diffLines(""1\n2\n3\n"", ""1\nX\n3\n"", null);
-let result = diff.render.renderUnified(r);";
+let r = diff.lines(""1\n2\n3\n"", ""1\nX\n3\n"", null);
+let result = diff.render.unified(r);";
         string output = RunDiffString(body);
         Assert.Contains("@@ -1,3 +1,3 @@", output);
     }
@@ -351,8 +351,8 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""a"", bLabel: ""b""
 };
-let r = diff.diff.diffLines(""1\n2\n3\n"", ""1\nX\n3\n"", opts);
-let result = diff.render.renderUnified(r);";
+let r = diff.lines(""1\n2\n3\n"", ""1\nX\n3\n"", opts);
+let result = diff.render.unified(r);";
         string output = RunDiffString(body);
         Assert.Contains("@@ -2 +2 @@", output);
     }
@@ -369,8 +369,8 @@ let opts = diff.types.DiffOptions {
   ignoreCase: false, ignoreBlankLines: false, preserveLineEndings: false,
   maxLines: 0, aLabel: ""before.txt"", bLabel: ""after.txt""
 };
-let r = diff.diff.diffLines(""a\n"", ""b\n"", opts);
-let result = diff.render.renderUnified(r);";
+let r = diff.lines(""a\n"", ""b\n"", opts);
+let result = diff.render.unified(r);";
         string output = RunDiffString(body);
         Assert.Contains("--- before.txt", output);
         Assert.Contains("+++ after.txt", output);
@@ -391,8 +391,8 @@ let result = diff.render.renderUnified(r);";
             string aLit = pathA.Replace("\\", "\\\\");
             string bLit = pathB.Replace("\\", "\\\\");
             string body = $@"
-let r = diff.diff.diffFiles(""{aLit}"", ""{bLit}"", null);
-let result = diff.render.renderUnified(r);";
+let r = diff.files(""{aLit}"", ""{bLit}"", null);
+let result = diff.render.unified(r);";
             string output = RunDiffString(body);
             Assert.Contains("--- " + pathA, output);
             Assert.Contains("+++ " + pathB, output);
@@ -410,13 +410,13 @@ let result = diff.render.renderUnified(r);";
     [Fact]
     public void Equal_IdenticalInputs_True()
     {
-        Assert.True(RunDiffBool("let result = diff.diff.equal(\"a\\nb\\n\", \"a\\nb\\n\", null);"));
+        Assert.True(RunDiffBool("let result = diff.equal(\"a\\nb\\n\", \"a\\nb\\n\", null);"));
     }
 
     [Fact]
     public void Equal_DifferentInputs_False()
     {
-        Assert.False(RunDiffBool("let result = diff.diff.equal(\"a\\n\", \"b\\n\", null);"));
+        Assert.False(RunDiffBool("let result = diff.equal(\"a\\n\", \"b\\n\", null);"));
     }
 
     // ── 11. Colorize ─────────────────────────────────────────────────────────
@@ -432,8 +432,8 @@ let result = diff.render.renderUnified(r);";
     public void Colorize_Enabled_WrapsLinesWithAnsiEscapes()
     {
         string body = @"
-let r = diff.diff.diffLines(""x\n"", ""y\n"", null);
-let result = diff.render.colorize(diff.render.renderUnified(r), true);";
+let r = diff.lines(""x\n"", ""y\n"", null);
+let result = diff.render.colorize(diff.render.unified(r), true);";
         string output = RunDiffString(body);
         // ESC = char 27
         Assert.Contains("[31m-x", output);
@@ -446,8 +446,8 @@ let result = diff.render.colorize(diff.render.renderUnified(r), true);";
     [Fact]
     public void Hunk_OldAndNewStart_AreOneBased()
     {
-        long oldStart = RunDiffInt("let r = diff.diff.diffLines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.hunks[0].oldStart;");
-        long newStart = RunDiffInt("let r = diff.diff.diffLines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.hunks[0].newStart;");
+        long oldStart = RunDiffInt("let r = diff.lines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.hunks[0].oldStart;");
+        long newStart = RunDiffInt("let r = diff.lines(\"foo\\nbar\\nqux\\n\", \"foo\\nbaz\\nqux\\n\", null); let result = r.hunks[0].newStart;");
         Assert.Equal(1L, oldStart);
         Assert.Equal(1L, newStart);
     }
@@ -458,7 +458,7 @@ let result = diff.render.colorize(diff.render.renderUnified(r), true);";
         // The Hunk's edits include EQUAL context, then DELETE, then INSERT.
         // Find the DELETE edit (text == "bar") and assert newLine is null.
         string body = @"
-let r = diff.diff.diffLines(""foo\nbar\nqux\n"", ""foo\nbaz\nqux\n"", null);
+let r = diff.lines(""foo\nbar\nqux\n"", ""foo\nbaz\nqux\n"", null);
 let edits = r.hunks[0].edits;
 let result = null;
 for (let e in edits) {
@@ -473,7 +473,7 @@ for (let e in edits) {
     public void Edit_InsertOp_HasNullOldLine()
     {
         string body = @"
-let r = diff.diff.diffLines(""foo\nbar\nqux\n"", ""foo\nbaz\nqux\n"", null);
+let r = diff.lines(""foo\nbar\nqux\n"", ""foo\nbaz\nqux\n"", null);
 let edits = r.hunks[0].edits;
 let result = null;
 for (let e in edits) {
@@ -499,7 +499,7 @@ while (i < 200) {
   a = a + ""line "" + conv.toStr(i) + ""\n"";
   i = i + 1;
 }
-let r = diff.diff.diffLines(a, a, null);
+let r = diff.lines(a, a, null);
 let result = r.equal;";
         Assert.True(RunDiffBool(body));
     }
