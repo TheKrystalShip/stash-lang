@@ -1,0 +1,81 @@
+#!/usr/bin/env stash
+// examples/type_hints.stash
+//
+// Type annotations in Stash are ADVISORY. They are surfaced by editor tooling
+// (hover, completion, the analyzer's SA0301 warning) but they are erased at
+// compile time — they do NOT enforce types at runtime. This example walks
+// through where annotations may appear and what they do (and don't) do.
+
+io.println("=" * 60);
+io.println("    Type Hints in Stash — Advisory, Not Enforced");
+io.println("=" * 60);
+
+// ─── Simple annotations on let / const ─────────────────────────────
+io.println("\n-- Simple annotations --");
+let port: int = 443;
+const HOST: string = "example.com";
+io.println("  port = " + port + " (typeof: " + typeof(port) + ")");
+io.println("  HOST = " + HOST + " (typeof: " + typeof(HOST) + ")");
+
+// Annotations on `fn` parameters and return type
+fn greet(name: string, count: int) -> string {
+    return str.repeat("Hello, " + name + "! ", count);
+}
+io.println("  " + greet("world", 2));
+
+// ─── Annotations are advisory: mismatches do NOT throw ─────────────
+io.println("\n-- Annotations are advisory --");
+let n: int = "not an int";   // analyzer warns (SA0301); runtime accepts
+io.println("  let n: int = \"not an int\" -> typeof(n) = " + typeof(n));
+
+let mixed: int[] = [1, "two", 3.0];   // mixed types accepted at runtime
+io.println("  let mixed: int[] = [1, \"two\", 3.0]");
+io.println("    typeof(mixed)     = " + typeof(mixed));
+io.println("    mixed is array    = " + (mixed is array));
+io.println("    mixed is int[]    = " + (mixed is int[]));   // false — annotation is erased
+
+// ─── To narrow a number to a byte, use conv.toByte explicitly ──────
+io.println("\n-- Explicit conversion via conv --");
+let b: byte = 200;   // does NOT narrow — b is still an int (literal stays a long)
+io.println("  let b: byte = 200 -> typeof(b) = " + typeof(b));
+
+let realByte = conv.toByte(200);
+io.println("  conv.toByte(200)  -> typeof   = " + typeof(realByte));
+
+// ─── Namespace-qualified (dotted) type annotations ─────────────────
+io.println("\n-- Dotted type annotations --");
+// `import "@stash/diff" as diff;`  // pseudo-import; works wherever package is installed
+// fn render(opts: diff.DiffOptions) -> diff.DiffResult { ... }
+//
+// Dotted forms (`diff.DiffOptions`, `diff.Edit[]`) parse anywhere a type may
+// appear: `let`, `const`, `fn` params/return, `for-in`, struct/interface
+// fields, lambda params, `catch (T e)`, `extend T`, struct literal `T { }`,
+// and `is T`. The head of the path resolves like any identifier; trailing
+// segments name members of that head.
+io.println("  (see source for dotted-form syntax notes)");
+
+// ─── Runtime checks via `is` ───────────────────────────────────────
+io.println("\n-- Runtime type checks: `is` ----------");
+let value = 42;
+if (value is int) {
+    io.println("  " + value + " is int -> true");
+}
+if (!(value is string)) {
+    io.println("  " + value + " is string -> false");
+}
+
+// ─── Stdlib factories produce typed arrays ─────────────────────────
+io.println("\n-- Typed arrays from stdlib factories --");
+let ints = arr.typed([1, 2, 3, 4], "int");
+io.println("  arr.typed([1,2,3,4], \"int\")");
+io.println("    typeof          = " + typeof(ints));
+io.println("    is int[]        = " + (ints is int[]));
+io.println("    arr.elementType = " + arr.elementType(ints));
+
+let filtered = arr.filter(ints, (x) => x > 1);
+io.println("  arr.filter preserves element type:");
+io.println("    typeof(filtered)= " + typeof(filtered));
+
+io.println("\nDone. Annotations document intent and inform tooling.");
+io.println("They never throw at runtime — use `is` / `conv` / analyzer rules");
+io.println("for runtime checks and explicit conversions.");

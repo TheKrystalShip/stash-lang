@@ -321,10 +321,11 @@ cycle handling.
 
 ### Type Model
 
-Stash is dynamically typed. Values carry runtime type information. Type hints may
-appear in declarations and signatures; unless a feature states otherwise, type
-hints are checked at runtime and by static analysis tools rather than by a separate
-compile-time type checker.
+Stash is dynamically typed. Values carry runtime type information. Type
+annotations may appear in declarations and signatures; they are advisory
+metadata consumed by editor tooling and the static analyzer and are **erased
+at compile time**. They do not participate in runtime dispatch. See *Type
+Hints* below for the full statement.
 
 The core value categories are:
 
@@ -439,7 +440,7 @@ Assigning to a `const` binding produces a runtime error.
 
 ### Type Hints
 
-Bindings, parameters, fields, and return positions may include type hints.
+Bindings, parameters, fields, and return positions may include type annotations.
 
 ```stash
 let port: int = 443;
@@ -448,13 +449,35 @@ fn open(path: string) -> bool {
 }
 ```
 
-A type hint names a runtime type, user-defined type, interface, or array type such
-as `int[]`. If a checked value does not match its type hint, evaluation produces a
-runtime error.
+**Type annotations are advisory metadata.** They are surfaced by editor tooling
+(hover, completion, diagnostics) and consumed by the static analyzer, but they
+are **erased at compile time** and have **no effect on runtime behavior**. A
+value that does not match its annotation will not raise a runtime error.
 
-Type hints may be **namespace-qualified** using a dotted path, allowing types
-imported through an alias to be referenced where the imported name itself is not
-in scope:
+```stash
+let n: int = "not a number";  // runs without error; analyzer warns (SA0301)
+let arr: int[] = [1, "two"];  // runs without error; array contains mixed types
+```
+
+For an explicit runtime check, use `is`:
+
+```stash
+if value is int {
+    // ...
+}
+```
+
+For value conversion (e.g. narrowing an `int` to a `byte`) use the `conv`
+namespace:
+
+```stash
+let b = conv.toByte(200);     // b is a byte
+```
+
+A type annotation accepts a type name, an array suffix (`T[]`), or a
+namespace-qualified dotted path. The head of a dotted path resolves like any
+identifier; trailing segments name members of that head. Dotted paths may also
+carry the `[]` suffix (`diff.Edit[]`).
 
 ```stash
 import "diff" as diff;
@@ -464,9 +487,16 @@ fn render(options: diff.DiffOptions) -> diff.DiffResult {
 }
 ```
 
-The head of the path resolves like any identifier; trailing segments name members
-of that head. Dotted type hints may also carry the `[]` array suffix
-(`diff.Edit[]`).
+Every type-position production — `let`/`const`/`fn` parameters and return,
+`for-in`, struct and interface fields, lambda parameters, `catch (T e)`,
+`extend T`, struct literal `T { ... }`, and `is T` — parses through the same
+grammar and accepts the same forms.
+
+The two grammar positions whose right-hand side is an *expression* — `is`
+followed by a value (where `value` evaluates to a type at runtime) and a
+struct literal whose `T` resolves through a local binding — continue to do
+what they always did at runtime. Erasure removes implicit, compiler-emitted
+checks; it does not change explicit user-written ones.
 
 ### Destructuring Declarations
 

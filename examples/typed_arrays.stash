@@ -1,53 +1,53 @@
 #!/usr/bin/env stash
 // examples/typed_arrays.stash
+//
+// Typed arrays in Stash are produced by stdlib factories — NOT by type
+// annotations. `let xs: int[] = [...]` is just an annotation; the array
+// literal is a plain `array`. To get a typed array (one that participates
+// in `xs is int[]` and propagates its element type through arr.filter /
+// arr.slice / arr.unique / etc.), call `arr.typed`, `arr.new`, or another
+// stdlib factory.
+//
+// See examples/type_hints.stash for the broader story on type annotations.
 
-io.println("=" * 54);
-io.println("    Typed Arrays — Type-Safe Collections in Stash");
-io.println("=" * 54);
+io.println("=" * 60);
+io.println("    Typed Arrays — Stdlib Factories");
+io.println("=" * 60);
 
-// ─── Declaration ──────────────────────────────────
-io.println("\n-- Declaration --");
-let ints: int[] = [10, 20, 30, 40, 50];
-let floats: float[] = [1.5, 2.7, 3.14, 4.0];
-let names: string[] = ["alpha", "beta", "gamma"];
-let flags: bool[] = [true, false, true, true, false];
+// ─── Construction ────────────────────────────────────────────────
+io.println("\n-- Construction --");
+let ints    = arr.typed([10, 20, 30, 40, 50], "int");
+let floats  = arr.typed([1.5, 2.7, 3.14, 4.0], "float");
+let names   = arr.typed(["alpha", "beta", "gamma"], "string");
+let flags   = arr.typed([true, false, true, true, false], "bool");
 
 io.println("  int[]:    " + ints);
 io.println("  float[]:  " + floats);
 io.println("  string[]: " + names);
 io.println("  bool[]:   " + flags);
 
-// ─── Const Typed Arrays ───────────────────────────
-io.println("\n-- Const Typed Arrays --");
-const PRIMES: int[] = [2, 3, 5, 7, 11, 13];
-io.println("  primes: " + PRIMES);
-io.println("  count:  " + len(PRIMES));
-
-// ─── Type Checking ───────────────────────────────
+// ─── Type Checking ───────────────────────────────────────────────
 io.println("\n-- Type Checking --");
 io.println("  typeof(ints):           " + typeof(ints));
 io.println("  typeof(floats):         " + typeof(floats));
-io.println("  typeof(names):          " + typeof(names));
 io.println("  ints is int[]:          " + (ints is int[]));
 io.println("  ints is array:          " + (ints is array));
 io.println("  ints is string[]:       " + (ints is string[]));
-io.println("  [1,2] is int[]:         " + ([1, 2] is int[]));
+io.println("  [1,2] is int[]:         " + ([1, 2] is int[]));   // plain literal → false
 
-// ─── Mutation ────────────────────────────────────
+// ─── Mutation (element-type enforced on push) ────────────────────
 io.println("\n-- Mutation --");
-let scores: int[] = [80, 90, 85];
+let scores = arr.typed([80, 90, 85], "int");
 io.println("  before push:       " + scores);
 arr.push(scores, 95);
 io.println("  after push 95:     " + scores);
-arr.insert(scores, 0, 75);
-io.println("  after insert 75@0: " + scores);
 let top = arr.pop(scores);
 io.println("  popped:            " + top);
 io.println("  remaining:         " + scores);
 
-// ─── Type-Preserving Operations ──────────────────
+// ─── Type-Preserving Operations ──────────────────────────────────
 io.println("\n-- Type-Preserving Operations --");
-let temps: float[] = [98.6, 101.2, 97.8, 103.5, 99.1];
+let temps = arr.typed([98.6, 101.2, 97.8, 103.5, 99.1], "float");
 let fever = arr.filter(temps, (t) => t > 100.0);
 io.println("  all temps:        " + temps);
 io.println("  fever temps:      " + fever);
@@ -57,68 +57,24 @@ let first3 = arr.slice(temps, 0, 3);
 io.println("  first 3 (slice):  " + first3);
 io.println("  typeof(first3):   " + typeof(first3));
 
-let unsorted: int[] = [5, 3, 1, 4, 2];
-io.println("  before sort:      " + unsorted);
-arr.sort(unsorted);
-io.println("  after sort:       " + unsorted);
-io.println("  typeof:           " + typeof(unsorted));
+// ─── arr.new — pre-allocated zero-initialized ────────────────────
+io.println("\n-- arr.new --");
+let buf = arr.new("int", 5);
+io.println("  int[] size 5:    " + buf);
+arr.push(buf, 99);
+io.println("  after push 99:   " + buf);
 
-// ─── Iteration ───────────────────────────────────
-io.println("\n-- Iteration --");
-let people: string[] = ["Alice", "Bob", "Charlie"];
-for (let name in people) {
-    io.println("  hello, " + name + "!");
-}
+let bytes = arr.new("byte", 4);
+io.println("  byte[] size 4:   " + bytes);
 
-let evens: int[] = [2, 4, 6, 8, 10];
-let total = 0;
-for (let n in evens) {
-    total = total + n;
-}
-io.println("  sum of " + evens + " = " + total);
-
-// ─── Conversion ──────────────────────────────────
-io.println("\n-- Conversion --");
+// ─── Round-tripping with arr.untyped ─────────────────────────────
+io.println("\n-- arr.typed / arr.untyped --");
 let raw = [1, 2, 3, 4, 5];
 let typed = arr.typed(raw, "int");
-io.println("  raw typeof:     " + typeof(raw));
-io.println("  typed typeof:   " + typeof(typed));
-io.println("  elementType:    " + arr.elementType(typed));
+io.println("  raw typeof:       " + typeof(raw));
+io.println("  typed typeof:     " + typeof(typed));
+io.println("  elementType:      " + arr.elementType(typed));
 
 let untyped = arr.untyped(typed);
-io.println("  untyped typeof: " + typeof(untyped));
-io.println("  elementType:    " + arr.elementType(untyped));
-
-// ─── arr.create ─────────────────────────────────────
-io.println("\n-- arr.create --");
-let buf: int[] = arr.create("int", 5);
-io.println("  int[] capacity 5: " + buf);
-arr.push(buf, 99);
-io.println("  after push 99:    " + buf);
-
-let blank: string[] = arr.create("string", 3);
-io.println("  string[] cap 3:   " + blank);
-
-// ─── Float Promotion ─────────────────────────────
-io.println("\n-- Float Promotion --");
-let measurements: float[] = [1, 2, 3];
-arr.push(measurements, 4);
-io.println("  float[] with int literals: " + measurements);
-io.println("  typeof:                    " + typeof(measurements));
-io.println("  elementType:               " + arr.elementType(measurements));
-
-// ─── Spread ──────────────────────────────────────
-io.println("\n-- Spread --");
-let lo: int[] = [1, 2, 3];
-let hi: int[] = [7, 8, 9];
-let merged = [...lo, 4, 5, 6, ...hi];
-io.println("  lo:     " + lo);
-io.println("  hi:     " + hi);
-io.println("  merged: " + merged);
-
-let tags: string[] = ["go", "rust"];
-let more: string[] = ["stash", "python"];
-let all = [...tags, ...more];
-io.println("  tags:   " + tags);
-io.println("  more:   " + more);
-io.println("  all:    " + all);
+io.println("  untyped typeof:   " + typeof(untyped));
+io.println("  elementType:      " + arr.elementType(untyped));
