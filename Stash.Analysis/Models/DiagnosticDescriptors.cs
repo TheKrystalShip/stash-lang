@@ -199,7 +199,7 @@ public static class DiagnosticDescriptors
     // ── SA14xx — Suggestions ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA1401 = new("SA1401", "Use optional chaining", DiagnosticLevel.Information, "Suggestions", "Use optional chaining: '{0}?.{1}' instead of null check with member access.", FixApplicability.Unsafe);
     public static readonly DiagnosticDescriptor SA1402 = new("SA1402", "Use null coalescing", DiagnosticLevel.Information, "Suggestions", "Use null coalescing: '{0} ?? {1}' instead of null check with ternary.", FixApplicability.Unsafe);
-    public static readonly DiagnosticDescriptor SA1403 = new("SA1403", "Prefer string interpolation over concatenation", DiagnosticLevel.Information, "Suggestions", "String concatenation can be simplified using string interpolation.");
+    public static readonly DiagnosticDescriptor SA1403 = new("SA1403", "Prefer string interpolation over concatenation", DiagnosticLevel.Information, "Suggestions", "String concatenation of {0} literals exceeds the threshold of {1}. Consider using string interpolation.");
     /// <summary>
     /// Lookup table from code string to descriptor for suppression validation.
     /// </summary>

@@ -238,4 +238,76 @@ public class Phase6RuleOptionsTests : AnalysisTestBase
         var diags = AnalyzeSource(source, config);
         Assert.DoesNotContain(diags, d => d.Code == "SA0405");
     }
+
+    // ── SA1403 — Prefer String Interpolation (configurable threshold) ─────────
+
+    [Fact]
+    public void ProjectConfig_ParsesSA1403Threshold()
+    {
+        var config = ProjectConfig.ParseContent("options.SA1403.threshold = 5\n");
+        Assert.True(config.RuleOptions.TryGetValue("SA1403", out var opts));
+        Assert.Equal("5", opts["threshold"]);
+    }
+
+    [Fact]
+    public void PreferStringInterpolationRule_Configure_SetsThreshold()
+    {
+        var rule = new PreferStringInterpolationRule();
+        rule.Configure(new Dictionary<string, string> { ["threshold"] = "5" });
+        Assert.Equal(5, rule.Threshold);
+    }
+
+    [Fact]
+    public void PreferStringInterpolationRule_Configure_InvalidValueIgnored()
+    {
+        var rule = new PreferStringInterpolationRule();
+        rule.Configure(new Dictionary<string, string> { ["threshold"] = "abc" });
+        Assert.Equal(PreferStringInterpolationRule.DefaultThreshold, rule.Threshold);
+
+        rule.Configure(new Dictionary<string, string> { ["threshold"] = "0" });
+        Assert.Equal(PreferStringInterpolationRule.DefaultThreshold, rule.Threshold);
+
+        rule.Configure(new Dictionary<string, string> { ["threshold"] = "-1" });
+        Assert.Equal(PreferStringInterpolationRule.DefaultThreshold, rule.Threshold);
+    }
+
+    [Fact]
+    public void SA1403_OneLiteralPlusVar_WithThreshold1_ReportsInfo()
+    {
+        // With threshold=1, "Hello " + name (1 literal) must fire
+        string source = "let name = \"world\"; let s = \"Hello \" + name;\n";
+        var config = ProjectConfig.ParseContent("options.SA1403.threshold = 1\n");
+        var diags = AnalyzeSource(source, config);
+        Assert.Contains(diags, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ConfigureThreshold5_ChainOfFour_NoInfo()
+    {
+        // threshold=5, chain with 4 literals — must NOT fire
+        string source = "let name = \"x\"; let s = \"a\" + name + \"b\" + name + \"c\" + name + \"d\";\n";
+        var config = ProjectConfig.ParseContent("options.SA1403.threshold = 5\n");
+        var diags = AnalyzeSource(source, config);
+        Assert.DoesNotContain(diags, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ConfigureThreshold2_ChainOfTwoLiteralsPlusVar_ReportsInfo()
+    {
+        // threshold=2, "a" + name + "b" (2 literals) — must fire
+        string source = "let name = \"x\"; let s = \"a\" + name + \"b\";\n";
+        var config = ProjectConfig.ParseContent("options.SA1403.threshold = 2\n");
+        var diags = AnalyzeSource(source, config);
+        Assert.Contains(diags, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ConfigureInvalidThreshold_FallsBackToDefault()
+    {
+        // threshold=abc is invalid — falls back to default 3, so 2-literal chain does NOT fire
+        string source = "let name = \"x\"; let s = \"a\" + name + \"b\";\n";
+        var config = ProjectConfig.ParseContent("options.SA1403.threshold = abc\n");
+        var diags = AnalyzeSource(source, config);
+        Assert.DoesNotContain(diags, d => d.Code == "SA1403");
+    }
 }

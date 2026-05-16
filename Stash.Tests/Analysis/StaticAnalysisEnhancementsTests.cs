@@ -480,10 +480,11 @@ public class StaticAnalysisEnhancementsTests : AnalysisTestBase
     // ── SA1403 — Prefer String Interpolation ──────────────────────────────────
 
     [Fact]
-    public void SA1403_StringLiteralPlusVar_ReportsInfo()
+    public void SA1403_OneLiteralPlusVar_NoInfoAtDefault()
     {
+        // "Hello " + name has only 1 string literal — below default threshold of 3
         var diagnostics = Validate("let name = \"world\"; let s = \"Hello \" + name;");
-        Assert.Contains(diagnostics, d => d.Code == "SA1403");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
     }
 
     [Fact]
@@ -506,6 +507,55 @@ public class StaticAnalysisEnhancementsTests : AnalysisTestBase
             """;
         var diagnostics = Validate(source);
         Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ThreeLiteralsInChain_ReportsInfo()
+    {
+        // "a" + name + "b" + ", " + other has 3 string literals — fires at default threshold 3
+        var diagnostics = Validate("let name = \"x\"; let other = \"y\"; let s = \"a\" + name + \"b\" + \", \" + other;");
+        Assert.Contains(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_ChainBelowThreshold_NoInfo()
+    {
+        // "a" + name + "b" has 2 string literals — below default threshold of 3
+        var diagnostics = Validate("let name = \"x\"; let s = \"a\" + name + \"b\";");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_FiresOnceAtChainRoot()
+    {
+        // Long chain: "a" + name + "b" + other + "c" + another + "d" — 4 literals, should emit exactly ONE SA1403
+        var diagnostics = Validate("let name = \"x\"; let other = \"y\"; let another = \"z\"; let s = \"a\" + name + \"b\" + other + \"c\" + another + \"d\";");
+        Assert.Single(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_AllLiteralChain_NoInfo()
+    {
+        // "a" + "b" + "c" — all literals, no non-literal — should not fire
+        var diagnostics = Validate("let s = \"a\" + \"b\" + \"c\";");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_NonStringPlus_NoInfo()
+    {
+        // 1 + 2 + 3 — no string literals — should not fire
+        var diagnostics = Validate("let s = 1 + 2 + 3;");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA1403");
+    }
+
+    [Fact]
+    public void SA1403_MessageIncludesCount()
+    {
+        // Diagnostic message must contain the literal count (3) for a 3-literal chain
+        var diagnostics = Validate("let name = \"x\"; let other = \"y\"; let s = \"a\" + name + \"b\" + \", \" + other;");
+        var diag = Assert.Single(diagnostics, d => d.Code == "SA1403");
+        Assert.Contains("3", diag.Message);
     }
 
     // ── Suppression Reason Field ──────────────────────────────────────────────

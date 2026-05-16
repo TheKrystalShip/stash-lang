@@ -29,6 +29,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private readonly Dictionary<string, int> _activeLockPaths = new();
     private readonly bool _isRepl;
     private readonly Dictionary<string, Expr> _varInitializers = new();
+    private TokenType? _parentBinaryOperator;
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
@@ -174,7 +175,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         LoopDepth = _loopDepth,
         FunctionDepth = _functionDepth,
         ElevateDepth = _elevateDepth,
-        ReportDiagnostic = _diagnostics.Add
+        ReportDiagnostic = _diagnostics.Add,
+        ParentBinaryOperator = _parentBinaryOperator,
     };
 
     private RuleContext BuildPostContext(List<Stmt> statements) => new RuleContext
@@ -691,8 +693,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
         DispatchNodeRules(expr);
+        var savedParent = _parentBinaryOperator;
+        _parentBinaryOperator = expr.Operator.Type;
         expr.Left.Accept(this);
         expr.Right.Accept(this);
+        _parentBinaryOperator = savedParent;
         return null;
     }
 

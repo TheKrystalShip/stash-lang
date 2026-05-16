@@ -134,6 +134,7 @@ Place a `.stashcheck` file in your project root (or any directory). `stash-check
 | `require-suppression-reason = true` | Require a reason on all inline suppression comments                  |
 | `severity.<CODE> = <level>`         | Override severity for a rule: `error`, `warning`, `info`, `off`      |
 | `options.<CODE>.<key> = <value>`    | Rule-specific option (e.g., complexity thresholds)                   |
+| `options.SA1403.threshold = <N>`    | Minimum string literal count in a `+` chain before SA1403 fires (default: 3) |
 
 ### Per-File Overrides
 
