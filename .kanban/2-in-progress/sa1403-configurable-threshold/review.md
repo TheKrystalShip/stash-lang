@@ -122,7 +122,8 @@ dotnet test Stash.Tests/Stash.Tests.csproj --filter "FullyQualifiedName~SA1403_I
 
 ## F03 — [MINOR] Phase 1B modified `Stash.Analysis/Visitors/SemanticValidator.cs` outside its declared `files` scope
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** (this commit)
 **Files:** `.kanban/2-in-progress/sa1403-configurable-threshold/plan.yaml:61-66`
 **Phase:** 1B
 **Commit:** 78ca35f
@@ -158,7 +159,8 @@ Expect to see the path appear under Phase 1B's `files:` block.
 
 ## F04 — [MINOR] Diagnostic message reads awkwardly at threshold=1 and is technically wrong (says "exceeds" when count equals threshold)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** efab25e
 **Files:** `Stash.Analysis/Models/DiagnosticDescriptors.cs:202`
 **Phase:** 1B
 **Commit:** 78ca35f

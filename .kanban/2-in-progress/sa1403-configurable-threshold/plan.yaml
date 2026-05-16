@@ -1,0 +1,114 @@
+schema_version: 1
+
+feature: sa1403-configurable-threshold
+title: SA1403 Configurable String Concatenation Threshold
+
+spec: ./spec.md
+context: ./context.md
+
+created: 2026-05-16
+architect_session: opus-4.7
+
+default_verify:
+  - dotnet build Stash.Analysis/Stash.Analysis.csproj
+
+scope:
+  - Stash.Analysis/Rules/Suggestions/PreferStringInterpolationRule.cs
+  - Stash.Analysis/Rules/RuleContext.cs
+  - Stash.Analysis/Engines/SemanticValidator.cs
+  - Stash.Analysis/Visitors/SemanticValidator.cs
+  - Stash.Analysis/Models/DiagnosticDescriptors.cs
+  - Stash.Tests/Analysis/StaticAnalysisEnhancementsTests.cs
+  - Stash.Tests/Analysis/Phase6RuleOptionsTests.cs
+  - Stash.Check/README.md
+
+phases:
+  - id: 1A
+    title: Verify RuleContext parent visibility and AST grouping
+    deps: []
+    files:
+      - Stash.Analysis/Rules/RuleContext.cs
+      - Stash.Analysis/Engines/SemanticValidator.cs
+    verify:
+      - dotnet build Stash.Analysis/Stash.Analysis.csproj
+    non_goals:
+      - Do not modify PreferStringInterpolationRule yet (Phase 1B)
+      - Do not modify DiagnosticDescriptors yet (Phase 1B)
+      - Do not add or rename tests (Phase 1B)
+      - Do not update Stash.Check/README.md (Phase 1B)
+      - If RuleContext already exposes the parent BinaryExpr (or an equivalent
+        "parent-is-plus" signal), make ZERO code changes — just document the
+        finding in notes/1A.md and finish the phase green.
+      - If parent visibility is missing, add the MINIMUM new field necessary
+        (e.g. a `ParentBinaryOperator` TokenType? on RuleContext, or a
+        `ParentExpr` reference). Do not refactor the visitor pattern.
+      - Confirm whether `(expr)` produces a Group/Paren AST node or is
+        transparent, and record the answer in notes/1A.md so Phase 1B knows
+        whether to treat parenthesized sub-chains as flat or as leaves.
+    est_tokens: 20000
+    notes: |
+      Write findings to notes/1A.md (create the file). Phase 1B reads it to
+      decide between detection approach (A) — pure parent check — and approach
+      (B) — alternative if parent is unavailable.
+
+      If you DO add a field to RuleContext, leave every existing rule untouched:
+      the field is optional / nullable. Tests for existing rules must still pass
+      unchanged.
+
+  - id: 1B
+    title: Rewrite SA1403 with chain counting and configurable threshold
+    deps: [1A]
+    files:
+      - Stash.Analysis/Rules/Suggestions/PreferStringInterpolationRule.cs
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Tests/Analysis/StaticAnalysisEnhancementsTests.cs
+      - Stash.Tests/Analysis/Phase6RuleOptionsTests.cs
+      - Stash.Check/README.md
+    verify:
+      - dotnet build Stash.Analysis/Stash.Analysis.csproj
+      - dotnet build Stash.Tests/Stash.Tests.csproj
+      - dotnet test Stash.Tests/Stash.Tests.csproj --filter "FullyQualifiedName~StaticAnalysisEnhancementsTests|FullyQualifiedName~Phase6RuleOptionsTests"
+      - dotnet build
+    non_goals:
+      - Do not change SA1403's Code, Category, DefaultLevel, or Title.
+      - Do not modify SA1202 or any other rule.
+      - Do not change ProjectConfig parsing logic — the `options.<CODE>.<key>`
+        machinery already exists and is the only surface we rely on.
+      - Do not add new diagnostic codes; this feature reshapes SA1403 only.
+      - Do not introduce config-parse warnings for invalid threshold values —
+        silent fall-back is the documented convention (Decision Log §7).
+      - Do not edit LSP, DAP, Playground, or VS Code grammar.
+      - Do not regenerate docs/Stash — Standard Library Reference.md — this
+        feature does not touch stdlib metadata.
+      - If a previously passing test outside the listed test files breaks
+        because it pinned the old SA1403 message string, STOP and report —
+        do not silently edit unrelated test files.
+    est_tokens: 55000
+    notes: |
+      Implementation order:
+        1. Update SA1403's MessageFormat in DiagnosticDescriptors.cs to include
+           the literal count (and, per Open Question §2, optionally the
+           threshold — pick one and stay consistent in emission sites).
+        2. Rewrite PreferStringInterpolationRule:
+             - Implement IConfigurableRule with a Threshold property (default 3).
+             - Configure() parses options["threshold"] via int.TryParse, requires
+               value > 0, otherwise keeps default. Mirror FunctionBodyTooLongRule.
+             - Analyze() skips when LoopDepth > 0 (preserved).
+             - Skip when the current BinaryExpr is NOT the chain root (use the
+               parent-info wired in Phase 1A).
+             - Compute literal count via the recursive helper from spec §3.2.
+             - Fire iff count >= Threshold AND HasNonLiteral(root).
+             - Emit ONE diagnostic at the root's span.
+        3. Update tests per spec §6 — rename the old StringLiteralPlusVar test,
+           add the new chain-length and configure-threshold tests.
+        4. Add a `options.SA1403.threshold = N` example to Stash.Check/README.md
+           in the rule-options section near the existing `options.<CODE>.<key>` row.
+
+      Manually verify: run `dotnet run --project Stash.Check -- some.stash` on a
+      script containing both a 2-literal chain (no fire) and a 3-literal chain
+      (one fire). Not part of automated verify, but useful sanity check.
+
+final_verify:
+  - dotnet build
+  - dotnet test
