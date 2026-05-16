@@ -154,9 +154,9 @@ public sealed partial class Compiler
 
     private static string[] GetTypeNames(CatchClause clause)
     {
-        var names = new string[clause.TypeTokens.Count];
-        for (int i = 0; i < clause.TypeTokens.Count; i++)
-            names[i] = clause.TypeTokens[i].Lexeme;
+        var names = new string[clause.CatchTypes.Count];
+        for (int i = 0; i < clause.CatchTypes.Count; i++)
+            names[i] = clause.CatchTypes[i].ToCanonicalString();
         return names;
     }
 

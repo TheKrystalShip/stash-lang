@@ -18,7 +18,7 @@ public class ForInStmt : Stmt
     /// <summary>Gets the loop variable token that receives each element.</summary>
     public Token VariableName { get; }
     /// <summary>Gets the optional type hint for the loop variable. <c>null</c> if no type annotation was provided.</summary>
-    public TypeHint? TypeHint { get; }
+    public TypeExpression? TypeHint { get; }
     /// <summary>Gets the expression that produces the iterable collection.</summary>
     public Expr Iterable { get; }
     /// <summary>Gets the block of statements executed for each element.</summary>
@@ -31,7 +31,7 @@ public class ForInStmt : Stmt
     /// <param name="iterable">The expression that produces the iterable collection.</param>
     /// <param name="body">The block of statements executed for each element.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ForInStmt(Token? indexName, Token variableName, TypeHint? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span, StmtType.ForIn)
+    public ForInStmt(Token? indexName, Token variableName, TypeExpression? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span, StmtType.ForIn)
     {
         IndexName = indexName;
         VariableName = variableName;

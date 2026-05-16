@@ -115,7 +115,7 @@ internal static class ControlFlowPrinter
         {
             ctx.EmitToken(); // :
             ctx.Space();
-            ctx.EmitToken(); // type
+            EmitTypeExpressionTokens(ctx, stmt.TypeHint);
         }
         ctx.Space();
         ctx.EmitToken(); // in
@@ -187,10 +187,11 @@ internal static class ControlFlowPrinter
             ctx.EmitToken(); // catch
             ctx.Space();
             ctx.EmitToken(); // (
-            // For typed catch: emit type names with | between them, then the variable
-            if (clause.TypeTokens.Count > 0)
+            // For typed catch: emit each TypeExpression (which may span multiple tokens for
+            // qualified or array forms), with `|` between them, then the variable.
+            if (clause.CatchTypes.Count > 0)
             {
-                for (int i = 0; i < clause.TypeTokens.Count; i++)
+                for (int i = 0; i < clause.CatchTypes.Count; i++)
                 {
                     if (i > 0)
                     {
@@ -198,7 +199,7 @@ internal static class ControlFlowPrinter
                         ctx.EmitToken(); // |
                         ctx.Space();
                     }
-                    ctx.EmitToken(); // type name
+                    EmitTypeExpressionTokens(ctx, clause.CatchTypes[i]);
                 }
                 ctx.Space();
             }
@@ -218,6 +219,36 @@ internal static class ControlFlowPrinter
             ctx.PushScope(ScopeKind.TryCatchBody);
             formatStmt(stmt.FinallyBody);
             ctx.PopScope();
+        }
+    }
+
+    /// <summary>
+    /// Emits the tokens that compose a structured <see cref="TypeExpression"/> in source order.
+    /// A simple type is 1 token, a qualified type is <c>2N - 1</c> tokens (identifiers + dots),
+    /// and each <c>[]</c> postfix adds two tokens.
+    /// </summary>
+    internal static void EmitTypeExpressionTokens(FormatContext ctx, TypeExpression typeExpression)
+    {
+        switch (typeExpression)
+        {
+            case SimpleType:
+                ctx.EmitToken(); // identifier
+                break;
+
+            case QualifiedType qualified:
+                ctx.EmitToken(); // first identifier
+                for (int i = 1; i < qualified.Segments.Count; i++)
+                {
+                    ctx.EmitToken(); // .
+                    ctx.EmitToken(); // identifier
+                }
+                break;
+
+            case ArrayType array:
+                EmitTypeExpressionTokens(ctx, array.Element);
+                ctx.EmitToken(); // [
+                ctx.EmitToken(); // ]
+                break;
         }
     }
 

@@ -57,12 +57,13 @@ public sealed class UnreachableCatchRule : IAnalysisRule
             // type that is NOT present in the declared union.
             // If at least one type IS present, the clause is reachable — skip those types.
             // We only fire for types that are completely absent.
-            foreach (var typeToken in clause.TypeTokens)
+            foreach (var typeExpression in clause.CatchTypes)
             {
-                if (!declaredUnion.Contains(typeToken.Lexeme))
+                string typeName = typeExpression.ToCanonicalString();
+                if (!declaredUnion.Contains(typeName))
                 {
                     context.ReportDiagnostic(DiagnosticDescriptors.SA0169.CreateDiagnostic(
-                        clause.Span, typeToken.Lexeme));
+                        clause.Span, typeName));
                 }
             }
         }

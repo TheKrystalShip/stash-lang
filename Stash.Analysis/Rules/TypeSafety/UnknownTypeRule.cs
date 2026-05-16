@@ -103,34 +103,46 @@ public sealed class UnknownTypeRule : IAnalysisRule
         }
     }
 
-    private static void ValidateTypeHint(TypeHint? typeHint, RuleContext context)
+    private static void ValidateTypeHint(TypeExpression? typeExpression, RuleContext context)
     {
-        if (typeHint == null)
+        if (typeExpression == null)
         {
             return;
         }
 
-        // Dotted (namespace-qualified) type names like `types.DiffOptions` cannot be resolved
+        // Unwrap array postfix(es) — the element type carries the resolvable name.
+        TypeExpression inner = typeExpression;
+        while (inner is ArrayType arr)
+        {
+            inner = arr.Element;
+        }
+
+        // Qualified (namespace-aliased) type names like `types.DiffOptions` cannot be resolved
         // against the local scope tree — the head identifier is an import alias whose target
         // module is not walked by this rule. Skip validation; LSP/import resolver covers it.
-        if (typeHint.Path is { Count: > 1 })
+        if (inner is QualifiedType)
         {
             return;
         }
 
-        var typeName = typeHint.Name.Lexeme;
+        if (inner is not SimpleType simple)
+        {
+            return;
+        }
+
+        var typeName = simple.Name.Lexeme;
 
         if (context.ValidBuiltInTypes.Contains(typeName))
         {
             return;
         }
 
-        var definition = context.ScopeTree.FindDefinition(typeName, typeHint.Name.Span.StartLine, typeHint.Name.Span.StartColumn);
+        var definition = context.ScopeTree.FindDefinition(typeName, simple.Name.Span.StartLine, simple.Name.Span.StartColumn);
         if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum || definition.Kind == SymbolKind.Interface))
         {
             return;
         }
 
-        context.ReportDiagnostic(DiagnosticDescriptors.SA0303.CreateDiagnostic(typeHint.Span, typeName));
+        context.ReportDiagnostic(DiagnosticDescriptors.SA0303.CreateDiagnostic(typeExpression.Span, typeName));
     }
 }

@@ -40,7 +40,7 @@ public sealed class MissingReturnRule : IAnalysisRule
         }
 
         // Skip void-like annotations
-        var returnTypeLexeme = fn.ReturnType.Lexeme;
+        var returnTypeLexeme = fn.ReturnType.ToCanonicalString();
         if (returnTypeLexeme is "void" or "never")
         {
             return;

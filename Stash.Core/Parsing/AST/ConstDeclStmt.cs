@@ -15,7 +15,7 @@ public class ConstDeclStmt : Stmt
     /// <summary>Gets the identifier token of the constant being declared.</summary>
     public Token Name { get; }
     /// <summary>Gets the optional type hint. <c>null</c> if no type annotation was provided.</summary>
-    public TypeHint? TypeHint { get; }
+    public TypeExpression? TypeHint { get; }
     /// <summary>Gets the initializer expression (always required for constants).</summary>
     public Expr Initializer { get; }
 
@@ -24,7 +24,7 @@ public class ConstDeclStmt : Stmt
     /// <param name="typeHint">The optional type hint, or <c>null</c>.</param>
     /// <param name="initializer">The initializer expression (required).</param>
     /// <param name="span">The source location of this statement.</param>
-    public ConstDeclStmt(Token name, TypeHint? typeHint, Expr initializer, SourceSpan span) : base(span, StmtType.ConstDecl)
+    public ConstDeclStmt(Token name, TypeExpression? typeHint, Expr initializer, SourceSpan span) : base(span, StmtType.ConstDecl)
     {
         Name = name;
         TypeHint = typeHint;

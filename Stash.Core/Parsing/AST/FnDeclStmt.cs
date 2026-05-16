@@ -19,11 +19,11 @@ public class FnDeclStmt : Stmt
     /// <summary>Gets the list of parameter name tokens.</summary>
     public List<Token> Parameters { get; }
     /// <summary>Gets the list of optional type hints for each parameter. Each entry is <c>null</c> if no type hint was provided.</summary>
-    public List<TypeHint?> ParameterTypes { get; }
+    public List<TypeExpression?> ParameterTypes { get; }
     /// <summary>Gets the list of optional default value expressions for each parameter. Each entry is <c>null</c> if no default was provided.</summary>
     public List<Expr?> DefaultValues { get; }
     /// <summary>Gets the optional return type hint. <c>null</c> if no return type was annotated.</summary>
-    public TypeHint? ReturnType { get; }
+    public TypeExpression? ReturnType { get; }
     /// <summary>Gets whether this function was declared with the <c>async</c> keyword.</summary>
     public bool IsAsync { get; }
     /// <summary>Gets the <c>async</c> keyword token, or <c>null</c> if not async.</summary>
@@ -56,7 +56,7 @@ public class FnDeclStmt : Stmt
     /// <param name="span">The source location of this declaration.</param>
     /// <param name="isAsync">Whether this function was declared with the <c>async</c> keyword.</param>
     /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
-    public FnDeclStmt(Token name, List<Token> parameters, List<TypeHint?> parameterTypes, List<Expr?> defaultValues, TypeHint? returnType, BlockStmt body, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span, StmtType.FnDecl)
+    public FnDeclStmt(Token name, List<Token> parameters, List<TypeExpression?> parameterTypes, List<Expr?> defaultValues, TypeExpression? returnType, BlockStmt body, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span, StmtType.FnDecl)
     {
         Name = name;
         Parameters = parameters;

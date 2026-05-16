@@ -27,7 +27,7 @@ public sealed class VariableTypeMismatchRule : IAnalysisRule
             return;
         }
 
-        var expectedType = stmt.TypeHint.Lexeme;
+        var expectedType = stmt.TypeHint.ToCanonicalString();
         var actualType = TypeInferenceEngine.InferExpressionType(context.ScopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
         if (actualType != null && actualType != "null" && actualType != expectedType)
         {

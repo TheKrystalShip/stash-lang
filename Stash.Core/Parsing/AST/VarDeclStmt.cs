@@ -15,7 +15,7 @@ public class VarDeclStmt : Stmt
     /// <summary>Gets the identifier token of the variable being declared.</summary>
     public Token Name { get; }
     /// <summary>Gets the optional type hint. <c>null</c> if no type annotation was provided.</summary>
-    public TypeHint? TypeHint { get; }
+    public TypeExpression? TypeHint { get; }
     /// <summary>Gets the optional initializer expression. <c>null</c> for uninitialized declarations (<c>let x;</c>).</summary>
     public Expr? Initializer { get; }
 
@@ -24,7 +24,7 @@ public class VarDeclStmt : Stmt
     /// <param name="typeHint">The optional type hint, or <c>null</c>.</param>
     /// <param name="initializer">The optional initializer expression, or <c>null</c>.</param>
     /// <param name="span">The source location of this statement.</param>
-    public VarDeclStmt(Token name, TypeHint? typeHint, Expr? initializer, SourceSpan span) : base(span, StmtType.VarDecl)
+    public VarDeclStmt(Token name, TypeExpression? typeHint, Expr? initializer, SourceSpan span) : base(span, StmtType.VarDecl)
     {
         Name = name;
         TypeHint = typeHint;

@@ -48,8 +48,8 @@ public sealed class UncaughtDeclaredThrowRule : IAnalysisRule
         var coveredTypes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var clause in tryCatch.CatchClauses)
         {
-            foreach (var typeToken in clause.TypeTokens)
-                coveredTypes.Add(typeToken.Lexeme);
+            foreach (var typeExpression in clause.CatchTypes)
+                coveredTypes.Add(typeExpression.ToCanonicalString());
         }
 
         // Walk the try body, collecting declared throws from every reachable call

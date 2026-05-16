@@ -21,9 +21,9 @@ public record OnRetryNode(
     Token OnRetryKeyword,
     bool IsReference,
     Token? ParamAttempt,
-    TypeHint? ParamAttemptTypeHint,
+    TypeExpression? ParamAttemptTypeHint,
     Token? ParamError,
-    TypeHint? ParamErrorTypeHint,
+    TypeExpression? ParamErrorTypeHint,
     BlockStmt? Body,
     Expr? Reference,
     SourceSpan Span);

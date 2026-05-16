@@ -16,7 +16,7 @@ internal static class DeclarationPrinter
         {
             ctx.EmitToken(); // :
             ctx.Space();
-            ctx.EmitToken(); // type
+            ControlFlowPrinter.EmitTypeExpressionTokens(ctx, stmt.TypeHint);
         }
         if (stmt.Initializer != null)
         {
@@ -37,7 +37,7 @@ internal static class DeclarationPrinter
         {
             ctx.EmitToken(); // :
             ctx.Space();
-            ctx.EmitToken(); // type
+            ControlFlowPrinter.EmitTypeExpressionTokens(ctx, stmt.TypeHint);
         }
         ctx.Space();
         ctx.EmitToken(); // =
@@ -59,7 +59,7 @@ internal static class DeclarationPrinter
         ParameterRules.FormatParameterList(
             ctx,
             stmt.Parameters.Count,
-            i => stmt.ParameterTypes[i] != null,
+            i => stmt.ParameterTypes[i],
             i => stmt.DefaultValues[i],
             stmt.HasRestParam,
             formatExpr);
@@ -68,7 +68,7 @@ internal static class DeclarationPrinter
             ctx.Space();
             ctx.EmitToken(); // ->
             ctx.Space();
-            ctx.EmitToken(); // return type
+            ControlFlowPrinter.EmitTypeExpressionTokens(ctx, stmt.ReturnType);
         }
         BraceRules.BeforeOpenBrace(ctx);
         ctx.PushScope(ScopeKind.FunctionBody);
@@ -105,11 +105,11 @@ internal static class DeclarationPrinter
         {
             ctx.NewLine();
             ctx.EmitToken(); // field name
-            if (stmt.FieldTypes[i] != null)
+            if (stmt.FieldTypes[i] is { } structFieldType)
             {
                 ctx.EmitToken(); // :
                 ctx.Space();
-                ctx.EmitToken(); // type
+                ControlFlowPrinter.EmitTypeExpressionTokens(ctx, structFieldType);
             }
             if (ctx.NextIs(TokenType.Comma))
             {
@@ -195,7 +195,8 @@ internal static class DeclarationPrinter
                     {
                         ctx.EmitToken(); // :
                         ctx.Space();
-                        ctx.EmitToken(); // type
+                        if (method.ParameterTypes[p] is { } paramType)
+                            ControlFlowPrinter.EmitTypeExpressionTokens(ctx, paramType);
                     }
                 }
                 ctx.EmitToken(); // )
@@ -205,14 +206,17 @@ internal static class DeclarationPrinter
                     ctx.Space();
                     ctx.EmitToken(); // ->
                     ctx.Space();
-                    ctx.EmitToken(); // return type
+                    if (method.ReturnType is { } rt)
+                        ControlFlowPrinter.EmitTypeExpressionTokens(ctx, rt);
                 }
             }
             else if (ctx.NextIs(TokenType.Colon))
             {
                 ctx.EmitToken(); // :
                 ctx.Space();
-                ctx.EmitToken(); // type
+                int fieldIdx = i - methodIndex;
+                if (fieldIdx >= 0 && fieldIdx < stmt.FieldTypes.Count && stmt.FieldTypes[fieldIdx] is { } ift)
+                    ControlFlowPrinter.EmitTypeExpressionTokens(ctx, ift);
             }
 
             if (ctx.NextIs(TokenType.Comma))
@@ -232,7 +236,7 @@ internal static class DeclarationPrinter
     {
         ctx.EmitToken(); // extend
         ctx.Space();
-        ctx.EmitToken(); // type name
+        ControlFlowPrinter.EmitTypeExpressionTokens(ctx, stmt.TypeName);
         BraceRules.BeforeOpenBrace(ctx);
         ctx.EmitToken(); // {
         ctx.PushScope(ScopeKind.ExtendBody);

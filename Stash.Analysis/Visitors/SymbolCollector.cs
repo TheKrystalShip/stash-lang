@@ -155,11 +155,37 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// Records a type-use reference for the given type-hint token, if it refers to a user-defined type.
     /// Built-in types (int, string, bool, etc.) are filtered out via <see cref="StdlibRegistry.ValidTypes"/>.
     /// </summary>
-    private void RecordTypeReference(TypeHint? typeHint)
+    private void RecordTypeReference(TypeExpression? typeExpression)
     {
-        if (typeHint != null && typeHint.Name.Type == TokenType.Identifier && !StdlibRegistry.ValidTypes.Contains(typeHint.Name.Lexeme))
+        if (typeExpression == null) return;
+
+        // Record the head identifier as a type-use reference. For qualified types, the head is
+        // the namespace alias — the static analyzer records that as a type-use even though the
+        // tail resolution happens via the import resolver. This mirrors prior behavior for the
+        // simple-type case and avoids losing user-type tracking under dotted forms.
+        Token head = typeExpression switch
         {
-            RecordReference(typeHint.Name.Lexeme, typeHint.Name.Span, ReferenceKind.TypeUse);
+            SimpleType s => s.Name,
+            QualifiedType q => q.Segments[0],
+            ArrayType a => UnwrapHead(a),
+            _ => null!,
+        };
+
+        if (head.Type == TokenType.Identifier && !StdlibRegistry.ValidTypes.Contains(head.Lexeme))
+        {
+            RecordReference(head.Lexeme, head.Span, ReferenceKind.TypeUse);
+        }
+
+        static Token UnwrapHead(ArrayType a)
+        {
+            TypeExpression inner = a.Element;
+            while (inner is ArrayType inner2) inner = inner2.Element;
+            return inner switch
+            {
+                SimpleType s => s.Name,
+                QualifiedType q => q.Segments[0],
+                _ => null!,
+            };
         }
     }
 
@@ -238,7 +264,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             var paramName = stmt.Parameters[i].Lexeme;
-            var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
+            var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.ToCanonicalString() : null;
             var part = paramType != null ? $"{paramName}: {paramType}" : paramName;
 
             if (i < stmt.DefaultValues.Count && stmt.DefaultValues[i] != null)
@@ -257,14 +283,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         var detail = $"fn {stmt.Name.Lexeme}({string.Join(", ", paramParts)})";
         if (stmt.ReturnType != null)
         {
-            detail += $" -> {stmt.ReturnType.Lexeme}";
+            detail += $" -> {stmt.ReturnType.ToCanonicalString()}";
         }
 
-        var returnTypeStr = stmt.ReturnType?.Lexeme;
+        var returnTypeStr = stmt.ReturnType?.ToCanonicalString();
         int paramCountForSymbol = stmt.HasRestParam ? stmt.Parameters.Count - 1 : stmt.Parameters.Count;
         var paramNames = stmt.Parameters.Take(paramCountForSymbol).Select(p => p.Lexeme).ToArray();
         int requiredCount = stmt.DefaultValues.Take(paramCountForSymbol).TakeWhile(d => d == null).Count();
-        var paramTypes = stmt.ParameterTypes.Take(paramCountForSymbol).Select(t => t?.Lexeme).ToArray();
+        var paramTypes = stmt.ParameterTypes.Take(paramCountForSymbol).Select(t => t?.ToCanonicalString()).ToArray();
 
         RecordTypeReference(stmt.ReturnType);
         foreach (var pt in stmt.ParameterTypes) RecordTypeReference(pt);
@@ -286,7 +312,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             var param = stmt.Parameters[i];
-            var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
+            var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.ToCanonicalString() : null;
             bool isRestParam = stmt.HasRestParam && i == stmt.Parameters.Count - 1;
             var paramDetail = isRestParam
                 ? (paramType != null ? $"...rest parameter of {stmt.Name.Lexeme}: {paramType}" : $"...rest parameter of {stmt.Name.Lexeme}")
@@ -340,7 +366,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             var fieldName = stmt.Fields[i].Lexeme;
-            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.ToCanonicalString() : null;
             fieldParts.Add(fieldType != null ? $"{fieldName}: {fieldType}" : fieldName);
         }
 
@@ -351,7 +377,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             var field = stmt.Fields[i];
-            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.ToCanonicalString() : null;
             var fieldDetail = fieldType != null ? $"field of {stmt.Name.Lexeme}: {fieldType}" : $"field of {stmt.Name.Lexeme}";
             _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: fieldDetail, parentName: stmt.Name.Lexeme, typeHint: fieldType));
             if (i < stmt.FieldTypes.Count) RecordTypeReference(stmt.FieldTypes[i]);
@@ -369,7 +395,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 var paramName = method.Parameters[i].Lexeme;
-                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.ToCanonicalString() : null;
                 var part = paramType != null ? $"{paramName}: {paramType}" : paramName;
 
                 if (i < method.DefaultValues.Count && method.DefaultValues[i] != null)
@@ -383,13 +409,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             var methodDetail = $"fn {method.Name.Lexeme}({string.Join(", ", paramParts)})";
             if (method.ReturnType != null)
             {
-                methodDetail += $" -> {method.ReturnType.Lexeme}";
+                methodDetail += $" -> {method.ReturnType.ToCanonicalString()}";
             }
 
-            var returnTypeStr = method.ReturnType?.Lexeme;
+            var returnTypeStr = method.ReturnType?.ToCanonicalString();
             var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
             int requiredCount = method.DefaultValues.TakeWhile(d => d == null).Count();
-            var methodParamTypes = method.ParameterTypes.Select(t => t?.Lexeme).ToArray();
+            var methodParamTypes = method.ParameterTypes.Select(t => t?.ToCanonicalString()).ToArray();
 
             RecordTypeReference(method.ReturnType);
             foreach (var pt in method.ParameterTypes) RecordTypeReference(pt);
@@ -413,7 +439,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 var param = method.Parameters[i];
-                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.ToCanonicalString() : null;
                 var paramDetail = paramType != null ? $"parameter of {method.Name.Lexeme}: {paramType}" : $"parameter of {method.Name.Lexeme}";
                 _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: method.Name.Lexeme, typeHint: paramType, isExplicitTypeHint: paramType != null));
             }
@@ -432,7 +458,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <summary>Collects extension method symbols from an extend block.</summary>
     public object? VisitExtendStmt(ExtendStmt stmt)
     {
-        string typeName = stmt.TypeName.Lexeme;
+        string typeName = stmt.TypeName.ToCanonicalString();
 
         foreach (var method in stmt.Methods)
         {
@@ -440,7 +466,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 var paramName = method.Parameters[i].Lexeme;
-                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.ToCanonicalString() : null;
                 var part = paramType != null ? $"{paramName}: {paramType}" : paramName;
 
                 if (i < method.DefaultValues.Count && method.DefaultValues[i] != null)
@@ -454,13 +480,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             var methodDetail = $"fn {method.Name.Lexeme}({string.Join(", ", paramParts)})";
             if (method.ReturnType != null)
             {
-                methodDetail += $" -> {method.ReturnType.Lexeme}";
+                methodDetail += $" -> {method.ReturnType.ToCanonicalString()}";
             }
 
-            var returnTypeStr = method.ReturnType?.Lexeme;
+            var returnTypeStr = method.ReturnType?.ToCanonicalString();
             var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
             int requiredCount = method.DefaultValues.TakeWhile(d => d == null).Count();
-            var methodParamTypes = method.ParameterTypes.Select(t => t?.Lexeme).ToArray();
+            var methodParamTypes = method.ParameterTypes.Select(t => t?.ToCanonicalString()).ToArray();
 
             RecordTypeReference(method.ReturnType);
             foreach (var pt in method.ParameterTypes) RecordTypeReference(pt);
@@ -481,7 +507,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 var param = method.Parameters[i];
-                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.ToCanonicalString() : null;
                 var paramDetail = paramType != null ? $"parameter of {method.Name.Lexeme}: {paramType}" : $"parameter of {method.Name.Lexeme}";
                 _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: method.Name.Lexeme, typeHint: paramType, isExplicitTypeHint: paramType != null));
             }
@@ -529,7 +555,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             var fieldName = stmt.Fields[i].Lexeme;
-            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.ToCanonicalString() : null;
             memberParts.Add(fieldType != null ? $"{fieldName}: {fieldType}" : fieldName);
         }
         foreach (var method in stmt.Methods)
@@ -538,13 +564,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 var paramName = method.Parameters[i].Lexeme;
-                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.ToCanonicalString() : null;
                 paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
             }
             var methodSig = $"{method.Name.Lexeme}({string.Join(", ", paramParts)})";
             if (method.ReturnType != null)
             {
-                methodSig += $" -> {method.ReturnType.Lexeme}";
+                methodSig += $" -> {method.ReturnType.ToCanonicalString()}";
             }
 
             memberParts.Add(methodSig);
@@ -556,7 +582,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             var field = stmt.Fields[i];
-            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.ToCanonicalString() : null;
             var fieldDetail = fieldType != null ? $"field of {stmt.Name.Lexeme}: {fieldType}" : $"field of {stmt.Name.Lexeme}";
             _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: fieldDetail, parentName: stmt.Name.Lexeme, typeHint: fieldType));
             if (i < stmt.FieldTypes.Count) RecordTypeReference(stmt.FieldTypes[i]);
@@ -568,18 +594,18 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 var paramName = method.Parameters[i].Lexeme;
-                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.ToCanonicalString() : null;
                 paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
             }
             var methodDetail = $"fn {method.Name.Lexeme}({string.Join(", ", paramParts)})";
             if (method.ReturnType != null)
             {
-                methodDetail += $" -> {method.ReturnType.Lexeme}";
+                methodDetail += $" -> {method.ReturnType.ToCanonicalString()}";
             }
 
-            var returnTypeStr = method.ReturnType?.Lexeme;
+            var returnTypeStr = method.ReturnType?.ToCanonicalString();
             var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
-            var methodParamTypes = method.ParameterTypes.Select(t => t?.Lexeme).ToArray();
+            var methodParamTypes = method.ParameterTypes.Select(t => t?.ToCanonicalString()).ToArray();
 
             RecordTypeReference(method.ReturnType);
             foreach (var pt in method.ParameterTypes) RecordTypeReference(pt);
@@ -600,7 +626,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
-        var typeStr = stmt.TypeHint?.Lexeme;
+        var typeStr = stmt.TypeHint?.ToCanonicalString();
         var detail = typeStr != null ? $"let {stmt.Name.Lexeme}: {typeStr}" : $"let {stmt.Name.Lexeme}";
         _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
         RecordTypeReference(stmt.TypeHint);
@@ -616,7 +642,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
-        var typeStr = stmt.TypeHint?.Lexeme;
+        var typeStr = stmt.TypeHint?.ToCanonicalString();
         var detail = typeStr != null ? $"const {stmt.Name.Lexeme}: {typeStr}" : $"const {stmt.Name.Lexeme}";
         _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
         RecordTypeReference(stmt.TypeHint);
@@ -714,9 +740,9 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// </summary>
     private static (string Name, string TypeHint)? ExtractIsNarrowing(Expr condition)
     {
-        if (condition is IsExpr isExpr && isExpr.Left is IdentifierExpr ident && isExpr.TypeName != null)
+        if (condition is IsExpr isExpr && isExpr.Left is IdentifierExpr ident && isExpr.Type != null)
         {
-            return (ident.Name.Lexeme, isExpr.TypeName.Lexeme);
+            return (ident.Name.Lexeme, isExpr.Type.ToCanonicalString());
         }
         return null;
     }
@@ -807,7 +833,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             _currentScope.AddSymbol(new SymbolInfo(stmt.IndexName.Lexeme, SymbolKind.LoopVariable, stmt.IndexName.Span, detail: "loop index", typeHint: "int"));
         }
 
-        var typeStr = stmt.TypeHint?.Lexeme;
+        var typeStr = stmt.TypeHint?.ToCanonicalString();
         var detail = typeStr != null ? $"loop variable: {typeStr}" : "loop variable";
         _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
         RecordTypeReference(stmt.TypeHint);
@@ -1006,12 +1032,9 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
-        if (expr.TypeName != null)
+        if (expr.Type != null)
         {
-            if (expr.TypeName.Type == TokenType.Identifier && !StdlibRegistry.ValidTypes.Contains(expr.TypeName.Lexeme))
-            {
-                RecordReference(expr.TypeName.Lexeme, expr.TypeName.Span, ReferenceKind.TypeUse);
-            }
+            RecordTypeReference(expr.Type);
         }
         else
         {
@@ -1275,14 +1298,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             PushScope(ScopeKind.Block, onRetry.Body.Span);
             if (onRetry.ParamAttempt is not null)
             {
-                var typeStr = onRetry.ParamAttemptTypeHint?.Lexeme;
+                var typeStr = onRetry.ParamAttemptTypeHint?.ToCanonicalString();
                 var detail = typeStr != null ? $"retry attempt number: {typeStr}" : "retry attempt number";
                 _currentScope.AddSymbol(new SymbolInfo(onRetry.ParamAttempt.Lexeme, SymbolKind.Parameter, onRetry.ParamAttempt.Span, detail: detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
                 RecordTypeReference(onRetry.ParamAttemptTypeHint);
             }
             if (onRetry.ParamError is not null)
             {
-                var typeStr = onRetry.ParamErrorTypeHint?.Lexeme;
+                var typeStr = onRetry.ParamErrorTypeHint?.ToCanonicalString();
                 var detail = typeStr != null ? $"retry error: {typeStr}" : "retry error";
                 _currentScope.AddSymbol(new SymbolInfo(onRetry.ParamError.Lexeme, SymbolKind.Parameter, onRetry.ParamError.Span, detail: detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
                 RecordTypeReference(onRetry.ParamErrorTypeHint);
@@ -1344,7 +1367,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             var param = expr.Parameters[i];
-            var paramType = i < expr.ParameterTypes.Count ? expr.ParameterTypes[i]?.Lexeme : null;
+            var paramType = i < expr.ParameterTypes.Count ? expr.ParameterTypes[i]?.ToCanonicalString() : null;
             bool isRestParam = expr.HasRestParam && i == expr.Parameters.Count - 1;
             var paramDetail = isRestParam
                 ? (paramType != null ? $"...rest parameter: {paramType}" : "...rest parameter")

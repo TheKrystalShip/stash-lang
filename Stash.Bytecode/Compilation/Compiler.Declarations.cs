@@ -248,7 +248,7 @@ partial class Compiler
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             string fieldName = stmt.Fields[i].Lexeme;
-            string? typeHint = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            string? typeHint = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.ToCanonicalString() : null;
             fields[i] = new InterfaceField(fieldName, typeHint);
         }
 
@@ -258,10 +258,10 @@ partial class Compiler
             InterfaceMethodSignature sig = stmt.Methods[i];
             var paramNames = sig.Parameters.Select(p => p.Lexeme).ToList();
             var paramTypes = sig.Parameters
-                .Select((_, j) => j < sig.ParameterTypes.Count ? sig.ParameterTypes[j]?.Lexeme : null)
+                .Select((_, j) => j < sig.ParameterTypes.Count ? sig.ParameterTypes[j]?.ToCanonicalString() : null)
                 .ToList();
             methods[i] = new InterfaceMethod(
-                sig.Name.Lexeme, sig.Parameters.Count, paramNames, paramTypes, sig.ReturnType?.Lexeme);
+                sig.Name.Lexeme, sig.Parameters.Count, paramNames, paramTypes, sig.ReturnType?.ToCanonicalString());
         }
 
         var meta = new InterfaceMetadata(stmt.Name.Lexeme, fields, methods);
@@ -293,7 +293,7 @@ partial class Compiler
             return null;
         }
 
-        string typeName = stmt.TypeName.Lexeme;
+        string typeName = stmt.TypeName.ToCanonicalString();
         bool isBuiltIn = typeName is "string" or "array" or "dict" or "int" or "float";
 
         var methodNames = new List<string>();

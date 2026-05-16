@@ -26,9 +26,9 @@ internal static class ExpressionPrinter
         ctx.Space();
         ctx.EmitToken(); // is
         ctx.Space();
-        if (expr.TypeName != null)
+        if (expr.Type != null)
         {
-            ctx.EmitToken(); // type name
+            ControlFlowPrinter.EmitTypeExpressionTokens(ctx, expr.Type);
         }
         else
         {
@@ -214,7 +214,7 @@ internal static class ExpressionPrinter
         ParameterRules.FormatParameterList(
             ctx,
             expr.Parameters.Count,
-            i => expr.ParameterTypes[i] != null,
+            i => expr.ParameterTypes[i],
             i => expr.DefaultValues[i],
             expr.HasRestParam,
             formatExpr);
@@ -314,11 +314,11 @@ internal static class ExpressionPrinter
                 if (expr.OnRetryClause.ParamAttempt is not null)
                 {
                     ctx.EmitToken(); // attempt param identifier
-                    if (expr.OnRetryClause.ParamAttemptTypeHint is not null)
+                    if (expr.OnRetryClause.ParamAttemptTypeHint is { } attemptType)
                     {
                         ctx.EmitToken(); // :
                         ctx.Space();
-                        ctx.EmitToken(); // type hint identifier
+                        ControlFlowPrinter.EmitTypeExpressionTokens(ctx, attemptType);
                     }
                 }
                 if (expr.OnRetryClause.ParamError is not null)
@@ -326,11 +326,11 @@ internal static class ExpressionPrinter
                     ctx.EmitToken(); // ,
                     ctx.Space();
                     ctx.EmitToken(); // error param identifier
-                    if (expr.OnRetryClause.ParamErrorTypeHint is not null)
+                    if (expr.OnRetryClause.ParamErrorTypeHint is { } errorType)
                     {
                         ctx.EmitToken(); // :
                         ctx.Space();
-                        ctx.EmitToken(); // type hint identifier
+                        ControlFlowPrinter.EmitTypeExpressionTokens(ctx, errorType);
                     }
                 }
                 ctx.EmitToken(); // )

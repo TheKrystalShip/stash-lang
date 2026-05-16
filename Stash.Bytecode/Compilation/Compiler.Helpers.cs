@@ -338,15 +338,19 @@ partial class Compiler
 
     /// <summary>
     /// Emits TypedWrap for typed array wrapping or scalar byte narrowing.
+    /// Phase 1: this method is fed the structured <see cref="TypeExpression"/> form and uses
+    /// <see cref="TypeExpression.ToCanonicalString"/> so dotted element types
+    /// (e.g. <c>diff.Edit[]</c>) survive into the constant pool intact. Phase 2 deletes this
+    /// method entirely as part of full erasure.
     /// </summary>
-    private void EmitTypeWrapping(byte reg, TypeHint? typeHint)
+    private void EmitTypeWrapping(byte reg, TypeExpression? typeExpression)
     {
-        if (typeHint is { IsArray: true })
+        if (typeExpression is ArrayType array)
         {
-            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(typeHint.Name.Lexeme));
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(array.Element.ToCanonicalString()));
             _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
         }
-        else if (typeHint is { IsArray: false } && typeHint.Name.Lexeme == ByteTypeName)
+        else if (typeExpression is SimpleType simple && simple.Name.Lexeme == ByteTypeName)
         {
             ushort typeIdx = _builder.AddConstant(StashValue.FromObj(ByteTypeName));
             _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);

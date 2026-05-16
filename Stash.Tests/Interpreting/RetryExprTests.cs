@@ -108,9 +108,9 @@ public class RetryExprTests : StashTestBase
         Assert.NotNull(retry.OnRetryClause);
         var onRetry = retry.OnRetryClause!;
         Assert.Equal("n", onRetry.ParamAttempt!.Lexeme);
-        Assert.Equal("int", onRetry.ParamAttemptTypeHint!.Lexeme);
+        Assert.Equal("int", onRetry.ParamAttemptTypeHint!.ToCanonicalString());
         Assert.Equal("err", onRetry.ParamError!.Lexeme);
-        Assert.Equal("Error", onRetry.ParamErrorTypeHint!.Lexeme);
+        Assert.Equal("Error", onRetry.ParamErrorTypeHint!.ToCanonicalString());
     }
 
     // ===== 3. Interpreter Tests — Basic Success/Failure =====

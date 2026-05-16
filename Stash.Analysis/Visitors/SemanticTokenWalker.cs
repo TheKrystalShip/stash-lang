@@ -99,23 +99,35 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     }
 
     /// <summary>
-    /// Emits semantic tokens for an entire dotted type hint:
-    /// the head identifier is classified normally via <see cref="EmitTypeReference(Token)"/>,
-    /// and each trailing segment after a <c>.</c> is emitted as a generic type token.
+    /// Emits semantic tokens for a structured <see cref="TypeExpression"/>: simple, qualified, and
+    /// array forms are all supported uniformly. For array types the element is recursed into; the
+    /// brackets themselves are owned by the grammar.
     /// </summary>
-    private void EmitTypeReference(TypeHint typeHint)
+    private void EmitTypeReference(TypeExpression typeExpression)
     {
-        EmitTypeReference(typeHint.Name);
-        if (typeHint.Path is { Count: > 1 } segments)
+        switch (typeExpression)
         {
-            for (int i = 1; i < segments.Count; i++)
-            {
-                var seg = segments[i];
-                if (seg.Type == TokenType.Identifier)
+            case SimpleType simple:
+                EmitTypeReference(simple.Name);
+                break;
+
+            case QualifiedType qualified:
+                // Head identifier (alias / first segment) classified normally; trailing segments
+                // are generic type tokens.
+                EmitTypeReference(qualified.Segments[0]);
+                for (int i = 1; i < qualified.Segments.Count; i++)
                 {
-                    EmitFromToken(seg, TokenTypeType, 0);
+                    var seg = qualified.Segments[i];
+                    if (seg.Type == TokenType.Identifier)
+                    {
+                        EmitFromToken(seg, TokenTypeType, 0);
+                    }
                 }
-            }
+                break;
+
+            case ArrayType array:
+                EmitTypeReference(array.Element);
+                break;
         }
     }
 
@@ -424,7 +436,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             EmitFromToken(stmt.Parameters[i], TokenTypeParameter, ModifierDeclaration);
-            if (stmt.ParameterTypes[i] is TypeHint paramType)
+            if (stmt.ParameterTypes[i] is TypeExpression paramType)
             {
                 EmitTypeReference(paramType);
             }
@@ -434,7 +446,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 defaultVal.Accept(this);
             }
         }
-        if (stmt.ReturnType is TypeHint returnType)
+        if (stmt.ReturnType is TypeExpression returnType)
         {
             EmitTypeReference(returnType);
         }
@@ -463,9 +475,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         {
             // Emit type tokens for typed catch clauses (built-in error types
             // resolve to struct.defaultLibrary via EmitTypeReference).
-            foreach (Token typeToken in clause.TypeTokens)
+            foreach (TypeExpression typeExpression in clause.CatchTypes)
             {
-                EmitTypeReference(typeToken);
+                EmitTypeReference(typeExpression);
             }
             EmitFromToken(clause.Variable, TokenTypeVariable, ModifierDeclaration);
             clause.Body.Accept(this);
@@ -521,7 +533,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
-            if (stmt.FieldTypes[i] is TypeHint fieldType)
+            if (stmt.FieldTypes[i] is TypeExpression fieldType)
             {
                 EmitTypeReference(fieldType);
             }
@@ -541,7 +553,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitExtendStmt(ExtendStmt stmt)
     {
-        EmitFromToken(stmt.TypeName, TokenTypeStruct, 0);
+        EmitTypeReference(stmt.TypeName);
         _isMethodContext = true;
         foreach (var method in stmt.Methods)
         {
@@ -567,7 +579,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
-            if (i < stmt.FieldTypes.Count && stmt.FieldTypes[i] is TypeHint fieldType)
+            if (i < stmt.FieldTypes.Count && stmt.FieldTypes[i] is TypeExpression fieldType)
             {
                 EmitTypeReference(fieldType);
             }
@@ -578,12 +590,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 EmitFromToken(method.Parameters[i], TokenTypeParameter, ModifierDeclaration);
-                if (i < method.ParameterTypes.Count && method.ParameterTypes[i] is TypeHint paramType)
+                if (i < method.ParameterTypes.Count && method.ParameterTypes[i] is TypeExpression paramType)
                 {
                     EmitTypeReference(paramType);
                 }
             }
-            if (method.ReturnType is TypeHint returnType)
+            if (method.ReturnType is TypeExpression returnType)
             {
                 EmitTypeReference(returnType);
             }
@@ -665,9 +677,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     public int VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
-        if (expr.TypeName != null)
+        if (expr.Type != null)
         {
-            EmitTypeReference(expr.TypeName);
+            EmitTypeReference(expr.Type);
         }
         else
         {
@@ -881,7 +893,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);
-            if (expr.ParameterTypes[i] is TypeHint paramType)
+            if (expr.ParameterTypes[i] is TypeExpression paramType)
             {
                 EmitTypeReference(paramType);
             }

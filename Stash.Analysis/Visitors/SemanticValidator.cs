@@ -478,10 +478,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 seenCatchAll = true;
 
             // SA0163: warn on explicit "RuntimeError" catch type (not for untyped catch-all)
-            foreach (Token typeToken in clause.TypeTokens)
+            foreach (TypeExpression typeExpression in clause.CatchTypes)
             {
-                if (typeToken.Lexeme == "RuntimeError")
-                    _diagnostics.Add(DiagnosticDescriptors.SA0163.CreateDiagnostic(typeToken.Span));
+                if (typeExpression.ToCanonicalString() == "RuntimeError")
+                    _diagnostics.Add(DiagnosticDescriptors.SA0163.CreateDiagnostic(typeExpression.Span));
             }
 
             _catchDepth++;

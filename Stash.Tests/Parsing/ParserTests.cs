@@ -1010,10 +1010,10 @@ public class ParserTests
         Assert.Single(ifaceDecl.Fields);
         Assert.Equal("name", ifaceDecl.Fields[0].Lexeme);
         Assert.NotNull(ifaceDecl.FieldTypes[0]);
-        Assert.Equal("string", ifaceDecl.FieldTypes[0]!.Lexeme);
+        Assert.Equal("string", ifaceDecl.FieldTypes[0]!.ToCanonicalString());
         Assert.Single(ifaceDecl.Methods);
         Assert.NotNull(ifaceDecl.Methods[0].ReturnType);
-        Assert.Equal("int", ifaceDecl.Methods[0].ReturnType!.Lexeme);
+        Assert.Equal("int", ifaceDecl.Methods[0].ReturnType!.ToCanonicalString());
     }
 
     [Fact]
@@ -1707,7 +1707,7 @@ public class ParserTests
         var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
         Assert.Equal("name", varDecl.Name.Lexeme);
         Assert.NotNull(varDecl.TypeHint);
-        Assert.Equal("string", varDecl.TypeHint!.Lexeme);
+        Assert.Equal("string", varDecl.TypeHint!.ToCanonicalString());
         var init = Assert.IsType<LiteralExpr>(varDecl.Initializer);
         Assert.Equal("Alice", init.Value);
     }
@@ -1719,7 +1719,7 @@ public class ParserTests
         var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
         Assert.Equal("count", varDecl.Name.Lexeme);
         Assert.NotNull(varDecl.TypeHint);
-        Assert.Equal("int", varDecl.TypeHint!.Lexeme);
+        Assert.Equal("int", varDecl.TypeHint!.ToCanonicalString());
         Assert.Null(varDecl.Initializer);
     }
 
@@ -1738,7 +1738,7 @@ public class ParserTests
         var constDecl = Assert.IsType<ConstDeclStmt>(Assert.Single(stmts));
         Assert.Equal("PI", constDecl.Name.Lexeme);
         Assert.NotNull(constDecl.TypeHint);
-        Assert.Equal("float", constDecl.TypeHint!.Lexeme);
+        Assert.Equal("float", constDecl.TypeHint!.ToCanonicalString());
         var init = Assert.IsType<LiteralExpr>(constDecl.Initializer);
         Assert.Equal(3.14, init.Value);
     }
@@ -1759,8 +1759,8 @@ public class ParserTests
         Assert.Equal("add", fnDecl.Name.Lexeme);
         Assert.Equal(2, fnDecl.Parameters.Count);
         Assert.Equal(2, fnDecl.ParameterTypes.Count);
-        Assert.Equal("int", fnDecl.ParameterTypes[0]!.Lexeme);
-        Assert.Equal("int", fnDecl.ParameterTypes[1]!.Lexeme);
+        Assert.Equal("int", fnDecl.ParameterTypes[0]!.ToCanonicalString());
+        Assert.Equal("int", fnDecl.ParameterTypes[1]!.ToCanonicalString());
         Assert.Null(fnDecl.ReturnType);
     }
 
@@ -1771,7 +1771,7 @@ public class ParserTests
         var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
         Assert.Equal("add", fnDecl.Name.Lexeme);
         Assert.NotNull(fnDecl.ReturnType);
-        Assert.Equal("int", fnDecl.ReturnType!.Lexeme);
+        Assert.Equal("int", fnDecl.ReturnType!.ToCanonicalString());
         Assert.Null(fnDecl.ParameterTypes[0]);
         Assert.Null(fnDecl.ParameterTypes[1]);
     }
@@ -1781,9 +1781,9 @@ public class ParserTests
     {
         var stmts = ParseProgram("fn add(a: int, b: int) -> int { return a; }");
         var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
-        Assert.Equal("int", fnDecl.ParameterTypes[0]!.Lexeme);
-        Assert.Equal("int", fnDecl.ParameterTypes[1]!.Lexeme);
-        Assert.Equal("int", fnDecl.ReturnType!.Lexeme);
+        Assert.Equal("int", fnDecl.ParameterTypes[0]!.ToCanonicalString());
+        Assert.Equal("int", fnDecl.ParameterTypes[1]!.ToCanonicalString());
+        Assert.Equal("int", fnDecl.ReturnType!.ToCanonicalString());
     }
 
     [Fact]
@@ -1802,7 +1802,7 @@ public class ParserTests
     {
         var stmts = ParseProgram("fn mixed(a: int, b) { }");
         var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
-        Assert.Equal("int", fnDecl.ParameterTypes[0]!.Lexeme);
+        Assert.Equal("int", fnDecl.ParameterTypes[0]!.ToCanonicalString());
         Assert.Null(fnDecl.ParameterTypes[1]);
     }
 
@@ -1823,8 +1823,8 @@ public class ParserTests
         Assert.Equal("Server", structDecl.Name.Lexeme);
         Assert.Equal(2, structDecl.Fields.Count);
         Assert.Equal(2, structDecl.FieldTypes.Count);
-        Assert.Equal("string", structDecl.FieldTypes[0]!.Lexeme);
-        Assert.Equal("int", structDecl.FieldTypes[1]!.Lexeme);
+        Assert.Equal("string", structDecl.FieldTypes[0]!.ToCanonicalString());
+        Assert.Equal("int", structDecl.FieldTypes[1]!.ToCanonicalString());
     }
 
     [Fact]
@@ -1842,7 +1842,7 @@ public class ParserTests
     {
         var stmts = ParseProgram("struct Config { name: string, value }");
         var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
-        Assert.Equal("string", structDecl.FieldTypes[0]!.Lexeme);
+        Assert.Equal("string", structDecl.FieldTypes[0]!.ToCanonicalString());
         Assert.Null(structDecl.FieldTypes[1]);
     }
 
@@ -1915,7 +1915,7 @@ public class ParserTests
         var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
         Assert.Equal("item", forIn.VariableName.Lexeme);
         Assert.NotNull(forIn.TypeHint);
-        Assert.Equal("string", forIn.TypeHint!.Lexeme);
+        Assert.Equal("string", forIn.TypeHint!.ToCanonicalString());
     }
 
     [Fact]
@@ -2012,7 +2012,7 @@ public class ParserTests
         var stmts = ParseProgram("let server: Server = null;");
         var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(varDecl.TypeHint);
-        Assert.Equal("Server", varDecl.TypeHint!.Lexeme);
+        Assert.Equal("Server", varDecl.TypeHint!.ToCanonicalString());
     }
 
     [Fact]
@@ -2021,7 +2021,7 @@ public class ParserTests
         var stmts = ParseProgram("fn create() -> Server { }");
         var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(fnDecl.ReturnType);
-        Assert.Equal("Server", fnDecl.ReturnType!.Lexeme);
+        Assert.Equal("Server", fnDecl.ReturnType!.ToCanonicalString());
     }
 
     // ── Lambda parsing tests ────────────────────────────────────────
@@ -2079,8 +2079,8 @@ public class ParserTests
         var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
         var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
         Assert.Equal(2, lambda.Parameters.Count);
-        Assert.Equal("int", lambda.ParameterTypes[0]?.Lexeme);
-        Assert.Equal("string", lambda.ParameterTypes[1]?.Lexeme);
+        Assert.Equal("int", lambda.ParameterTypes[0]?.ToCanonicalString());
+        Assert.Equal("string", lambda.ParameterTypes[1]?.ToCanonicalString());
     }
 
     [Fact]
@@ -2156,8 +2156,8 @@ public class ParserTests
         var stmts = ParseProgram("fn connect(host: string, port: int = 8080) { }");
         var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
         Assert.Equal(2, fn.Parameters.Count);
-        Assert.Equal("string", fn.ParameterTypes[0]!.Lexeme);
-        Assert.Equal("int", fn.ParameterTypes[1]!.Lexeme);
+        Assert.Equal("string", fn.ParameterTypes[0]!.ToCanonicalString());
+        Assert.Equal("int", fn.ParameterTypes[1]!.ToCanonicalString());
         Assert.Null(fn.DefaultValues[0]);
         var defaultVal = Assert.IsType<LiteralExpr>(fn.DefaultValues[1]);
         Assert.Equal(8080L, defaultVal.Value);
@@ -2286,7 +2286,7 @@ public class ParserTests
         var isExpr = Assert.IsType<IsExpr>(result);
         var left = Assert.IsType<IdentifierExpr>(isExpr.Left);
         Assert.Equal("x", left.Name.Lexeme);
-        Assert.Equal("int", isExpr.TypeName!.Lexeme);
+        Assert.Equal("int", isExpr.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2294,7 +2294,7 @@ public class ParserTests
     {
         var result = ParseExpr("x is string");
         var isExpr = Assert.IsType<IsExpr>(result);
-        Assert.Equal("string", isExpr.TypeName!.Lexeme);
+        Assert.Equal("string", isExpr.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2302,7 +2302,7 @@ public class ParserTests
     {
         var result = ParseExpr("x is null");
         var isExpr = Assert.IsType<IsExpr>(result);
-        Assert.Equal("null", isExpr.TypeName!.Lexeme);
+        Assert.Equal("null", isExpr.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2311,7 +2311,7 @@ public class ParserTests
         var result = ParseExpr("(1 + 2) is int");
         var isExpr = Assert.IsType<IsExpr>(result);
         Assert.IsType<GroupingExpr>(isExpr.Left);
-        Assert.Equal("int", isExpr.TypeName!.Lexeme);
+        Assert.Equal("int", isExpr.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2322,7 +2322,7 @@ public class ParserTests
         var equality = Assert.IsType<BinaryExpr>(result);
         Assert.Equal(TokenType.EqualEqual, equality.Operator.Type);
         var isExpr = Assert.IsType<IsExpr>(equality.Left);
-        Assert.Equal("int", isExpr.TypeName!.Lexeme);
+        Assert.Equal("int", isExpr.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2333,9 +2333,9 @@ public class ParserTests
         var andExpr = Assert.IsType<BinaryExpr>(result);
         Assert.Equal(TokenType.AmpersandAmpersand, andExpr.Operator.Type);
         var leftIs = Assert.IsType<IsExpr>(andExpr.Left);
-        Assert.Equal("int", leftIs.TypeName!.Lexeme);
+        Assert.Equal("int", leftIs.Type!.ToCanonicalString());
         var rightIs = Assert.IsType<IsExpr>(andExpr.Right);
-        Assert.Equal("string", rightIs.TypeName!.Lexeme);
+        Assert.Equal("string", rightIs.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2344,7 +2344,7 @@ public class ParserTests
         // User-defined struct/enum names are now accepted in `is` expressions
         var result = ParseExpr("x is MyStruct");
         var isExpr = Assert.IsType<IsExpr>(result);
-        Assert.Equal("MyStruct", isExpr.TypeName!.Lexeme);
+        Assert.Equal("MyStruct", isExpr.Type!.ToCanonicalString());
     }
 
     [Fact]
@@ -2355,7 +2355,7 @@ public class ParserTests
         {
             var result = ParseExpr($"x is {type}");
             var isExpr = Assert.IsType<IsExpr>(result);
-            Assert.Equal(type, isExpr.TypeName!.Lexeme);
+            Assert.Equal(type, isExpr.Type!.ToCanonicalString());
         }
     }
 
@@ -2466,10 +2466,10 @@ public class ParserTests
         var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
         var paramType = fn.ParameterTypes[0];
         Assert.NotNull(paramType);
-        Assert.Equal("a.B", paramType!.Lexeme);
-        Assert.NotNull(paramType.Path);
-        Assert.Equal(2, paramType.Path!.Count);
-        Assert.Equal("a", paramType.Name.Lexeme);
+        Assert.Equal("a.B", paramType!.ToCanonicalString());
+        var qualified = Assert.IsType<QualifiedType>(paramType);
+        Assert.Equal(2, qualified.Segments.Count);
+        Assert.Equal("a", qualified.Segments[0].Lexeme);
     }
 
     [Fact]
@@ -2478,7 +2478,7 @@ public class ParserTests
         var stmts = ParseProgram("fn f() -> a.B {}");
         var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(fn.ReturnType);
-        Assert.Equal("a.B", fn.ReturnType!.Lexeme);
+        Assert.Equal("a.B", fn.ReturnType!.ToCanonicalString());
     }
 
     [Fact]
@@ -2487,7 +2487,7 @@ public class ParserTests
         var stmts = ParseProgram("let x: a.B = 1;");
         var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(decl.TypeHint);
-        Assert.Equal("a.B", decl.TypeHint!.Lexeme);
+        Assert.Equal("a.B", decl.TypeHint!.ToCanonicalString());
     }
 
     [Fact]
@@ -2496,7 +2496,7 @@ public class ParserTests
         var stmts = ParseProgram("const x: a.B = 1;");
         var decl = Assert.IsType<ConstDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(decl.TypeHint);
-        Assert.Equal("a.B", decl.TypeHint!.Lexeme);
+        Assert.Equal("a.B", decl.TypeHint!.ToCanonicalString());
     }
 
     [Fact]
@@ -2506,7 +2506,7 @@ public class ParserTests
         var decl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
         var fieldType = decl.FieldTypes[0];
         Assert.NotNull(fieldType);
-        Assert.Equal("a.B", fieldType!.Lexeme);
+        Assert.Equal("a.B", fieldType!.ToCanonicalString());
     }
 
     [Fact]
@@ -2515,7 +2515,7 @@ public class ParserTests
         var stmts = ParseProgram("for (let v: a.B in xs) { }");
         var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
         Assert.NotNull(forIn.TypeHint);
-        Assert.Equal("a.B", forIn.TypeHint!.Lexeme);
+        Assert.Equal("a.B", forIn.TypeHint!.ToCanonicalString());
     }
 
     [Fact]
@@ -2526,7 +2526,7 @@ public class ParserTests
         Assert.True(fn.HasRestParam);
         var paramType = fn.ParameterTypes[^1];
         Assert.NotNull(paramType);
-        Assert.Equal("a.B", paramType!.Lexeme);
+        Assert.Equal("a.B", paramType!.ToCanonicalString());
     }
 
     [Fact]
@@ -2537,9 +2537,9 @@ public class ParserTests
         var retry = Assert.IsType<RetryExpr>(exprStmt.Expression);
         Assert.NotNull(retry.OnRetryClause);
         Assert.NotNull(retry.OnRetryClause!.ParamAttemptTypeHint);
-        Assert.Equal("a.B", retry.OnRetryClause.ParamAttemptTypeHint!.Lexeme);
+        Assert.Equal("a.B", retry.OnRetryClause.ParamAttemptTypeHint!.ToCanonicalString());
         Assert.NotNull(retry.OnRetryClause.ParamErrorTypeHint);
-        Assert.Equal("c.D", retry.OnRetryClause.ParamErrorTypeHint!.Lexeme);
+        Assert.Equal("c.D", retry.OnRetryClause.ParamErrorTypeHint!.ToCanonicalString());
     }
 
     [Fact]
@@ -2548,9 +2548,9 @@ public class ParserTests
         var stmts = ParseProgram("let x: a.b.c = 1;");
         var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(decl.TypeHint);
-        Assert.Equal("a.b.c", decl.TypeHint!.Lexeme);
-        Assert.NotNull(decl.TypeHint.Path);
-        Assert.Equal(3, decl.TypeHint.Path!.Count);
+        Assert.Equal("a.b.c", decl.TypeHint!.ToCanonicalString());
+        var qualified = Assert.IsType<QualifiedType>(decl.TypeHint);
+        Assert.Equal(3, qualified.Segments.Count);
     }
 
     [Fact]
@@ -2559,8 +2559,8 @@ public class ParserTests
         var stmts = ParseProgram("let x: a.B[] = [];");
         var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
         Assert.NotNull(decl.TypeHint);
-        Assert.True(decl.TypeHint!.IsArray);
-        Assert.Equal("a.B[]", decl.TypeHint.Lexeme);
+        Assert.IsType<ArrayType>(decl.TypeHint);
+        Assert.Equal("a.B[]", decl.TypeHint!.ToCanonicalString());
     }
 
     [Fact]

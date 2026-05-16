@@ -1,4 +1,5 @@
 using System;
+using Stash.Analysis.Formatting.Printers;
 using Stash.Parsing.AST;
 
 namespace Stash.Analysis.Formatting.Rules;
@@ -8,7 +9,7 @@ internal static class ParameterRules
     internal static void FormatParameterList(
         FormatContext ctx,
         int paramCount,
-        Func<int, bool> hasType,
+        Func<int, TypeExpression?> getType,
         Func<int, Expr?> getDefault,
         bool hasRestParam,
         Action<Expr> formatExpr)
@@ -22,11 +23,11 @@ internal static class ParameterRules
                 ctx.EmitToken(); // ...
             }
             ctx.EmitToken(); // param name
-            if (hasType(i))
+            if (getType(i) is { } paramType)
             {
                 ctx.EmitToken(); // :
                 ctx.Space();
-                ctx.EmitToken(); // type
+                ControlFlowPrinter.EmitTypeExpressionTokens(ctx, paramType);
             }
             var defaultVal = getDefault(i);
             if (defaultVal != null)

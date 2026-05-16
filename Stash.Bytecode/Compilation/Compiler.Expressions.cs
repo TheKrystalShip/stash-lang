@@ -488,26 +488,65 @@ partial class Compiler
         }
         else
         {
-            string name = expr.TypeName!.Lexeme;
-            int localReg = _scope.ResolveLocal(name);
-            if (localReg >= 0)
+            // Structured TypeExpression form. For simple types, treat the head as a
+            // type-name lookup (or a local holding a runtime type). For qualified types
+            // whose head segment resolves to a local variable, evaluate as a dotted
+            // expression so user code like `holder.myType` continues to work; otherwise
+            // use the canonical type-name string for namespace-qualified type lookups.
+            TypeExpression typeExpression = expr.Type!;
+            if (typeExpression is QualifiedType qualified
+                && _scope.ResolveLocal(qualified.Segments[0].Lexeme) >= 0)
             {
-                // The type name is a local variable holding a runtime type
-                _builder.EmitABC(OpCode.Is, dest, valReg, (byte)((byte)localReg | 0x80));
+                byte typeReg = CompileQualifiedTypeAsExpression(qualified);
+                _builder.EmitABC(OpCode.Is, dest, valReg, (byte)(typeReg | 0x80));
+                _scope.FreeTemp(typeReg);
             }
             else
             {
-                // Static type name — load from constant pool
-                ushort typeIdx = _builder.AddConstant(name);
-                byte typeReg = _scope.AllocTemp();
-                _builder.EmitABx(OpCode.LoadK, typeReg, typeIdx);
-                _builder.EmitABC(OpCode.Is, dest, valReg, typeReg);
-                _scope.FreeTemp(typeReg);
+                string name = typeExpression.ToCanonicalString();
+                int localReg = typeExpression is SimpleType simple
+                    ? _scope.ResolveLocal(simple.Name.Lexeme)
+                    : -1;
+                if (localReg >= 0)
+                {
+                    // Simple-type name is a local variable holding a runtime type
+                    _builder.EmitABC(OpCode.Is, dest, valReg, (byte)((byte)localReg | 0x80));
+                }
+                else
+                {
+                    // Static type name — load canonical form from constant pool
+                    ushort typeIdx = _builder.AddConstant(name);
+                    byte typeReg = _scope.AllocTemp();
+                    _builder.EmitABx(OpCode.LoadK, typeReg, typeIdx);
+                    _builder.EmitABC(OpCode.Is, dest, valReg, typeReg);
+                    _scope.FreeTemp(typeReg);
+                }
             }
         }
 
         _scope.FreeTemp(valReg);
         return null;
+    }
+
+    /// <summary>
+    /// Lowers a <see cref="QualifiedType"/> whose head is a runtime value (local) into a
+    /// chain of <see cref="DotExpr"/> evaluations, returning the register holding the
+    /// resulting value. Used by <c>is</c> so user code like <c>x is holder.myType</c>
+    /// continues to evaluate the RHS as a runtime expression while still parsing as a
+    /// structured <see cref="TypeExpression"/>.
+    /// </summary>
+    private byte CompileQualifiedTypeAsExpression(QualifiedType qualified)
+    {
+        Expr expr = new IdentifierExpr(qualified.Segments[0], qualified.Segments[0].Span);
+        for (int i = 1; i < qualified.Segments.Count; i++)
+        {
+            Token seg = qualified.Segments[i];
+            expr = new DotExpr(expr, seg, new Common.SourceSpan(
+                qualified.Segments[0].Span.File,
+                qualified.Segments[0].Span.StartLine, qualified.Segments[0].Span.StartColumn,
+                seg.Span.EndLine, seg.Span.EndColumn), false);
+        }
+        return CompileExpr(expr);
     }
 
     public object? VisitTryExpr(TryExpr expr)

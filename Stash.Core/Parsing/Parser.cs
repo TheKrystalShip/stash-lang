@@ -236,10 +236,10 @@ public class Parser
 
         // Normal variable declaration
         Token name = Consume(TokenType.Identifier, "Expected variable name.");
-        TypeHint? typeHint = null;
+        TypeExpression? typeHint = null;
         if (Match(TokenType.Colon))
         {
-            typeHint = ParseTypeHint();
+            typeHint = ParseTypeExpression();
         }
         Expr? initializer = null;
         if (Match(TokenType.Equal))
@@ -280,10 +280,10 @@ public class Parser
 
         // Normal constant declaration
         Token name = Consume(TokenType.Identifier, "Expected constant name.");
-        TypeHint? typeHint = null;
+        TypeExpression? typeHint = null;
         if (Match(TokenType.Colon))
         {
-            typeHint = ParseTypeHint();
+            typeHint = ParseTypeExpression();
         }
         Consume(TokenType.Equal, "Expected '=' after constant name (constants must be initialized).");
         Expr initializer = Expression();
@@ -393,7 +393,7 @@ public class Parser
         Consume(TokenType.LeftParen, "Expected '(' after function name.");
 
         List<Token> parameters = new();
-        List<TypeHint?> parameterTypes = new();
+        List<TypeExpression?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
         bool hasRestParam = false;
@@ -410,10 +410,10 @@ public class Parser
                     }
                     hasRestParam = true;
                     Token restParamName = Consume(TokenType.Identifier, "Expected parameter name.");
-                    TypeHint? restParamType = null;
+                    TypeExpression? restParamType = null;
                     if (Match(TokenType.Colon))
                     {
-                        restParamType = ParseTypeHint();
+                        restParamType = ParseTypeExpression();
                     }
                     if (Check(TokenType.Equal))
                     {
@@ -430,10 +430,10 @@ public class Parser
                 }
 
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
-                TypeHint? paramType = null;
+                TypeExpression? paramType = null;
                 if (Match(TokenType.Colon))
                 {
-                    paramType = ParseTypeHint();
+                    paramType = ParseTypeExpression();
                 }
                 parameterTypes.Add(paramType);
 
@@ -452,10 +452,10 @@ public class Parser
         }
 
         Consume(TokenType.RightParen, "Expected ')' after parameters.");
-        TypeHint? returnType = null;
+        TypeExpression? returnType = null;
         if (Match(TokenType.Arrow))
         {
-            returnType = ParseTypeHint();
+            returnType = ParseTypeExpression();
         }
         BlockStmt body = ParseBlock();
         var decl = new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken, hasRestParam);
@@ -492,7 +492,7 @@ public class Parser
         Consume(TokenType.LeftBrace, "Expected '{' after struct name.");
 
         List<Token> fields = new();
-        List<TypeHint?> fieldTypes = new();
+        List<TypeExpression?> fieldTypes = new();
         List<FnDeclStmt> methods = new();
 
         // Parse fields (comma-separated, stop when we hit fn, async, or })
@@ -506,10 +506,10 @@ public class Parser
                 }
 
                 fields.Add(Consume(TokenType.Identifier, "Expected field name."));
-                TypeHint? fieldType = null;
+                TypeExpression? fieldType = null;
                 if (Match(TokenType.Colon))
                 {
-                    fieldType = ParseTypeHint();
+                    fieldType = ParseTypeExpression();
                 }
                 fieldTypes.Add(fieldType);
             } while (Match(TokenType.Comma));
@@ -570,7 +570,7 @@ public class Parser
         Consume(TokenType.LeftBrace, "Expected '{' after interface name.");
 
         List<Token> fields = new();
-        List<TypeHint?> fieldTypes = new();
+        List<TypeExpression?> fieldTypes = new();
         List<InterfaceMethodSignature> methods = new();
         HashSet<string> memberNames = new();
 
@@ -598,17 +598,17 @@ public class Parser
                 {
                     // Method signature: name(param1, param2, ...) -> ReturnType
                     List<Token> parameters = new();
-                    List<TypeHint?> parameterTypes = new();
+                    List<TypeExpression?> parameterTypes = new();
 
                     if (!Check(TokenType.RightParen))
                     {
                         do
                         {
                             parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
-                            TypeHint? paramType = null;
+                            TypeExpression? paramType = null;
                             if (Match(TokenType.Colon))
                             {
-                                paramType = ParseTypeHint();
+                                paramType = ParseTypeExpression();
                             }
                             parameterTypes.Add(paramType);
                         } while (Match(TokenType.Comma));
@@ -616,10 +616,10 @@ public class Parser
 
                     Consume(TokenType.RightParen, "Expected ')' after interface method parameters.");
 
-                    TypeHint? returnType = null;
+                    TypeExpression? returnType = null;
                     if (Match(TokenType.Arrow))
                     {
-                        returnType = ParseTypeHint();
+                        returnType = ParseTypeExpression();
                     }
 
                     methods.Add(new InterfaceMethodSignature(memberName, parameters, parameterTypes, returnType));
@@ -627,10 +627,10 @@ public class Parser
                 else
                 {
                     // Field requirement: name or name: Type
-                    TypeHint? fieldType = null;
+                    TypeExpression? fieldType = null;
                     if (Match(TokenType.Colon))
                     {
-                        fieldType = ParseTypeHint();
+                        fieldType = ParseTypeExpression();
                     }
                     fields.Add(memberName);
                     fieldTypes.Add(fieldType);
@@ -652,7 +652,7 @@ public class Parser
     private Stmt ExtendDeclaration()
     {
         Token extendToken = Previous();
-        Token typeName = Consume(TokenType.Identifier, "Expected type name after 'extend'.");
+        TypeExpression typeName = ParseTypeExpression();
 
         Consume(TokenType.LeftBrace, "Expected '{' after type name in extend block.");
 
@@ -1120,10 +1120,10 @@ public class Parser
             varName = Consume(TokenType.Identifier, "Expected variable name after ',' in for-in loop.");
         }
 
-        TypeHint? typeHint = null;
+        TypeExpression? typeHint = null;
         if (Match(TokenType.Colon))
         {
-            typeHint = ParseTypeHint();
+            typeHint = ParseTypeExpression();
         }
         Consume(TokenType.In, "Expected 'in' after variable name in for-in loop.");
         Expr iterable = Expression();
@@ -1321,29 +1321,31 @@ public class Parser
         {
             Token catchKeyword = Previous();
             Consume(TokenType.LeftParen, "Expected '(' after 'catch'.");
-            // Parse either "Type var" or just "var" (full multi-clause/union parsing)
-            Token firstIdent = Consume(TokenType.Identifier, "Expected variable name or type name in 'catch'.");
-            var typeTokens = new List<Token>();
+            var catchTypes = new List<TypeExpression>();
             Token variable;
-            if (!Check(TokenType.RightParen))
+
+            // Lookahead: if the first identifier is immediately followed by ')' it is the variable
+            // in an untyped catch-all `catch (e)`. Otherwise it is the head of one or more
+            // (potentially qualified or array) type expressions separated by '|'.
+            if (Check(TokenType.Identifier) &&
+                _current + 1 < _tokens.Count &&
+                _tokens[_current + 1].Type == TokenType.RightParen)
             {
-                // First token was a type name; parse optional | type names, then variable
-                typeTokens.Add(firstIdent);
-                while (Match(TokenType.Pipe))
-                {
-                    typeTokens.Add(Consume(TokenType.Identifier, "Expected type name after '|' in catch clause."));
-                }
-                variable = Consume(TokenType.Identifier, "Expected variable name in 'catch'.");
+                variable = Advance();
             }
             else
             {
-                // Single identifier → untyped catch-all
-                variable = firstIdent;
+                catchTypes.Add(ParseTypeExpression());
+                while (Match(TokenType.Pipe))
+                {
+                    catchTypes.Add(ParseTypeExpression());
+                }
+                variable = Consume(TokenType.Identifier, "Expected variable name in 'catch'.");
             }
             Consume(TokenType.RightParen, "Expected ')' after catch variable.");
             BlockStmt catchBody = ParseBlock();
             SourceSpan clauseSpan = MakeSpan(catchKeyword.Span, catchBody.Span);
-            catchClauses.Add(new CatchClause(catchKeyword, typeTokens, variable, catchBody, clauseSpan));
+            catchClauses.Add(new CatchClause(catchKeyword, catchTypes, variable, catchBody, clauseSpan));
         }
 
         if (Match(TokenType.Finally))
@@ -1805,39 +1807,29 @@ public class Parser
             Token isKeyword = Previous();
             if (Match(TokenType.Null) || Match(TokenType.Struct) || Match(TokenType.Enum))
             {
-                // Built-in type keywords — bare token path
+                // Built-in type keywords (null/struct/enum) — wrap as a SimpleType for uniformity.
                 Token typeName = Previous();
-                expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
+                var simpleType = new SimpleType(typeName, typeName.Span);
+                expr = new IsExpr(expr, isKeyword, simpleType, MakeSpan(expr.Span, typeName.Span));
             }
             else if (Check(TokenType.Identifier))
             {
-                // Check for typed array pattern: identifier followed by []
-                if (_current + 2 < _tokens.Count &&
-                    _tokens[_current + 1].Type is TokenType.LeftBracket &&
-                    _tokens[_current + 2].Type is TokenType.RightBracket)
+                // Disambiguate between a structured type expression
+                //   Identifier ('.' Identifier)* ('[' ']')*
+                // and an arbitrary expression yielding a type value (typesArr[0], getType(), etc.).
+                //
+                // A call '(' anywhere after the identifier/dot chain forces the expression branch.
+                // A '[' followed by anything other than ']' is an index expression. A '[' followed
+                // by ']' (or repeated) is an array-type postfix.
+                if (IsStructuredTypeExpressionAhead())
                 {
-                    // T[] pattern: consume identifier, [, ]
-                    Token baseType = Advance();
-                    Advance(); // [
-                    Token closeBracket = Advance(); // ]
-                    // Create a synthetic token with combined lexeme "int[]"
-                    var syntheticToken = new Token(TokenType.Identifier, $"{baseType.Lexeme}[]", null,
-                        new SourceSpan(baseType.Span.File, baseType.Span.StartLine, baseType.Span.StartColumn,
-                            closeBracket.Span.EndLine, closeBracket.Span.EndColumn));
-                    expr = new IsExpr(expr, isKeyword, syntheticToken, MakeSpan(expr.Span, closeBracket.Span));
-                }
-                // Peek ahead: if followed by (, ., or [ → complex expression (array index, call, member access)
-                else if (_current + 1 < _tokens.Count &&
-                    _tokens[_current + 1].Type is TokenType.LeftParen or TokenType.Dot or TokenType.LeftBracket)
-                {
-                    Expr typeExpr = Call();
-                    expr = new IsExpr(expr, isKeyword, typeExpr, MakeSpan(expr.Span, typeExpr.Span));
+                    TypeExpression typeExpression = ParseTypeExpression();
+                    expr = new IsExpr(expr, isKeyword, typeExpression, MakeSpan(expr.Span, typeExpression.Span));
                 }
                 else
                 {
-                    // Bare identifier: int, Point, Printable
-                    Token typeName = Advance();
-                    expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
+                    Expr typeExpr = Call();
+                    expr = new IsExpr(expr, isKeyword, typeExpr, MakeSpan(expr.Span, typeExpr.Span));
                 }
             }
             else
@@ -2143,14 +2135,14 @@ public class Parser
                 // Inline block: onRetry (n, err) { ... }
                 Advance(); // consume '('
                 Token paramAttempt = Consume(TokenType.Identifier, "Expected parameter name for attempt number.");
-                TypeHint? paramAttemptTypeHint = null;
+                TypeExpression? paramAttemptTypeHint = null;
                 if (Match(TokenType.Colon))
-                    paramAttemptTypeHint = ParseTypeHint();
+                    paramAttemptTypeHint = ParseTypeExpression();
                 Consume(TokenType.Comma, "Expected ',' between onRetry parameters.");
                 Token paramError = Consume(TokenType.Identifier, "Expected parameter name for error.");
-                TypeHint? paramErrorTypeHint = null;
+                TypeExpression? paramErrorTypeHint = null;
                 if (Match(TokenType.Colon))
-                    paramErrorTypeHint = ParseTypeHint();
+                    paramErrorTypeHint = ParseTypeExpression();
                 Consume(TokenType.RightParen, "Expected ')' after onRetry parameters.");
                 BlockStmt hookBody = ParseBlock();
                 onRetryClause = new OnRetryNode(onRetryToken, false, paramAttempt, paramAttemptTypeHint, paramError, paramErrorTypeHint, hookBody, null, MakeSpan(onRetryStart, hookBody.Span));
@@ -2875,7 +2867,7 @@ public class Parser
     private Expr ParseLambda(Token open, bool isAsync = false, Token? asyncToken = null)
     {
         List<Token> parameters = new();
-        List<TypeHint?> parameterTypes = new();
+        List<TypeExpression?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
         bool hasRestParam = false;
@@ -2893,10 +2885,10 @@ public class Parser
                     }
                     hasRestParam = true;
                     Token restParamName = Consume(TokenType.Identifier, "Expected parameter name.");
-                    TypeHint? restParamType = null;
+                    TypeExpression? restParamType = null;
                     if (Match(TokenType.Colon))
                     {
-                        restParamType = ParseTypeHint();
+                        restParamType = ParseTypeExpression();
                     }
                     if (Check(TokenType.Equal))
                     {
@@ -2913,10 +2905,10 @@ public class Parser
                 }
 
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
-                TypeHint? paramType = null;
+                TypeExpression? paramType = null;
                 if (Match(TokenType.Colon))
                 {
-                    paramType = ParseTypeHint();
+                    paramType = ParseTypeExpression();
                 }
                 parameterTypes.Add(paramType);
 
@@ -3184,33 +3176,92 @@ public class Parser
     /// </summary>
     private bool IsAtEnd => Peek().Type == TokenType.Eof;
 
-    /// <summary>Parses an optional type hint after a colon: <c>: TypeName</c>, <c>: a.B</c>,
-    /// <c>: a.b.C</c>, or any of those with a trailing <c>[]</c>.</summary>
-    private TypeHint ParseTypeHint()
+    /// <summary>
+    /// Lookahead — returns true when the tokens starting at the current position form a structured
+    /// type expression: <c>Identifier ('.' Identifier)* ('[' ']')*</c> followed by something other
+    /// than <c>(</c> (a call) or <c>[</c> with non-<c>]</c> contents (an index expression).
+    /// Used by the <c>is</c> operator to choose between a <see cref="TypeExpression"/> and an
+    /// arbitrary <see cref="Expr"/> on the RHS.
+    /// </summary>
+    private bool IsStructuredTypeExpressionAhead()
     {
-        Token head = Consume(TokenType.Identifier, "Expected type name after ':'.");
-        List<Token>? path = null;
+        int saved = _current;
+        try
+        {
+            if (!Check(TokenType.Identifier)) return false;
+            Advance(); // first identifier
+
+            // Optional dotted path
+            while (Check(TokenType.Dot))
+            {
+                if (_current + 1 >= _tokens.Count || _tokens[_current + 1].Type != TokenType.Identifier)
+                {
+                    return false;
+                }
+                Advance(); // '.'
+                Advance(); // identifier
+            }
+
+            // A call always wins: `is foo()`, `is mod.Foo()` are arbitrary expressions.
+            if (Check(TokenType.LeftParen)) return false;
+
+            // '[' must be the array postfix '[]' (otherwise it's an index expression).
+            while (Check(TokenType.LeftBracket))
+            {
+                if (_current + 1 >= _tokens.Count || _tokens[_current + 1].Type != TokenType.RightBracket)
+                {
+                    return false;
+                }
+                Advance(); // '['
+                Advance(); // ']'
+            }
+
+            return true;
+        }
+        finally
+        {
+            _current = saved;
+        }
+    }
+
+    /// <summary>
+    /// Parses a type expression at any type position: a bare type name (<c>int</c>, <c>Point</c>),
+    /// a namespace-qualified type (<c>diff.Edit</c>, <c>a.b.C</c>), or any of those with a trailing
+    /// <c>[]</c> for an array type. The grammar production is uniform across <c>let</c>/<c>const</c>/
+    /// <c>fn</c>/<c>for-in</c>/struct/interface/lambda/retry annotations as well as <c>is</c>,
+    /// <c>catch</c>, and <c>extend</c>.
+    /// </summary>
+    private TypeExpression ParseTypeExpression()
+    {
+        Token head = Consume(TokenType.Identifier, "Expected type name.");
+        List<Token>? segments = null;
         while (Check(TokenType.Dot))
         {
             Advance(); // consume '.'
             Token next = Consume(TokenType.Identifier, "Expected identifier after '.' in type name.");
-            path ??= new List<Token> { head };
-            path.Add(next);
+            segments ??= new List<Token> { head };
+            segments.Add(next);
         }
 
-        Token last = path is { Count: > 0 } ? path[^1] : head;
-        bool isArray = false;
-        Token endToken = last;
-        if (Match(TokenType.LeftBracket))
+        Token last = segments is { Count: > 0 } ? segments[^1] : head;
+        var primarySpan = new SourceSpan(head.Span.File, head.Span.StartLine, head.Span.StartColumn,
+            last.Span.EndLine, last.Span.EndColumn);
+
+        TypeExpression result = segments is { Count: > 0 }
+            ? new QualifiedType(segments, primarySpan)
+            : new SimpleType(head, primarySpan);
+
+        // Postfix '[]' for array types (left-associative; supports T[][] etc.)
+        while (Match(TokenType.LeftBracket))
         {
             Consume(TokenType.RightBracket, "Expected ']' after '[' in typed array type.");
-            isArray = true;
-            endToken = Previous();
+            Token closeBracket = Previous();
+            var arraySpan = new SourceSpan(head.Span.File, head.Span.StartLine, head.Span.StartColumn,
+                closeBracket.Span.EndLine, closeBracket.Span.EndColumn);
+            result = new ArrayType(result, arraySpan);
         }
 
-        var span = new SourceSpan(head.Span.File, head.Span.StartLine, head.Span.StartColumn,
-            endToken.Span.EndLine, endToken.Span.EndColumn);
-        return new TypeHint(head, path, isArray, span);
+        return result;
     }
 
     /// <summary>
