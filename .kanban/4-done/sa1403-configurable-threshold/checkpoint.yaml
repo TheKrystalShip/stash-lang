@@ -1,0 +1,29 @@
+schema_version: 1
+feature: sa1403-configurable-threshold
+current: null
+updated: '2026-05-16T20:37:03Z'
+phases:
+  1A:
+    status: done
+    commit: 339412886ebcf49027c1b3bf181f3d4a8d71fe55
+    verified: true
+    started: '2026-05-16T19:53:48Z'
+    completed: '2026-05-16T20:00:22Z'
+    attempts: 1
+    notes: Added ParentBinaryOperator (TokenType?) to RuleContext; GroupingExpr is non-transparent; SemanticValidator
+      path discrepancy documented for Phase 1B
+  1B:
+    status: done
+    commit: 78ca35fca05ce626d881cee488ad06629a04d903
+    verified: true
+    started: '2026-05-16T20:01:38Z'
+    completed: '2026-05-16T20:08:22Z'
+    attempts: 1
+    notes: Rewrote PreferStringInterpolationRule with chain counting, IConfigurableRule threshold, and
+      root-detection via ParentBinaryOperator; updated descriptor, tests (75 pass), and README
+review:
+  status: resolved
+  started: '2026-05-16T20:15:06Z'
+  resolved: '2026-05-16T20:37:03Z'
+  findings_open: 0
+  findings_fixed: 0
