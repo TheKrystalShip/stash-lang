@@ -27,6 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- module-exports — Module Exports — explicit export keyword | .kanban/2-in-progress/module-exports/ | 10 phases | started 2026-05-16
 
 ---
 
