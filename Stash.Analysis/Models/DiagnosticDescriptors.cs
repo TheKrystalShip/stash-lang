@@ -108,6 +108,12 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
     public static readonly DiagnosticDescriptor SA0804 = new("SA0804", "Import statements not in canonical order", DiagnosticLevel.Information, "Imports", "Import statements are not in canonical order.", FixApplicability.Safe);
 
+    // ── SA0805–SA0808 — Exports ───────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0805 = new("SA0805", "Export mutable binding", DiagnosticLevel.Error, "Exports", "Cannot export mutable binding '{0}'. Only 'fn', 'const', 'struct', 'enum', and 'interface' declarations may be exported.");
+    public static readonly DiagnosticDescriptor SA0806 = new("SA0806", "Export import binding", DiagnosticLevel.Error, "Exports", "Cannot export imported binding '{0}'. Re-export the name in the importing module instead.");
+    public static readonly DiagnosticDescriptor SA0807 = new("SA0807", "Export unknown name", DiagnosticLevel.Error, "Exports", "Exported name '{0}' is not declared at the top level of this module.");
+    public static readonly DiagnosticDescriptor SA0808 = new("SA0808", "Duplicate export", DiagnosticLevel.Error, "Exports", "'{0}' is already exported.");
+
     // ── SA083x — Deprecations ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0830 = new("SA0830", "Deprecated built-in member", DiagnosticLevel.Warning, "Deprecations", "'{0}' is deprecated \u2014 use '{1}' instead.");
 
@@ -277,6 +283,10 @@ public static class DiagnosticDescriptors
         dict[SA0801.Code] = SA0801;
         dict[SA0802.Code] = SA0802;
         dict[SA0804.Code] = SA0804;
+        dict[SA0805.Code] = SA0805;
+        dict[SA0806.Code] = SA0806;
+        dict[SA0807.Code] = SA0807;
+        dict[SA0808.Code] = SA0808;
         dict[SA0810.Code] = SA0810;
         dict[SA0811.Code] = SA0811;
         dict[SA0812.Code] = SA0812;
