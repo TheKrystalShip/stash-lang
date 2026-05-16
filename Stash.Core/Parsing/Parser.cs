@@ -1073,12 +1073,25 @@ public class Parser
                 Advance(); // skip second identifier
             }
 
-            // Optional: colon + type hint
+            // Optional: colon + type hint (may be dotted: a.B.C)
             if (Check(TokenType.Colon))
             {
                 Advance(); // skip ':'
                 if (!Check(TokenType.Identifier)) return false;
-                Advance(); // skip type
+                Advance(); // skip first segment
+                while (Check(TokenType.Dot))
+                {
+                    Advance(); // skip '.'
+                    if (!Check(TokenType.Identifier)) return false;
+                    Advance(); // skip segment
+                }
+                // Optional array suffix []
+                if (Check(TokenType.LeftBracket))
+                {
+                    Advance();
+                    if (!Check(TokenType.RightBracket)) return false;
+                    Advance();
+                }
             }
 
             return Check(TokenType.In);
@@ -3171,18 +3184,33 @@ public class Parser
     /// </summary>
     private bool IsAtEnd => Peek().Type == TokenType.Eof;
 
-    /// <summary>Parses an optional type hint after a colon: <c>: TypeName</c> or <c>: TypeName[]</c>.</summary>
+    /// <summary>Parses an optional type hint after a colon: <c>: TypeName</c>, <c>: a.B</c>,
+    /// <c>: a.b.C</c>, or any of those with a trailing <c>[]</c>.</summary>
     private TypeHint ParseTypeHint()
     {
-        Token typeName = Consume(TokenType.Identifier, "Expected type name after ':'.");
+        Token head = Consume(TokenType.Identifier, "Expected type name after ':'.");
+        List<Token>? path = null;
+        while (Check(TokenType.Dot))
+        {
+            Advance(); // consume '.'
+            Token next = Consume(TokenType.Identifier, "Expected identifier after '.' in type name.");
+            path ??= new List<Token> { head };
+            path.Add(next);
+        }
+
+        Token last = path is { Count: > 0 } ? path[^1] : head;
+        bool isArray = false;
+        Token endToken = last;
         if (Match(TokenType.LeftBracket))
         {
             Consume(TokenType.RightBracket, "Expected ']' after '[' in typed array type.");
-            var span = new SourceSpan(typeName.Span.File, typeName.Span.StartLine, typeName.Span.StartColumn,
-                Previous().Span.EndLine, Previous().Span.EndColumn);
-            return new TypeHint(typeName, true, span);
+            isArray = true;
+            endToken = Previous();
         }
-        return new TypeHint(typeName, false, typeName.Span);
+
+        var span = new SourceSpan(head.Span.File, head.Span.StartLine, head.Span.StartColumn,
+            endToken.Span.EndLine, endToken.Span.EndColumn);
+        return new TypeHint(head, path, isArray, span);
     }
 
     /// <summary>

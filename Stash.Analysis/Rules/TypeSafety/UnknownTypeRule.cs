@@ -110,6 +110,14 @@ public sealed class UnknownTypeRule : IAnalysisRule
             return;
         }
 
+        // Dotted (namespace-qualified) type names like `types.DiffOptions` cannot be resolved
+        // against the local scope tree — the head identifier is an import alias whose target
+        // module is not walked by this rule. Skip validation; LSP/import resolver covers it.
+        if (typeHint.Path is { Count: > 1 })
+        {
+            return;
+        }
+
         var typeName = typeHint.Name.Lexeme;
 
         if (context.ValidBuiltInTypes.Contains(typeName))

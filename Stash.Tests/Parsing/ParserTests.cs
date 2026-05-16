@@ -2456,4 +2456,157 @@ public class ParserTests
         Assert.Single(switchStmt.Cases);
         Assert.True(switchStmt.Cases[0].IsDefault);
     }
+
+    // ── Dotted (Namespace-Qualified) Type Annotations ──────────────────
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InFunctionParameter()
+    {
+        var stmts = ParseProgram("fn f(x: a.B) {}");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        var paramType = fn.ParameterTypes[0];
+        Assert.NotNull(paramType);
+        Assert.Equal("a.B", paramType!.Lexeme);
+        Assert.NotNull(paramType.Path);
+        Assert.Equal(2, paramType.Path!.Count);
+        Assert.Equal("a", paramType.Name.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InReturnType()
+    {
+        var stmts = ParseProgram("fn f() -> a.B {}");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(fn.ReturnType);
+        Assert.Equal("a.B", fn.ReturnType!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InLetDeclaration()
+    {
+        var stmts = ParseProgram("let x: a.B = 1;");
+        var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(decl.TypeHint);
+        Assert.Equal("a.B", decl.TypeHint!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InConstDeclaration()
+    {
+        var stmts = ParseProgram("const x: a.B = 1;");
+        var decl = Assert.IsType<ConstDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(decl.TypeHint);
+        Assert.Equal("a.B", decl.TypeHint!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InStructField()
+    {
+        var stmts = ParseProgram("struct S { x: a.B }");
+        var decl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        var fieldType = decl.FieldTypes[0];
+        Assert.NotNull(fieldType);
+        Assert.Equal("a.B", fieldType!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InForLoopVariable()
+    {
+        var stmts = ParseProgram("for (let v: a.B in xs) { }");
+        var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
+        Assert.NotNull(forIn.TypeHint);
+        Assert.Equal("a.B", forIn.TypeHint!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InRestParameter()
+    {
+        var stmts = ParseProgram("fn f(...xs: a.B) {}");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.True(fn.HasRestParam);
+        var paramType = fn.ParameterTypes[^1];
+        Assert.NotNull(paramType);
+        Assert.Equal("a.B", paramType!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedType_InOnRetryParameter()
+    {
+        var stmts = ParseProgram("retry (3) onRetry (n: a.B, err: c.D) { } { }");
+        var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+        var retry = Assert.IsType<RetryExpr>(exprStmt.Expression);
+        Assert.NotNull(retry.OnRetryClause);
+        Assert.NotNull(retry.OnRetryClause!.ParamAttemptTypeHint);
+        Assert.Equal("a.B", retry.OnRetryClause.ParamAttemptTypeHint!.Lexeme);
+        Assert.NotNull(retry.OnRetryClause.ParamErrorTypeHint);
+        Assert.Equal("c.D", retry.OnRetryClause.ParamErrorTypeHint!.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_MultiSegmentDotted()
+    {
+        var stmts = ParseProgram("let x: a.b.c = 1;");
+        var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(decl.TypeHint);
+        Assert.Equal("a.b.c", decl.TypeHint!.Lexeme);
+        Assert.NotNull(decl.TypeHint.Path);
+        Assert.Equal(3, decl.TypeHint.Path!.Count);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedArray()
+    {
+        var stmts = ParseProgram("let x: a.B[] = [];");
+        var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(decl.TypeHint);
+        Assert.True(decl.TypeHint!.IsArray);
+        Assert.Equal("a.B[]", decl.TypeHint.Lexeme);
+    }
+
+    [Fact]
+    public void ParseTypeHint_TrailingDot_Errors()
+    {
+        var lexer = new Lexer("let x: a. = 1;");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        parser.ParseProgram();
+        Assert.NotEmpty(parser.Errors);
+        Assert.Contains(parser.Errors, e => e.Contains("Expected identifier after '.' in type name."));
+    }
+
+    [Fact]
+    public void ParseTypeHint_DotKeyword_Errors()
+    {
+        // `if` is a reserved keyword and is not a valid identifier path segment.
+        var lexer = new Lexer("let x: a.if = 1;");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        parser.ParseProgram();
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    [Fact]
+    public void ParseTypeHint_SourceSpanCoversFullDottedName()
+    {
+        // "let x: a.bc = 1;" — type hint spans from 'a' at col 8 through last char of "bc" at col 11.
+        var stmts = ParseProgram("let x: a.bc = 1;");
+        var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(decl.TypeHint);
+        var span = decl.TypeHint!.Span;
+        Assert.Equal(8, span.StartColumn);
+        Assert.Equal(11, span.EndColumn);
+    }
+
+    [Fact]
+    public void ParseTypeHint_DottedArray_SourceSpanCoversBrackets()
+    {
+        // "let x: a.B[] = [];" — span ends at the ']' bracket.
+        var stmts = ParseProgram("let x: a.B[] = [];");
+        var decl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(decl.TypeHint);
+        var span = decl.TypeHint!.Span;
+        Assert.Equal(8, span.StartColumn);
+        // Last column of the closing ']' bracket.
+        Assert.Equal(12, span.EndColumn);
+    }
 }

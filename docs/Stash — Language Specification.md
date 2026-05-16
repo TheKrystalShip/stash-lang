@@ -452,6 +452,22 @@ A type hint names a runtime type, user-defined type, interface, or array type su
 as `int[]`. If a checked value does not match its type hint, evaluation produces a
 runtime error.
 
+Type hints may be **namespace-qualified** using a dotted path, allowing types
+imported through an alias to be referenced where the imported name itself is not
+in scope:
+
+```stash
+import "diff" as diff;
+
+fn render(options: diff.DiffOptions) -> diff.DiffResult {
+    return diff.lines("a", "b", options);
+}
+```
+
+The head of the path resolves like any identifier; trailing segments name members
+of that head. Dotted type hints may also carry the `[]` array suffix
+(`diff.Edit[]`).
+
 ### Destructuring Declarations
 
 Array destructuring binds elements by position.
