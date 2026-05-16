@@ -30,6 +30,7 @@ public sealed class PreferStringInterpolationRule : IAnalysisRule, IConfigurable
 
     public void Configure(IReadOnlyDictionary<string, string> options)
     {
+        Threshold = DefaultThreshold;
         if (options.TryGetValue("threshold", out string? val) && int.TryParse(val, out int v) && v > 0)
             Threshold = v;
     }

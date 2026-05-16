@@ -272,6 +272,15 @@ public class Phase6RuleOptionsTests : AnalysisTestBase
     }
 
     [Fact]
+    public void PreferStringInterpolationRule_Configure_ResetsToDefaultWhenOptionAbsent()
+    {
+        var rule = new PreferStringInterpolationRule();
+        rule.Configure(new Dictionary<string, string> { ["threshold"] = "5" });
+        rule.Configure(new Dictionary<string, string>());
+        Assert.Equal(PreferStringInterpolationRule.DefaultThreshold, rule.Threshold);
+    }
+
+    [Fact]
     public void SA1403_OneLiteralPlusVar_WithThreshold1_ReportsInfo()
     {
         // With threshold=1, "Hello " + name (1 literal) must fire
