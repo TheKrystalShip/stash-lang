@@ -39,3 +39,4 @@ Thumbs.db
 
 test_output.log
 test_output.txt
+scripts/checkpoint/__pycache__/

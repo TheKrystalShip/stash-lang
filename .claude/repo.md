@@ -14,9 +14,20 @@ This file is the shared persistent memory for all agents working on this project
 
 ---
 
-## Active Work / In Progress
+## Active Multi-Phase Work
 
-<!-- Agents: add entries here when starting multi-phase work. Remove when complete. -->
+<!--
+Live checkpoint state lives in .kanban/2-in-progress/<slug>/checkpoint.yaml.
+This section is ONLY a one-line-per-feature pointer so a cold-start session
+knows which features are in flight. Run `/resume <slug>` for actual state.
+
+Format (one line per active feature):
+  - <slug> — <title> | .kanban/2-in-progress/<slug>/ | <N> phases | started YYYY-MM-DD
+
+The architect adds a line here on bootstrap; `/done` removes it on promotion.
+-->
+
+_(none active)_
 
 ---
 
