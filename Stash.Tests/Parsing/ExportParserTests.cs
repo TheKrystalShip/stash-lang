@@ -119,23 +119,23 @@ public class ExportParserTests
     }
 
     // =========================================================================
-    // Error cases — SX001 / SX002 / SX003
+    // Error cases — disallowed export targets
     // =========================================================================
 
     [Fact]
-    public void Parse_ExportLet_RaisesSX001()
+    public void Parse_ExportLet_RaisesParseError()
     {
         RunExpectingParseError("export let counter = 0;");
     }
 
     [Fact]
-    public void Parse_ExportExtend_RaisesSX002()
+    public void Parse_ExportExtend_RaisesParseError()
     {
         RunExpectingParseError("export extend string { fn shout() { } }");
     }
 
     [Fact]
-    public void Parse_ExportImport_RaisesSX003()
+    public void Parse_ExportImport_RaisesParseError()
     {
         RunExpectingParseError("""export import { foo } from "other.stash";""");
     }

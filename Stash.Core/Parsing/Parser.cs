@@ -744,29 +744,26 @@ public class Parser
     ///   <item><description><c>export fn/const/struct/enum/interface …</c> — declaration-site form</description></item>
     ///   <item><description><c>export { name1, name2, … };</c> — block form</description></item>
     /// </list>
-    /// Raises SX001 immediately when followed by <c>let</c>, SX002 when followed by <c>extend</c>,
-    /// and SX003 when followed by <c>import</c>.
+    /// Raises a parse error immediately when followed by <c>let</c>, <c>extend</c>, or <c>import</c>,
+    /// as none of those forms are exportable.
     /// </summary>
     private Stmt ExportDeclaration()
     {
         Token exportKeyword = Previous();
 
-        // export let → SX001
         if (Check(TokenType.Let))
         {
-            throw Error(Peek(), "SX001: Exporting mutable bindings is not allowed. Use 'const' instead of 'let'.");
+            throw Error(Peek(), "Exporting mutable bindings is not allowed. Use 'const' instead of 'let'.");
         }
 
-        // export extend → SX002
         if (Check(TokenType.Extend))
         {
-            throw Error(Peek(), "SX002: 'extend' blocks cannot be exported. Extension methods are registered globally at module-load time.");
+            throw Error(Peek(), "'extend' blocks cannot be exported. Extension methods are registered globally at module-load time.");
         }
 
-        // export import → SX003
         if (Check(TokenType.Import))
         {
-            throw Error(Peek(), "SX003: Import declarations cannot be exported.");
+            throw Error(Peek(), "Import declarations cannot be exported.");
         }
 
         // export { name1, name2 } — block form
