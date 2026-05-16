@@ -332,6 +332,14 @@ partial class Compiler
         return null;
     }
 
+    public object? VisitExportDeclStmt(ExportDeclStmt stmt)
+    {
+        stmt.Inner.Accept(this);
+        return null;
+    }
+
+    public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
+
     public object? VisitImportStmt(ImportStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);

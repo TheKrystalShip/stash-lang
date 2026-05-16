@@ -420,6 +420,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitExportDeclStmt(ExportDeclStmt stmt)
+    {
+        stmt.Inner.Accept(this);
+        return null;
+    }
+
+    public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
+
     public object? VisitImportStmt(ImportStmt stmt) => null;
 
     public object? VisitImportAsStmt(ImportAsStmt stmt) => null;

@@ -603,6 +603,23 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitExportDeclStmt(ExportDeclStmt stmt)
+    {
+        EmitFromToken(stmt.ExportKeyword, TokenTypeKeyword, 0);
+        stmt.Inner.Accept(this);
+        return 0;
+    }
+
+    public int VisitExportBlockStmt(ExportBlockStmt stmt)
+    {
+        EmitFromToken(stmt.ExportKeyword, TokenTypeKeyword, 0);
+        foreach (var name in stmt.Names)
+        {
+            EmitFromToken(name, TokenTypeVariable, 0);
+        }
+        return 0;
+    }
+
     public int VisitImportStmt(ImportStmt stmt)
     {
         foreach (var name in stmt.Names)

@@ -950,6 +950,25 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     }
 
     /// <summary>
+    /// Delegates to the inner declaration so its symbol is collected as if no <c>export</c> wrapper existed.
+    /// </summary>
+    /// <param name="stmt">The export-declaration statement (<c>export fn/const/struct/…</c>).</param>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitExportDeclStmt(ExportDeclStmt stmt)
+    {
+        stmt.Inner.Accept(this);
+        return null;
+    }
+
+    /// <summary>
+    /// No-op — the block form introduces no new symbols; the symbols it names were already collected
+    /// from their own declarations.
+    /// </summary>
+    /// <param name="stmt">The export-block statement (<c>export { … };</c>).</param>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
+
+    /// <summary>
     /// Registers a placeholder <see cref="SymbolKind.Variable"/> symbol for each imported name.
     /// These placeholder symbols are later replaced by fully-resolved <see cref="SymbolInfo"/>
     /// instances from <see cref="ImportResolver"/> during the <see cref="AnalysisEngine"/> pass.

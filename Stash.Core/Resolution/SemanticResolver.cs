@@ -380,6 +380,14 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
+    public object? VisitExportDeclStmt(ExportDeclStmt stmt)
+    {
+        stmt.Inner.Accept(this);
+        return null;
+    }
+
+    public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
+
     public object? VisitImportStmt(ImportStmt stmt)
     {
         ResolveExpr(stmt.Path);
