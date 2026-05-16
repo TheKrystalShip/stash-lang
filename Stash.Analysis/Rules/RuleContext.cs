@@ -3,6 +3,7 @@ namespace Stash.Analysis.Rules;
 using System;
 using System.Collections.Generic;
 using Stash.Analysis.FlowAnalysis;
+using Stash.Lexing;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -33,6 +34,19 @@ public sealed class RuleContext
 
     /// <summary>Current loop nesting depth. Non-zero when inside a loop body.</summary>
     public int LoopDepth { get; init; }
+
+    /// <summary>
+    /// The operator type of the immediately enclosing <see cref="BinaryExpr"/>, or
+    /// <see langword="null"/> when the current expression is not a direct child of a
+    /// <see cref="BinaryExpr"/>. Used by expression-level rules to detect whether the current
+    /// node is a nested operand (e.g. inside a <c>+</c> chain) or a chain root.
+    /// </summary>
+    /// <remarks>
+    /// Populated by <c>SemanticValidator.VisitBinaryExpr</c> before dispatching child rules.
+    /// Rules that do not inspect parent context can ignore this field safely — it is always
+    /// <see langword="null"/> unless explicitly set.
+    /// </remarks>
+    public TokenType? ParentBinaryOperator { get; init; }
 
     /// <summary>Current function nesting depth. Non-zero when inside a function or lambda body.</summary>
     public int FunctionDepth { get; init; }
