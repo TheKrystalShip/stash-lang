@@ -1,0 +1,99 @@
+schema_version: 1
+feature: module-exports
+current: null
+updated: '2026-05-17T09:29:30Z'
+phases:
+  1A:
+    status: done
+    commit: 9df0387677237597c51edf91045a410adf1d8c14
+    verified: true
+    started: '2026-05-16T22:00:54Z'
+    completed: '2026-05-16T22:11:00Z'
+    attempts: 1
+    notes: Added export soft-keyword, ExportDeclStmt/ExportBlockStmt AST nodes, parser integration with
+      SX001/SX002/SX003 error emission, default interface stubs for six-visitor build compatibility, 17
+      tests
+  1B:
+    status: done
+    commit: 1cb3697d404b3f48c5d0e4c03b0218009e5701e2
+    verified: true
+    started: '2026-05-16T22:20:08Z'
+    completed: '2026-05-16T22:24:38Z'
+    attempts: 1
+    notes: Added VisitExportDeclStmt/VisitExportBlockStmt pass-through stubs to all six visitors
+  1C:
+    status: done
+    commit: 4354a99b7fb143d5bbb664cb15fb9895348c2aa5
+    verified: true
+    started: '2026-05-16T22:25:56Z'
+    completed: '2026-05-16T22:35:12Z'
+    attempts: 1
+    notes: ModuleExports.Build + SA0805-SA0808 in SemanticValidator; 33 tests green
+  1D:
+    status: done
+    commit: 6c8792d84e967db4baee146b4da28f5fe166ac5a
+    verified: true
+    started: '2026-05-17T07:44:17Z'
+    completed: '2026-05-17T07:57:48Z'
+    attempts: 1
+    notes: Core ModuleExports type (names-only), ModuleExportsBuilder in Analysis, Chunk.Exports property,
+      .stashc v4 with inline export serialization
+  1E:
+    status: done
+    commit: 74fa9a4b0c35651993f0a3dae35a7052fc36023b
+    verified: true
+    started: '2026-05-17T07:59:32Z'
+    completed: '2026-05-17T08:05:59Z'
+    attempts: 1
+    notes: Add BuildExportedEnvironment to filter module globals at LoadModule boundary; 7 runtime tests
+      pass
+  1F:
+    status: done
+    commit: 2b77a6fea370771bafbc40beaeb8d0cf9aa768c9
+    verified: true
+    started: '2026-05-17T08:14:35Z'
+    completed: '2026-05-17T08:20:46Z'
+    attempts: 1
+    notes: ModuleInfo.Exports populated by AnalysisEngine; ResolveSelectiveImport filters by export set
+      and emits SA0809 hint; ResolveNamespaceImport builds filtered ModuleInfo for completion
+  1G:
+    status: done
+    commit: c42cf6556a15b203bf6354823016d6bc8d616371
+    verified: true
+    started: '2026-05-17T08:27:11Z'
+    completed: '2026-05-17T08:35:17Z'
+    attempts: 1
+    notes: Added ModuleExportsSymbol predicate and BuildAddMissingImportActions to CodeActionHandler;
+      verified SemanticTokenWalker export keyword highlighting; 8 new tests in ExportLspTests
+  1H:
+    status: done
+    commit: 84eddd1f0de4d2977440bdd56bc251b89fd9468e
+    verified: true
+    started: '2026-05-17T08:39:18Z'
+    completed: '2026-05-17T08:45:44Z'
+    attempts: 1
+    notes: Replace 1B stub with Doc.Group printer for ExportBlockStmt; add ExportFormatterTests
+  1I:
+    status: done
+    commit: b3ea5b4dda98946c3c01bc7e29e173a39cd33a7d
+    verified: true
+    started: '2026-05-17T08:49:08Z'
+    completed: '2026-05-17T08:51:10Z'
+    attempts: 1
+    notes: Added 'export' to Monarch keywords array; added export-declaration pattern and keyword.control
+      alternation to tmLanguage.json
+  1J:
+    status: done
+    commit: 04c1638caf72dc2a3ed3f50343665f2321226281
+    verified: true
+    started: '2026-05-17T08:51:48Z'
+    completed: '2026-05-17T08:56:10Z'
+    attempts: 1
+    notes: Added Exports section to language spec (contextual keyword, BNF, back-compat), created module_exports.stash
+      example, added CHANGELOG entry
+review:
+  status: in_progress
+  started: '2026-05-17T09:04:52Z'
+  resolved: null
+  findings_open: 0
+  findings_fixed: 0
