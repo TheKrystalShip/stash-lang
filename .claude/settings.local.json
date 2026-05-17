@@ -10,7 +10,8 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(xargs -n1 basename)",
-      "Bash(dotnet --version)"
+      "Bash(dotnet --version)",
+      "Bash(bash *)"
     ]
   },
   "outputStyle": "Explanatory"
