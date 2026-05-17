@@ -198,7 +198,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ExportSetBuilderTests|Fully
 
 ## F04 — [MINOR] `SemanticTokenWalker` emits export-block names as `Variable` regardless of underlying symbol kind
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 7df13d2
 **Files:** `Stash.Analysis/Visitors/SemanticTokenWalker.cs:613-621`
 **Phase:** 1G
 **Commit:** c42cf65
