@@ -1,3 +1,6 @@
 node_modules/
-out/
+out/*
+!out/
+!out/*.js
+!out/*.js.map
 *.vsix

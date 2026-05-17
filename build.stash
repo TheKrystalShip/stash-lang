@@ -23,8 +23,8 @@ artifacts[$"{REGISTRY_SOURCE}"] = $"{REGISTRY_DEST}";
 artifacts[$"{CHECK_SOURCE}"] = $"{CHECK_DEST}";
 artifacts[$"{FORMAT_SOURCE}"] = $"{FORMAT_DEST}";
 
+/// Clean the build artifacts and rebuild the entire project.
 fn cleanBuildStash() {
-  // Clean solution and build all projects
   io.println("Cleaning and building the project...");
   $!>(dotnet clean);
   io.println("Clean complete. Starting build...");
@@ -32,6 +32,8 @@ fn cleanBuildStash() {
   io.println("Build complete.");
 }
 
+/// Deploy all build artifacts to a directory on the PATH for easy access.
+/// This will overwrite any existing binaries with the same name.
 fn deploy() {
   for (let source, dest in artifacts) {
     if (!fs.exists(source)) {
@@ -40,8 +42,8 @@ fn deploy() {
       env.exit(1);
     }
     if (fs.exists(dest)) {
+      // unlink old binary (process keeps running fine)
       try fs.delete(dest);
-    // unlink old binary (process keeps running fine)
     }
     fs.copy(source, dest);
     io.println($"Copied {source} to {dest}");
@@ -49,8 +51,9 @@ fn deploy() {
   io.println("Deployment complete.");
 }
 
+/// Build the stash-lang vscode extension.
+/// Sometimes, changes affect the extension and we always want to keep the latest version available.
 fn buildExtension() {
-  // Build the VSCode extension
   io.println("Building VSCode extension...");
   const result = env.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
     return $(${path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});

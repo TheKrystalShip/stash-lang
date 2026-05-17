@@ -13,6 +13,7 @@ import { StashBytecodeViewerProvider } from "./bytecodeViewer";
 import { StashInlineValuesProvider } from "./inlineValues";
 import { StashTaskProvider } from "./tasks";
 import { StashDebugConfigurationProvider } from "./debugConfigProvider";
+import { registerDocCommentExpansionProvider } from "./docCommentProvider";
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
@@ -145,6 +146,10 @@ export function activate(context: vscode.ExtensionContext) {
       new StashInlineValuesProvider(),
     ),
   );
+
+  // ── Documentation Comment Expansion ──────────────────────────────────────
+
+  context.subscriptions.push(registerDocCommentExpansionProvider());
 }
 
 export function deactivate(): Thenable<void> | undefined {

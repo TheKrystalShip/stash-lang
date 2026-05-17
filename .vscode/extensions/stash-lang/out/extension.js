@@ -45,6 +45,7 @@ const bytecodeViewer_1 = require("./bytecodeViewer");
 const inlineValues_1 = require("./inlineValues");
 const tasks_1 = require("./tasks");
 const debugConfigProvider_1 = require("./debugConfigProvider");
+const docCommentProvider_1 = require("./docCommentProvider");
 let client;
 let debugOutput;
 let lspTrace;
@@ -110,6 +111,8 @@ function activate(context) {
     context.subscriptions.push(vscode.window.registerCustomEditorProvider(bytecodeViewer_1.StashBytecodeViewerProvider.viewType, bytecodeViewerProvider, { supportsMultipleEditorsPerDocument: false }));
     // ── Inline Values ──────────────────────────────────────────────────────────
     context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: "stash", scheme: "file" }, new inlineValues_1.StashInlineValuesProvider()));
+    // ── Documentation Comment Expansion ──────────────────────────────────────
+    context.subscriptions.push((0, docCommentProvider_1.registerDocCommentExpansionProvider)());
 }
 function deactivate() {
     lspTrace?.dispose();
