@@ -1,12 +1,12 @@
-using System.Linq;
 using Stash.Analysis;
+using Stash.Core.Resolution;
 using Stash.Lexing;
 using Stash.Parsing;
 
 namespace Stash.Tests.Analysis;
 
 /// <summary>
-/// Tests for <see cref="ModuleExports.Build"/> — the export-set construction pass that
+/// Tests for <see cref="ModuleExportsBuilder.Build"/> — the export-set construction pass that
 /// reads top-level export annotations and validates them against the top-level declaration set.
 /// </summary>
 public class ExportSetBuilderTests : AnalysisTestBase
@@ -17,10 +17,8 @@ public class ExportSetBuilderTests : AnalysisTestBase
     {
         var tokens = new Lexer(source, "<test>").ScanTokens();
         var stmts = new Parser(tokens).ParseProgram();
-        var collector = new SymbolCollector();
-        var scopeTree = collector.Collect(stmts);
         var diagnostics = new List<SemanticDiagnostic>();
-        var exports = ModuleExports.Build(stmts, scopeTree, diagnostics);
+        var exports = ModuleExportsBuilder.Build(stmts, diagnostics);
         return (exports, diagnostics);
     }
 
@@ -69,8 +67,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
         var (exports, diagnostics) = Build("export fn diff(a, b) {}");
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("diff", exports.Names.Keys);
-        Assert.Equal(SymbolKind.Function, exports.Names["diff"].Kind);
+        Assert.Contains("diff", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -80,8 +77,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
         var (exports, diagnostics) = Build("""export const VERSION = "1.0";""");
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("VERSION", exports.Names.Keys);
-        Assert.Equal(SymbolKind.Constant, exports.Names["VERSION"].Kind);
+        Assert.Contains("VERSION", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -91,8 +87,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
         var (exports, diagnostics) = Build("export struct Point { x: int, y: int }");
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("Point", exports.Names.Keys);
-        Assert.Equal(SymbolKind.Struct, exports.Names["Point"].Kind);
+        Assert.Contains("Point", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -102,8 +97,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
         var (exports, diagnostics) = Build("export enum Status { Ok, Err }");
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("Status", exports.Names.Keys);
-        Assert.Equal(SymbolKind.Enum, exports.Names["Status"].Kind);
+        Assert.Contains("Status", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -113,8 +107,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
         var (exports, diagnostics) = Build("export interface Closer { fn close() }");
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("Closer", exports.Names.Keys);
-        Assert.Equal(SymbolKind.Interface, exports.Names["Closer"].Kind);
+        Assert.Contains("Closer", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -129,8 +122,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
             """);
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("diff", exports.Names.Keys);
-        Assert.Equal(SymbolKind.Function, exports.Names["diff"].Kind);
+        Assert.Contains("diff", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -144,8 +136,8 @@ public class ExportSetBuilderTests : AnalysisTestBase
             """);
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("diff", exports.Names.Keys);
-        Assert.Contains("VERSION", exports.Names.Keys);
+        Assert.Contains("diff", exports.Names);
+        Assert.Contains("VERSION", exports.Names);
         Assert.Empty(diagnostics);
     }
 
@@ -161,8 +153,8 @@ public class ExportSetBuilderTests : AnalysisTestBase
             """);
 
         Assert.True(exports.HasExplicitExports);
-        Assert.Contains("diff", exports.Names.Keys);
-        Assert.Contains("VERSION", exports.Names.Keys);
+        Assert.Contains("diff", exports.Names);
+        Assert.Contains("VERSION", exports.Names);
         Assert.Equal(2, exports.Names.Count);
         Assert.Empty(diagnostics);
     }
@@ -188,7 +180,7 @@ public class ExportSetBuilderTests : AnalysisTestBase
             export { counter };
             """);
 
-        Assert.DoesNotContain("counter", exports.Names.Keys);
+        Assert.DoesNotContain("counter", exports.Names);
     }
 
     // ── SA0806: export import binding ────────────────────────────────────────

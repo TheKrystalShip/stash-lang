@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Stash.Common;
+using Stash.Core.Resolution;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -80,10 +81,10 @@ public class ImportResolver
         /// uses legacy "export everything" semantics (no <c>export</c> annotations).
         /// </summary>
         /// <remarks>
-        /// When non-null and <see cref="ModuleExports.HasExplicitExports"/> is <see langword="true"/>,
-        /// only names present in <see cref="ModuleExports.Names"/> are visible to importers.
+        /// When non-null and <see cref="Stash.Core.Resolution.ModuleExports.HasExplicitExports"/> is <see langword="true"/>,
+        /// only names present in <see cref="Stash.Core.Resolution.ModuleExports.Names"/> are visible to importers.
         /// </remarks>
-        public ModuleExports? Exports { get; }
+        public Stash.Core.Resolution.ModuleExports? Exports { get; }
 
         /// <summary>
         /// Initializes a new <see cref="ModuleInfo"/> with the given URI, path, symbol tree, errors,
@@ -96,7 +97,7 @@ public class ImportResolver
         /// <param name="exports">
         /// The explicit export set, or <see langword="null"/> for legacy modules that export everything.
         /// </param>
-        public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors, ModuleExports? exports = null)
+        public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors, Stash.Core.Resolution.ModuleExports? exports = null)
         {
             Uri = uri;
             AbsolutePath = absolutePath;
@@ -213,7 +214,7 @@ public class ImportResolver
             // When the module has an explicit export set, check membership first.
             if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
             {
-                if (!moduleInfo.Exports.Names.ContainsKey(lexeme))
+                if (!moduleInfo.Exports.Names.Contains(lexeme))
                 {
                     resolution.Diagnostics.Add(new SemanticDiagnostic(
                         $"Module '{importPath}' does not export '{lexeme}'.",
@@ -328,12 +329,12 @@ public class ImportResolver
         var filteredScope = new Scope(originalScope.Kind, null, originalScope.Span);
 
         // Collect the names of exported parent types so we can include their children too.
-        var exportedParentNames = new HashSet<string>(exports.Names.Keys);
+        var exportedParentNames = new HashSet<string>(exports.Names);
 
         foreach (var sym in originalScope.Symbols)
         {
             // Include exported top-level symbols.
-            if (sym.ParentName == null && exports.Names.ContainsKey(sym.Name))
+            if (sym.ParentName == null && exports.Names.Contains(sym.Name))
             {
                 filteredScope.AddSymbol(sym);
                 continue;

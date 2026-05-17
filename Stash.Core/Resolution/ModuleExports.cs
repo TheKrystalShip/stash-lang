@@ -10,7 +10,7 @@ using System.Collections.Immutable;
 /// This is the lightweight, Bytecode-layer view of a module's export set.  It carries only the
 /// exported names and the <see cref="HasExplicitExports"/> flag needed by the runtime filter.
 /// The richer analysis-layer model (with per-name <c>SymbolKind</c>, declaration spans, and
-/// diagnostic helpers) lives in <c>Stash.Analysis.ModuleExports</c>.
+/// diagnostic helpers) lives in <c>Stash.Analysis.ModuleExportsBuilder</c>.
 ///
 /// When <see cref="HasExplicitExports"/> is <see langword="false"/>, the module uses the
 /// legacy "export everything" semantics and <see cref="Names"/> is empty.

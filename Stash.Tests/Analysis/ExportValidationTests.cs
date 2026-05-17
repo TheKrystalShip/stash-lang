@@ -4,7 +4,7 @@ namespace Stash.Tests.Analysis;
 
 /// <summary>
 /// End-to-end tests for export-related diagnostics emitted by <see cref="SemanticValidator"/>
-/// when it invokes <see cref="ModuleExports.Build"/> during the validation pass.
+/// when it invokes <see cref="ModuleExportsBuilder.Build"/> during the validation pass.
 /// Verifies that SA0805–SA0808 surface through the full validation pipeline.
 /// </summary>
 public class ExportValidationTests : AnalysisTestBase

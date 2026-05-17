@@ -760,7 +760,7 @@ public class CodeActionHandler : CodeActionHandlerBase
         if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
         {
             // Module has an explicit export set — only names in that set are visible.
-            return moduleInfo.Exports.Names.ContainsKey(symbolName);
+            return moduleInfo.Exports.Names.Contains(symbolName);
         }
 
         // Legacy module: every top-level symbol is exported.

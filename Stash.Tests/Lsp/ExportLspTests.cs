@@ -37,7 +37,7 @@ public class ExportLspTests : AnalysisTestBase
         var collector = new SymbolCollector { IncludeBuiltIns = false };
         var scopeTree = collector.Collect(statements);
         var exportDiagnostics = new List<SemanticDiagnostic>();
-        var exports = ModuleExports.Build(statements, scopeTree, exportDiagnostics);
+        var exports = ModuleExportsBuilder.Build(statements, exportDiagnostics);
         return new ImportResolver.ModuleInfo(uri, path, scopeTree, new List<DiagnosticError>(), exports);
     }
 

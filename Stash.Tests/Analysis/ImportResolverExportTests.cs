@@ -54,7 +54,7 @@ public class ImportResolverExportTests
         errors.AddRange(parser.StructuredErrors);
 
         var exportDiagnostics = new List<SemanticDiagnostic>();
-        var exports = ModuleExports.Build(statements, scopeTree, exportDiagnostics);
+        var exports = ModuleExportsBuilder.Build(statements, exportDiagnostics);
 
         return new ImportResolver.ModuleInfo(uri, absolutePath, scopeTree, errors, exports);
     }
@@ -325,7 +325,7 @@ public class ImportResolverExportTests
             Assert.NotNull(moduleInfo);
             Assert.NotNull(moduleInfo.Exports);
             Assert.True(moduleInfo.Exports.HasExplicitExports);
-            Assert.True(moduleInfo.Exports.Names.ContainsKey("greet"));
+            Assert.True(moduleInfo.Exports.Names.Contains("greet"));
         }
         finally
         {

@@ -408,7 +408,7 @@ public class AnalysisEngine
 
         // Build the explicit export set so the ImportResolver can enforce it.
         var exportDiagnostics = new List<SemanticDiagnostic>();
-        var exports = ModuleExports.Build(statements, scopeTree, exportDiagnostics);
+        var exports = ModuleExportsBuilder.Build(statements, exportDiagnostics);
         // Diagnostics from the module's own export validation are silently discarded here —
         // they will be re-emitted when the module itself is analyzed as the primary document.
 
