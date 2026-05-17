@@ -448,17 +448,41 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _ctx.EmitToken(); // export
         _ctx.Space();
         _ctx.EmitToken(); // {
-        _ctx.Space();
+
+        if (stmt.Names.Count == 0)
+        {
+            _ctx.EmitToken(); // }
+            _ctx.EmitToken(); // ;
+            return 0;
+        }
+
+        // Group: single-line if it fits, broken with one name per line otherwise.
+        int groupMark = _ctx.Mark();
+        _ctx.Indent++;
+        int indentMark = _ctx.Mark();
+        _ctx.AddDoc(Doc.Line); // space in flat, newline in break
+
         for (int i = 0; i < stmt.Names.Count; i++)
         {
-            if (i > 0)
+            _ctx.EmitToken(); // name
+            bool isLast = i == stmt.Names.Count - 1;
+            if (!isLast)
             {
                 _ctx.EmitToken(); // ,
-                _ctx.Space();
+                _ctx.SoftNewLine(); // becomes Doc.Line (space/newline) on next iteration
             }
-            _ctx.EmitToken(); // name
+            else
+            {
+                // trailing comma in break mode only
+                _ctx.AddDoc(Doc.IfBreak(Doc.Text(","), Doc.Empty));
+            }
         }
-        _ctx.Space();
+
+        _ctx.WrapFrom(indentMark, Doc.Indent);
+        _ctx.Indent--;
+        _ctx.AddDoc(Doc.Line); // space in flat, newline in break
+        _ctx.WrapFrom(groupMark, Doc.Group);
+
         _ctx.EmitToken(); // }
         _ctx.EmitToken(); // ;
         return 0;
