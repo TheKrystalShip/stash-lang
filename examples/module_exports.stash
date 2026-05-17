@@ -1,0 +1,104 @@
+#!/usr/bin/env stash
+
+// examples/module_exports.stash
+// Module Exports — explicit export keyword
+//
+// This file demonstrates both export forms and shows how module-private helpers
+// stay hidden from importers.
+//
+// NOTE: This is a self-contained demo. In a real project the library and the
+//       importer would live in separate .stash files. Here the "library" part is
+//       defined as a set of functions and the "importer" part calls them in the
+//       same script to illustrate the concepts and print observable output.
+
+io.println("=" * 56);
+io.println("  Module Exports");
+io.println("=" * 56);
+
+// ─── Declaration-site form ────────────────────────────────────────────────────
+//
+// Prefix any supported declaration with `export` to include it in the module's
+// public surface.
+
+io.println("\n-- Declaration-site exports --");
+
+export fn greet(name: str) -> str {
+    return _format_greeting(name);
+}
+
+export const VERSION: str = "1.0.0";
+
+export struct Point {
+    x: int,
+    y: int
+}
+
+export enum Direction { North, South, East, West }
+
+// Private helper — not visible to importers because the file uses export
+// annotations, so only annotated symbols are exported.
+fn _format_greeting(name: str) -> str {
+    return $"Hello, {name}!";
+}
+
+io.println($"  greet(\"World\"):  {greet("World")}");
+io.println($"  VERSION:         {VERSION}");
+
+let p = Point { x: 3, y: 7 };
+io.println($"  Point:           ({p.x}, {p.y})");
+io.println($"  Direction.North: {Direction.North}");
+
+// ─── Block form ───────────────────────────────────────────────────────────────
+//
+// Names may also be listed in a standalone `export { }` block anywhere at the
+// top level. The effective export set is the union of all export annotations and
+// all export blocks in the file.
+
+io.println("\n-- Block-form exports --");
+
+fn add(a: int, b: int) -> int { return a + b; }
+fn _subtract(a: int, b: int) -> int { return a - b; }   // stays private
+
+const PI: float = 3.14159;
+
+// Only `add` and `PI` are added to the export set here.
+// `_subtract` is not listed and therefore remains module-private.
+export { add, PI };
+
+io.println($"  add(3, 4):       {add(3, 4)}");
+io.println($"  PI:              {PI}");
+
+// ─── Back-compatibility: legacy modules ──────────────────────────────────────
+//
+// A file with zero `export` annotations exports everything — existing scripts
+// and packages continue to work without modification.
+//
+// Because THIS file has export annotations, all non-exported top-level symbols
+// (_format_greeting, _subtract) are module-private and importers that attempt
+//   import { _format_greeting } from "module_exports.stash"
+// will receive a "does not export '_format_greeting'" error.
+
+io.println("\n-- Back-compat note --");
+io.println("  Files with no export annotations: all top-level symbols visible.");
+io.println("  This file uses exports, so only annotated symbols are public.");
+
+// ─── Mixed forms ─────────────────────────────────────────────────────────────
+//
+// Both forms can be combined. The export set is the union.
+
+io.println("\n-- Mixed forms (union) --");
+
+export fn multiply(a: int, b: int) -> int { return a * b; }
+
+const SCALE: int = 10;
+export { SCALE };
+
+io.println($"  multiply(6, 7):  {multiply(6, 7)}");
+io.println($"  SCALE:           {SCALE}");
+
+// Public export set for this module:
+//   greet, VERSION, Point, Direction, add, PI, multiply, SCALE
+
+io.println("\n-- Summary of exported symbols --");
+io.println("  greet, VERSION, Point, Direction, add, PI, multiply, SCALE");
+io.println("  (all other top-level symbols are module-private)");

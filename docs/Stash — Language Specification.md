@@ -148,7 +148,7 @@ The following words are contextual keywords. They have keyword meaning only in t
 positions specified by this document:
 
 ```text
-and async await elevate from onRetry or retry timeout until
+and async await elevate export from onRetry or retry timeout until
 ```
 
 ### Literals
@@ -317,6 +317,94 @@ module resolution base.
 Import cycles produce a runtime error unless an implementation explicitly documents
 cycle handling.
 
+### Exports
+
+By default, every top-level binding in a Stash module is visible to importers.
+When a module author wants to restrict the public surface, they annotate
+declarations or list names explicitly with the `export` contextual keyword.
+
+**Back-compatibility rule:** A module that contains zero `export` annotations
+behaves as before — every top-level binding is accessible to importers. The
+opt-in model means that all existing scripts and packages continue to work
+without modification.
+
+#### Declaration-site form
+
+Prefix any supported top-level declaration with `export`:
+
+```stash
+export fn diff(a, b) { ... }
+export async fn fetch(url) { ... }
+export const VERSION: str = "1.0.0";
+export struct Point { x: int, y: int }
+export enum Status { Ok, Err }
+export interface Closer { fn close() }
+```
+
+Once any `export` annotation appears in a file, only annotated symbols are
+visible to importers; all other top-level symbols become module-private.
+
+#### Block form
+
+Names may also be listed in a standalone `export { }` block anywhere at the
+top level:
+
+```stash
+fn helper() { ... }           // module-private
+fn diff(a, b) { ... }
+const VERSION = "1.0.0";
+
+export { diff, VERSION };     // only diff and VERSION are exported
+```
+
+The two forms may be combined in a single file. The effective export set is
+their union:
+
+```stash
+export fn diff(a, b) { ... }
+fn _internal() { ... }
+const VERSION = "1.0.0";
+export { VERSION };           // diff (from decl-site) and VERSION are exported
+```
+
+An empty block `export { }` is valid. `HasExplicitExports` becomes `true` and the
+module exposes zero symbols — useful for scripts that are loaded for side effects
+only.
+
+#### Syntax restrictions
+
+The following forms are parse-time errors:
+
+| Rejected form                   | Reason                                                                     |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| `export let x = 0;`             | Mutable bindings cannot be exported. Use an accessor function.             |
+| `export extend Type { ... }`    | `extend` is a side-effect declaration with no name; it cannot be exported. |
+| `export import "x.stash" as x;` | Import statements cannot be exported.                                      |
+
+The static analyzer enforces additional semantic constraints and reports them
+as diagnostics:
+
+| Diagnostic | Trigger                                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------------------- |
+| SA0805     | `export { x }` where `x` is a `let` binding                                                          |
+| SA0806     | `export { x }` where `x` is an imported name                                                         |
+| SA0807     | `export { x }` where `x` is not declared at the top level                                            |
+| SA0808     | A name appears in the export set more than once (via any combination of forms)                       |
+| SA0809     | An importer references a name that exists in the module but is not exported (information-level hint) |
+
+#### Interaction with `fn export(...)`
+
+`export` is a **contextual (soft) keyword**. It gains keyword meaning only at
+statement boundaries when followed by `fn`, `async`, `const`, `struct`, `enum`,
+`interface`, or `{`. In all other positions — including function names, variable
+names, and call expressions — it is a plain identifier:
+
+```stash
+fn export(container, path) { ... }   // valid: "export" is the function name
+export(container, "/tmp/out");       // valid: call expression
+let export = 5;                      // valid: let binding named "export"
+```
+
 ## Values and Types
 
 ### Type Model
@@ -324,8 +412,8 @@ cycle handling.
 Stash is dynamically typed. Values carry runtime type information. Type
 annotations may appear in declarations and signatures; they are advisory
 metadata consumed by editor tooling and the static analyzer and are **erased
-at compile time**. They do not participate in runtime dispatch. See *Type
-Hints* below for the full statement.
+at compile time**. They do not participate in runtime dispatch. See _Type
+Hints_ below for the full statement.
 
 The core value categories are:
 
@@ -492,7 +580,7 @@ Every type-position production — `let`/`const`/`fn` parameters and return,
 `extend T`, struct literal `T { ... }`, and `is T` — parses through the same
 grammar and accepts the same forms.
 
-The two grammar positions whose right-hand side is an *expression* — `is`
+The two grammar positions whose right-hand side is an _expression_ — `is`
 followed by a value (where `value` evaluates to a type at runtime) and a
 struct literal whose `T` resolves through a local binding — continue to do
 what they always did at runtime. Erasure removes implicit, compiler-emitted
@@ -1424,6 +1512,8 @@ declaration         = asyncFunctionDecl
                     | interfaceDecl
                     | extendDecl
                     | importDecl
+                    | exportDecl
+                    | exportBlock
                     | statement ;
 
 variableDecl        = "let" (identifier typed? | destructurePattern) initializer? ";" ;
@@ -1463,6 +1553,19 @@ extendDecl          = "extend" typeHint "{" functionDecl* asyncFunctionDecl* "}"
 
 importDecl          = "import" "{" identifier ("," identifier)* ","? "}" "from" expression ";"
                     | "import" expression "as" identifier ";" ;
+
+exportDecl          = "export" decoratedDecl ;
+
+decoratedDecl       = functionDecl
+                    | asyncFunctionDecl
+                    | constDecl
+                    | structDecl
+                    | enumDecl
+                    | interfaceDecl ;
+
+exportBlock         = "export" "{" exportName ("," exportName)* ","? "}" ";" ;
+
+exportName          = identifier ;
 
 statement           = block
                     | ifStmt
