@@ -44,7 +44,7 @@ The plan should be trusted, but it is not sacred. Implementers may make small, d
 | `/spec <topic>` | Create or revise `brief.md`, `plan.yaml`, and `checkpoint.yaml`. |
 | `/next-phase [slug]` | Implement exactly one pending phase. |
 | `/feature-review [slug]` | Review the completed feature against `brief.md`. |
-| `/resolve [slug] <Fxx>` | Fix one review finding. |
+| `/resolve [slug] <Fxx> [Fyy...]` | Fix exactly the selected review finding(s). |
 | `/done [slug]` | Run final verification and move the feature to `.kanban/4-done/`. |
 | `/resume [slug]` | Print current state and recommend the next command. |
 
@@ -140,7 +140,7 @@ phases:
 **Commit:** abc123
 ```
 
-`/resolve` fixes one finding at a time.
+`/resolve` fixes exactly the selected finding(s). Use one ID for the safest path, or several explicit IDs when the findings are related or small enough to verify together.
 
 ---
 
@@ -215,13 +215,14 @@ The reviewer compares the diff against `brief.md`, especially `Acceptance Criter
 
 ### 4. Resolve Findings
 
-Run one finding at a time:
+Run one selected finding or an explicit small batch:
 
 ```text
 /resolve [slug] F01
+/resolve [slug] F02 F03 F04
 ```
 
-The resolver fixes only that finding, verifies it, commits, and marks the finding fixed.
+The resolver fixes only the selected finding(s), verifies the union of their commands, commits once, and marks those findings fixed.
 
 ### 5. Finish
 
@@ -244,7 +245,7 @@ Common states:
 - Clean tree, no current phase: run `/next-phase`.
 - Dirty tree, current phase in progress: verify or continue that phase.
 - All phases done, review not started: run `/feature-review`.
-- Review has open findings: run `/resolve <slug> Fxx`.
+- Review has open findings: run `/resolve <slug> Fxx [Fyy...]`.
 
 ---
 

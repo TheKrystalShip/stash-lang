@@ -32,7 +32,7 @@ Older feature directories may contain `spec.md`, `context.md`, or `notes/`. New 
 | `/spec [topic]` | Create or revise `brief.md`, `plan.yaml`, and `checkpoint.yaml`. |
 | `/next-phase [slug]` | Dispatch one Implementer turn for the next ready phase. |
 | `/feature-review [slug]` | Dispatch one Reviewer turn after all phases are done. |
-| `/resolve [slug] <Fxx>` | Dispatch one Resolver turn for one review finding. |
+| `/resolve [slug] <Fxx> [Fyy...]` | Dispatch one Resolver turn for exactly the selected finding(s). |
 | `/done [slug]` | Run final verify and promote to `.kanban/4-done/`. |
 | `/resume [slug]` | Print deterministic status and next action. |
 
@@ -85,7 +85,7 @@ Use scripts for deterministic work:
 2. `/next-phase` implements one phase and commits it.
 3. Repeat `/next-phase` until all phases are done.
 4. `/feature-review` compares the diff to `brief.md` and writes `review.md`.
-5. `/resolve <Fxx>` fixes one finding at a time.
+5. `/resolve <Fxx> [Fyy...]` fixes an explicit selected finding or small selected batch.
 6. `/done` runs final verification and archives the feature.
 
 ## When Not To Use This

@@ -50,7 +50,7 @@ Read the status output and pick the right next-action recommendation:
 | --- | --- |
 | Working tree clean, `current` is null, some phases still `pending` with deps satisfied | `/next-phase <slug>` |
 | Working tree clean, all phases `done`, review `not_started` | `/feature-review <slug>` |
-| Working tree clean, review has open findings | `/resolve <slug> <Fxx>` for the first open finding |
+| Working tree clean, review has open findings | `/resolve <slug> <Fxx> [Fyy...]` for the first open finding or an explicit related batch |
 | Working tree clean, all phases done, review `resolved` (or no findings) | `/done <slug>` |
 | Working tree DIRTY, checkpoint shows phase `in_progress` | Run the phase's verify command directly to see if the prior implementer finished but didn't commit: `bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>`. If green, advise the user to commit and run `advance-checkpoint.py <slug> <phase-id> done`. If red, advise running `/next-phase <slug>` again — it will re-dispatch with the diff visible. |
 | Working tree dirty, checkpoint clean | Investigate — the dirty tree is unrelated work. Don't auto-advance. |

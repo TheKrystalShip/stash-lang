@@ -96,4 +96,4 @@ Invoke the `reviewer` agent via the `Agent` tool with `subagent_type: "reviewer"
    - Counts by severity
    - Next action:
      - If 0 findings: `/done <slug>`
-     - Else: `/resolve <slug> F01` (start with the highest-priority finding)
+     - Else: `/resolve <slug> F01` (or an explicit small related batch such as `/resolve <slug> F01 F02`)

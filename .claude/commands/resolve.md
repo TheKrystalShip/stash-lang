@@ -1,9 +1,11 @@
 ---
-description: Dispatch one Resolver turn to fix exactly one review finding.
-argument-hint: <slug> <Fxx>
+description: Dispatch one Resolver turn to fix exactly the selected review finding(s).
+argument-hint: [slug] <Fxx> [Fyy...]
 ---
 
-You are about to dispatch one **resolver** turn to fix exactly one finding from `review.md`.
+You are about to dispatch one **resolver** turn to fix the selected finding(s) from `review.md`.
+
+The user chooses the batch size. One finding is normal; several related or small findings are allowed. The resolver must fix **only** the selected findings.
 
 ## Args from the user
 
@@ -14,70 +16,114 @@ $ARGUMENTS
 ### 1. Parse args
 
 ```bash
-read -r SLUG FID <<< "$ARGUMENTS"
-if [ -z "$SLUG" ] || [ -z "$FID" ]; then
-  # If only one arg, maybe user passed only the finding id and there's one active feature
-  if [ -z "$FID" ] && [ -n "$SLUG" ]; then
-    count=$(ls -1d .kanban/2-in-progress/*/ 2>/dev/null | wc -l)
-    if [ "$count" -eq 1 ]; then
-      FID="$SLUG"
-      SLUG=$(basename "$(ls -1d .kanban/2-in-progress/*/)")
-    fi
-  fi
-  if [ -z "$SLUG" ] || [ -z "$FID" ]; then
-    echo "usage: /resolve <slug> <Fxx>" >&2
+set -- $ARGUMENTS
+if [ "$#" -lt 1 ]; then
+  echo "usage: /resolve [slug] <Fxx> [Fyy...]" >&2
+  exit 1
+fi
+
+first="$1"
+shift
+
+if [[ "$first" =~ ^F[0-9][0-9]$ ]]; then
+  count=$(ls -1d .kanban/2-in-progress/*/ 2>/dev/null | wc -l)
+  if [ "$count" -ne 1 ]; then
+    echo "usage: /resolve <slug> <Fxx> [Fyy...] — slug is required when active feature count is not 1" >&2
     exit 1
   fi
+  SLUG=$(basename "$(ls -1d .kanban/2-in-progress/*/)")
+  FIDS=("$first" "$@")
+else
+  SLUG="$first"
+  FIDS=("$@")
 fi
-echo "slug: $SLUG  finding: $FID"
+
+if [ "${#FIDS[@]}" -lt 1 ]; then
+  echo "usage: /resolve [slug] <Fxx> [Fyy...]" >&2
+  exit 1
+fi
+
+for fid in "${FIDS[@]}"; do
+  if ! [[ "$fid" =~ ^F[0-9][0-9]$ ]]; then
+    echo "invalid finding id: $fid" >&2
+    exit 1
+  fi
+done
+
+printf 'slug: %s  findings:' "$SLUG"
+printf ' %s' "${FIDS[@]}"
+printf '\n'
 ```
 
-### 2. Refuse if tree is dirty
+### 2. Batch-size sanity check
+
+```bash
+if [ "${#FIDS[@]}" -gt 5 ]; then
+  echo "refusing batch of ${#FIDS[@]} findings; split it into smaller explicit batches" >&2
+  exit 1
+fi
+if [ "${#FIDS[@]}" -ge 4 ]; then
+  echo "warning: resolving ${#FIDS[@]} findings in one batch; keep this for related or small fixes" >&2
+fi
+```
+
+### 3. Refuse if tree is dirty
 
 ```bash
 [ -z "$(git status --porcelain)" ] || { echo "tree dirty; commit or stash first" >&2; exit 1; }
 ```
 
-### 3. Extract the finding section verbatim
+### 4. Extract selected finding sections verbatim
 
-The review template uses `## Fxx — [SEVERITY] title` as the section header. Extract exactly that block from `review.md`:
+The review template uses `## Fxx — [SEVERITY] title` as the section header. Extract exactly the selected blocks from `review.md`:
 
 ```bash
 REVIEW=".kanban/2-in-progress/$SLUG/review.md"
 [ -f "$REVIEW" ] || { echo "no review.md found" >&2; exit 1; }
-awk -v fid="^## $FID " '
-  $0 ~ fid {in_section=1; print; next}
-  in_section && /^## F/ {exit}
-  in_section {print}
-' "$REVIEW" > /tmp/finding-$$.md
-if [ ! -s /tmp/finding-$$.md ]; then
-  echo "finding $FID not found in $REVIEW" >&2
-  exit 1
-fi
-cat /tmp/finding-$$.md
+OUT="/tmp/findings-$$.md"
+: > "$OUT"
+
+for fid in "${FIDS[@]}"; do
+  tmp="/tmp/finding-$fid-$$.md"
+  awk -v fid="^## ${fid} " '
+    $0 ~ fid {in_section=1; print; next}
+    in_section && /^## F/ {exit}
+    in_section {print}
+  ' "$REVIEW" > "$tmp"
+  if [ ! -s "$tmp" ]; then
+    echo "finding $fid not found in $REVIEW" >&2
+    exit 1
+  fi
+  if grep -q '\*\*Status:\*\* fixed' "$tmp"; then
+    echo "finding $fid is already fixed" >&2
+    exit 1
+  fi
+  cat "$tmp" >> "$OUT"
+  printf '\n---\n\n' >> "$OUT"
+done
+
+cat "$OUT"
 ```
-
-### 4. Check status
-
-If the extracted section contains `**Status:** fixed`, refuse — tell the user that finding is already resolved.
 
 ## Dispatch the resolver
 
 Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"`. The prompt **must** contain:
 
 1. **Slug:** `$SLUG`
-2. **Finding id:** `$FID`
-3. **Finding section verbatim** — paste the full text extracted above
+2. **Selected finding ids:** all IDs in `${FIDS[@]}`
+3. **Selected finding sections verbatim** — paste the full text extracted above
 4. **Pointers:**
-   - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read only if the finding cites a requirement; for older features, use `spec.md`)
+   - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read only if a selected finding cites a requirement; for older features, use `spec.md`)
    - Plan: `.kanban/2-in-progress/<slug>/plan.yaml`
    - Review file: `.kanban/2-in-progress/<slug>/review.md`
 5. **Hard rules** (reiterate):
-   - Fix only the named files. If you must touch others, stop and report.
-   - Run the finding's `Verify` command before commit.
-   - Commit message: `fix(<slug>): <Fxx> — <short title>` with body referencing `review.md`.
-   - Update `review.md`: change `**Status:** open` → `**Status:** fixed`, append `**Fixed in:** <sha>` below.
-6. **Failure protocol** — if the suggested fix doesn't work or requires files outside the finding/plan scope, stop and report; do not silently expand scope.
+   - Fix exactly the selected finding(s), and no unselected findings.
+   - If selected findings conflict or are not coherent as a batch, stop and report.
+   - Run the union of all selected findings' `Verify` commands before commit.
+   - Commit message for one finding: `fix(<slug>): <Fxx> — <short title>`.
+   - Commit message for multiple findings: `fix(<slug>): resolve Fxx Fyy Fzz`.
+   - Update each selected finding in `review.md`: change `**Status:** open` → `**Status:** fixed`, append `**Fixed in:** <sha>` below.
+6. **Failure protocol** — if the selected batch cannot be resolved cleanly, stop before committing and report what should be split or corrected.
 7. **Checkpoint advance after success:**
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status in_progress
@@ -87,7 +133,7 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 
 1. Verify the commit landed: `git log -1 --oneline`.
 2. Re-grep `review.md` for remaining open findings: `grep -B1 "Status:\*\* open" .kanban/2-in-progress/$SLUG/review.md`.
-3. If there are still open findings, suggest the next one: `/resolve <slug> Fxx`.
+3. If there are still open findings, suggest the next explicit batch: `/resolve <slug> Fxx [Fyy...]`.
 4. If all findings are fixed, update the checkpoint and tell the user `/done <slug>` is ready:
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status resolved
