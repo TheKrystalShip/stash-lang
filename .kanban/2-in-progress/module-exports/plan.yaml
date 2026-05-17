@@ -1,0 +1,370 @@
+# plan.yaml — machine-readable phase plan
+#
+# Authored by the architect, consumed by every slash command. Strict schema.
+# Validate with: scripts/checkpoint/validate-spec.py module-exports
+
+schema_version: 1
+
+feature: module-exports
+title: Module Exports — explicit export keyword
+
+spec: ./spec.md
+context: ./context.md
+
+created: 2026-05-16
+architect_session: opus-architect-2026-05-16
+
+# Cheap check run after every phase in addition to per-phase verify.
+default_verify:
+  - dotnet build Stash.sln
+
+# Hard scope. Implementers may not touch files outside this list unless the
+# phase explicitly extends scope. verify-phase.sh enforces this.
+scope:
+  - Stash.Core/**
+  - Stash.Bytecode/**
+  - Stash.Analysis/**
+  - Stash.Lsp/**
+  - Stash.Playground/**
+  - Stash.Tests/**
+  - .vscode/extensions/stash-lang/**
+  - docs/**
+  - examples/**
+  - CHANGELOG.md
+
+phases:
+  - id: 1A
+    title: Lexer + Parser + AST nodes for export
+    deps: []
+    files:
+      - Stash.Core/Lexing/Keywords.cs
+      - Stash.Core/Parsing/Parser.cs
+      - Stash.Core/Parsing/AST/ExportDeclStmt.cs
+      - Stash.Core/Parsing/AST/ExportBlockStmt.cs
+      - Stash.Core/Parsing/AST/StmtType.cs
+      - Stash.Core/Parsing/AST/IStmtVisitor.cs
+      - Stash.Tests/Parsing/ExportParserTests.cs
+    verify:
+      - dotnet build Stash.Core
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ExportParserTests"
+    non_goals:
+      - Do not implement the ExportSetBuilder semantics (Phase 1C)
+      - Do not enforce export filtering in the VM (Phase 1E)
+      - Do not enforce export filtering in the analyzer (Phase 1F)
+      - Do not change the formatter output (Phase 1H)
+      - Do not change tmLanguage/Monarch grammars (Phase 1I)
+      - Do not update the language spec markdown (Phase 1J)
+      - Six-visitor stubs are added in Phase 1B; here we only add the interface method on IStmtVisitor and rely on the implementers throwing NotImplementedException OR returning default until 1B lands. The phase must still build.
+    est_tokens: 45000
+    notes: |
+      - Add "export" to SoftKeywords (Stash.Core/Lexing/Keywords.cs). DO NOT add a TokenType.Export.
+      - The follow-set for treating `export` as a keyword: { Fn, Const, Struct, Enum, Interface, LeftBrace, Let,
+        and Identifier-with-lexeme-"async" followed by Fn }. When followed by Let, emit SX001 immediately.
+      - Mirror the async-fn soft-keyword pattern at Parser.cs:171–178.
+      - ExportDeclStmt holds: ExportKeyword Token, Inner Stmt, SourceSpan. Inner is one of
+        FnDeclStmt/ConstDeclStmt/StructDeclStmt/EnumDeclStmt/InterfaceDeclStmt — assert at construction.
+      - ExportBlockStmt holds: ExportKeyword Token, Names List<Token>, SourceSpan.
+      - Add VisitExportDeclStmt and VisitExportBlockStmt to IStmtVisitor<T>. Existing implementations
+        will fail to compile until 1B; that is expected — 1B is purely a mechanical pass-through pass.
+      - Parser tests must include all cases in spec Section 6 under "Parser / AST".
+
+  - id: 1B
+    title: Six-visitor pass-through stubs (no semantics)
+    deps: [1A]
+    files:
+      - Stash.Core/Resolution/SemanticResolver.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Analysis/Visitors/SymbolCollector.cs
+      - Stash.Analysis/Visitors/SemanticTokenWalker.cs
+      - Stash.Analysis/Visitors/StashFormatter.cs
+      - Stash.Bytecode/Compilation/Compiler.Declarations.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ParserTests|FullyQualifiedName~ResolverTests"
+    non_goals:
+      - Do not enforce any export-specific semantics — those land in 1C/1D/1E/1F.
+      - Do not change the formatter's printed output for export — temporary placeholder only (will be polished in 1H).
+      - SemanticTokenWalker may emit `keyword` for the export keyword token; richer styling lands in 1G.
+    est_tokens: 40000
+    notes: |
+      Pass-through rules:
+      - SemanticResolver.VisitExportDeclStmt: stmt.Inner.Accept(this); return null.
+      - SemanticResolver.VisitExportBlockStmt: return null (names are validated in 1C against the symbol table).
+      - SemanticValidator.VisitExportDeclStmt: stmt.Inner.Accept(this); return null.
+      - SemanticValidator.VisitExportBlockStmt: return null (1C adds SX001–SX005 here).
+      - SymbolCollector.VisitExportDeclStmt: stmt.Inner.Accept(this); return null. The top-level symbol
+        is collected from the inner declaration, exactly as today.
+      - SymbolCollector.VisitExportBlockStmt: return null (no new symbols).
+      - SemanticTokenWalker: emit `keyword` token at stmt.ExportKeyword.Span; for ExportDeclStmt also
+        walk Inner; for ExportBlockStmt also emit identifier tokens for each name.
+      - StashFormatter: minimal placeholder — print "export " before Inner for ExportDeclStmt;
+        single-line "export { a, b, c };" for ExportBlockStmt. Polished in 1H.
+      - Compiler.VisitExportDeclStmt: stmt.Inner.Accept(this); return null. The chunk's Exports field is
+        populated in 1D, not here.
+      - Compiler.VisitExportBlockStmt: return null (the export set is captured by the new builder in 1D).
+
+  - id: 1C
+    title: ExportSetBuilder + SX001–SX005 in SemanticValidator
+    deps: [1B]
+    files:
+      - Stash.Analysis/Models/ModuleExports.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Analysis/Models/SemanticDiagnostics.cs
+      - Stash.Tests/Analysis/ExportSetBuilderTests.cs
+      - Stash.Tests/Analysis/ExportValidationTests.cs
+    verify:
+      - dotnet build Stash.Analysis
+      - dotnet build Stash.Tests
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ExportSetBuilderTests|FullyQualifiedName~ExportValidationTests"
+    non_goals:
+      - Do not modify the VM yet (Phase 1E).
+      - Do not modify the bytecode chunk yet (Phase 1D).
+      - Do not modify ImportResolver yet (Phase 1F).
+    est_tokens: 45000
+    notes: |
+      - Create Stash.Analysis/Models/ModuleExports.cs defining:
+          public sealed record ExportEntry(SymbolKind Kind, SourceSpan DeclSpan, SourceSpan ExportSpan);
+          public sealed class ModuleExports {
+              public bool HasExplicitExports { get; }
+              public IReadOnlyDictionary<string, ExportEntry> Names { get; }
+              public static ModuleExports Build(IReadOnlyList<Stmt> topLevel, IDiagnosticSink sink);
+          }
+      - Build() walks the top-level statements once, collects names, runs the rule table in spec 3.2.3.
+      - Diagnostic codes SX001..SX005 are registered in SemanticDiagnostics.cs with messages per spec 3.2.2.
+      - SemanticValidator runs ModuleExports.Build at the program level when visiting the top-level
+        BlockStmt (or equivalent entry). Errors flow into the standard diagnostic sink.
+
+  - id: 1D
+    title: Chunk.Exports + bytecode serializer round-trip
+    deps: [1C]
+    files:
+      - Stash.Core/Resolution/ModuleExports.cs
+      - Stash.Analysis/Models/ModuleExports.cs
+      - Stash.Analysis/Models/ModuleExportsBuilder.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Bytecode/Bytecode/Chunk.cs
+      - Stash.Bytecode/Bytecode/Metadata.cs
+      - Stash.Bytecode/Bytecode/ChunkBuilder.cs
+      - Stash.Bytecode/Compilation/Compiler.cs
+      - Stash.Bytecode/Compilation/Compiler.Declarations.cs
+      - Stash.Bytecode/Serialization/BytecodeWriter.cs
+      - Stash.Bytecode/Serialization/BytecodeReader.cs
+      - Stash.Tests/Bytecode/ExportSerializationTests.cs
+    verify:
+      - dotnet build Stash.Tests/Stash.Tests.csproj
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ExportSerializationTests|FullyQualifiedName~BytecodeWriterTests|FullyQualifiedName~BytecodeReaderTests|FullyQualifiedName~ExportSetBuilderTests|FullyQualifiedName~ExportValidationTests"
+    non_goals:
+      - Do not add new opcodes (no VM dispatch changes here).
+      - Do not change the VM's module loading yet (Phase 1E).
+      - Do not change the analyzer's import resolver yet (Phase 1F).
+    est_tokens: 50000
+    notes: |
+      ## Dependency problem and solution
+
+      Stash.Bytecode and Stash.Analysis are siblings — neither references the other. Both reference
+      Stash.Core. ModuleExports was created in Phase 1C inside Stash.Analysis, but Chunk (Bytecode)
+      needs to hold a ModuleExports field. Bytecode cannot reference Analysis, so the type must move.
+
+      ## What moves to Stash.Core (new file: Stash.Core/Resolution/ModuleExports.cs)
+
+      Move only the DATA MODEL — no builder logic, no diagnostic references:
+
+        public sealed record ExportEntry(SymbolKind Kind, SourceSpan DeclSpan, SourceSpan ExportSpan);
+
+        public sealed class ModuleExports
+        {
+            public bool HasExplicitExports { get; }
+            public IReadOnlyDictionary<string, ExportEntry> Names { get; }
+            // Internal constructor only — use ModuleExportsBuilder in Stash.Analysis to construct.
+            internal ModuleExports(bool hasExplicitExports, IReadOnlyDictionary<string, ExportEntry> names) { ... }
+            public static readonly ModuleExports Empty = new(false, ImmutableDictionary<string, ExportEntry>.Empty);
+        }
+
+      SymbolKind and SourceSpan already live in Stash.Core — no new dependencies needed.
+
+      ## What stays in Stash.Analysis
+
+      Delete Stash.Analysis/Models/ModuleExports.cs (the old file — now superseded by the Core type).
+      Create Stash.Analysis/Models/ModuleExportsBuilder.cs with the builder logic extracted from the
+      old Build() static method:
+
+        public static class ModuleExportsBuilder
+        {
+            public static ModuleExports Build(IReadOnlyList<Stmt> topLevel, IDiagnosticSink sink);
+        }
+
+      The builder references IDiagnosticSink and DiagnosticDescriptors — both Analysis types — so it
+      stays in Analysis. It returns the Core ModuleExports type.
+
+      ## Update SemanticValidator (already in scope)
+
+      SemanticValidator already calls ModuleExports.Build(). Change the call site to:
+        ModuleExportsBuilder.Build(topLevel, _sink)
+      No other changes needed in SemanticValidator.
+
+      ## Bytecode changes
+
+      - Chunk gains: public ModuleExports? Exports { get; init; }. Only the top-level chunk
+        produced by Compiler.Compile(stmts) populates this; nested function chunks always have null.
+      - Add ExportSetMetadata record in Metadata.cs (mirror ImportMetadata's shape).
+      - BytecodeWriter: serialize ExportSetMetadata under a new constant-pool kind tag.
+        Bump BYTECODE_FORMAT_VERSION (see header comment in BytecodeWriter.cs). Update the file
+        header comment accordingly.
+      - BytecodeReader: decode the new kind tag; populate Chunk.Exports on the top-level chunk only.
+      - Compiler.Compile(): call ModuleExportsBuilder.Build() — wait, Stash.Bytecode cannot reference
+        Stash.Analysis either. Solution: the Compiler does NOT call the builder. Instead, the caller
+        that owns both Analysis and Bytecode (Stash.Cli / the compilation pipeline) runs
+        ModuleExportsBuilder.Build() first and passes the resulting ModuleExports into Compiler.Compile()
+        as an optional parameter. Compiler simply assigns it to Chunk.Exports. This keeps the
+        dependency graph clean.
+
+      ## Verify that all 1C tests still pass after the move
+
+      The verify command includes ExportSetBuilderTests and ExportValidationTests — if the move broke
+      any 1C behaviour they will catch it.
+
+  - id: 1E
+    title: VM enforcement at LoadModule boundary
+    deps: [1D]
+    files:
+      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+      - Stash.Tests/Bytecode/ImportExportRuntimeTests.cs
+    verify:
+      - dotnet build Stash.Bytecode Stash.Tests
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ImportExportRuntimeTests"
+    non_goals:
+      - Do not change any other VM file. The dispatch loop must remain untouched.
+      - Do not change error messages other than reusing "Module does not export 'X'" as documented.
+      - Do not modify the analyzer or LSP (Phases 1F/1G).
+    est_tokens: 35000
+    notes: |
+      - Add private static helper BuildExportedEnvironment(Dictionary<string, StashValue> globals,
+        ModuleExports? exports) on VirtualMachine.Modules.cs.
+      - In LoadModule, after moduleVM.Execute, replace the line
+            ModuleCache[resolvedPath] = moduleVM.Globals;
+            return moduleVM.Globals;
+        with:
+            var filtered = BuildExportedEnvironment(moduleVM.Globals, moduleChunk.Exports);
+            ModuleCache[resolvedPath] = filtered;
+            return filtered;
+      - BuildExportedEnvironment rules:
+          * exports == null → return globals unchanged.
+          * exports.HasExplicitExports == false (legacy) → return globals unchanged (defensive).
+          * else → new Dictionary copying (a) all built-in namespaces (StashNamespace with IsBuiltIn=true),
+            (b) all entries whose key is in exports.Names.
+      - Tests must cover the seven scenarios listed in spec Section 6 under "VM / Runtime".
+
+  - id: 1F
+    title: Analyzer ImportResolver filtering + SX-W001 hint
+    deps: [1C]
+    files:
+      - Stash.Analysis/Resolvers/ImportResolver.cs
+      - Stash.Analysis/Engines/AnalysisEngine.cs
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
+      - Stash.Tests/Analysis/ImportResolverExportTests.cs
+    verify:
+      - dotnet build Stash.Tests/Stash.Tests.csproj
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ImportResolverExportTests|FullyQualifiedName~ImportResolverTests"
+    non_goals:
+      - Do not modify the VM (Phase 1E owns it; 1F is analyzer-only).
+      - Do not change LSP handlers (Phase 1G).
+    est_tokens: 45000
+    notes: |
+      - ImportResolver.ModuleInfo gains public ModuleExports? Exports { get; }.
+      - The ModuleParser delegate's implementation in AnalysisEngine runs ModuleExports.Build on the
+        parsed top-level statements and stores the result on ModuleInfo.
+      - ResolveSelectiveImport: if Exports != null and the name is not in Exports.Names, emit the
+        existing "does not export 'X'" diagnostic. If the name does exist as a private top-level
+        symbol, also emit SX-W001 as an information-level hint suggesting the user add it to an
+        export block.
+      - ResolveNamespaceImport: filter the alias's exposed symbols by Exports.Names when Exports != null.
+      - Dependency tracking: when a module's export set changes, invalidate dependents the same way
+        symbol changes already invalidate them today (the existing TrackDependency / GetDependents path).
+
+  - id: 1G
+    title: LSP code-action filter + semantic-token highlight
+    deps: [1F]
+    files:
+      - Stash.Lsp/Handlers/CodeActionHandler.cs
+      - Stash.Analysis/Visitors/SemanticTokenWalker.cs
+      - Stash.Tests/Lsp/ExportLspTests.cs
+    verify:
+      - dotnet build Stash.Tests/Stash.Tests.csproj
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ExportLspTests"
+    non_goals:
+      - Do not change completion or hover behavior — those work for free through ImportResolver (Phase 1F).
+      - Do not change DAP — module exports are a static concept; DAP is unaffected.
+    est_tokens: 35000
+    notes: |
+      - CodeActionHandler "add missing import" code action (around line 506): when listing candidate
+        names from a module, filter by ModuleInfo.Exports if Exports != null.
+      - SemanticTokenWalker may already emit a keyword token at the export-keyword position (stub from 1B);
+        verify and add tests.
+
+  - id: 1H
+    title: Formatter pretty-printing for export forms
+    deps: [1B]
+    files:
+      - Stash.Analysis/Visitors/StashFormatter.cs
+      - Stash.Tests/Format/ExportFormatterTests.cs
+    verify:
+      - dotnet build Stash.Tests/Stash.Tests.csproj
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~ExportFormatterTests|FullyQualifiedName~FormatterTests"
+    non_goals:
+      - Do not change ImportSorter or reorder export blocks (D-2/3.3.6).
+      - Do not change non-export formatting output.
+    est_tokens: 35000
+    notes: |
+      - VisitExportDeclStmt: print "export " + Inner.Print(). Doc-comment trivia attaches to the inner
+        decl, not the export keyword.
+      - VisitExportBlockStmt: same Doc combinator pattern as the destructured import { a, b } printer —
+        single-line if it fits the print width, otherwise broken with one identifier per line and a
+        trailing comma.
+
+  - id: 1I
+    title: Playground tokenizer + VS Code tmLanguage
+    deps: [1A]
+    files:
+      - Stash.Playground/wwwroot/js/stash-language.js
+      - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
+    verify:
+      - dotnet build Stash.Playground
+    non_goals:
+      - Do not change other grammars (tree-sitter etc. — not in scope for this feature).
+      - Do not add semantic styling beyond `keyword.control` / Monarch `keyword`.
+    est_tokens: 20000
+    notes: |
+      - Stash.Playground/wwwroot/js/stash-language.js: add "export" to the keywords array.
+      - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json: add an `export-declaration`
+        pattern (similar to `import-statement`) under the top-level patterns list, and add `export`
+        to the keyword-control pattern's alternation.
+
+  - id: 1J
+    title: Docs, language spec update, example
+    deps: [1A]
+    files:
+      - docs/Stash — Language Specification.md
+      - examples/module_exports.stash
+      - CHANGELOG.md
+    verify:
+      - dotnet build Stash.sln
+    non_goals:
+      - Do not edit the generated docs/Stash — Standard Library Reference.md.
+      - Do not change CLAUDE.md or AGENTS.md.
+    est_tokens: 30000
+    notes: |
+      - Spec edits:
+          * Section "Source Files and Modules" — add a new "Exports" subsection after "Imports"
+            covering the syntax in spec 3.1, the back-compat rule in 3.3.1, and the SX001–SX005 errors.
+          * "Identifiers and Keywords" — add "export" to the contextual keywords list (line 150).
+          * BNF section — add the `exportDecl` and `exportBlock` productions and reference them
+            from the top-level statement rule.
+      - examples/module_exports.stash: a short demo showing both forms (decl-site and block), an
+        intentionally-private helper, and an importer file that confirms the helper is hidden.
+      - CHANGELOG.md: one bullet under the next unreleased section noting the feature and the
+        back-compat guarantee for legacy modules.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test Stash.Tests --filter "FullyQualifiedName!~IntegrityVerificationTests"
