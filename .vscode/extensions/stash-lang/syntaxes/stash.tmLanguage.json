@@ -6,6 +6,7 @@
     { "include": "#shebang" },
     { "include": "#comments" },
     { "include": "#import-statement" },
+    { "include": "#export-declaration" },
     { "include": "#variable-declaration" },
     { "include": "#function-declaration" },
     { "include": "#struct-declaration" },
@@ -90,6 +91,29 @@
         {
           "name": "keyword.control.import.stash",
           "match": "\\b(import)\\b"
+        }
+      ]
+    },
+
+    "export-declaration": {
+      "patterns": [
+        {
+          "match": "\\b(export)\\b\\s*\\{([^}]*)\\}",
+          "captures": {
+            "1": { "name": "keyword.control.export.stash" },
+            "2": {
+              "patterns": [
+                {
+                  "name": "variable.other.stash",
+                  "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "keyword.control.export.stash",
+          "match": "\\b(export)\\b"
         }
       ]
     },
@@ -337,7 +361,7 @@
         },
         {
           "name": "keyword.control.stash",
-          "match": "\\b(as|onRetry|until)\\b"
+          "match": "\\b(as|export|onRetry|until)\\b"
         }
       ]
     },
