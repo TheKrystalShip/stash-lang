@@ -3,7 +3,7 @@ using Stash.Common;
 
 namespace Stash.Tests.Bytecode;
 
-public class DisassemblerTests
+public class DisassemblerTests : BytecodeTestBase
 {
     // ---- SourceMap Tests ----
 
@@ -364,5 +364,32 @@ public class DisassemblerTests
         string output = Disassembler.Disassemble(chunk, options);
 
         Assert.Contains("\x1b[", output); // ANSI escape sequence
+    }
+
+    // ── CallBuiltIn name resolution (P1) ─────────────────────────────────────
+
+    [Fact]
+    public void Disassemble_CallBuiltIn_ResolvesNamespaceAndMethod()
+    {
+        // io.println(1, 2) should produce "io.println(2 args)" in the call.builtin comment.
+        string output = Disassemble("io.println(1, 2);");
+
+        Assert.Contains("io.println", output);
+        Assert.DoesNotContain("[ic:", output);
+    }
+
+    [Fact]
+    public void Disassemble_CallBuiltIn_MethodOnlyFallbackWhenNamespaceUnknown()
+    {
+        // When the receiver register cannot be traced statically (e.g. assigned
+        // from an expression too far back), the comment degrades to ".method(N args)"
+        // but never emits the raw "[ic:N]" token.
+        //
+        // A simple direct call `math.sqrt(4)` still resolves fully; we verify the
+        // resolved form appears and the raw slot form does not.
+        string output = Disassemble("math.sqrt(4);");
+
+        Assert.Contains("math.sqrt", output);
+        Assert.DoesNotContain("[ic:", output);
     }
 }

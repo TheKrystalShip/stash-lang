@@ -545,4 +545,114 @@ public static class Disassembler
 
     private static string Col(DisassemblerOptions options, string text, string ansiCode)
         => options.Color ? $"{ansiCode}{text}{Ansi.Reset}" : text;
+
+    // ─── Builtin Call Name Resolution ────────────────────────────────────────
+
+    /// <summary>Maximum number of instructions to scan backward when resolving a namespace prefix.</summary>
+    private const int MaxBackwardSteps = 8;
+
+    /// <summary>
+    /// Resolves the human-readable name for a <c>CallBuiltIn</c> instruction at
+    /// <paramref name="instrIdx"/>.  The companion word at <c>instrIdx+1</c> holds the
+    /// IC slot index; <c>ICSlots[slot].ConstantIndex</c> gives the method-name constant.
+    /// A bounded backward scan of at most <see cref="MaxBackwardSteps"/> real instructions
+    /// (skipping companion words) looks for the most recent instruction that wrote to the
+    /// receiver register (operand B of the <c>CallBuiltIn</c>) via <c>GetGlobal</c>,
+    /// <c>GetUpval</c>, or <c>Move</c> and recovers the source name to use as a namespace prefix.
+    /// </summary>
+    /// <returns>A string like <c>"io.println(2 args)"</c> or <c>".println(2 args)"</c> on fallback.</returns>
+    internal static string ResolveBuiltinCallName(Chunk chunk, int instrIdx)
+    {
+        uint callWord = chunk.Code[instrIdx];
+        byte receiverReg = Instruction.GetB(callWord);
+        byte argCount    = Instruction.GetC(callWord);
+
+        // IC slot index is in the companion word immediately following the instruction.
+        uint icSlot = instrIdx + 1 < chunk.Code.Length ? chunk.Code[instrIdx + 1] : 0;
+
+        // Resolve method name from IC slot constant index.
+        string? methodName = null;
+        if (chunk.ICSlots != null && icSlot < (uint)chunk.ICSlots.Length)
+        {
+            ushort constIdx = chunk.ICSlots[(int)icSlot].ConstantIndex;
+            if (constIdx < chunk.Constants.Length && chunk.Constants[constIdx].AsObj is string s)
+                methodName = s;
+        }
+
+        if (methodName == null)
+            return $"({argCount} args)";
+
+        // Build a list of instruction-start offsets up to instrIdx so we can walk
+        // backward through real instructions only (skipping companion words).
+        var instrOffsets = new List<int>(instrIdx + 1);
+        for (int i = 0; i < instrIdx; )
+        {
+            instrOffsets.Add(i);
+            uint w  = chunk.Code[i];
+            var  op = Instruction.GetOp(w);
+            i++;
+            // Skip companion words so we do not misidentify them as instructions.
+            if (OpCodeMetadata.IsDefined((byte)op))
+            {
+                switch (OpCodeMetadata.GetCompanionWords(op))
+                {
+                    case CompanionWordKind.OneIC:
+                        i++;
+                        break;
+                    case CompanionWordKind.UpvalueDescriptors:
+                    {
+                        ushort protoIdx = Instruction.GetBx(w);
+                        if (protoIdx < chunk.Constants.Length && chunk.Constants[protoIdx].AsObj is Chunk fn)
+                            i += fn.Upvalues.Length;
+                        break;
+                    }
+                    case CompanionWordKind.PipeStages:
+                        i += Instruction.GetB(w);
+                        break;
+                }
+            }
+        }
+
+        // Walk backward through real instructions, bounded by MaxBackwardSteps.
+        string? nsName = null;
+        int stepsRemaining = MaxBackwardSteps;
+        for (int j = instrOffsets.Count - 1; j >= 0 && stepsRemaining > 0; j--, stepsRemaining--)
+        {
+            uint w  = chunk.Code[instrOffsets[j]];
+            var  op = Instruction.GetOp(w);
+
+            // Stop at any jump (we do not track control flow).
+            if (OpCodeMetadata.IsDefined((byte)op) && OpCodeMetadata.GetFormat(op) == OpCodeFormat.AsBx)
+                break;
+
+            byte destA = Instruction.GetA(w);
+            if (destA != receiverReg)
+                continue;
+
+            // Found the most recent writer of receiverReg.
+            if (op == OpCode.GetGlobal)
+            {
+                ushort bx = Instruction.GetBx(w);
+                nsName = FormatGlobalPublic(chunk, bx);
+            }
+            else if (op == OpCode.GetUpval)
+            {
+                byte b = Instruction.GetB(w);
+                nsName = GetUpvalueNamePublic(chunk, b);
+            }
+            else if (op == OpCode.Move)
+            {
+                byte srcB = Instruction.GetB(w);
+                if (chunk.LocalNames != null && srcB < chunk.LocalNames.Length)
+                    nsName = chunk.LocalNames[srcB];
+            }
+            break;
+        }
+
+        string callName = nsName != null
+            ? $"{nsName}.{methodName}({argCount} args)"
+            : $".{methodName}({argCount} args)";
+
+        return callName;
+    }
 }
