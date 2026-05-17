@@ -27,6 +27,8 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- readable-disassembly — Readable Disassembly | .kanban/2-in-progress/readable-disassembly/ | 3 phases | started 2026-05-17
+
 ---
 
 ## Architecture Decisions (enduring)
