@@ -135,7 +135,7 @@ public static class Disassembler
             EmitConstSection(chunk, options, sb);
             EmitGlobalsSection(chunk, options, sb);
             EmitConstGlobalInitsSection(chunk, options, sb);
-            // EmitLocalsSection(chunk, options, sb);
+            EmitLocalsSection(chunk, options, sb);
         }
 
         var labels = CollectLabels(chunk);

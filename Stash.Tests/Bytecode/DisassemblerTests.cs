@@ -392,4 +392,83 @@ public class DisassemblerTests : BytecodeTestBase
         Assert.Contains("math.sqrt", output);
         Assert.DoesNotContain("[ic:", output);
     }
+
+    // ── Locals legend (P2) ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Disassemble_LocalsSection_EmittedForNamedLocals()
+    {
+        // Build a function chunk with:
+        //   r0 = param "x"         (role: param)
+        //   r1 = local "total"     (role: local)
+        //   r2 = const "PI"        (role: const)
+        //   r3 = internal "<iter>" (role: internal)
+        var builder = new ChunkBuilder
+        {
+            Name     = "myFunc",
+            Arity    = 1,
+            MinArity = 1,
+            LocalNames  = new[] { "x", "total", "PI", "<iter>" },
+            LocalIsConst = new[] { false, false, true, false },
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
+        builder.EmitAB(OpCode.Return, 0, 1);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        Assert.Contains(".locals:", output);
+        Assert.Contains("[r0]", output);
+        Assert.Contains("x", output);
+        Assert.Contains("; param", output);
+        Assert.Contains("[r1]", output);
+        Assert.Contains("total", output);
+        Assert.Contains("; local", output);
+        Assert.Contains("[r2]", output);
+        Assert.Contains("PI", output);
+        Assert.Contains("; const", output);
+        Assert.Contains("[r3]", output);
+        Assert.Contains("<iter>", output);
+        Assert.Contains("; internal", output);
+    }
+
+    [Fact]
+    public void Disassemble_LocalsSection_AbsentInCompactMode()
+    {
+        var builder = new ChunkBuilder
+        {
+            Name     = "myFunc",
+            Arity    = 1,
+            MinArity = 1,
+            LocalNames  = new[] { "x", "total" },
+            LocalIsConst = new[] { false, false },
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
+        builder.EmitAB(OpCode.Return, 0, 1);
+        Chunk chunk = builder.Build();
+
+        var options = new DisassemblerOptions { Compact = true };
+        string output = Disassembler.Disassemble(chunk, options);
+
+        Assert.DoesNotContain(".locals:", output);
+    }
+
+    [Fact]
+    public void Disassemble_LocalsSection_AbsentWhenNoLocalNames()
+    {
+        var builder = new ChunkBuilder
+        {
+            Name     = "myFunc",
+            Arity    = 1,
+            MinArity = 1,
+            // LocalNames intentionally left null
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
+        builder.EmitAB(OpCode.Return, 0, 1);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        Assert.DoesNotContain(".locals:", output);
+    }
 }
