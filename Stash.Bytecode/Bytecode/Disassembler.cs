@@ -686,8 +686,11 @@ public static class Disassembler
             uint w  = chunk.Code[instrOffsets[j]];
             var  op = Instruction.GetOp(w);
 
-            // Stop at any jump (we do not track control flow).
-            if (OpCodeMetadata.IsDefined((byte)op) && OpCodeMetadata.GetFormat(op) == OpCodeFormat.AsBx)
+            // Stop at any branching instruction (we do not track control flow).
+            // Use IsBranching rather than the AsBx format: the AsBx format is also used
+            // by non-jump opcodes (addi, for.prep, iter.loop, try.begin, etc.) that are
+            // valid intervening instructions and must not truncate the backward scan.
+            if (OpCodeMetadata.IsDefined((byte)op) && OpCodeMetadata.IsBranching(op))
                 break;
 
             byte destA = Instruction.GetA(w);

@@ -411,6 +411,61 @@ public class DisassemblerTests : BytecodeTestBase
         Assert.DoesNotContain("[ic:", verboseOutput);
     }
 
+    [Fact]
+    public void Disassemble_CallBuiltIn_NonJumpAsBxOpcodeDoesNotTruncateBackwardScan()
+    {
+        // Regression test for F02: the backward scan used GetFormat(op) == AsBx as the
+        // stop condition, which caused it to break on non-jump AsBx opcodes (addi,
+        // for.prep, iter.loop, etc.) even when they do not write the receiver register.
+        //
+        // Build a chunk manually that places an AddI instruction between the
+        // GetGlobal that loads the "io" namespace receiver and the CallBuiltIn.
+        // Before the fix, the scan broke on AddI and fell back to ".println(0 args)".
+        // After the fix, it continues past AddI and recovers "io" → "io.println(0 args)".
+        //
+        // Layout (register r0 = local "counter", r1 = ns receiver, r2 = call window):
+        //   GetGlobal   r1, [g0]          ← load "io" namespace into r1
+        //   AddI        r0, 1             ← non-jump AsBx opcode; writes r0 ≠ r1
+        //   CallBuiltIn r2, r1, 0  [ic0] ← backward scan must find r1 → "io"
+        var globalSlots = new GlobalSlotAllocator();
+        ushort ioSlot = globalSlots.GetOrAllocate("io");
+
+        var builder = new ChunkBuilder
+        {
+            Name         = "testFn",
+            Arity        = 0,
+            MinArity     = 0,
+            LocalNames   = new[] { "counter" },
+            LocalIsConst = new[] { false },
+            EnableDce    = false,
+        };
+        builder.SetGlobalSlots(globalSlots);
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 20));
+
+        // Constant index 0 = "println" (the method name used by CallBuiltIn)
+        ushort nameIdx = builder.AddConstant("println");
+
+        // GetGlobal r1, [g0]  — loads the "io" namespace into register 1
+        builder.EmitABx(OpCode.GetGlobal, 1, ioSlot);
+
+        // AddI r0, 1  — non-jump AsBx opcode between GetGlobal and CallBuiltIn
+        builder.EmitAsBx(OpCode.AddI, 0, 1);
+
+        // CallBuiltIn r2, r1, 0  (calleeReg=2, nsReg=1, argc=0) + IC companion word
+        ushort icSlot = builder.AllocateICSlot(nameIdx);
+        builder.EmitABC(OpCode.CallBuiltIn, 2, 1, 0);
+        builder.EmitRaw((uint)icSlot);
+
+        builder.EmitAB(OpCode.Return, 0, 0);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        // The namespace must be recovered despite the AddI between GetGlobal and CallBuiltIn.
+        Assert.Contains("io.println", output);
+        Assert.DoesNotContain("[ic:", output);
+    }
+
     // ── Locals legend (P2) ───────────────────────────────────────────────────
 
     [Fact]
