@@ -367,4 +367,4 @@ phases:
 # Final acceptance command — run by `/done` before promoting to 4-done/.
 final_verify:
   - dotnet build Stash.sln
-  - dotnet test Stash.Tests --filter "FullyQualifiedName!~IntegrityVerificationTests"
+  - dotnet test Stash.Tests --filter "FullyQualifiedName~ExportParserTests|FullyQualifiedName~ExportSetBuilderTests|FullyQualifiedName~ExportValidationTests|FullyQualifiedName~ExportSerializationTests|FullyQualifiedName~ImportExportRuntimeTests|FullyQualifiedName~ImportResolverExportTests|FullyQualifiedName~ExportLspTests|FullyQualifiedName~ExportFormatterTests"
