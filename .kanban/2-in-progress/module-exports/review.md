@@ -106,7 +106,8 @@ dotnet test Stash.Tests
 
 ## F02 — [IMPORTANT] `ModuleExportsBuilder` is a thin shim — Build logic still lives on the Analysis-layer `ModuleExports` class
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 908d1c8
 **Files:** `Stash.Analysis/Models/ModuleExports.cs:56-98`, `Stash.Analysis/Models/ModuleExportsBuilder.cs:37-51`
 **Phase:** 1D
 **Commit:** 6c8792d
@@ -159,7 +160,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ImportResolver"
 
 ## F03 — [MINOR] Unused `ScopeTree` parameter on `Stash.Analysis.ModuleExports.Build`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 908d1c8
 **Files:** `Stash.Analysis/Models/ModuleExports.cs:48-58`
 **Phase:** 1C
 **Commit:** 4354a99
