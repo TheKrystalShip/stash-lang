@@ -91,24 +91,10 @@ public sealed partial class VirtualMachine
                     }
                     else
                     {
-                        // Built-in file-based loader: compile the module from disk.
-                        string moduleSource = File.ReadAllText(resolvedPath);
-                        var lex = new Lexer(moduleSource, resolvedPath);
-                        var tokens = lex.ScanTokens();
-                        if (lex.Errors.Count > 0)
-                        {
-                            throw new RuntimeError($"Syntax error in module '{resolvedPath}': {lex.Errors[0]}", span);
-                        }
-
-                        var par = new Parser(tokens);
-                        var stmts = par.ParseProgram();
-                        if (par.Errors.Count > 0)
-                        {
-                            throw new RuntimeError($"Parse error in module '{resolvedPath}': {par.Errors[0]}", span);
-                        }
-
-                        SemanticResolver.Resolve(stmts);
-                        moduleChunk = Compiler.Compile(stmts);
+                        // Built-in file-based loader: delegate to StashCompilationPipeline
+                        // so that ModuleExports are wired through and private symbols are
+                        // filtered out at import time.
+                        moduleChunk = StashCompilationPipeline.LoadModule(resolvedPath, currentFile);
                     }
                 }
                 catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)

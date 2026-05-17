@@ -2,6 +2,7 @@ namespace Stash.Bytecode;
 
 using System.IO;
 using System.Collections.Generic;
+using Stash.Analysis;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -82,6 +83,7 @@ internal static class StashCompilationPipeline
         }
 
         SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
+        var exports = ModuleExportsBuilder.Build(stmts, []);
+        return Compiler.Compile(stmts, exports: exports);
     }
 }

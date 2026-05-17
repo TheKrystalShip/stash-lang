@@ -302,7 +302,8 @@ public class DebugSession : IDebugger
             // Resolve AST for bytecode compilation
             SemanticResolver.Resolve(stmts);
 
-            return Compiler.Compile(stmts);
+            var exports = Stash.Analysis.ModuleExportsBuilder.Build(stmts, []);
+            return Compiler.Compile(stmts, exports: exports);
         };
 
         _interpreterThread = new System.Threading.Thread(() =>

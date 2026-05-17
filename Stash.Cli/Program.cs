@@ -24,6 +24,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Stash.Analysis;
 using Stash.Bytecode;
 using Stash.Cli.Completion;
 using Stash.Cli.Shell;
@@ -1193,7 +1194,8 @@ public class Program
             throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
 
         SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
+        var exports = ModuleExportsBuilder.Build(stmts, []);
+        return Compiler.Compile(stmts, exports: exports);
     }
 
     /// <summary>
