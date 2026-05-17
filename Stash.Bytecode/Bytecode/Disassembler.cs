@@ -305,6 +305,10 @@ public static class Disassembler
             : $"op_{(byte)op:x2}";
         (string operands, string? comment) = FormatInstruction(chunk, labels, idx, word, op);
 
+        // In verbose mode, replace the compact CallBuiltIn comment with the resolved name.
+        if (!options.Compact && op == OpCode.CallBuiltIn)
+            comment = ResolveBuiltinCallName(chunk, idx);
+
         string offsetStr = options.Compact
             ? $"{idx,4}:"
             : Col(options, $"  {idx:x4}:", Ansi.Dim);

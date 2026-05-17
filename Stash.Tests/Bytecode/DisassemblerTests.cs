@@ -393,6 +393,24 @@ public class DisassemblerTests : BytecodeTestBase
         Assert.DoesNotContain("[ic:", output);
     }
 
+    [Fact]
+    public void Disassemble_CallBuiltIn_CompactMode_LegacyIcFormat()
+    {
+        // Compact mode must preserve the pre-P1 byte-for-byte format: "(N args) [ic:M]".
+        // It must NOT contain the resolved name ("io.println") that verbose mode shows.
+        Chunk chunk = CompileSource("io.println(1, 2);");
+        var compactOptions = new DisassemblerOptions { Compact = true };
+        string compactOutput = Disassembler.Disassemble(chunk, compactOptions);
+
+        Assert.Contains("[ic:", compactOutput);
+        Assert.DoesNotContain("io.println", compactOutput);
+
+        // Verbose mode must still show the resolved name.
+        string verboseOutput = Disassembler.Disassemble(chunk);
+        Assert.Contains("io.println", verboseOutput);
+        Assert.DoesNotContain("[ic:", verboseOutput);
+    }
+
     // ── Locals legend (P2) ───────────────────────────────────────────────────
 
     [Fact]

@@ -269,11 +269,11 @@ internal static class BespokeOperandFormatters
 
         r[OpCode.CallBuiltIn] = (chunk, labels, idx, word) =>
         {
-            byte a = Instruction.GetA(word);
-            byte b = Instruction.GetB(word);
-            byte c = Instruction.GetC(word);
-            string comment = Disassembler.ResolveBuiltinCallName(chunk, idx);
-            return ($"r{a}, r{b}, {c}", comment);
+            byte a      = Instruction.GetA(word);
+            byte b      = Instruction.GetB(word);
+            byte c      = Instruction.GetC(word);
+            uint icWord = (uint)(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0);
+            return ($"r{a}, r{b}, {c}", $"({c} args) [ic:{icWord}]");
         };
 
         // ── Shell ─────────────────────────────────────────────────────────────
