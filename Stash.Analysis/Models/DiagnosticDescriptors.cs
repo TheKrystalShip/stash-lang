@@ -113,6 +113,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0806 = new("SA0806", "Export import binding", DiagnosticLevel.Error, "Exports", "Cannot export imported binding '{0}'. Re-export the name in the importing module instead.");
     public static readonly DiagnosticDescriptor SA0807 = new("SA0807", "Export unknown name", DiagnosticLevel.Error, "Exports", "Exported name '{0}' is not declared at the top level of this module.");
     public static readonly DiagnosticDescriptor SA0808 = new("SA0808", "Duplicate export", DiagnosticLevel.Error, "Exports", "'{0}' is already exported.");
+    public static readonly DiagnosticDescriptor SA0809 = new("SA0809", "Symbol declared but not exported", DiagnosticLevel.Information, "Exports", "'{0}' is declared in '{1}' but is not in its export set. Consider adding it to an export block.");
 
     // ── SA083x — Deprecations ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0830 = new("SA0830", "Deprecated built-in member", DiagnosticLevel.Warning, "Deprecations", "'{0}' is deprecated \u2014 use '{1}' instead.");
@@ -287,6 +288,7 @@ public static class DiagnosticDescriptors
         dict[SA0806.Code] = SA0806;
         dict[SA0807.Code] = SA0807;
         dict[SA0808.Code] = SA0808;
+        dict[SA0809.Code] = SA0809;
         dict[SA0810.Code] = SA0810;
         dict[SA0811.Code] = SA0811;
         dict[SA0812.Code] = SA0812;

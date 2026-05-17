@@ -76,18 +76,33 @@ public class ImportResolver
         public List<DiagnosticError> Errors { get; }
 
         /// <summary>
-        /// Initializes a new <see cref="ModuleInfo"/> with the given URI, path, symbol tree, and errors.
+        /// Gets the explicit export set for the module, or <see langword="null"/> if the module
+        /// uses legacy "export everything" semantics (no <c>export</c> annotations).
+        /// </summary>
+        /// <remarks>
+        /// When non-null and <see cref="ModuleExports.HasExplicitExports"/> is <see langword="true"/>,
+        /// only names present in <see cref="ModuleExports.Names"/> are visible to importers.
+        /// </remarks>
+        public ModuleExports? Exports { get; }
+
+        /// <summary>
+        /// Initializes a new <see cref="ModuleInfo"/> with the given URI, path, symbol tree, errors,
+        /// and optional explicit export set.
         /// </summary>
         /// <param name="uri">The URI of the module file.</param>
         /// <param name="absolutePath">The absolute file-system path of the module.</param>
         /// <param name="symbols">The parsed symbol tree for the module.</param>
         /// <param name="errors">Any parse errors encountered.</param>
-        public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors)
+        /// <param name="exports">
+        /// The explicit export set, or <see langword="null"/> for legacy modules that export everything.
+        /// </param>
+        public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors, ModuleExports? exports = null)
         {
             Uri = uri;
             AbsolutePath = absolutePath;
             Symbols = symbols;
             Errors = errors;
+            Exports = exports;
         }
     }
 
@@ -193,13 +208,38 @@ public class ImportResolver
         // For each imported name, check if it exists in the module's top-level exports
         foreach (var nameToken in stmt.Names)
         {
+            var lexeme = nameToken.Lexeme;
+
+            // When the module has an explicit export set, check membership first.
+            if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+            {
+                if (!moduleInfo.Exports.Names.ContainsKey(lexeme))
+                {
+                    resolution.Diagnostics.Add(new SemanticDiagnostic(
+                        $"Module '{importPath}' does not export '{lexeme}'.",
+                        DiagnosticLevel.Error,
+                        nameToken.Span));
+
+                    // If the name exists as a private top-level declaration, hint the author.
+                    var privateSymbol = moduleInfo.Symbols.GetTopLevel()
+                        .FirstOrDefault(s => s.Name == lexeme);
+                    if (privateSymbol != null)
+                    {
+                        resolution.Diagnostics.Add(
+                            DiagnosticDescriptors.SA0809.CreateDiagnostic(nameToken.Span, lexeme, importPath));
+                    }
+
+                    continue;
+                }
+            }
+
             var exportedSymbol = moduleInfo.Symbols.GetTopLevel()
-                .FirstOrDefault(s => s.Name == nameToken.Lexeme);
+                .FirstOrDefault(s => s.Name == lexeme);
 
             if (exportedSymbol == null)
             {
                 resolution.Diagnostics.Add(new SemanticDiagnostic(
-                    $"Module '{importPath}' does not export '{nameToken.Lexeme}'.",
+                    $"Module '{importPath}' does not export '{lexeme}'.",
                     DiagnosticLevel.Error,
                     nameToken.Span));
                 continue;
@@ -263,7 +303,51 @@ public class ImportResolver
 
         TrackDependency(absolutePath, documentUri);
         var moduleInfo = LoadModule(absolutePath, parseModule);
-        resolution.NamespaceImports[stmt.Alias.Lexeme] = moduleInfo;
+
+        // When the module has an explicit export set, expose only the exported symbols for
+        // dot-completion on the alias (keeps LSP completion consistent with runtime behaviour).
+        if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+        {
+            resolution.NamespaceImports[stmt.Alias.Lexeme] = BuildFilteredModuleInfo(moduleInfo);
+        }
+        else
+        {
+            resolution.NamespaceImports[stmt.Alias.Lexeme] = moduleInfo;
+        }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="ModuleInfo"/> whose symbol tree contains only the exported symbols
+    /// (and their children — struct fields, enum members, interface methods).
+    /// </summary>
+    private static ModuleInfo BuildFilteredModuleInfo(ModuleInfo moduleInfo)
+    {
+        var exports = moduleInfo.Exports!;
+        var originalScope = moduleInfo.Symbols.GlobalScope;
+
+        var filteredScope = new Scope(originalScope.Kind, null, originalScope.Span);
+
+        // Collect the names of exported parent types so we can include their children too.
+        var exportedParentNames = new HashSet<string>(exports.Names.Keys);
+
+        foreach (var sym in originalScope.Symbols)
+        {
+            // Include exported top-level symbols.
+            if (sym.ParentName == null && exports.Names.ContainsKey(sym.Name))
+            {
+                filteredScope.AddSymbol(sym);
+                continue;
+            }
+
+            // Include child symbols (fields, enum members, methods) whose parent is exported.
+            if (sym.ParentName != null && exportedParentNames.Contains(sym.ParentName))
+            {
+                filteredScope.AddSymbol(sym);
+            }
+        }
+
+        var filteredTree = new ScopeTree(filteredScope);
+        return new ModuleInfo(moduleInfo.Uri, moduleInfo.AbsolutePath, filteredTree, moduleInfo.Errors, exports);
     }
 
     /// <summary>
