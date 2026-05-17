@@ -1,5 +1,5 @@
 ---
-description: Open an Architect session to design a new feature. Produces spec.md, plan.yaml, context.md under .kanban/2-in-progress/<slug>/.
+description: Open an Architect session to design a new feature. Produces brief.md, plan.yaml, and checkpoint.yaml under .kanban/2-in-progress/<slug>/.
 argument-hint: [topic or feature description]
 ---
 
@@ -19,7 +19,7 @@ Before invoking the architect, do this in the main conversation (not inside the 
    ls -1 .kanban/2-in-progress/ 2>/dev/null || true
    ```
 
-   If one of them might be what the user means, ask whether they want to refine that spec instead of starting fresh.
+   If one of them might be what the user means, ask whether they want to refine that brief instead of starting fresh.
 
 2. Read `.claude/skills/checkpoint-workflow.md` and `.claude/agents/architect.md` so you can pass the architect a brief that's anchored in the current workflow.
 
@@ -35,6 +35,6 @@ Once the slug is confirmed, invoke the `architect` agent via the `Agent` tool wi
 - An instruction to run `bash scripts/checkpoint/bootstrap-feature.sh <slug> "<title>"` only AFTER initial design discussion has converged enough to commit to a slug and title
 - An instruction to run `python3 scripts/checkpoint/validate-spec.py <slug>` before declaring the spec ready, and fix every reported problem
 - An instruction to add a one-line pointer to `.claude/repo.md` "Active Multi-Phase Work" when done
-- An instruction to NOT write implementation code — only spec / plan / context artifacts
+- An instruction to NOT write implementation code — only `brief.md`, `plan.yaml`, and checkpoint artifacts
 
 Tell the architect to return the slug and a short summary so you can report back to the user with the next command: `/next-phase <slug>`.

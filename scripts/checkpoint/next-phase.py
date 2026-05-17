@@ -5,7 +5,7 @@ Prints the next pending phase whose dependencies are all done. Output is a
 YAML document on stdout containing the phase entry plus a `_brief` block
 that aggregates the context the implementer needs:
 
-  - `_brief.spec_path`, `_brief.context_path` (relative to repo root)
+  - `_brief.brief_path` (relative to repo root)
   - `_brief.feature`, `_brief.title`
   - `_brief.default_verify`, `_brief.scope` (from plan.yaml)
   - `_brief.attempts` (from checkpoint.yaml, so a retry can be detected)
@@ -64,17 +64,22 @@ def main(argv: list[str]) -> int:
         return 2
 
     feature_path = INPROGRESS_DIR / slug
+    brief_rel = plan.get("brief") or plan.get("spec") or "brief.md"
+    brief_path = (feature_path / brief_rel).resolve()
+    context_path = (feature_path / plan.get("context", "context.md")).resolve()
     chosen_state = cp_phases.get(chosen["id"], {})
     out = dict(chosen)
     out["_brief"] = {
         "feature": slug,
         "title": plan.get("title"),
         "feature_dir": str(feature_path.relative_to(Path.cwd())) if feature_path.is_relative_to(Path.cwd()) else str(feature_path),
-        "spec_path": str((feature_path / plan["spec"]).resolve().relative_to(Path.cwd())) if (feature_path / plan["spec"]).resolve().is_relative_to(Path.cwd()) else str((feature_path / plan["spec"]).resolve()),
-        "context_path": str((feature_path / plan.get("context", "context.md")).resolve()) if (feature_path / plan.get("context", "context.md")).is_file() else None,
+        "brief_path": str(brief_path.relative_to(Path.cwd())) if brief_path.is_relative_to(Path.cwd()) else str(brief_path),
+        "spec_path": str(brief_path.relative_to(Path.cwd())) if brief_path.is_relative_to(Path.cwd()) else str(brief_path),
+        "context_path": str(context_path.relative_to(Path.cwd())) if context_path.is_file() and context_path.is_relative_to(Path.cwd()) else (str(context_path) if context_path.is_file() else None),
         "default_verify": plan.get("default_verify") or [],
         "scope": plan.get("scope") or [],
         "attempts": chosen_state.get("attempts", 0),
+        "previous_summary": chosen_state.get("notes", ""),
     }
     yaml.safe_dump(out, sys.stdout, sort_keys=False, default_flow_style=False, width=100)
     return 0

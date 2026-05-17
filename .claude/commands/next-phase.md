@@ -30,13 +30,13 @@ fi
 echo "slug: $SLUG"
 ```
 
-### 2. Validate spec + auto-heal checkpoint
+### 2. Validate plan + auto-heal checkpoint
 
 ```bash
 python3 scripts/checkpoint/validate-spec.py "$SLUG"
 ```
 
-Fix any reported problems before continuing. If validation fails, **do not invoke the implementer** — tell the user the spec needs architect attention.
+Fix any reported problems before continuing. If validation fails, **do not invoke the implementer** — tell the user the brief/plan needs architect attention.
 
 ### 3. Check git state
 
@@ -57,11 +57,13 @@ Capture the YAML output. If exit code is 2:
 - "in_progress" → tell the user to run `/resume <slug>`.
 - "blocked" → tell the user some prior phase is `failed`; investigate.
 
-If exit code is 0, the YAML is the implementer's brief data. Note the `id`, `title`, `files`, `verify`, `non_goals`, `est_tokens`, `_brief.attempts`.
+If exit code is 0, the YAML is the implementer's brief data. Note the `id`, `title`, `files`, `verify`, `done_when`, `_brief.brief_path`, and `_brief.attempts`.
 
-### 5. Sanity-check phase size
+### 5. Sanity-check phase shape
 
-If `est_tokens > 80000`, refuse to dispatch — the architect should split the phase first. Tell the user.
+If `done_when` is missing or empty, refuse to dispatch — the architect should state the observable behavior that proves the phase.
+
+If `est_tokens > 80000`, refuse to dispatch — the architect should split the phase first. `est_tokens` is optional in the simplified workflow; only check it when present.
 
 If `_brief.attempts >= 2`, this is at least a third try. Warn the user — perhaps the phase needs to be split, the brief enriched, or there's a deeper bug to address first.
 
@@ -75,12 +77,11 @@ python3 scripts/checkpoint/advance-checkpoint.py "$SLUG" "<phase-id>" in_progres
 
 Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implementer"`. The prompt **must** contain, in this order:
 
-1. **Hard scope reminder** — quote the phase's `non_goals` verbatim, and emphasize that only files in `phase.files` may be modified.
-2. **Phase brief** — the full YAML from `next-phase.py` (id, title, deps, files, verify, non_goals, notes).
+1. **Plan trust reminder** — tell the implementer to trust the plan as the default route, but allow small documented corrections when a file path, symbol location, signature, or verify command is stale. If `non_goals` exists, quote it verbatim.
+2. **Phase brief** — the full YAML from `next-phase.py` (id, title, deps, files, verify, done_when, notes).
 3. **Pointers**:
-   - Spec: `.kanban/2-in-progress/<slug>/spec.md` (read sections relevant to this phase)
-   - Context: `.kanban/2-in-progress/<slug>/context.md` (read all of it — it's small)
-   - Per-phase notes (if exists): `.kanban/2-in-progress/<slug>/notes/<id>.md`
+   - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read summary, design path, acceptance criteria, and sections relevant to this phase)
+   - Legacy spec/context paths if `_brief` reports them for an older feature
 4. **Verification contract** — the implementer must run `bash scripts/checkpoint/verify-phase.sh <slug> <id>` (not just the bare verify commands — the script also enforces scope).
 5. **Commit contract** — the exact commit message format from `.claude/agents/implementer.md`. Verify must pass before commit.
 6. **Advance contract** — after a green commit:
@@ -89,7 +90,7 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
        --commit "$(git rev-parse HEAD)" --verified true \
        --notes "<one-line summary>"
    ```
-7. **Failure protocol** — if verify cannot be made to pass within scope, run:
+7. **Failure protocol** — if verify cannot be made to pass after bounded plan corrections, run:
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> <id> failed \
        --notes "<reason>"

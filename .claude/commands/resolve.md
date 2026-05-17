@@ -69,7 +69,7 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 2. **Finding id:** `$FID`
 3. **Finding section verbatim** — paste the full text extracted above
 4. **Pointers:**
-   - Spec: `.kanban/2-in-progress/<slug>/spec.md` (read only if the finding cites a spec requirement)
+   - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read only if the finding cites a requirement; for older features, use `spec.md`)
    - Plan: `.kanban/2-in-progress/<slug>/plan.yaml`
    - Review file: `.kanban/2-in-progress/<slug>/review.md`
 5. **Hard rules** (reiterate):
@@ -77,7 +77,7 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
    - Run the finding's `Verify` command before commit.
    - Commit message: `fix(<slug>): <Fxx> — <short title>` with body referencing `review.md`.
    - Update `review.md`: change `**Status:** open` → `**Status:** fixed`, append `**Fixed in:** <sha>` below.
-6. **Failure protocol** — if the suggested fix doesn't work as written, stop and report; do not improvise scope.
+6. **Failure protocol** — if the suggested fix doesn't work or requires files outside the finding/plan scope, stop and report; do not silently expand scope.
 7. **Checkpoint advance after success:**
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status in_progress

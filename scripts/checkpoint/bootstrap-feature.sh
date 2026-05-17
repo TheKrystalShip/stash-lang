@@ -22,17 +22,14 @@ if [ -e "$dest" ]; then
   exit 1
 fi
 
-mkdir -p "$dest/notes"
+mkdir -p "$dest"
 
 # Copy templates and substitute placeholders.
 sed -e "s/{{Feature Name}}/$title/g" \
     -e "s/{{feature-slug}}/$slug/g" \
     -e "s/{{user}}/$(git config user.name 2>/dev/null || echo unknown)/g" \
     -e "s/{{YYYY-MM-DD}}/$(date -u +%Y-%m-%d)/g" \
-    "$templates/spec-template.md" > "$dest/spec.md"
-
-sed -e "s/{{Feature Name}}/$title/g" \
-    "$templates/context-template.md" > "$dest/context.md"
+    "$templates/brief-template.md" > "$dest/brief.md"
 
 # plan.yaml needs the slug in the `feature:` field.
 sed -e "s/^feature: feature-slug$/feature: $slug/" \
@@ -41,7 +38,8 @@ sed -e "s/^feature: feature-slug$/feature: $slug/" \
     "$templates/plan-template.yaml" > "$dest/plan.yaml"
 
 sed -e "s/^feature: feature-slug$/feature: $slug/" \
+    -e "s/^updated: 2026-05-16T00:00:00Z$/updated: $(date -u +%Y-%m-%dT00:00:00Z)/" \
     "$templates/checkpoint-template.yaml" > "$dest/checkpoint.yaml"
 
 echo "created: $dest"
-echo "next: edit spec.md and plan.yaml, then run scripts/checkpoint/validate-spec.sh $slug"
+echo "next: edit brief.md and plan.yaml, then run python3 scripts/checkpoint/validate-spec.py $slug"

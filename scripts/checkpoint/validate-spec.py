@@ -21,8 +21,8 @@ from _common import (  # noqa: E402
     save_checkpoint,
 )
 
-REQUIRED_PLAN_KEYS = {"schema_version", "feature", "title", "spec", "phases"}
-REQUIRED_PHASE_KEYS = {"id", "title", "deps", "files", "verify", "non_goals", "est_tokens"}
+REQUIRED_PLAN_KEYS = {"schema_version", "feature", "title", "phases"}
+REQUIRED_PHASE_KEYS = {"id", "title", "deps", "files", "verify"}
 
 
 def main(argv: list[str]) -> int:
@@ -41,9 +41,14 @@ def main(argv: list[str]) -> int:
     if plan.get("feature") != slug:
         problems.append(f"plan.yaml `feature` ({plan.get('feature')!r}) does not match directory name ({slug!r})")
 
-    spec_path = fdir / plan.get("spec", "spec.md")
-    if not spec_path.is_file():
-        problems.append(f"spec file not found: {spec_path}")
+    brief_rel = plan.get("brief") or plan.get("spec")
+    if not brief_rel:
+        problems.append("plan.yaml must declare `brief: ./brief.md`")
+        brief_path = fdir / "brief.md"
+    else:
+        brief_path = fdir / brief_rel
+        if not brief_path.is_file():
+            problems.append(f"brief file not found: {brief_path}")
 
     phases = plan.get("phases") or []
     if not phases:
@@ -68,13 +73,14 @@ def main(argv: list[str]) -> int:
             problems.append(f"phase {pid} has empty files list (every phase must declare its scope)")
         if not ph.get("verify"):
             problems.append(f"phase {pid} has empty verify list (every phase must declare how to verify)")
-        if not ph.get("non_goals"):
-            problems.append(f"phase {pid} has empty non_goals list (state explicit scope boundaries)")
-        est = ph.get("est_tokens", 0)
-        if not isinstance(est, int) or est < 5000:
-            problems.append(f"phase {pid} est_tokens looks too small ({est})")
-        if isinstance(est, int) and est > 80000:
-            problems.append(f"phase {pid} est_tokens={est} exceeds 80k — consider splitting")
+        if plan.get("brief") and not ph.get("done_when"):
+            problems.append(f"phase {pid} has empty done_when list (state the end-to-end behavior that proves the phase)")
+        est = ph.get("est_tokens")
+        if est is not None:
+            if not isinstance(est, int) or est < 5000:
+                problems.append(f"phase {pid} est_tokens looks too small ({est})")
+            if isinstance(est, int) and est > 80000:
+                problems.append(f"phase {pid} est_tokens={est} exceeds 80k — consider splitting")
 
     # --- checkpoint.yaml ---
     if cp.get("feature") != slug:

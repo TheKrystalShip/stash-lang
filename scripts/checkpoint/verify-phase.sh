@@ -2,8 +2,8 @@
 # verify-phase.sh <slug> <phase-id>
 #
 # Runs a phase's verify commands AND checks that the working tree's modified
-# files (vs HEAD or vs the merge-base with main, whichever has fewer commits)
-# stay within the phase's declared `files` glob list.
+# files stay within the current phase plan. Implementers may correct plan.yaml
+# first when the original plan is stale; this script enforces the updated plan.
 #
 # Exit codes:
 #   0  verification passed
@@ -32,20 +32,30 @@ from _common import load_plan, phase_by_id  # type: ignore
 plan = load_plan("$slug")
 ph = phase_by_id(plan, "$phase_id")
 print(json.dumps({
+    "title": ph.get("title"),
     "files": ph.get("files") or [],
     "verify": ph.get("verify") or [],
+    "done_when": ph.get("done_when") or [],
     "default_verify": plan.get("default_verify") or [],
     "scope": plan.get("scope") or [],
 }))
 PY
 )"
 
+phase_title="$(jq -r '.title // ""' <<<"$phase_json")"
 mapfile -t allowed < <(jq -r '.files[]' <<<"$phase_json")
 mapfile -t scope   < <(jq -r '.scope[]' <<<"$phase_json")
+mapfile -t done_when < <(jq -r '.done_when[]' <<<"$phase_json")
+
+echo "verify-phase: $slug/$phase_id ${phase_title}"
+if [ "${#done_when[@]}" -gt 0 ]; then
+  echo "Done when:"
+  for item in "${done_when[@]}"; do echo "  - $item"; done
+fi
 
 # --- Scope check ---
 # Compare working tree against last commit. Uncommitted edits are the implementer's
-# pending work; we want to flag any out-of-scope edits before they're committed.
+# pending work; flag anything outside the current plan before it is committed.
 changed="$(git diff --name-only HEAD 2>/dev/null; git ls-files --others --exclude-standard 2>/dev/null)"
 out_of_scope=()
 while IFS= read -r f; do
@@ -74,6 +84,7 @@ if [ "${#out_of_scope[@]}" -gt 0 ]; then
   for f in "${out_of_scope[@]}"; do echo "  - $f" >&2; done
   echo "phase $phase_id declares these files:" >&2
   for p in "${allowed[@]}"; do echo "  + $p" >&2; done
+  echo "If the plan is stale, make the smallest justified correction to plan.yaml and rerun." >&2
   exit 2
 fi
 

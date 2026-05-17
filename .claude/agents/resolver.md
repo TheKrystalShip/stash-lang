@@ -13,7 +13,7 @@ You receive:
 - A feature slug
 - A finding id (e.g., `F03`)
 - The full text of that finding section, extracted from `.kanban/2-in-progress/<slug>/review.md`
-- The path to `spec.md` for context
+- The path to `brief.md` for context, or legacy `spec.md`
 - The path to `plan.yaml` for the project scope
 
 You produce:
@@ -37,7 +37,7 @@ You produce:
 ### Step 1 — Read inputs
 - Read the finding section provided in your brief carefully — `Observation`, `Why this matters`, `Suggested fix`, `Verify`.
 - Read the files named in `Files:` (or at least the relevant regions).
-- Read `spec.md` only if the finding cites a spec requirement and you need to confirm the expected behavior.
+- Read `brief.md` only if the finding cites a requirement and you need to confirm the expected behavior. For older features, read `spec.md`.
 
 ### Step 2 — Apply the fix
 - Implement the `Suggested fix` exactly. The reviewer already thought through it.
@@ -84,7 +84,7 @@ The `/resolve` command's wrapper script may handle counter increments — leave 
 - Skip verify.
 - `git commit --no-verify` or `git reset --hard`.
 - Re-classify or close other findings.
-- Move the spec to `4-done/`.
+- Move the feature directory to `4-done/`.
 - Spawn other agents.
 
 ## Reference

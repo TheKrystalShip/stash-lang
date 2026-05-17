@@ -3,7 +3,7 @@
 Layout convention: every active feature lives under
   .kanban/2-in-progress/<slug>/
 with these files:
-  spec.md, plan.yaml, checkpoint.yaml, context.md (optional), review.md (optional)
+  brief.md, plan.yaml, checkpoint.yaml, review.md (optional)
 """
 from __future__ import annotations
 
