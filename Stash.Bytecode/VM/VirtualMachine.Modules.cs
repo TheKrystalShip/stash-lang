@@ -6,6 +6,7 @@ using Stash.Common;
 using Stash.Debugging;
 using Stash.Lexing;
 using Stash.Parsing;
+using Stash.Core.Resolution;
 using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -139,14 +140,41 @@ public sealed partial class VirtualMachine
 
                 moduleVM.Execute(moduleChunk);
 
-                ModuleCache[resolvedPath] = moduleVM.Globals;
-                return moduleVM.Globals;
+                var filtered = BuildExportedEnvironment(moduleVM.Globals, moduleChunk.Exports);
+                ModuleCache[resolvedPath] = filtered;
+                return filtered;
             }
             finally
             {
                 _importStack.Remove(resolvedPath);
             }
         }
+    }
+
+    private static Dictionary<string, StashValue> BuildExportedEnvironment(
+        Dictionary<string, StashValue> globals,
+        ModuleExports? exports)
+    {
+        // No explicit exports — legacy module: expose everything unchanged.
+        if (exports == null || !exports.HasExplicitExports)
+            return globals;
+
+        // Explicit export set: copy only exported names plus all built-in namespaces.
+        var result = new Dictionary<string, StashValue>(exports.Names.Count);
+        foreach (KeyValuePair<string, StashValue> kvp in globals)
+        {
+            object? val = kvp.Value.ToObject();
+            if (val is StashNamespace sn && sn.IsBuiltIn)
+            {
+                result[kvp.Key] = kvp.Value;
+                continue;
+            }
+
+            if (exports.Names.Contains(kvp.Key))
+                result[kvp.Key] = kvp.Value;
+        }
+
+        return result;
     }
 
     private string? ResolvePackagePath(string modulePath, SourceSpan? span)
