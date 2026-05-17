@@ -1,9 +1,7 @@
-using System.Collections.Generic;
 using Stash.Analysis;
 using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Parsing.AST;
 
 namespace Stash.Tests.Analysis;
 
@@ -67,14 +65,14 @@ public class ImportResolverExportTests
     public void Analysis_ImportPrivateName_ReportsDoesNotExport()
     {
         // Module has explicit exports; `helper` is private.
-        const string moduleSource = "export fn greet() { }\nfn helper() { }";
-        const string mainSource = "import { helper } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { helper } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -93,14 +91,14 @@ public class ImportResolverExportTests
     public void Analysis_SA0809_HintsWhenPrivateNameExistsAsTopLevelDecl()
     {
         // `helper` exists as a top-level declaration but is not exported → SA0809 hint expected.
-        const string moduleSource = "export fn greet() { }\nfn helper() { }";
-        const string mainSource = "import { helper } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { helper } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -117,14 +115,14 @@ public class ImportResolverExportTests
     public void Analysis_SA0809_NotEmittedWhenNameDoesNotExistAtAll()
     {
         // `missing` does not exist anywhere → error only, no SA0809 hint.
-        const string moduleSource = "export fn greet() { }";
-        const string mainSource = "import { missing } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }";
+        const string MainSource = "import { missing } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -144,14 +142,14 @@ public class ImportResolverExportTests
     public void Analysis_LegacyModule_BehavesAsBefore()
     {
         // Module with no export annotations — all top-level symbols are importable.
-        const string moduleSource = "fn greet() { }\nfn helper() { }";
-        const string mainSource = "import { greet, helper } from \"module.stash\";";
+        const string ModuleSource = "fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { greet, helper } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -169,14 +167,14 @@ public class ImportResolverExportTests
     public void Analysis_LegacyModule_NoSA0809Emitted()
     {
         // No export annotations → no SA0809 hint should ever be emitted.
-        const string moduleSource = "fn helper() { }";
-        const string mainSource = "import { nonexistent } from \"module.stash\";";
+        const string ModuleSource = "fn helper() { }";
+        const string MainSource = "import { nonexistent } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -197,14 +195,14 @@ public class ImportResolverExportTests
     {
         // Module exports only `greet`; `helper` is private.
         // The namespace import's ModuleInfo.Symbols should only list exported top-level symbols.
-        const string moduleSource = "export fn greet() { }\nfn helper() { }";
-        const string mainSource = "import \"module.stash\" as utils;";
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import \"module.stash\" as utils;";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -227,14 +225,14 @@ public class ImportResolverExportTests
     public void Analysis_NamespaceImport_LegacyModule_ExposesAllSymbols()
     {
         // No export annotations → namespace alias exposes all top-level symbols.
-        const string moduleSource = "fn greet() { }\nfn helper() { }";
-        const string mainSource = "import \"module.stash\" as utils;";
+        const string ModuleSource = "fn greet() { }\nfn helper() { }";
+        const string MainSource = "import \"module.stash\" as utils;";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -255,14 +253,14 @@ public class ImportResolverExportTests
     public void Analysis_NamespaceImport_ExportedStructFieldsIncluded()
     {
         // When a struct is exported, its fields should appear in the namespace alias's symbols.
-        const string moduleSource = "export struct Point { x: int, y: int }\nfn internal() { }";
-        const string mainSource = "import \"module.stash\" as geo;";
+        const string ModuleSource = "export struct Point { x: int, y: int }\nfn internal() { }";
+        const string MainSource = "import \"module.stash\" as geo;";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -286,14 +284,14 @@ public class ImportResolverExportTests
     public void Analysis_ImportExportedName_ResolvesSuccessfully()
     {
         // Importing a name that is in the explicit export set should work.
-        const string moduleSource = "export fn greet() { }\nfn helper() { }";
-        const string mainSource = "import { greet } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { greet } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -311,14 +309,14 @@ public class ImportResolverExportTests
     [Fact]
     public void ModuleInfo_Exports_NotNull_WhenModuleHasExplicitExports()
     {
-        const string moduleSource = "export fn greet() { }";
-        const string mainSource = "import { greet } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }";
+        const string MainSource = "import { greet } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -338,14 +336,14 @@ public class ImportResolverExportTests
     [Fact]
     public void ModuleInfo_Exports_HasExplicitExportsFalse_ForLegacyModule()
     {
-        const string moduleSource = "fn greet() { }";
-        const string mainSource = "import { greet } from \"module.stash\";";
+        const string ModuleSource = "fn greet() { }";
+        const string MainSource = "import { greet } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var resolver = new ImportResolver();
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
@@ -368,17 +366,17 @@ public class ImportResolverExportTests
     {
         // Simulate a module whose export list changes: first version exports `greet`,
         // second version adds `helper` to the export set.
-        const string moduleSourceV1 = "export fn greet() { }\nfn helper() { }";
-        const string moduleSourceV2 = "export fn greet() { }\nexport fn helper() { }";
-        const string mainSource = "import { helper } from \"module.stash\";";
+        const string ModuleSourceV1 = "export fn greet() { }\nfn helper() { }";
+        const string ModuleSourceV2 = "export fn greet() { }\nexport fn helper() { }";
+        const string MainSource = "import { helper } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSourceV1, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSourceV1, MainSource);
         try
         {
             var resolver = new ImportResolver();
             var modulePath = Path.Combine(Path.GetDirectoryName(mainUri.LocalPath)!, "module.stash");
 
-            var lexer = new Lexer(mainSource, mainUri.LocalPath);
+            var lexer = new Lexer(MainSource, mainUri.LocalPath);
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
 
             // First resolve: `helper` is private → error.
@@ -387,12 +385,12 @@ public class ImportResolverExportTests
                 d => d.Level == DiagnosticLevel.Error && d.Message.Contains("does not export 'helper'"));
 
             // Update the module file to export `helper` as well.
-            File.WriteAllText(modulePath, moduleSourceV2);
+            File.WriteAllText(modulePath, ModuleSourceV2);
 
             // Invalidate the cache so the resolver re-parses the module.
             resolver.InvalidateCache(modulePath);
 
-            var stmts2 = new Parser(new Lexer(mainSource, mainUri.LocalPath).ScanTokens()).ParseProgram();
+            var stmts2 = new Parser(new Lexer(MainSource, mainUri.LocalPath).ScanTokens()).ParseProgram();
             var resolution2 = resolver.ResolveImports(mainUri, stmts2, ParseModuleWithExports);
 
             // After cache invalidation and file update, `helper` should resolve cleanly.
@@ -411,14 +409,14 @@ public class ImportResolverExportTests
     [Fact]
     public void AnalysisEngine_ImportPrivateName_ReportsDoesNotExport()
     {
-        const string moduleSource = "export fn greet() { }\nfn helper() { }";
-        const string mainSource = "import { helper } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { helper } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
-            var result = engine.Analyze(mainUri, mainSource);
+            var result = engine.Analyze(mainUri, MainSource);
 
             Assert.Contains(result.SemanticDiagnostics,
                 d => d.Level == DiagnosticLevel.Error && d.Message.Contains("does not export 'helper'"));
@@ -432,14 +430,14 @@ public class ImportResolverExportTests
     [Fact]
     public void AnalysisEngine_ImportExportedName_NoError()
     {
-        const string moduleSource = "export fn greet() { }\nfn helper() { }";
-        const string mainSource = "import { greet } from \"module.stash\";";
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { greet } from \"module.stash\";";
 
-        var (tempDir, _, mainUri) = SetupTest(moduleSource, mainSource);
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
         try
         {
             var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
-            var result = engine.Analyze(mainUri, mainSource);
+            var result = engine.Analyze(mainUri, MainSource);
 
             Assert.DoesNotContain(result.SemanticDiagnostics,
                 d => d.Level == DiagnosticLevel.Error && d.Message.Contains("does not export 'greet'"));
