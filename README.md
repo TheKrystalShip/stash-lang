@@ -40,6 +40,7 @@ A dynamically typed scripting language for system administration. Stash combines
 - **Sensible error handling.** `try` expression with `??` fallback for inline errors. Full `try/catch/finally` also available.
 - **Built-in parallelism and async/await.** `task.run()`, `arr.parMap`, `arr.parForEach` — isolated tasks with snapshot semantics, no shared-state bugs.
 - **Interfaces and structural contracts.** Define with `interface`, check with `is`, extend any type with `extend` blocks.
+- **Module exports.** Opt-in visibility control with `export fn`, `export struct`, or `export { name }` blocks.
 - **UFCS.** Call any function as a method on its first argument: `nums.sort()` instead of `arr.sort(nums)`.
 - **Rich literals.** Durations (`5s`), byte sizes (`1.5GB`), semver (`@v1.2.3`), IP addresses (`@192.168.1.0/24`), hex/octal/binary numbers.
 - **Time-bounded execution.** `timeout 5s { ... }` cancels any operation — HTTP requests, shell commands, sleep, I/O — when the deadline expires. Composable with `try` and `retry`. No other scripting language has this as a language primitive.
@@ -150,9 +151,18 @@ async fn fetchStatus(host: string) -> string {
 let status = await fetchStatus("https://api.example.com");
 ```
 
-#### Imports
+#### Imports & Exports
 
 ```stash
+// Exporting — opt-in visibility control
+export fn deploy(target: string) -> bool { ... }   // declaration-site
+export struct Server { host: ip, port: int }
+
+fn _internal() { ... }                             // module-private (unannotated)
+const VERSION = "1.0.0";
+export { VERSION };                                // block form; union with decl-site exports
+
+// Importing
 import { deploy, Server } from "utils.stash";      // selective
 import "lib/utils.stash" as utils;                  // aliased namespace
 import $"{env.home()}/config.stash";               // dynamic path
