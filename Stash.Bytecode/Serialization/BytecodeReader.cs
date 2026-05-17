@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Text;
 using Stash.Common;
+using Stash.Core.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
@@ -14,7 +16,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public static class BytecodeReader
 {
-    private const ushort FormatVersion         = 3;
+    private const ushort FormatVersion         = 4;
     private const byte   FlagHasDebugInfo      = 0x01;
     private const byte   FlagHasEmbeddedSource = 0x04;
     private const byte   FlagHasStdlibManifest = 0x08;
@@ -128,7 +130,7 @@ public static class BytecodeReader
 
         // Format version (u16 LE)
         ushort version = reader.ReadUInt16();
-        if (version != 1 && version != 2 && version != FormatVersion)
+        if (version != 1 && version != 2 && version != 3 && version != FormatVersion)
             throw new InvalidDataException(
                 $"Unsupported .stashc format version {version} (expected {FormatVersion}).");
 
@@ -169,11 +171,12 @@ public static class BytecodeReader
         int maxRegs         = reader.ReadUInt16();
         int globalSlotCount = reader.ReadUInt16();
 
-        // Chunk flags (bit 0: IsAsync, bit 1: HasRestParam, bit 2: MayHaveCapturedLocals)
+        // Chunk flags (bit 0: IsAsync, bit 1: HasRestParam, bit 2: MayHaveCapturedLocals, bit 3: HasExports)
         byte chunkFlags            = reader.ReadByte();
         bool isAsync               = (chunkFlags & 0x01) != 0;
         bool hasRestParam          = (chunkFlags & 0x02) != 0;
         bool mayHaveCapturedLocals = (chunkFlags & 0x04) != 0;
+        bool hasExports            = (chunkFlags & 0x08) != 0 && formatVersion >= 4;
 
         // Code (u32 instruction count + uint[] 4-bytes-per-instruction LE)
         uint codeLength = reader.ReadUInt32();
@@ -228,6 +231,13 @@ public static class BytecodeReader
                 ushort constIndex = reader.ReadUInt16();
                 constGlobalInits[i] = (slot, constIndex);
             }
+        }
+
+        // Exports (only present when chunk flag bit 3 is set and formatVersion >= 4)
+        ModuleExports? exports = null;
+        if (hasExports)
+        {
+            exports = ReadExports(reader);
         }
 
         // Debug info (only present when the debug flag is set in the file header)
@@ -311,6 +321,9 @@ public static class BytecodeReader
             globalSlotCount,
             icSlots: icSlots,
             constGlobalInits: constGlobalInits);
+
+        if (exports is not null)
+            chunk.Exports = exports;
 
         return chunk;
     }
@@ -509,6 +522,20 @@ public static class BytecodeReader
         bool hasWait    = reader.ReadByte() != 0;
         bool hasStale   = reader.ReadByte() != 0;
         return new LockMetadata(optionCount, hasWait, hasStale);
+    }
+
+    private static ModuleExports ReadExports(BinaryReader reader)
+    {
+        // HasExplicitExports flag (u8)
+        bool hasExplicitExports = reader.ReadByte() != 0;
+
+        // Names: u16 count + [length-prefixed strings]
+        ushort nameCount = reader.ReadUInt16();
+        var builder = ImmutableHashSet.CreateBuilder<string>();
+        for (int i = 0; i < nameCount; i++)
+            builder.Add(ReadString16(reader));
+
+        return ModuleExports.Create(hasExplicitExports, builder.ToImmutable());
     }
 
     private static StdlibManifest ReadStdlibManifest(BinaryReader reader)

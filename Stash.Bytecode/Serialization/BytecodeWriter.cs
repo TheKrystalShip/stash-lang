@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using Stash.Core.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
@@ -18,7 +19,14 @@ public static class BytecodeWriter
     public const uint MagicBytes = 0x53544243;
 
     /// <summary>Current .stashc format version.</summary>
-    public const ushort FormatVersion = 3;
+    /// <remarks>
+    /// Version history:
+    ///   1 — initial release
+    ///   2 — CommandMetadata gained <c>IsStreaming</c> field
+    ///   3 — LockMetadata and StashLiteralArg added to constant pool
+    ///   4 — Chunk.Exports (ExportSetMetadata / ExportSetMetadata tag 19) added
+    /// </remarks>
+    public const ushort FormatVersion = 4;
 
     /// <summary>
     /// File-level flags stored in the header byte.
@@ -175,11 +183,12 @@ public static class BytecodeWriter
         writer.Write((ushort)chunk.MaxRegs);
         writer.Write((ushort)chunk.GlobalSlotCount);
 
-        // Flags: IsAsync, HasRestParam, MayHaveCapturedLocals
+        // Flags: IsAsync, HasRestParam, MayHaveCapturedLocals, HasExports
         byte chunkFlags = 0;
         if (chunk.IsAsync)               chunkFlags |= 1;
         if (chunk.HasRestParam)          chunkFlags |= 2;
         if (chunk.MayHaveCapturedLocals) chunkFlags |= 4;
+        if (chunk.Exports is not null)   chunkFlags |= 8;
         writer.Write(chunkFlags);
 
         // Code: u32 instruction count + uint[] (each instruction is 4 bytes LE)
@@ -217,10 +226,29 @@ public static class BytecodeWriter
             }
         }
 
+        // Exports (only if chunk has an explicit export set — flag bit 3)
+        if (chunk.Exports is { } exports)
+        {
+            WriteExports(writer, exports);
+        }
+
         // Debug info (only if flag was set in header)
         if (includeDebugInfo)
         {
             WriteDebugInfo(writer, chunk);
+        }
+    }
+
+    private static void WriteExports(BinaryWriter writer, Stash.Core.Resolution.ModuleExports exports)
+    {
+        // HasExplicitExports flag (u8)
+        writer.Write((byte)(exports.HasExplicitExports ? 1 : 0));
+
+        // Names: u16 count + [length-prefixed strings]
+        writer.Write((ushort)exports.Names.Count);
+        foreach (string name in exports.Names)
+        {
+            WriteLengthPrefixedString(writer, name);
         }
     }
 

@@ -53,3 +53,10 @@ public sealed record StructInitMetadata(
 
 /// <summary>Metadata for OP_LOCKBEGIN. Stored in the constant pool.</summary>
 public sealed record LockMetadata(int OptionCount, bool HasWait, bool HasStale);
+
+/// <summary>
+/// Metadata for a module's explicit export set.  Stored in the constant pool of the top-level
+/// chunk and serialized as part of the .stashc binary format.
+/// </summary>
+/// <param name="Names">The exported names in the module's export set.</param>
+public sealed record ExportSetMetadata(string[] Names);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Core.Resolution;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 using Stash.Runtime;
@@ -71,10 +72,19 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     // ==================================================================
 
     /// <summary>Compile a list of statements (script body) into a Chunk.</summary>
-    public static Chunk Compile(List<Stmt> statements, bool enableDce = true, bool enableOptimizationPipeline = true, bool enableLvn = true)
+    /// <param name="statements">Top-level statement list.</param>
+    /// <param name="enableDce">Whether dead-code elimination is enabled.</param>
+    /// <param name="enableOptimizationPipeline">Whether the optimization pipeline is enabled.</param>
+    /// <param name="enableLvn">Whether local value numbering is enabled.</param>
+    /// <param name="exports">
+    /// Optional module export set produced by <c>ModuleExportsBuilder.Build()</c> in
+    /// <c>Stash.Analysis</c>.  When provided, the resulting top-level <see cref="Chunk"/> will
+    /// have its <see cref="Chunk.Exports"/> property set accordingly.
+    /// </param>
+    public static Chunk Compile(List<Stmt> statements, bool enableDce = true, bool enableOptimizationPipeline = true, bool enableLvn = true, ModuleExports? exports = null)
     {
         var globalSlots = new GlobalSlotAllocator();
-        return Compile(statements, globalSlots, enableDce, enableOptimizationPipeline, enableLvn);
+        return Compile(statements, globalSlots, enableDce, enableOptimizationPipeline, enableLvn, exports);
     }
 
     /// <summary>
@@ -82,7 +92,12 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// Used by the REPL to share slot assignments across successive inputs, ensuring that lambdas
     /// compiled in an earlier REPL chunk read the correct global slots when invoked later.
     /// </summary>
-    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true, bool enableOptimizationPipeline = true, bool enableLvn = true)
+    /// <param name="exports">
+    /// Optional module export set produced by <c>ModuleExportsBuilder.Build()</c> in
+    /// <c>Stash.Analysis</c>.  When provided, the resulting top-level <see cref="Chunk"/> will
+    /// have its <see cref="Chunk.Exports"/> property set accordingly.
+    /// </param>
+    public static Chunk Compile(List<Stmt> statements, GlobalSlotAllocator globalSlots, bool enableDce = true, bool enableOptimizationPipeline = true, bool enableLvn = true, ModuleExports? exports = null)
     {
         var compiler = new Compiler(null, null, globalSlots);
         compiler._builder.EnableDce = enableDce;
@@ -101,7 +116,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
         compiler._builder.MaxRegs = compiler._scope.MaxRegs;
         compiler._builder.LocalNames = compiler._scope.GetLocalNames();
         compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
-        return compiler._builder.Build();
+        var chunk = compiler._builder.Build();
+        if (exports is not null)
+            chunk.Exports = exports;
+        return chunk;
     }
 
     /// <summary>Compile a single expression into a Chunk (for eval/REPL).</summary>

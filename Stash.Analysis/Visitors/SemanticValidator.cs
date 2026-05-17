@@ -96,7 +96,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _elevateDepth = 0;
 
         // Validate export set and collect SA0805–SA0808 diagnostics.
-        ModuleExports.Build(statements, _scopeTree, _diagnostics);
+        ModuleExportsBuilder.Build(statements, _diagnostics);
 
         CheckUnreachableStatements(statements);
 

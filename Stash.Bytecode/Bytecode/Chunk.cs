@@ -1,4 +1,5 @@
 using Stash.Bytecode.Optimization;
+using Stash.Core.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Stdlib;
 
@@ -66,6 +67,14 @@ public sealed class Chunk
 
     /// <summary>Optional stdlib manifest declaring required globals for load-time validation.</summary>
     public StdlibManifest? StdlibManifest { get; internal set; }
+
+    /// <summary>
+    /// The module's explicit export set, or <see langword="null"/> for nested function chunks
+    /// and for top-level chunks compiled without export information.
+    /// When non-null and <see cref="ModuleExports.HasExplicitExports"/> is <see langword="true"/>,
+    /// only the names in <see cref="ModuleExports.Names"/> are visible to importers.
+    /// </summary>
+    public ModuleExports? Exports { get; internal set; }
 
     /// <summary>
     /// Per-compilation pass-pipeline statistics.  Populated by <see cref="ChunkBuilder.Build"/>
