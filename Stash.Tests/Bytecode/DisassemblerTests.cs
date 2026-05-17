@@ -471,4 +471,161 @@ public class DisassemblerTests : BytecodeTestBase
 
         Assert.DoesNotContain(".locals:", output);
     }
+
+    // ── Register-name annotations (P3) ──────────────────────────────────────
+
+    [Fact]
+    public void Disassemble_RegisterAnnotations_AppearedInVerboseMode()
+    {
+        // move r1, r0  — Move has a bespoke formatter that returns no bespoke comment,
+        // so the annotation appears directly as the comment.
+        var builder = new ChunkBuilder
+        {
+            Name      = "annotFunc",
+            Arity     = 1,
+            MinArity  = 1,
+            LocalNames = new[] { "src", "dst" },
+            LocalIsConst = new[] { false, false },
+            EnableDce = false,
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 10));
+        // Move: R(1) = R(0), so dst=src
+        builder.EmitABC(OpCode.Move, 1, 0, 0);
+        builder.EmitAB(OpCode.Return, 1, 1);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        // Both named registers must appear annotated on the move line.
+        Assert.Contains("r1=dst", output);
+        Assert.Contains("r0=src", output);
+    }
+
+    [Fact]
+    public void Disassemble_RegisterAnnotations_BespokeCommentFirstThenSeparatorThenAnnotation()
+    {
+        // GetUpval has a bespoke comment that is the upvalue name.
+        // When the destination register r0 is also named in LocalNames, P3 appends the
+        // annotation after the bespoke comment with "  |  " separator.
+        var builder = new ChunkBuilder
+        {
+            Name      = "closureFunc",
+            Arity     = 0,
+            MinArity  = 0,
+            LocalNames  = new[] { "captured" },
+            LocalIsConst = new[] { false },
+            UpvalueNames = new[] { "outerVar" },
+        };
+        builder.AddUpvalue(0, isLocal: true); // uv0 captures local 0 from enclosing scope
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 15));
+        // GetUpval r0, uv0  → bespoke comment = "outerVar", annotation = "r0=captured"
+        builder.EmitAB(OpCode.GetUpval, 0, 0);
+        builder.EmitAB(OpCode.Return, 0, 1);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        // The "  |  " separator must appear on the get.upval line.
+        Assert.Contains("  |  ", output);
+        // The bespoke comment (upvalue name) comes before the separator.
+        int sepIdx = output.IndexOf("  |  ", StringComparison.Ordinal);
+        Assert.True(sepIdx > 0);
+        // The annotation (register name) comes after the separator.
+        string afterSep = output.Substring(sepIdx + 5); // 5 = "  |  ".Length
+        Assert.Contains("r0=captured", afterSep);
+        // The bespoke part (upvalue name) appears before the separator.
+        string beforeSep = output.Substring(0, sepIdx);
+        Assert.Contains("outerVar", beforeSep);
+    }
+
+    [Fact]
+    public void Disassemble_RegisterAnnotations_DedupSameSlot()
+    {
+        // Add r2, r2, r4 — R(A)=r2=total is written and also read as R(B)=r2.
+        // The same slot should appear exactly once in annotations.
+        var builder = new ChunkBuilder
+        {
+            Name      = "dedupFunc",
+            Arity     = 0,
+            MinArity  = 0,
+            LocalNames = new[] { "a", "b", "total", "x", "delta" },
+            LocalIsConst = new[] { false, false, false, false, false },
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 10));
+        // Add: R(2) = R(2) + R(4)
+        builder.EmitABC(OpCode.Add, 2, 2, 4);
+        builder.EmitAB(OpCode.Return, 0, 0);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        // "r2=total" should appear exactly once (deduplicated), not twice.
+        int count = 0;
+        int pos = 0;
+        while ((pos = output.IndexOf("r2=total", pos, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            pos++;
+        }
+        Assert.Equal(1, count);
+        // r4=delta also appears (it is a different slot).
+        Assert.Contains("r4=delta", output);
+    }
+
+    [Fact]
+    public void Disassemble_CompactMode_ByteForByteGoldenRegression()
+    {
+        // Build a chunk with LocalNames so that P3 would add annotations in verbose mode.
+        // Compact mode must produce exactly the same output as before P3 (no annotations).
+        var builder = new ChunkBuilder
+        {
+            Name      = "goldenFunc",
+            Arity     = 1,
+            MinArity  = 1,
+            LocalNames = new[] { "x", "y" },
+            LocalIsConst = new[] { false, false },
+            EnableDce = false,
+        };
+        builder.EmitABC(OpCode.Move, 1, 0, 0);
+        builder.EmitAB(OpCode.Return, 1, 1);
+        Chunk chunk = builder.Build();
+
+        var compactOptions = new DisassemblerOptions { Compact = true };
+        string compactOutput = Disassembler.Disassemble(chunk, compactOptions);
+
+        // Compact output must not contain any register annotation tokens.
+        Assert.DoesNotContain("r0=", compactOutput);
+        Assert.DoesNotContain("r1=", compactOutput);
+        Assert.DoesNotContain("  |  ", compactOutput);
+        // Compact output must still contain the opcode mnemonics.
+        Assert.Contains("move", compactOutput);
+        Assert.Contains("ret", compactOutput);
+    }
+
+    [Fact]
+    public void Disassemble_RegisterAnnotations_UnnamedSlotsOmitted()
+    {
+        // Slots beyond LocalNames.Length should not produce annotations.
+        var builder = new ChunkBuilder
+        {
+            Name     = "sparseFunc",
+            Arity    = 0,
+            MinArity = 0,
+            // Only r0 and r1 are named; r2 is unnamed (compiler temporary).
+            LocalNames = new[] { "first", "second" },
+            LocalIsConst = new[] { false, false },
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 10));
+        // Add r2, r0, r1 — r2 is beyond LocalNames so only r0 and r1 get annotations.
+        builder.EmitABC(OpCode.Add, 2, 0, 1);
+        builder.EmitAB(OpCode.Return, 2, 1);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        Assert.Contains("r0=first", output);
+        Assert.Contains("r1=second", output);
+        // r2 has no name entry, so "r2=" should NOT appear as an annotation.
+        Assert.DoesNotContain("r2=", output);
+    }
 }

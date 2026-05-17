@@ -311,15 +311,76 @@ public static class Disassembler
 
         string mnemStr = Col(options, $"{mnem,-20}", Ansi.Bold);
 
-        if (comment != null)
+        // Register-name annotations — only in verbose mode.
+        string? annotations = options.Compact ? null : BuildRegisterAnnotations(chunk, op, word);
+
+        // Compose the comment column: bespoke comment first, then annotations after "  |  ".
+        string? fullComment;
+        if (comment != null && annotations != null)
+            fullComment = $"{comment}  |  {annotations}";
+        else if (comment != null)
+            fullComment = comment;
+        else
+            fullComment = annotations;
+
+        if (fullComment != null)
         {
-            string commentStr = Col(options, $"; {comment}", Ansi.DimGreen);
+            string commentStr = Col(options, $"; {fullComment}", Ansi.DimGreen);
             sb.AppendLine($"{offsetStr}  {mnemStr}{operands,-24}{commentStr}");
         }
         else
         {
             sb.AppendLine($"{offsetStr}  {mnemStr}{operands}");
         }
+    }
+
+    /// <summary>
+    /// Builds a short register-name annotation string for the comment column, e.g.
+    /// <c>"r5=accum  r2=count"</c>.  Returns null when no named registers are referenced
+    /// by <paramref name="op"/> or when <see cref="Chunk.LocalNames"/> is absent.
+    /// Slots without a LocalNames entry (pure temporaries) are silently omitted.
+    /// Duplicate registers within one instruction are deduplicated and ordered A→B→C.
+    /// </summary>
+    private static string? BuildRegisterAnnotations(Chunk chunk, OpCode op, uint word)
+    {
+        if (chunk.LocalNames is not { Length: > 0 })
+            return null;
+
+        if (!OpCodeMetadata.IsDefined((byte)op))
+            return null;
+
+        OperandRole allRoles = OpCodeMetadata.GetReads(op) | OpCodeMetadata.GetWrites(op);
+
+        // Quick exit: no register operands at all.
+        if ((allRoles & (OperandRole.RegA | OperandRole.RegB | OperandRole.RegC)) == OperandRole.None)
+            return null;
+
+        var seen    = new System.Collections.Generic.HashSet<byte>();
+        var parts   = new System.Collections.Generic.List<string>(3);
+
+        // Emit in A → B → C order to match operand position order.
+        if ((allRoles & OperandRole.RegA) != OperandRole.None)
+        {
+            byte slot = Instruction.GetA(word);
+            if (seen.Add(slot) && slot < chunk.LocalNames.Length && chunk.LocalNames[slot] is { Length: > 0 } name)
+                parts.Add($"r{slot}={name}");
+        }
+
+        if ((allRoles & OperandRole.RegB) != OperandRole.None)
+        {
+            byte slot = Instruction.GetB(word);
+            if (seen.Add(slot) && slot < chunk.LocalNames.Length && chunk.LocalNames[slot] is { Length: > 0 } name)
+                parts.Add($"r{slot}={name}");
+        }
+
+        if ((allRoles & OperandRole.RegC) != OperandRole.None)
+        {
+            byte slot = Instruction.GetC(word);
+            if (seen.Add(slot) && slot < chunk.LocalNames.Length && chunk.LocalNames[slot] is { Length: > 0 } name)
+                parts.Add($"r{slot}={name}");
+        }
+
+        return parts.Count == 0 ? null : string.Join("  ", parts);
     }
 
     // ─── Operand Formatter ───────────────────────────────────────────────────
