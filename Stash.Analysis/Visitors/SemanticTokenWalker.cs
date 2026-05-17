@@ -615,7 +615,16 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.ExportKeyword, TokenTypeKeyword, 0);
         foreach (var name in stmt.Names)
         {
-            EmitFromToken(name, TokenTypeVariable, 0);
+            var def = _result.Symbols.FindDefinition(name.Lexeme, name.Span.StartLine, name.Span.StartColumn);
+            if (def != null)
+            {
+                var (type, modifiers) = MapSymbolKind(def, name);
+                EmitFromToken(name, type, modifiers);
+            }
+            else
+            {
+                EmitFromToken(name, TokenTypeVariable, 0);
+            }
         }
         return 0;
     }

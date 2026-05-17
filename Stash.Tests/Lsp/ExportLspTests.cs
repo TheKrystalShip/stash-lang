@@ -93,6 +93,47 @@ public class ExportLspTests : AnalysisTestBase
         Assert.Equal(TokenTypeKeyword, type);
     }
 
+    // ── Lsp_SemanticTokens_ExportBlock_NameTokenType ─────────────────────────
+
+    [Fact]
+    public void Lsp_SemanticTokens_ExportBlock_FunctionNameIsHighlightedAsFunction()
+    {
+        const string source = """
+            fn greet() {}
+            export { greet };
+            """;
+        // "greet" in the export block is on line 2, col 10.
+        var map = ClassifyTokens(source);
+        var (type, _) = TokenAt(map, 2, 10);
+        Assert.Equal(TokenTypeFunction, type);
+    }
+
+    [Fact]
+    public void Lsp_SemanticTokens_ExportBlock_StructNameIsHighlightedAsStruct()
+    {
+        const string source = """
+            struct Point { x: int, y: int }
+            export { Point };
+            """;
+        // "Point" in the export block is on line 2, col 10.
+        var map = ClassifyTokens(source);
+        var (type, _) = TokenAt(map, 2, 10);
+        Assert.Equal(TokenTypeStruct, type);
+    }
+
+    [Fact]
+    public void Lsp_SemanticTokens_ExportBlock_EnumNameIsHighlightedAsEnum()
+    {
+        const string source = """
+            enum Color { Red, Green, Blue }
+            export { Color };
+            """;
+        // "Color" in the export block is on line 2, col 10.
+        var map = ClassifyTokens(source);
+        var (type, _) = TokenAt(map, 2, 10);
+        Assert.Equal(TokenTypeEnum, type);
+    }
+
     // ── ModuleExportsSymbol — unit tests for the filter predicate ────────────
 
     [Fact]
