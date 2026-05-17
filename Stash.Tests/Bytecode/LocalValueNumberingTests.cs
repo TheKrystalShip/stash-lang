@@ -6,6 +6,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
+using Stash.Stdlib;
 using Xunit;
 
 namespace Stash.Tests.Bytecode;
@@ -366,5 +367,69 @@ public class LocalValueNumberingTests : BytecodeTestBase
         var vm = new VirtualMachine();
         object? result = vm.Execute(chunk);
         Assert.Equal(84L, result);
+    }
+
+    // ===========================================================================
+    // Test 15: Call clobbers callee-frame registers — orphaned Move VN must not survive
+    //
+    // Regression test for: CopyProp orphans `move rT, r0` (rT = temp used only for a
+    // field access that CopyProp rewrites to use r0 directly).  LVN then records rT as
+    // the canonical holder of r0's VN.  A subsequent `move rArg, r0` (call-arg setup)
+    // hits the cached VN and is rewritten to `move rArg, rT`.  At runtime, rT is inside
+    // the callee's stack frame and gets clobbered, so the second call sees null.
+    // ===========================================================================
+
+    [Fact]
+    public void Lvn_TwoCallsWithSameArg_AfterCopyPropOrphansTemp_BothCallsSeeSameValue()
+    {
+        // This test exercises a specific interaction between CopyPropagationPass and
+        // LocalValueNumberingPass that caused the second of two consecutive single-param
+        // calls to receive null/garbage instead of the correct argument.
+        //
+        // Pattern that triggers the bug:
+        //   1. Caller accesses a field on `val` before calling the two heavy callees.
+        //      This causes the compiler to emit `move rT, r0` + `get.field.ic rF, rT, k`.
+        //   2. CopyProp rewrites the GetFieldIC to use r0 directly, orphaning `move rT, r0`.
+        //      rT is now referenced only by the orphaned move.
+        //   3. LVN records the orphaned `move rT, r0` and sets rT as the canonical holder
+        //      of r0's VN.  When the later `move rArg, r0` (call-arg setup) is processed,
+        //      LVN produces a VN hit and rewrites it to `move rArg, rT`.
+        //   4. At runtime, the callee's frame covers rT and writes an iteration value to it.
+        //      The second call therefore receives garbage (loop index) instead of the struct.
+        //
+        // Both helpers iterate over a range (forcing the loop machinery to write to r4 of
+        // the callee, which maps to r8 in the caller's frame), then return a fixed value.
+        // If the bug is present, the second call's `v.x` access will throw because `v`
+        // is an integer loop index, not the struct.
+        const string source = """
+            struct DR { aLabel: string, bLabel: string, x: int }
+
+            fn _maxOld(dr: DR) -> int {
+              for (let i in 0..3) { let x = i * 2; }
+              return dr.x;
+            }
+
+            fn _maxNew(dr: DR) -> int {
+              for (let i in 0..3) { let x = i * 2; }
+              return dr.x;
+            }
+
+            fn unified(result: DR) -> int {
+              const lines = [];
+              arr.push(lines, "A:" + result.aLabel);
+              arr.push(lines, "B:" + result.bLabel);
+              const aLastLine = _maxOld(result);
+              const bLastLine = _maxNew(result);
+              return aLastLine + bLastLine;
+            }
+
+            let r = DR { aLabel: "a", bLabel: "b", x: 5 };
+            return unified(r);
+            """;
+        Chunk chunk = CompileWithPipeline(source);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        object? result = vm.Execute(chunk);
+        // Both helpers must see x=5, so the sum must be 10.
+        Assert.Equal(10L, result);
     }
 }

@@ -135,6 +135,27 @@ internal sealed class LocalValueNumberingPass : IBytecodePass
                 KillMutableGlobalVns(regToVN, vnToReg, exprToVN, mutableGlobalBySlot);
                 KillFieldVns(regToVN, vnToReg, exprToVN, activeFieldKeys);
                 KillWrittenRegs(raw, regToVN, vnToReg);
+
+                // For Call/CallSpread, the callee frame starts at A+1 and extends over
+                // A+1..A+MaxRegs-1 (MaxRegs is unknown at this point).  Any register R > A
+                // that the caller holds a VN for may be clobbered by the callee at runtime.
+                // Kill those VN entries now so later instructions cannot use them as
+                // canonical sources.  CallBuiltIn is excluded: it executes without pushing
+                // a frame, so caller registers above A are never touched.
+                if (op == OpCode.Call || op == OpCode.CallSpread)
+                {
+                    byte callA = Instruction.GetA(raw);
+                    // Collect keys first to avoid mutating the dictionary mid-iteration.
+                    var toKill = new List<int>();
+                    foreach (int reg in regToVN.Keys)
+                    {
+                        if (reg > callA)
+                            toKill.Add(reg);
+                    }
+                    foreach (int reg in toKill)
+                        KillReg((byte)reg, regToVN, vnToReg);
+                }
+
                 continue;
             }
 

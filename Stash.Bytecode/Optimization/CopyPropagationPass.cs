@@ -88,6 +88,17 @@ internal sealed class CopyPropagationPass : IBytecodePass
                         copyOf.Remove(written);
                         RemoveAliases(copyOf, written);
                     });
+
+                    // TODO: For Call/CallSpread, the callee frame spans R(A+1)..R(A+MaxRegs-1).
+                    // Any copyOf entry whose *key* is a register > A may refer to a slot that
+                    // the callee clobbers at runtime (e.g. via iter.loop writing <iter_val>).
+                    // We are currently safe only because CopyProp rewrites reads back to the
+                    // un-clobbered source register (rather than recording a stale copy target),
+                    // so the produced code happens to be correct — but it is a happy accident,
+                    // not a guarantee.  If this pass is ever extended to track multi-hop copies
+                    // or to propagate through Call boundaries, this gap must be closed by
+                    // killing all copyOf entries with key > A on Call/CallSpread, mirroring
+                    // the fix applied to LocalValueNumberingPass for the same class of bug.
                 }
             }
         }
