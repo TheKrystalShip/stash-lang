@@ -214,6 +214,17 @@ public class CodeActionHandler : CodeActionHandlerBase
                         }
                     }));
                 }
+
+                // "Add missing import" — search workspace modules that export the undefined name.
+                var currentFilePath = uri.IsFile ? uri.LocalPath : null;
+                if (currentFilePath != null)
+                {
+                    var candidates = CollectImportCandidates(_analysis, _scanner, currentFilePath);
+                    var importActions = BuildAddMissingImportActions(
+                        name, currentFilePath, candidates, request.TextDocument.Uri, result);
+                    foreach (var importAction in importActions)
+                        actions.Add(new CommandOrCodeAction(importAction));
+                }
             }
             // Remove misplaced break/continue/return
             else if (message == "'break' used outside of a loop." ||
@@ -625,6 +636,135 @@ public class CodeActionHandler : CodeActionHandlerBase
                 }
             }
         };
+    }
+
+    // ── "Add missing import" helpers ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Collects candidate (absolutePath, ModuleInfo) pairs from the workspace for "add missing
+    /// import" suggestions.  Only files already cached in the <see cref="ImportResolver"/> or
+    /// discovered via the workspace scanner roots are considered.
+    /// </summary>
+    private static IEnumerable<(string AbsolutePath, ImportResolver.ModuleInfo ModuleInfo)>
+        CollectImportCandidates(AnalysisEngine analysis, WorkspaceScanner scanner, string currentFilePath)
+    {
+        var roots = scanner.GetRoots();
+        if (roots.Count == 0)
+            yield break;
+
+        foreach (var root in roots)
+        {
+            IEnumerable<string> stashFiles;
+            try
+            {
+                stashFiles = Directory.EnumerateFiles(root, "*.stash", SearchOption.AllDirectories);
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            foreach (var filePath in stashFiles)
+            {
+                if (string.Equals(filePath, currentFilePath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var moduleInfo = analysis.ImportResolver.GetModule(filePath);
+                if (moduleInfo != null)
+                    yield return (filePath, moduleInfo);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Produces "Add import" <see cref="CodeAction"/> instances for each workspace module that
+    /// exports <paramref name="symbolName"/>.  Filters by <see cref="ImportResolver.ModuleInfo.Exports"/>
+    /// when the module has explicit exports; falls back to top-level symbol lookup for legacy modules.
+    /// </summary>
+    /// <returns>
+    /// One <see cref="CodeAction"/> per matching module, or an empty sequence when no candidates exist.
+    /// </returns>
+    internal static IEnumerable<CodeAction> BuildAddMissingImportActions(
+        string symbolName,
+        string currentFilePath,
+        IEnumerable<(string AbsolutePath, ImportResolver.ModuleInfo ModuleInfo)> candidates,
+        DocumentUri documentUri,
+        AnalysisResult currentResult)
+    {
+        foreach (var (absolutePath, moduleInfo) in candidates)
+        {
+            if (!ModuleExportsSymbol(moduleInfo, symbolName))
+                continue;
+
+            // Compute the import path relative to the current file's directory.
+            var currentDir = Path.GetDirectoryName(currentFilePath) ?? string.Empty;
+            string relativePath;
+            try
+            {
+                relativePath = Path.GetRelativePath(currentDir, absolutePath)
+                    .Replace('\\', '/');
+            }
+            catch (Exception)
+            {
+                continue;
+            }
+
+            // Ensure the path starts with "./" so the Stash importer treats it as relative.
+            if (!relativePath.StartsWith("./", StringComparison.Ordinal) &&
+                !relativePath.StartsWith("../", StringComparison.Ordinal))
+            {
+                relativePath = "./" + relativePath;
+            }
+
+            // Determine the insert line: after any existing imports at the top of the file.
+            int insertLine = 0;
+            foreach (var stmt in currentResult.Statements)
+            {
+                if (stmt is ImportStmt or ImportAsStmt)
+                    insertLine = stmt.Span.EndLine; // 1-based; this advances past the import
+                else
+                    break;
+            }
+            // insertLine is now 1-based end line of last import, or 0 — convert to 0-based for LSP.
+            // (No adjustment needed when insertLine == 0: insert at line 0.)
+
+            yield return new CodeAction
+            {
+                Title = $"Add import '{symbolName}' from \"{relativePath}\"",
+                Kind = CodeActionKind.QuickFix,
+                Edit = new WorkspaceEdit
+                {
+                    Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                    {
+                        [documentUri] = new[]
+                        {
+                            new TextEdit
+                            {
+                                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
+                                    insertLine, 0, insertLine, 0),
+                                NewText = $"import {{ {symbolName} }} from \"{relativePath}\";\n"
+                            }
+                        }
+                    }
+                }
+            };
+        }
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="moduleInfo"/> exposes
+    /// <paramref name="symbolName"/> to importers, respecting the explicit export set when present.
+    /// </summary>
+    internal static bool ModuleExportsSymbol(ImportResolver.ModuleInfo moduleInfo, string symbolName)
+    {
+        if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+        {
+            // Module has an explicit export set — only names in that set are visible.
+            return moduleInfo.Exports.Names.ContainsKey(symbolName);
+        }
+
+        // Legacy module: every top-level symbol is exported.
+        return moduleInfo.Symbols.GetTopLevel().Any(s => s.Name == symbolName);
     }
 
     // ── "Surround with try/catch (typed)" helpers ────────────────────────────────────
