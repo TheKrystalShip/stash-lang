@@ -1,6 +1,6 @@
 #!/usr/bin/env stash
 
-const HOME_DIR: string = env.get("HOME");
+const HOME_DIR = env.get("HOME");
 const RUNTIME: string = "linux-x64";
 const LSP_SOURCE: string = $"./Stash.Lsp/bin/Release/net10.0/{RUNTIME}/publish/StashLsp";
 const LSP_DEST: string = $"{HOME_DIR}/.local/bin/stash-lsp";
@@ -37,7 +37,7 @@ fn deploy() {
     if (!fs.exists(source)) {
       io.println($"Error: Source binary not found at {source}");
       io.println("Run cleanBuild() first.");
-      process.exit(1);
+      env.exit(1);
     }
     if (fs.exists(dest)) {
       try fs.delete(dest);
@@ -52,13 +52,12 @@ fn deploy() {
 fn buildExtension() {
   // Build the VSCode extension
   io.println("Building VSCode extension...");
-  const result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
-    // stash-disable-next-line SA1302
+  const result = env.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
     return $(${path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
   });
   if (result.exitCode != 0) {
     io.println($"VSCode extension build failed:\n{result.stderr}");
-    process.exit(1);
+    env.exit(1);
   }
   io.println("Build complete.");
 }
