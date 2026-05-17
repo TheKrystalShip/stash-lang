@@ -262,4 +262,57 @@ public class CopyPropagationTests : BytecodeTestBase
         Assert.Equal(OpCode.CloseUpval, Instruction.GetOp(closeInstr));
         Assert.Equal(1, (int)Instruction.GetA(closeInstr));
     }
+
+    // ===========================================================================
+    // Regression — Call/CallSpread invalidate copyOf entries within the callee
+    // frame window. The callee's frame spans R(A+1)..R(A+MaxRegs-1), so any
+    // copyOf entry whose key or value sits above A may reference a register the
+    // callee clobbers at runtime. Subsequent reads must NOT be rewritten through
+    // those stale entries. Mirrors the LVN fix for the consecutive-call bug.
+    // ===========================================================================
+
+    [Fact]
+    public void CopyProp_Call_KillsEntriesAboveA()
+    {
+        // Move r8, r0;           — r8 is a copy of r0
+        // Call  r4, _, 1;        — callee frame is R(5)..R(5+MaxRegs-1) ⊇ {r8}
+        // Add   r9, r8, r0;      — read of r8 must NOT be rewritten to r0
+        //                          (the runtime r8 has been clobbered by the callee)
+        var builder = new ChunkBuilder();
+        builder.MaxRegs = 10;
+        builder.EmitABC(OpCode.Move, 8, 0, 0);     // Move r8 = r0
+        builder.EmitABC(OpCode.Call, 4, 0, 1);     // Call r4 with 1 arg
+        builder.EmitABC(OpCode.Add, 9, 8, 0);      // Add r9 = r8 + r0
+        builder.EmitABC(OpCode.Return, 0, 0, 0);
+
+        RunCopyPropOnly(builder);
+
+        // Add is at index 2 in the lowered code. Its B operand must still be r8,
+        // not rewritten to r0 — the call has invalidated copyOf[r8].
+        uint addInstr = builder.RawCode[2];
+        Assert.Equal(OpCode.Add, Instruction.GetOp(addInstr));
+        Assert.Equal(8, (int)Instruction.GetB(addInstr));
+    }
+
+    [Fact]
+    public void CopyProp_CallBuiltIn_PreservesEntriesAboveA()
+    {
+        // CallBuiltIn does NOT push a frame — caller registers above A are safe.
+        // The copyOf entry should survive and the post-call read should be rewritten.
+        var builder = new ChunkBuilder();
+        builder.MaxRegs = 10;
+        builder.EmitABC(OpCode.Move, 8, 0, 0);          // Move r8 = r0
+        builder.EmitABC(OpCode.CallBuiltIn, 4, 5, 1);   // CallBuiltIn r4, ns=r5, 1 arg
+        builder.EmitRaw(0);                              // companion word: IC slot 0
+        builder.EmitABC(OpCode.Add, 9, 8, 7);            // Add r9 = r8 + r7
+        builder.EmitABC(OpCode.Return, 0, 0, 0);
+
+        RunCopyPropOnly(builder);
+
+        // The Add reads r8; copyOf[r8]=r0 should still apply, so B is rewritten to r0.
+        // Add is at index 3 (Move=0, CallBuiltIn=1, companion=2, Add=3).
+        uint addInstr = builder.RawCode[3];
+        Assert.Equal(OpCode.Add, Instruction.GetOp(addInstr));
+        Assert.Equal(0, (int)Instruction.GetB(addInstr));
+    }
 }

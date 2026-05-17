@@ -89,16 +89,27 @@ internal sealed class CopyPropagationPass : IBytecodePass
                         RemoveAliases(copyOf, written);
                     });
 
-                    // TODO: For Call/CallSpread, the callee frame spans R(A+1)..R(A+MaxRegs-1).
-                    // Any copyOf entry whose *key* is a register > A may refer to a slot that
-                    // the callee clobbers at runtime (e.g. via iter.loop writing <iter_val>).
-                    // We are currently safe only because CopyProp rewrites reads back to the
-                    // un-clobbered source register (rather than recording a stale copy target),
-                    // so the produced code happens to be correct — but it is a happy accident,
-                    // not a guarantee.  If this pass is ever extended to track multi-hop copies
-                    // or to propagate through Call boundaries, this gap must be closed by
-                    // killing all copyOf entries with key > A on Call/CallSpread, mirroring
-                    // the fix applied to LocalValueNumberingPass for the same class of bug.
+                    // For Call/CallSpread, the callee frame spans R(A+1)..R(A+MaxRegs-1).
+                    // The callee may clobber any caller register above A at runtime, so any
+                    // copyOf entry whose key OR value lives in that window must be invalidated.
+                    // CallBuiltIn is excluded: it executes without pushing a frame, so caller
+                    // registers above A are never touched.  Mirrors the analogous fix in
+                    // LocalValueNumberingPass.
+                    if (op == OpCode.Call || op == OpCode.CallSpread)
+                    {
+                        byte callA = Instruction.GetA(raw);
+                        List<byte>? toRemove = null;
+                        foreach (var kvp in copyOf)
+                        {
+                            if (kvp.Key > callA || kvp.Value > callA)
+                                (toRemove ??= new List<byte>()).Add(kvp.Key);
+                        }
+                        if (toRemove is not null)
+                        {
+                            foreach (byte k in toRemove)
+                                copyOf.Remove(k);
+                        }
+                    }
                 }
             }
         }
