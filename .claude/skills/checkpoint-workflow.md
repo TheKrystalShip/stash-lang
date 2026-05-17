@@ -30,7 +30,7 @@ Older feature directories may contain `spec.md`, `context.md`, or `notes/`. New 
 | Command | What it does |
 | --- | --- |
 | `/spec [topic]` | Create or revise `brief.md`, `plan.yaml`, and `checkpoint.yaml`. |
-| `/next-phase [slug]` | Dispatch one Implementer turn for the next ready phase. |
+| `/next-phase [slug] [count]` | Dispatch one Implementer turn for the next ready phase(s). |
 | `/feature-review [slug]` | Dispatch one Reviewer turn after all phases are done. |
 | `/resolve [slug] <Fxx> [Fyy...]` | Dispatch one Resolver turn for exactly the selected finding(s). |
 | `/done [slug]` | Run final verify and promote to `.kanban/4-done/`. |
@@ -73,7 +73,7 @@ Use scripts for deterministic work:
 | --- | --- |
 | `bootstrap-feature.sh <slug> [title]` | Create feature files from templates. |
 | `validate-spec.py [slug]` | Validate plan/checkpoint shape and heal missing checkpoint phase entries. |
-| `next-phase.py [slug]` | Print the next ready phase as YAML. |
+| `next-phase.py [slug] [count]` | Print the next ready phase or ready phase batch as YAML. |
 | `verify-phase.sh <slug> <phase-id>` | Print `done_when`, enforce the current plan's file scope, and run verify commands. |
 | `advance-checkpoint.py <slug> <phase-id> <status>` | Advance state legally. |
 | `status.py [slug]` | Print compact current state. |
@@ -82,7 +82,7 @@ Use scripts for deterministic work:
 ## Lifecycle
 
 1. `/spec <topic>` writes the RFC-style brief and phase plan.
-2. `/next-phase` implements one phase and commits it.
+2. `/next-phase` implements one phase by default, or an explicit small batch when the user passes a count.
 3. Repeat `/next-phase` until all phases are done.
 4. `/feature-review` compares the diff to `brief.md` and writes `review.md`.
 5. `/resolve <Fxx> [Fyy...]` fixes an explicit selected finding or small selected batch.

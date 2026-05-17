@@ -48,7 +48,7 @@ Read the status output and pick the right next-action recommendation:
 
 | Situation | Recommend |
 | --- | --- |
-| Working tree clean, `current` is null, some phases still `pending` with deps satisfied | `/next-phase <slug>` |
+| Working tree clean, `current` is null, some phases still `pending` with deps satisfied | `/next-phase <slug>` or `/next-phase <slug> N` for an explicit small batch |
 | Working tree clean, all phases `done`, review `not_started` | `/feature-review <slug>` |
 | Working tree clean, review has open findings | `/resolve <slug> <Fxx> [Fyy...]` for the first open finding or an explicit related batch |
 | Working tree clean, all phases done, review `resolved` (or no findings) | `/done <slug>` |

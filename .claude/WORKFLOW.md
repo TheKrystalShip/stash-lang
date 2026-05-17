@@ -42,7 +42,7 @@ The plan should be trusted, but it is not sacred. Implementers may make small, d
 | Command | Job |
 | --- | --- |
 | `/spec <topic>` | Create or revise `brief.md`, `plan.yaml`, and `checkpoint.yaml`. |
-| `/next-phase [slug]` | Implement exactly one pending phase. |
+| `/next-phase [slug] [count]` | Implement the next ready phase(s) in one implementer turn. |
 | `/feature-review [slug]` | Review the completed feature against `brief.md`. |
 | `/resolve [slug] <Fxx> [Fyy...]` | Fix exactly the selected review finding(s). |
 | `/done [slug]` | Run final verification and move the feature to `.kanban/4-done/`. |
@@ -152,7 +152,7 @@ All deterministic workflow operations live in `scripts/checkpoint/`:
 | --- | --- |
 | `bootstrap-feature.sh <slug> [title]` | Creates the feature directory from templates. |
 | `validate-spec.py [slug]` | Validates `plan.yaml` and syncs missing checkpoint phase entries. |
-| `next-phase.py [slug]` | Prints the next ready phase as YAML. |
+| `next-phase.py [slug] [count]` | Prints the next ready phase or ready phase batch as YAML. |
 | `verify-phase.sh <slug> <phase-id>` | Prints `done_when`, checks the current plan's scope, and runs verify commands. |
 | `advance-checkpoint.py <slug> <phase-id> <status>` | Performs legal state transitions. |
 | `status.py [slug]` | Prints a compact status report. |
@@ -186,22 +186,25 @@ python3 scripts/checkpoint/validate-spec.py <slug>
 
 passes.
 
-### 2. Implement One Phase
+### 2. Implement Phase(s)
 
 Run:
 
 ```text
 /next-phase [slug]
+/next-phase [slug] 3
 ```
 
-The implementer receives the current phase, the path to `brief.md`, planned files, verify commands, and `done_when`.
+The implementer receives the current phase or selected phase batch, the path to `brief.md`, planned files, verify commands, and `done_when`.
 
 The implementer must:
 
 - start from the planned files and keep any deviations small, documented, and within the phase intent
-- run `bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>`
-- commit the phase
-- advance the checkpoint
+- run `bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>` for each selected phase
+- commit each phase separately
+- advance the checkpoint after each phase
+
+Batching affects one agent turn, not phase granularity. A three-phase batch should normally produce three phase commits.
 
 ### 3. Review
 
