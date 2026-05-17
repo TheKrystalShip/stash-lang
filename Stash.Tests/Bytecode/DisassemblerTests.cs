@@ -381,15 +381,52 @@ public class DisassemblerTests : BytecodeTestBase
     [Fact]
     public void Disassemble_CallBuiltIn_MethodOnlyFallbackWhenNamespaceUnknown()
     {
-        // When the receiver register cannot be traced statically (e.g. assigned
-        // from an expression too far back), the comment degrades to ".method(N args)"
-        // but never emits the raw "[ic:N]" token.
+        // The backward scan only recognises GetGlobal, GetUpval, and Move as
+        // namespace sources.  When the receiver register is written by any other
+        // instruction (here: LoadConst), the scan finds the writer, cannot
+        // recover a namespace name, and degrades to ".method(N args)" — never
+        // the raw "[ic:N]" token and never a "fully-qualified" name like "io.println".
         //
-        // A simple direct call `math.sqrt(4)` still resolves fully; we verify the
-        // resolved form appears and the raw slot form does not.
-        string output = Disassemble("math.sqrt(4);");
+        // Build a minimal chunk:
+        //   LoadConst  r0, [k0]          ← "io" string constant — NOT GetGlobal/GetUpval/Move
+        //   CallBuiltIn r1, r0, 0  [ic0] ← scan finds LoadConst, falls back to ".println(0 args)"
+        var builder = new ChunkBuilder
+        {
+            Name         = "fallbackTest",
+            Arity        = 0,
+            MinArity     = 0,
+            LocalNames   = System.Array.Empty<string>(),
+            LocalIsConst = System.Array.Empty<bool>(),
+            EnableDce    = false,
+        };
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 20));
 
-        Assert.Contains("math.sqrt", output);
+        // Constant 0 = "println" (the method name read via ICSlots[0].ConstantIndex)
+        ushort nameIdx = builder.AddConstant("println");
+
+        // Constant 1 = the string "io" — loaded into r0 via LoadConst (not GetGlobal),
+        // so the backward scan cannot map r0 to a namespace identifier.
+        ushort nsStringIdx = builder.AddConstant("io");
+
+        // LoadK r0, [k1]  — writes r0 with a constant; scan will stop here but
+        // cannot identify a namespace → nsName stays null.
+        builder.EmitABx(OpCode.LoadK, 0, nsStringIdx);
+
+        // CallBuiltIn r1, r0, 0  (calleeReg=1, nsReg=0, argc=0) + IC companion word
+        ushort icSlot = builder.AllocateICSlot(nameIdx);
+        builder.EmitABC(OpCode.CallBuiltIn, 1, 0, 0);
+        builder.EmitRaw((uint)icSlot);
+
+        builder.EmitAB(OpCode.Return, 0, 0);
+        Chunk chunk = builder.Build();
+
+        string output = Disassembler.Disassemble(chunk);
+
+        // Fallback form must appear: ".println(" with no namespace prefix.
+        Assert.Contains(".println(", output);
+        // The fully-qualified form must NOT appear (scan never recovered "io").
+        Assert.DoesNotContain("io.println", output);
+        // The raw IC-slot token must NOT appear in verbose mode.
         Assert.DoesNotContain("[ic:", output);
     }
 
@@ -670,6 +707,8 @@ public class DisassemblerTests : BytecodeTestBase
         Assert.DoesNotContain("r0=", compactOutput);
         Assert.DoesNotContain("r1=", compactOutput);
         Assert.DoesNotContain("  |  ", compactOutput);
+        // Compact output must not contain section headers suppressed in compact mode.
+        Assert.DoesNotContain(".locals:", compactOutput);
         // Compact output must still contain the opcode mnemonics.
         Assert.Contains("move", compactOutput);
         Assert.Contains("ret", compactOutput);
