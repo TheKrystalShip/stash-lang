@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using Stash.Common;
 using Stash.Core.Resolution;
 using Stash.Parsing.AST;
@@ -87,6 +88,22 @@ public class ImportResolver
         public Stash.Core.Resolution.ModuleExports? Exports { get; }
 
         /// <summary>
+        /// Gets the per-name export entries, including <see cref="ExportEntry.OriginPath"/> for
+        /// re-exported names. Used by <see cref="ImportResolver"/> for cycle detection and
+        /// SA0825 source-export checking. <see langword="null"/> when the module has no explicit exports.
+        /// </summary>
+        internal IReadOnlyDictionary<string, ExportEntry>? ExportEntries { get; }
+
+        /// <summary>
+        /// Gets the list of static re-export target paths declared by this module.
+        /// Each entry is the resolved absolute path of a source module referenced in
+        /// <c>export { … } from "p";</c> or <c>export "p" as x;</c> statements.
+        /// Used to build the re-export graph for SA0826 cycle detection.
+        /// Contains only paths that were statically resolvable (dynamic paths are skipped).
+        /// </summary>
+        internal IReadOnlyList<string> ReExportTargets { get; }
+
+        /// <summary>
         /// Initializes a new <see cref="ModuleInfo"/> with the given URI, path, symbol tree, errors,
         /// and optional explicit export set.
         /// </summary>
@@ -97,13 +114,34 @@ public class ImportResolver
         /// <param name="exports">
         /// The explicit export set, or <see langword="null"/> for legacy modules that export everything.
         /// </param>
-        public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors, Stash.Core.Resolution.ModuleExports? exports = null)
+        public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors,
+            Stash.Core.Resolution.ModuleExports? exports = null)
         {
             Uri = uri;
             AbsolutePath = absolutePath;
             Symbols = symbols;
             Errors = errors;
             Exports = exports;
+            ExportEntries = null;
+            ReExportTargets = Array.Empty<string>();
+        }
+
+        /// <summary>
+        /// Initializes a new <see cref="ModuleInfo"/> with full re-export metadata.
+        /// Called from <see cref="ImportResolver"/> after resolving re-export paths.
+        /// </summary>
+        internal ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors,
+            Stash.Core.Resolution.ModuleExports? exports,
+            IReadOnlyDictionary<string, ExportEntry>? exportEntries,
+            IReadOnlyList<string>? reExportTargets)
+        {
+            Uri = uri;
+            AbsolutePath = absolutePath;
+            Symbols = symbols;
+            Errors = errors;
+            Exports = exports;
+            ExportEntries = exportEntries;
+            ReExportTargets = reExportTargets ?? Array.Empty<string>();
         }
     }
 
@@ -127,6 +165,14 @@ public class ImportResolver
         /// Map from imported namespace alias to its module info (for import-as).
         /// </summary>
         public Dictionary<string, ModuleInfo> NamespaceImports { get; } = new();
+
+        /// <summary>
+        /// Set of (importPath, name) pairs used by re-export statements in this module.
+        /// Used by SA0827 detection: if the same (importPath, name) pair appears in both
+        /// an ImportStmt and an ExportBlockStmt.Names entry, that is a redundant pair.
+        /// Key: the resolved absolute path of the source module; Value: set of names re-exported from it.
+        /// </summary>
+        internal Dictionary<string, HashSet<string>> ReExportedNamesByPath { get; } = new();
     }
 
     /// <summary>
@@ -150,6 +196,45 @@ public class ImportResolver
             return resolution;
         }
 
+        // First pass: collect import sources so we can detect SA0827 redundant pairs.
+        // Key: resolved absolute path; Value: set of selectively-imported names from that path.
+        var importedNamesByPath = new Dictionary<string, HashSet<string>>();
+        foreach (var stmt in statements)
+        {
+            if (stmt is ImportStmt importStmt)
+            {
+                var importPath = importStmt.StaticPathValue;
+                if (!string.IsNullOrEmpty(importPath))
+                {
+                    var absPath = ResolveImportToAbsolutePathSilent(importPath, documentDir);
+                    if (absPath != null)
+                    {
+                        if (!importedNamesByPath.TryGetValue(absPath, out var names))
+                        {
+                            names = new HashSet<string>();
+                            importedNamesByPath[absPath] = names;
+                        }
+                        foreach (var nameToken in importStmt.Names)
+                        {
+                            names.Add(nameToken.Lexeme);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Build the re-export adjacency graph (absolute path → set of re-export target absolute paths)
+        // for SA0826 cycle detection. Edges are only from re-export statements, not plain imports.
+        // We build this across the cached modules as well, so we must record edges when we process
+        // re-export statements below.
+        var reExportGraph = new Dictionary<string, HashSet<string>>();
+        var documentAbsPath = documentUri.IsFile ? documentUri.LocalPath : null;
+
+        if (documentAbsPath != null)
+        {
+            reExportGraph[documentAbsPath] = new HashSet<string>();
+        }
+
         foreach (var stmt in statements)
         {
             switch (stmt)
@@ -160,10 +245,382 @@ public class ImportResolver
                 case ImportAsStmt importAsStmt:
                     ResolveNamespaceImport(importAsStmt, documentDir, resolution, parseModule, documentUri);
                     break;
+                case ExportFromStmt exportFromStmt:
+                    ResolveExportFrom(exportFromStmt, documentDir, resolution, parseModule, documentUri,
+                        importedNamesByPath, reExportGraph, documentAbsPath);
+                    break;
+                case ExportModuleAsStmt exportModuleAsStmt:
+                    ResolveExportModuleAs(exportModuleAsStmt, documentDir, resolution, parseModule, documentUri,
+                        reExportGraph, documentAbsPath);
+                    break;
+            }
+        }
+
+        // SA0826: check for cycles in the re-export subgraph using three-color DFS.
+        if (documentAbsPath != null && reExportGraph.ContainsKey(documentAbsPath))
+        {
+            DetectReExportCycles(reExportGraph, documentAbsPath, resolution, statements);
+        }
+
+        // SA0827: emit information-level hint for redundant import+export pairs.
+        // Pattern: `import { x } from "p"; export { x } from "p";` — the explicit
+        // re-export form makes the separate ImportStmt redundant.
+        foreach (var (absPath, reExportedNames) in resolution.ReExportedNamesByPath)
+        {
+            if (!importedNamesByPath.TryGetValue(absPath, out var importedNames))
+            {
+                continue;
+            }
+
+            foreach (var name in reExportedNames)
+            {
+                if (!importedNames.Contains(name))
+                {
+                    continue;
+                }
+
+                // Find the ExportFromStmt name token span for the diagnostic
+                var span = FindExportFromNameSpan(statements, absPath, documentDir, name);
+                if (span.HasValue)
+                {
+                    // Reconstruct the relative path string for the message
+                    var relPath = FindExportFromPathString(statements, name);
+                    resolution.Diagnostics.Add(
+                        DiagnosticDescriptors.SA0827.CreateDiagnostic(span.Value, name, relPath ?? absPath));
+                }
             }
         }
 
         return resolution;
+    }
+
+    /// <summary>
+    /// Resolves a path string to an absolute path without emitting diagnostics.
+    /// Returns null if the path cannot be resolved or file does not exist.
+    /// </summary>
+    private static string? ResolveImportToAbsolutePathSilent(string importPath, string documentDir)
+    {
+        if (ModuleResolver.IsBareSpecifier(importPath))
+        {
+            string relativePath = Path.GetFullPath(importPath, documentDir);
+            if (File.Exists(relativePath))
+            {
+                return relativePath;
+            }
+            if (Path.HasExtension(importPath) && !importPath.StartsWith('@'))
+            {
+                return null;
+            }
+            return ModuleResolver.ResolvePackageImport(importPath, documentDir);
+        }
+
+        string absolutePath = Path.GetFullPath(importPath, documentDir);
+        return File.Exists(absolutePath) ? absolutePath : null;
+    }
+
+    /// <summary>
+    /// Resolves a selective re-export: export { name1, name2 } from "path.stash";
+    /// </summary>
+    private void ResolveExportFrom(ExportFromStmt stmt, string documentDir, ImportResolution resolution,
+        ModuleParser parseModule, Uri documentUri,
+        Dictionary<string, HashSet<string>> importedNamesByPath,
+        Dictionary<string, HashSet<string>> reExportGraph, string? documentAbsPath)
+    {
+        var exportPath = (stmt.Path as LiteralExpr)?.Value as string;
+        if (string.IsNullOrEmpty(exportPath))
+        {
+            if (stmt.Path is not LiteralExpr { Value: string })
+            {
+                // Dynamic path — cannot resolve statically; emit SA0801-style hint
+                resolution.Diagnostics.Add(DiagnosticDescriptors.SA0801.CreateDiagnostic(stmt.Path.Span));
+            }
+            return;
+        }
+
+        var absolutePath = ResolveImportToAbsolutePath(exportPath, documentDir, resolution, stmt.Path.Span);
+        if (absolutePath == null)
+        {
+            return;
+        }
+
+        TrackDependency(absolutePath, documentUri);
+        var moduleInfo = LoadModule(absolutePath, parseModule);
+
+        // Record re-export edge for cycle detection
+        if (documentAbsPath != null)
+        {
+            if (!reExportGraph.TryGetValue(documentAbsPath, out var edges))
+            {
+                edges = new HashSet<string>();
+                reExportGraph[documentAbsPath] = edges;
+            }
+            edges.Add(absolutePath);
+
+            // Also seed the target module's edges from its cached ReExportTargets
+            if (!reExportGraph.ContainsKey(absolutePath))
+            {
+                reExportGraph[absolutePath] = new HashSet<string>(moduleInfo.ReExportTargets);
+            }
+        }
+
+        foreach (var nameToken in stmt.Names)
+        {
+            var lexeme = nameToken.Lexeme;
+
+            // SA0825: check that the source module actually exports this name
+            if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+            {
+                if (!moduleInfo.Exports.Names.Contains(lexeme))
+                {
+                    resolution.Diagnostics.Add(
+                        DiagnosticDescriptors.SA0825.CreateDiagnostic(nameToken.Span, exportPath, lexeme));
+                    continue;
+                }
+            }
+
+            // SA0827: detect redundant import+export pair
+            // `import { x } from "p"; export { x };` is equivalent to `export { x } from "p";`
+            // We detect the case where ExportFromStmt itself is used but the same name
+            // was also imported via ImportStmt from the same resolved path AND is listed in
+            // ExportBlockStmt. That SA0827 case is handled separately below in the SA0827 scanner.
+
+            // Track for potential SA0827 detection (re-exported names by path)
+            if (!resolution.ReExportedNamesByPath.TryGetValue(absolutePath, out var reExportedNames))
+            {
+                reExportedNames = new HashSet<string>();
+                resolution.ReExportedNamesByPath[absolutePath] = reExportedNames;
+            }
+            reExportedNames.Add(lexeme);
+        }
+    }
+
+    /// <summary>
+    /// Resolves a namespace re-export: export "path.stash" as alias;
+    /// </summary>
+    private void ResolveExportModuleAs(ExportModuleAsStmt stmt, string documentDir, ImportResolution resolution,
+        ModuleParser parseModule, Uri documentUri,
+        Dictionary<string, HashSet<string>> reExportGraph, string? documentAbsPath)
+    {
+        var exportPath = (stmt.Path as LiteralExpr)?.Value as string;
+        if (string.IsNullOrEmpty(exportPath))
+        {
+            if (stmt.Path is not LiteralExpr { Value: string })
+            {
+                resolution.Diagnostics.Add(DiagnosticDescriptors.SA0801.CreateDiagnostic(stmt.Path.Span));
+            }
+            return;
+        }
+
+        var absolutePath = ResolveImportToAbsolutePath(exportPath, documentDir, resolution, stmt.Path.Span);
+        if (absolutePath == null)
+        {
+            return;
+        }
+
+        TrackDependency(absolutePath, documentUri);
+        var moduleInfo = LoadModule(absolutePath, parseModule);
+
+        // Record re-export edge for cycle detection
+        if (documentAbsPath != null)
+        {
+            if (!reExportGraph.TryGetValue(documentAbsPath, out var edges))
+            {
+                edges = new HashSet<string>();
+                reExportGraph[documentAbsPath] = edges;
+            }
+            edges.Add(absolutePath);
+
+            // Also seed the target module's edges from its cached ReExportTargets
+            if (!reExportGraph.ContainsKey(absolutePath))
+            {
+                reExportGraph[absolutePath] = new HashSet<string>(moduleInfo.ReExportTargets);
+            }
+        }
+
+        // Expose the module under its alias for SA0825 isn't applicable here (it's a namespace alias).
+        if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+        {
+            resolution.NamespaceImports[stmt.Alias.Lexeme] = BuildFilteredModuleInfo(moduleInfo);
+        }
+        else
+        {
+            resolution.NamespaceImports[stmt.Alias.Lexeme] = moduleInfo;
+        }
+    }
+
+    /// <summary>
+    /// Detects cycles in the re-export subgraph using three-color DFS.
+    /// White = 0 (unvisited), Gray = 1 (in-progress), Black = 2 (done).
+    /// Emits SA0826 on the first cycle found that includes <paramref name="startPath"/>.
+    /// </summary>
+    private void DetectReExportCycles(
+        Dictionary<string, HashSet<string>> reExportGraph,
+        string startPath,
+        ImportResolution resolution,
+        List<Stmt> statements)
+    {
+        var color = new Dictionary<string, int>();
+        var path = new List<string>();
+        var reported = new HashSet<string>();
+
+        void Dfs(string current)
+        {
+            if (!reExportGraph.TryGetValue(current, out var neighbors))
+            {
+                return;
+            }
+
+            color[current] = 1; // gray
+            path.Add(current);
+
+            foreach (var neighbor in neighbors)
+            {
+                var neighborColor = color.TryGetValue(neighbor, out var c) ? c : 0;
+                if (neighborColor == 1)
+                {
+                    // Found a cycle — build the cycle path string
+                    int cycleStart = path.IndexOf(neighbor);
+                    if (cycleStart < 0)
+                    {
+                        cycleStart = 0;
+                    }
+
+                    var cycleSegment = path.GetRange(cycleStart, path.Count - cycleStart);
+                    cycleSegment.Add(neighbor);
+
+                    // Use file names for readability
+                    var cycleNames = cycleSegment.ConvertAll(p => Path.GetFileName(p));
+                    var cycleKey = string.Join(" → ", cycleNames);
+
+                    if (reported.Add(cycleKey))
+                    {
+                        // Find a span to attach the diagnostic to.
+                        // First try: find the re-export stmt in the current document that references the
+                        // neighbor (cycle-closing node). For direct cycles (A→A) this will be found.
+                        // For transitive cycles (A→B→A), the current document only references B — so fall
+                        // back to finding the re-export stmt that points to any node in the cycle path.
+                        SourceSpan? diagnosticSpan = FindReExportSpanForPath(statements, neighbor);
+
+                        if (!diagnosticSpan.HasValue)
+                        {
+                            // Transitive cycle: find any re-export stmt in the current document
+                            // that is part of the detected cycle path.
+                            foreach (var cyclePath in cycleSegment)
+                            {
+                                diagnosticSpan = FindReExportSpanForPath(statements, cyclePath);
+                                if (diagnosticSpan.HasValue) break;
+                            }
+                        }
+
+                        if (diagnosticSpan.HasValue)
+                        {
+                            resolution.Diagnostics.Add(
+                                DiagnosticDescriptors.SA0826.CreateDiagnostic(diagnosticSpan.Value, cycleKey));
+                        }
+                    }
+                }
+                else if (neighborColor == 0)
+                {
+                    Dfs(neighbor);
+                }
+            }
+
+            path.RemoveAt(path.Count - 1);
+            color[current] = 2; // black
+        }
+
+        Dfs(startPath);
+    }
+
+    /// <summary>
+    /// Finds the source span of the name token in an <see cref="ExportFromStmt"/> for a given
+    /// resolved absolute source path and name. Used to attach SA0827 to the right token.
+    /// </summary>
+    private static SourceSpan? FindExportFromNameSpan(List<Stmt> statements, string targetAbsPath, string documentDir, string name)
+    {
+        foreach (var stmt in statements)
+        {
+            if (stmt is not ExportFromStmt ef)
+            {
+                continue;
+            }
+
+            var pathValue = (ef.Path as LiteralExpr)?.Value as string;
+            if (pathValue == null)
+            {
+                continue;
+            }
+
+            var absPath = ResolveImportToAbsolutePathSilent(pathValue, documentDir);
+            if (absPath == null || !string.Equals(absPath, targetAbsPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var nameTok in ef.Names)
+            {
+                if (nameTok.Lexeme == name)
+                {
+                    return nameTok.Span;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns the raw path string from the first <see cref="ExportFromStmt"/> that exports the
+    /// given name. Used to format the SA0827 message with the original path string.
+    /// </summary>
+    private static string? FindExportFromPathString(List<Stmt> statements, string name)
+    {
+        foreach (var stmt in statements)
+        {
+            if (stmt is not ExportFromStmt ef)
+            {
+                continue;
+            }
+
+            foreach (var nameTok in ef.Names)
+            {
+                if (nameTok.Lexeme == name)
+                {
+                    return (ef.Path as LiteralExpr)?.Value as string;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the source span of a re-export statement that references the given target path.
+    /// Returns null if not found.
+    /// </summary>
+    private static SourceSpan? FindReExportSpanForPath(List<Stmt> statements, string targetAbsPath)
+    {
+        foreach (var stmt in statements)
+        {
+            string? pathValue = stmt switch
+            {
+                ExportFromStmt ef => (ef.Path as LiteralExpr)?.Value as string,
+                ExportModuleAsStmt em => (em.Path as LiteralExpr)?.Value as string,
+                _ => null,
+            };
+            if (pathValue == null)
+            {
+                continue;
+            }
+
+            // Check if the path value basename matches the target
+            if (targetAbsPath.EndsWith(pathValue, StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFileName(targetAbsPath).Equals(Path.GetFileName(pathValue), StringComparison.OrdinalIgnoreCase))
+            {
+                return stmt.Span;
+            }
+        }
+        return null;
     }
 
     /// <summary>

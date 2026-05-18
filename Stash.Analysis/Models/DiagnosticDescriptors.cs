@@ -198,6 +198,28 @@ public static class DiagnosticDescriptors
             "Exports",
             "Re-export alias '{0}' collides with an existing top-level binding.");
 
+    // ── SA0825–SA0827 — Re-export resolver (Phase 2F) ─────────────────────────
+    public static readonly DiagnosticDescriptor SA0825 =
+        new("SA0825",
+            "Re-export references name not in source module's export set",
+            DiagnosticLevel.Error,
+            "Exports",
+            "Module '{0}' does not export '{1}'.");
+
+    public static readonly DiagnosticDescriptor SA0826 =
+        new("SA0826",
+            "Re-export cycle detected",
+            DiagnosticLevel.Error,
+            "Exports",
+            "Re-export cycle detected: {0}.");
+
+    public static readonly DiagnosticDescriptor SA0827 =
+        new("SA0827",
+            "Redundant import+export pair",
+            DiagnosticLevel.Information,
+            "Exports",
+            "Redundant import+export pair. Use 'export {{ {0} }} from \"{1}\";' to re-export directly.");
+
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
     public static readonly DiagnosticDescriptor SA0902 = new("SA0902", "Function body too long", DiagnosticLevel.Information, "Style", "Function '{0}' is {1} lines long, exceeding the threshold of {2}. Consider breaking it into smaller functions.");
@@ -324,6 +346,9 @@ public static class DiagnosticDescriptors
         dict[SA0822.Code] = SA0822;
         dict[SA0823.Code] = SA0823;
         dict[SA0824.Code] = SA0824;
+        dict[SA0825.Code] = SA0825;
+        dict[SA0826.Code] = SA0826;
+        dict[SA0827.Code] = SA0827;
         dict[SA0830.Code] = SA0830;
         dict[SA0840.Code] = SA0840;
         dict[SA0841.Code] = SA0841;

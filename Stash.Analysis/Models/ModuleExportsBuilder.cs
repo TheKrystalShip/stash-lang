@@ -12,7 +12,12 @@ using Stash.Parsing.AST;
 /// <param name="Kind">The declaration kind of the exported symbol.</param>
 /// <param name="DeclSpan">The source span of the underlying declaration's name token.</param>
 /// <param name="ExportSpan">The source span of the export annotation (the export keyword or block entry) that introduced this name into the export set.</param>
-internal sealed record ExportEntry(SymbolKind Kind, SourceSpan DeclSpan, SourceSpan ExportSpan);
+/// <param name="OriginPath">
+/// For re-exported names (<c>export { x } from "p";</c> or <c>export "p" as x;</c>), the resolved
+/// absolute path of the source module. <see langword="null"/> for locally-declared exports.
+/// Lives only on the Analysis side — not propagated to <see cref="Stash.Core.Resolution.ModuleExports"/>.
+/// </param>
+internal sealed record ExportEntry(SymbolKind Kind, SourceSpan DeclSpan, SourceSpan ExportSpan, string? OriginPath = null);
 
 /// <summary>
 /// Builds the lightweight <see cref="Stash.Core.Resolution.ModuleExports"/> record that is
@@ -39,6 +44,31 @@ public static class ModuleExportsBuilder
         IReadOnlyList<Stmt> topLevel,
         List<SemanticDiagnostic> diagnostics)
     {
+        return Build(topLevel, diagnostics, out _);
+    }
+
+    /// <summary>
+    /// Builds the <see cref="Stash.Core.Resolution.ModuleExports"/> record and also exposes the
+    /// per-name <see cref="ExportEntry"/> map for analysis-time use (e.g. <see cref="ImportResolver"/>
+    /// needs <see cref="ExportEntry.OriginPath"/> to detect re-export cycles and enrich the
+    /// re-export graph).
+    /// </summary>
+    /// <param name="topLevel">The top-level statement list of the module.</param>
+    /// <param name="diagnostics">
+    /// The diagnostic list to which SA0805–SA0808 violations are appended.
+    /// </param>
+    /// <param name="entries">
+    /// When this method returns, contains the per-name export-entry map produced during the walk.
+    /// Entries for re-exported names carry a non-null <see cref="ExportEntry.OriginPath"/>.
+    /// </param>
+    /// <returns>
+    /// A <see cref="Stash.Core.Resolution.ModuleExports"/> instance.
+    /// </returns>
+    internal static Stash.Core.Resolution.ModuleExports Build(
+        IReadOnlyList<Stmt> topLevel,
+        List<SemanticDiagnostic> diagnostics,
+        out Dictionary<string, ExportEntry> entries)
+    {
         // Fast path: check whether any export annotations exist.
         bool hasAny = false;
         foreach (var stmt in topLevel)
@@ -52,6 +82,7 @@ public static class ModuleExportsBuilder
 
         if (!hasAny)
         {
+            entries = new Dictionary<string, ExportEntry>();
             return Stash.Core.Resolution.ModuleExports.Empty;
         }
 
@@ -82,6 +113,7 @@ public static class ModuleExportsBuilder
             }
         }
 
+        entries = names;
         return Stash.Core.Resolution.ModuleExports.Create(true, ImmutableHashSet.CreateRange(names.Keys));
     }
 
@@ -243,6 +275,10 @@ public static class ModuleExportsBuilder
         List<SemanticDiagnostic> diagnostics)
     {
         // SA0823 is emitted by the SemanticValidator, not here; the builder simply skips empty lists.
+        // OriginPath is the raw path string from the statement (relative or bare specifier).
+        // Full resolution to an absolute path is deferred to ImportResolver (Phase 2G).
+        var originPath = (exportFrom.Path as LiteralExpr)?.Value as string;
+
         foreach (var nameTok in exportFrom.Names)
         {
             var lexeme = nameTok.Lexeme;
@@ -258,7 +294,7 @@ public static class ModuleExportsBuilder
             }
             else
             {
-                names[lexeme] = new ExportEntry(SymbolKind.Namespace, nameTok.Span, exportSpan);
+                names[lexeme] = new ExportEntry(SymbolKind.Namespace, nameTok.Span, exportSpan, originPath);
             }
         }
     }

@@ -388,6 +388,46 @@ public class AnalysisEngine
     /// An <see cref="ImportResolver.ModuleInfo"/> describing the module's URI, path, scope tree,
     /// and structured errors.
     /// </returns>
+    /// <summary>
+    /// Extracts the resolved absolute paths of all re-export source modules declared by
+    /// <paramref name="statements"/> via <c>export { … } from "p";</c> or
+    /// <c>export "p" as x;</c>. Used to seed <see cref="ImportResolver.ModuleInfo.ReExportTargets"/>
+    /// so that SA0826 cycle detection can traverse transitive re-export edges in the module graph.
+    /// </summary>
+    private static List<string> BuildReExportTargets(List<Stash.Parsing.AST.Stmt> statements, string? moduleDir)
+    {
+        if (moduleDir == null)
+        {
+            return new List<string>();
+        }
+
+        var targets = new List<string>();
+        foreach (var stmt in statements)
+        {
+            string? pathValue = stmt switch
+            {
+                Stash.Parsing.AST.ExportFromStmt ef =>
+                    (ef.Path as Stash.Parsing.AST.LiteralExpr)?.Value as string,
+                Stash.Parsing.AST.ExportModuleAsStmt em =>
+                    (em.Path as Stash.Parsing.AST.LiteralExpr)?.Value as string,
+                _ => null
+            };
+
+            if (string.IsNullOrEmpty(pathValue))
+            {
+                continue;
+            }
+
+            var absPath = Path.GetFullPath(pathValue, moduleDir);
+            if (File.Exists(absPath))
+            {
+                targets.Add(absPath);
+            }
+        }
+
+        return targets;
+    }
+
     private ImportResolver.ModuleInfo ParseModule(string absolutePath)
     {
         var uri = new Uri(absolutePath);
@@ -408,10 +448,15 @@ public class AnalysisEngine
 
         // Build the explicit export set so the ImportResolver can enforce it.
         var exportDiagnostics = new List<SemanticDiagnostic>();
-        var exports = ModuleExportsBuilder.Build(statements, exportDiagnostics);
+        var exports = ModuleExportsBuilder.Build(statements, exportDiagnostics, out var exportEntries);
         // Diagnostics from the module's own export validation are silently discarded here —
         // they will be re-emitted when the module itself is analyzed as the primary document.
 
-        return new ImportResolver.ModuleInfo(uri, absolutePath, scopeTree, errors, exports);
+        // Collect resolved re-export target paths for SA0826 transitive cycle detection.
+        var moduleDir = Path.GetDirectoryName(absolutePath);
+        var reExportTargets = BuildReExportTargets(statements, moduleDir);
+
+        return new ImportResolver.ModuleInfo(uri, absolutePath, scopeTree, errors, exports,
+            exportEntries, reExportTargets);
     }
 }
