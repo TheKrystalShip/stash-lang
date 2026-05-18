@@ -969,6 +969,37 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
 
     /// <summary>
+    /// Registers a <see cref="SymbolKind.Namespace"/> symbol for the alias introduced by
+    /// <c>export "path" as alias;</c>. Per decision D-12, this binding is local and visible
+    /// in the same file, mirroring <c>import "path" as alias;</c>.
+    /// </summary>
+    /// <param name="stmt">The namespace re-export-as statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt)
+    {
+        var staticPath = (stmt.Path as LiteralExpr)?.Value as string;
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Alias.Lexeme, SymbolKind.Namespace, stmt.Alias.Span, detail: $"namespace from {staticPath ?? "<dynamic>"}"));
+        return null;
+    }
+
+    /// <summary>
+    /// Registers a placeholder <see cref="SymbolKind.Variable"/> symbol for each name introduced by
+    /// <c>export { a, b } from "path";</c>. Per decision D-12, these bindings are local and visible
+    /// in the same file, mirroring <c>import { a, b } from "path";</c>.
+    /// </summary>
+    /// <param name="stmt">The selective re-export-from statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitExportFromStmt(ExportFromStmt stmt)
+    {
+        var staticPath = (stmt.Path as LiteralExpr)?.Value as string;
+        foreach (var name in stmt.Names)
+        {
+            _currentScope.AddSymbol(new SymbolInfo(name.Lexeme, SymbolKind.Variable, name.Span, detail: $"re-exported from {staticPath ?? "<dynamic>"}"));
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Registers a placeholder <see cref="SymbolKind.Variable"/> symbol for each imported name.
     /// These placeholder symbols are later replaced by fully-resolved <see cref="SymbolInfo"/>
     /// instances from <see cref="ImportResolver"/> during the <see cref="AnalysisEngine"/> pass.

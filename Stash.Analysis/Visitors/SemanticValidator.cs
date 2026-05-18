@@ -431,6 +431,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
 
+    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt) => null;
+
+    public object? VisitExportFromStmt(ExportFromStmt stmt) => null;
+
     public object? VisitImportStmt(ImportStmt stmt) => null;
 
     public object? VisitImportAsStmt(ImportAsStmt stmt) => null;

@@ -388,6 +388,25 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
 
+    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt)
+    {
+        ResolveExpr(stmt.Path);
+        Declare(stmt.Alias.Lexeme);
+        Define(stmt.Alias.Lexeme);
+        return null;
+    }
+
+    public object? VisitExportFromStmt(ExportFromStmt stmt)
+    {
+        ResolveExpr(stmt.Path);
+        foreach (var name in stmt.Names)
+        {
+            Declare(name.Lexeme);
+            Define(name.Lexeme);
+        }
+        return null;
+    }
+
     public object? VisitImportStmt(ImportStmt stmt)
     {
         ResolveExpr(stmt.Path);

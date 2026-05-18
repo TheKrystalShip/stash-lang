@@ -488,6 +488,40 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitExportModuleAsStmt(ExportModuleAsStmt stmt)
+    {
+        _ctx.EmitToken(); // export
+        _ctx.Space();
+        FormatExpr(stmt.Path);
+        _ctx.Space();
+        _ctx.EmitToken(); // as
+        _ctx.Space();
+        _ctx.EmitToken(); // alias
+        _ctx.EmitToken(); // ;
+        return 0;
+    }
+
+    public int VisitExportFromStmt(ExportFromStmt stmt)
+    {
+        _ctx.EmitToken(); // export
+        _ctx.Space();
+        _ctx.EmitToken(); // {
+        _ctx.Space();
+        for (int i = 0; i < stmt.Names.Count; i++)
+        {
+            if (i > 0) { _ctx.EmitToken(); _ctx.Space(); } // ,
+            _ctx.EmitToken(); // name
+        }
+        _ctx.Space();
+        _ctx.EmitToken(); // }
+        _ctx.Space();
+        _ctx.EmitToken(); // from
+        _ctx.Space();
+        FormatExpr(stmt.Path);
+        _ctx.EmitToken(); // ;
+        return 0;
+    }
+
     public int VisitImportAsStmt(ImportAsStmt stmt)
     {
         DeclarationPrinter.PrintImportAs(stmt, _ctx, FormatExpr);

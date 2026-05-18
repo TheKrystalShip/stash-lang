@@ -629,6 +629,35 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitExportModuleAsStmt(ExportModuleAsStmt stmt)
+    {
+        EmitFromToken(stmt.ExportKeyword, TokenTypeKeyword, 0);
+        stmt.Path.Accept(this);
+        EmitFromToken(stmt.Alias, TokenTypeNamespace, ModifierDeclaration);
+        return 0;
+    }
+
+    public int VisitExportFromStmt(ExportFromStmt stmt)
+    {
+        EmitFromToken(stmt.ExportKeyword, TokenTypeKeyword, 0);
+        foreach (var name in stmt.Names)
+        {
+            var def = _result.Symbols.FindDefinition(name.Lexeme, name.Span.StartLine, name.Span.StartColumn);
+            if (def != null)
+            {
+                var (type, modifiers) = MapSymbolKind(def, name);
+                EmitFromToken(name, type, modifiers);
+            }
+            else
+            {
+                EmitFromToken(name, TokenTypeVariable, ModifierDeclaration);
+            }
+        }
+        EmitFromToken(stmt.FromKeyword, TokenTypeKeyword, 0);
+        stmt.Path.Accept(this);
+        return 0;
+    }
+
     public int VisitImportStmt(ImportStmt stmt)
     {
         foreach (var name in stmt.Names)

@@ -340,6 +340,13 @@ partial class Compiler
 
     public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
 
+    // Phase 2D replaces these stubs with real Import/ImportAs emission.
+    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt) =>
+        throw new NotImplementedException("Compiled in phase 2D");
+
+    public object? VisitExportFromStmt(ExportFromStmt stmt) =>
+        throw new NotImplementedException("Compiled in phase 2D");
+
     public object? VisitImportStmt(ImportStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
