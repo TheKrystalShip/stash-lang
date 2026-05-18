@@ -45,7 +45,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ImportResolverExportTests|F
 
 ## F02 — [MINOR] AST node XML docs reference stale diagnostic codes (SA0812 / SA0813)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `Stash.Core/Parsing/AST/ExportFromStmt.cs:19,23`, `Stash.Core/Parsing/AST/ExportModuleAsStmt.cs:21`
 **Phase:** 2A
 **Commit:** 82993d4
@@ -233,7 +234,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ReexportLspTests"
 
 ## F08 — [MINOR] Diagnostic-code drift: brief uses SA0809/SA0810/SA0814 throughout; implementation uses SA0825/SA0826/SA0827
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `.kanban/2-in-progress/export-from-import/brief.md:51-52,166,227-236,313-316,353`, `.kanban/2-in-progress/export-from-import/plan.yaml:213-235`
 **Phase:** cross-phase (renumbering 248f7dc only renamed SA0811-13 → SA0822-24; the other group was renumbered to SA0825-27 without the brief being amended)
 **Commit:** 248f7dc
@@ -291,7 +293,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ReexportLspTests"
 
 ## F10 — [MINOR] tmLanguage re-export rule ordering is load-bearing and undocumented
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `.vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json:100-115`
 **Phase:** 2I
 **Commit:** a2b83f9

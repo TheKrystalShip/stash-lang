@@ -18,7 +18,7 @@ using Stash.Lexing;
 /// </code>
 /// The alias is both usable as a local namespace binding in the same file and re-exported to
 /// downstream importers. Validation of name collisions and source-module membership is performed
-/// by the semantic analyzer (SA0813), not the parser.
+/// by the semantic analyzer (SA0824), not the parser.
 /// </remarks>
 public sealed class ExportModuleAsStmt : Stmt
 {

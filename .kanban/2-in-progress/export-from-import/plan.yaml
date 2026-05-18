@@ -201,7 +201,7 @@ phases:
       - Single-level selective re-export (`export { foo } from "x.stash";`) is observable.
       - Three-level transitive re-export chain (A → B → C, A exposes a name originally defined in C) returns the C-defined value.
       - Re-exporting the same module twice (two different aliases for the same path) shares the ModuleCache entry (module body runs once).
-      - Re-export of a name that is *not* in the source module's export set fails at module-load time with the parent feature's "Module does not export 'X'" error (Phase 2F upgrades this to a static SA0809 diagnostic).
+      - Re-export of a name that is *not* in the source module's export set fails at module-load time with the parent feature's "Module does not export 'X'" error (Phase 2F upgrades this to a static SA0825 diagnostic).
       - Same-module use (D-12) — `export "lib/x.stash" as x; let v = x.foo();` evaluates `x.foo()` correctly in the same module that re-exports `x`.
       - Same-module use (D-12) — `export { foo } from "lib/x.stash"; let v = foo();` evaluates `foo()` correctly in the same module.
       - Dynamic path expression (D-9) — `const P = "lib/x.stash"; export P as x;` loads `lib/x.stash` at module-load time, mirroring `import P as x;`.
@@ -211,7 +211,7 @@ phases:
       If the verify fails, fix Phase 2C or 2D — do NOT touch VirtualMachine.Modules.cs.
 
   - id: 2F
-    title: Analyzer ImportResolver — SA0809 source-export check + SA0810 cycle detection + ExportEntry.OriginPath
+    title: Analyzer ImportResolver — SA0825 source-export check + SA0826 cycle detection + ExportEntry.OriginPath
     deps: [2C]
     files:
       - Stash.Analysis/Resolvers/ImportResolver.cs
@@ -228,10 +228,10 @@ phases:
       - Do not modify LSP handlers (Phase 2G).
     done_when:
       - ImportResolver walks ExportFromStmt and ExportModuleAsStmt to add their targets to the import graph.
-      - For each ExportFromStmt name, the resolver verifies the source module's Exports.Names contains the name (when HasExplicitExports == true) and emits SA0809 otherwise.
-      - The resolver detects cycles in the *re-export subgraph* and emits SA0810. Ordinary import edges do not count toward cycle detection.
+      - For each ExportFromStmt name, the resolver verifies the source module's Exports.Names contains the name (when HasExplicitExports == true) and emits SA0825 otherwise.
+      - The resolver detects cycles in the *re-export subgraph* and emits SA0826. Ordinary import edges do not count toward cycle detection.
       - ExportEntry (in ModuleExportsBuilder.cs) gains an optional OriginPath set to the resolved source-module path for re-exported names; null for locally-exported names.
-      - SA0814 (redundant `import { x } from "p"; export { x };` pair) is registered and emitted as an **information-level hint only** (no code action in this feature — see D-10).
+      - SA0827 (redundant `import { x } from "p"; export { x };` pair) is registered and emitted as an **information-level hint only** (no code action in this feature — see D-10).
       - Unused-import diagnostic (D-11) treats any `export` statement — `export { x };`, `export { x } from "p";`, or `export "p" as x;` — as a use of the imported name/module. Test: a barrel module that only imports and only re-exports MUST NOT trigger the unused-import diagnostic.
       - Dependency tracking invalidates dependents when a re-export target's export set changes.
     notes: |
@@ -317,7 +317,7 @@ phases:
       - Do not edit the generated docs/Stash — Standard Library Reference.md.
       - Do not edit CLAUDE.md or AGENTS.md.
     done_when:
-      - Language spec gains a "Re-exports" subsection under "Source Files and Modules > Exports" that documents both forms with examples and the SA0809–SA0814 diagnostics.
+      - Language spec gains a "Re-exports" subsection under "Source Files and Modules > Exports" that documents both forms with examples and the SA0822–SA0827 diagnostics.
       - The BNF section of the spec adds the `exportModuleAs` and `exportFrom` productions (with `expression` as the path, matching `import`'s grammar) and references them from the top-level statement rule.
       - The spec explicitly documents that a re-export statement also binds its alias / selected names as locals in the current module (D-12), with a short example showing same-file use.
       - The spec documents that re-export statements count as uses for the unused-import diagnostic (D-11).

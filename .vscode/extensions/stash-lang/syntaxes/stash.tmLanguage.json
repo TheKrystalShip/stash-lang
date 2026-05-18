@@ -114,6 +114,7 @@
           }
         },
         {
+          "comment": "Must appear *after* the 'export { … } from' rule above — otherwise the from-clause is not highlighted.",
           "match": "\\b(export)\\b\\s*\\{([^}]*)\\}",
           "captures": {
             "1": { "name": "keyword.control.export.stash" },

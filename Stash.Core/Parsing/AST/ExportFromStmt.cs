@@ -16,9 +16,9 @@ using Stash.Lexing;
 /// <code>
 /// export { Color, Size, Direction } from "lib/types.stash";
 /// export { encode, decode } from path_fn();
-/// export { } from "lib/x.stash";   // SA0812 — empty list (caught by analyzer in Phase 2C)
+/// export { } from "lib/x.stash";   // SA0823 — empty list (caught by analyzer in Phase 2C)
 /// </code>
-/// Validation of source-module membership (SA0809), empty list (SA0812), and other semantic rules
+/// Validation of source-module membership (SA0825), empty list (SA0823), and other semantic rules
 /// is performed by the semantic analyzer, not the parser. The parser produces this node for all
 /// syntactically valid <c>export { … } from expr;</c> forms, including an empty name list.
 /// </para>
@@ -30,7 +30,7 @@ public sealed class ExportFromStmt : Stmt
 
     /// <summary>
     /// The list of identifier tokens naming the symbols to re-export.
-    /// May be empty; SA0812 is raised by the analyzer (Phase 2C) when empty.
+    /// May be empty; SA0823 is raised by the analyzer (Phase 2C) when empty.
     /// </summary>
     public List<Token> Names { get; }
 

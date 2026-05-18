@@ -47,8 +47,8 @@ This is purely an ergonomics + barrel-file readability win. The runtime model is
 
 - Add the two new statement forms at the surface (parser + AST).
 - Compile both forms by desugaring to an internal import operation that populates the importer's globals exactly as a hand-written `import` would, plus contributing names to the chunk's `ModuleExports.Names`.
-- Detect and diagnose re-export of names not in the source module's exported set (`SA0809`).
-- Detect re-export cycles in the analyzer (`SA0810`) — independently of ordinary import-cycle handling, because re-export cycles are unambiguously bugs.
+- Detect and diagnose re-export of names not in the source module's exported set (`SA0825`).
+- Detect re-export cycles in the analyzer (`SA0826`) — independently of ordinary import-cycle handling, because re-export cycles are unambiguously bugs.
 - Surface the original declaration through LSP hover / go-to-def for re-exported names.
 - Preserve `.stashc` format compatibility: no version bump. `ModuleExports.Names` stays `IReadOnlySet<string>`.
 - Preserve the dispatch-loop size constraint: no new opcodes.
@@ -163,7 +163,7 @@ Rationale: users expect feature parity with `import`. An author migrating from t
 Diagnostic implications:
 
 - **Unused-symbol diagnostics:** a re-exported binding counts as "used" because its name is in the module's export set. A name that is both re-exported and referenced inside the module is also used; a name that is only re-exported is still used. A name that is *neither* in the export set nor referenced cannot occur via this feature — every re-exported name is in the export set by definition.
-- **SA0814 (redundant pair):** the desugaring equivalence makes this hint precise. `import { x } from "p"; export { x };` is functionally identical to `export { x } from "p";` in both observable runtime behavior (the export set and the local binding `x`) and source-side IDE behavior (hover, go-to-def). Suggesting the rewrite is therefore lossless.
+- **SA0827 (redundant pair):** the desugaring equivalence makes this hint precise. `import { x } from "p"; export { x };` is functionally identical to `export { x } from "p";` in both observable runtime behavior (the export set and the local binding `x`) and source-side IDE behavior (hover, go-to-def). Suggesting the rewrite is therefore lossless.
 - **Duplicate binding (SA0824):** unchanged. If the alias of `ExportModuleAsStmt` collides with another top-level binding, SA0824 fires — same rule that would have fired for an equivalent `import ... as alias;`.
 
 Consequences of this strategy (each verified against the existing code):
@@ -228,14 +228,14 @@ New `DiagnosticDescriptors` entries (all in the SA08xx imports range, continuing
 
 | Code | Level | When | Message |
 | --- | --- | --- | --- |
-| `SA0809` | Error | Re-export of a name that is not in the source module's exported set | `Module '{0}' does not export '{1}'.` |
-| `SA0810` | Error | Re-export cycle detected in the analyzer's module graph | `Re-export cycle detected: {0}.` |
+| `SA0825` | Error | Re-export of a name that is not in the source module's exported set | `Module '{0}' does not export '{1}'.` |
+| `SA0826` | Error | Re-export cycle detected in the analyzer's module graph | `Re-export cycle detected: {0}.` |
 | `SA0822` | Error | `export * from "path";` | `Wildcard re-export is not supported. Use 'export { name, ... } from "..."' to list names explicitly.` |
 | `SA0823` | Error | `export {} from "path";` | `Empty re-export list. Use a regular import for side effects.` |
 | `SA0824` | Error | Alias of `ExportModuleAsStmt` collides with another top-level binding | `Cannot re-export module as '{0}': a binding with that name already exists.` |
-| `SA0814` | Information | `import { x } from "p"; export { x };` — redundant pair | `This import-export pair can be written as 'export { {0} } from "{1}"'.` |
+| `SA0827` | Information | `import { x } from "p"; export { x };` — redundant pair | `This import-export pair can be written as 'export { {0} } from "{1}"'.` |
 
-`SA0814` is the only information-level addition; it is a hint, not a warning.
+`SA0827` is the only information-level addition; it is a hint, not a warning.
 
 #### Compiler
 
@@ -261,8 +261,8 @@ The VM phase exists purely to **prove** via end-to-end tests that the desugaring
 `ImportResolver` is extended to:
 
 1. **Walk the new statement kinds**, computing module resolution for each `ExportFromStmt.Path` and `ExportModuleAsStmt.Path` the same way it walks `ImportStmt` and `ImportAsStmt`. This populates the analyzer's import graph.
-2. **Validate selective re-export source filtering** (`SA0809`): for each name in `ExportFromStmt.Names`, if the source module's `Exports` is non-null and `HasExplicitExports`, the name must be in `Exports.Names`. If the source has `HasExplicitExports == false` (legacy), every top-level name is implicitly exported and the check passes.
-3. **Detect re-export cycles** (`SA0810`): when the import-graph walk discovers a re-export edge that closes a cycle of re-export edges, emit `SA0810`. Ordinary import edges in the cycle don't count (they're allowed). The cycle detection runs on the subgraph of re-export edges only.
+2. **Validate selective re-export source filtering** (`SA0825`): for each name in `ExportFromStmt.Names`, if the source module's `Exports` is non-null and `HasExplicitExports`, the name must be in `Exports.Names`. If the source has `HasExplicitExports == false` (legacy), every top-level name is implicitly exported and the check passes.
+3. **Detect re-export cycles** (`SA0826`): when the import-graph walk discovers a re-export edge that closes a cycle of re-export edges, emit `SA0826`. Ordinary import edges in the cycle don't count (they're allowed). The cycle detection runs on the subgraph of re-export edges only.
 4. **Enrich `ExportEntry`** with an optional source-module path: re-exported names get `OriginPath != null`, locally-exported names get `OriginPath == null`. This lives in `Stash.Analysis/Models/ModuleExportsBuilder.cs` (the rich entry), not in the bytecode-layer `ModuleExports`. LSP uses this to drive hover and go-to-def.
 
 #### LSP
@@ -291,7 +291,7 @@ The "add missing import" code action (`CodeActionHandler.cs`) is unaffected — 
 ```
 Parser recognises new forms (ExportModuleAsStmt, ExportFromStmt)
     -> ModuleExportsBuilder collects re-exported names into Chunk.Exports
-    -> ImportResolver validates source-side export membership (SA0809) and re-export cycles (SA0810)
+    -> ImportResolver validates source-side export membership (SA0825) and re-export cycles (SA0826)
     -> Compiler emits ordinary Import/ImportAs sequences (no new opcodes)
     -> VM runs unchanged; BuildExportedEnvironment filter passes re-exported names through
     -> LSP surfaces origin-module info for hover/go-to-def
@@ -310,10 +310,10 @@ The key invariant the path preserves: **the runtime view of a re-exported name i
 
 **Failure path behaviour:**
 
-4. `export { private_thing } from "lib/x.stash"` where `private_thing` is module-private in `lib/x.stash` produces `SA0809` and does not compile.
+4. `export { private_thing } from "lib/x.stash"` where `private_thing` is module-private in `lib/x.stash` produces `SA0825` and does not compile.
 5. `export * from "lib/x.stash"` produces `SA0822`.
 6. `export {} from "lib/x.stash"` produces `SA0823`.
-7. Re-export cycle `A -> B -> A` produces `SA0810` from the analyzer.
+7. Re-export cycle `A -> B -> A` produces `SA0826` from the analyzer.
 
 **Cross-entrypoint behaviour:**
 
@@ -350,7 +350,7 @@ The phase list lives in `plan.yaml`. There are **10 phases**, mirroring the pare
 | 2C | ModuleExportsBuilder extension + SA0822/SA0823/SA0824 in validator |
 | 2D | Compiler: emit ordinary Import/ImportAs for new nodes |
 | 2E | VM verification (tests only; zero source changes expected) |
-| 2F | ImportResolver: SA0809 (source-export check), SA0810 (cycles), SA0814 (hint), ExportEntry origin path |
+| 2F | ImportResolver: SA0825 (source-export check), SA0826 (cycles), SA0827 (hint), ExportEntry origin path |
 | 2G | LSP: hover/go-to-def via origin path + `from` semantic token |
 | 2H | Formatter pretty-printing |
 | 2I | Playground tokenizer + tmLanguage regression coverage |
@@ -359,7 +359,7 @@ The phase list lives in `plan.yaml`. There are **10 phases**, mirroring the pare
 ## Open Questions
 
 - **Q1 — RESOLVED 2026-05-18.** Path expression form. **Decision:** allow any expression `import` accepts. Feature parity with `import` is the design constraint. Implementation: replace the "next token is `TokenType.String`" gate with the lookahead rule documented in "Soft-keyword disambiguation" (scan to next depth-0 `;`; activate iff trailing tokens are `As Identifier Semicolon`). See decision **D-9** below.
-- **Q2 — RESOLVED 2026-05-18.** SA0814 ships as an information-level hint only in this feature. A code action that auto-rewrites the redundant `import { x } from "p"; export { x };` pair into `export { x } from "p";` is a follow-up, tracked separately. See decision **D-10**.
+- **Q2 — RESOLVED 2026-05-18.** SA0827 ships as an information-level hint only in this feature. A code action that auto-rewrites the redundant `import { x } from "p"; export { x };` pair into `export { x } from "p";` is a follow-up, tracked separately. See decision **D-10**.
 - **Q3 — RESOLVED 2026-05-18.** Any `export` statement counts as a use of the imported name/module for unused-import diagnostics. This applies to the parent feature's `export { x };` block form (when `x` was imported) as well as to both new forms in this feature. A module that only imports and only re-exports a name MUST NOT trigger unused-import. See decision **D-11**.
 - **Q4 — NEW.** Can the `Expression()` parser produce a sequence whose final three tokens at depth 0 are `As Identifier Semicolon` *without* being a valid re-export path expression? `as` is currently used as a cast operator (`expr as Type`); a cast's right-hand side is a type reference, not a bare `Identifier` followed by `;` at the same statement position. We believe this is safe — the disambiguation lookahead is unambiguous in current grammar — but Phase 2A must verify by inspection of `Expression()` and `as`-cast precedence and add a regression test exercising `let x = y as Foo;` parsing unchanged. If a corner case is found, the fallback is to require the path expression to be one of: a string literal, a parenthesised expression, an identifier reference, a function call, a member access — i.e., the empirical subset that `import` paths actually take in the wild. Track the verification result in this Open Question and either close or amend.
 - **Q5 — NEW.** Should `examples/packages/` (the existing barrel example used by the parent feature) be migrated to the new syntax in this feature, to provide a real-world smoke test? The "Non-Goals" section explicitly defers migration. **Working answer:** keep deferred; ship a fresh `examples/reexport_barrel.stash` in Phase 2J and migrate `examples/packages/` in a follow-up.
@@ -372,11 +372,12 @@ The phase list lives in `plan.yaml`. There are **10 phases**, mirroring the pare
 | 2026-05-18 | **D-2**: Two AST nodes (`ExportModuleAsStmt`, `ExportFromStmt`) instead of one. | Validation rules differ; mirrors the existing `ImportStmt`/`ImportAsStmt` split; every visitor cleanly dispatches without an inner-discriminator switch. |
 | 2026-05-18 | **D-3**: No `export { x as y } from "p";` alias form. | Symmetric with parent feature's D-6 deferral of local-export aliasing. Will add both forms in a future single PR. |
 | 2026-05-18 | **D-4**: No `export * from "p";`. | Matches Stash's principled rejection of wildcard imports — name-collision opacity is the same hazard. |
-| 2026-05-18 | **D-5**: Re-export cycle detection lives in the analyzer (`SA0810`), not the runtime. | Cycles in the re-export subgraph are unambiguous bugs (unlike general import cycles, which sometimes work). The analyzer has the full graph; the runtime has only the per-load view. |
-| 2026-05-18 | **D-6**: Selective re-export source check (`SA0809`) treats a source module with `HasExplicitExports == false` as exporting every top-level name. | Matches the parent feature's runtime behavior: legacy modules expose everything. |
+| 2026-05-18 | **D-5**: Re-export cycle detection lives in the analyzer (`SA0826`), not the runtime. | Cycles in the re-export subgraph are unambiguous bugs (unlike general import cycles, which sometimes work). The analyzer has the full graph; the runtime has only the per-load view. |
+| 2026-05-18 | **D-6**: Selective re-export source check (`SA0825`) treats a source module with `HasExplicitExports == false` as exporting every top-level name. | Matches the parent feature's runtime behavior: legacy modules expose everything. |
 | 2026-05-18 | **D-7**: `ExportEntry` (analysis layer) gains an optional `OriginPath`. Bytecode-layer `ModuleExports.Names` remains `IReadOnlySet<string>`. | LSP needs origin information; the runtime doesn't. Keeping origin info out of bytecode preserves format compatibility. |
 | 2026-05-18 | **D-8**: This feature is orthogonal to `exports-private-default`. | The desugar strategy means re-exports work identically whether the default is "public" or "private." |
 | 2026-05-18 | **D-9**: The path expression in both new forms accepts any expression `import` accepts (not just string literals). | Feature parity with `import` dynamic-path support. Authors moving between `import "p" as x;` and `export "p" as x;` should not lose grammar capability. Soft-keyword disambiguation uses a depth-tracked scan for trailing `as Identifier ;` — see brief §Surface. |
-| 2026-05-18 | **D-10**: SA0814 ships as info-level hint only; auto-rewrite code action is deferred. | Hint provides discoverability without intrusion. Code-action work is independently scoped and can land in a separate small PR once the feature is stable. |
+| 2026-05-18 | **D-10**: SA0827 ships as info-level hint only; auto-rewrite code action is deferred. | Hint provides discoverability without intrusion. Code-action work is independently scoped and can land in a separate small PR once the feature is stable. |
 | 2026-05-18 | **D-11**: Re-export statements count as uses for the unused-import diagnostic. | Consistent with the desugaring equivalence (`export { x } from "p"` ≡ `import { x } from "p"; export { x };`). A barrel-file module that re-exports symbols without referencing them locally would otherwise be flooded with false positives. |
 | 2026-05-18 | **D-12**: A re-export statement binds its alias / selected names as locals in the same module, in addition to contributing them to the export set. | This falls out of the desugaring (`import` already binds locals). Making it an explicit guarantee preserves feature parity with `import` and removes a footgun where users would be surprised that `export "lib/x.stash" as x;` doesn't let them write `x.foo()` in the same file. |
+| 2026-05-18 | **D-13**: Planned diagnostic codes SA0809/SA0810/SA0814 were renumbered to SA0825/SA0826/SA0827 during Phase 2C/2F to avoid conflict with the parent `module-exports` feature's SA0809 ("Symbol declared but not exported") and with Lock diagnostics SA0810/SA0814. All references in the brief, plan, spec, descriptor registry, and tests use the final SA0825/SA0826/SA0827 numbers. |
