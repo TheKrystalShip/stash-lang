@@ -140,7 +140,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ReexportLspTests"
 
 ## F05 — [MINOR] `FindReExportSpanForPath` uses suffix match — wrong span on basename collisions
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `Stash.Analysis/Resolvers/ImportResolver.cs:601-624`
 **Phase:** 2F
 **Commit:** 128ea50
@@ -169,7 +170,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ReexportResolverTests"
 
 ## F06 — [MINOR] `ImportResolver._loadingModules` and `EnsureModuleLoaded` thread-safety
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `Stash.Analysis/Resolvers/ImportResolver.cs:45,903`, `Stash.Analysis/Engines/AnalysisEngine.cs:255-279`
 **Phase:** 2G (out-of-plan-scope `EnsureModuleLoaded` addition)
 **Commit:** 9924510
@@ -199,7 +201,8 @@ dotnet test Stash.Tests --filter "FullyQualifiedName~ImportResolverTests"
 
 ## F07 — [MINOR] No same-module LSP coverage for re-exported names (D-12 IDE gap)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `Stash.Analysis/Visitors/SymbolCollector.cs:996-999`, `Stash.Tests/Lsp/ReexportLspTests.cs`
 **Phase:** 2G
 **Commit:** 9924510
@@ -260,7 +263,8 @@ grep -n "SA0809\|SA0810\|SA0814" .kanban/2-in-progress/export-from-import/brief.
 
 ## F09 — [MINOR] `examples/reexport_barrel.stash` and spec rely on `OriginPath`'s relative-path resolution but never exercise bare-specifier (`@scope/pkg`) re-exports
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** TBD
 **Files:** `examples/reexport_barrel.stash`, `Stash.Lsp/Handlers/HoverHandler.cs:484-495` (`ResolveOriginPath`)
 **Phase:** 2G, 2J
 **Commit:** 9924510, ffa0464

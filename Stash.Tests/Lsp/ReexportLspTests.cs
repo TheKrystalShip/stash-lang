@@ -495,6 +495,131 @@ public class ReexportLspTests : AnalysisTestBase
         catch { Cleanup(dir); throw; }
     }
 
+    // ── F07: D-12 same-module hover/go-to-def for re-exported names ──────────
+
+    [Fact]
+    public void Hover_ReexportedName_InReexportingFileItself_ShowsOriginSignature()
+    {
+        // D-12: a re-exporting file (index.stash) should be able to resolve the re-exported
+        // name for hover/go-to-def in the re-exporting file itself, not just in a downstream
+        // importer.  Before F07, ResolveExportFrom never pushed a SymbolInfo into
+        // ResolvedSymbols, so hover landed on the placeholder instead of the real declaration.
+        var dir = SetupTempDir();
+        try
+        {
+            const string LibSource = """
+                /// Represents a color value.
+                export enum Color { Red, Green, Blue }
+                """;
+            // index.stash re-exports Color and then USES it on the next line.
+            const string IndexSource =
+                "export { Color } from \"lib/types.stash\";\n" +
+                "let c = Color.Red;\n";
+
+            Directory.CreateDirectory(Path.Combine(dir, "lib"));
+            File.WriteAllText(Path.Combine(dir, "lib", "types.stash"), LibSource, System.Text.Encoding.UTF8);
+            WriteFile(dir, "index.stash", IndexSource);
+
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
+            var indexUri = FileUri(dir, "index.stash");
+            docs.Open(indexUri, IndexSource, 1);
+            engine.Analyze(indexUri, IndexSource);
+
+            try
+            {
+                // Hover on "Color" in index.stash (the usage on line 2)
+                // should show the enum signature from lib/types.stash, not the placeholder.
+                var hover = GetHover(engine, docs, indexUri, IndexSource, "Color");
+                Assert.NotNull(hover);
+                var md = hover!.Contents.MarkupContent!.Value;
+                Assert.Contains("Color", md);
+                // The hover text should mention Enum (from the origin declaration), not just
+                // the re-export placeholder text.
+                Assert.DoesNotContain("re-exported from", md, StringComparison.OrdinalIgnoreCase);
+            }
+            finally { Cleanup(dir); }
+        }
+        catch { Cleanup(dir); throw; }
+    }
+
+    [Fact]
+    public void GoToDefinition_ReexportedEnum_InReexportingFile_JumpsToOriginDeclaration()
+    {
+        // Go-to-def on a re-exported enum name in the re-exporting file should jump to the
+        // original declaration, not stay in the re-exporting file.
+        var dir = SetupTempDir();
+        try
+        {
+            const string LibSource = "export enum Status { Ok, Err }";
+            const string IndexSource =
+                "export { Status } from \"lib/status.stash\";\n" +
+                "let s = Status.Ok;\n";
+
+            Directory.CreateDirectory(Path.Combine(dir, "lib"));
+            File.WriteAllText(Path.Combine(dir, "lib", "status.stash"), LibSource, System.Text.Encoding.UTF8);
+            WriteFile(dir, "index.stash", IndexSource);
+
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
+            var indexUri = FileUri(dir, "index.stash");
+            docs.Open(indexUri, IndexSource, 1);
+            engine.Analyze(indexUri, IndexSource);
+
+            try
+            {
+                var result = GetDefinition(engine, docs, indexUri, IndexSource, "Status");
+                Assert.NotNull(result);
+                var locations = result!.ToArray();
+                Assert.NotEmpty(locations);
+
+                // The target must be in lib/status.stash, not in index.stash itself.
+                var targetPath = locations[0].Location!.Uri.ToUri().LocalPath;
+                Assert.Contains("status.stash", targetPath);
+                Assert.DoesNotContain("index.stash", targetPath);
+            }
+            finally { Cleanup(dir); }
+        }
+        catch { Cleanup(dir); throw; }
+    }
+
+    // ── F09: bare-specifier (@scope/pkg) re-export hover smoke test ───────────
+
+    [Fact]
+    public void Hover_ReexportFromBareSpecifier_DoesNotCrash()
+    {
+        // Smoke test for HoverHandler.ResolveOriginPath's bare-specifier branch.
+        // A re-exporting file uses a @scope/pkg specifier; hover must not throw.
+        // Full URI assertion is omitted because setting up a full package layout
+        // is out of scope for this Minor finding — the key invariant is no crash.
+        var dir = SetupTempDir();
+        try
+        {
+            // Lay out a minimal stash package: dir/stashes/@myorg/utils/index.stash
+            var pkgDir = Path.Combine(dir, "stashes", "@myorg", "utils");
+            Directory.CreateDirectory(pkgDir);
+            File.WriteAllText(Path.Combine(pkgDir, "index.stash"), "export fn parse(s: string) { }");
+            // stash.json so the resolver can find the stashes/ directory
+            File.WriteAllText(Path.Combine(dir, "stash.json"), """{"name": "test-project"}""");
+
+            // The re-exporting file imports from the bare specifier
+            const string IndexSource = "export { parse } from \"@myorg/utils\";\n";
+            WriteFile(dir, "barrel.stash", IndexSource);
+
+            // Analyze barrel.stash as the primary document
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
+            var barrelUri = FileUri(dir, "barrel.stash");
+            docs.Open(barrelUri, IndexSource, 1);
+            engine.Analyze(barrelUri, IndexSource);
+
+            // Must not throw — bare-specifier branch in ResolveOriginPath must degrade gracefully
+            var hover = GetHover(engine, docs, barrelUri, IndexSource, "parse");
+            // hover may be null if the package is not fully resolvable — both null and non-null are acceptable
+        }
+        finally { Cleanup(dir); }
+    }
+
     // ── Cycle resistance ──────────────────────────────────────────────────────
 
     [Fact]

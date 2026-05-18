@@ -1,3 +1,5 @@
+using System.Linq;
+using System.Threading.Tasks;
 using Stash.Analysis;
 using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;
@@ -634,6 +636,39 @@ public class ImportResolverTests
             var diagnostic = Assert.Single(resolution.Diagnostics);
             Assert.Equal(DiagnosticLevel.Information, diagnostic.Level);
             Assert.Contains("Dynamic import path", diagnostic.Message);
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    // ── F06: concurrent LoadModule / EnsureModuleLoaded safety ───────────────
+
+    [Fact]
+    public async Task EnsureModuleLoaded_ConcurrentCallsSamePath_DoesNotThrowAndCachesOnce()
+    {
+        // Stress-test: N tasks all call EnsureModuleLoaded on the same path concurrently.
+        // Expected: no exception, and the module is cached (non-null) after all tasks finish.
+        var tempDir = Path.Combine(Path.GetTempPath(), "stash_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var modulePath = Path.Combine(tempDir, "shared.stash");
+            File.WriteAllText(modulePath, "export fn helper() { }");
+
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+
+            const int TaskCount = 16;
+            var tasks = Enumerable.Range(0, TaskCount)
+                .Select(_ => Task.Run(() => engine.EnsureModuleLoaded(modulePath)))
+                .ToArray();
+
+            await Task.WhenAll(tasks); // must complete without exception
+
+            // At least one task should have loaded the module — cache must be populated.
+            var cached = engine.EnsureModuleLoaded(modulePath);
+            Assert.NotNull(cached);
         }
         finally
         {

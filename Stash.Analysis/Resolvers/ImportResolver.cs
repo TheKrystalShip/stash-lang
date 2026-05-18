@@ -41,7 +41,13 @@ public class ImportResolver
     // Cache of parsed module symbols, keyed by absolute file path
     private readonly ConcurrentDictionary<string, ModuleInfo> _moduleCache = new();
 
-    /// <summary>Guard set preventing infinite recursion on circular imports.</summary>
+    /// <summary>
+    /// Guard set preventing infinite recursion on circular imports.
+    /// All mutations and membership checks MUST be performed inside <c>lock (_loadingModules)</c>
+    /// so that concurrent LSP requests cannot race on the Add/Remove pair.
+    /// <see cref="LoadModule"/> and the <see cref="AnalysisEngine.EnsureModuleLoaded"/> path are
+    /// safe for concurrent calls after this guard is in place.
+    /// </summary>
     private readonly HashSet<string> _loadingModules = new();
     // Map from imported file path → set of document URIs that import it
     private readonly ConcurrentDictionary<string, HashSet<Uri>> _dependents = new();
@@ -259,7 +265,7 @@ public class ImportResolver
         // SA0826: check for cycles in the re-export subgraph using three-color DFS.
         if (documentAbsPath != null && reExportGraph.ContainsKey(documentAbsPath))
         {
-            DetectReExportCycles(reExportGraph, documentAbsPath, resolution, statements);
+            DetectReExportCycles(reExportGraph, documentAbsPath, resolution, statements, documentDir);
         }
 
         // SA0827: emit information-level hint for redundant import+export pairs.
@@ -391,6 +397,49 @@ public class ImportResolver
                 resolution.ReExportedNamesByPath[absolutePath] = reExportedNames;
             }
             reExportedNames.Add(lexeme);
+
+            // D-12 IDE parity: push a fully-resolved SymbolInfo so that hover/go-to-def works
+            // in the re-exporting file itself (not only in downstream importers).
+            // Mirror the ResolveSelectiveImport pattern: Span = name-token span in this file,
+            // FullSpan/SourceUri = the origin declaration's location.
+            var exportedSymbol = moduleInfo.Symbols.GetTopLevel()
+                .FirstOrDefault(s => s.Name == lexeme);
+
+            if (exportedSymbol != null)
+            {
+                var resolvedSymbol = new SymbolInfo(
+                    nameToken.Lexeme,
+                    exportedSymbol.Kind,
+                    nameToken.Span,
+                    exportedSymbol.FullSpan,
+                    exportedSymbol.Detail,
+                    exportedSymbol.ParentName,
+                    exportedSymbol.TypeHint,
+                    moduleInfo.Uri);
+
+                resolution.ResolvedSymbols.Add(resolvedSymbol);
+
+                // Also push child symbols (struct fields, enum members, interface methods) so that
+                // member-access expressions like `Color.Red` resolve correctly in the re-exporting file.
+                if (exportedSymbol.Kind == SymbolKind.Struct || exportedSymbol.Kind == SymbolKind.Enum || exportedSymbol.Kind == SymbolKind.Interface)
+                {
+                    var allChildren = moduleInfo.Symbols.All
+                        .Where(s => s.ParentName == nameToken.Lexeme && (s.Kind == SymbolKind.Field || s.Kind == SymbolKind.EnumMember || s.Kind == SymbolKind.Method));
+
+                    foreach (var child in allChildren)
+                    {
+                        resolution.ResolvedSymbols.Add(new SymbolInfo(
+                            child.Name,
+                            child.Kind,
+                            child.Span,
+                            child.FullSpan,
+                            child.Detail,
+                            child.ParentName,
+                            child.TypeHint,
+                            moduleInfo.Uri));
+                    }
+                }
+            }
         }
     }
 
@@ -457,7 +506,8 @@ public class ImportResolver
         Dictionary<string, HashSet<string>> reExportGraph,
         string startPath,
         ImportResolution resolution,
-        List<Stmt> statements)
+        List<Stmt> statements,
+        string documentDir)
     {
         var color = new Dictionary<string, int>();
         var path = new List<string>();
@@ -499,7 +549,7 @@ public class ImportResolver
                         // neighbor (cycle-closing node). For direct cycles (A→A) this will be found.
                         // For transitive cycles (A→B→A), the current document only references B — so fall
                         // back to finding the re-export stmt that points to any node in the cycle path.
-                        SourceSpan? diagnosticSpan = FindReExportSpanForPath(statements, neighbor);
+                        SourceSpan? diagnosticSpan = FindReExportSpanForPath(statements, neighbor, documentDir);
 
                         if (!diagnosticSpan.HasValue)
                         {
@@ -507,7 +557,7 @@ public class ImportResolver
                             // that is part of the detected cycle path.
                             foreach (var cyclePath in cycleSegment)
                             {
-                                diagnosticSpan = FindReExportSpanForPath(statements, cyclePath);
+                                diagnosticSpan = FindReExportSpanForPath(statements, cyclePath, documentDir);
                                 if (diagnosticSpan.HasValue) break;
                             }
                         }
@@ -596,9 +646,11 @@ public class ImportResolver
 
     /// <summary>
     /// Finds the source span of a re-export statement that references the given target path.
+    /// Resolves each statement's path to an absolute path and compares case-insensitively to
+    /// avoid false matches when two files share a basename in different directories.
     /// Returns null if not found.
     /// </summary>
-    private static SourceSpan? FindReExportSpanForPath(List<Stmt> statements, string targetAbsPath)
+    private static SourceSpan? FindReExportSpanForPath(List<Stmt> statements, string targetAbsPath, string documentDir)
     {
         foreach (var stmt in statements)
         {
@@ -613,9 +665,12 @@ public class ImportResolver
                 continue;
             }
 
-            // Check if the path value basename matches the target
-            if (targetAbsPath.EndsWith(pathValue, StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(targetAbsPath).Equals(Path.GetFileName(pathValue), StringComparison.OrdinalIgnoreCase))
+            // Resolve the statement's path to absolute and compare case-insensitively.
+            // This prevents wrong-span attribution when two .stash files share a basename
+            // in different subdirectories.
+            var stmtAbsPath = ResolveImportToAbsolutePathSilent(pathValue, documentDir);
+            if (stmtAbsPath != null &&
+                string.Equals(stmtAbsPath, targetAbsPath, StringComparison.OrdinalIgnoreCase))
             {
                 return stmt.Span;
             }
@@ -897,8 +952,17 @@ public class ImportResolver
             return cached;
         }
 
-        // Guard against circular imports
-        if (!_loadingModules.Add(absolutePath))
+        // Guard against circular imports.  All _loadingModules mutations are serialised through a
+        // lock so that concurrent LSP requests cannot race on the Add/Remove pair — two threads
+        // would otherwise both pass the TryGetValue check above and then both attempt Add,
+        // leaving one of them seeing a false "already loading" signal.
+        bool added;
+        lock (_loadingModules)
+        {
+            added = _loadingModules.Add(absolutePath);
+        }
+
+        if (!added)
         {
             var emptyScope = new Scope(ScopeKind.Global, null, new SourceSpan(absolutePath, 1, 1, 1, 1));
             return new ModuleInfo(new Uri(absolutePath), absolutePath, new ScopeTree(emptyScope), new List<DiagnosticError>());
@@ -921,7 +985,10 @@ public class ImportResolver
         }
         finally
         {
-            _loadingModules.Remove(absolutePath);
+            lock (_loadingModules)
+            {
+                _loadingModules.Remove(absolutePath);
+            }
         }
     }
 

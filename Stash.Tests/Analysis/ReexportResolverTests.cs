@@ -370,6 +370,58 @@ public class ReexportResolverTests
         Assert.Null(entry.OriginPath);
     }
 
+    // ── F05: SA0826 span precision — basename collision ───────────────────────
+
+    [Fact]
+    public void SA0826_Span_PointsAtCorrectStatement_WhenTwoPathsShareBasename()
+    {
+        // Two re-export statements reference files that share the same basename ("types.stash")
+        // but live in different subdirectories.  Only one of them forms a cycle; the diagnostic
+        // span must point at that statement, not the other one.
+        //
+        //   index.stash
+        //     export { Foo } from "lib/a/types.stash";   ← forms a cycle (types.stash exports back)
+        //     export { Bar } from "lib/b/types.stash";   ← no cycle; must NOT get the diagnostic
+        //
+        // lib/a/types.stash:  export { Foo } from "../../index.stash";   ← closes the cycle
+        // lib/b/types.stash:  export fn Bar() { }                        ← plain declaration
+
+        var dir = SetupTempDir();
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(dir, "lib", "a"));
+            Directory.CreateDirectory(Path.Combine(dir, "lib", "b"));
+
+            // lib/b/types.stash — no cycle, just a declaration
+            WriteFile(Path.Combine(dir, "lib", "b"), "types.stash", "export fn Bar() { }");
+
+            // lib/a/types.stash — re-exports back to index.stash, creating the cycle
+            WriteFile(Path.Combine(dir, "lib", "a"), "types.stash",
+                """export { Foo } from "../../index.stash";""");
+
+            // index.stash — re-exports from both subdirectories
+            const string IndexSource =
+                "export { Foo } from \"lib/a/types.stash\";\n" +
+                "export { Bar } from \"lib/b/types.stash\";\n";
+            WriteFile(dir, "index.stash", IndexSource);
+
+            var indexUri = FileUri(dir, "index.stash");
+            var resolver = new ImportResolver();
+            var lexer = new Lexer(IndexSource, indexUri.LocalPath);
+            var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
+            var diagnostics = resolver.ResolveImports(indexUri, stmts, ParseModuleWithExports).Diagnostics;
+
+            // SA0826 must fire
+            Assert.Contains(diagnostics, d => d.Code == "SA0826");
+
+            // The diagnostic span must point at the FIRST statement (lib/a/types.stash, line 1),
+            // not the second (lib/b/types.stash, line 2).
+            var sa0826 = diagnostics.First(d => d.Code == "SA0826");
+            Assert.Equal(1, sa0826.Span.StartLine);
+        }
+        finally { Cleanup(dir); }
+    }
+
     // ── Dependency invalidation for re-export targets ─────────────────────────
 
     [Fact]
