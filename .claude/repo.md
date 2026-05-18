@@ -27,6 +27,9 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- exports-private-default — Exports — Private by Default | .kanban/2-in-progress/exports-private-default/ | 5 phases | started 2026-05-18
+- export-from-import — Module Exports — Re-export Forms | .kanban/2-in-progress/export-from-import/ | 10 phases | started 2026-05-18
+
 ---
 
 ## Architecture Decisions (enduring)
