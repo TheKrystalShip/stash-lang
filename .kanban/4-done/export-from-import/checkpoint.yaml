@@ -1,0 +1,102 @@
+schema_version: 1
+feature: export-from-import
+current: null
+updated: '2026-05-18T20:42:10Z'
+phases:
+  2A:
+    status: done
+    commit: 82993d4f239ae02984ca31ae120d9d67a774612c
+    verified: true
+    started: '2026-05-18T10:50:21Z'
+    completed: '2026-05-18T10:59:02Z'
+    attempts: 1
+    notes: 'Parser + AST nodes: ExportModuleAsStmt, ExportFromStmt, 17 tests, default-throwing visitor
+      methods, depth-tracked path-form disambiguator'
+  2B:
+    status: done
+    commit: 3757e265f0dc8ea868c836e77a373e838ac14eab
+    verified: true
+    started: '2026-05-18T11:00:43Z'
+    completed: '2026-05-18T11:08:37Z'
+    attempts: 1
+    notes: 'All six visitors wired: SemanticResolver resolves Path+binds names; SymbolCollector D-12 local
+      binding; SemanticTokenWalker keyword+namespace tokens; StashFormatter single-line placeholder; Compiler
+      stubs throw NotImplementedException'
+  2C:
+    status: done
+    commit: eefd1836b196deea944247bc6e89aa481f8c40a0
+    verified: true
+    started: '2026-05-18T11:10:16Z'
+    completed: '2026-05-18T11:17:10Z'
+    attempts: 1
+    notes: ModuleExportsBuilder extended for ExportModuleAsStmt/ExportFromStmt; SA0822/SA0823/SA0824 registered
+      and emitted; codes shifted from brief's SA0811-SA0813 due to Lock range collision
+  2D:
+    status: done
+    commit: 3fd5ef16b9d49f2d96e72511f0ff07f004f45c15
+    verified: true
+    started: '2026-05-18T11:18:53Z'
+    completed: '2026-05-18T11:24:18Z'
+    attempts: 1
+    notes: Extracted EmitImportAs/EmitImport helpers; re-export visitors delegate to same helpers; 13
+      tests all pass
+  2E:
+    status: done
+    commit: afacafb2247e5436ca8e4ae3786a9259810ebcf5
+    verified: true
+    started: '2026-05-18T11:27:20Z'
+    completed: '2026-05-18T11:35:47Z'
+    attempts: 1
+    notes: '8 end-to-end tests proving desugar strategy: namespace/selective re-export, 3-level transitive
+      chain, cache sharing, missing-name error, D-12 same-module use, D-9 dynamic path; zero source changes'
+  2F:
+    status: done
+    commit: 128ea5030374ce254f1c6601e3bedec45ba56563
+    verified: true
+    started: '2026-05-18T16:02:16Z'
+    completed: '2026-05-18T16:20:56Z'
+    attempts: 1
+    notes: 'SA0825/SA0826/SA0827 + OriginPath: 15 tests, fixed 4 bugs in previous turn''s scaffolding
+      (SA0827 emission, SA0826 transitive cycle detection, SA0826 span fallback, OriginPath in ProcessExportFrom)'
+  2G:
+    status: done
+    commit: 992451020150e032b523486635bd2cbb6ba02114
+    verified: true
+    started: '2026-05-18T16:24:24Z'
+    completed: '2026-05-18T16:39:15Z'
+    attempts: 1
+    notes: HoverHandler+DefinitionHandler follow OriginPath chain via EnsureModuleLoaded; ParseModule
+      now runs DocCommentResolver for docstring pass-through; 10 tests pass
+  2H:
+    status: done
+    commit: d6547af96a1d2e43fa37d5ed40bc83a9a03a7657
+    verified: true
+    started: '2026-05-18T16:45:44Z'
+    completed: '2026-05-18T16:59:28Z'
+    attempts: 1
+    notes: Replaced VisitExportFromStmt 2B stub with Doc.Group/Indent/IfBreak combinators; added 11 ReexportFormatterTests;
+      handles trailing-comma in source token stream via SkipToken
+  2I:
+    status: done
+    commit: a2b83f947e9e0ba3f8aef3a29dffbc82bdaf56ca
+    verified: true
+    started: '2026-05-18T17:02:42Z'
+    completed: '2026-05-18T17:21:42Z'
+    attempts: 1
+    notes: tmLanguage extended to capture 'from' in export-from form; 9 regression tests added; Monarch
+      unchanged (keywords already present)
+  2J:
+    status: done
+    commit: ffa046441acbfe39fde2fb1f578cda15800985af
+    verified: true
+    started: '2026-05-18T17:23:14Z'
+    completed: '2026-05-18T17:32:50Z'
+    attempts: 1
+    notes: Spec Re-exports subsection, BNF exportModuleAs/exportFrom, example, CHANGELOG bullet; SA0822-SA0827
+      codes used throughout
+review:
+  status: resolved
+  started: '2026-05-18T17:42:01Z'
+  resolved: '2026-05-18T20:42:10Z'
+  findings_open: 0
+  findings_fixed: 0
