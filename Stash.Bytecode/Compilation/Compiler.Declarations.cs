@@ -340,66 +340,89 @@ partial class Compiler
 
     public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
 
-    // Phase 2D replaces these stubs with real Import/ImportAs emission.
-    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt) =>
-        throw new NotImplementedException("Compiled in phase 2D");
+    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt)
+    {
+        EmitImportAs(stmt.Span, stmt.Path, stmt.Alias);
+        return null;
+    }
 
-    public object? VisitExportFromStmt(ExportFromStmt stmt) =>
-        throw new NotImplementedException("Compiled in phase 2D");
+    public object? VisitExportFromStmt(ExportFromStmt stmt)
+    {
+        EmitImport(stmt.Span, stmt.Path, stmt.Names);
+        return null;
+    }
 
     public object? VisitImportStmt(ImportStmt stmt)
     {
-        _builder.AddSourceMapping(stmt.Span);
+        EmitImport(stmt.Span, stmt.Path, stmt.Names);
+        return null;
+    }
+
+    public object? VisitImportAsStmt(ImportAsStmt stmt)
+    {
+        EmitImportAs(stmt.Span, stmt.Path, stmt.Alias);
+        return null;
+    }
+
+    /// <summary>
+    /// Emits the bytecode sequence for an import-as operation. Used by both
+    /// <see cref="VisitImportAsStmt"/> and <see cref="VisitExportModuleAsStmt"/>.
+    /// </summary>
+    private void EmitImportAs(SourceSpan span, Expr path, Token alias)
+    {
+        _builder.AddSourceMapping(span);
+
+        byte pathReg = CompileExpr(path);
+
+        var metadata = new ImportAsMetadata(alias.Lexeme);
+        ushort metaIdx = _builder.AddConstant(metadata);
+
+        // ImportAs R(pathReg), K(metaIdx) — VM reads path from R(A), writes result to R(A+1)
+        _builder.EmitABx(OpCode.ImportAs, pathReg, metaIdx);
+
+        byte aliasReg = _scope.DeclareLocal(alias.Lexeme);
+        _scope.MarkInitialized();
+
+        if (_enclosing == null && _scope.ScopeDepth == 0)
+        {
+            ushort gslot = _globalSlots.GetOrAllocate(alias.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, aliasReg, gslot);
+        }
+    }
+
+    /// <summary>
+    /// Emits the bytecode sequence for a selective import operation. Used by both
+    /// <see cref="VisitImportStmt"/> and <see cref="VisitExportFromStmt"/>.
+    /// </summary>
+    private void EmitImport(SourceSpan span, Expr path, IReadOnlyList<Token> names)
+    {
+        _builder.AddSourceMapping(span);
 
         // Compile path into a temp register
-        byte pathReg = CompileExpr(stmt.Path);
+        byte pathReg = CompileExpr(path);
 
-        string[] names = new string[stmt.Names.Count];
-        for (int i = 0; i < stmt.Names.Count; i++)
-            names[i] = stmt.Names[i].Lexeme;
+        string[] nameArr = new string[names.Count];
+        for (int i = 0; i < names.Count; i++)
+            nameArr[i] = names[i].Lexeme;
 
-        var metadata = new ImportMetadata(names);
+        var metadata = new ImportMetadata(nameArr);
         ushort metaIdx = _builder.AddConstant(metadata);
 
         // Import R(pathReg), K(metaIdx) — VM reads path from R(A), writes N results to R(A+1)..R(A+N)
         _builder.EmitABx(OpCode.Import, pathReg, metaIdx);
 
         // Declare each imported name as a local (allocated consecutively after pathReg)
-        for (int i = 0; i < stmt.Names.Count; i++)
+        for (int i = 0; i < names.Count; i++)
         {
-            byte nameReg = _scope.DeclareLocal(stmt.Names[i].Lexeme);
+            byte nameReg = _scope.DeclareLocal(names[i].Lexeme);
             _scope.MarkInitialized();
 
             if (_enclosing == null && _scope.ScopeDepth == 0)
             {
-                ushort gslot = _globalSlots.GetOrAllocate(stmt.Names[i].Lexeme);
+                ushort gslot = _globalSlots.GetOrAllocate(names[i].Lexeme);
                 _builder.EmitABx(OpCode.SetGlobal, nameReg, gslot);
             }
         }
-        return null;
-    }
-
-    public object? VisitImportAsStmt(ImportAsStmt stmt)
-    {
-        _builder.AddSourceMapping(stmt.Span);
-
-        byte pathReg = CompileExpr(stmt.Path);
-
-        var metadata = new ImportAsMetadata(stmt.Alias.Lexeme);
-        ushort metaIdx = _builder.AddConstant(metadata);
-
-        // ImportAs R(pathReg), K(metaIdx) — VM reads path from R(A), writes result to R(A+1)
-        _builder.EmitABx(OpCode.ImportAs, pathReg, metaIdx);
-
-        byte aliasReg = _scope.DeclareLocal(stmt.Alias.Lexeme);
-        _scope.MarkInitialized();
-
-        if (_enclosing == null && _scope.ScopeDepth == 0)
-        {
-            ushort gslot = _globalSlots.GetOrAllocate(stmt.Alias.Lexeme);
-            _builder.EmitABx(OpCode.SetGlobal, aliasReg, gslot);
-        }
-        return null;
     }
 
     public object? VisitDestructureStmt(DestructureStmt stmt)
