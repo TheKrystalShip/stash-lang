@@ -739,13 +739,15 @@ public class Parser
 
     /// <summary>
     /// Parses an export declaration. The <c>export</c> soft-keyword token has already been consumed.
-    /// Supports two forms:
+    /// Supports the following forms:
     /// <list type="bullet">
     ///   <item><description><c>export fn/const/struct/enum/interface …</c> — declaration-site form</description></item>
     ///   <item><description><c>export { name1, name2, … };</c> — block form</description></item>
+    ///   <item><description><c>export { name1, name2 } from expr;</c> — selective re-export form</description></item>
+    ///   <item><description><c>export expr as alias;</c> — namespace re-export path form</description></item>
     /// </list>
     /// Raises a parse error immediately when followed by <c>let</c>, <c>extend</c>, or <c>import</c>,
-    /// as none of those forms are exportable.
+    /// as none of those forms are exportable. Also rejects <c>export * from …</c> with an SA0811 reference.
     /// </summary>
     private Stmt ExportDeclaration()
     {
@@ -766,7 +768,13 @@ public class Parser
             throw Error(Peek(), "Import declarations cannot be exported.");
         }
 
-        // export { name1, name2 } — block form
+        // export * from … — wildcard re-export is not supported (SA0811)
+        if (Check(TokenType.Star))
+        {
+            throw Error(Peek(), "Wildcard re-export (`export * from`) is not supported. Use 'export { name, ... } from \"...\"' to list names explicitly. See SA0811.");
+        }
+
+        // export { name1, name2 } — block form or selective re-export form (export { … } from expr;)
         if (Check(TokenType.LeftBrace))
         {
             Advance(); // consume '{'
@@ -781,8 +789,18 @@ public class Parser
             }
 
             Token closeBrace = Consume(TokenType.RightBrace, "Expected '}' after export names.");
-            Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after export block.");
-            return new ExportBlockStmt(exportKeyword, names, MakeSpan(exportKeyword.Span, finalSemi.Span));
+
+            // Peek for 'from' to disambiguate block form from selective re-export form
+            if (CheckIdentifier("from"))
+            {
+                Token fromKeyword = Advance(); // consume contextual 'from'
+                Expr pathExpr = Expression();
+                Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after re-export declaration.");
+                return new ExportFromStmt(exportKeyword, names, fromKeyword, pathExpr, MakeSpan(exportKeyword.Span, finalSemi.Span));
+            }
+
+            Token semi = Consume(TokenType.Semicolon, "Expected ';' after export block.");
+            return new ExportBlockStmt(exportKeyword, names, MakeSpan(exportKeyword.Span, semi.Span));
         }
 
         // export async fn — declaration-site form
@@ -815,7 +833,15 @@ public class Parser
                 Advance();
                 return new ExportDeclStmt(exportKeyword, InterfaceDeclaration(), MakeSpan(exportKeyword.Span, Previous().Span));
             default:
-                throw Error(Peek(), "Expected a declaration after 'export'.");
+                // Path re-export form: export expr as alias;
+                // IsExportKeyword's path-form lookahead has already confirmed that the trailing
+                // tokens before the next depth-0 ';' are 'as Identifier ;', so Expression()
+                // followed by 'as <Identifier> ;' is safe to parse here.
+                Expr path = Expression();
+                Token asKeyword = Consume(TokenType.As, "Expected 'as' after module path in re-export declaration.");
+                Token alias = Consume(TokenType.Identifier, "Expected alias name after 'as' in re-export declaration.");
+                Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after re-export declaration.");
+                return new ExportModuleAsStmt(exportKeyword, path, asKeyword, alias, MakeSpan(exportKeyword.Span, finalSemi.Span));
         }
     }
 
@@ -2869,8 +2895,15 @@ public class Parser
 
     /// <summary>
     /// Returns true when <c>export</c> at the current position is used as a soft keyword (not an identifier).
-    /// The follow-set that activates the keyword is: <c>fn</c>, <c>const</c>, <c>struct</c>, <c>enum</c>,
-    /// <c>interface</c>, <c>let</c>, <c>extend</c>, <c>import</c>, <c>{</c>, or <c>async</c> followed by <c>fn</c>.
+    /// The follow-set that activates the keyword is:
+    /// <list type="bullet">
+    ///   <item><c>fn</c>, <c>const</c>, <c>struct</c>, <c>enum</c>, <c>interface</c>, <c>let</c>,
+    ///         <c>extend</c>, <c>import</c>, <c>{</c> — existing declaration-site or block forms.</item>
+    ///   <item><c>async fn</c> — async function declaration-site form.</item>
+    ///   <item><c>*</c> — wildcard form; activates as keyword so the parser can emit an SA0811-referencing error.</item>
+    ///   <item>Any expression-starter token where the statement (up to the first depth-0 <c>;</c>) ends in
+    ///         <c>as Identifier ;</c> — the path re-export form <c>export expr as alias;</c>.</item>
+    /// </list>
     /// </summary>
     private bool IsExportKeyword()
     {
@@ -2888,15 +2921,72 @@ public class Parser
             case TokenType.Extend:
             case TokenType.Import:
             case TokenType.LeftBrace:
+            case TokenType.Star:
                 return true;
             case TokenType.Identifier:
                 // 'export async fn' — async followed by fn
-                return _tokens[_current + 1].Lexeme == "async"
+                if (_tokens[_current + 1].Lexeme == "async"
                     && _current + 2 < _tokens.Count
-                    && _tokens[_current + 2].Type == TokenType.Fn;
+                    && _tokens[_current + 2].Type == TokenType.Fn)
+                {
+                    return true;
+                }
+                // Fall through to path-form scan below (identifier can be an expression starter)
+                goto default;
             default:
-                return false;
+                // Path-form rule: activate iff next token is an expression starter AND the tokens
+                // immediately before the first depth-0 ';' are 'as Identifier ;'.
+                return IsExportPathFormLookahead();
         }
+    }
+
+    /// <summary>
+    /// Scans forward from <c>_current + 1</c>, tracking <c>()</c>, <c>[]</c>, <c>{}</c> depth, and returns
+    /// <c>true</c> iff:
+    /// <list type="number">
+    ///   <item>The token at <c>_current + 1</c> is an expression starter.</item>
+    ///   <item>There exists a depth-0 <c>;</c> token before EOF.</item>
+    ///   <item>The three tokens immediately preceding that <c>;</c> are <c>As</c>, <c>Identifier</c>, <c>Semicolon</c>.</item>
+    /// </list>
+    /// This identifies the <c>export expr as alias;</c> re-export path form unambiguously.
+    /// </summary>
+    private bool IsExportPathFormLookahead()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        if (!IsExpressionStarter(_tokens[_current + 1].Type)) return false;
+
+        int depth = 0;
+        int semiIndex = -1;
+
+        for (int i = _current + 1; i < _tokens.Count; i++)
+        {
+            TokenType t = _tokens[i].Type;
+
+            if (t == TokenType.LeftParen || t == TokenType.LeftBracket || t == TokenType.LeftBrace)
+            {
+                depth++;
+            }
+            else if (t == TokenType.RightParen || t == TokenType.RightBracket || t == TokenType.RightBrace)
+            {
+                depth--;
+            }
+            else if (t == TokenType.Semicolon && depth == 0)
+            {
+                semiIndex = i;
+                break;
+            }
+            else if (t == TokenType.Eof)
+            {
+                break;
+            }
+        }
+
+        if (semiIndex < 0) return false;
+
+        // Require: tokens[semiIndex-2] == As, tokens[semiIndex-1] == Identifier, tokens[semiIndex] == Semicolon
+        if (semiIndex < 2) return false;
+        return _tokens[semiIndex - 2].Type == TokenType.As
+            && _tokens[semiIndex - 1].Type == TokenType.Identifier;
     }
 
     /// <summary>Returns true if the token type can start an expression (used for await keyword disambiguation).</summary>

@@ -161,4 +161,18 @@ public interface IStmtVisitor<T>
     /// </summary>
     T VisitExportBlockStmt(ExportBlockStmt stmt) =>
         throw new System.NotImplementedException($"{GetType().Name} has not yet implemented VisitExportBlockStmt.");
+
+    /// <summary>
+    /// Visits an <see cref="ExportModuleAsStmt"/> node (<c>export expr as alias;</c>).
+    /// Implementations are added in Phase 2B; until then the default throws <see cref="System.NotImplementedException"/>.
+    /// </summary>
+    T VisitExportModuleAsStmt(ExportModuleAsStmt stmt) =>
+        throw new System.NotImplementedException($"{GetType().Name} has not yet implemented VisitExportModuleAsStmt.");
+
+    /// <summary>
+    /// Visits an <see cref="ExportFromStmt"/> node (<c>export {{ name1, name2, … }} from expr;</c>).
+    /// Implementations are added in Phase 2B; until then the default throws <see cref="System.NotImplementedException"/>.
+    /// </summary>
+    T VisitExportFromStmt(ExportFromStmt stmt) =>
+        throw new System.NotImplementedException($"{GetType().Name} has not yet implemented VisitExportFromStmt.");
 }

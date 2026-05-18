@@ -34,4 +34,6 @@ public enum StmtType : byte
     Unset,
     ExportDecl,
     ExportBlock,
+    ExportModuleAs,
+    ExportFrom,
 }
