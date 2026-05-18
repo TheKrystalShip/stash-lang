@@ -43,7 +43,7 @@ public static class ModuleExportsBuilder
         bool hasAny = false;
         foreach (var stmt in topLevel)
         {
-            if (stmt is ExportDeclStmt or ExportBlockStmt)
+            if (stmt is ExportDeclStmt or ExportBlockStmt or ExportModuleAsStmt or ExportFromStmt)
             {
                 hasAny = true;
                 break;
@@ -70,6 +70,14 @@ public static class ModuleExportsBuilder
 
                 case ExportBlockStmt exportBlock:
                     ProcessExportBlock(exportBlock, topLevelIndex, names, diagnostics);
+                    break;
+
+                case ExportModuleAsStmt exportModuleAs:
+                    ProcessExportModuleAs(exportModuleAs, names, diagnostics);
+                    break;
+
+                case ExportFromStmt exportFrom:
+                    ProcessExportFrom(exportFrom, names, diagnostics);
                     break;
             }
         }
@@ -121,6 +129,17 @@ public static class ModuleExportsBuilder
                     break;
                 case ImportAsStmt importAs:
                     index.TryAdd(importAs.Alias.Lexeme, new TopLevelEntry(SymbolKind.Namespace, importAs.Alias.Span, false, isImport: true));
+                    break;
+                case ExportModuleAsStmt exportModuleAs:
+                    // The alias is both a local namespace binding (like ImportAsStmt) and an export.
+                    index.TryAdd(exportModuleAs.Alias.Lexeme, new TopLevelEntry(SymbolKind.Namespace, exportModuleAs.Alias.Span, false, isImport: true));
+                    break;
+                case ExportFromStmt exportFrom:
+                    // Each name is both a local binding (like ImportStmt) and an export.
+                    foreach (var nameTok in exportFrom.Names)
+                    {
+                        index.TryAdd(nameTok.Lexeme, new TopLevelEntry(SymbolKind.Namespace, nameTok.Span, false, isImport: true));
+                    }
                     break;
             }
         }
@@ -192,6 +211,54 @@ public static class ModuleExportsBuilder
             else
             {
                 names[lexeme] = new ExportEntry(entry.Kind, entry.DeclSpan, nameTok.Span);
+            }
+        }
+    }
+
+    private static void ProcessExportModuleAs(
+        ExportModuleAsStmt exportModuleAs,
+        Dictionary<string, ExportEntry> names,
+        List<SemanticDiagnostic> diagnostics)
+    {
+        var aliasLexeme = exportModuleAs.Alias.Lexeme;
+        var exportSpan = exportModuleAs.Alias.Span;
+
+        if (names.TryGetValue(aliasLexeme, out var existing))
+        {
+            // SA0808: duplicate export
+            diagnostics.Add(DiagnosticDescriptors.SA0808.CreateDiagnosticWithRelated(
+                exportSpan,
+                [new RelatedLocation("First exported here.", existing.ExportSpan)],
+                aliasLexeme));
+        }
+        else
+        {
+            names[aliasLexeme] = new ExportEntry(SymbolKind.Namespace, exportModuleAs.Alias.Span, exportSpan);
+        }
+    }
+
+    private static void ProcessExportFrom(
+        ExportFromStmt exportFrom,
+        Dictionary<string, ExportEntry> names,
+        List<SemanticDiagnostic> diagnostics)
+    {
+        // SA0823 is emitted by the SemanticValidator, not here; the builder simply skips empty lists.
+        foreach (var nameTok in exportFrom.Names)
+        {
+            var lexeme = nameTok.Lexeme;
+            var exportSpan = nameTok.Span;
+
+            if (names.TryGetValue(lexeme, out var existing))
+            {
+                // SA0808: duplicate export
+                diagnostics.Add(DiagnosticDescriptors.SA0808.CreateDiagnosticWithRelated(
+                    exportSpan,
+                    [new RelatedLocation("First exported here.", existing.ExportSpan)],
+                    lexeme));
+            }
+            else
+            {
+                names[lexeme] = new ExportEntry(SymbolKind.Namespace, nameTok.Span, exportSpan);
             }
         }
     }

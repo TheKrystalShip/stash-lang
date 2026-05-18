@@ -747,7 +747,7 @@ public class Parser
     ///   <item><description><c>export expr as alias;</c> — namespace re-export path form</description></item>
     /// </list>
     /// Raises a parse error immediately when followed by <c>let</c>, <c>extend</c>, or <c>import</c>,
-    /// as none of those forms are exportable. Also rejects <c>export * from …</c> with an SA0811 reference.
+    /// as none of those forms are exportable. Also rejects <c>export * from …</c> with an SA0822 reference.
     /// </summary>
     private Stmt ExportDeclaration()
     {
@@ -768,10 +768,10 @@ public class Parser
             throw Error(Peek(), "Import declarations cannot be exported.");
         }
 
-        // export * from … — wildcard re-export is not supported (SA0811)
+        // export * from … — wildcard re-export is not supported (SA0822)
         if (Check(TokenType.Star))
         {
-            throw Error(Peek(), "Wildcard re-export (`export * from`) is not supported. Use 'export { name, ... } from \"...\"' to list names explicitly. See SA0811.");
+            throw Error(Peek(), "Wildcard re-export (`export * from`) is not supported. Use 'export { name, ... } from \"...\"' to list names explicitly. See SA0822.");
         }
 
         // export { name1, name2 } — block form or selective re-export form (export { … } from expr;)
@@ -2900,7 +2900,7 @@ public class Parser
     ///   <item><c>fn</c>, <c>const</c>, <c>struct</c>, <c>enum</c>, <c>interface</c>, <c>let</c>,
     ///         <c>extend</c>, <c>import</c>, <c>{</c> — existing declaration-site or block forms.</item>
     ///   <item><c>async fn</c> — async function declaration-site form.</item>
-    ///   <item><c>*</c> — wildcard form; activates as keyword so the parser can emit an SA0811-referencing error.</item>
+    ///   <item><c>*</c> — wildcard form; activates as keyword so the parser can emit an SA0822-referencing error.</item>
     ///   <item>Any expression-starter token where the statement (up to the first depth-0 <c>;</c>) ends in
     ///         <c>as Identifier ;</c> — the path re-export form <c>export expr as alias;</c>.</item>
     /// </list>

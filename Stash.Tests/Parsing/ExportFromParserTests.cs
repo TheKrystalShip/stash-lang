@@ -166,13 +166,13 @@ public class ExportFromParserTests
     // =========================================================================
 
     [Fact]
-    public void Parse_ExportWildcardFrom_RaisesParseErrorReferencingSA0811()
+    public void Parse_ExportWildcardFrom_RaisesParseErrorReferencingSA0822()
     {
         var tokens = new Lexer("""export * from "p";""", "<test>").ScanTokens();
         var parser = new Parser(tokens);
         parser.ParseProgram();
         Assert.NotEmpty(parser.Errors);
-        Assert.Contains("SA0811", parser.Errors[0]);
+        Assert.Contains("SA0822", parser.Errors[0]);
     }
 
     [Fact]

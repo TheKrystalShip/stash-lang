@@ -176,6 +176,28 @@ public static class DiagnosticDescriptors
             "Shell",
             "Bare identifier '{0}' is resolved as a declared Stash symbol, but an executable with the same name exists on PATH. The PATH executable is shadowed. Use '\\{0}' to force shell execution.");
 
+    // ── SA0822–SA0824 — Re-exports ────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0822 =
+        new("SA0822",
+            "Wildcard re-export is not supported",
+            DiagnosticLevel.Error,
+            "Exports",
+            "Wildcard re-export (`export * from`) is not supported. Use 'export { name, ... } from \"...\"' to list names explicitly.");
+
+    public static readonly DiagnosticDescriptor SA0823 =
+        new("SA0823",
+            "Empty re-export list",
+            DiagnosticLevel.Warning,
+            "Exports",
+            "Re-export list is empty. Add at least one name to export, or remove the statement.");
+
+    public static readonly DiagnosticDescriptor SA0824 =
+        new("SA0824",
+            "Re-export alias collides with existing top-level binding",
+            DiagnosticLevel.Error,
+            "Exports",
+            "Re-export alias '{0}' collides with an existing top-level binding.");
+
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
     public static readonly DiagnosticDescriptor SA0902 = new("SA0902", "Function body too long", DiagnosticLevel.Information, "Style", "Function '{0}' is {1} lines long, exceeding the threshold of {2}. Consider breaking it into smaller functions.");
@@ -299,6 +321,9 @@ public static class DiagnosticDescriptors
         dict[SA0817.Code] = SA0817;
         dict[SA0820.Code] = SA0820;
         dict[SA0821.Code] = SA0821;
+        dict[SA0822.Code] = SA0822;
+        dict[SA0823.Code] = SA0823;
+        dict[SA0824.Code] = SA0824;
         dict[SA0830.Code] = SA0830;
         dict[SA0840.Code] = SA0840;
         dict[SA0841.Code] = SA0841;

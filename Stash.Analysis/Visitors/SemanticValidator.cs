@@ -431,9 +431,68 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitExportBlockStmt(ExportBlockStmt stmt) => null;
 
-    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt) => null;
+    public object? VisitExportModuleAsStmt(ExportModuleAsStmt stmt)
+    {
+        // SA0824: alias collides with an existing top-level binding introduced by a different statement.
+        var alias = stmt.Alias.Lexeme;
+        if (TopLevelNameExistsExcluding(alias, stmt))
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0824.CreateDiagnostic(stmt.Alias.Span, alias));
+        }
 
-    public object? VisitExportFromStmt(ExportFromStmt stmt) => null;
+        return null;
+    }
+
+    public object? VisitExportFromStmt(ExportFromStmt stmt)
+    {
+        // SA0823: empty re-export list.
+        if (stmt.Names.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0823.CreateDiagnostic(stmt.ExportKeyword.Span));
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="name"/> is introduced as a top-level
+    /// binding by any statement in <see cref="_allStatements"/> other than <paramref name="excluding"/>.
+    /// Used by SA0824 to detect alias collisions for <c>export … as alias;</c>.
+    /// </summary>
+    private bool TopLevelNameExistsExcluding(string name, Stmt excluding)
+    {
+        foreach (var topStmt in _allStatements)
+        {
+            if (ReferenceEquals(topStmt, excluding)) continue;
+
+            if (TopLevelStmtDefinesName(topStmt, name))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="stmt"/> directly introduces a top-level
+    /// binding named <paramref name="name"/>.
+    /// </summary>
+    private static bool TopLevelStmtDefinesName(Stmt stmt, string name)
+    {
+        var effective = stmt is ExportDeclStmt ed ? ed.Inner : stmt;
+        return effective switch
+        {
+            FnDeclStmt fn => fn.Name.Lexeme == name,
+            ConstDeclStmt c => c.Name.Lexeme == name,
+            StructDeclStmt s => s.Name.Lexeme == name,
+            EnumDeclStmt e => e.Name.Lexeme == name,
+            InterfaceDeclStmt iface => iface.Name.Lexeme == name,
+            VarDeclStmt v => v.Name.Lexeme == name,
+            ImportAsStmt importAs => importAs.Alias.Lexeme == name,
+            ImportStmt importStmt => importStmt.Names.Exists(t => t.Lexeme == name),
+            ExportModuleAsStmt exportAs => exportAs.Alias.Lexeme == name,
+            ExportFromStmt exportFrom => exportFrom.Names.Exists(t => t.Lexeme == name),
+            _ => false
+        };
+    }
 
     public object? VisitImportStmt(ImportStmt stmt) => null;
 
