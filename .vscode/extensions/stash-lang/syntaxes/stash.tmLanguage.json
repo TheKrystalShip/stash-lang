@@ -98,6 +98,22 @@
     "export-declaration": {
       "patterns": [
         {
+          "comment": "Re-export form: export { a, b } from \"path\"; — highlights 'export', names, and 'from'",
+          "match": "\\b(export)\\b\\s*\\{([^}]*)\\}\\s*(from)\\b",
+          "captures": {
+            "1": { "name": "keyword.control.export.stash" },
+            "2": {
+              "patterns": [
+                {
+                  "name": "variable.other.stash",
+                  "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+                }
+              ]
+            },
+            "3": { "name": "keyword.control.import.stash" }
+          }
+        },
+        {
           "match": "\\b(export)\\b\\s*\\{([^}]*)\\}",
           "captures": {
             "1": { "name": "keyword.control.export.stash" },
