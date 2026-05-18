@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Handlers;
 
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -112,9 +113,25 @@ public class DefinitionHandler : DefinitionHandlerBase
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
-        // If symbol was imported from another file, look up its original definition in that module
+        // If symbol was imported from another file, follow re-export chain to the original declaration
         if (symbol.SourceUri != null)
         {
+            // Follow OriginPath chain for re-exported names
+            var (finalSymbol, finalUri) = HoverHandler.ResolveReExportChain(_analysis, symbol, word);
+            var resolvedUri = finalUri ?? symbol.SourceUri;
+
+            if (finalSymbol != symbol)
+            {
+                // Chain was followed — jump to the original declaration
+                var chainedLocation = new Location
+                {
+                    Uri = DocumentUri.From(resolvedUri),
+                    Range = finalSymbol.Span.ToLspRange()
+                };
+                return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(chainedLocation));
+            }
+
+            // No re-export chain — use the existing cross-module lookup
             var moduleInfo2 = _analysis.ImportResolver.GetModule(symbol.SourceUri.LocalPath);
             if (moduleInfo2 != null)
             {

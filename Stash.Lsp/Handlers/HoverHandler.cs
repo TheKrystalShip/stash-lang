@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -231,8 +232,11 @@ public class HoverHandler : HoverHandlerBase
             return Task.FromResult<Hover?>(null);
         }
 
-        // Normal symbol hover
-        var detail = symbol.Detail ?? symbol.Name;
+        // Normal symbol hover — follow re-export chain if applicable
+        // When the symbol came from a module that re-exports it, look up the original declaration.
+        var (displaySymbol, displaySourceUri) = ResolveReExportChain(_analysis, symbol, word);
+
+        var detail = displaySymbol.Detail ?? displaySymbol.Name;
 
         // Append effective type (narrowed or inferred) if not already shown in detail
         string? effectiveType = result.Symbols.GetNarrowedTypeHint(word, (int)line, (int)col) ?? symbol.TypeHint;
@@ -244,22 +248,23 @@ public class HoverHandler : HoverHandlerBase
             detail += $": {effectiveType}";
         }
 
-        var md = $"```stash\n{detail}\n```\n*{symbol.Kind}*";
-        if (symbol.SourceUri != null)
+        var md = $"```stash\n{detail}\n```\n*{displaySymbol.Kind}*";
+        var effectiveSourceUri = displaySourceUri ?? symbol.SourceUri;
+        if (effectiveSourceUri != null)
         {
-            var importedPath = System.IO.Path.GetFileName(symbol.SourceUri.LocalPath);
+            var importedPath = Path.GetFileName(effectiveSourceUri.LocalPath);
             md += $"\n\n*imported from {importedPath}*";
         }
 
-        if (symbol.Documentation != null)
+        if (displaySymbol.Documentation != null)
         {
-            md += "\n\n---\n\n" + FormatDocumentation(symbol.Documentation);
+            md += "\n\n---\n\n" + FormatDocumentation(displaySymbol.Documentation);
         }
 
         // Render @throws section for user-defined functions that carry structured throws metadata.
-        if (symbol.Throws != null && symbol.Kind is StashSymbolKind.Function or StashSymbolKind.Method)
+        if (displaySymbol.Throws != null && displaySymbol.Kind is StashSymbolKind.Function or StashSymbolKind.Method)
         {
-            var adapted = AdaptThrows(symbol.Throws);
+            var adapted = AdaptThrows(displaySymbol.Throws);
             var userThrows = ThrowsRenderer.Render(adapted);
             if (userThrows != null) md += userThrows;
         }
@@ -356,6 +361,140 @@ public class HoverHandler : HoverHandlerBase
         for (int i = 0; i < throws.Count; i++)
             result[i] = new Stash.Stdlib.Models.ThrowsEntry(throws[i].ErrorType, throws[i].Description);
         return result;
+    }
+
+    /// <summary>
+    /// Follows the re-export chain starting from <paramref name="symbol"/> by consulting
+    /// <see cref="ExportEntry.OriginPath"/> on intermediate modules.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When a symbol was imported from a module that itself re-exports it via
+    /// <c>export { name } from "path";</c>, <see cref="ExportEntry.OriginPath"/> is non-null.
+    /// This method walks the chain transitively (up to a depth cap of 16) until it reaches
+    /// the module that originally declares the name, or until the chain cannot be followed
+    /// (missing module, unresolvable path, or cycle).
+    /// </para>
+    /// <para>
+    /// Cycles are detected by tracking visited absolute paths. A depth cap of 16 provides
+    /// an additional safety bound even when cycle detection is not triggered (e.g., very long
+    /// valid chains).
+    /// </para>
+    /// <para>
+    /// Modules that are not yet in the import resolver's cache are loaded on demand via
+    /// <see cref="AnalysisEngine.EnsureModuleLoaded"/>. This handles transitively-imported modules
+    /// that were not loaded during the primary document's analysis pipeline.
+    /// </para>
+    /// </remarks>
+    /// <param name="analysis">The analysis engine used to load modules on demand.</param>
+    /// <param name="symbol">The symbol resolved in the current document (may have <see cref="SymbolInfo.SourceUri"/> set).</param>
+    /// <param name="name">The symbol name to look up in each intermediate module.</param>
+    /// <returns>
+    /// A tuple of the final <see cref="SymbolInfo"/> (the original declaration) and the
+    /// <see cref="System.Uri"/> of the module that declares it. Both equal the inputs when
+    /// no re-export chain is found.
+    /// </returns>
+    internal static (SymbolInfo Symbol, System.Uri? SourceUri) ResolveReExportChain(
+        AnalysisEngine analysis, SymbolInfo symbol, string name)
+    {
+        const int MaxDepth = 16;
+
+        if (symbol.SourceUri == null)
+        {
+            return (symbol, null);
+        }
+
+        var visited = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var currentModulePath = symbol.SourceUri.LocalPath;
+        var currentSymbol = symbol;
+        System.Uri? currentUri = symbol.SourceUri;
+
+        for (int depth = 0; depth < MaxDepth; depth++)
+        {
+            if (!visited.Add(currentModulePath))
+            {
+                // Cycle detected — bail out with current best result
+                break;
+            }
+
+            var moduleInfo = analysis.EnsureModuleLoaded(currentModulePath);
+            if (moduleInfo == null)
+            {
+                break;
+            }
+
+            // Check if this module has an explicit re-export entry with OriginPath
+            if (moduleInfo.ExportEntries == null || !moduleInfo.ExportEntries.TryGetValue(name, out var entry))
+            {
+                // Module doesn't re-export this name (it may declare it locally)
+                var localSym = moduleInfo.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == name);
+                if (localSym != null)
+                {
+                    currentSymbol = localSym;
+                    currentUri = moduleInfo.Uri;
+                }
+                break;
+            }
+
+            if (entry.OriginPath == null)
+            {
+                // Locally declared in this module — find the actual symbol
+                var localSym = moduleInfo.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == name);
+                if (localSym != null)
+                {
+                    currentSymbol = localSym;
+                    currentUri = moduleInfo.Uri;
+                }
+                break;
+            }
+
+            // Resolve OriginPath relative to the current module's directory
+            var moduleDir = Path.GetDirectoryName(currentModulePath);
+            if (moduleDir == null)
+            {
+                break;
+            }
+
+            var originAbsPath = ResolveOriginPath(entry.OriginPath, moduleDir);
+            if (originAbsPath == null)
+            {
+                break;
+            }
+
+            // Load the origin module (may not be in cache yet for transitive imports)
+            var originModuleInfo = analysis.EnsureModuleLoaded(originAbsPath);
+            if (originModuleInfo == null)
+            {
+                break;
+            }
+
+            var originSym = originModuleInfo.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == name);
+            if (originSym != null)
+            {
+                currentSymbol = originSym;
+                currentUri = originModuleInfo.Uri;
+            }
+            currentModulePath = originAbsPath;
+        }
+
+        return (currentSymbol, currentUri);
+    }
+
+    /// <summary>
+    /// Resolves a raw <see cref="ExportEntry.OriginPath"/> string (relative or bare specifier)
+    /// to an absolute file-system path. Returns <see langword="null"/> if the file does not exist.
+    /// </summary>
+    private static string? ResolveOriginPath(string originPath, string moduleDir)
+    {
+        var candidate = Path.GetFullPath(originPath, moduleDir);
+        if (File.Exists(candidate))
+        {
+            return candidate;
+        }
+
+        // Bare-specifier fallback (e.g. package names) — not common for OriginPath but handled
+        var packagePath = Stash.Common.ModuleResolver.ResolvePackageImport(originPath, moduleDir);
+        return packagePath != null && File.Exists(packagePath) ? packagePath : null;
     }
 
 }

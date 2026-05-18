@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Stash.Tests" />
+    <InternalsVisibleTo Include="StashLsp" />
   </ItemGroup>
 
   <ItemGroup>

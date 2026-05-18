@@ -246,6 +246,39 @@ public class AnalysisEngine
     }
 
     /// <summary>
+    /// Ensures a module is loaded into the import resolver's cache, parsing it if necessary.
+    /// Used by LSP handlers that need to inspect the symbol table of a transitively-imported module
+    /// that was not loaded during the primary document's analysis.
+    /// </summary>
+    /// <param name="absolutePath">The absolute file system path of the module to load.</param>
+    /// <returns>
+    /// The cached or freshly-parsed <see cref="ImportResolver.ModuleInfo"/>, or
+    /// <see langword="null"/> if the file does not exist or cannot be read.
+    /// </returns>
+    public ImportResolver.ModuleInfo? EnsureModuleLoaded(string absolutePath)
+    {
+        var existing = _importResolver.GetModule(absolutePath);
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        if (!File.Exists(absolutePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ParseModule(absolutePath);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Invalidates the import cache for the given file so that the next analysis picks up changes.
     /// </summary>
     /// <param name="absolutePath">The absolute file system path of the module to invalidate.</param>
@@ -433,10 +466,21 @@ public class AnalysisEngine
         var uri = new Uri(absolutePath);
         var source = File.ReadAllText(absolutePath);
 
-        var lexer = new Lexer(source, absolutePath);
+        // Preserve trivia so that DocCommentResolver can attach doc-comment documentation to symbols.
+        var lexer = new Lexer(source, absolutePath, preserveTrivia: true);
         var tokens = lexer.ScanTokens();
 
-        var parser = new Parser(tokens);
+        // Filter out trivia tokens for the parser
+        var parserTokens = new List<Token>(tokens.Count);
+        foreach (var t in tokens)
+        {
+            if (t.Type is not (TokenType.DocComment or TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
+            {
+                parserTokens.Add(t);
+            }
+        }
+
+        var parser = new Parser(parserTokens);
         var statements = parser.ParseProgram();
 
         var collector = new SymbolCollector { IncludeBuiltIns = false };
@@ -445,6 +489,10 @@ public class AnalysisEngine
         var errors = new List<DiagnosticError>();
         errors.AddRange(lexer.StructuredErrors);
         errors.AddRange(parser.StructuredErrors);
+
+        // Attach doc comments so hover over re-exported names shows the original documentation.
+        var docDiagnostics = new List<SemanticDiagnostic>();
+        DocCommentResolver.Resolve(tokens, scopeTree, docDiagnostics);
 
         // Build the explicit export set so the ImportResolver can enforce it.
         var exportDiagnostics = new List<SemanticDiagnostic>();
