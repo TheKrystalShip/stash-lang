@@ -254,6 +254,9 @@ public static class ModuleExportsBuilder
     {
         var aliasLexeme = exportModuleAs.Alias.Lexeme;
         var exportSpan = exportModuleAs.Alias.Span;
+        // Capture the raw path string so LSP hover/go-to-def can follow the chain
+        // via HoverHandler.ResolveReExportChain (matches the pattern used by ProcessExportFrom).
+        var originPath = (exportModuleAs.Path as LiteralExpr)?.Value as string;
 
         if (names.TryGetValue(aliasLexeme, out var existing))
         {
@@ -265,7 +268,7 @@ public static class ModuleExportsBuilder
         }
         else
         {
-            names[aliasLexeme] = new ExportEntry(SymbolKind.Namespace, exportModuleAs.Alias.Span, exportSpan);
+            names[aliasLexeme] = new ExportEntry(SymbolKind.Namespace, exportModuleAs.Alias.Span, exportSpan, originPath);
         }
     }
 

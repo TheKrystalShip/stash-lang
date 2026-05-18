@@ -474,6 +474,13 @@ public class HoverHandler : HoverHandlerBase
                 currentSymbol = originSym;
                 currentUri = originModuleInfo.Uri;
             }
+            else if (entry.Kind == StashSymbolKind.Namespace)
+            {
+                // Namespace re-export: the origin module IS the target. Even if there is no
+                // symbol named `name` declared inside it (because the alias is the module itself),
+                // point the URI at the origin module so hover/go-to-def lands there.
+                currentUri = originModuleInfo.Uri;
+            }
             currentModulePath = originAbsPath;
         }
 

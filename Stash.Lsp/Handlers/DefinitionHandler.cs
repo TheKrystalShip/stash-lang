@@ -131,8 +131,9 @@ public class DefinitionHandler : DefinitionHandlerBase
                 return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(chainedLocation));
             }
 
-            // No re-export chain — use the existing cross-module lookup
-            var moduleInfo2 = _analysis.ImportResolver.GetModule(symbol.SourceUri.LocalPath);
+            // No re-export chain — use the existing cross-module lookup.
+            // Use resolvedUri (which may have been updated by the chain for namespace re-exports).
+            var moduleInfo2 = _analysis.ImportResolver.GetModule(resolvedUri.LocalPath);
             if (moduleInfo2 != null)
             {
                 var originalSymbol = moduleInfo2.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == word);
@@ -140,17 +141,17 @@ public class DefinitionHandler : DefinitionHandlerBase
                 {
                     var importedLocation = new Location
                     {
-                        Uri = DocumentUri.From(symbol.SourceUri),
+                        Uri = DocumentUri.From(resolvedUri),
                         Range = originalSymbol.Span.ToLspRange()
                     };
                     return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(importedLocation));
                 }
             }
 
-            // Fallback: jump to start of the imported file
+            // Fallback: jump to start of the resolved file (follows namespace re-export OriginPath if set)
             var fallbackLocation = new Location
             {
-                Uri = DocumentUri.From(symbol.SourceUri),
+                Uri = DocumentUri.From(resolvedUri),
                 Range = new Range(new Position(0, 0), new Position(0, 0))
             };
             return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(fallbackLocation));

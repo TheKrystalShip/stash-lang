@@ -673,12 +673,11 @@ public class ImportResolver
             {
                 if (!moduleInfo.Exports.Names.Contains(lexeme))
                 {
-                    resolution.Diagnostics.Add(new SemanticDiagnostic(
-                        $"Module '{importPath}' does not export '{lexeme}'.",
-                        DiagnosticLevel.Error,
-                        nameToken.Span));
+                    // SA0828: plain import references a name not in the module's export set.
+                    resolution.Diagnostics.Add(
+                        DiagnosticDescriptors.SA0828.CreateDiagnostic(nameToken.Span, importPath, lexeme));
 
-                    // If the name exists as a private top-level declaration, hint the author.
+                    // SA0809: if the name exists as a private top-level declaration, hint the author.
                     var privateSymbol = moduleInfo.Symbols.GetTopLevel()
                         .FirstOrDefault(s => s.Name == lexeme);
                     if (privateSymbol != null)
@@ -696,10 +695,9 @@ public class ImportResolver
 
             if (exportedSymbol == null)
             {
-                resolution.Diagnostics.Add(new SemanticDiagnostic(
-                    $"Module '{importPath}' does not export '{lexeme}'.",
-                    DiagnosticLevel.Error,
-                    nameToken.Span));
+                // SA0828: name not found in the module's top-level symbols.
+                resolution.Diagnostics.Add(
+                    DiagnosticDescriptors.SA0828.CreateDiagnostic(nameToken.Span, importPath, lexeme));
                 continue;
             }
 

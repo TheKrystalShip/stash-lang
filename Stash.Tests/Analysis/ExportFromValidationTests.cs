@@ -33,7 +33,7 @@ public class ExportFromValidationTests : AnalysisTestBase
         var diagnostics = Validate("""export { } from "lib/x.stash";""");
 
         Assert.Contains(diagnostics, d =>
-            d.Code == "SA0823" && d.Level == DiagnosticLevel.Warning);
+            d.Code == "SA0823" && d.Level == DiagnosticLevel.Error);
     }
 
     [Fact]

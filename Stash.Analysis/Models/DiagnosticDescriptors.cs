@@ -187,7 +187,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0823 =
         new("SA0823",
             "Empty re-export list",
-            DiagnosticLevel.Warning,
+            DiagnosticLevel.Error,
             "Exports",
             "Re-export list is empty. Add at least one name to export, or remove the statement.");
 
@@ -219,6 +219,13 @@ public static class DiagnosticDescriptors
             DiagnosticLevel.Information,
             "Exports",
             "Redundant import+export pair. Use 'export {{ {0} }} from \"{1}\";' to re-export directly.");
+
+    public static readonly DiagnosticDescriptor SA0828 =
+        new("SA0828",
+            "Import references name not in source module's export set",
+            DiagnosticLevel.Error,
+            "Imports",
+            "Module '{0}' does not export '{1}'.");
 
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
@@ -349,6 +356,7 @@ public static class DiagnosticDescriptors
         dict[SA0825.Code] = SA0825;
         dict[SA0826.Code] = SA0826;
         dict[SA0827.Code] = SA0827;
+        dict[SA0828.Code] = SA0828;
         dict[SA0830.Code] = SA0830;
         dict[SA0840.Code] = SA0840;
         dict[SA0841.Code] = SA0841;

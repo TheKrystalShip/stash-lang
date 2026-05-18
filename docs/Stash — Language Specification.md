@@ -436,7 +436,7 @@ export { Color, Size, Direction };
 ```
 
 A trailing comma after the last name is allowed. An empty list
-`export {} from "p";` is accepted but produces a warning (SA0823).
+`export {} from "p";` is rejected as an error (SA0823).
 
 The imported names are **also bound as locals** in the re-exporting module:
 
@@ -505,7 +505,7 @@ export { Color, Size }   from "lib/types.stash";
 | Diagnostic | Level | Trigger | Example |
 | ---------- | ----- | ------- | ------- |
 | SA0822 | Error | Wildcard re-export (`export * from "p"`) | `export * from "lib/x.stash";` |
-| SA0823 | Warning | Empty re-export list (`export {} from "p"`) | `export {} from "lib/x.stash";` |
+| SA0823 | Error | Empty re-export list (`export {} from "p"`) | `export {} from "lib/x.stash";` |
 | SA0824 | Error | Re-export alias collides with an existing top-level binding | `const fmt = 1; export "lib/fmt.stash" as fmt;` |
 | SA0825 | Error | Re-exported name not in the source module's export set | `export { _internal } from "lib/x.stash";` |
 | SA0826 | Error | Re-export cycle detected | `A` re-exports `B`, `B` re-exports `A` |

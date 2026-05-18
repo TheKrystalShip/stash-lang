@@ -1,3 +1,4 @@
+using System.Linq;
 using Stash.Analysis;
 using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;
@@ -129,6 +130,66 @@ public class ImportResolverExportTests
             Assert.Contains(resolution.Diagnostics,
                 d => d.Level == DiagnosticLevel.Error && d.Message.Contains("does not export 'missing'"));
             Assert.DoesNotContain(resolution.Diagnostics, d => d.Code == "SA0809");
+        }
+        finally
+        {
+            Cleanup(tempDir);
+        }
+    }
+
+    // ── F01 regression: SA0828 coded diagnostic, no duplicate on private name ──
+
+    [Fact]
+    public void Analysis_ImportPrivateName_EmitsSA0828_NotCodelessDiagnostic()
+    {
+        // F01 fix: the missing-name diagnostic must carry the SA0828 code — not a hand-coded
+        // codeless SemanticDiagnostic. `helper` is private (not exported).
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { helper } from \"module.stash\";";
+
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
+        try
+        {
+            var resolver = new ImportResolver();
+            var stmts = new Parser(new Lexer(MainSource, mainUri.LocalPath).ScanTokens()).ParseProgram();
+            var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
+
+            // Exactly one SA0828 error (not codeless)
+            Assert.Contains(resolution.Diagnostics,
+                d => d.Code == "SA0828" && d.Level == DiagnosticLevel.Error);
+            // No diagnostic should have a null/empty code
+            Assert.DoesNotContain(resolution.Diagnostics, d => string.IsNullOrEmpty(d.Code));
+        }
+        finally
+        {
+            Cleanup(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analysis_ImportPrivateName_NoDuplicateDiagnostic_WhenPrivateSymbolExists()
+    {
+        // F01 fix: when `helper` is private, exactly two diagnostics should fire:
+        // SA0828 (not-in-export-set) and SA0809 (private-name hint). NOT three.
+        const string ModuleSource = "export fn greet() { }\nfn helper() { }";
+        const string MainSource = "import { helper } from \"module.stash\";";
+
+        var (tempDir, _, mainUri) = SetupTest(ModuleSource, MainSource);
+        try
+        {
+            var resolver = new ImportResolver();
+            var stmts = new Parser(new Lexer(MainSource, mainUri.LocalPath).ScanTokens()).ParseProgram();
+            var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
+
+            // Must have SA0828 (the primary error)
+            Assert.Contains(resolution.Diagnostics, d => d.Code == "SA0828");
+            // Must have SA0809 (the hint)
+            Assert.Contains(resolution.Diagnostics, d => d.Code == "SA0809");
+            // Must NOT have two separate SA0828 or two "does not export" errors for the same name
+            var notExportDiags = resolution.Diagnostics
+                .Where(d => d.Message.Contains("does not export 'helper'"))
+                .ToList();
+            Assert.Single(notExportDiags);
         }
         finally
         {
