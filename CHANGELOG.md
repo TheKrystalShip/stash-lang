@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Explicit module exports (`export` keyword):** Modules can now restrict their public surface with `export`. Prefix any `fn`, `async fn`, `const`, `struct`, `enum`, or `interface` declaration with `export`, or list names in a standalone `export { name1, name2 }` block anywhere at the top level. When a module contains at least one `export` annotation, only the annotated symbols are visible to importers; all other top-level bindings become module-private. **Back-compatibility is fully preserved:** files with zero `export` annotations continue to export every top-level symbol, exactly as before — existing scripts and packages require no changes.
 
+- **Re-export forms** — modules can now re-export imported symbols directly:
+  - `export "lib/x.stash" as x;` — re-exports a module as a namespace (Form 1)
+  - `export { foo, bar } from "lib/x.stash";` — re-exports selective names (Form 2)
+  Both forms also bind the alias/names as locals in the same module, so the re-exporting file may use them directly. Wildcard `export * from "p"` is intentionally not supported (SA0822). New diagnostics SA0822–SA0827 cover wildcard re-export, empty list, alias collision, missing source export, re-export cycles, and the redundant `import { x } from "p"; export { x };` pattern. Bytecode format unchanged (still v4) — re-exports desugar to ordinary `Import`/`ImportAs` instructions plus export-set entries.
+
 - **Spreading `null` splices zero entries** — In function-call and array-literal contexts, `...null` is now equivalent to spreading an empty array (`f(1, ...null, 2) → f(1, 2)`, `[1, ...null, 2] → [1, 2]`). Symmetric with empty-array splat and Stash's general null-tolerance for collection-like operations. Dict-literal spread of `null` continues to error (dict spread requires key/value pairs). The analyzer's SA0503 warning is narrowed to fire only in the dict context.
 - **String spread error message points to the helpers** — `[..."abc"]` and `f(..."abc")` now throw `RuntimeError: Cannot spread string; use str.words(s) or str.shellSplit(s) and spread the result.` The `...str` syntax is reserved for a future char-iterable string semantics.
 

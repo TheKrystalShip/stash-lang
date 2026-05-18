@@ -392,18 +392,149 @@ as diagnostics:
 | SA0808     | A name appears in the export set more than once (via any combination of forms)                       |
 | SA0809     | An importer references a name that exists in the module but is not exported (information-level hint) |
 
+### Re-exports
+
+A re-export statement combines an `import` with an export-set contribution in a
+single declaration. The primary motivation is **barrel files** (`index.stash`)
+that collect and re-expose symbols from several sub-modules so consumers can
+import from one place.
+
+#### Form 1: Namespace re-export
+
+```stash
+export "lib/data.stash" as data;
+```
+
+This is exactly equivalent to writing:
+
+```stash
+import "lib/data.stash" as data;
+export { data };
+```
+
+The alias `data` is **also bound as a local** in the same module (see
+"Same-module binding" below), so the same file may use it immediately:
+
+```stash
+export "lib/math.stash" as math;
+
+// Same-module use — works because `math` is a local binding too.
+io.println(math.pi);
+```
+
+#### Form 2: Selective re-export
+
+```stash
+export { Color, Size, Direction } from "lib/types.stash";
+```
+
+This is exactly equivalent to:
+
+```stash
+import { Color, Size, Direction } from "lib/types.stash";
+export { Color, Size, Direction };
+```
+
+A trailing comma after the last name is allowed. An empty list
+`export {} from "p";` is accepted but produces a warning (SA0823).
+
+The imported names are **also bound as locals** in the re-exporting module:
+
+```stash
+export { Color } from "lib/types.stash";
+
+// Same-module use — `Color` is a local binding.
+let bg = Color.Red;
+io.println(bg);
+```
+
+#### Path is an expression (D-9)
+
+Both forms accept any expression that evaluates to a string at runtime,
+mirroring `import`'s grammar:
+
+```stash
+const TYPES_PATH = "lib/types.stash";
+export { Color } from TYPES_PATH;
+
+const MATH_MOD  = "lib/math.stash";
+export MATH_MOD as math;
+```
+
+#### No wildcard re-export
+
+`export * from "p";` is a compile-time error (SA0822). Stash rejects wildcard
+imports on principle; wildcard re-exports are symmetrically disallowed.
+
+#### Same-module binding (D-12)
+
+A re-export statement **also introduces the alias or selected names as local
+bindings** in the current module, exactly as if a plain `import` statement had
+appeared. The runtime value (a namespace, function, struct type, etc.) is the
+same object a regular `import` would produce.
+
+```stash
+// index.stash — barrel + same-module use
+export "lib/fmt.stash"   as fmt;
+export { encode, decode } from "lib/codec.stash";
+
+// Works inside the same file:
+io.println(fmt.version);
+let raw = encode("hello");
+```
+
+This makes re-export statements a strict superset of their two-line
+`import` + `export` equivalents — migrating from the two-line form never
+removes a local binding that was already usable.
+
+#### Unused-import interaction (D-11)
+
+Re-export statements count as **uses** of the imported name or module.
+A barrel file that only imports and re-exports a name does NOT trigger the
+unused-import diagnostic, because contributing a name to the export set is a
+meaningful use.
+
+```stash
+// This barrel file emits no SA-unused diagnostics.
+export "lib/fmt.stash"   as fmt;
+export { Color, Size }   from "lib/types.stash";
+```
+
+#### Diagnostics
+
+| Diagnostic | Level | Trigger | Example |
+| ---------- | ----- | ------- | ------- |
+| SA0822 | Error | Wildcard re-export (`export * from "p"`) | `export * from "lib/x.stash";` |
+| SA0823 | Warning | Empty re-export list (`export {} from "p"`) | `export {} from "lib/x.stash";` |
+| SA0824 | Error | Re-export alias collides with an existing top-level binding | `const fmt = 1; export "lib/fmt.stash" as fmt;` |
+| SA0825 | Error | Re-exported name not in the source module's export set | `export { _internal } from "lib/x.stash";` |
+| SA0826 | Error | Re-export cycle detected | `A` re-exports `B`, `B` re-exports `A` |
+| SA0827 | Information | Redundant `import { x } from "p"; export { x };` pair — use `export { x } from "p";` instead | `import { x } from "p"; export { x };` |
+
+#### Bytecode invariant
+
+Re-export forms compile to the same bytecode as their `import` equivalents
+plus an export-set entry. No new opcodes are required, and `.stashc` files
+remain at format version v4 — the serializer is unchanged.
+
 #### Interaction with `fn export(...)`
 
 `export` is a **contextual (soft) keyword**. It gains keyword meaning only at
 statement boundaries when followed by `fn`, `async`, `const`, `struct`, `enum`,
-`interface`, or `{`. In all other positions — including function names, variable
-names, and call expressions — it is a plain identifier:
+`interface`, `{`, or an **expression starter** (for the path re-export form). In
+all other positions — including function names, variable names, and call
+expressions — it is a plain identifier:
 
 ```stash
 fn export(container, path) { ... }   // valid: "export" is the function name
 export(container, "/tmp/out");       // valid: call expression
 let export = 5;                      // valid: let binding named "export"
 ```
+
+The path re-export form (`export <expr> as <id>;`) is distinguished from a call
+expression `export(...)` by a lookahead rule: the keyword activates only when
+the token sequence from the current position to the next depth-0 semicolon ends
+in `as <Identifier> ;`.
 
 ## Values and Types
 
@@ -1514,6 +1645,8 @@ declaration         = asyncFunctionDecl
                     | importDecl
                     | exportDecl
                     | exportBlock
+                    | exportModuleAs
+                    | exportFrom
                     | statement ;
 
 variableDecl        = "let" (identifier typed? | destructurePattern) initializer? ";" ;
@@ -1564,6 +1697,10 @@ decoratedDecl       = functionDecl
                     | interfaceDecl ;
 
 exportBlock         = "export" "{" exportName ("," exportName)* ","? "}" ";" ;
+
+exportModuleAs      = "export" expression "as" identifier ";" ;
+
+exportFrom          = "export" "{" [ exportName ("," exportName)* ","? ] "}" "from" expression ";" ;
 
 exportName          = identifier ;
 
