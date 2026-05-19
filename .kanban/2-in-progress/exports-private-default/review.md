@@ -23,7 +23,7 @@ Findings below are all stale-comment / plan-divergence items, no semantic defect
 ## F01 — [IMPORTANT] final_verify runs unfiltered `dotnet test` — will refuse promotion
 
 **Status:** fixed
-**Fixed in:** TBD
+**Fixed in:** 2bd4ca2
 **Files:** `.kanban/2-in-progress/exports-private-default/plan.yaml:final_verify`
 **Phase:** cross-phase / promotion
 **Commit:** -
