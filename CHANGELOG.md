@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Language
 
-- **Explicit module exports (`export` keyword):** Modules can now restrict their public surface with `export`. Prefix any `fn`, `async fn`, `const`, `struct`, `enum`, or `interface` declaration with `export`, or list names in a standalone `export { name1, name2 }` block anywhere at the top level. When a module contains at least one `export` annotation, only the annotated symbols are visible to importers; all other top-level bindings become module-private. **Back-compatibility is fully preserved:** files with zero `export` annotations continue to export every top-level symbol, exactly as before — existing scripts and packages require no changes.
+- **Explicit module exports (`export` keyword):** Modules now use a strict private-by-default model. Every top-level binding is module-private unless explicitly annotated with `export`. Prefix any `fn`, `async fn`, `const`, `struct`, `enum`, or `interface` declaration with `export`, or list names in a standalone `export { name1, name2 }` block anywhere at the top level. There is one rule: a symbol is accessible to importers only if it carries an `export` annotation. **Breaking change:** the previous dual-mode behavior — where a file with zero `export` annotations exposed all top-level symbols — is removed. See the breaking-changes note below.
 
 - **Re-export forms** — modules can now re-export imported symbols directly:
   - `export "lib/x.stash" as x;` — re-exports a module as a namespace (Form 1)
@@ -61,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`EnsureTokenFresh` warns on failure** — when an automatic token refresh fails, the CLI now prints a `warning:` message to stderr identifying the cause (expired refresh token, server error, or network unreachable) instead of failing silently.
 
 ### Changed
+
+#### Language
+
+- **Exports are now private-by-default (breaking change):** The previous dual-mode export behavior has been removed. Previously, a module with zero `export` annotations exposed all its top-level symbols to importers; a module with at least one annotation switched to allowlist mode. This distinction is gone. All top-level bindings are now module-private regardless of whether the file contains any `export` annotations. **Migration:** any module that was implicitly exporting symbols (i.e. had no `export` annotations) must now annotate each symbol it intends to export with `export`, or add an `export { name1, name2 }` block. Modules that already used `export` annotations exclusively are unaffected.
 
 #### Registry
 

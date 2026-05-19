@@ -319,14 +319,11 @@ cycle handling.
 
 ### Exports
 
-By default, every top-level binding in a Stash module is visible to importers.
-When a module author wants to restrict the public surface, they annotate
-declarations or list names explicitly with the `export` contextual keyword.
-
-**Back-compatibility rule:** A module that contains zero `export` annotations
-behaves as before — every top-level binding is accessible to importers. The
-opt-in model means that all existing scripts and packages continue to work
-without modification.
+By default, every top-level binding in a Stash module is **module-private** —
+not visible to importers. A symbol is exported only when it is explicitly
+annotated with the `export` keyword, either at the declaration site or via a
+standalone `export { }` block. There is one rule: if you want a name accessible
+to importers, you must annotate it with `export`.
 
 #### Declaration-site form
 
@@ -367,9 +364,8 @@ const VERSION = "1.0.0";
 export { VERSION };           // diff (from decl-site) and VERSION are exported
 ```
 
-An empty block `export { }` is valid. `HasExplicitExports` becomes `true` and the
-module exposes zero symbols — useful for scripts that are loaded for side effects
-only.
+An empty block `export { }` is valid and the module exposes zero symbols —
+useful for scripts that are loaded for side effects only.
 
 #### Syntax restrictions
 
