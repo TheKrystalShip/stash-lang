@@ -145,6 +145,15 @@ required. They can be thrown with struct-literal syntax and caught by typed `cat
 | ---- | ------ | ----------- |
 | `AliasError` | `message: string`, `aliasName: string?`, `detail: string?` | Alias name is invalid or conflicts with an existing definition. |
 | `CancellationError` | `message: string` | External cancellation (Ctrl-C or programmatic cancellation). |
+| `CliAmbiguousOption` | `message: string`, `option: string`, `candidates: array<string>` | A long-option prefix matches more than one declared option. |
+| `CliInvalidValue` | `message: string`, `option: string?`, `value: string`, `expected: string` | Type conversion or choices membership failed. |
+| `CliMissingRequired` | `message: string`, `name: string` | A required positional or option was not supplied. |
+| `CliMissingValue` | `message: string`, `option: string` | An option that requires a value appeared without one. |
+| `CliSchemaError` | `message: string`, `field: string`, `reason: string` | Schema construction failed (duplicate names, invalid default, unknown type tag). |
+| `CliUnexpectedPositional` | `message: string`, `value: string` | Extra positional after all positional slots are filled. |
+| `CliUnknownCommand` | `message: string`, `name: string`, `candidates: array<string>` | A subcommand name was not declared. |
+| `CliUnknownOption` | `message: string`, `option: string` | An option not declared in the schema was encountered. |
+| `CliValidationFailed` | `message: string`, `option: string?`, `message: string` | min/max/pattern/validate rejected the value. |
 | `CommandError` | `message: string`, `exitCode: int`, `stderr: string`, `stdout: string`, `command: string` | Strict command ($!(...)) exited with a non-zero exit code. |
 | `IOError` | `message: string` | File or network I/O failure. |
 | `IndexError` | `message: string` | Array or string index is out of bounds. |

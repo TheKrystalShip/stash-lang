@@ -2,6 +2,7 @@ namespace Stash.Tests.Stdlib;
 
 using Stash.Runtime.Errors;
 using Stash.Tests.Interpreting;
+using Xunit;
 
 /// <summary>
 /// Tests for P1 of the cli-arg-parsing feature:
@@ -244,26 +245,26 @@ public class CliSchemaBuilderTests : StashTestBase
     // =========================================================================
 
     [Fact]
-    public void CliSchema_DuplicateShortOption_ThrowsValueError()
+    public void CliSchema_DuplicateShortOption_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.schema({ output: cli.option("string", { short: "o" }), other: cli.option("string", { short: "o" }) });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
         Assert.Contains("-o", ex.Message);
     }
 
     [Fact]
-    public void CliSchema_DuplicateLongOption_ThrowsValueError()
+    public void CliSchema_DuplicateLongOption_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.schema({ output: cli.option("string", { name: "out" }), outputDir: cli.option("string", { name: "out" }) });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
         Assert.Contains("--out", ex.Message);
     }
 
     [Fact]
-    public void CliSchema_RepeatedPositionalNotLast_ThrowsValueError()
+    public void CliSchema_RepeatedPositionalNotLast_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.schema({ files: cli.positional("string", { repeated: true }), output: cli.positional("string") });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
         Assert.Contains("repeated", ex.Message);
     }
 
@@ -284,18 +285,18 @@ public class CliSchemaBuilderTests : StashTestBase
     }
 
     [Fact]
-    public void CliSchema_DefaultFailsConversionForInt_ThrowsValueError()
+    public void CliSchema_DefaultFailsConversionForInt_ThrowsCliSchemaError()
     {
         // Pass "default" key in the options dict (dict key, not field accessor — valid in Stash)
         var ex = RunCapturingError("""cli.schema({ retries: cli.option("int", { default: "not-a-number" }) });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
     }
 
     [Fact]
-    public void CliSchema_DefaultFailsConversionForBool_ThrowsValueError()
+    public void CliSchema_DefaultFailsConversionForBool_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.schema({ verbose: cli.flag({ default: "maybe" }) });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
     }
 
     [Fact]
@@ -313,18 +314,18 @@ public class CliSchemaBuilderTests : StashTestBase
     }
 
     [Fact]
-    public void CliSchema_ShadowHelpLong_ThrowsValueError()
+    public void CliSchema_ShadowHelpLong_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.schema({ help: cli.flag() });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
         Assert.Contains("--help", ex.Message);
     }
 
     [Fact]
-    public void CliSchema_ShadowHelpShort_ThrowsValueError()
+    public void CliSchema_ShadowHelpShort_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.schema({ something: cli.flag({ short: "h" }) });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
         Assert.Contains("-h", ex.Message);
     }
 

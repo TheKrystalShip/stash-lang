@@ -53,7 +53,10 @@ public static partial class CliBuiltIns
             if (entry.AsObj is StashInstance cmdInstCheck && cmdInstCheck.TypeName == "CliCommandSpec")
             {
                 if (!commandSpec.IsNull)
-                    throw new ValueError("'cli.schema': only one cli.command() entry is allowed per schema.");
+                    throw new CliSchemaError(
+                        "'cli.schema': only one cli.command() entry is allowed per schema.",
+                        field: propName,
+                        reason: "duplicate command spec");
                 commandSpec = entry;
                 continue;
             }
@@ -76,20 +79,32 @@ public static partial class CliBuiltIns
 
             // Check for --help / -h shadowing
             if (helpFlag && longName == "help")
-                throw new ValueError($"'cli.schema': option '{propName}' shadows the reserved '--help' flag. Set helpFlag: false to disable the implicit help flag.");
+                throw new CliSchemaError(
+                    $"'cli.schema': option '{propName}' shadows the reserved '--help' flag. Set helpFlag: false to disable the implicit help flag.",
+                    field: propName,
+                    reason: "shadows --help");
             if (helpFlag && shortOpt == "h")
-                throw new ValueError($"'cli.schema': option '{propName}' shadows the reserved '-h' (help) short flag. Set helpFlag: false or use a different short.");
+                throw new CliSchemaError(
+                    $"'cli.schema': option '{propName}' shadows the reserved '-h' (help) short flag. Set helpFlag: false or use a different short.",
+                    field: propName,
+                    reason: "shadows -h");
 
             // ── Duplicate long name detection ──────────────────────────────
             if (seenLongs.TryGetValue(longName, out string? prevLong))
-                throw new ValueError($"'cli.schema': duplicate long option '--{longName}' from both '{prevLong}' and '{propName}'.");
+                throw new CliSchemaError(
+                    $"'cli.schema': duplicate long option '--{longName}' from both '{prevLong}' and '{propName}'.",
+                    field: propName,
+                    reason: $"duplicate long option '--{longName}'");
             seenLongs[longName] = propName;
 
             // ── Duplicate short option detection ──────────────────────────
             if (shortOpt is not null)
             {
                 if (seenShorts.TryGetValue(shortOpt, out string? prevShort))
-                    throw new ValueError($"'cli.schema': duplicate short option '-{shortOpt}' from both '{prevShort}' and '{propName}'.");
+                    throw new CliSchemaError(
+                        $"'cli.schema': duplicate short option '-{shortOpt}' from both '{prevShort}' and '{propName}'.",
+                        field: propName,
+                        reason: $"duplicate short option '-{shortOpt}'");
                 seenShorts[shortOpt] = propName;
             }
 
@@ -114,8 +129,12 @@ public static partial class CliBuiltIns
             if (posVal.IsObj && posVal.AsObj is StashInstance pos)
             {
                 StashValue repeatedVal = pos.GetField("repeated", null);
+                string posName = pos.GetField("name", null) is { IsObj: true } nf && nf.AsObj is string ns2 ? ns2 : $"positional[{i}]";
                 if (repeatedVal.IsBool && repeatedVal.AsBool)
-                    throw new ValueError("'cli.schema': a positional with repeated: true must be the last positional argument.");
+                    throw new CliSchemaError(
+                        "'cli.schema': a positional with repeated: true must be the last positional argument.",
+                        field: posName,
+                        reason: "repeated positional is not last");
             }
         }
 
@@ -171,7 +190,7 @@ public static partial class CliBuiltIns
 
     /// <summary>
     /// Validates that a default value can be converted by the declared type tag.
-    /// Raises ValueError (placeholder for P1; rewired to CliSchemaError in P2).
+    /// Raises CliSchemaError when the default is incompatible with the declared type tag.
     /// </summary>
     private static void ValidateDefault(StashValue defaultValue, string typeTag, string propName)
     {
@@ -179,7 +198,10 @@ public static partial class CliBuiltIns
         {
             case "string":
                 if (!(defaultValue.IsObj && defaultValue.AsObj is string))
-                    throw new ValueError($"'cli.schema': default for '{propName}' cannot be used as type 'string'.");
+                    throw new CliSchemaError(
+                        $"'cli.schema': default for '{propName}' cannot be used as type 'string'.",
+                        field: propName,
+                        reason: "default is not a string");
                 break;
 
             case "int":
@@ -188,11 +210,17 @@ public static partial class CliBuiltIns
                     if (defaultValue.IsObj && defaultValue.AsObj is string strInt)
                     {
                         if (!long.TryParse(strInt, out _))
-                            throw new ValueError($"'cli.schema': default for '{propName}' cannot be converted to type 'int'.");
+                            throw new CliSchemaError(
+                                $"'cli.schema': default for '{propName}' cannot be converted to type 'int'.",
+                                field: propName,
+                                reason: "default cannot be converted to int");
                     }
                     else
                     {
-                        throw new ValueError($"'cli.schema': default for '{propName}' cannot be used as type 'int'.");
+                        throw new CliSchemaError(
+                            $"'cli.schema': default for '{propName}' cannot be used as type 'int'.",
+                            field: propName,
+                            reason: "default is not an int");
                     }
                 }
                 break;
@@ -203,11 +231,17 @@ public static partial class CliBuiltIns
                     if (defaultValue.IsObj && defaultValue.AsObj is string strFloat)
                     {
                         if (!double.TryParse(strFloat, NumberStyles.Float, CultureInfo.InvariantCulture, out _))
-                            throw new ValueError($"'cli.schema': default for '{propName}' cannot be converted to type 'float'.");
+                            throw new CliSchemaError(
+                                $"'cli.schema': default for '{propName}' cannot be converted to type 'float'.",
+                                field: propName,
+                                reason: "default cannot be converted to float");
                     }
                     else
                     {
-                        throw new ValueError($"'cli.schema': default for '{propName}' cannot be used as type 'float'.");
+                        throw new CliSchemaError(
+                            $"'cli.schema': default for '{propName}' cannot be used as type 'float'.",
+                            field: propName,
+                            reason: "default is not a float");
                     }
                 }
                 break;
@@ -221,11 +255,17 @@ public static partial class CliBuiltIns
                         if (lower != "true" && lower != "false" &&
                             lower != "1" && lower != "0" &&
                             lower != "yes" && lower != "no")
-                            throw new ValueError($"'cli.schema': default for '{propName}' cannot be converted to type 'bool'.");
+                            throw new CliSchemaError(
+                                $"'cli.schema': default for '{propName}' cannot be converted to type 'bool'.",
+                                field: propName,
+                                reason: "default cannot be converted to bool");
                     }
                     else
                     {
-                        throw new ValueError($"'cli.schema': default for '{propName}' cannot be used as type 'bool'.");
+                        throw new CliSchemaError(
+                            $"'cli.schema': default for '{propName}' cannot be used as type 'bool'.",
+                            field: propName,
+                            reason: "default is not a bool");
                     }
                 }
                 break;
@@ -237,7 +277,10 @@ public static partial class CliBuiltIns
             case "bytesize":
             case "semver":
                 if (!(defaultValue.IsObj && defaultValue.AsObj is string))
-                    throw new ValueError($"'cli.schema': default for '{propName}' with type '{typeTag}' must be a string.");
+                    throw new CliSchemaError(
+                        $"'cli.schema': default for '{propName}' with type '{typeTag}' must be a string.",
+                        field: propName,
+                        reason: $"default for type '{typeTag}' must be a string");
                 break;
         }
     }
