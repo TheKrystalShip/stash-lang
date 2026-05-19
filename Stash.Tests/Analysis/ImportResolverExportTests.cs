@@ -374,7 +374,7 @@ public class ImportResolverExportTests
     // ── ModuleInfo.Exports is set when module uses export annotations ─────────
 
     [Fact]
-    public void ModuleInfo_Exports_NotNull_WhenModuleHasExplicitExports()
+    public void ModuleInfo_Exports_NotNull_WhenModuleHasAnyExportAnnotation()
     {
         const string ModuleSource = "export fn greet() { }";
         const string MainSource = "import { greet } from \"module.stash\";";

@@ -125,7 +125,10 @@ public class ImportResolver
         /// <param name="symbols">The parsed symbol tree for the module.</param>
         /// <param name="errors">Any parse errors encountered.</param>
         /// <param name="exports">
-        /// The explicit export set, or <see langword="null"/> for legacy modules that export everything.
+        /// The export set. Always non-null for modules compiled from source (an empty <c>Names</c>
+        /// means the module exports nothing). <see langword="null"/> is reserved for v3 on-disk
+        /// <c>.stashc</c> chunks loaded without an export section; the VM exposes their full globals
+        /// as a legacy fallback.
         /// </param>
         public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors,
             Stash.Core.Resolution.ModuleExports? exports = null)

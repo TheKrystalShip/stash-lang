@@ -10,7 +10,7 @@ using Stash.Lexing;
 /// <remarks>
 /// <code>
 /// export { diff, VERSION };
-/// export { };   // valid — HasExplicitExports becomes true with zero names
+/// export { };   // valid — Names ends up empty, same as a module with no export annotations
 /// </code>
 /// Each identifier in <see cref="Names"/> must resolve to a top-level <c>fn</c>, <c>const</c>,
 /// <c>struct</c>, <c>enum</c>, or <c>interface</c> declaration in the same file. Validation of
