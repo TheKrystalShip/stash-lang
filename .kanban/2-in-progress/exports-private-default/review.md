@@ -82,7 +82,7 @@ python3 scripts/checkpoint/promote-done.sh exports-private-default --dry-run
 ## F02 — [MINOR] Stale `HasExplicitExports` mention in `ExportBlockStmt` doc comment
 
 **Status:** fixed
-**Fixed in:** placeholder-sha
+**Fixed in:** 8911a54
 **Files:** `Stash.Core/Parsing/AST/ExportBlockStmt.cs:13`
 **Phase:** 1A (carried from parent feature)
 **Commit:** -
@@ -127,7 +127,7 @@ Should return zero hits outside `.kanban/4-done/`.
 ## F03 — [MINOR] Stale test method name `ModuleInfo_Exports_NotNull_WhenModuleHasExplicitExports`
 
 **Status:** fixed
-**Fixed in:** placeholder-sha
+**Fixed in:** 8911a54
 **Files:** `Stash.Tests/Analysis/ImportResolverExportTests.cs:377`
 **Phase:** 1D
 **Commit:** d3aa652
@@ -167,7 +167,7 @@ Both should be green / empty outside the kanban folder.
 ## F04 — [MINOR] Stale "legacy modules export everything" wording in `ImportResolver.ModuleInfo` ctor doc
 
 **Status:** fixed
-**Fixed in:** placeholder-sha
+**Fixed in:** 8911a54
 **Files:** `Stash.Analysis/Resolvers/ImportResolver.cs:128`
 **Phase:** 1B
 **Commit:** 890fb30
