@@ -147,13 +147,13 @@ public class ExportLspTests : AnalysisTestBase
     }
 
     [Fact]
-    public void ModuleExportsSymbol_LegacyModule_ReturnsTrueForAnyTopLevelName()
+    public void ModuleExportsSymbol_ZeroAnnotations_ReturnsFalseForAllNames()
     {
-        // Legacy module: no export annotations → every top-level symbol is exported.
+        // Zero-annotation module: empty Names set → no top-level symbol is exported.
         var moduleInfo = BuildModuleInfo("fn greet() {}\nfn helper() {}");
 
-        Assert.True(CodeActionHandler.ModuleExportsSymbol(moduleInfo, "greet"));
-        Assert.True(CodeActionHandler.ModuleExportsSymbol(moduleInfo, "helper"));
+        Assert.False(CodeActionHandler.ModuleExportsSymbol(moduleInfo, "greet"));
+        Assert.False(CodeActionHandler.ModuleExportsSymbol(moduleInfo, "helper"));
         Assert.False(CodeActionHandler.ModuleExportsSymbol(moduleInfo, "unknown"));
     }
 
@@ -201,16 +201,17 @@ public class ExportLspTests : AnalysisTestBase
     }
 
     [Fact]
-    public void Lsp_AddMissingImport_LegacyModule_ProposesAllTopLevelNames()
+    public void Lsp_AddMissingImport_ZeroAnnotations_ProposesNoNames()
     {
-        // Legacy module: no export annotations → all top-level names are importable.
+        // Zero-annotation module: empty export set → no top-level names are importable;
+        // "add missing import" must not propose any action.
         var moduleInfo = BuildModuleInfo("fn greet() {}\nfn helper() {}", "/tmp/lib.stash");
         var candidates = new[] { ("/tmp/lib.stash", moduleInfo) };
 
         var result = FullAnalyze("let x = 0;");
         var currentFilePath = "/tmp/main.stash";
 
-        // Both "greet" and "helper" should produce actions.
+        // Neither "greet" nor "helper" should produce an action.
         var actionsForGreet = CodeActionHandler.BuildAddMissingImportActions(
             "greet", currentFilePath,
             candidates.Select(c => (c.Item1, c.moduleInfo)),
@@ -221,8 +222,8 @@ public class ExportLspTests : AnalysisTestBase
             candidates.Select(c => (c.Item1, c.moduleInfo)),
             TestUri, result).ToList();
 
-        Assert.Single(actionsForGreet);
-        Assert.Single(actionsForHelper);
+        Assert.Empty(actionsForGreet);
+        Assert.Empty(actionsForHelper);
     }
 
     [Fact]

@@ -84,13 +84,19 @@ public class ImportResolver
         public List<DiagnosticError> Errors { get; }
 
         /// <summary>
-        /// Gets the explicit export set for the module, or <see langword="null"/> if the module
-        /// uses legacy "export everything" semantics (no <c>export</c> annotations).
+        /// Gets the export set for the module.
         /// </summary>
         /// <remarks>
-        /// When non-null, only names present in <see cref="Stash.Core.Resolution.ModuleExports.Names"/>
-        /// are visible to importers.  An empty <see cref="Stash.Core.Resolution.ModuleExports.Names"/>
-        /// means the module exports nothing.
+        /// <para>
+        /// For modules compiled from source this is always non-null.
+        /// Only names present in <see cref="Stash.Core.Resolution.ModuleExports.Names"/>
+        /// are visible to importers; an empty <see cref="Stash.Core.Resolution.ModuleExports.Names"/>
+        /// means the module exports nothing (e.g. a file with zero <c>export</c> annotations).
+        /// </para>
+        /// <para>
+        /// <see langword="null"/> is reserved for v3 on-disk <c>.stashc</c> chunks that pre-date
+        /// the export-set feature; the VM exposes their full globals as a legacy fallback.
+        /// </para>
         /// </remarks>
         public Stash.Core.Resolution.ModuleExports? Exports { get; }
 

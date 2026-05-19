@@ -197,12 +197,12 @@ public class ImportResolverExportTests
         }
     }
 
-    // ── Analysis_LegacyModule_BehavesAsBefore ─────────────────────────────────
+    // ── Analysis_ZeroAnnotations_ExposesNothing ───────────────────────────────
 
     [Fact]
-    public void Analysis_LegacyModule_BehavesAsBefore()
+    public void Analysis_ZeroAnnotations_ExposesNothing()
     {
-        // Module with no export annotations — all top-level symbols are importable.
+        // Module with no export annotations — all top-level symbols are private (exports nothing).
         const string ModuleSource = "fn greet() { }\nfn helper() { }";
         const string MainSource = "import { greet, helper } from \"module.stash\";";
 
@@ -214,9 +214,12 @@ public class ImportResolverExportTests
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
-            Assert.Empty(resolution.Diagnostics);
-            Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "greet");
-            Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "helper");
+            // Zero-annotation module exports nothing — both imports should fail.
+            Assert.Contains(resolution.Diagnostics,
+                d => d.Level == DiagnosticLevel.Error && d.Message.Contains("does not export 'greet'"));
+            Assert.Contains(resolution.Diagnostics,
+                d => d.Level == DiagnosticLevel.Error && d.Message.Contains("does not export 'helper'"));
+            Assert.Empty(resolution.ResolvedSymbols);
         }
         finally
         {
@@ -225,9 +228,10 @@ public class ImportResolverExportTests
     }
 
     [Fact]
-    public void Analysis_LegacyModule_NoSA0809Emitted()
+    public void Analysis_ZeroAnnotations_NoSA0809ForMissingName()
     {
-        // No export annotations → no SA0809 hint should ever be emitted.
+        // No export annotations, and the requested name doesn't exist as a top-level symbol
+        // → SA0828 error expected, but no SA0809 hint (nothing to hint about).
         const string ModuleSource = "fn helper() { }";
         const string MainSource = "import { nonexistent } from \"module.stash\";";
 
@@ -239,7 +243,7 @@ public class ImportResolverExportTests
             var stmts = new Parser(lexer.ScanTokens()).ParseProgram();
             var resolution = resolver.ResolveImports(mainUri, stmts, ParseModuleWithExports);
 
-            // Error expected, but no SA0809 hint (legacy module).
+            // Error expected; no SA0809 because 'nonexistent' is not a top-level symbol.
             Assert.Contains(resolution.Diagnostics, d => d.Level == DiagnosticLevel.Error);
             Assert.DoesNotContain(resolution.Diagnostics, d => d.Code == "SA0809");
         }
@@ -283,9 +287,10 @@ public class ImportResolverExportTests
     }
 
     [Fact]
-    public void Analysis_NamespaceImport_LegacyModule_ExposesAllSymbols()
+    public void Analysis_NamespaceImport_ZeroAnnotations_ExposesNothing()
     {
-        // No export annotations → namespace alias exposes all top-level symbols.
+        // No export annotations → namespace alias exposes no top-level symbols
+        // (zero-annotation module exports nothing).
         const string ModuleSource = "fn greet() { }\nfn helper() { }";
         const string MainSource = "import \"module.stash\" as utils;";
 
@@ -301,8 +306,9 @@ public class ImportResolverExportTests
             var moduleInfo = resolution.NamespaceImports["utils"];
             var topLevel = moduleInfo.Symbols.GetTopLevel().ToList();
 
-            Assert.Contains(topLevel, s => s.Name == "greet");
-            Assert.Contains(topLevel, s => s.Name == "helper");
+            // Zero-annotation module: namespace alias is empty (no exported symbols).
+            Assert.DoesNotContain(topLevel, s => s.Name == "greet");
+            Assert.DoesNotContain(topLevel, s => s.Name == "helper");
         }
         finally
         {

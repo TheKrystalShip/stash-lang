@@ -234,6 +234,35 @@ public class ImportExportRuntimeTests : BytecodeTestBase
         Assert.Equal(1, loadCount);
     }
 
+    // ── Vm_ZeroAnnotationModule_AllImportsFail ────────────────────────────────
+
+    [Fact]
+    public void Vm_ZeroAnnotationModule_AllImportsFail()
+    {
+        // Source-compiled module with zero export annotations: Exports.Names is empty,
+        // so every top-level name is module-private.  Importing any name must raise
+        // "Module does not export 'X'".
+        Chunk moduleChunk = CompileWithExports("""
+            fn helper() { return 42; }
+            fn another() { return 1; }
+            """);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import { helper } from "mod";
+                return helper();
+            };
+            return func();
+            """;
+
+        Chunk mainChunk = CompileSource(mainSource);
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (_, _) => moduleChunk;
+        var ex = Assert.Throws<RuntimeError>(() => vm.Execute(mainChunk));
+        Assert.Contains("does not export 'helper'", ex.Message);
+    }
+
     // ── Vm_EmptyExportBlock_AllImportsFail ────────────────────────────────────
 
     [Fact]
