@@ -27,48 +27,49 @@
 6. [`arr`](#arr--array-operations)
 7. [`assert`](#assert--assertions)
 8. [`buf`](#buf--byte-buffer-operations)
-9. [`complete`](#complete--tab-completion)
-10. [`config`](#config--format-agnostic-configuration)
-11. [`conv`](#conv--type-conversion)
-12. [`crypto`](#crypto--cryptography-and-hashing)
-13. [`csv`](#csv--csv-parsing-and-writing)
-14. [`dict`](#dict--dictionary-operations)
-15. [`dns`](#dns--dns-resolution)
-16. [`encoding`](#encoding--encoding-and-decoding)
-17. [`env`](#env--environment-and-process-state)
-18. [`fs`](#fs--file-system-operations)
-19. [`http`](#http--http-client)
-20. [`ini`](#ini--ini-configuration)
-21. [`io`](#io--standard-io)
-22. [`json`](#json--json)
-23. [`log`](#log--structured-logging)
-24. [`math`](#math--math-functions)
-25. [`net`](#net--networking-utilities)
-26. [`path`](#path--path-manipulation)
-27. [`pkg`](#pkg--package-manager)
-28. [`process`](#process--process-management)
-29. [`prompt`](#prompt--repl-prompt-customisation)
-30. [`re`](#re--regular-expressions)
-31. [`scheduler`](#scheduler--os-service-management)
-32. [`sftp`](#sftp--sftp-file-transfer)
-33. [`shell`](#shell--interactive-shell-state)
-34. [`signal`](#signal--signal-handling)
-35. [`ssh`](#ssh--ssh-remote-execution)
-36. [`str`](#str--string-operations)
-37. [`sys`](#sys--system-information)
-38. [`task`](#task--parallel-tasks)
-39. [`tcp`](#tcp--tcp-sockets)
-40. [`term`](#term--terminal-formatting)
-41. [`test`](#test--test-framework)
-42. [`time`](#time--time-and-date)
-43. [`toml`](#toml--toml)
-44. [`tpl`](#tpl--templating)
-45. [`udp`](#udp--udp-datagrams)
-46. [`ws`](#ws--websockets)
-47. [`xml`](#xml--xml)
-48. [`yaml`](#yaml--yaml)
-49. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
-50. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
+9. [`cli`](#cli--cli)
+10. [`complete`](#complete--tab-completion)
+11. [`config`](#config--format-agnostic-configuration)
+12. [`conv`](#conv--type-conversion)
+13. [`crypto`](#crypto--cryptography-and-hashing)
+14. [`csv`](#csv--csv-parsing-and-writing)
+15. [`dict`](#dict--dictionary-operations)
+16. [`dns`](#dns--dns-resolution)
+17. [`encoding`](#encoding--encoding-and-decoding)
+18. [`env`](#env--environment-and-process-state)
+19. [`fs`](#fs--file-system-operations)
+20. [`http`](#http--http-client)
+21. [`ini`](#ini--ini-configuration)
+22. [`io`](#io--standard-io)
+23. [`json`](#json--json)
+24. [`log`](#log--structured-logging)
+25. [`math`](#math--math-functions)
+26. [`net`](#net--networking-utilities)
+27. [`path`](#path--path-manipulation)
+28. [`pkg`](#pkg--package-manager)
+29. [`process`](#process--process-management)
+30. [`prompt`](#prompt--repl-prompt-customisation)
+31. [`re`](#re--regular-expressions)
+32. [`scheduler`](#scheduler--os-service-management)
+33. [`sftp`](#sftp--sftp-file-transfer)
+34. [`shell`](#shell--interactive-shell-state)
+35. [`signal`](#signal--signal-handling)
+36. [`ssh`](#ssh--ssh-remote-execution)
+37. [`str`](#str--string-operations)
+38. [`sys`](#sys--system-information)
+39. [`task`](#task--parallel-tasks)
+40. [`tcp`](#tcp--tcp-sockets)
+41. [`term`](#term--terminal-formatting)
+42. [`test`](#test--test-framework)
+43. [`time`](#time--time-and-date)
+44. [`toml`](#toml--toml)
+45. [`tpl`](#tpl--templating)
+46. [`udp`](#udp--udp-datagrams)
+47. [`ws`](#ws--websockets)
+48. [`xml`](#xml--xml)
+49. [`yaml`](#yaml--yaml)
+50. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
+51. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
 
 ---
 
@@ -2598,6 +2599,162 @@ Writes a 64-bit IEEE 754 double (little-endian) at the given offset.
 
 - `IndexError` — if the offset is out of range for the buffer length
 - `TypeError` — if any argument has the wrong type
+
+---
+
+## `cli` — cli
+
+**Capability:** _none — always available_
+**Throws:** `TypeError`, `ValueError`
+
+### Types
+
+#### `CliArgSpec` struct
+
+A single argument specification (positional, option, or flag).
+
+| Field | Type |
+| ----- | ---- |
+| `kind` | `string` |
+| `typeTag` | `string` |
+| `name` | `string` |
+| `short` | `string` |
+| `aliases` | `array` |
+| `required` | `bool` |
+| `defaultVal` | `any` |
+| `repeated` | `bool` |
+| `choices` | `array` |
+| `min` | `any` |
+| `max` | `any` |
+| `pattern` | `string` |
+| `validate` | `any` |
+| `help` | `string` |
+| `metavar` | `string` |
+| `env` | `string` |
+| `negatable` | `bool` |
+
+#### `CliCommandSpec` struct
+
+Maps subcommand names to their nested CliSchema values.
+
+| Field | Type |
+| ----- | ---- |
+| `commands` | `dict` |
+
+#### `CliSchema` struct
+
+A fully-validated schema that describes a script's CLI surface.
+
+| Field | Type |
+| ----- | ---- |
+| `positionals` | `array` |
+| `options` | `dict` |
+| `command` | `any` |
+| `programName` | `string` |
+| `description` | `string` |
+| `helpFlag` | `bool` |
+
+#### `CliCommand` struct
+
+The parsed subcommand result.
+
+| Field | Type |
+| ----- | ---- |
+| `name` | `string` |
+| `path` | `array` |
+| `values` | `dict` |
+
+#### `CliParseResult` struct
+
+Result returned by cli.tryParse.
+
+| Field | Type |
+| ----- | ---- |
+| `ok` | `bool` |
+| `value` | `dict` |
+| `error` | `any` |
+| `helpRequested` | `bool` |
+
+### Functions
+
+| Function | Returns | Throws | Description |
+| -------- | ------- | ------ | ----------- |
+| `cli.positional` | `CliArgSpec` | `ValueError` | Declares a positional argument. |
+| `cli.option` | `CliArgSpec` | `ValueError` | Declares a named option that takes a value. |
+| `cli.flag` | `CliArgSpec` | — | Declares a boolean flag. |
+| `cli.command` | `CliCommandSpec` | `TypeError` | Declares a set of named subcommands. |
+| `cli.schema` | `CliSchema` | `TypeError`, `ValueError` | Validates a dict definition and builds a reusable schema value. |
+
+### Function Details
+
+#### `cli.positional(typeTag: any, ...options: any) -> CliArgSpec`
+
+Declares a positional argument.
+
+**Parameters:**
+
+- `typeTag`: `any` — Type tag: "string", "int", "float", "bool", "duration", "ip", "bytesize", "semver".
+- `options`: `any` — Optional dict of spec keys: name, required, default, repeated, choices, validate, help, metavar.
+
+**Returns:** `CliArgSpec` — A CliArgSpec for use inside cli.schema()
+
+**Throws:**
+
+- `ValueError` — if typeTag is not a recognised type tag
+
+#### `cli.option(typeTag: any, ...options: any) -> CliArgSpec`
+
+Declares a named option that takes a value.
+
+**Parameters:**
+
+- `typeTag`: `any` — Type tag: "string", "int", "float", "bool", "duration", "ip", "bytesize", "semver".
+- `options`: `any` — Optional dict of spec keys: name, short, aliases, required, default, repeated, choices, min, max, pattern, validate, help, metavar, env.
+
+**Returns:** `CliArgSpec` — A CliArgSpec for use inside cli.schema()
+
+**Throws:**
+
+- `ValueError` — if typeTag is not a recognised type tag
+
+#### `cli.flag(...options: any) -> CliArgSpec`
+
+Declares a boolean flag.
+
+**Parameters:**
+
+- `options`: `any` — Optional dict of spec keys: name, short, aliases, help, default, negatable.
+
+**Returns:** `CliArgSpec` — A CliArgSpec for use inside cli.schema()
+
+#### `cli.command(...definition: any) -> CliCommandSpec`
+
+Declares a set of named subcommands.
+
+**Parameters:**
+
+- `definition`: `any` — Dict mapping subcommand names to CliSchema values.
+
+**Returns:** `CliCommandSpec` — A CliCommandSpec for use inside cli.schema()
+
+**Throws:**
+
+- `TypeError` — if definition is not a dict
+
+#### `cli.schema(...definition: any) -> CliSchema`
+
+Validates a dict definition and builds a reusable schema value.
+
+**Parameters:**
+
+- `definition`: `any` — Dict mapping Stash property names to CliArgSpec / CliCommandSpec values.
+
+**Returns:** `CliSchema` — A validated CliSchema
+
+**Throws:**
+
+- `TypeError` — if definition is not a dict
+- `ValueError` — if any schema-time validation rule is violated
 
 ---
 
