@@ -159,10 +159,10 @@ public class ExportValidationTests : AnalysisTestBase
         Assert.Contains(diagnostics, d => d.Code == "SA0808"); // foo duplicate
     }
 
-    // ── Regression: legacy modules (no export) are unaffected ────────────────
+    // ── Files with no export annotations: SA0805 only fires on exported lets ──
 
     [Fact]
-    public void Validate_LegacyModuleWithLetBindings_NoSA0805()
+    public void Validate_LetBindingsInUnannotatedFile_NoSA0805()
     {
         var diagnostics = Validate("""
             let x = 0;

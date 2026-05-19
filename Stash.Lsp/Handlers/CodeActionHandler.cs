@@ -679,7 +679,7 @@ public class CodeActionHandler : CodeActionHandlerBase
     /// <summary>
     /// Produces "Add import" <see cref="CodeAction"/> instances for each workspace module that
     /// exports <paramref name="symbolName"/>.  Filters by <see cref="ImportResolver.ModuleInfo.Exports"/>
-    /// when the module has explicit exports; falls back to top-level symbol lookup for legacy modules.
+    /// when the module has explicit exports; falls back to top-level symbol lookup for v3 on-disk chunks (Exports == null fallback).
     /// </summary>
     /// <returns>
     /// One <see cref="CodeAction"/> per matching module, or an empty sequence when no candidates exist.

@@ -37,10 +37,10 @@ public class ImportExportRuntimeTests : BytecodeTestBase
     }
 
     /// <summary>
-    /// Compiles <paramref name="source"/> without running the export builder so that
-    /// <c>Chunk.Exports</c> is <see langword="null"/> (legacy module behaviour).
+    /// Compiles <paramref name="source"/> without running the export builder, simulating
+    /// a v3 on-disk chunk where the bytecode reader produces <c>Chunk.Exports</c> as <see langword="null"/>.
     /// </summary>
-    private static Chunk CompileLegacy(string source) => CompileSource(source);
+    private static Chunk CompileWithoutExports(string source) => CompileSource(source);
 
     /// <summary>
     /// Executes <paramref name="mainSource"/> inside a VM that resolves all module
@@ -78,13 +78,13 @@ public class ImportExportRuntimeTests : BytecodeTestBase
         Assert.Equal(1L, result);
     }
 
-    // ── Vm_ImportFromLegacyModule_StillSeesEverything ─────────────────────────
+    // ── Vm_NullExportsChunk_VmExposesFullGlobals ─────────────────────────────
 
     [Fact]
-    public void Vm_ImportFromLegacyModule_StillSeesEverything()
+    public void Vm_NullExportsChunk_VmExposesFullGlobals()
     {
-        // Legacy module (no export annotations) — Chunk.Exports is null.
-        Chunk moduleChunk = CompileLegacy("""
+        // v3 on-disk chunk (Exports == null) — VM falls back to full global exposure.
+        Chunk moduleChunk = CompileWithoutExports("""
             let value = null;
             value = 99;
             """);

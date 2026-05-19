@@ -217,7 +217,8 @@ Replace the `<param>` text with the same v3-on-disk explanation already on the p
 
 ## F05 — [NIT] "Legacy modules (no export) are unaffected" comment in `ExportValidationTests`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ed419cd
 **Files:** `Stash.Tests/Analysis/ExportValidationTests.cs:162`
 **Phase:** 1D
 **Commit:** d3aa652
@@ -254,7 +255,8 @@ exported lets ──` and rename the test method to `Validate_LetBindingsInUnann
 
 ## F06 — [NIT] Inline comment in `ImportExportRuntimeTests.CompileLegacy` helper says "legacy module"
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ed419cd
 **Files:** `Stash.Tests/Bytecode/ImportExportRuntimeTests.cs:40-43`
 **Phase:** 1B
 **Commit:** 890fb30
@@ -297,7 +299,8 @@ branch of `BuildExportedEnvironment`, not "legacy modules."
 
 ## F07 — [NIT] CodeActionHandler doc summary still says "legacy modules"
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ed419cd
 **Files:** `Stash.Lsp/Handlers/CodeActionHandler.cs:682`
 **Phase:** 1B
 **Commit:** 890fb30
