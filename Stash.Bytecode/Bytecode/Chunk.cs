@@ -69,10 +69,10 @@ public sealed class Chunk
     public StdlibManifest? StdlibManifest { get; internal set; }
 
     /// <summary>
-    /// The module's explicit export set, or <see langword="null"/> for nested function chunks
-    /// and for top-level chunks compiled without export information.
-    /// When non-null and <see cref="ModuleExports.HasExplicitExports"/> is <see langword="true"/>,
-    /// only the names in <see cref="ModuleExports.Names"/> are visible to importers.
+    /// The module's export set, or <see langword="null"/> for nested function chunks
+    /// and for v3 on-disk chunks loaded without export information.
+    /// When non-null, only the names in <see cref="ModuleExports.Names"/> are visible to
+    /// importers.  An empty <see cref="ModuleExports.Names"/> means the module exports nothing.
     /// </summary>
     public ModuleExports? Exports { get; internal set; }
 

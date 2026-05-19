@@ -753,17 +753,21 @@ public class CodeActionHandler : CodeActionHandlerBase
 
     /// <summary>
     /// Returns <see langword="true"/> when <paramref name="moduleInfo"/> exposes
-    /// <paramref name="symbolName"/> to importers, respecting the explicit export set when present.
+    /// <paramref name="symbolName"/> to importers.
+    /// When <see cref="ImportResolver.ModuleInfo.Exports"/> is non-null, only names in
+    /// <see cref="Stash.Core.Resolution.ModuleExports.Names"/> are visible.
+    /// When <see cref="ImportResolver.ModuleInfo.Exports"/> is <see langword="null"/> (v3
+    /// on-disk chunk), every top-level symbol is treated as exported (legacy fallback).
     /// </summary>
     internal static bool ModuleExportsSymbol(ImportResolver.ModuleInfo moduleInfo, string symbolName)
     {
-        if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+        if (moduleInfo.Exports != null)
         {
-            // Module has an explicit export set — only names in that set are visible.
+            // Module has an export set — only names in that set are visible.
             return moduleInfo.Exports.Names.Contains(symbolName);
         }
 
-        // Legacy module: every top-level symbol is exported.
+        // v3 on-disk chunk (Exports == null): every top-level symbol is exported.
         return moduleInfo.Symbols.GetTopLevel().Any(s => s.Name == symbolName);
     }
 

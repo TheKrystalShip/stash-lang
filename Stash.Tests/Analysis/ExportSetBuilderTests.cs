@@ -22,39 +22,36 @@ public class ExportSetBuilderTests : AnalysisTestBase
         return (exports, diagnostics);
     }
 
-    // ── HasExplicitExports == false when no annotations ───────────────────────
+    // ── Empty Names when no annotations ──────────────────────────────────────
 
     [Fact]
-    public void Build_NoAnnotations_HasExplicitExportsFalse()
+    public void Build_NoAnnotations_NamesEmpty()
     {
         var (exports, diagnostics) = Build("""
             fn helper() {}
             const VERSION = "1.0";
             """);
 
-        Assert.False(exports.HasExplicitExports);
         Assert.Empty(exports.Names);
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public void Build_EmptySource_HasExplicitExportsFalse()
+    public void Build_EmptySource_NamesEmpty()
     {
         var (exports, diagnostics) = Build("");
 
-        Assert.False(exports.HasExplicitExports);
         Assert.Empty(exports.Names);
         Assert.Empty(diagnostics);
     }
 
-    // ── Empty export block → HasExplicitExports == true, zero Names ───────────
+    // ── Empty export block → zero Names ──────────────────────────────────────
 
     [Fact]
-    public void Build_EmptyExportBlock_HasExplicitExportsTrueZeroNames()
+    public void Build_EmptyExportBlock_ZeroNames()
     {
         var (exports, diagnostics) = Build("export { };");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Empty(exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -66,7 +63,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("export fn diff(a, b) {}");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("diff", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -76,7 +72,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("""export const VERSION = "1.0";""");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("VERSION", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -86,7 +81,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("export struct Point { x: int, y: int }");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("Point", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -96,7 +90,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("export enum Status { Ok, Err }");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("Status", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -106,7 +99,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("export interface Closer { fn close() }");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("Closer", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -121,7 +113,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
             export { diff };
             """);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("diff", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -135,7 +126,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
             export { diff, VERSION };
             """);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("diff", exports.Names);
         Assert.Contains("VERSION", exports.Names);
         Assert.Empty(diagnostics);
@@ -152,7 +142,6 @@ public class ExportSetBuilderTests : AnalysisTestBase
             export { VERSION };
             """);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("diff", exports.Names);
         Assert.Contains("VERSION", exports.Names);
         Assert.Equal(2, exports.Names.Count);
@@ -246,5 +235,18 @@ public class ExportSetBuilderTests : AnalysisTestBase
         var dup = diagnostics.FirstOrDefault(d => d.Code == "SA0808");
         Assert.NotNull(dup);
         Assert.NotEmpty(dup.RelatedLocations);
+    }
+
+    // ── New behavior: zero annotations exports nothing ────────────────────────
+
+    [Fact]
+    public void Build_NoAnnotations_ReturnsEmpty()
+    {
+        var (exports, _) = Build("""
+            fn helper() {}
+            const VERSION = "1.0";
+            """);
+
+        Assert.Same(ModuleExports.Empty, exports);
     }
 }

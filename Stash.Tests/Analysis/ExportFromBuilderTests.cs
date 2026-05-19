@@ -30,17 +30,16 @@ public class ExportFromBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("""export "lib/data.stash" as data;""");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("data", exports.Names);
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public void Build_ExportModuleAs_HasExplicitExportsTrue()
+    public void Build_ExportModuleAs_NamesNonEmpty()
     {
         var (exports, _) = Build("""export "lib/x.stash" as x;""");
 
-        Assert.True(exports.HasExplicitExports);
+        Assert.NotEmpty(exports.Names);
     }
 
     // ── ExportFromStmt: basic name collection ─────────────────────────────────
@@ -50,7 +49,6 @@ public class ExportFromBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("""export { Color } from "lib/types.stash";""");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("Color", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -60,7 +58,6 @@ public class ExportFromBuilderTests : AnalysisTestBase
     {
         var (exports, diagnostics) = Build("""export { Color, Size, Direction } from "lib/types.stash";""");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("Color", exports.Names);
         Assert.Contains("Size", exports.Names);
         Assert.Contains("Direction", exports.Names);
@@ -69,12 +66,12 @@ public class ExportFromBuilderTests : AnalysisTestBase
     }
 
     [Fact]
-    public void Build_ExportFrom_EmptyList_HasExplicitExportsTrueZeroNames()
+    public void Build_ExportFrom_EmptyList_ZeroNames()
     {
-        // Empty list triggers SA0823 in validator, but builder still sets HasExplicitExports = true.
+        // Empty list triggers SA0823 in validator; builder produces empty Names
+        // (indistinguishable from no annotations — both mean "exports nothing").
         var (exports, diagnostics) = Build("""export { } from "lib/x.stash";""");
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Empty(exports.Names);
         Assert.Empty(diagnostics); // SA0823 is emitted by SemanticValidator, not builder
     }
@@ -89,7 +86,6 @@ public class ExportFromBuilderTests : AnalysisTestBase
             export "lib/data.stash" as data;
             """);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("helper", exports.Names);
         Assert.Contains("data", exports.Names);
         Assert.Equal(2, exports.Names.Count);
@@ -105,7 +101,6 @@ public class ExportFromBuilderTests : AnalysisTestBase
             export { Color, Size } from "lib/types.stash";
             """);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("foo", exports.Names);
         Assert.Contains("Color", exports.Names);
         Assert.Contains("Size", exports.Names);

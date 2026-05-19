@@ -385,7 +385,6 @@ public class ImportResolverExportTests
             var moduleInfo = resolver.GetModule(modulePath);
             Assert.NotNull(moduleInfo);
             Assert.NotNull(moduleInfo.Exports);
-            Assert.True(moduleInfo.Exports.HasExplicitExports);
             Assert.True(moduleInfo.Exports.Names.Contains("greet"));
         }
         finally
@@ -395,7 +394,7 @@ public class ImportResolverExportTests
     }
 
     [Fact]
-    public void ModuleInfo_Exports_HasExplicitExportsFalse_ForLegacyModule()
+    public void ModuleInfo_Exports_NamesEmpty_ForModuleWithNoAnnotations()
     {
         const string ModuleSource = "fn greet() { }";
         const string MainSource = "import { greet } from \"module.stash\";";
@@ -412,7 +411,7 @@ public class ImportResolverExportTests
             var moduleInfo = resolver.GetModule(modulePath);
             Assert.NotNull(moduleInfo);
             Assert.NotNull(moduleInfo.Exports);
-            Assert.False(moduleInfo.Exports.HasExplicitExports);
+            Assert.Empty(moduleInfo.Exports.Names);
         }
         finally
         {

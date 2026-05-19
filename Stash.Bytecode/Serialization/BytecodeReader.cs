@@ -526,16 +526,13 @@ public static class BytecodeReader
 
     private static ModuleExports ReadExports(BinaryReader reader)
     {
-        // HasExplicitExports flag (u8)
-        bool hasExplicitExports = reader.ReadByte() != 0;
-
         // Names: u16 count + [length-prefixed strings]
         ushort nameCount = reader.ReadUInt16();
         var builder = ImmutableHashSet.CreateBuilder<string>();
         for (int i = 0; i < nameCount; i++)
             builder.Add(ReadString16(reader));
 
-        return ModuleExports.Create(hasExplicitExports, builder.ToImmutable());
+        return ModuleExports.Create(builder.ToImmutable());
     }
 
     private static StdlibManifest ReadStdlibManifest(BinaryReader reader)

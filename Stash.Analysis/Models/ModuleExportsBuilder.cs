@@ -37,8 +37,8 @@ public static class ModuleExportsBuilder
     /// </param>
     /// <returns>
     /// A <see cref="Stash.Core.Resolution.ModuleExports"/> instance.
-    /// When no export annotation is found, <see cref="Stash.Core.Resolution.ModuleExports.HasExplicitExports"/>
-    /// is <see langword="false"/> and <see cref="Stash.Core.Resolution.ModuleExports.Names"/> is empty.
+    /// When no export annotation is found, <see cref="Stash.Core.Resolution.ModuleExports.Names"/> is
+    /// empty, meaning the module exports nothing to importers.
     /// </returns>
     public static Stash.Core.Resolution.ModuleExports Build(
         IReadOnlyList<Stmt> topLevel,
@@ -69,23 +69,6 @@ public static class ModuleExportsBuilder
         List<SemanticDiagnostic> diagnostics,
         out Dictionary<string, ExportEntry> entries)
     {
-        // Fast path: check whether any export annotations exist.
-        bool hasAny = false;
-        foreach (var stmt in topLevel)
-        {
-            if (stmt is ExportDeclStmt or ExportBlockStmt or ExportModuleAsStmt or ExportFromStmt)
-            {
-                hasAny = true;
-                break;
-            }
-        }
-
-        if (!hasAny)
-        {
-            entries = new Dictionary<string, ExportEntry>();
-            return Stash.Core.Resolution.ModuleExports.Empty;
-        }
-
         // Build an index of top-level declarations for fast lookup.
         var topLevelIndex = BuildTopLevelIndex(topLevel);
 
@@ -114,7 +97,11 @@ public static class ModuleExportsBuilder
         }
 
         entries = names;
-        return Stash.Core.Resolution.ModuleExports.Create(true, ImmutableHashSet.CreateRange(names.Keys));
+
+        if (names.Count == 0)
+            return Stash.Core.Resolution.ModuleExports.Empty;
+
+        return Stash.Core.Resolution.ModuleExports.Create(ImmutableHashSet.CreateRange(names.Keys));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

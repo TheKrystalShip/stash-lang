@@ -88,8 +88,9 @@ public class ImportResolver
         /// uses legacy "export everything" semantics (no <c>export</c> annotations).
         /// </summary>
         /// <remarks>
-        /// When non-null and <see cref="Stash.Core.Resolution.ModuleExports.HasExplicitExports"/> is <see langword="true"/>,
-        /// only names present in <see cref="Stash.Core.Resolution.ModuleExports.Names"/> are visible to importers.
+        /// When non-null, only names present in <see cref="Stash.Core.Resolution.ModuleExports.Names"/>
+        /// are visible to importers.  An empty <see cref="Stash.Core.Resolution.ModuleExports.Names"/>
+        /// means the module exports nothing.
         /// </remarks>
         public Stash.Core.Resolution.ModuleExports? Exports { get; }
 
@@ -374,7 +375,7 @@ public class ImportResolver
             var lexeme = nameToken.Lexeme;
 
             // SA0825: check that the source module actually exports this name
-            if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+            if (moduleInfo.Exports != null)
             {
                 if (!moduleInfo.Exports.Names.Contains(lexeme))
                 {
@@ -487,7 +488,7 @@ public class ImportResolver
         }
 
         // Expose the module under its alias for SA0825 isn't applicable here (it's a namespace alias).
-        if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+        if (moduleInfo.Exports != null)
         {
             resolution.NamespaceImports[stmt.Alias.Lexeme] = BuildFilteredModuleInfo(moduleInfo);
         }
@@ -723,8 +724,8 @@ public class ImportResolver
         {
             var lexeme = nameToken.Lexeme;
 
-            // When the module has an explicit export set, check membership first.
-            if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+            // Check that the name is in the module's export set.
+            if (moduleInfo.Exports != null)
             {
                 if (!moduleInfo.Exports.Names.Contains(lexeme))
                 {
@@ -815,9 +816,9 @@ public class ImportResolver
         TrackDependency(absolutePath, documentUri);
         var moduleInfo = LoadModule(absolutePath, parseModule);
 
-        // When the module has an explicit export set, expose only the exported symbols for
-        // dot-completion on the alias (keeps LSP completion consistent with runtime behaviour).
-        if (moduleInfo.Exports != null && moduleInfo.Exports.HasExplicitExports)
+        // Expose only the exported symbols for dot-completion on the alias
+        // (keeps LSP completion consistent with runtime behaviour).
+        if (moduleInfo.Exports != null)
         {
             resolution.NamespaceImports[stmt.Alias.Lexeme] = BuildFilteredModuleInfo(moduleInfo);
         }

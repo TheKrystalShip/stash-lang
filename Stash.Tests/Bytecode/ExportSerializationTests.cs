@@ -45,8 +45,7 @@ public class ExportSerializationTests
         var chunk = CompileWithExports("export fn diff(a, b) {}");
 
         Assert.NotNull(chunk.Exports);
-        Assert.True(chunk.Exports!.HasExplicitExports);
-        Assert.Contains("diff", chunk.Exports.Names);
+        Assert.Contains("diff", chunk.Exports!.Names);
     }
 
     [Fact]
@@ -55,8 +54,7 @@ public class ExportSerializationTests
         var chunk = CompileWithExports("""export const VERSION = "1.0";""");
 
         Assert.NotNull(chunk.Exports);
-        Assert.True(chunk.Exports!.HasExplicitExports);
-        Assert.Contains("VERSION", chunk.Exports.Names);
+        Assert.Contains("VERSION", chunk.Exports!.Names);
     }
 
     [Fact]
@@ -68,12 +66,11 @@ public class ExportSerializationTests
             """);
 
         Assert.NotNull(chunk.Exports);
-        Assert.True(chunk.Exports!.HasExplicitExports);
-        Assert.Contains("diff", chunk.Exports.Names);
+        Assert.Contains("diff", chunk.Exports!.Names);
     }
 
     [Fact]
-    public void Compile_NoExportAnnotations_ChunkExportsHasExplicitExportsFalse()
+    public void Compile_NoExportAnnotations_ChunkExportsNamesEmpty()
     {
         var chunk = CompileWithExports("""
             fn helper() {}
@@ -81,10 +78,8 @@ public class ExportSerializationTests
             """);
 
         // When there are no export annotations, ModuleExportsBuilder returns Empty.
-        // Exports will be non-null but HasExplicitExports = false.
         Assert.NotNull(chunk.Exports);
-        Assert.False(chunk.Exports!.HasExplicitExports);
-        Assert.Empty(chunk.Exports.Names);
+        Assert.Empty(chunk.Exports!.Names);
     }
 
     [Fact]
@@ -124,8 +119,7 @@ public class ExportSerializationTests
         var restored = RoundTrip(chunk);
 
         Assert.NotNull(restored.Exports);
-        Assert.True(restored.Exports!.HasExplicitExports);
-        Assert.Contains("diff", restored.Exports.Names);
+        Assert.Contains("diff", restored.Exports!.Names);
     }
 
     [Fact]
@@ -140,8 +134,7 @@ public class ExportSerializationTests
         var restored = RoundTrip(chunk);
 
         Assert.NotNull(restored.Exports);
-        Assert.True(restored.Exports!.HasExplicitExports);
-        Assert.Contains("diff", restored.Exports.Names);
+        Assert.Contains("diff", restored.Exports!.Names);
         Assert.Contains("VERSION", restored.Exports.Names);
         Assert.Contains("Point", restored.Exports.Names);
         Assert.Equal(3, restored.Exports.Names.Count);
@@ -150,14 +143,13 @@ public class ExportSerializationTests
     [Fact]
     public void Serialization_RoundTripsExportSet_EmptyExportBlock()
     {
-        // export {} is valid and produces HasExplicitExports=true with zero names
+        // export {} produces empty Names — indistinguishable from no annotations
         var chunk = CompileWithExports("export { };");
 
         var restored = RoundTrip(chunk);
 
         Assert.NotNull(restored.Exports);
-        Assert.True(restored.Exports!.HasExplicitExports);
-        Assert.Empty(restored.Exports.Names);
+        Assert.Empty(restored.Exports!.Names);
     }
 
     [Fact]
@@ -168,8 +160,7 @@ public class ExportSerializationTests
         var restored = RoundTrip(chunk);
 
         Assert.NotNull(restored.Exports);
-        Assert.False(restored.Exports!.HasExplicitExports);
-        Assert.Empty(restored.Exports.Names);
+        Assert.Empty(restored.Exports!.Names);
     }
 
     [Fact]
@@ -180,8 +171,7 @@ public class ExportSerializationTests
         var restored = RoundTrip(chunk, includeDebugInfo: false);
 
         Assert.NotNull(restored.Exports);
-        Assert.True(restored.Exports!.HasExplicitExports);
-        Assert.Contains("diff", restored.Exports.Names);
+        Assert.Contains("diff", restored.Exports!.Names);
     }
 
     [Fact]
@@ -204,7 +194,7 @@ public class ExportSerializationTests
     // ── ModuleExportsBuilder ──────────────────────────────────────────────────
 
     [Fact]
-    public void ModuleExportsBuilder_NoAnnotations_ReturnsEmpty()
+    public void ModuleExportsBuilder_NoAnnotations_NamesEmpty()
     {
         var tokens = new Lexer("fn helper() {}", "<test>").ScanTokens();
         var stmts = new Parser(tokens).ParseProgram();
@@ -212,13 +202,12 @@ public class ExportSerializationTests
 
         var exports = ModuleExportsBuilder.Build(stmts, diagnostics);
 
-        Assert.False(exports.HasExplicitExports);
         Assert.Empty(exports.Names);
         Assert.Empty(diagnostics);
     }
 
     [Fact]
-    public void ModuleExportsBuilder_ExportFn_ReturnsHasExplicitExportsTrue()
+    public void ModuleExportsBuilder_ExportFn_CollectsName()
     {
         var tokens = new Lexer("export fn diff(a, b) {}", "<test>").ScanTokens();
         var stmts = new Parser(tokens).ParseProgram();
@@ -226,7 +215,6 @@ public class ExportSerializationTests
 
         var exports = ModuleExportsBuilder.Build(stmts, diagnostics);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("diff", exports.Names);
         Assert.Empty(diagnostics);
     }
@@ -250,20 +238,18 @@ public class ExportSerializationTests
     // ── ModuleExports.Create factory ──────────────────────────────────────────
 
     [Fact]
-    public void ModuleExports_Create_SetsPropertiesCorrectly()
+    public void ModuleExports_Create_SetsNamesCorrectly()
     {
         var names = ImmutableHashSet.Create("foo", "bar");
-        var exports = Stash.Core.Resolution.ModuleExports.Create(true, names);
+        var exports = Stash.Core.Resolution.ModuleExports.Create(names);
 
-        Assert.True(exports.HasExplicitExports);
         Assert.Contains("foo", exports.Names);
         Assert.Contains("bar", exports.Names);
     }
 
     [Fact]
-    public void ModuleExports_Empty_HasExplicitExportsFalse()
+    public void ModuleExports_Empty_NamesEmpty()
     {
-        Assert.False(Stash.Core.Resolution.ModuleExports.Empty.HasExplicitExports);
         Assert.Empty(Stash.Core.Resolution.ModuleExports.Empty.Names);
     }
 }

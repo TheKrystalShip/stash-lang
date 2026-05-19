@@ -163,7 +163,7 @@ public class ExportLspTests : AnalysisTestBase
         // Module has explicit (but empty) export set — nothing is exported.
         var moduleInfo = BuildModuleInfo("fn greet() {}\nexport {};");
 
-        Assert.True(moduleInfo.Exports!.HasExplicitExports);
+        Assert.Empty(moduleInfo.Exports!.Names);
         Assert.False(CodeActionHandler.ModuleExportsSymbol(moduleInfo, "greet"));
     }
 

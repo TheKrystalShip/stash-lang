@@ -241,9 +241,6 @@ public static class BytecodeWriter
 
     private static void WriteExports(BinaryWriter writer, Stash.Core.Resolution.ModuleExports exports)
     {
-        // HasExplicitExports flag (u8)
-        writer.Write((byte)(exports.HasExplicitExports ? 1 : 0));
-
         // Names: u16 count + [length-prefixed strings]
         writer.Write((ushort)exports.Names.Count);
         foreach (string name in exports.Names)

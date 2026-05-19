@@ -141,8 +141,10 @@ public sealed partial class VirtualMachine
         Dictionary<string, StashValue> globals,
         ModuleExports? exports)
     {
-        // No explicit exports — legacy module: expose everything unchanged.
-        if (exports == null || !exports.HasExplicitExports)
+        // No export set (v3 on-disk chunk) or empty Names — expose everything unchanged.
+        // NOTE: The Names.Count == 0 branch will be removed in phase 1B; it is preserved
+        // here only to keep the build green while HasExplicitExports is removed.
+        if (exports == null || exports.Names.Count == 0)
             return globals;
 
         // Explicit export set: copy only exported names plus all built-in namespaces.
