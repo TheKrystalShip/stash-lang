@@ -54,7 +54,7 @@ public class LvnDifferentialTests : BytecodeTestBase
     {
         const string fib = """
             fn fib(n) {
-                if (n <= 1) return n;
+                if (n <= 1) { return n; }
                 return fib(n - 1) + fib(n - 2);
             }
             return fib(10);
@@ -181,7 +181,7 @@ public class LvnDifferentialTests : BytecodeTestBase
     {
         const string src = """
             fn factorial(n) {
-                if (n <= 1) return 1;
+                if (n <= 1) { return 1; }
                 return n * factorial(n - 1);
             }
             return factorial(10);
