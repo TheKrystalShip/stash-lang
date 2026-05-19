@@ -1,5 +1,7 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using Stash.Analysis;
 using Stash.Bytecode;
 using Stash.Core.Resolution;
@@ -234,35 +236,6 @@ public class ImportExportRuntimeTests : BytecodeTestBase
         Assert.Equal(1, loadCount);
     }
 
-    // ── Vm_ZeroAnnotationModule_AllImportsFail ────────────────────────────────
-
-    [Fact]
-    public void Vm_ZeroAnnotationModule_AllImportsFail()
-    {
-        // Source-compiled module with zero export annotations: Exports.Names is empty,
-        // so every top-level name is module-private.  Importing any name must raise
-        // "Module does not export 'X'".
-        Chunk moduleChunk = CompileWithExports("""
-            fn helper() { return 42; }
-            fn another() { return 1; }
-            """);
-
-        string mainSource = """
-            let func = null;
-            func = () => {
-                import { helper } from "mod";
-                return helper();
-            };
-            return func();
-            """;
-
-        Chunk mainChunk = CompileSource(mainSource);
-        var vm = new VirtualMachine();
-        vm.ModuleLoader = (_, _) => moduleChunk;
-        var ex = Assert.Throws<RuntimeError>(() => vm.Execute(mainChunk));
-        Assert.Contains("does not export 'helper'", ex.Message);
-    }
-
     // ── Vm_EmptyExportBlock_AllImportsFail ────────────────────────────────────
 
     [Fact]
@@ -288,5 +261,114 @@ public class ImportExportRuntimeTests : BytecodeTestBase
         vm.ModuleLoader = (_, _) => moduleChunk;
         var ex = Assert.Throws<RuntimeError>(() => vm.Execute(mainChunk));
         Assert.Contains("hidden", ex.Message);
+    }
+
+    // ── E2E: zero-annotation module raises "does not export" at runtime ───────
+
+    /// <summary>
+    /// End-to-end test: a script that imports from a file with zero export annotations
+    /// must raise a runtime "does not export 'X'" error.
+    /// Uses real disk files and the VM's built-in file-based module loader.
+    /// </summary>
+    [Fact]
+    public void E2E_ZeroAnnotationModule_ImportFails()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "stash_e2e_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            // A module with no export annotations — exports nothing.
+            File.WriteAllText(Path.Combine(tempDir, "lib.stash"), """
+                fn helper() { return 42; }
+                fn another() { return 99; }
+                """);
+
+            // Main script imports from that module.
+            string mainPath = Path.Combine(tempDir, "main.stash");
+            File.WriteAllText(mainPath, """
+                import { helper } from "lib.stash";
+                return helper();
+                """);
+
+            string mainSource = File.ReadAllText(mainPath);
+            var tokens = new Lexer(mainSource, mainPath).ScanTokens();
+            var stmts = new Parser(tokens).ParseProgram();
+            SemanticResolver.Resolve(stmts);
+            var exports = ModuleExportsBuilder.Build(stmts, []);
+            var mainChunk = Compiler.Compile(stmts, exports: exports);
+
+            var vm = new VirtualMachine();
+            vm.CurrentFile = mainPath;
+            var ex = Assert.Throws<RuntimeError>(() => vm.Execute(mainChunk));
+            Assert.Contains("does not export 'helper'", ex.Message);
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    // ── E2E: namespace import from partial-export module ─────────────────────
+
+    /// <summary>
+    /// End-to-end test: <c>import "f.stash" as ns</c> from a file that exports <c>foo</c>
+    /// but not <c>bar</c> must expose <c>ns.foo</c> and must not expose <c>ns.bar</c>.
+    /// Uses real disk files and the VM's built-in file-based module loader.
+    /// </summary>
+    [Fact]
+    public void E2E_NamespaceImport_ExposesOnlyExportedNames()
+    {
+        string tempDir = Path.Combine(Path.GetTempPath(), "stash_e2e_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            // lib.stash: exports only "foo"; "bar" is private.
+            File.WriteAllText(Path.Combine(tempDir, "lib.stash"), """
+                export fn foo() { return "foo_result"; }
+                fn bar() { return "bar_result"; }
+                """);
+
+            // Main script: import lib as ns, access ns.foo → succeeds, ns.bar → missing member.
+            string mainPath = Path.Combine(tempDir, "main.stash");
+            File.WriteAllText(mainPath, """
+                import "lib.stash" as ns;
+                return ns.foo();
+                """);
+
+            string mainSource = File.ReadAllText(mainPath);
+            var tokens = new Lexer(mainSource, mainPath).ScanTokens();
+            var stmts = new Parser(tokens).ParseProgram();
+            SemanticResolver.Resolve(stmts);
+            var exports = ModuleExportsBuilder.Build(stmts, []);
+            var mainChunk = Compiler.Compile(stmts, exports: exports);
+
+            var vm = new VirtualMachine();
+            vm.CurrentFile = mainPath;
+
+            // ns.foo() succeeds.
+            object? result = vm.Execute(mainChunk);
+            Assert.Equal("foo_result", result);
+
+            // Verify ns.bar is absent: import the namespace, inspect it.
+            File.WriteAllText(mainPath, """
+                import "lib.stash" as ns;
+                return ns;
+                """);
+
+            var tokens2 = new Lexer(File.ReadAllText(mainPath), mainPath).ScanTokens();
+            var stmts2 = new Parser(tokens2).ParseProgram();
+            SemanticResolver.Resolve(stmts2);
+            var mainChunk2 = Compiler.Compile(stmts2);
+            var vm2 = new VirtualMachine();
+            vm2.CurrentFile = mainPath;
+            object? nsObj = vm2.Execute(mainChunk2);
+            var ns = Assert.IsType<StashNamespace>(nsObj);
+            Assert.True(ns.HasMember("foo"));
+            Assert.False(ns.HasMember("bar"));
+        }
+        finally
+        {
+            Directory.Delete(tempDir, recursive: true);
+        }
     }
 }

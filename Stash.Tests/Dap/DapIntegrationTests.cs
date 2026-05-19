@@ -1003,7 +1003,7 @@ let y = 2;
     {
         var modulePath = Path.Combine(Path.GetTempPath(), $"stash_module_{Guid.NewGuid():N}.stash");
         File.WriteAllText(modulePath, @"
-fn helper() {
+export fn helper() {
     return 42;
 }
 ");

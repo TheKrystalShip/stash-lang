@@ -313,7 +313,7 @@ public class ImportResolverTests
     public void Analyze_WithSelectiveImport_InjectsResolvedSymbols()
     {
         var (tempDir, moduleUri, mainUri) = SetupImportTest(
-            moduleSource: "fn helper() { }",
+            moduleSource: "export fn helper() { }",
             mainSource: "import { helper } from \"module.stash\";\nhelper();");
 
         try
@@ -425,7 +425,7 @@ public class ImportResolverTests
     public void Analyze_ImportedFunction_FoundByFindDefinition()
     {
         var (tempDir, moduleUri, mainUri) = SetupImportTest(
-            moduleSource: "fn helper() { }",
+            moduleSource: "export fn helper() { }",
             mainSource: "import { helper } from \"module.stash\";\nhelper();");
 
         try

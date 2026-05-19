@@ -105,17 +105,18 @@ public class ReexportResolverTests
     }
 
     [Fact]
-    public void SA0825_DoesNotFire_WhenSourceHasNoExplicitExports_LegacyMode()
+    public void SA0825_Fires_WhenSourceHasNoExportAnnotations()
     {
         var dir = SetupTempDir();
         try
         {
-            // lib.stash has no export annotations — legacy mode, all names are visible.
+            // lib.stash has no export annotations — zero-annotation module exports nothing.
+            // Re-exporting 'bar' that isn't in the (empty) export set must fire SA0825.
             WriteFile(dir, "lib.stash", "fn foo() { }\nfn bar() { }");
             var diagnostics = ResolveMain(dir,
                 """export { bar } from "lib.stash";""");
 
-            Assert.DoesNotContain(diagnostics, d => d.Code == "SA0825");
+            Assert.Contains(diagnostics, d => d.Code == "SA0825");
         }
         finally { Cleanup(dir); }
     }

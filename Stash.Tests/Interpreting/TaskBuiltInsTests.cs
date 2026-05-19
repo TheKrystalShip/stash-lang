@@ -625,7 +625,7 @@ let result = arr.parMap([1, 2, 3, 4, 5, 6, 7, 8], (x) => {
         {
             string modulePath = System.IO.Path.Combine(tmpDir, "shared.stash");
             System.IO.File.WriteAllText(modulePath, @"
-fn getValue() { return 100; }
+export fn getValue() { return 100; }
 ");
 
             string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
@@ -663,8 +663,8 @@ let result = r1 + r2;
         {
             string modulePath = System.IO.Path.Combine(tmpDir, "math_utils.stash");
             System.IO.File.WriteAllText(modulePath, @"
-fn add(a, b) { return a + b; }
-fn mul(a, b) { return a * b; }
+export fn add(a, b) { return a + b; }
+export fn mul(a, b) { return a * b; }
 ");
 
             string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
@@ -701,10 +701,10 @@ let result = r1 + r2;
         {
             System.IO.File.WriteAllText(
                 System.IO.Path.Combine(tmpDir, "mod_a.stash"),
-                "fn getA() { return 111; }");
+                "export fn getA() { return 111; }");
             System.IO.File.WriteAllText(
                 System.IO.Path.Combine(tmpDir, "mod_b.stash"),
-                "fn getB() { return 222; }");
+                "export fn getB() { return 222; }");
 
             string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
             string source = @"
@@ -742,7 +742,7 @@ let result = r1 + r2;
             string modulePath = System.IO.Path.Combine(tmpDir, "init.stash");
             System.IO.File.WriteAllText(modulePath, @"
 io.println(""MODULE_LOADED"");
-fn getData() { return 42; }
+export fn getData() { return 42; }
 ");
 
             string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
