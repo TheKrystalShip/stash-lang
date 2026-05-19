@@ -185,7 +185,8 @@ public static partial class CliBuiltIns
             shortOpt: null,
             aliases: [],
             required: opts?.GetBoolOpt("required") ?? true,
-            defaultVal: opts?.GetOpt("default") ?? StashValue.Null,
+            // Accept "defaultVal" or "default" (both work; "default" is a keyword but valid as a dict literal key)
+            defaultVal: opts?.GetDefaultOpt() ?? StashValue.Null,
             repeated: opts?.GetBoolOpt("repeated") ?? false,
             choices: opts?.GetListOpt("choices"),
             min: StashValue.Null,
@@ -221,7 +222,8 @@ public static partial class CliBuiltIns
             shortOpt: opts?.GetStringOpt("short"),
             aliases: opts?.GetListOpt("aliases") ?? [],
             required: opts?.GetBoolOpt("required") ?? false,
-            defaultVal: opts?.GetOpt("default") ?? StashValue.Null,
+            // Accept "defaultVal" or "default" (both work; see GetDefaultOpt)
+            defaultVal: opts?.GetDefaultOpt() ?? StashValue.Null,
             repeated: opts?.GetBoolOpt("repeated") ?? false,
             choices: opts?.GetListOpt("choices"),
             min: opts?.GetOpt("min") ?? StashValue.Null,
@@ -249,7 +251,10 @@ public static partial class CliBuiltIns
             shortOpt: opts?.GetStringOpt("short"),
             aliases: opts?.GetListOpt("aliases") ?? [],
             required: false,
-            defaultVal: opts?.GetOpt("default") ?? StashValue.False,
+            // Accept "defaultVal" or "default" (both work; see GetDefaultOpt). Flags default to false.
+            defaultVal: opts is not null && (opts.Has("defaultVal") || opts.Has("default"))
+                ? opts.GetDefaultOpt()
+                : StashValue.False,
             repeated: false,
             choices: null,
             min: StashValue.Null,
@@ -375,6 +380,20 @@ internal static class CliDictExtensions
     public static StashValue GetOpt(this StashDictionary d, string key)
     {
         return d.Has(key) ? d.Get(key) : StashValue.Null;
+    }
+
+    /// <summary>
+    /// Gets the "defaultVal" key if present, otherwise falls back to "default".
+    /// Accepts both because "default" is a reserved keyword in Stash and cannot be used in
+    /// dict literals via identifier syntax (d.default), but CAN be used as a dict literal key
+    /// ({ default: ... }). We also accept "defaultVal" for test code that cannot use "default".
+    /// Returns StashValue.Null if neither key is present.
+    /// </summary>
+    public static StashValue GetDefaultOpt(this StashDictionary d)
+    {
+        if (d.Has("defaultVal")) return d.Get("defaultVal");
+        if (d.Has("default")) return d.Get("default");
+        return StashValue.Null;
     }
 
     public static string? GetStringOpt(this StashDictionary d, string key)

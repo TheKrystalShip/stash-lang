@@ -113,8 +113,8 @@ public static partial class CliBuiltIns
                 ValidateDefault(defaultVal, typeTag, propName);
 
             // ── Write resolved long name back onto a new StashInstance ─────
-            // Build a fresh copy of the spec dict with the resolved name filled in.
-            StashValue resolvedSpec = ReplaceNameField(specInst, longName);
+            // Build a fresh copy of the spec dict with the resolved name and propName filled in.
+            StashValue resolvedSpec = ReplaceNameField(specInst, longName, propName);
 
             if (kind == "positional")
                 positionals.Add(resolvedSpec);
@@ -153,9 +153,11 @@ public static partial class CliBuiltIns
     }
 
     /// <summary>
-    /// Copies a CliArgSpec StashInstance, replacing the <c>name</c> field with the resolved long name.
+    /// Copies a CliArgSpec StashInstance, replacing the <c>name</c> field with the resolved long name
+    /// and recording the Stash property name (dict key) as <c>propName</c>.
+    /// The <c>propName</c> field is used by the parsing engine to populate the result dict.
     /// </summary>
-    private static StashValue ReplaceNameField(StashInstance specInst, string longName)
+    internal static StashValue ReplaceNameField(StashInstance specInst, string longName, string propName = "")
     {
         // We rebuild the dict from the known CliArgSpec fields.
         var fields = new Dictionary<string, StashValue>
@@ -163,6 +165,9 @@ public static partial class CliBuiltIns
             ["kind"]        = specInst.GetField("kind",      null),
             ["typeTag"]     = specInst.GetField("typeTag",   null),
             ["name"]        = StashValue.FromObj(longName),
+            // propName is the Stash-side property key (camelCase dict key from cli.schema() definition).
+            // The parsing engine uses this to populate the result dict with the correct key.
+            ["propName"]    = StashValue.FromObj(propName),
             ["short"]       = specInst.GetField("short",     null),
             ["aliases"]     = specInst.GetField("aliases",   null),
             ["required"]    = specInst.GetField("required",  null),
