@@ -257,7 +257,7 @@ public class TypeInferenceTests
         Assert.Equal("dict", symbol.TypeHint);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void InfersType_ArgsParseReturnsDict()
     {
         const string src = """let parsed = args.parse({ name: "cli" });""";

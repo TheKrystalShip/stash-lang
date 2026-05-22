@@ -246,7 +246,7 @@ public class StdlibConsistencyTests
             .ToHashSet();
 
         // Capability-gated namespaces must not be present
-        string[] gated = ["env", "fs", "http", "ssh", "sftp", "process", "args", "pkg"];
+        string[] gated = ["env", "fs", "http", "ssh", "sftp", "process", "pkg"];
         foreach (var ns in gated)
         {
             Assert.False(definedNamespaces.Contains(ns),

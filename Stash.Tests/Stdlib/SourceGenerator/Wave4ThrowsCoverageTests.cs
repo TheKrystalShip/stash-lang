@@ -23,7 +23,6 @@ public class Wave4ThrowsCoverageTests
     {
         ["sys"] = new() { "cpuCount", "totalMemory", "freeMemory", "uptime", "loadAvg", "pid", "tempDir", "networkInterfaces" },
         ["term"] = new() { "bold", "dim", "underline", "strip", "width", "isInteractive", "zeroWidth", "colorsEnabled", "clear" },
-        ["args"] = new() { "list", "count" },
         ["alias"] = new() { "list", "names", "get", "exists", "clear", "__listPretty", "__getPretty" },
         ["config"] = new(),
         ["assert"] = new() { "equal", "notEqual", "true", "false", "null", "notNull", "throws", "fail", "deepEqual" },
