@@ -12,6 +12,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Stash.Tests" />
+    <InternalsVisibleTo Include="Stash.Analysis" />
+    <InternalsVisibleTo Include="Stash" />
   </ItemGroup>
 
   <ItemGroup>

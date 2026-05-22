@@ -69,6 +69,15 @@ public class Program
             return;
         }
 
+        // Static --help for a script: stash --help script.stash
+        // This short-circuits before the normal parse/compile/execute path.
+        if (args.Length >= 2 && (args[0] is "--help" or "-h") &&
+            args[1].EndsWith(".stash", System.StringComparison.OrdinalIgnoreCase))
+        {
+            System.Environment.Exit(Stash.Cli.Modes.StaticHelpMode.Run(args[1], Console.Out));
+            return;
+        }
+
         // Early exit flags
         if (args.Length > 0 && args[0] is "--help" or "-h")
         {
