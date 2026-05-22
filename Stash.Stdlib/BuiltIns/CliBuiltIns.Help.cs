@@ -165,6 +165,11 @@ public static partial class CliBuiltIns
     /// Renders the full help text for the given schema at the given terminal width.
     /// commandPath is used only to qualify the usage line when routing to a subcommand.
     /// </summary>
+    /// <remarks>
+    /// Treated as a public contract via <c>InternalsVisibleTo</c> to <c>Stash</c> (Stash.Cli,
+    /// <c>StaticHelpMode</c>) for the static <c>--help</c> path. Signature changes require
+    /// lockstep updates in <c>Stash.Cli/Modes/StaticHelpMode.cs</c>.
+    /// </remarks>
     internal static string RenderHelp(StashInstance schemaInst, int width, string? commandPath = null)
     {
         string programName = GetStringFieldOrEmpty(schemaInst, "programName");

@@ -319,6 +319,11 @@ public static partial class CliBuiltIns
     /// The <c>name</c> field is the override if supplied; the schema assigns the final
     /// kebab-cased long name after it knows the property key.
     /// </summary>
+    /// <remarks>
+    /// Treated as a public contract via <c>InternalsVisibleTo</c> to <c>Stash.Analysis</c>
+    /// (<c>LiteralSchemaBuilder</c>) for the static <c>--help</c> path. Signature changes
+    /// require lockstep updates in <c>Stash.Analysis/Cli/LiteralSchemaBuilder.cs</c>.
+    /// </remarks>
     internal static StashValue MakeArgSpecInstance(
         string kind,
         string typeTag,

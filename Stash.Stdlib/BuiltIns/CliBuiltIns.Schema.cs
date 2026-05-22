@@ -21,6 +21,11 @@ public static partial class CliBuiltIns
     ///   - default-fails-conversion         (default value cannot be converted via the declared type tag)
     ///   - --help / -h shadowing            (when helpFlag is enabled)
     /// </summary>
+    /// <remarks>
+    /// Treated as a public contract via <c>InternalsVisibleTo</c> to <c>Stash.Analysis</c>
+    /// (<c>LiteralSchemaBuilder</c>) for the static <c>--help</c> path. Signature changes
+    /// require lockstep updates in <c>Stash.Analysis/Cli/LiteralSchemaBuilder.cs</c>.
+    /// </remarks>
     internal static StashValue BuildSchema(
         StashDictionary def,
         string programName,
