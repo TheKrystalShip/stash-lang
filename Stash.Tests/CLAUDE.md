@@ -45,6 +45,10 @@ dotnet test -v normal                                          # Verbose output
 
 ## Test Helpers
 
+### Fixture Files
+
+Tests that load fixture files (e.g. expected-output snapshots) use the **embedded-resource** pattern, never `CopyToOutputDirectory`. Add `<EmbeddedResource Include="Path\To\*.txt" />` to `Stash.Tests.csproj` and read via `Assembly.GetManifestResourceStream("Stash.Tests.Path.To.Filename.txt")`.
+
 ### Interpreting Tests
 
 Each built-in namespace test file uses this shared pattern:

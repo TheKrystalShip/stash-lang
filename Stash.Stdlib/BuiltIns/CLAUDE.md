@@ -167,6 +167,10 @@ public static void Chdir(IInterpreterContext ctx, string dir)
 
 Produces a `DeprecationInfo` consumed by the analyzer's `SA0830` rule.
 
+## Exiting from a built-in
+
+Built-ins that terminate the script must call `GlobalBuiltIns.EmitExitImpl(ctx, code)`, which throws `ExitException(code)` — unwinds the interpreter (running `defer` blocks), is observable via `Assert.Throws<ExitException>` in tests, and is translated to `Environment.Exit` only by the top-level CLI driver. **Never call `Environment.Exit` directly from a built-in.** Mark such functions with `[StashFn(Capability = StashCapabilities.Environment)]`.
+
 ## Cross-Platform Requirement
 
 Every namespace must work on Linux, macOS, and Windows. Use `RuntimeInformation` or `env.os` for branching. Avoid hard-coded Unix paths or shell commands. Capability-gated namespaces with platform-specific dependencies (e.g. `Renci.SshNet`) are loaded lazily — the namespace's factory is only invoked when the capability is enabled, so referenced types are never JITted in environments that don't support them.
