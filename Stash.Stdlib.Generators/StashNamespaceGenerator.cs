@@ -16,6 +16,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
     private const string FnAttr = "Stash.Stdlib.Abstractions.StashFnAttribute";
     private const string ParamAttr = "Stash.Stdlib.Abstractions.StashParamAttribute";
     private const string ConstAttr = "Stash.Stdlib.Abstractions.StashConstAttribute";
+    private const string MemberAttr = "Stash.Stdlib.Abstractions.StashMemberAttribute";
     private const string StructAttr = "Stash.Stdlib.Abstractions.StashStructAttribute";
     private const string EnumAttr = "Stash.Stdlib.Abstractions.StashEnumAttribute";
     private const string FieldAttr = "Stash.Stdlib.Abstractions.StashFieldAttribute";
@@ -104,6 +105,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
 
         var functions = new List<FunctionModel>();
         var constants = new List<ConstantModel>();
+        var members = new List<MemberModel>();
         var structs = new List<StructModel>();
         var enums = new List<EnumModel>();
         var seenFnNames = new HashSet<string>(System.StringComparer.Ordinal);
@@ -113,6 +115,26 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             ct.ThrowIfCancellationRequested();
             switch (member)
             {
+                case IMethodSymbol method when HasAttr(method, FnAttr) && HasAttr(method, MemberAttr):
+                    // Mutual exclusion: [StashMember] + [StashFn]
+                    diags.Add(Diagnostic.Create(Diagnostics.MemberConflictsWithFn,
+                        method.Locations.FirstOrDefault() ?? loc, method.Name));
+                    break;
+                case IMethodSymbol method when HasAttr(method, MemberAttr):
+                    var mm = BuildMember(method, stashName, diags);
+                    if (mm is not null)
+                    {
+                        if (!seenFnNames.Add(mm.StashName))
+                        {
+                            diags.Add(Diagnostic.Create(Diagnostics.DuplicateFunctionName,
+                                method.Locations.FirstOrDefault() ?? loc, stashName, mm.StashName));
+                        }
+                        else
+                        {
+                            members.Add(mm);
+                        }
+                    }
+                    break;
                 case IMethodSymbol method when HasAttr(method, FnAttr):
                     var fn = BuildFunction(method, stashName, diags);
                     if (fn is not null)
@@ -126,6 +148,11 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                             functions.Add(fn);
                         }
                     }
+                    break;
+                case IFieldSymbol field when HasAttr(field, MemberAttr) && HasAttr(field, ConstAttr):
+                    // Mutual exclusion: [StashMember] + [StashConst]
+                    diags.Add(Diagnostic.Create(Diagnostics.MemberConflictsWithConst,
+                        field.Locations.FirstOrDefault() ?? loc, field.Name));
                     break;
                 case IFieldSymbol field when HasAttr(field, ConstAttr):
                     var c = BuildConstant(field, diags);
@@ -150,7 +177,8 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             functions.ToEquatableArray(),
             constants.ToEquatableArray(),
             structs.ToEquatableArray(),
-            enums.ToEquatableArray());
+            enums.ToEquatableArray(),
+            members.ToEquatableArray());
 
         return new BuildResult(model, diags.ToEquatableArray());
     }
@@ -373,6 +401,135 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             takesContext,
             isVariadic,
             pms.ToEquatableArray(),
+            DocCommentParser.Parse(docXml),
+            ReadDeprecation(method),
+            capabilityFull,
+            mergedThrows);
+    }
+
+    private static MemberModel? BuildMember(IMethodSymbol method, string stashNs, List<Diagnostic> diags)
+    {
+        var loc = method.Locations.FirstOrDefault() ?? Location.None;
+        var memberAttr = method.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == MemberAttr);
+
+        // Validate parameter shape: exactly one IInterpreterContext parameter.
+        var ps = method.Parameters;
+        string paramDesc;
+        bool shapeOk;
+        if (ps.Length == 0)
+        {
+            paramDesc = "zero parameters (expected one IInterpreterContext)";
+            shapeOk = false;
+        }
+        else if (ps.Length > 1)
+        {
+            paramDesc = $"{ps.Length} parameters (expected exactly one IInterpreterContext)";
+            shapeOk = false;
+        }
+        else if (ps[0].Type.ToDisplayString() != "Stash.Runtime.IInterpreterContext")
+        {
+            paramDesc = $"one parameter of type '{ps[0].Type.ToDisplayString()}' (expected IInterpreterContext)";
+            shapeOk = false;
+        }
+        else
+        {
+            paramDesc = string.Empty;
+            shapeOk = true;
+        }
+
+        if (!shapeOk)
+        {
+            diags.Add(Diagnostic.Create(Diagnostics.MemberWrongParameterShape, loc, method.Name, paramDesc));
+            return null;
+        }
+
+        // Read attribute named arguments.
+        string? nameOverride = null;
+        string? returnTypeOverride = null;
+        string capabilityFull = "global::Stash.Runtime.StashCapabilities.None";
+        string stabilityFull = "global::Stash.Stdlib.Abstractions.Stability.Cached";
+        var attrThrows = new List<string>();
+
+        if (memberAttr is not null)
+        {
+            foreach (var na in memberAttr.NamedArguments)
+            {
+                if (na.Key == "Name" && na.Value.Value is string s) nameOverride = s;
+                if (na.Key == "ReturnType" && na.Value.Value is string rt) returnTypeOverride = rt;
+                if (na.Key == "Capability" && na.Value.Value is int capVal)
+                    capabilityFull = FormatCapabilityFlags(capVal);
+                if (na.Key == "Stability" && na.Value.Value is int stab)
+                    stabilityFull = stab == 0
+                        ? "global::Stash.Stdlib.Abstractions.Stability.Cached"
+                        : "global::Stash.Stdlib.Abstractions.Stability.Live";
+                if (na.Key == "Throws" && !na.Value.IsNull && na.Value.Kind == TypedConstantKind.Array)
+                {
+                    foreach (var tc in na.Value.Values)
+                    {
+                        if (tc.Kind == TypedConstantKind.Type && tc.Value is INamedTypeSymbol errSym)
+                        {
+                            bool hasStashError = errSym.GetAttributes().Any(
+                                a => a.AttributeClass?.ToDisplayString() == ErrorAttrFullName);
+                            if (!hasStashError)
+                            {
+                                diags.Add(Diagnostic.Create(Diagnostics.MemberThrowsNotStashError,
+                                    loc, errSym.Name, method.Name));
+                                continue;
+                            }
+                            string canonicalName = errSym.Name;
+                            var errAttr = errSym.GetAttributes().FirstOrDefault(
+                                a => a.AttributeClass?.ToDisplayString() == ErrorAttrFullName);
+                            if (errAttr is not null)
+                            {
+                                foreach (var arg in errAttr.NamedArguments)
+                                {
+                                    if (arg.Key == "Name" && arg.Value.Value is string nameOvr)
+                                        canonicalName = nameOvr;
+                                }
+                            }
+                            if (!attrThrows.Contains(canonicalName))
+                                attrThrows.Add(canonicalName);
+                        }
+                    }
+                }
+            }
+        }
+
+        string stashName = nameOverride ?? NamingRules.ToCamelCase(method.Name);
+        if (nameOverride == null && NamingRules.HasConsecutiveUppercase(stashName))
+        {
+            diags.Add(Diagnostic.Create(Diagnostics.ConsecutiveUppercaseInName, loc, method.Name, stashName));
+            return null;
+        }
+
+        // Return type
+        string? wrap = TypeMarshaller.MapReturnType(method.ReturnType, out string returnStash);
+        if (wrap is null)
+        {
+            diags.Add(Diagnostic.Create(Diagnostics.UnsupportedReturnType, loc,
+                method.ReturnType.ToDisplayString(), method.Name));
+            return null;
+        }
+        if (returnTypeOverride is not null) returnStash = returnTypeOverride;
+
+        // Require non-empty <summary> (build error, not warning).
+        var docXml = method.GetDocumentationCommentXml();
+        if (!DocCommentParser.HasSummary(docXml))
+        {
+            diags.Add(Diagnostic.Create(Diagnostics.MemberMissingSummaryDoc, loc, method.Name));
+            return null;
+        }
+
+        var docThrows = DocCommentParser.ParseThrows(docXml);
+        ReportOldDocTagForm(docThrows, method.Name, loc, diags);
+        var mergedThrows = MergeThrows(attrThrows, ToCompatThrows(docThrows), method.Name, loc, diags);
+
+        return new MemberModel(
+            method.Name,
+            stashName,
+            wrap,
+            returnStash,
+            stabilityFull,
             DocCommentParser.Parse(docXml),
             ReadDeprecation(method),
             capabilityFull,

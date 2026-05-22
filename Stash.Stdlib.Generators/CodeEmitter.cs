@@ -43,6 +43,10 @@ internal static class CodeEmitter
         {
             EmitFunction(sb, ns, fn);
         }
+        foreach (var m in ns.Members)
+        {
+            EmitMember(sb, ns, m);
+        }
 
         sb.AppendLine("        return ns.Build();");
         sb.AppendLine("    }");
@@ -147,6 +151,67 @@ internal static class CodeEmitter
         }
         sb.AppendLine(");");
         if (hasFnCap)
+        {
+            sb.AppendLine("        }");
+        }
+    }
+
+    private static void EmitMember(StringBuilder sb, NamespaceModel ns, MemberModel m)
+    {
+        string qualifiedName = string.IsNullOrEmpty(ns.StashName)
+            ? m.StashName
+            : ns.StashName + "." + m.StashName;
+
+        string docArg = m.Documentation is null ? "null" : Quote(m.Documentation);
+        string deprecArg = m.DeprecationReplacement is null
+            ? "null"
+            : $"new global::Stash.Stdlib.Models.DeprecationInfo({Quote(m.DeprecationReplacement)})";
+        string returnTypeArg = m.ReturnTypeStash is null ? "null" : Quote(m.ReturnTypeStash);
+
+        bool hasCap = m.CapabilityFullName != "global::Stash.Runtime.StashCapabilities.None";
+        if (hasCap)
+        {
+            sb.Append("        if ((__caps & ").Append(m.CapabilityFullName).Append(") == ").Append(m.CapabilityFullName).AppendLine(")");
+            sb.AppendLine("        {");
+        }
+
+        // Emit the getter lambda.
+        sb.AppendLine("        ns.Member(");
+        sb.Append("            ").Append(Quote(m.StashName)).AppendLine(",");
+        sb.AppendLine("            static (global::Stash.Runtime.IInterpreterContext ctx) =>");
+        sb.AppendLine("            {");
+
+        // Body: call the method and wrap the return value.
+        string invocation = m.MethodName + "(ctx)";
+        if (m.ReturnTypeFullName == "void")
+        {
+            sb.Append("                ").Append(invocation).AppendLine(";");
+            sb.AppendLine("                return global::Stash.Runtime.StashValue.Null;");
+        }
+        else if (m.ReturnTypeFullName == "passthrough")
+        {
+            sb.Append("                return ").Append(invocation).AppendLine(";");
+        }
+        else
+        {
+            string wrap = m.ReturnTypeFullName.Replace("{BODY}", invocation);
+            sb.Append("                return ").Append(wrap).AppendLine(";");
+        }
+
+        sb.AppendLine("            },");
+        sb.Append("            stability: ").Append(m.StabilityFullName).AppendLine(",");
+        sb.Append("            returnType: ").Append(returnTypeArg).AppendLine(",");
+        sb.Append("            documentation: ").Append(docArg).AppendLine(",");
+        sb.Append("            deprecation: ").Append(deprecArg);
+        if (m.Throws.Count > 0)
+        {
+            sb.AppendLine(",");
+            sb.Append("            throws: ");
+            EmitThrowsArray(sb, m.Throws);
+        }
+        sb.AppendLine(");");
+
+        if (hasCap)
         {
             sb.AppendLine("        }");
         }

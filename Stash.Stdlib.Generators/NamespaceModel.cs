@@ -14,7 +14,19 @@ internal sealed record NamespaceModel(
     EquatableArray<FunctionModel> Functions,
     EquatableArray<ConstantModel> Constants,
     EquatableArray<StructModel> Structs,
-    EquatableArray<EnumModel> Enums);
+    EquatableArray<EnumModel> Enums,
+    EquatableArray<MemberModel> Members = default);
+
+internal sealed record MemberModel(
+    string MethodName,
+    string StashName,
+    string ReturnTypeFullName,   // wrap template (same as FunctionModel.ReturnTypeFullName)
+    string ReturnTypeStash,
+    string StabilityFullName,    // e.g. "global::Stash.Stdlib.Abstractions.Stability.Cached"
+    string? Documentation,
+    string? DeprecationReplacement,
+    string CapabilityFullName,
+    EquatableArray<ThrowsModel> Throws);
 
 internal sealed record FunctionModel(
     string MethodName,

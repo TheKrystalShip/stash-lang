@@ -22,3 +22,8 @@ STSE001    | StashErrorGenerator    | Error    | [StashError] class must be in S
 STSE002    | StashErrorGenerator    | Error    | [StashError] class must inherit RuntimeError.
 STSE003    | StashErrorGenerator    | Error    | [StashError] class declares a reserved member name.
 STSE004    | StashErrorGenerator    | Error    | Duplicate canonical name across [StashError] classes.
+STASH_MEM001 | StashStdlibGenerator | Error    | [StashMember] and [StashFn] are mutually exclusive.
+STASH_MEM002 | StashStdlibGenerator | Error    | [StashMember] and [StashConst] are mutually exclusive.
+STASH_MEM003 | StashStdlibGenerator | Error    | [StashMember] method has wrong parameter shape.
+STASH_MEM004 | StashStdlibGenerator | Error    | [StashMember] missing XML summary doc comment.
+STASH_MEM005 | StashStdlibGenerator | Error    | [StashMember(Throws=...)] type not [StashError]-attributed.

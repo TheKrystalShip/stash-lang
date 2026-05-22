@@ -109,4 +109,62 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    // ── [StashMember] diagnostics ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// STASH_MEM001: [StashMember] is mutually exclusive with [StashFn].
+    /// </summary>
+    public static readonly DiagnosticDescriptor MemberConflictsWithFn = new(
+        id: "STASH_MEM001",
+        title: "[StashMember] and [StashFn] are mutually exclusive",
+        messageFormat: "Method '{0}' is annotated with both [StashMember] and [StashFn]. These attributes are mutually exclusive; remove one of them.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// STASH_MEM002: [StashMember] is mutually exclusive with [StashConst].
+    /// </summary>
+    public static readonly DiagnosticDescriptor MemberConflictsWithConst = new(
+        id: "STASH_MEM002",
+        title: "[StashMember] and [StashConst] are mutually exclusive",
+        messageFormat: "Symbol '{0}' is annotated with both [StashMember] and [StashConst]. These attributes are mutually exclusive; remove one of them.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// STASH_MEM003: [StashMember] method must have exactly one IInterpreterContext parameter.
+    /// </summary>
+    public static readonly DiagnosticDescriptor MemberWrongParameterShape = new(
+        id: "STASH_MEM003",
+        title: "[StashMember] method has wrong parameter shape",
+        messageFormat: "[StashMember] method '{0}' must have exactly one parameter of type IInterpreterContext. Found: {1}.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// STASH_MEM004: [StashMember] method is missing a non-empty XML &lt;summary&gt; doc comment.
+    /// This is an error (not a warning) — members ship without docs are a permanent paper cut.
+    /// </summary>
+    public static readonly DiagnosticDescriptor MemberMissingSummaryDoc = new(
+        id: "STASH_MEM004",
+        title: "[StashMember] missing <summary> doc comment",
+        messageFormat: "[StashMember] method '{0}' is missing a non-empty XML <summary> doc comment",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// STASH_MEM005: A type in [StashMember(Throws=...)] does not have [StashError].
+    /// </summary>
+    public static readonly DiagnosticDescriptor MemberThrowsNotStashError = new(
+        id: "STASH_MEM005",
+        title: "[StashMember(Throws=...)] type not [StashError]-attributed",
+        messageFormat: "Type '{0}' in [StashMember(Throws=...)] on method '{1}' does not have the [StashError] attribute. Only [StashError]-decorated RuntimeError subclasses are valid.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

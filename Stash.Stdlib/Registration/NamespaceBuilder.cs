@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
 
 /// <summary>
@@ -18,6 +19,7 @@ public class NamespaceBuilder
     private readonly StashNamespace _namespace;
     private readonly List<NamespaceFunction> _functions = [];
     private readonly List<NamespaceConstant> _constants = [];
+    private readonly List<NamespaceMember> _members = [];
     private readonly List<BuiltInStruct> _structs = [];
     private readonly List<BuiltInEnum> _enums = [];
     private StashCapabilities _requiredCapability = StashCapabilities.None;
@@ -50,6 +52,34 @@ public class NamespaceBuilder
         string qualifiedName = string.IsNullOrEmpty(_name) ? name : $"{_name}.{name}";
         _namespace.Define(name, new Runtime.BuiltInFunction(qualifiedName, arity, body));
         _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation, deprecation, throws));
+        return this;
+    }
+
+    /// <summary>
+    /// Defines a read-only data member backed by a context-bound getter.
+    /// Registers both the runtime payload (<see cref="NamespaceMemberPayload"/>) and the
+    /// LSP/Analysis metadata in a single call.
+    /// </summary>
+    /// <param name="name">The Stash-visible member name (without namespace prefix).</param>
+    /// <param name="getter">The getter delegate invoked to produce the member's value.</param>
+    /// <param name="stability">
+    /// <see cref="Stability.Cached"/> (default) or <see cref="Stability.Live"/>.
+    /// </param>
+    /// <param name="returnType">Optional Stash type label for LSP/docs.</param>
+    /// <param name="documentation">Optional documentation string.</param>
+    /// <param name="deprecation">Optional deprecation metadata.</param>
+    /// <param name="throws">Optional list of error types this member's getter may throw.</param>
+    public NamespaceBuilder Member(string name,
+        Func<IInterpreterContext, StashValue> getter,
+        Stability stability = Stability.Cached,
+        string? returnType = null,
+        string? documentation = null,
+        DeprecationInfo? deprecation = null,
+        ThrowsEntry[]? throws = null)
+    {
+        var payload = new NamespaceMemberPayload(getter, stability, returnType);
+        _namespace.Define(name, payload);
+        _members.Add(new NamespaceMember(_name, name, returnType, stability, documentation, deprecation, throws));
         return this;
     }
 
@@ -105,6 +135,6 @@ public class NamespaceBuilder
     /// </summary>
     public NamespaceDefinition Build()
     {
-        return new NamespaceDefinition(_name, _namespace, _functions, _constants, _structs, _enums, _requiredCapability);
+        return new NamespaceDefinition(_name, _namespace, _functions, _constants, _structs, _enums, _requiredCapability, _members);
     }
 }
