@@ -69,7 +69,7 @@ public static partial class CliBuiltIns
 
         try
         {
-            StashDictionary parsed = RunParser(schemaInst, argv);
+            StashDictionary parsed = RunParser(schemaInst, argv, ctx);
             return MakeParseResult(ok: true, value: parsed, error: StashValue.Null, helpRequested: false);
         }
         catch (HelpRequestedException)
@@ -89,7 +89,7 @@ public static partial class CliBuiltIns
 
     // ── Parser core ───────────────────────────────────────────────────────────
 
-    private static StashDictionary RunParser(StashInstance schemaInst, string[] argv)
+    private static StashDictionary RunParser(StashInstance schemaInst, string[] argv, IInterpreterContext ctx)
     {
         // P4: Subcommand-aware entry point.
         // If the schema has a CliCommandSpec, we parse in two stages:
@@ -106,13 +106,14 @@ public static partial class CliBuiltIns
             commandSpecVal.AsObj is StashInstance cmdSpecInst &&
             cmdSpecInst.TypeName == "CliCommandSpec")
         {
-            return RunSubcommandParser(schemaInst, cmdSpecInst, argv, helpFlag, pathSoFar: []);
+            return RunSubcommandParser(schemaInst, cmdSpecInst, argv, helpFlag, pathSoFar: [], ctx);
         }
 
         return RunFlatParser(schemaInst, argv, helpFlag,
             inheritedSpecByPropName: null,
             inheritedValues: null,
-            inheritedSupplied: null);
+            inheritedSupplied: null,
+            ctx);
     }
 
     /// <summary>
@@ -128,7 +129,8 @@ public static partial class CliBuiltIns
         StashInstance cmdSpecInst,
         string[] argv,
         bool helpFlag,
-        List<string> pathSoFar)
+        List<string> pathSoFar,
+        IInterpreterContext ctx)
     {
         // ── Build root lookup tables (options/flags only — no positionals at root when subcommands exist) ──
         List<StashValue> rootPositionalSpecs = GetListField(rootSchemaInst, "positionals");
@@ -174,7 +176,7 @@ public static partial class CliBuiltIns
                         throw new CliUnexpectedPositional(
                             $"Unexpected positional argument '{token}' — no subcommand was selected.",
                             value: token);
-                    ConsumePositional(token, rootPositionalSpecs, ref rootPosCursor, rootValues, rootSupplied);
+                    ConsumePositional(token, rootPositionalSpecs, ref rootPosCursor, rootValues, rootSupplied, ctx);
                 }
                 i++;
                 continue;
@@ -252,6 +254,7 @@ public static partial class CliBuiltIns
                         bool isRepeated = GetBoolFieldOrFalse(spec, "repeated");
                         StashValue converted = ConvertValue(rawValue, typeTag, $"--{longPart}");
                         ValidateChoices(converted, rawValue, spec, $"--{longPart}");
+                        ApplyConstraints(spec, converted, rawValue, $"--{longPart}", ctx);
                         SetValue(rootValues, rootPropName!, converted, spec, isRepeated);
                         rootSupplied.Add(rootPropName!);
                     }
@@ -329,6 +332,7 @@ public static partial class CliBuiltIns
                         bool sIsRepeated = GetBoolFieldOrFalse(sSpec, "repeated");
                         StashValue converted = ConvertValue(rawValue, sTypeTag, $"-{shortChar}");
                         ValidateChoices(converted, rawValue, sSpec, $"-{shortChar}");
+                        ApplyConstraints(sSpec, converted, rawValue, $"-{shortChar}", ctx);
                         SetValue(rootValues, sPropName, converted, sSpec, sIsRepeated);
                         rootSupplied.Add(sPropName);
                     }
@@ -409,10 +413,10 @@ public static partial class CliBuiltIns
             // The recursive call builds the complete result dict (with the innermost CliCommand)
             // and handles its own root env/defaults/missing-required checks.
             // We merge any root-level values from rootValues into the recursive result and return.
-            leafValues = RunSubcommandParser(leafSchema, leafCmdSpec, subArgv, leafHelpFlag, newPath);
+            leafValues = RunSubcommandParser(leafSchema, leafCmdSpec, subArgv, leafHelpFlag, newPath, ctx);
 
             // Apply root-level env fallbacks / defaults / missing-required
-            ApplyEnvFallbacks(rootSpecByPropName, rootSupplied, rootValues);
+            ApplyEnvFallbacks(rootSpecByPropName, rootSupplied, rootValues, ctx);
             ApplyDefaults(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
             CheckMissingRequired(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
 
@@ -429,10 +433,11 @@ public static partial class CliBuiltIns
             leafSchema, subArgv, leafHelpFlag,
             inheritedSpecByPropName: rootSpecByPropName,
             inheritedValues: rootValues,
-            inheritedSupplied: rootSupplied);
+            inheritedSupplied: rootSupplied,
+            ctx);
 
         // ── Apply root-level env fallbacks / defaults / missing-required ──
-        ApplyEnvFallbacks(rootSpecByPropName, rootSupplied, rootValues);
+        ApplyEnvFallbacks(rootSpecByPropName, rootSupplied, rootValues, ctx);
         ApplyDefaults(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
         CheckMissingRequired(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
 
@@ -600,7 +605,8 @@ public static partial class CliBuiltIns
         bool helpFlag,
         Dictionary<string, StashInstance>? inheritedSpecByPropName,
         Dictionary<string, StashValue>? inheritedValues,
-        HashSet<string>? inheritedSupplied)
+        HashSet<string>? inheritedSupplied,
+        IInterpreterContext ctx)
     {
         List<StashValue> positionalSpecs = GetListField(schemaInst, "positionals");
         StashDictionary optionsDict = GetDictField(schemaInst, "options");
@@ -629,7 +635,7 @@ public static partial class CliBuiltIns
             // ── Past -- boundary: all remaining tokens are positionals ──────
             if (pastDoubleDash)
             {
-                ConsumePositional(token, positionalSpecs, ref positionalCursor, values, supplied);
+                ConsumePositional(token, positionalSpecs, ref positionalCursor, values, supplied, ctx);
                 continue;
             }
 
@@ -690,6 +696,7 @@ public static partial class CliBuiltIns
                         bool isRepeated = GetBoolFieldOrFalse(iSpec, "repeated");
                         StashValue converted = ConvertValue(rawValue, typeTag, $"--{longPart}");
                         ValidateChoices(converted, rawValue, iSpec, $"--{longPart}");
+                        ApplyConstraints(iSpec, converted, rawValue, $"--{longPart}", ctx);
                         SetValue(inheritedValues!, inheritedPropName!, converted, iSpec, isRepeated);
                         inheritedSupplied!.Add(inheritedPropName!);
                     }
@@ -768,7 +775,7 @@ public static partial class CliBuiltIns
                     bool isRepeated = GetBoolFieldOrFalse(spec, "repeated");
                     StashValue converted = ConvertValue(rawValue, typeTag, $"--{longPart}");
                     ValidateChoices(converted, rawValue, spec, $"--{longPart}");
-                    // TODO(P5): apply min/max/pattern/validate here
+                    ApplyConstraints(spec, converted, rawValue, $"--{longPart}", ctx);
                     SetValue(values, resolvedPropName, converted, spec, isRepeated);
                     supplied.Add(resolvedPropName);
                 }
@@ -824,7 +831,7 @@ public static partial class CliBuiltIns
                         bool sIsRepeated = GetBoolFieldOrFalse(sSpec, "repeated");
                         StashValue converted = ConvertValue(rawValue, sTypeTag, $"-{shortChar}");
                         ValidateChoices(converted, rawValue, sSpec, $"-{shortChar}");
-                        // TODO(P5): apply min/max/pattern/validate here
+                        ApplyConstraints(sSpec, converted, rawValue, $"-{shortChar}", ctx);
                         SetValue(values, sPropName, converted, sSpec, sIsRepeated);
                         supplied.Add(sPropName);
                     }
@@ -833,11 +840,11 @@ public static partial class CliBuiltIns
             }
 
             // ── Positional token ──────────────────────────────────────────
-            ConsumePositional(token, positionalSpecs, ref positionalCursor, values, supplied);
+            ConsumePositional(token, positionalSpecs, ref positionalCursor, values, supplied, ctx);
         }
 
         // ── Post-parse: apply env fallbacks then defaults ──────────────────
-        ApplyEnvFallbacks(specByPropName, supplied, values);
+        ApplyEnvFallbacks(specByPropName, supplied, values, ctx);
         ApplyDefaults(specByPropName, positionalSpecs, supplied, values);
 
         // ── Missing-required checks ────────────────────────────────────────
@@ -907,7 +914,8 @@ public static partial class CliBuiltIns
         List<StashValue> positionalSpecs,
         ref int cursor,
         Dictionary<string, StashValue> values,
-        HashSet<string> supplied)
+        HashSet<string> supplied,
+        IInterpreterContext ctx)
     {
         // Check if we have a current positional spec at cursor
         if (cursor < positionalSpecs.Count)
@@ -925,7 +933,7 @@ public static partial class CliBuiltIns
 
             StashValue converted = ConvertValue(token, sTypeTag, sPropName);
             ValidateChoices(converted, token, spec, sPropName);
-            // TODO(P5): apply min/max/pattern/validate here
+            ApplyConstraints(spec, converted, token, sPropName, ctx);
 
             if (isRepeated)
             {
@@ -954,7 +962,7 @@ public static partial class CliBuiltIns
                     string typeTag = GetStringFieldOrEmpty(lastSpec, "typeTag");
                     StashValue converted = ConvertValue(token, typeTag, propName);
                     ValidateChoices(converted, token, lastSpec, propName);
-                    // TODO(P5): apply min/max/pattern/validate here
+                    ApplyConstraints(lastSpec, converted, token, propName, ctx);
                     AppendToList(values, propName, converted);
                     supplied.Add(propName);
                     return;
@@ -1002,7 +1010,8 @@ public static partial class CliBuiltIns
     private static void ApplyEnvFallbacks(
         Dictionary<string, StashInstance> specByPropName,
         HashSet<string> supplied,
-        Dictionary<string, StashValue> values)
+        Dictionary<string, StashValue> values,
+        IInterpreterContext ctx)
     {
         foreach (var (propName, spec) in specByPropName)
         {
@@ -1020,7 +1029,7 @@ public static partial class CliBuiltIns
 
             StashValue converted = ConvertValue(envVal, typeTag, $"${envVar}");
             ValidateChoices(converted, envVal, spec, propName);
-            // TODO(P5): apply min/max/pattern/validate here
+            ApplyConstraints(spec, converted, envVal, propName, ctx);
             SetValue(values, propName, converted, spec, isRepeated);
             supplied.Add(propName);
         }

@@ -116,6 +116,12 @@ public static partial class CliBuiltIns
             // Build a fresh copy of the spec dict with the resolved name and propName filled in.
             StashValue resolvedSpec = ReplaceNameField(specInst, longName, propName);
 
+            // ── Construction-time constraint/type compatibility check ──────
+            // min/max only valid for numeric types; pattern only valid for string.
+            // Enforced on the resolved spec so the rule is structural (not builder-implicit).
+            if (resolvedSpec.IsObj && resolvedSpec.AsObj is StashInstance resolvedInst)
+                ValidateConstraintCompatibility(resolvedInst, typeTag, propName);
+
             if (kind == "positional")
                 positionals.Add(resolvedSpec);
             else
