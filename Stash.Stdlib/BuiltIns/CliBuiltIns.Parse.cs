@@ -91,22 +91,477 @@ public static partial class CliBuiltIns
 
     private static StashDictionary RunParser(StashInstance schemaInst, string[] argv)
     {
-        // ── Read schema fields ─────────────────────────────────────────────
+        // P4: Subcommand-aware entry point.
+        // If the schema has a CliCommandSpec, we parse in two stages:
+        //   1. Scan argv for root-level options/flags and detect the first non-option token.
+        //   2. Use that token as the subcommand selector and parse the remainder against the
+        //      leaf schema, with root specs still available for "global flag passthrough".
+        // If no subcommand spec is present, delegate directly to RunFlatParser.
+
         bool helpFlag = GetBoolField(schemaInst, "helpFlag");
+        StashValue commandSpecVal = schemaInst.GetField("command", null);
 
-        List<StashValue> positionalSpecs = GetListField(schemaInst, "positionals");
-        StashDictionary optionsDict = GetDictField(schemaInst, "options");
+        if (!commandSpecVal.IsNull &&
+            commandSpecVal.IsObj &&
+            commandSpecVal.AsObj is StashInstance cmdSpecInst &&
+            cmdSpecInst.TypeName == "CliCommandSpec")
+        {
+            return RunSubcommandParser(schemaInst, cmdSpecInst, argv, helpFlag, pathSoFar: []);
+        }
 
-        // ── Build lookup tables ────────────────────────────────────────────
-        // propName -> spec instance (for all options and flags)
-        var specByPropName = new Dictionary<string, StashInstance>(StringComparer.Ordinal);
-        // longName -> propName (the CLI-facing --foo name maps back to propName)
-        var longToProp = new Dictionary<string, string>(StringComparer.Ordinal);
-        // short char -> propName
-        var shortToProp = new Dictionary<string, string>(StringComparer.Ordinal);
-        // also track aliases: longAlias -> propName
-        var aliasToProp = new Dictionary<string, string>(StringComparer.Ordinal);
+        return RunFlatParser(schemaInst, argv, helpFlag,
+            inheritedSpecByPropName: null,
+            inheritedValues: null,
+            inheritedSupplied: null);
+    }
 
+    /// <summary>
+    /// Subcommand-aware parser.
+    /// Scans argv for the first non-option token to use as a subcommand selector.
+    /// Root-level options/flags are parsed before and after the subcommand token so that
+    /// "global flags carry through" — root flags may appear anywhere in the argv stream.
+    /// Returns a flat result dict that contains all root-parsed values PLUS a "command" key
+    /// holding a CliCommand instance (name, path, values).
+    /// </summary>
+    private static StashDictionary RunSubcommandParser(
+        StashInstance rootSchemaInst,
+        StashInstance cmdSpecInst,
+        string[] argv,
+        bool helpFlag,
+        List<string> pathSoFar)
+    {
+        // ── Build root lookup tables (options/flags only — no positionals at root when subcommands exist) ──
+        List<StashValue> rootPositionalSpecs = GetListField(rootSchemaInst, "positionals");
+        StashDictionary rootOptionsDict = GetDictField(rootSchemaInst, "options");
+
+        var rootSpecByPropName = new Dictionary<string, StashInstance>(StringComparer.Ordinal);
+        var rootLongToProp     = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rootShortToProp    = new Dictionary<string, string>(StringComparer.Ordinal);
+        var rootAliasToProp    = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        BuildLookupTables(rootOptionsDict, rootSpecByPropName, rootLongToProp, rootShortToProp, rootAliasToProp);
+
+        // ── Parse state ────────────────────────────────────────────────────
+        var rootValues    = new Dictionary<string, StashValue>(StringComparer.Ordinal);
+        var rootSupplied  = new HashSet<string>(StringComparer.Ordinal);
+        int rootPosCursor = 0;
+        bool pastDoubleDash = false;
+
+        // ── Available subcommand names ─────────────────────────────────────
+        StashValue commandsVal = cmdSpecInst.GetField("commands", null);
+        StashDictionary commandsDict = commandsVal.IsObj && commandsVal.AsObj is StashDictionary cd
+            ? cd : new StashDictionary();
+
+        // ── First pass: scan argv for root options and the subcommand selector ──
+        int i = 0;
+        string? selectedSubcommand = null;
+        int subcommandArgvStart = argv.Length; // index of first token AFTER the subcommand selector
+
+        while (i < argv.Length)
+        {
+            string token = argv[i];
+
+            // ── Past -- boundary ────────────────────────────────────────────
+            if (pastDoubleDash)
+            {
+                // After --, everything is positional. If we don't have a subcommand yet,
+                // the first positional after -- is NOT a subcommand selector.
+                if (selectedSubcommand is null)
+                {
+                    // Treat as a positional for the root — but subcommands mode means
+                    // we don't have root positionals declared. Raise CliUnexpectedPositional.
+                    if (rootPositionalSpecs.Count == 0)
+                        throw new CliUnexpectedPositional(
+                            $"Unexpected positional argument '{token}' — no subcommand was selected.",
+                            value: token);
+                    ConsumePositional(token, rootPositionalSpecs, ref rootPosCursor, rootValues, rootSupplied);
+                }
+                i++;
+                continue;
+            }
+
+            if (token == "--")
+            {
+                pastDoubleDash = true;
+                i++;
+                continue;
+            }
+
+            // ── Long option / short option ─────────────────────────────────
+            if (token.StartsWith("--", StringComparison.Ordinal))
+            {
+                // Help flag
+                if (helpFlag && token == "--help")
+                    throw new HelpRequestedException();
+
+                string longPart = token[2..];
+                string? inlineValue = null;
+                int eqIdx = longPart.IndexOf('=');
+                if (eqIdx >= 0)
+                {
+                    inlineValue = longPart[(eqIdx + 1)..];
+                    longPart = longPart[..eqIdx];
+                }
+
+                // Try to match against root options
+                if (TryResolveRootLongName(longPart, rootLongToProp, rootAliasToProp, out string? rootPropName))
+                {
+                    i++; // consume token
+                    StashInstance spec = rootSpecByPropName[rootPropName!];
+                    string kind = GetStringFieldOrEmpty(spec, "kind");
+
+                    bool isNegation = false;
+                    if (longPart.StartsWith("no-", StringComparison.Ordinal))
+                    {
+                        string baseName = longPart[3..];
+                        if (rootLongToProp.TryGetValue(baseName, out string? negProp))
+                        {
+                            StashInstance negSpec = rootSpecByPropName[negProp];
+                            if (GetStringFieldOrEmpty(negSpec, "kind") == "flag" && GetBoolFieldOrFalse(negSpec, "negatable"))
+                            {
+                                isNegation = true;
+                                rootPropName = negProp;
+                                spec = negSpec;
+                                kind = "flag";
+                            }
+                        }
+                    }
+
+                    if (kind == "flag")
+                    {
+                        SetValue(rootValues, rootPropName!, isNegation ? StashValue.False : StashValue.True, spec, isRepeated: false);
+                        rootSupplied.Add(rootPropName!);
+                    }
+                    else
+                    {
+                        string rawValue;
+                        if (inlineValue is not null)
+                        {
+                            rawValue = inlineValue;
+                        }
+                        else if (i < argv.Length)
+                        {
+                            rawValue = argv[i];
+                            i++;
+                        }
+                        else
+                        {
+                            throw new CliMissingValue($"Option '--{longPart}' requires a value.", option: $"--{longPart}");
+                        }
+                        string typeTag = GetStringFieldOrEmpty(spec, "typeTag");
+                        bool isRepeated = GetBoolFieldOrFalse(spec, "repeated");
+                        StashValue converted = ConvertValue(rawValue, typeTag, $"--{longPart}");
+                        ValidateChoices(converted, rawValue, spec, $"--{longPart}");
+                        SetValue(rootValues, rootPropName!, converted, spec, isRepeated);
+                        rootSupplied.Add(rootPropName!);
+                    }
+                    continue;
+                }
+
+                // Not a known root option — might be a subcommand-specific flag; stop root scan
+                // and treat remaining as subcommand argv. If no subcommand was selected yet, this
+                // is an unknown root option.
+                if (selectedSubcommand is null)
+                {
+                    // We need to resolve properly — check if it truly is unknown at root
+                    // (CliUnknownOption) or if it belongs to the subcommand (treat as sub argv).
+                    // The spec says unknown options raise CliUnknownOption; we'll defer them to
+                    // the subcommand parser if a subcommand was already selected, otherwise error.
+                    i++;
+                    throw new CliUnknownOption($"Unknown option '{token}'.", option: token);
+                }
+                // We have a selected subcommand — this token plus remainder are subcommand argv
+                subcommandArgvStart = i;
+                break;
+            }
+
+            if (token.StartsWith("-", StringComparison.Ordinal) && token.Length > 1)
+            {
+                // Help -h
+                if (helpFlag && token == "-h")
+                    throw new HelpRequestedException();
+
+                // Try root short options
+                string shortsPart = token[1..];
+                bool allHandled = true;
+                int si = 0;
+                int savedI = i + 1;
+                int tempI = i + 1;
+
+                while (si < shortsPart.Length)
+                {
+                    string shortChar = shortsPart[si].ToString();
+                    si++;
+
+                    if (!rootShortToProp.TryGetValue(shortChar, out string? sPropName))
+                    {
+                        allHandled = false;
+                        break;
+                    }
+
+                    StashInstance sSpec = rootSpecByPropName[sPropName];
+                    string sKind = GetStringFieldOrEmpty(sSpec, "kind");
+
+                    if (sKind == "flag")
+                    {
+                        SetValue(rootValues, sPropName, StashValue.True, sSpec, isRepeated: false);
+                        rootSupplied.Add(sPropName);
+                    }
+                    else
+                    {
+                        string rawValue;
+                        if (si < shortsPart.Length)
+                        {
+                            rawValue = shortsPart[si..];
+                            si = shortsPart.Length;
+                        }
+                        else if (tempI < argv.Length)
+                        {
+                            rawValue = argv[tempI];
+                            tempI++;
+                        }
+                        else
+                        {
+                            string sLong = GetStringFieldOrEmpty(sSpec, "name");
+                            throw new CliMissingValue($"Option '-{shortChar}' (--{sLong}) requires a value.", option: $"-{shortChar}");
+                        }
+                        string sTypeTag = GetStringFieldOrEmpty(sSpec, "typeTag");
+                        bool sIsRepeated = GetBoolFieldOrFalse(sSpec, "repeated");
+                        StashValue converted = ConvertValue(rawValue, sTypeTag, $"-{shortChar}");
+                        ValidateChoices(converted, rawValue, sSpec, $"-{shortChar}");
+                        SetValue(rootValues, sPropName, converted, sSpec, sIsRepeated);
+                        rootSupplied.Add(sPropName);
+                    }
+                }
+
+                if (allHandled)
+                {
+                    i = tempI;
+                    continue;
+                }
+
+                // Unknown short option — if we have a subcommand, pass to sub; otherwise error
+                if (selectedSubcommand is null)
+                {
+                    // Reset the partially parsed state and report the unknown option
+                    string unknown = "-" + shortsPart[si - 1];
+                    throw new CliUnknownOption($"Unknown option '{unknown}'.", option: unknown);
+                }
+                subcommandArgvStart = i;
+                break;
+            }
+
+            // ── Non-option token: this is the subcommand selector ─────────
+            i++;
+            selectedSubcommand = token;
+            subcommandArgvStart = i;
+            break;
+        }
+
+        // ── Remaining root-level options after subcommand selector ─────────
+        // (Handled by the subcommand parser via "inherited specs" mechanism.)
+
+        // ── Validate the selected subcommand ──────────────────────────────
+        if (selectedSubcommand is null)
+        {
+            // No subcommand token found — help?
+            // All remaining tokens were root options. The subcommand is required.
+            // Check if there's a help request, else raise CliMissingRequired.
+            List<string> allSubcmds = GetSubcommandNames(commandsDict);
+            throw new CliMissingRequired(
+                $"A subcommand is required. Available: {string.Join(", ", allSubcmds)}.",
+                name: "<subcommand>");
+        }
+
+        // Check that the selected subcommand is known
+        if (!commandsDict.Has(selectedSubcommand))
+        {
+            List<string> allSubcmds = GetSubcommandNames(commandsDict);
+            List<string> candidates = FindCandidates(selectedSubcommand, allSubcmds);
+            throw new CliUnknownCommand(
+                $"Unknown subcommand '{selectedSubcommand}'. Did you mean: {string.Join(", ", candidates.Count > 0 ? candidates : allSubcmds)}?",
+                name: selectedSubcommand,
+                candidates: candidates.Count > 0 ? candidates : allSubcmds);
+        }
+
+        // ── Resolve the leaf schema ────────────────────────────────────────
+        StashValue leafSchemaVal = commandsDict.Get(selectedSubcommand);
+        if (!leafSchemaVal.IsObj || leafSchemaVal.AsObj is not StashInstance leafSchema)
+            throw new TypeError($"Internal error: subcommand '{selectedSubcommand}' is not a CliSchema.");
+
+        List<string> newPath = [..pathSoFar, selectedSubcommand];
+
+        // ── Build the subcommand argv: remaining tokens from subcommandArgvStart ──
+        string[] subArgv = argv[subcommandArgvStart..];
+
+        // ── Check if the leaf schema also has subcommands (two-level recursion) ──
+        StashValue leafCommandVal = leafSchema.GetField("command", null);
+        bool leafHelpFlag = GetBoolField(leafSchema, "helpFlag");
+
+        StashDictionary leafValues;
+
+        if (!leafCommandVal.IsNull &&
+            leafCommandVal.IsObj &&
+            leafCommandVal.AsObj is StashInstance leafCmdSpec &&
+            leafCmdSpec.TypeName == "CliCommandSpec")
+        {
+            // Recurse into the next level of subcommands.
+            // The recursive call builds the complete result dict (with the innermost CliCommand)
+            // and handles its own root env/defaults/missing-required checks.
+            // We merge any root-level values from rootValues into the recursive result and return.
+            leafValues = RunSubcommandParser(leafSchema, leafCmdSpec, subArgv, leafHelpFlag, newPath);
+
+            // Apply root-level env fallbacks / defaults / missing-required
+            ApplyEnvFallbacks(rootSpecByPropName, rootSupplied, rootValues);
+            ApplyDefaults(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
+            CheckMissingRequired(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
+
+            // The innermost CliCommand (with full path) is already the "command" key in leafValues.
+            // Build our root result and propagate the inner command key.
+            StashDictionary rootResult = BuildResultDict(rootSpecByPropName, rootPositionalSpecs, rootValues);
+            if (leafValues.Has("command"))
+                rootResult.Set("command", leafValues.Get("command"));
+            return rootResult;
+        }
+
+        // Flat leaf: parse the leaf schema's argv with root specs inherited for global flag passthrough
+        leafValues = RunFlatParser(
+            leafSchema, subArgv, leafHelpFlag,
+            inheritedSpecByPropName: rootSpecByPropName,
+            inheritedValues: rootValues,
+            inheritedSupplied: rootSupplied);
+
+        // ── Apply root-level env fallbacks / defaults / missing-required ──
+        ApplyEnvFallbacks(rootSpecByPropName, rootSupplied, rootValues);
+        ApplyDefaults(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
+        CheckMissingRequired(rootSpecByPropName, rootPositionalSpecs, rootSupplied, rootValues);
+
+        // ── Build the CliCommand struct ────────────────────────────────────
+        // The command's "values" dict is the leaf's parsed values (excluding any root keys
+        // that were written into rootValues via inherited passthrough).
+        // Extract only the leaf schema's keys from leafValues:
+        StashDictionary commandValues = ExtractLeafValues(leafSchema, leafValues);
+
+        var commandFields = new Dictionary<string, StashValue>
+        {
+            ["name"]   = StashValue.FromObj(selectedSubcommand),
+            ["path"]   = StashValue.FromObj(newPath.Select(StashValue.FromObj).ToList<StashValue>()),
+            ["values"] = StashValue.FromObj(commandValues),
+        };
+        StashValue commandInst = StashValue.FromObj(new StashInstance("CliCommand", commandFields));
+
+        // ── Build final result dict: root values + "command" key ──────────
+        StashDictionary rootResult2 = BuildResultDict(rootSpecByPropName, rootPositionalSpecs, rootValues);
+        rootResult2.Set("command", commandInst);
+        return rootResult2;
+    }
+
+    /// <summary>
+    /// Extracts a dict containing only the keys declared in leafSchema (positionals + options),
+    /// looking them up from the given source values dict.
+    /// </summary>
+    private static StashDictionary ExtractLeafValues(StashInstance leafSchema, StashDictionary sourceValues)
+    {
+        var result = new StashDictionary();
+
+        List<StashValue> positionals = GetListField(leafSchema, "positionals");
+        StashDictionary options = GetDictField(leafSchema, "options");
+
+        foreach (object rawKey in options.RawKeys())
+        {
+            string propName = rawKey?.ToString() ?? "";
+            if (sourceValues.Has(propName))
+                result.Set(propName, sourceValues.Get(propName));
+        }
+
+        foreach (StashValue sv in positionals)
+        {
+            if (!sv.IsObj || sv.AsObj is not StashInstance spec) continue;
+            string propName = GetStringFieldOrEmpty(spec, "propName");
+            if (!string.IsNullOrEmpty(propName) && sourceValues.Has(propName))
+                result.Set(propName, sourceValues.Get(propName));
+        }
+
+        return result;
+    }
+
+    /// <summary>Returns subcommand names from a commands dict as a sorted list.</summary>
+    private static List<string> GetSubcommandNames(StashDictionary commandsDict)
+    {
+        var names = new List<string>();
+        foreach (object rawKey in commandsDict.RawKeys())
+        {
+            string name = rawKey?.ToString() ?? "";
+            if (!string.IsNullOrEmpty(name))
+                names.Add(name);
+        }
+        names.Sort(StringComparer.Ordinal);
+        return names;
+    }
+
+    /// <summary>
+    /// Finds candidate subcommand names for an unknown command token.
+    /// Uses substring matching: returns names that contain the token (case-insensitive)
+    /// or share a common prefix. Falls back to all names if no match.
+    /// </summary>
+    private static List<string> FindCandidates(string unknown, List<string> allNames)
+    {
+        // Exact prefix match
+        var prefixMatches = allNames
+            .Where(n => n.StartsWith(unknown, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (prefixMatches.Count > 0) return prefixMatches;
+
+        // Substring match
+        var subMatches = allNames
+            .Where(n => n.Contains(unknown, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (subMatches.Count > 0) return subMatches;
+
+        // Return all as candidates when nothing matches
+        return allNames;
+    }
+
+    /// <summary>
+    /// Tries to resolve a long option name against root option tables.
+    /// Unlike ResolveLongName, this returns false instead of throwing when unresolved.
+    /// </summary>
+    private static bool TryResolveRootLongName(
+        string longPart,
+        Dictionary<string, string> longToProp,
+        Dictionary<string, string> aliasToProp,
+        out string? propName)
+    {
+        if (longToProp.TryGetValue(longPart, out propName))
+            return true;
+        if (aliasToProp.TryGetValue(longPart, out propName))
+            return true;
+
+        // Prefix matching
+        var allLongs = longToProp.Keys.Concat(aliasToProp.Keys)
+            .Where(k => k.StartsWith(longPart, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (allLongs.Count == 1)
+        {
+            string winner = allLongs[0];
+            propName = longToProp.TryGetValue(winner, out string? p) ? p : aliasToProp[winner];
+            return true;
+        }
+
+        propName = null;
+        return false;
+    }
+
+    /// <summary>Builds the lookup tables for a given options dict.</summary>
+    private static void BuildLookupTables(
+        StashDictionary optionsDict,
+        Dictionary<string, StashInstance> specByPropName,
+        Dictionary<string, string> longToProp,
+        Dictionary<string, string> shortToProp,
+        Dictionary<string, string> aliasToProp)
+    {
         foreach (object rawKey in optionsDict.RawKeys())
         {
             string propKey = rawKey?.ToString() ?? "";
@@ -131,13 +586,36 @@ public static partial class CliBuiltIns
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The original flat parser, refactored to accept optional "inherited" root specs
+    /// so that global flags declared at root can appear in the subcommand argv segment.
+    /// When inherited specs are provided, tokens matching inherited options are written
+    /// into inheritedValues (root's values dict) rather than the sub's values dict.
+    /// </summary>
+    private static StashDictionary RunFlatParser(
+        StashInstance schemaInst,
+        string[] argv,
+        bool helpFlag,
+        Dictionary<string, StashInstance>? inheritedSpecByPropName,
+        Dictionary<string, StashValue>? inheritedValues,
+        HashSet<string>? inheritedSupplied)
+    {
+        List<StashValue> positionalSpecs = GetListField(schemaInst, "positionals");
+        StashDictionary optionsDict = GetDictField(schemaInst, "options");
+
+        // ── Build lookup tables ────────────────────────────────────────────
+        var specByPropName = new Dictionary<string, StashInstance>(StringComparer.Ordinal);
+        var longToProp     = new Dictionary<string, string>(StringComparer.Ordinal);
+        var shortToProp    = new Dictionary<string, string>(StringComparer.Ordinal);
+        var aliasToProp    = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        BuildLookupTables(optionsDict, specByPropName, longToProp, shortToProp, aliasToProp);
 
         // ── Parse state ────────────────────────────────────────────────────
-        // Accumulate values keyed by propName
         var values = new Dictionary<string, StashValue>(StringComparer.Ordinal);
-        // Track which options/flags were actually supplied (for missing-required checks)
         var supplied = new HashSet<string>(StringComparer.Ordinal);
-        // Positional consumption cursor
         int positionalCursor = 0;
         bool pastDoubleDash = false;
 
@@ -178,6 +656,44 @@ public static partial class CliBuiltIns
                 {
                     inlineValue = longPart[(eqIdx + 1)..];
                     longPart = longPart[..eqIdx];
+                }
+
+                // Check if this is an inherited (root-level) option that should be handled
+                if (inheritedSpecByPropName is not null &&
+                    TryResolveRootLongName(longPart, BuildLongMap(inheritedSpecByPropName), new Dictionary<string, string>(), out string? inheritedPropName))
+                {
+                    StashInstance iSpec = inheritedSpecByPropName[inheritedPropName!];
+                    string iKind = GetStringFieldOrEmpty(iSpec, "kind");
+
+                    if (iKind == "flag")
+                    {
+                        SetValue(inheritedValues!, inheritedPropName!, StashValue.True, iSpec, isRepeated: false);
+                        inheritedSupplied!.Add(inheritedPropName!);
+                    }
+                    else
+                    {
+                        string rawValue;
+                        if (inlineValue is not null)
+                        {
+                            rawValue = inlineValue;
+                        }
+                        else if (i < argv.Length)
+                        {
+                            rawValue = argv[i];
+                            i++;
+                        }
+                        else
+                        {
+                            throw new CliMissingValue($"Option '--{longPart}' requires a value.", option: $"--{longPart}");
+                        }
+                        string typeTag = GetStringFieldOrEmpty(iSpec, "typeTag");
+                        bool isRepeated = GetBoolFieldOrFalse(iSpec, "repeated");
+                        StashValue converted = ConvertValue(rawValue, typeTag, $"--{longPart}");
+                        ValidateChoices(converted, rawValue, iSpec, $"--{longPart}");
+                        SetValue(inheritedValues!, inheritedPropName!, converted, iSpec, isRepeated);
+                        inheritedSupplied!.Add(inheritedPropName!);
+                    }
+                    continue;
                 }
 
                 // Detect --no-<name> negation early (before ResolveLongName)
@@ -328,6 +844,22 @@ public static partial class CliBuiltIns
         CheckMissingRequired(specByPropName, positionalSpecs, supplied, values);
 
         return BuildResultDict(specByPropName, positionalSpecs, values);
+    }
+
+    /// <summary>
+    /// Builds a longName -> propName lookup from a specByPropName dict.
+    /// Used for inherited (root-level) option resolution during subcommand parsing.
+    /// </summary>
+    private static Dictionary<string, string> BuildLongMap(Dictionary<string, StashInstance> specByPropName)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (propName, spec) in specByPropName)
+        {
+            string longName = GetStringFieldOrEmpty(spec, "name");
+            if (!string.IsNullOrEmpty(longName))
+                map[longName] = propName;
+        }
+        return map;
     }
 
     // ── Long name resolution ──────────────────────────────────────────────────
