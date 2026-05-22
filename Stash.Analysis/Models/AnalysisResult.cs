@@ -2,6 +2,7 @@ namespace Stash.Analysis;
 
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Analysis.Cli;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
@@ -18,11 +19,19 @@ public class AnalysisResult
     public List<SemanticDiagnostic> SemanticDiagnostics { get; }
     public Dictionary<string, ImportResolver.ModuleInfo> NamespaceImports { get; }
 
+    /// <summary>
+    /// Index of literal <c>cli.parse(schema)</c> result bindings discovered by
+    /// <see cref="Cli.CliSchemaAnalyzer"/>. Used by hover and completion handlers to provide
+    /// field-level information when the cursor is on or after a parse-result variable.
+    /// </summary>
+    public CliSchemaIndex CliSchema { get; }
+
     public AnalysisResult(List<Token> tokens, List<Stmt> statements,
         List<string> lexErrors, List<string> parseErrors,
         List<DiagnosticError> structuredLexErrors, List<DiagnosticError> structuredParseErrors,
         ScopeTree symbols, List<SemanticDiagnostic> semanticDiagnostics,
-        Dictionary<string, ImportResolver.ModuleInfo>? namespaceImports = null)
+        Dictionary<string, ImportResolver.ModuleInfo>? namespaceImports = null,
+        CliSchemaIndex? cliSchema = null)
     {
         Tokens = tokens;
         Statements = statements;
@@ -33,6 +42,7 @@ public class AnalysisResult
         Symbols = symbols;
         SemanticDiagnostics = semanticDiagnostics;
         NamespaceImports = namespaceImports ?? new Dictionary<string, ImportResolver.ModuleInfo>();
+        CliSchema = cliSchema ?? new CliSchemaIndex();
     }
 
     /// <summary>

@@ -639,6 +639,31 @@ public class CompletionHandler : CompletionHandlerBase
             }
         }
 
+        // ── CLI parse-result dot completions ──────────────────────────────────
+        // If the prefix is a variable bound to cli.parse(schema) output and the schema
+        // was a literal cli.schema({...}), offer the declared field names as completions.
+        if (items.Count == 0 && result != null)
+        {
+            var cliInfo = result.CliSchema.TryGet(prefix);
+            if (cliInfo != null)
+            {
+                foreach (var field in cliInfo.Fields)
+                {
+                    var fieldDetail = field.TypeTag != null
+                        ? $"cli field: {field.TypeTag}"
+                        : "cli field";
+                    items.Add(new CompletionItem
+                    {
+                        Label = field.Name,
+                        Kind = LspCompletionItemKind.Field,
+                        Detail = fieldDetail
+                    });
+                }
+                if (items.Count > 0)
+                    return new CompletionList(items);
+            }
+        }
+
         // Check if prefix is an enum from a namespace import (e.g., utils.LogLevel.)
         if (items.Count == 0 && result != null)
         {

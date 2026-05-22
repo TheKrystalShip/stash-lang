@@ -232,6 +232,34 @@ public class HoverHandler : HoverHandlerBase
             return Task.FromResult<Hover?>(null);
         }
 
+        // ── CLI parse-result hover ────────────────────────────────────────────
+        // When the hovered word is a variable bound to cli.parse(schema) output
+        // (and the schema is a literal cli.schema({...})), render the field listing.
+        if (!afterDot && symbol != null &&
+            (symbol.Kind is StashSymbolKind.Variable or StashSymbolKind.Constant))
+        {
+            var cliInfo = result.CliSchema.TryGet(word);
+            if (cliInfo != null && cliInfo.Fields.Count > 0)
+            {
+                var fieldLines = new System.Text.StringBuilder();
+                foreach (var f in cliInfo.Fields)
+                {
+                    var tag = f.TypeTag ?? "any";
+                    fieldLines.AppendLine($"  {f.Name}: {tag}");
+                }
+                var hoverMd =
+                    $"```stash\n// cli.parse result — declared fields:\n{fieldLines.ToString().TrimEnd()}\n```\n*cli parse result*";
+                return Task.FromResult<Hover?>(new Hover
+                {
+                    Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = hoverMd
+                    })
+                });
+            }
+        }
+
         // Normal symbol hover — follow re-export chain if applicable
         // When the symbol came from a module that re-exports it, look up the original declaration.
         var (displaySymbol, displaySourceUri) = ResolveReExportChain(_analysis, symbol, word);

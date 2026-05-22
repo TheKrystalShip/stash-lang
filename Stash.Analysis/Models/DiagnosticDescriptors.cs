@@ -258,6 +258,10 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA1401 = new("SA1401", "Use optional chaining", DiagnosticLevel.Information, "Suggestions", "Use optional chaining: '{0}?.{1}' instead of null check with member access.", FixApplicability.Unsafe);
     public static readonly DiagnosticDescriptor SA1402 = new("SA1402", "Use null coalescing", DiagnosticLevel.Information, "Suggestions", "Use null coalescing: '{0} ?? {1}' instead of null check with ternary.", FixApplicability.Unsafe);
     public static readonly DiagnosticDescriptor SA1403 = new("SA1403", "Prefer string interpolation over concatenation", DiagnosticLevel.Information, "Suggestions", "String concatenation reaches {0} string literals (threshold {1}). Consider using string interpolation.");
+
+    // ── SA15xx — CLI Schema ───────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA1501 = new("SA1501", "Duplicate short option in CLI schema", DiagnosticLevel.Error, "CLI Schema", "Short option '-{0}' is already declared in this schema.");
+    public static readonly DiagnosticDescriptor SA1502 = new("SA1502", "Unknown type tag in CLI schema", DiagnosticLevel.Warning, "CLI Schema", "'{0}' is not a recognised CLI type tag. Expected one of: string, int, float, bool, duration, ip, bytesize, semver.");
     /// <summary>
     /// Lookup table from code string to descriptor for suppression validation.
     /// </summary>
@@ -385,6 +389,8 @@ public static class DiagnosticDescriptors
         dict[SA1401.Code] = SA1401;
         dict[SA1402.Code] = SA1402;
         dict[SA1403.Code] = SA1403;
+        dict[SA1501.Code] = SA1501;
+        dict[SA1502.Code] = SA1502;
         dict[SA0211.Code] = SA0211;
         dict[SA0212.Code] = SA0212;
         dict[SA0311.Code] = SA0311;

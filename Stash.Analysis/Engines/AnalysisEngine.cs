@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging;
+using Stash.Analysis.Cli;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -190,6 +191,11 @@ public class AnalysisEngine
         semanticDiagnostics.AddRange(importDiagnostics);
         semanticDiagnostics.AddRange(docCommentDiagnostics);
 
+        // CLI schema analysis — literal cli.schema({...}) diagnostics and field index
+        var cliDiagnostics = new System.Collections.Generic.List<SemanticDiagnostic>();
+        var cliSchemaIndex = CliSchemaAnalyzer.Analyze(statements, cliDiagnostics);
+        semanticDiagnostics.AddRange(cliDiagnostics);
+
         // Parse suppression directives from trivia tokens
         var suppressionMap = SuppressionDirectiveParser.Parse(tokens);
         semanticDiagnostics = suppressionMap.Filter(semanticDiagnostics);
@@ -197,7 +203,7 @@ public class AnalysisEngine
 
         var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
             lexer.StructuredErrors, parser.StructuredErrors, symbols, semanticDiagnostics,
-            namespaceImportsResult);
+            namespaceImportsResult, cliSchemaIndex);
         _logger.LogDebug("Analysis complete: {Uri} — {DiagCount} diagnostics, {SymbolCount} symbols", uri, result.SemanticDiagnostics.Count, result.Symbols.All.Count);
         _contentHashCache[uri] = (sourceHash, result);
         _cache[uri] = result;
