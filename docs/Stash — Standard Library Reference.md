@@ -23,53 +23,52 @@
 2. [Global Functions and Types](#global-functions-and-types)
 3. [`alias`](#alias--shell-aliases)
 4. [`archive`](#archive--archive-operations)
-5. [`args`](#args--argument-parsing)
-6. [`arr`](#arr--array-operations)
-7. [`assert`](#assert--assertions)
-8. [`buf`](#buf--byte-buffer-operations)
-9. [`cli`](#cli--cli)
-10. [`complete`](#complete--tab-completion)
-11. [`config`](#config--format-agnostic-configuration)
-12. [`conv`](#conv--type-conversion)
-13. [`crypto`](#crypto--cryptography-and-hashing)
-14. [`csv`](#csv--csv-parsing-and-writing)
-15. [`dict`](#dict--dictionary-operations)
-16. [`dns`](#dns--dns-resolution)
-17. [`encoding`](#encoding--encoding-and-decoding)
-18. [`env`](#env--environment-and-process-state)
-19. [`fs`](#fs--file-system-operations)
-20. [`http`](#http--http-client)
-21. [`ini`](#ini--ini-configuration)
-22. [`io`](#io--standard-io)
-23. [`json`](#json--json)
-24. [`log`](#log--structured-logging)
-25. [`math`](#math--math-functions)
-26. [`net`](#net--networking-utilities)
-27. [`path`](#path--path-manipulation)
-28. [`pkg`](#pkg--package-manager)
-29. [`process`](#process--process-management)
-30. [`prompt`](#prompt--repl-prompt-customisation)
-31. [`re`](#re--regular-expressions)
-32. [`scheduler`](#scheduler--os-service-management)
-33. [`sftp`](#sftp--sftp-file-transfer)
-34. [`shell`](#shell--interactive-shell-state)
-35. [`signal`](#signal--signal-handling)
-36. [`ssh`](#ssh--ssh-remote-execution)
-37. [`str`](#str--string-operations)
-38. [`sys`](#sys--system-information)
-39. [`task`](#task--parallel-tasks)
-40. [`tcp`](#tcp--tcp-sockets)
-41. [`term`](#term--terminal-formatting)
-42. [`test`](#test--test-framework)
-43. [`time`](#time--time-and-date)
-44. [`toml`](#toml--toml)
-45. [`tpl`](#tpl--templating)
-46. [`udp`](#udp--udp-datagrams)
-47. [`ws`](#ws--websockets)
-48. [`xml`](#xml--xml)
-49. [`yaml`](#yaml--yaml)
-50. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
-51. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
+5. [`arr`](#arr--array-operations)
+6. [`assert`](#assert--assertions)
+7. [`buf`](#buf--byte-buffer-operations)
+8. [`cli`](#cli--cli)
+9. [`complete`](#complete--tab-completion)
+10. [`config`](#config--format-agnostic-configuration)
+11. [`conv`](#conv--type-conversion)
+12. [`crypto`](#crypto--cryptography-and-hashing)
+13. [`csv`](#csv--csv-parsing-and-writing)
+14. [`dict`](#dict--dictionary-operations)
+15. [`dns`](#dns--dns-resolution)
+16. [`encoding`](#encoding--encoding-and-decoding)
+17. [`env`](#env--environment-and-process-state)
+18. [`fs`](#fs--file-system-operations)
+19. [`http`](#http--http-client)
+20. [`ini`](#ini--ini-configuration)
+21. [`io`](#io--standard-io)
+22. [`json`](#json--json)
+23. [`log`](#log--structured-logging)
+24. [`math`](#math--math-functions)
+25. [`net`](#net--networking-utilities)
+26. [`path`](#path--path-manipulation)
+27. [`pkg`](#pkg--package-manager)
+28. [`process`](#process--process-management)
+29. [`prompt`](#prompt--repl-prompt-customisation)
+30. [`re`](#re--regular-expressions)
+31. [`scheduler`](#scheduler--os-service-management)
+32. [`sftp`](#sftp--sftp-file-transfer)
+33. [`shell`](#shell--interactive-shell-state)
+34. [`signal`](#signal--signal-handling)
+35. [`ssh`](#ssh--ssh-remote-execution)
+36. [`str`](#str--string-operations)
+37. [`sys`](#sys--system-information)
+38. [`task`](#task--parallel-tasks)
+39. [`tcp`](#tcp--tcp-sockets)
+40. [`term`](#term--terminal-formatting)
+41. [`test`](#test--test-framework)
+42. [`time`](#time--time-and-date)
+43. [`toml`](#toml--toml)
+44. [`tpl`](#tpl--templating)
+45. [`udp`](#udp--udp-datagrams)
+46. [`ws`](#ws--websockets)
+47. [`xml`](#xml--xml)
+48. [`yaml`](#yaml--yaml)
+49. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
+50. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
 
 ---
 
@@ -849,67 +848,6 @@ Lists the contents of a ZIP or TAR archive without extracting.
 - `IOError` — if the archive file is not found or a filesystem error occurs
 - `ParseError` — if the archive data is malformed
 - `ValueError` — if the file extension does not identify a supported archive format
-
----
-
-## `args` — Argument Parsing
-
-**Capability:** `Process`
-**Throws:** `ParseError`, `TypeError`, `ValueError`
-
-### Functions
-
-| Function | Returns | Throws | Description |
-| -------- | ------- | ------ | ----------- |
-| `args.list` | `array` | — | Returns the command-line arguments as an array of strings. |
-| `args.count` | `int` | — | Returns the number of command-line arguments. |
-| `args.parse` | `dict` | `ValueError`, `ParseError`, `TypeError` | Parses command-line arguments according to the given spec. |
-| `args.build` | `array` | `TypeError` | Builds an array of CLI argument strings from a spec and values dict. |
-
-### Function Details
-
-#### `args.list() -> array`
-
-Returns the command-line arguments as an array of strings.
-
-**Returns:** `array` — An array of argument strings passed to the script
-
-#### `args.count() -> int`
-
-Returns the number of command-line arguments.
-
-**Returns:** `int` — The count of arguments passed to the script
-
-#### `args.parse(spec: any) -> dict`
-
-Parses command-line arguments according to the given spec.
-
-**Parameters:**
-
-- `spec`: `any` — A dict describing the expected arguments (flags, options, positional)
-
-**Returns:** `dict` — A dict of parsed argument values
-
-**Throws:**
-
-- `ValueError` — if a required option or positional argument is missing, or an unknown argument is encountered
-- `ParseError` — if an option value cannot be parsed as the declared type (int, float, or bool)
-- `TypeError` — if spec is not a dict, or a declared argument type is unrecognised
-
-#### `args.build(spec: any, values: any) -> array`
-
-Builds an array of CLI argument strings from a spec and values dict.
-
-**Parameters:**
-
-- `spec`: `any` — The argument specification dict (same format as args.parse).
-- `values`: `any` — The values dict to serialize into CLI arguments.
-
-**Returns:** `array` — An array of argument strings.
-
-**Throws:**
-
-- `TypeError` — if spec or values is not a dict, or if a value's type does not match the declared option type
 
 ---
 
@@ -2614,7 +2552,7 @@ Writes a 64-bit IEEE 754 double (little-endian) at the given offset.
 ## `cli` — cli
 
 **Capability:** _none — always available_
-**Throws:** `TypeError`, `ValueError`
+**Throws:** `CliSchemaError`, `TypeError`, `ValueError`
 
 ### Types
 
@@ -2688,13 +2626,48 @@ Result returned by cli.tryParse.
 
 | Function | Returns | Throws | Description |
 | -------- | ------- | ------ | ----------- |
+| `cli.build` | `array` | `TypeError`, `CliSchemaError` | Renders a values dict back to an argv string array. |
+| `cli.argv` | `array` | — | Returns the raw script argv as supplied by the host. |
+| `cli.argc` | `int` | — | Returns the number of raw script arguments. |
 | `cli.positional` | `CliArgSpec` | `ValueError` | Declares a positional argument. |
 | `cli.option` | `CliArgSpec` | `ValueError` | Declares a named option that takes a value. |
 | `cli.flag` | `CliArgSpec` | — | Declares a boolean flag. |
 | `cli.command` | `CliCommandSpec` | `TypeError` | Declares a set of named subcommands. |
 | `cli.schema` | `CliSchema` | `TypeError`, `ValueError` | Validates a dict definition and builds a reusable schema value. |
+| `cli.help` | `string` | `TypeError` | Renders the schema as --help text and returns the string. |
+| `cli.printHelp` | `null` | `TypeError` | Renders the schema as --help text and writes it to stdout via io.println. |
+| `cli.tryParse` | `CliParseResult` | `TypeError` | Parses an argv array against a CliSchema. |
+| `cli.parse` | `dict` | `TypeError` | Parses an argv array against a CliSchema. |
 
 ### Function Details
+
+#### `cli.build(schema: any, ...values: any) -> array`
+
+Renders a values dict back to an argv string array. Round-trips for round-trippable schemas.
+
+**Parameters:**
+
+- `schema`: `any` — A CliSchema built by cli.schema()
+- `values`: `any` — The values dict to serialize (as returned by cli.parse or cli.tryParse)
+
+**Returns:** `array` — array<string> suitable for passing to cli.parse / cli.tryParse
+
+**Throws:**
+
+- `TypeError` — if schema is not a CliSchema or values is not a dict
+- `CliSchemaError` — if a value cannot be serialized for the declared spec (type mismatch, choices violation, constraint violation)
+
+#### `cli.argv() -> array`
+
+Returns the raw script argv as supplied by the host. Replaces args.list.
+
+**Returns:** `array` — array<string> of script arguments (empty when invoked via -c or REPL)
+
+#### `cli.argc() -> int`
+
+Returns the number of raw script arguments. Replaces args.count.
+
+**Returns:** `int` — int count of script arguments
 
 #### `cli.positional(typeTag: any, ...options: any) -> CliArgSpec`
 
@@ -2764,6 +2737,66 @@ Validates a dict definition and builds a reusable schema value.
 
 - `TypeError` — if definition is not a dict
 - `ValueError` — if any schema-time validation rule is violated
+
+#### `cli.help(schema: any, ...options: any) -> string`
+
+Renders the schema as --help text and returns the string.
+
+**Parameters:**
+
+- `schema`: `any` — A CliSchema built by cli.schema().
+- `options`: `any` — Optional dict: command (dot-separated subcommand path), width (int, default 80).
+
+**Returns:** `string` — The formatted help text as a string.
+
+**Throws:**
+
+- `TypeError` — if schema is not a CliSchema
+
+#### `cli.printHelp(schema: any, ...options: any) -> null`
+
+Renders the schema as --help text and writes it to stdout via io.println.
+
+**Parameters:**
+
+- `schema`: `any` — A CliSchema built by cli.schema().
+- `options`: `any` — Optional dict: command (dot-separated subcommand path), width (int, default 80).
+
+**Returns:** `null` — null
+
+**Throws:**
+
+- `TypeError` — if schema is not a CliSchema
+
+#### `cli.tryParse(schema: any, ...argv: any) -> CliParseResult`
+
+Parses an argv array against a CliSchema. Never exits; returns a CliParseResult.
+
+**Parameters:**
+
+- `schema`: `any` — A CliSchema built by cli.schema()
+- `argv`: `any` — Optional array of strings to parse (defaults to cli.argv())
+
+**Returns:** `CliParseResult` — CliParseResult with ok, value, error, and helpRequested fields
+
+**Throws:**
+
+- `TypeError` — if schema is not a CliSchema
+
+#### `cli.parse(schema: any, ...argv: any) -> dict`
+
+Parses an argv array against a CliSchema. On --help, prints help and exits 0. On failure, prints a short error to stderr and exits 2. On success, returns the parsed values dict.
+
+**Parameters:**
+
+- `schema`: `any` — A CliSchema built by cli.schema()
+- `argv`: `any` — Optional array of strings to parse (defaults to cli.argv() / ScriptArgs)
+
+**Returns:** `dict` — dict of parsed values (same shape as cli.tryParse(...).value)
+
+**Throws:**
+
+- `TypeError` — if schema is not a CliSchema
 
 ---
 
@@ -10321,7 +10354,6 @@ here will not appear in the runtime when its capability is not granted.
 | Namespace | Capability |
 | --------- | ---------- |
 | `archive` | `FileSystem` |
-| `args` | `Process` |
 | `dns` | `Network` |
 | `env` | `Environment` |
 | `fs` | `FileSystem` |

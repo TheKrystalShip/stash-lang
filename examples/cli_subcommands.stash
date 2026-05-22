@@ -1,0 +1,104 @@
+#!/usr/bin/env stash
+
+// cli_subcommands.stash — two-level subcommand schema with the cli namespace
+//
+// Demonstrates a git-style two-level subcommand tree:
+//   <program> remote add    <name> <url> [--fetch]
+//   <program> remote remove <name>
+//   <program> remote list   [--verbose]
+//
+// The schema nests two cli.command() calls: the root selects "remote", and the
+// nested schema then selects "add", "remove", or "list". The parsed result
+// exposes the selected leaf via `parsed.command` (a CliCommand struct).
+//
+// Usage:
+//   stash examples/cli_subcommands.stash --help
+//   stash examples/cli_subcommands.stash remote add origin https://example.com/repo.git
+//   stash examples/cli_subcommands.stash remote add origin https://example.com/repo.git --fetch
+//   stash examples/cli_subcommands.stash remote remove origin
+//   stash examples/cli_subcommands.stash remote list
+//   stash examples/cli_subcommands.stash remote list -v
+
+// ── Leaf schemas ─────────────────────────────────────────────────────────────
+
+const remoteAddSchema = cli.schema({
+    name:  cli.positional("string", { help: "Short name for the remote." }),
+    url:   cli.positional("string", { help: "URL of the remote repository." }),
+    fetch: cli.flag({ help: "Immediately fetch after adding." })
+});
+
+const remoteRemoveSchema = cli.schema({
+    name: cli.positional("string", { help: "Name of the remote to remove." })
+});
+
+const remoteListSchema = cli.schema({
+    verbose: cli.flag({ short: "v", help: "Show remote URLs alongside names." })
+});
+
+// ── Mid-level schema: `remote <subcommand>` ──────────────────────────────────
+
+const remoteSchema = cli.schema({
+    remote: cli.command({
+        add:    remoteAddSchema,
+        remove: remoteRemoveSchema,
+        list:   remoteListSchema
+    })
+});
+
+// ── Root schema: `<program> remote ...` ──────────────────────────────────────
+// The root selects between top-level subcommands (here just "remote").
+// A global --verbose flag is declared at the root and available in all paths.
+
+const rootSchema = cli.schema({
+    verbose: cli.flag({ short: "v", help: "Enable global verbose output." }),
+    top:     cli.command({ remote: remoteSchema })
+});
+
+// ── Parsing ──────────────────────────────────────────────────────────────────
+const parsed = cli.parse(rootSchema);
+
+// ── Dispatch on the selected leaf subcommand ─────────────────────────────────
+// parsed.command is a CliCommand: { name, path, values }
+// path contains the full chain of matched subcommand names, e.g. ["remote", "add"].
+
+const cmd = parsed.command;
+
+if (cmd == null) {
+    cli.printHelp(rootSchema);
+    exit(1);
+}
+
+io.println("subcommand path: " + conv.toStr(cmd.path));
+
+switch (cmd.name) {
+    case "add": {
+        io.println("Adding remote '" + cmd.values.name + "' -> " + cmd.values.url);
+        if (cmd.values.fetch) {
+            io.println("  (fetching immediately)");
+        }
+    }
+    case "remove": {
+        io.println("Removing remote '" + cmd.values.name + "'");
+    }
+    case "list": {
+        io.println("Listing remotes" + (cmd.values.verbose ? " (verbose)" : ""));
+        // In a real script: enumerate configured remotes here.
+        io.println("  origin  https://example.com/repo.git");
+    }
+    default: {
+        io.println("Unknown leaf subcommand: " + cmd.name);
+        exit(1);
+    }
+}
+
+// ── cli.tryParse for programmatic testing ───────────────────────────────────
+// Parse a two-level "remote add" invocation without forking a process.
+
+const result = cli.tryParse(rootSchema, ["remote", "add", "upstream", "https://github.com/org/repo.git"]);
+if (result.ok) {
+    const c = result.value.command;
+    io.println("[tryParse] path:    " + conv.toStr(c.path));
+    io.println("[tryParse] name:    " + c.values.name);
+    io.println("[tryParse] url:     " + c.values.url);
+    io.println("[tryParse] fetch:   " + conv.toStr(c.values.fetch));
+}

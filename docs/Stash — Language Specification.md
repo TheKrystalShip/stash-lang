@@ -1494,6 +1494,30 @@ echo 'io.println("hello");' | stash
 When supported, these modes must parse and evaluate their input as normal Stash
 programs.
 
+### Script Argument Parsing
+
+Script arguments are accessed through the `cli` namespace. The `args` namespace
+(`args.list`, `args.count`, `args.parse`, `args.build`) was removed in the same
+release that introduced `cli`; it is not available in conforming implementations.
+
+Use `cli.argv()` to retrieve the raw argument array and `cli.argc()` to get the
+count. For typed, validated, and documented argument parsing use `cli.schema`,
+`cli.parse`, and `cli.tryParse`:
+
+```stash
+schema = cli.schema({
+    input:   cli.positional("string", { required: true }),
+    output:  cli.option("string", { short: "o", default: "./out" }),
+    verbose: cli.flag({ short: "v" }),
+})
+
+args = cli.parse(schema)
+io.println(args.input)
+```
+
+The full `cli` namespace API is specified in the
+[Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md).
+
 ## Errors and Cleanup
 
 ### Error Values

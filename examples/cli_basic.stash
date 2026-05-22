@@ -1,0 +1,73 @@
+#!/usr/bin/env stash
+
+// cli_basic.stash — declarative CLI argument parsing with the cli namespace
+//
+// Demonstrates: positionals, options, flags, defaults, --help, and error handling.
+//
+// Usage:
+//   stash examples/cli_basic.stash <input> [options]
+//   stash examples/cli_basic.stash --help
+//
+// Examples:
+//   stash examples/cli_basic.stash data.csv
+//   stash examples/cli_basic.stash data.csv --output results/ --retries 5 --verbose
+//   stash examples/cli_basic.stash data.csv -o results/ -v -r 5
+
+// ── Schema definition ────────────────────────────────────────────────────────
+// cli.schema() takes a dict mapping Stash property names to argument specs.
+// It validates the schema at construction time and raises CliSchemaError early
+// if any rule is violated (e.g. duplicate short options, unknown type tags).
+
+const schema = cli.schema({
+    input:   cli.positional("string", { help: "Path to the input file." }),
+    output:  cli.option("string",     { short: "o", default: "./out", help: "Output directory." }),
+    retries: cli.option("int",        { short: "r", default: 3, min: 0, max: 10,
+                                        help: "Number of retry attempts (0-10)." }),
+    verbose: cli.flag({ short: "v", help: "Enable verbose logging." })
+});
+
+// ── Parsing ──────────────────────────────────────────────────────────────────
+// cli.parse(schema) reads cli.argv() by default.
+// On --help it prints generated help and exits 0.
+// On any parse or validation failure it prints the error and exits 2.
+
+const parsed = cli.parse(schema);
+
+// ── Using the result ─────────────────────────────────────────────────────────
+io.println("input:   " + parsed.input);
+io.println("output:  " + parsed.output);
+io.println("retries: " + conv.toStr(parsed.retries));
+io.println("verbose: " + conv.toStr(parsed.verbose));
+
+if (parsed.verbose) {
+    io.println("[verbose] Starting with retries=" + conv.toStr(parsed.retries));
+}
+
+// ── cli.tryParse for non-exiting error handling ──────────────────────────────
+// For tests or library code that must not call exit(), use cli.tryParse.
+// It returns a CliParseResult: { ok, value, error, helpRequested }.
+
+const helpResult = cli.tryParse(schema, ["--help"]);
+if (helpResult.helpRequested) {
+    io.println("[tryParse] --help was requested (no exit)");
+}
+
+// Validate that a bad argument surfaces a structured error:
+const badResult = cli.tryParse(schema, ["--retries", "999"]);
+if (!badResult.ok) {
+    io.println("[tryParse] error type:    " + badResult.error.type);
+    io.println("[tryParse] error message: " + badResult.error.message);
+}
+
+// ── cli.build — round-trip back to argv ─────────────────────────────────────
+// cli.build(schema, values) converts a parsed values dict back to an argv array.
+// Useful for forwarding arguments to a sub-process.
+
+const rebuilt = cli.build(schema, parsed);
+io.println("rebuilt argv: " + conv.toStr(rebuilt));
+
+// ── Raw argv access ──────────────────────────────────────────────────────────
+// cli.argv() and cli.argc() expose the raw script arguments without parsing.
+
+io.println("raw argv:  " + conv.toStr(cli.argv()));
+io.println("raw argc:  " + conv.toStr(cli.argc()));
