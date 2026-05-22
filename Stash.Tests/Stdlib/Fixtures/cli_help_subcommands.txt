@@ -1,0 +1,10 @@
+Usage: mytool [options] [subcommand]
+
+Manage remote repositories.
+
+Options:
+  --help, -h  Show this help message.
+
+Commands:
+  add     Add a remote.
+  remove  Remove a remote.

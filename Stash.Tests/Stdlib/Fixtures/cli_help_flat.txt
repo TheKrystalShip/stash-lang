@@ -1,0 +1,12 @@
+Usage: mytool [options] <input>
+
+A test tool for processing files.
+
+Positional arguments:
+  <input> STRING  Input file to process.
+
+Options:
+  --output, -o STRING  Output destination.  (default: ./out)
+  --verbose, -v        Enable verbose output.
+  --retries INT        Number of retries.  (default: 3)
+  --help, -h           Show this help message.
