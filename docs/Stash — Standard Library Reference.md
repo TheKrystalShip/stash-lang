@@ -2552,7 +2552,7 @@ Writes a 64-bit IEEE 754 double (little-endian) at the given offset.
 ## `cli` — cli
 
 **Capability:** _none — always available_
-**Throws:** `CliSchemaError`, `TypeError`, `ValueError`
+**Throws:** `CliSchemaError`, `TypeError`
 
 ### Types
 
@@ -2629,11 +2629,11 @@ Result returned by cli.tryParse.
 | `cli.build` | `array` | `TypeError`, `CliSchemaError` | Renders a values dict back to an argv string array. |
 | `cli.argv` | `array` | — | Returns the raw script argv as supplied by the host. |
 | `cli.argc` | `int` | — | Returns the number of raw script arguments. |
-| `cli.positional` | `CliArgSpec` | `ValueError` | Declares a positional argument. |
-| `cli.option` | `CliArgSpec` | `ValueError` | Declares a named option that takes a value. |
+| `cli.positional` | `CliArgSpec` | `CliSchemaError` | Declares a positional argument. |
+| `cli.option` | `CliArgSpec` | `CliSchemaError` | Declares a named option that takes a value. |
 | `cli.flag` | `CliArgSpec` | — | Declares a boolean flag. |
 | `cli.command` | `CliCommandSpec` | `TypeError` | Declares a set of named subcommands. |
-| `cli.schema` | `CliSchema` | `TypeError`, `ValueError` | Validates a dict definition and builds a reusable schema value. |
+| `cli.schema` | `CliSchema` | `TypeError`, `CliSchemaError` | Validates a dict definition and builds a reusable schema value. |
 | `cli.help` | `string` | `TypeError` | Renders the schema as --help text and returns the string. |
 | `cli.printHelp` | `null` | `TypeError` | Renders the schema as --help text and writes it to stdout via io.println. |
 | `cli.tryParse` | `CliParseResult` | `TypeError` | Parses an argv array against a CliSchema. |
@@ -2682,7 +2682,7 @@ Declares a positional argument.
 
 **Throws:**
 
-- `ValueError` — if typeTag is not a recognised type tag
+- `CliSchemaError` — if typeTag is not a recognised type tag
 
 #### `cli.option(typeTag: any, ...options: any) -> CliArgSpec`
 
@@ -2697,7 +2697,7 @@ Declares a named option that takes a value.
 
 **Throws:**
 
-- `ValueError` — if typeTag is not a recognised type tag
+- `CliSchemaError` — if typeTag is not a recognised type tag
 
 #### `cli.flag(...options: any) -> CliArgSpec`
 
@@ -2736,7 +2736,7 @@ Validates a dict definition and builds a reusable schema value.
 **Throws:**
 
 - `TypeError` — if definition is not a dict
-- `ValueError` — if any schema-time validation rule is violated
+- `CliSchemaError` — if any schema-time validation rule is violated
 
 #### `cli.help(schema: any, ...options: any) -> string`
 

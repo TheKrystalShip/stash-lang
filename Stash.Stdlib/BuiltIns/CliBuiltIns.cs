@@ -165,7 +165,7 @@ public static partial class CliBuiltIns
     /// <summary>Declares a positional argument.</summary>
     /// <param name="typeTag">Type tag: "string", "int", "float", "bool", "duration", "ip", "bytesize", "semver".</param>
     /// <param name="options">Optional dict of spec keys: name, required, default, repeated, choices, validate, help, metavar.</param>
-    /// <exception cref="ValueError">if typeTag is not a recognised type tag</exception>
+    /// <exception cref="CliSchemaError">if typeTag is not a recognised type tag</exception>
     /// <returns>A CliArgSpec for use inside cli.schema()</returns>
     [StashFn(Raw = true, ReturnType = "CliArgSpec")]
     private static StashValue Positional(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -202,7 +202,7 @@ public static partial class CliBuiltIns
     /// <summary>Declares a named option that takes a value.</summary>
     /// <param name="typeTag">Type tag: "string", "int", "float", "bool", "duration", "ip", "bytesize", "semver".</param>
     /// <param name="options">Optional dict of spec keys: name, short, aliases, required, default, repeated, choices, min, max, pattern, validate, help, metavar, env.</param>
-    /// <exception cref="ValueError">if typeTag is not a recognised type tag</exception>
+    /// <exception cref="CliSchemaError">if typeTag is not a recognised type tag</exception>
     /// <returns>A CliArgSpec for use inside cli.schema()</returns>
     [StashFn(Raw = true, ReturnType = "CliArgSpec")]
     private static StashValue Option(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -295,7 +295,7 @@ public static partial class CliBuiltIns
     /// <summary>Validates a dict definition and builds a reusable schema value.</summary>
     /// <param name="definition">Dict mapping Stash property names to CliArgSpec / CliCommandSpec values.</param>
     /// <exception cref="TypeError">if definition is not a dict</exception>
-    /// <exception cref="ValueError">if any schema-time validation rule is violated</exception>
+    /// <exception cref="CliSchemaError">if any schema-time validation rule is violated</exception>
     /// <returns>A validated CliSchema</returns>
     [StashFn(Raw = true, ReturnType = "CliSchema")]
     private static StashValue Schema(IInterpreterContext _, ReadOnlySpan<StashValue> args)
@@ -369,8 +369,10 @@ public static partial class CliBuiltIns
     private static void ValidateTypeTag(string tag, string funcName)
     {
         if (!KnownTypeTags.Contains(tag))
-            throw new ValueError(
-                $"'{funcName}': unknown type tag \"{tag}\". Supported tags: {string.Join(", ", KnownTypeTags)}.");
+            throw new CliSchemaError(
+                $"'{funcName}': unknown type tag \"{tag}\". Supported tags: {string.Join(", ", KnownTypeTags)}.",
+                field: "typeTag",
+                reason: $"unknown type tag \"{tag}\"");
     }
 }
 

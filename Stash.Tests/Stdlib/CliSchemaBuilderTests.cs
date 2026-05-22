@@ -8,7 +8,8 @@ using Xunit;
 /// Tests for P1 of the cli-arg-parsing feature:
 ///   cli.positional, cli.option, cli.flag, cli.command, cli.schema.
 ///
-/// All schema-time validation failures throw ValueError in P1 (rewired to CliSchemaError in P2).
+/// All schema-time validation failures (including unknown type tags via cli.positional / cli.option /
+/// cli.schema) raise CliSchemaError, per the brief's Error model.
 ///
 /// Note: "default" is a reserved keyword in Stash; the CliArgSpec field is "defaultVal".
 /// Note: Stash dict literals do not allow trailing commas; all test dicts use no trailing comma.
@@ -41,10 +42,10 @@ public class CliSchemaBuilderTests : StashTestBase
     }
 
     [Fact]
-    public void CliPositional_UnknownTypeTag_ThrowsValueError()
+    public void CliPositional_UnknownTypeTag_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.positional("path");""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
     }
 
     [Fact]
@@ -89,10 +90,10 @@ public class CliSchemaBuilderTests : StashTestBase
     }
 
     [Fact]
-    public void CliOption_UnknownTypeTag_ThrowsValueError()
+    public void CliOption_UnknownTypeTag_ThrowsCliSchemaError()
     {
         var ex = RunCapturingError("""cli.option("notatype");""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
     }
 
     [Fact]
@@ -277,11 +278,11 @@ public class CliSchemaBuilderTests : StashTestBase
     }
 
     [Fact]
-    public void CliSchema_UnknownTypeTagInOption_ThrowsValueError()
+    public void CliSchema_UnknownTypeTagInOption_ThrowsCliSchemaError()
     {
         // The type-tag validation fires in cli.option, surfacing before cli.schema
         var ex = RunCapturingError("""cli.schema({ output: cli.option("notatype") });""");
-        Assert.IsType<ValueError>(ex);
+        Assert.IsType<CliSchemaError>(ex);
     }
 
     [Fact]
