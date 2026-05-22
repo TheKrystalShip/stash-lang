@@ -26,7 +26,7 @@ public class DictArgParseTests : StashTestBase
     // Category 1: Basic Flags (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictFlag_LongForm_SetsTrue()
     {
         var source = """
@@ -40,7 +40,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(true, RunWithArgs(source, ["--verbose"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictFlag_Absent_DefaultsFalse()
     {
         var source = """
@@ -54,7 +54,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(false, RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictFlag_ShortForm_SetsTrue()
     {
         var source = """
@@ -68,7 +68,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(true, RunWithArgs(source, ["-v"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictFlag_MultipleFlags_AllSet()
     {
         var source = """
@@ -83,7 +83,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(true, RunWithArgs(source, ["--verbose", "--debug"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictFlag_NoShortName_OnlyLongForm()
     {
         var source = """
@@ -101,7 +101,7 @@ public class DictArgParseTests : StashTestBase
     // Category 2: Options (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_LongForm_SetsValue()
     {
         var source = """
@@ -115,7 +115,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(8080L, RunWithArgs(source, ["--port", "8080"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_ShortForm_SetsValue()
     {
         var source = """
@@ -129,7 +129,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(9000L, RunWithArgs(source, ["-p", "9000"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_EqualsSyntax()
     {
         var source = """
@@ -143,7 +143,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal("localhost", RunWithArgs(source, ["--host=localhost"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_DefaultValue()
     {
         var source = """
@@ -157,7 +157,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(8080L, RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_NoDefault_ReturnsNull()
     {
         var source = """
@@ -171,7 +171,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Null(RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_TypeInt_Coerces()
     {
         var source = """
@@ -187,7 +187,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(42L, result);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_TypeFloat_Coerces()
     {
         var source = """
@@ -203,7 +203,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(3.14, (double)result!, 10);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_TypeBool_Coerces()
     {
         var source = """
@@ -222,7 +222,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(false, RunWithArgs(source, ["--enabled", "no"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_TypeString_Keeps()
     {
         var source = """
@@ -238,7 +238,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal("alice", result);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictOption_Required_Missing_Throws()
     {
         var source = """
@@ -256,7 +256,7 @@ public class DictArgParseTests : StashTestBase
     // Category 3: Positionals (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictPositional_Single_Captured()
     {
         var source = """
@@ -268,7 +268,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal("example.com", RunWithArgs(source, ["example.com"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictPositional_Multiple_InOrder()
     {
         var source = """
@@ -283,7 +283,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal("/tmp/out", RunWithArgs(source, ["/home/user/file", "/tmp/out"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictPositional_TypeCoercion()
     {
         var source = """
@@ -295,7 +295,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(5L, RunWithArgs(source, ["5"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictPositional_Required_Missing_Throws()
     {
         var source = """
@@ -307,7 +307,7 @@ public class DictArgParseTests : StashTestBase
         RunWithArgsExpectingError(source, []);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictPositional_WithDefault()
     {
         var source = """
@@ -323,7 +323,7 @@ public class DictArgParseTests : StashTestBase
     // Category 4: Commands (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_Name_Captured()
     {
         var source = """
@@ -338,7 +338,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal("start", RunWithArgs(source, ["start"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_NoneProvided_Null()
     {
         var source = """
@@ -352,7 +352,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Null(RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_LevelFlag_Works()
     {
         var source = """
@@ -366,7 +366,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(true, RunWithArgs(source, ["start", "--detach"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_LevelOption_Works()
     {
         var source = """
@@ -380,7 +380,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(10L, RunWithArgs(source, ["start", "--delay", "10"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_LevelPositional_Works()
     {
         var source = """
@@ -394,7 +394,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal("production", RunWithArgs(source, ["deploy", "production"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_LevelOption_EqualsSyntax()
     {
         var source = """
@@ -408,7 +408,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(3000L, RunWithArgs(source, ["start", "--port=3000"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictCommand_LevelRequiredOption_Missing_Throws()
     {
         var source = """
@@ -426,7 +426,7 @@ public class DictArgParseTests : StashTestBase
     // Category 5: Mixed Arguments (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictMixed_FlagsOptionsPositional()
     {
         var source = """
@@ -440,7 +440,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(9090L, RunWithArgs(source, ["-v", "--port", "9090", "myhost"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictMixed_TopLevelFlagWithSubcommand()
     {
         var source = """
@@ -453,7 +453,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(true, RunWithArgs(source, ["--verbose", "start"]));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictMixed_EmptySpec_NoArgs()
     {
         var source = """
@@ -467,7 +467,7 @@ public class DictArgParseTests : StashTestBase
     // Category 6: Error Cases (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictError_UnknownLongFlag_Throws()
     {
         var source = """
@@ -481,7 +481,7 @@ public class DictArgParseTests : StashTestBase
         RunWithArgsExpectingError(source, ["--unknown"]);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictError_UnknownShortFlag_Throws()
     {
         var source = """
@@ -495,7 +495,7 @@ public class DictArgParseTests : StashTestBase
         RunWithArgsExpectingError(source, ["-z"]);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictError_OptionMissingValue_Throws()
     {
         var source = """
@@ -509,7 +509,7 @@ public class DictArgParseTests : StashTestBase
         RunWithArgsExpectingError(source, ["--port"]);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictError_InvalidIntCoercion_Throws()
     {
         var source = """
@@ -527,7 +527,7 @@ public class DictArgParseTests : StashTestBase
     // Category 7: Metadata (dict format)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictMetadata_NameParses()
     {
         var source = """
@@ -542,7 +542,7 @@ public class DictArgParseTests : StashTestBase
         Assert.Equal(false, RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictMetadata_VersionParses()
     {
         var source = """
@@ -556,7 +556,7 @@ public class DictArgParseTests : StashTestBase
     // Category 8: Inline Dict Spec (no intermediate variable)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictInlineSpec_DirectCallNoVariable()
     {
         var source = """
@@ -570,7 +570,7 @@ public class DictArgParseTests : StashTestBase
     // Category 9: Complex Real-World Spec
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void DictComplex_FullServiceCtlSpec()
     {
         var complexSpec = """

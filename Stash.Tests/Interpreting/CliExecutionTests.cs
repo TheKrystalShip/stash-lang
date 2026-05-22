@@ -99,7 +99,7 @@ public class CliExecutionTests : StashTestBase
     public void RunSource_WithArgs_PassesArgsCorrectly()
     {
         var source = """
-            let a = args.list();
+            let a = cli.argv();
             let result = a[0];
             """;
         object? value = Run(source, "<command>", ["hello"]);
@@ -151,7 +151,7 @@ public class CliExecutionTests : StashTestBase
     [Trait("Category", "Integration")]
     public void Command_WithScriptArgs_PassesArgs()
     {
-        var (stdout, _, exitCode) = RunCli("-c \"io.println(args.list()[0]);\" myarg");
+        var (stdout, _, exitCode) = RunCli("-c \"io.println(cli.argv()[0]);\" myarg");
         Assert.Equal(0, exitCode);
         Assert.Equal("myarg", stdout);
     }
@@ -227,7 +227,7 @@ public class CliExecutionTests : StashTestBase
     [Trait("Category", "Integration")]
     public void Stdin_WithArgs_PassesArgs()
     {
-        var (stdout, _, exitCode) = RunCli("-- firstarg", stdinInput: "io.println(args.list()[0]);");
+        var (stdout, _, exitCode) = RunCli("-- firstarg", stdinInput: "io.println(cli.argv()[0]);");
         Assert.Equal(0, exitCode);
         Assert.Equal("firstarg", stdout);
     }

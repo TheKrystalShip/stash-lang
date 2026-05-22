@@ -6,7 +6,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 1: Basic Flags
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagTrue_EmitsLongFlag()
     {
         var source = """
@@ -19,7 +19,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("--verbose", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagTrue_PreferShortForm()
     {
         var source = """
@@ -32,7 +32,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("-v", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagFalse_Skipped()
     {
         var source = """
@@ -45,7 +45,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagMissing_Skipped()
     {
         var source = """
@@ -58,7 +58,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_MultipleFlags_AllEmitted()
     {
         var source = """
@@ -75,7 +75,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 2: Basic Options
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionString_EmitsValue()
     {
         var source = """
@@ -88,7 +88,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("--name", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionString_PreferShortForm()
     {
         var source = """
@@ -101,7 +101,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("-n", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionInt_EmitsStringValue()
     {
         var source = """
@@ -114,7 +114,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("8080", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionFloat_EmitsStringValue()
     {
         var source = """
@@ -127,7 +127,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("3.14", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionBool_EmitsStringValue()
     {
         var source = """
@@ -140,7 +140,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("true", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionNull_Skipped()
     {
         var source = """
@@ -153,7 +153,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_OptionMissing_Skipped()
     {
         var source = """
@@ -170,7 +170,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 3: Compound Types (list, map, csv)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_ListOption_RepeatedFlags()
     {
         var source = """
@@ -183,7 +183,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(4L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_ListOption_SingleElement()
     {
         var source = """
@@ -196,7 +196,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(2L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_ListOption_EmptyArray()
     {
         var source = """
@@ -209,7 +209,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_MapOption_RepeatedKeyValue()
     {
         var source = """
@@ -222,7 +222,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(4L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_MapOption_EmptyDict()
     {
         var source = """
@@ -235,7 +235,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CsvOption_CommaJoined()
     {
         var source = """
@@ -248,7 +248,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("a,b,c", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CsvOption_SingleElement()
     {
         var source = """
@@ -265,7 +265,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 4: Positionals
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_Positional_EmitsValue()
     {
         var source = """
@@ -278,7 +278,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("example.com", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_MultiplePositionals_InOrder()
     {
         var source = """
@@ -291,7 +291,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("file.txt", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_PositionalNull_Skipped()
     {
         var source = """
@@ -304,7 +304,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_PositionalInt_EmitsStringValue()
     {
         var source = """
@@ -321,7 +321,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 5: Commands
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_Command_EmitsCommandName()
     {
         var source = """
@@ -334,7 +334,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("start", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CommandNoValue_NoOutput()
     {
         var source = """
@@ -347,7 +347,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CommandWithFlags()
     {
         var source = """
@@ -360,7 +360,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("-d", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CommandWithOptions()
     {
         var source = """
@@ -373,7 +373,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(3L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CommandWithPositionals()
     {
         var source = """
@@ -390,7 +390,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 6: Mixed (realistic usage)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_Mixed_FlagsOptionsPositionals()
     {
         var source = """
@@ -407,7 +407,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(4L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_Mixed_TopLevelAndCommand()
     {
         var source = """
@@ -480,7 +480,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("web", Run(lastSource));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_EmptySpec_EmptyResult()
     {
         var source = """
@@ -490,7 +490,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal(0L, Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_EmptyValues_EmptyResult()
     {
         var source = """
@@ -511,7 +511,7 @@ public class ArgsBuildTests : StashTestBase
     // Category: Flag Property Override
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagProperty_UsedForFlags()
     {
         var source = """
@@ -524,7 +524,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("-d", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagProperty_UsedForOptions()
     {
         var source = """
@@ -537,7 +537,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("-e", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagProperty_LongFormOverride()
     {
         var source = """
@@ -550,7 +550,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("--read-only", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagProperty_TakesPriorityOverShort()
     {
         var source = """
@@ -563,7 +563,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("--verbose", Run(source));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagProperty_ListType()
     {
         var source = """
@@ -585,7 +585,7 @@ public class ArgsBuildTests : StashTestBase
         Assert.Equal("-p", Run(source2));
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_FlagProperty_CsvType()
     {
         var source = """
@@ -602,7 +602,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 7: Error Cases
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_NonDictSpec_Throws()
     {
         var source = """
@@ -612,7 +612,7 @@ public class ArgsBuildTests : StashTestBase
         RunExpectingError(source);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_NonDictValues_Throws()
     {
         var source = """
@@ -622,7 +622,7 @@ public class ArgsBuildTests : StashTestBase
         RunExpectingError(source);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_ListTypeNotArray_Throws()
     {
         var source = """
@@ -635,7 +635,7 @@ public class ArgsBuildTests : StashTestBase
         RunExpectingError(source);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_MapTypeNotDict_Throws()
     {
         var source = """
@@ -648,7 +648,7 @@ public class ArgsBuildTests : StashTestBase
         RunExpectingError(source);
     }
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_CsvTypeNotArray_Throws()
     {
         var source = """
@@ -665,7 +665,7 @@ public class ArgsBuildTests : StashTestBase
     // Category 8: Roundtrip (parse → build → parse)
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
     public void Build_Roundtrip_ParseThenBuild()
     {
         var source = """

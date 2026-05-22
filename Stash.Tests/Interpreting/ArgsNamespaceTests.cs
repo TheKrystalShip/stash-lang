@@ -2,11 +2,13 @@ namespace Stash.Tests.Interpreting;
 
 public class ArgsNamespaceTests : StashTestBase
 {
+    private const string SkipReason = "args namespace removed in cli-arg-parsing; migrated by follow-up spec";
+
     // =========================================================================
     // args.list()
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void List_WithNoArgs_ReturnsEmptyArray()
     {
         var source = """
@@ -15,7 +17,7 @@ public class ArgsNamespaceTests : StashTestBase
         Assert.Equal(0L, RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void List_WithMultipleArgs_ReturnsAllArgs()
     {
         var source = """
@@ -24,7 +26,7 @@ public class ArgsNamespaceTests : StashTestBase
         Assert.Equal(2L, RunWithArgs(source, ["hello", "world"]));
     }
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void List_ReturnsCorrectValues()
     {
         var source = """
@@ -34,7 +36,7 @@ public class ArgsNamespaceTests : StashTestBase
         Assert.Equal("hello", RunWithArgs(source, ["hello", "world"]));
     }
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void List_ReturnsSecondArg()
     {
         var source = """
@@ -44,7 +46,7 @@ public class ArgsNamespaceTests : StashTestBase
         Assert.Equal("world", RunWithArgs(source, ["hello", "world"]));
     }
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void List_ReturnsCopy_MutationDoesNotAffectOriginal()
     {
         var source = """
@@ -60,7 +62,7 @@ public class ArgsNamespaceTests : StashTestBase
     // args.count()
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void Count_WithNoArgs_ReturnsZero()
     {
         var source = """
@@ -69,7 +71,7 @@ public class ArgsNamespaceTests : StashTestBase
         Assert.Equal(0L, RunWithArgs(source, []));
     }
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void Count_WithArgs_ReturnsCorrectCount()
     {
         var source = """
@@ -82,7 +84,7 @@ public class ArgsNamespaceTests : StashTestBase
     // args.parse()
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void Parse_BasicFlag_SetsTrue()
     {
         var source = """
@@ -94,7 +96,7 @@ public class ArgsNamespaceTests : StashTestBase
         Assert.Equal(true, RunWithArgs(source, ["--verbose"]));
     }
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void Parse_BasicOption_SetsValue()
     {
         var source = """
@@ -110,7 +112,7 @@ public class ArgsNamespaceTests : StashTestBase
     // Namespace accessibility
     // =========================================================================
 
-    [Fact]
+    [Fact(Skip = SkipReason)]
     public void Namespace_IsAccessible()
     {
         var source = """
