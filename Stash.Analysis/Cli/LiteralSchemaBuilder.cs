@@ -58,7 +58,7 @@ public static class LiteralSchemaBuilder
 
     private static readonly HashSet<string> BuilderNames = new(StringComparer.Ordinal)
     {
-        "option", "positional", "flag", "command",
+        "option", "positional", "flag",
     };
 
     // ── Public entry point ───────────────────────────────────────────────────
@@ -517,66 +517,6 @@ public static class LiteralSchemaBuilder
                     metavar: null,
                     env: null,
                     negatable: opts?.Has("negatable") == true && GetBoolOpt(opts!, "negatable"));
-            }
-
-            case "command":
-            {
-                // cli.command(dict mapping subcommand names to cli.schema() values)
-                // For literal mode: subcommand values must themselves be schema calls.
-                // For simplicity in literal mode, we skip nested subcommand building and
-                // just produce an empty CliCommandSpec so the schema is still buildable.
-                // The help renderer will show the command entry without subcommand help texts.
-                var commandsDict = new StashDictionary();
-                if (args.Count >= 1 && args[0] is DictLiteralExpr cmdDict)
-                {
-                    foreach (var (keyToken, valExpr) in cmdDict.Entries)
-                    {
-                        if (keyToken is null) continue;
-                        string cmdName = keyToken.Type == TokenType.StringLiteral && keyToken.Literal is string ck
-                            ? ck : keyToken.Lexeme;
-                        // valExpr should be a cli.schema() call; attempt recursive build.
-                        if (valExpr is CallExpr subCall &&
-                            TryExtractSchemaCall(subCall, out DictLiteralExpr? subSchemaDict, out DictLiteralExpr? subOptsDict) &&
-                            IsLiteralSchemaDict(subSchemaDict!))
-                        {
-                            try
-                            {
-                                StashDictionary subDef = BuildSchemaDictFromAST(subSchemaDict!);
-                                string subProgramName = "";
-                                string subDescription = "";
-                                bool subHelpFlag = true;
-                                if (subOptsDict is not null && IsLiteralExpr(subOptsDict))
-                                {
-                                    StashDictionary subOpts = EvalDictLiteral(subOptsDict);
-                                    if (subOpts.Has("programName"))
-                                    {
-                                        StashValue pv = subOpts.Get("programName");
-                                        if (pv.IsObj && pv.AsObj is string ps) subProgramName = ps;
-                                    }
-                                    if (subOpts.Has("description"))
-                                    {
-                                        StashValue dv = subOpts.Get("description");
-                                        if (dv.IsObj && dv.AsObj is string ds) subDescription = ds;
-                                    }
-                                    if (subOpts.Has("helpFlag"))
-                                    {
-                                        StashValue hv = subOpts.Get("helpFlag");
-                                        if (hv.IsBool) subHelpFlag = hv.AsBool;
-                                    }
-                                }
-                                StashValue subResult = CliBuiltIns.BuildSchema(subDef, subProgramName, subDescription, subHelpFlag);
-                                if (subResult.IsObj)
-                                    commandsDict.Set(cmdName, subResult);
-                            }
-                            catch { /* skip this subcommand on error */ }
-                        }
-                    }
-                }
-                var cmdFields = new System.Collections.Generic.Dictionary<string, StashValue>
-                {
-                    ["commands"] = StashValue.FromObj(commandsDict),
-                };
-                return StashValue.FromObj(new StashInstance("CliCommandSpec", cmdFields));
             }
 
             default:
