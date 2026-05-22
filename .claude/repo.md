@@ -27,6 +27,9 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- os-namespace — OS Namespace Standard Library | .kanban/2-in-progress/os-namespace/ | 8 phases | started 2026-05-22
+- stdlib-namespace-members — Stdlib Namespace Members — Read-only Data Access | .kanban/2-in-progress/stdlib-namespace-members/ | 6 phases | started 2026-05-22
+
 _no features in flight_
 
 ---
