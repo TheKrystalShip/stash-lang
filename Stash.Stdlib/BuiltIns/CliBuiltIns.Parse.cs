@@ -8,15 +8,16 @@ using Stash.Runtime.Types;
 using Stash.Runtime.Errors;
 using Stash.Stdlib.Abstractions;
 
-// Parsing engine for cli.tryParse — P3.
+// Parsing engine for cli.tryParse / cli.parse — P3 + P7.
 // Handles positionals, options, flags, repeated, choices, defaults, env fallback, -- boundary,
 // short-flag bundling (-abc), and -nVALUE short option with inline value.
 //
-// Not implemented in P3 (deferred phases noted inline):
-//   - Subcommand dispatch           → P4
-//   - min/max/pattern/validate      → P5 (accept but ignore with TODO comments)
-//   - cli.help / cli.printHelp      → P6
-//   - cli.parse exit wrapper        → P7
+// P7 additions:
+//   - cli.parse: exit wrapper around cli.tryParse
+//       - reads ScriptArgs when no explicit argv is provided
+//       - on --help / -h: prints full help to stdout, calls exit(0)
+//       - on parse failure: prints short error + abbreviated usage to stderr, calls exit(2)
+//       - on success: returns the parsed dict directly
 public static partial class CliBuiltIns
 {
     // ── Help-requested sentinel ───────────────────────────────────────────────
@@ -85,6 +86,119 @@ public static partial class CliBuiltIns
             StashError stashErr = StashError.FromRuntimeError(ex, stackLines: null);
             return MakeParseResult(ok: false, value: new StashDictionary(), error: StashValue.FromObj(stashErr), helpRequested: false);
         }
+    }
+
+    // ── cli.parse ─────────────────────────────────────────────────────────────
+
+    /// <summary>Parses an argv array against a CliSchema. On --help, prints help and exits 0. On failure, prints a short error to stderr and exits 2. On success, returns the parsed values dict.</summary>
+    /// <param name="schema">A CliSchema built by cli.schema()</param>
+    /// <param name="argv">Optional array of strings to parse (defaults to cli.argv() / ScriptArgs)</param>
+    /// <exception cref="TypeError">if schema is not a CliSchema</exception>
+    /// <returns>dict of parsed values (same shape as cli.tryParse(...).value)</returns>
+    [StashFn(Raw = true, Capability = StashCapabilities.Environment, ReturnType = "dict")]
+    private static StashValue Parse(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        if (args.Length < 1)
+            throw new TypeError("'cli.parse' requires at least 1 argument (schema).");
+
+        if (!args[0].IsObj || args[0].AsObj is not StashInstance schemaInst || schemaInst.TypeName != "CliSchema")
+            throw new TypeError("'cli.parse': first argument must be a CliSchema (returned by cli.schema()).");
+
+        // Resolve argv: explicit second argument, or fall back to ScriptArgs
+        string[] argv;
+        if (args.Length >= 2)
+        {
+            if (!args[1].IsObj || args[1].AsObj is not List<StashValue> argvList)
+                throw new TypeError("'cli.parse': second argument must be an array of strings.");
+            argv = new string[argvList.Count];
+            for (int i = 0; i < argvList.Count; i++)
+            {
+                if (!argvList[i].IsObj || argvList[i].AsObj is not string s)
+                    throw new TypeError("'cli.parse': argv elements must be strings.");
+                argv[i] = s;
+            }
+        }
+        else
+        {
+            argv = ctx.ScriptArgs ?? [];
+        }
+
+        try
+        {
+            StashDictionary parsed = RunParser(schemaInst, argv, ctx);
+            return StashValue.FromObj(parsed);
+        }
+        catch (HelpRequestedException)
+        {
+            // --help / -h detected: print full help text to stdout, then exit(0)
+            string helpText = RenderHelp(schemaInst, HelpDefaultWidth);
+            ctx.Output.WriteLine(helpText);
+            ctx.NotifyOutput("stdout", helpText + "\n");
+            GlobalBuiltIns.EmitExitImpl(ctx, ParseExitCodeHelp);
+            // Unreachable: EmitExitImpl always throws ExitException
+            return StashValue.Null;
+        }
+        catch (RuntimeError ex) when (ex is CliMissingRequired or CliUnknownOption or CliMissingValue
+                                         or CliInvalidValue or CliUnexpectedPositional or CliAmbiguousOption
+                                         or CliValidationFailed or CliUnknownCommand)
+        {
+            // Parse failure: print short error + abbreviated usage to stderr, then exit(2)
+            string usageLine = BuildAbbreviatedUsage(schemaInst);
+            ctx.ErrorOutput.WriteLine(ex.Message);
+            ctx.ErrorOutput.WriteLine(usageLine);
+            GlobalBuiltIns.EmitExitImpl(ctx, ParseExitCodeError);
+            // Unreachable: EmitExitImpl always throws ExitException
+            return StashValue.Null;
+        }
+    }
+
+    // ── Exit code constants ────────────────────────────────────────────────────
+
+    private const int ParseExitCodeHelp  = 0;
+    private const int ParseExitCodeError = 2;
+
+    // ── Abbreviated usage builder ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a one-line abbreviated usage string for the error-path output.
+    /// Format: "Usage: &lt;program&gt; [options] &lt;positionals...&gt; [subcommand]"
+    /// This mirrors the first line of cli.help but is derived independently so it
+    /// does not depend on the full RenderHelp invocation path.
+    /// </summary>
+    private static string BuildAbbreviatedUsage(StashInstance schemaInst)
+    {
+        string programName = GetStringFieldOrEmpty(schemaInst, "programName");
+        bool helpFlag = GetBoolField(schemaInst, "helpFlag");
+        List<StashValue> positionals = GetListField(schemaInst, "positionals");
+        StashDictionary optionsDict = GetDictField(schemaInst, "options");
+        StashValue commandSpecVal = schemaInst.GetField("command", null);
+
+        var parts = new List<string>();
+        string displayName = string.IsNullOrEmpty(programName) ? "program" : programName;
+        parts.Add(HelpUsagePrefix + displayName);
+
+        bool hasOptions = optionsDict.RawKeys().Any() || helpFlag;
+        if (hasOptions)
+            parts.Add("[options]");
+
+        foreach (StashValue sv in positionals)
+        {
+            if (!sv.IsObj || sv.AsObj is not StashInstance spec) continue;
+            string name = GetStringFieldOrEmpty(spec, "name");
+            bool required = GetBoolFieldOrFalse(spec, "required");
+            bool repeated = GetBoolFieldOrFalse(spec, "repeated");
+            string token = repeated ? name + "..." : name;
+            parts.Add(required ? "<" + token + ">" : "[" + token + "]");
+        }
+
+        bool hasSubcommands = !commandSpecVal.IsNull &&
+                              commandSpecVal.IsObj &&
+                              commandSpecVal.AsObj is StashInstance cmdSpec &&
+                              cmdSpec.TypeName == "CliCommandSpec";
+        if (hasSubcommands)
+            parts.Add("[subcommand]");
+
+        return string.Join(" ", parts);
     }
 
     // ── Parser core ───────────────────────────────────────────────────────────
