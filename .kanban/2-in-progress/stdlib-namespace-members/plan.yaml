@@ -1,0 +1,226 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py stdlib-namespace-members
+
+schema_version: 1
+
+feature: stdlib-namespace-members
+title: Stdlib Namespace Members — Read-only Data Access
+brief: ./brief.md
+created: 2026-05-22
+architect_session: opus-4-7-2026-05-22
+
+default_verify:
+  - dotnet build
+
+scope:
+  - Stash.Core/**
+  - Stash.Stdlib/**
+  - Stash.Stdlib.Generators/**
+  - Stash.Bytecode/**
+  - Stash.Analysis/**
+  - Stash.Lsp/**
+  - Stash.Dap/**
+  - Stash.Docs/**
+  - Stash.Tests/**
+  - examples/**
+  - docs/**
+  - Stash.Playground/wwwroot/js/**
+  - .vscode/extensions/stash-lang/**
+  - CHANGELOG.md
+
+phases:
+  - id: P1
+    title: "[StashMember] attribute + source generator with declaration-kind tagging"
+    deps: []
+    files:
+      - Stash.Stdlib/Abstractions/StashMemberAttribute.cs
+      - Stash.Stdlib/Abstractions/Stability.cs
+      - Stash.Stdlib/Registration/DeclarationKind.cs
+      - Stash.Stdlib/Registration/NamespaceBuilder.cs
+      - Stash.Stdlib/Registration/NamespaceDefinition.cs
+      - Stash.Stdlib/Models/NamespaceMember.cs
+      - Stash.Stdlib/Models/NamespaceMemberPayload.cs
+      - Stash.Stdlib.Generators/StashNamespaceGenerator.cs
+      - Stash.Stdlib.Generators/NamespaceModel.cs
+      - Stash.Stdlib.Generators/CodeEmitter.cs
+      - Stash.Stdlib.Generators/Diagnostics.cs
+      - Stash.Stdlib.Generators/AnalyzerReleases.Unshipped.md
+      - Stash.Tests/Stdlib/SourceGenerator/StashMemberGeneratorTests.cs
+      - Stash.Tests/Stdlib/SourceGenerator/Fixtures/StashMemberFixture.cs
+    verify:
+      - dotnet build Stash.Stdlib.Generators/Stash.Stdlib.Generators.csproj
+      - dotnet build Stash.Stdlib/Stash.Stdlib.csproj
+      - dotnet test --filter "FullyQualifiedName~StashMemberGeneratorTests"
+    done_when:
+      - "A method annotated with [StashMember] taking exactly one IInterpreterContext parameter produces a generated NamespaceBuilder.Member(...) registration call carrying DeclarationKind = DataMember."
+      - "A method annotated with [StashMember] alongside [StashFn] fails to compile with a generator diagnostic that names both attributes and identifies the offending method."
+      - "A method annotated with [StashMember] alongside [StashConst] fails to compile with a generator diagnostic."
+      - "A [StashMember] method whose parameter shape is wrong (zero params, two params, or a non-IInterpreterContext parameter) fails to compile with a generator diagnostic."
+      - "Each generated namespace registry exposes a queryable declaration-kind table (name -> {Function, DataMember, Constant}) usable by the compiler in P3."
+      - "The source generator (or the analogous StandardLibraryReferenceTests-style build-time check) rejects a [StashMember] without a non-empty XML <summary> comment, mirroring the existing [StashFn] enforcement; a unit test exercises both the passing and the failing case."
+      - "The [StashMember] attribute accepts Throws (Type or Type[]), Capability (StashCapabilities), and a nullable ReturnType string; each propagates through to the generated registry entry and is observable via the namespace registry API consumed by LSP/docs/analysis in P6."
+      - "[StashDeprecated] composes with [StashMember]: a method carrying both is registered with the deprecation metadata attached to the member entry."
+      - "Capability-gated members emit the same `if ((__caps & cap) == cap)` registration gate as capability-gated [StashFn] entries; a unit test confirms that a member registered under a denied capability is absent from the frozen namespace."
+      - "A `Stability` enum (`Cached`, `Live`) exists and `[StashMember(Stability = Stability.Cached)]` / `[StashMember(Stability = Stability.Live)]` both compile and register; the source generator emits the stability tag into the generated registry entry alongside the getter delegate; a method annotated `[StashMember]` without an explicit Stability defaults to `Cached`; unit tests cover all three cases (explicit Cached, explicit Live, omitted default)."
+
+  - id: P2
+    title: Runtime read path — declaration-kind-aware StashNamespace.VMGetField
+    deps: [P1]
+    files:
+      # StashNamespace.cs and VirtualMachine.Functions.cs are NOT modified in P2:
+      # dispatch lives entirely in VirtualMachine.Collections.cs (GetField + GetFieldIC slow path).
+      - Stash.Bytecode/VM/VirtualMachine.Collections.cs
+      - Stash.Core/Runtime/Types/StashDictionary.cs
+      - Stash.Core/Runtime/Types/StashFrozenArray.cs
+      - Stash.Stdlib/BuiltIns/GlobalBuiltIns.cs
+      - Stash.Tests/Runtime/NamespaceMemberRuntimeTests.cs
+    verify:
+      - dotnet build Stash.Core/Stash.Core.csproj
+      - dotnet build Stash.Stdlib/Stash.Stdlib.csproj
+      - dotnet build Stash.Bytecode/Stash.Bytecode.csproj
+      - dotnet test --filter "FullyQualifiedName~NamespaceMemberRuntimeTests"
+    done_when:
+      - "A unit test registers a DataMember whose getter reads a mutable host-side cell; the VM read returns the current cell value, and a second read after the host mutates the cell returns the new value (proving no IC caching of DataMember reads)."
+      - "A unit test registers a Function entry and reads it bare; the VM returns the BuiltInFunction value (function reference) without invoking it."
+      - "A unit test registers a Constant and reads it; the VM returns the stored snapshot (existing behavior preserved)."
+      - "On the dynamic-receiver path (variable bound to a namespace value, then dotted access), VMGetField selects the correct branch by declaration kind."
+      - "A `Cached`-stability DataMember invokes its getter exactly once across N accesses (verifiable via a counting test fixture whose getter increments a counter); subsequent reads return the same reference (identity-stable)."
+      - "A `Live`-stability DataMember invokes its getter on every access (counter increments equal access count)."
+      - "Reference-typed return values from a DataMember getter (arrays, dicts) are frozen at the boundary regardless of stability mode; a unit test attempts mutation through the returned reference and observes the standard frozen-write error rather than silent mutation. Primitive returns (int, string, bool, float) are unaffected."
+
+  - id: P3
+    title: Compile-time DotExpr resolution + SA08xx for call-of-DataMember
+    deps: [P1, P2]
+    files:
+      - Stash.Bytecode/Compiler/Compiler.Expressions.cs
+      - Stash.Bytecode/Compiler/Compiler.Lookup.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Analysis/Diagnostics/DiagnosticCodes.cs
+      - Stash.Tests/Compiler/NamespaceDotResolutionTests.cs
+      - Stash.Tests/Analysis/NamespaceMemberCallDiagnosticTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~NamespaceDotResolutionTests|FullyQualifiedName~NamespaceMemberCallDiagnosticTests"
+    done_when:
+      - "Compiling a script that contains `cli.argc()` against a namespace where `argc` is a DataMember fails with SA08xx; the diagnostic message names `argc`, calls it 'a value member, not a function', and includes the source file:line of the call site."
+      - "Compiling `let n = cli.argc;` succeeds and emits a fused load opcode that invokes the registered getter at runtime (no SA08xx, no runtime detect-and-invoke shim)."
+      - "Compiling `let f = io.println;` succeeds and emits a load that produces the BuiltInFunction value (function reference); calling f(...) afterward dispatches normally."
+      - "Compiling `cli.argc(extra)` (DataMember with arguments) also raises SA08xx — call-of-DataMember is rejected regardless of arity."
+      - "A dynamic receiver (`let n = cli; n.argc;`) compiles without SA08xx and resolves at runtime via the kind-aware VMGetField path."
+      - "The chosen SA08xx diagnostic ID is recorded in brief.md's Decision Log."
+
+  - id: P4
+    title: Read-only enforcement — SA0845 + ReadOnlyError (built-in + user-module const)
+    deps: [P2, P3]
+    files:
+      - Stash.Runtime/Errors/ReadOnlyError.cs
+      - Stash.Bytecode/VM/VirtualMachine.TypeOps.cs
+      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+      - Stash.Bytecode/Bytecode/Metadata.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Analysis/Visitors/SymbolCollector.cs
+      - Stash.Analysis/Diagnostics/DiagnosticCodes.cs
+      - Stash.Tests/Analysis/ReadOnlyNamespaceTests.cs
+      - Stash.Tests/Runtime/ReadOnlyErrorTests.cs
+      - Stash.Tests/Modules/ConstReexportTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~ReadOnlyNamespaceTests|FullyQualifiedName~ReadOnlyErrorTests|FullyQualifiedName~ConstReexportTests"
+    done_when:
+      - "Assigning to `cli.argv` is rejected at analyze time with SA0845; the diagnostic message identifies `argv` as a read-only namespace member."
+      - "Assigning to `math.PI` (constant) is rejected by the same SA0845 — both DataMember and Constant entries on built-in namespaces are write-protected statically."
+      - "A dynamic-receiver assignment that reaches a built-in StashNamespace raises ReadOnlyError, not the generic TypeError; the error type is catchable as `catch (e: ReadOnlyError)` and is registered as a top-level [StashError]."
+      - "For a user module `mod.stash` containing `export const PI = 3.14;`, the script `import \"./mod.stash\" as mod; mod.PI = 0;` is rejected at analyze time with SA0845 and at runtime (dynamic-receiver path) with ReadOnlyError."
+      - "Assignment to a non-const export from the same user module remains permitted (no false positives)."
+      - "If ModuleExports does not already carry per-export const-ness, the brief's open question is closed here — either by threading the bit through or by recording in the Decision Log that user-module enforcement slips to a follow-up."
+
+  - id: P5
+    title: Migrate v1 set (hard break) + audit existing `()` call sites in repo
+    deps: [P3, P4]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/EnvBuiltIns.cs
+      - examples/**
+      - Stash.Tests/**
+      - Stash.Tests/Stdlib/CliMembersTests.cs
+      - Stash.Tests/Stdlib/EnvMembersTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~CliMembersTests|FullyQualifiedName~EnvMembersTests"
+      - dotnet test
+    done_when:
+      - "All eight v1 members (`cli.argc`, `cli.argv`, `env.cwd`, `env.home`, `env.user`, `env.hostname`, `env.os`, `env.arch`) resolve as bare member access and return the host-supplied values."
+      - "Each old call form (`cli.argc()`, `cli.argv()`, `env.cwd()`, `env.home()`, `env.user()`, `env.hostname()`, `env.os()`, `env.arch()`) is rejected by SA08xx at compile time — there is no [StashFn] shim, no deprecation window, and no AST sugar that silently strips the parens."
+      - "Every `.stash` source file in the repo (examples, integration tests, doctests, bundled artifacts) that previously called one of the eight migrated entries has been rewritten to bare member access, and the full `dotnet test` suite passes."
+      - "`typeof(cli.argc)` returns the declared member type (e.g. \"int\") — not \"function\" — confirming the registration change took effect."
+      - "Every one of the eight migrated members has a non-empty XML <summary> comment on its C# getter; the build-time summary check from P1 is exercised against the real migration set, not just synthetic tests."
+      - "Each migrated member declares its Throws metadata per the brief's per-member documentation manifest (env.cwd and env.home declare IOError; cli.argc / cli.argv / env.user / env.hostname / env.os / env.arch declare no throws unless audit of the existing implementation finds otherwise — discrepancies are recorded in the Decision Log)."
+      - "env.user and env.hostname remain gated by StashCapabilities.Environment after migration; a test confirms that under a denied capability, access raises the standard capability error rather than returning a value."
+      - "Per the per-member manifest in brief.md: `env.cwd` is annotated `Stability.Live`; the other seven (`cli.argc`, `cli.argv`, `env.home`, `env.user`, `env.hostname`, `env.os`, `env.arch`) are `Stability.Cached` (the annotation may be implicit-default)."
+      - "Regression test: after `os.chdir(\"/tmp\")` (or equivalent), a subsequent read of `env.cwd` returns the new directory — proving the Live annotation re-invokes the getter."
+      - "Regression test: two successive reads of `cli.argv` return the same reference (identity-stable across accesses), demonstrating the Cached annotation in effect."
+      - "Regression test: `cli.argv[0] = \"x\"` raises a frozen-write error rather than silently mutating the returned array; the same holds for any reference-typed Cached member."
+
+  - id: P6
+    title: LSP + DAP + docs + playground + VS Code grammar
+    deps: [P5]
+    files:
+      - Stash.Lsp/Handlers/CompletionHandler.cs
+      - Stash.Lsp/Handlers/HoverHandler.cs
+      - Stash.Lsp/Handlers/SemanticTokensHandler.cs
+      - Stash.Dap/DebugSession.cs
+      - Stash.Docs/ReferenceGenerator.cs
+      - Stash.Playground/wwwroot/js/stash-language.js
+      - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
+      - Stash.Tests/Lsp/NamespaceMembersLspTests.cs
+      - Stash.Tests/Dap/NamespaceMembersDapTests.cs
+    verify:
+      - dotnet run --project Stash.Docs/
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~NamespaceMembersLspTests|FullyQualifiedName~NamespaceMembersDapTests"
+    done_when:
+      - "LSP completion at `cli.` lists `argc` and `argv` with a completion-item kind that distinguishes them from function items (Property/Field for members vs Function for callables); the chosen kind is recorded in the Decision Log."
+      - "LSP hover on `cli.argv` renders the entry with: (i) the signature line `cli.argv: array<string>` or equivalent `member<array<string>>` rendering, (ii) the XML <summary> text from the C# getter, and (iii) the documented Throws list if non-empty; NOT as `fn cli.argv() -> array<string>`."
+      - "LSP hover on a member declared with a nullable ReturnType (`string?`) renders the nullable form (e.g. `member<string?>`); type inference treats the access as potentially-null at the call site."
+      - "LSP hover on `io.println` continues to render the function signature unchanged."
+      - "The DAP variable view, when inspecting the `cli` namespace, displays `argc` and `argv` with their resolved current values (auto-invoked getter) and labels them distinctly from function entries (so a user can tell a member from a function in the variable tree); the labeling convention is recorded in the Decision Log."
+      - "The regenerated `docs/Stash — Standard Library Reference.md` contains a 'Members' subsection that is rendered separately from the 'Functions' subsection under each namespace that has at least one member; each member row renders summary text, throws list, and capability gate when applicable; StandardLibraryReferenceTests passes with no manual edits."
+      - "The VS Code TextMate grammar and the playground Monarch tokenizer have been audited; either no changes are required (member access reuses existing dotted-identifier patterns) or the necessary tokenizer updates are present."
+      - "LSP hover over a `Live`-stability member surfaces a stability indicator in the rendered signature (e.g. `member<string> (live)` or equivalent prefix/suffix tag) so the user can tell that successive reads may differ; `Cached` members may render without an explicit indicator since Cached is the default. A unit test asserts the indicator appears on `env.cwd` hover and does not appear on `cli.argc` hover."
+
+  - id: P7
+    title: Spec sections (Namespace Members + Function References) + example + CHANGELOG breaking-changes entry
+    deps: [P5, P6]
+    files:
+      - docs/Stash — Language Specification.md
+      - docs/Stash — Standard Library Reference.md
+      - examples/namespace_members.stash
+      - CHANGELOG.md
+      - Stash.Tests/Language/FunctionReferenceTests.cs
+      - Stash.Tests/Documentation/StandardLibraryReferenceTests.cs
+    verify:
+      - dotnet run --project Stash.Docs/
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~FunctionReferenceTests|FullyQualifiedName~StandardLibraryReferenceTests"
+      - dotnet run --project Stash.Cli/ -- examples/namespace_members.stash arg1 arg2 arg3
+    done_when:
+      - "The Language Specification has a new dedicated top-level 'Namespace Members' subsection (not buried in an existing paragraph) that describes declaration kinds, the read-only contract, and the call-form-against-member error; the section is linked from the Table of Contents."
+      - "The Language Specification has a new dedicated top-level 'Function References' subsection (not buried in an existing paragraph) with at least one worked example (e.g. `let f = io.println; f(\"hello\");`), states that `Function`-kind namespace entries yield a callable when accessed bare while `DataMember`-kind entries yield the underlying value, and pins `typeof(io.println) == \"function\"`; the section is linked from the Table of Contents."
+      - "The 'Namespace Members' spec section contains the cross-language framing paragraph that explicitly references ES module live bindings and C# properties as the design precedent."
+      - "The 'Namespace Members' spec section contains the side-effect contract paragraph stating that getter access may throw, may re-materialize values, and that identity (`member === member`) is not preserved across accesses."
+      - "A new xUnit test FunctionReferenceTests pins the documented behavior: bare member access of a function-kind entry yields a callable, capture-and-call works for at least three namespaces (e.g. io, str, math), and typeof returns \"function\"."
+      - "`examples/namespace_members.stash` runs to completion under the verify command; it exercises at least four of the eight v1 members, captures at least one function reference, and includes a `try/catch` that demonstrates ReadOnlyError on attempted assignment to a built-in member."
+      - "CHANGELOG.md has a `Breaking changes` heading whose entries list every one of the eight migrated members by their old `()` form (cli.argc(), cli.argv(), env.cwd(), env.home(), env.user(), env.hostname(), env.os(), env.arch()) and new bare form, and references the new SA08xx diagnostic code."
+      - "The 'Namespace Members' spec subsection documents the `Cached` vs `Live` stability split, explicitly citing JS ES module `const` exports (identity-stable bindings) and `let` exports (live re-read on access) as the precedent."
+      - "The 'Namespace Members' spec side-effect contract paragraph is rewritten to the new four-bullet contract: (i) Cached members preserve identity across accesses; (ii) Live members re-invoke the getter on each access; (iii) all reference-typed returns are frozen at the boundary regardless of stability; (iv) getters may throw per the documented Throws list."
+      - "At least one worked example in the spec demonstrates `env.cwd` updating after `os.chdir(...)` to make the Live behavior concrete to readers."
+
+final_verify:
+  - dotnet build
+  - dotnet test
+  - dotnet run --project Stash.Docs/
+  - dotnet run --project Stash.Cli/ -- examples/namespace_members.stash arg1 arg2 arg3
+  - python3 scripts/checkpoint/validate-spec.py stdlib-namespace-members

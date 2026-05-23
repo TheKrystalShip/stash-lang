@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 
 namespace Stash.Bytecode;
 
@@ -15,6 +16,16 @@ public sealed partial class VirtualMachine
 {
     private object? GetIndexValue(object? obj, object? index, ref CallFrame frame)
     {
+        if (obj is StashFrozenArray fa)
+        {
+            if (index is not long faIdx)
+                throw new RuntimeError("Array index must be an integer.", GetCurrentSpan(ref frame));
+            long faIdxAdj = faIdx;
+            if (faIdxAdj < 0) faIdxAdj += fa.Count;
+            if (faIdxAdj < 0 || faIdxAdj >= fa.Count)
+                throw new RuntimeError($"Index {faIdx} out of bounds for array of length {fa.Count}.", GetCurrentSpan(ref frame));
+            return fa.Items[(int)faIdxAdj].ToObject();
+        }
         if (obj is StashTypedArray ta)
         {
             if (index is not long tIdx)
@@ -71,6 +82,10 @@ public sealed partial class VirtualMachine
 
     private void SetIndexValue(object? obj, object? index, object? value, ref CallFrame frame)
     {
+        if (obj is StashFrozenArray)
+        {
+            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.", GetCurrentSpan(ref frame));
+        }
         if (obj is StashTypedArray ta)
         {
             if (index is not long tIdx)
@@ -231,10 +246,10 @@ public sealed partial class VirtualMachine
         string fieldName = (string)frame.Chunk.Constants[c].AsObj!;
         StashValue objVal = _stack[@base + b];
 
-        // Fast path: namespace member access (e.g., math.abs)
+        // Fast path: namespace member access (e.g., math.abs, cli.argc)
         if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is StashNamespace ns)
         {
-            _stack[@base + a] = ns.GetMemberValue(fieldName, null);
+            _stack[@base + a] = ResolveNamespaceMember(ns, fieldName, GetCurrentSpan(ref frame));
             return;
         }
 
@@ -294,23 +309,38 @@ public sealed partial class VirtualMachine
         {
             object? rawObj = objVal.AsObj;
 
-            // Namespace member access
+            // Namespace member access (Function, Constant, or DataMember)
             if (rawObj is StashNamespace ns)
             {
-                StashValue result = ns.GetMemberValue(fieldName, null);
-                _stack[@base + a] = result;
+                // Check declaration kind to decide IC caching strategy.
+                StashValue rawSlot = ns.GetMemberValue(fieldName, null);
+                StashValue result;
 
-                if (ns.IsFrozen)
+                if (rawSlot.IsObj && rawSlot.AsObj is NamespaceMemberPayload payload)
                 {
-                    if (ic.State == 0)
+                    // DataMember: invoke getter, freeze reference-typed results, never IC-cache.
+                    result = FreezeMemberValue(payload.Invoke(_context));
+                    _stack[@base + a] = result;
+                    // Force megamorphic so the IC fast path is never taken for DataMember slots.
+                    ic.State = 2;
+                }
+                else
+                {
+                    // Function or Constant: value is stable post-freeze — IC-cacheable.
+                    result = rawSlot;
+                    _stack[@base + a] = result;
+                    if (ns.IsFrozen)
                     {
-                        ic.Guard = ns;
-                        ic.CachedValue = result;
-                        ic.State = 1;
-                    }
-                    else if (ic.State == 1)
-                    {
-                        ic.State = 2;
+                        if (ic.State == 0)
+                        {
+                            ic.Guard = ns;
+                            ic.CachedValue = result;
+                            ic.State = 1;
+                        }
+                        else if (ic.State == 1)
+                        {
+                            ic.State = 2;
+                        }
                     }
                 }
                 return;
@@ -570,5 +600,43 @@ public sealed partial class VirtualMachine
                     GetCurrentSpan(ref frame));
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves a namespace member access, dispatching DataMember payloads through their
+    /// getter and freezing reference-typed return values at the boundary.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private StashValue ResolveNamespaceMember(StashNamespace ns, string fieldName, SourceSpan? span)
+    {
+        StashValue rawSlot = ns.GetMemberValue(fieldName, span);
+        if (rawSlot.IsObj && rawSlot.AsObj is NamespaceMemberPayload payload)
+        {
+            return FreezeMemberValue(payload.Invoke(_context));
+        }
+        return rawSlot;
+    }
+
+    /// <summary>
+    /// Freezes reference-typed values returned by a DataMember getter so that callers
+    /// cannot silently mutate a cached or shared collection.
+    /// Primitive types (int, string, bool, float) are returned unchanged.
+    /// </summary>
+    private static StashValue FreezeMemberValue(StashValue value)
+    {
+        if (!value.IsObj) return value; // primitives: int, float, bool, null
+        object? obj = value.AsObj;
+        return obj switch
+        {
+            List<StashValue> list => StashValue.FromObj(new StashFrozenArray(list)),
+            StashDictionary dict when !dict.IsFrozen => FreezeDict(dict, value),
+            _ => value, // strings (interned/immutable), BuiltInFunction, StashInstance, etc.
+        };
+    }
+
+    private static StashValue FreezeDict(StashDictionary dict, StashValue original)
+    {
+        dict.Freeze();
+        return original;
     }
 }

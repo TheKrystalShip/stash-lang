@@ -13,11 +13,24 @@ using Stash.Common;
 public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMIterable, IVMIndexable, IVMSized, IVMStringifiable
 {
     private readonly Dictionary<object, StashValue> _entries = new();
+    private bool _frozen;
 
     public int Count => _entries.Count;
 
+    /// <summary>Whether this dictionary is frozen (write operations throw).</summary>
+    public bool IsFrozen => _frozen;
+
+    /// <summary>
+    /// Freezes the dictionary, making all subsequent write operations throw
+    /// <see cref="RuntimeError"/>. Used by the DataMember read path to honour the
+    /// side-effect contract: reference-typed returns are frozen at the boundary.
+    /// </summary>
+    public void Freeze() => _frozen = true;
+
     public void Set(object key, StashValue value)
     {
+        if (_frozen)
+            throw new RuntimeError("Cannot mutate a read-only dictionary returned by a namespace member.");
         ValidateKey(key);
         _entries[key] = value;
     }
@@ -34,11 +47,15 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
 
     public bool Remove(object key)
     {
+        if (_frozen)
+            throw new RuntimeError("Cannot mutate a read-only dictionary returned by a namespace member.");
         return _entries.Remove(key);
     }
 
     public void Clear()
     {
+        if (_frozen)
+            throw new RuntimeError("Cannot mutate a read-only dictionary returned by a namespace member.");
         _entries.Clear();
     }
 
