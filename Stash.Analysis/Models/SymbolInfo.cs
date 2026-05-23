@@ -37,6 +37,45 @@ public enum SymbolKind
 }
 
 /// <summary>
+/// Indicates where a symbol came from. Lets handlers distinguish user code from
+/// stdlib-injected helpers without re-querying registries — e.g.,
+/// <c>WorkspaceSymbolHandler</c> can omit <see cref="BuiltinStdlib"/> entries from
+/// workspace symbol search, and completion-style handlers can route presentation
+/// rules by origin.
+/// </summary>
+public enum SymbolOrigin
+{
+    /// <summary>Declared directly in user source (the default).</summary>
+    UserDefined,
+    /// <summary>Synthesized from <c>StdlibRegistry</c> by <c>SymbolCollector.RegisterBuiltIns</c>.</summary>
+    BuiltinStdlib,
+    /// <summary>Brought into scope by an <c>import</c> statement (populated by <c>ImportResolver</c>).</summary>
+    ImportedModule
+}
+
+/// <summary>
+/// Whether the symbol can be referenced as a bare identifier at the cursor.
+/// Member-style declarations (fields, methods, enum members) are always reached
+/// through a dot prefix in Stash (<c>self.x</c>, <c>Color.Red</c>, <c>p.greet()</c>),
+/// so they must not appear in unqualified completion lists.
+/// </summary>
+/// <remarks>
+/// The default is auto-derived from <see cref="SymbolKind"/> in the
+/// <see cref="SymbolInfo"/> constructor: <see cref="SymbolKind.Field"/>,
+/// <see cref="SymbolKind.Method"/>, and <see cref="SymbolKind.EnumMember"/>
+/// map to <see cref="RequiresQualification"/>; every other kind maps to
+/// <see cref="BareIdentifier"/>. Callers can override the default for unusual
+/// cases (e.g., re-export shims), but they almost never should.
+/// </remarks>
+public enum SymbolAccessibility
+{
+    /// <summary>Valid as a bare identifier at the cursor (the default for most kinds).</summary>
+    BareIdentifier,
+    /// <summary>Only reachable through a dot prefix (the default for member-style kinds).</summary>
+    RequiresQualification
+}
+
+/// <summary>
 /// Carries the full metadata for a single symbol declaration in a Stash document,
 /// including its name, kind, source location, type, and documentation.
 /// </summary>
@@ -159,6 +198,23 @@ public class SymbolInfo
     public IReadOnlyList<Stash.Parsing.AST.ThrowsEntry>? Throws { get; set; }
 
     /// <summary>
+    /// Gets the origin of this symbol — user-authored, stdlib-injected, or imported.
+    /// Lets handlers (workspace symbol search, presentation filters) route by source
+    /// without re-querying <c>StdlibRegistry</c> or the import resolver.
+    /// </summary>
+    public SymbolOrigin Origin { get; }
+
+    /// <summary>
+    /// Gets whether this symbol is reachable as a bare identifier or only via dot prefix.
+    /// Member-style kinds (<see cref="SymbolKind.Field"/>, <see cref="SymbolKind.Method"/>,
+    /// <see cref="SymbolKind.EnumMember"/>) default to
+    /// <see cref="SymbolAccessibility.RequiresQualification"/>; everything else defaults to
+    /// <see cref="SymbolAccessibility.BareIdentifier"/>. The default is auto-derived from
+    /// <see cref="Kind"/> in the constructor and almost never overridden.
+    /// </summary>
+    public SymbolAccessibility Accessibility { get; }
+
+    /// <summary>
     /// Initializes a new <see cref="SymbolInfo"/> with the given metadata.
     /// </summary>
     /// <param name="name">The unqualified identifier name.</param>
@@ -175,7 +231,7 @@ public class SymbolInfo
     /// <param name="isExplicitTypeHint"><see langword="true"/> if <paramref name="typeHint"/> was written explicitly in source.</param>
     /// <param name="isVariadic"><see langword="true"/> if this callable accepts unlimited arguments via a rest parameter.</param>
     /// <param name="isAsync"><see langword="true"/> if this function or method was declared with the <c>async</c> keyword.</param>
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false, bool isVariadic = false, bool isAsync = false)
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false, bool isVariadic = false, bool isAsync = false, SymbolOrigin origin = SymbolOrigin.UserDefined, SymbolAccessibility? accessibility = null)
     {
         Name = name;
         Kind = kind;
@@ -191,5 +247,21 @@ public class SymbolInfo
         IsExplicitTypeHint = isExplicitTypeHint;
         IsVariadic = isVariadic;
         IsAsync = isAsync;
+        Origin = origin;
+        Accessibility = accessibility ?? DeriveAccessibility(kind);
     }
+
+    /// <summary>
+    /// Auto-derives the default <see cref="SymbolAccessibility"/> from a
+    /// <see cref="SymbolKind"/>. Member-style kinds require qualification; everything
+    /// else is reachable as a bare identifier. Centralised here so handlers never
+    /// re-encode the kind→accessibility table.
+    /// </summary>
+    private static SymbolAccessibility DeriveAccessibility(SymbolKind kind) => kind switch
+    {
+        SymbolKind.Field => SymbolAccessibility.RequiresQualification,
+        SymbolKind.Method => SymbolAccessibility.RequiresQualification,
+        SymbolKind.EnumMember => SymbolAccessibility.RequiresQualification,
+        _ => SymbolAccessibility.BareIdentifier
+    };
 }

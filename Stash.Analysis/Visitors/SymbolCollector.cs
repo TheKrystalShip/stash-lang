@@ -98,43 +98,52 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         var span = new SourceSpan(file, 0, 0, 0, 0);
 
+        // These symbols are injected for *resolution* — they let hover, goto-def,
+        // find-references, and rename answer questions about stdlib names. Presentation
+        // handlers (completion, workspace-symbol search) must NOT surface them as-is;
+        // they should filter by Origin == BuiltinStdlib and/or Accessibility before
+        // including them in user-facing lists. The Accessibility tag is auto-derived
+        // from Kind (Field/Method/EnumMember → RequiresQualification), so per-member
+        // gating happens automatically.
+        const SymbolOrigin builtIn = SymbolOrigin.BuiltinStdlib;
+
         foreach (var s in StdlibRegistry.Structs)
         {
-            _currentScope.AddSymbol(new SymbolInfo(s.Name, SymbolKind.Struct, span, span, s.Detail));
+            _currentScope.AddSymbol(new SymbolInfo(s.Name, SymbolKind.Struct, span, span, s.Detail, origin: builtIn));
             foreach (var f in s.Fields)
             {
                 var fieldDetail = f.Type != null ? $"field of {s.Name}: {f.Type}" : $"field of {s.Name}";
-                _currentScope.AddSymbol(new SymbolInfo(f.Name, SymbolKind.Field, span, detail: fieldDetail, parentName: s.Name, typeHint: f.Type));
+                _currentScope.AddSymbol(new SymbolInfo(f.Name, SymbolKind.Field, span, detail: fieldDetail, parentName: s.Name, typeHint: f.Type, origin: builtIn));
             }
         }
 
         foreach (var e in StdlibRegistry.Enums)
         {
-            _currentScope.AddSymbol(new SymbolInfo(e.Name, SymbolKind.Enum, span, span, e.Detail, parentName: e.Namespace));
+            _currentScope.AddSymbol(new SymbolInfo(e.Name, SymbolKind.Enum, span, span, e.Detail, parentName: e.Namespace, origin: builtIn));
             foreach (var member in e.Members)
             {
-                _currentScope.AddSymbol(new SymbolInfo(member, SymbolKind.EnumMember, span, detail: $"member of {e.Name}", parentName: e.Name));
+                _currentScope.AddSymbol(new SymbolInfo(member, SymbolKind.EnumMember, span, detail: $"member of {e.Name}", parentName: e.Name, origin: builtIn));
             }
         }
 
         foreach (var i in StdlibRegistry.Interfaces)
         {
-            _currentScope.AddSymbol(new SymbolInfo(i.Name, SymbolKind.Interface, span, span, i.Detail));
+            _currentScope.AddSymbol(new SymbolInfo(i.Name, SymbolKind.Interface, span, span, i.Detail, origin: builtIn));
             foreach (var f in i.Fields)
             {
                 var fieldDetail = f.Type != null ? $"field of {i.Name}: {f.Type}" : $"field of {i.Name}";
-                _currentScope.AddSymbol(new SymbolInfo(f.Name, SymbolKind.Field, span, detail: fieldDetail, parentName: i.Name, typeHint: f.Type));
+                _currentScope.AddSymbol(new SymbolInfo(f.Name, SymbolKind.Field, span, detail: fieldDetail, parentName: i.Name, typeHint: f.Type, origin: builtIn));
             }
         }
 
         foreach (var fn in StdlibRegistry.Functions)
         {
-            _currentScope.AddSymbol(new SymbolInfo(fn.Name, SymbolKind.Function, span, span, fn.Detail, typeHint: fn.ReturnType, parameterNames: fn.ParamNames));
+            _currentScope.AddSymbol(new SymbolInfo(fn.Name, SymbolKind.Function, span, span, fn.Detail, typeHint: fn.ReturnType, parameterNames: fn.ParamNames, origin: builtIn));
         }
 
         foreach (var ns in StdlibRegistry.NamespaceNames)
         {
-            _currentScope.AddSymbol(new SymbolInfo(ns, SymbolKind.Namespace, span, detail: $"namespace {ns}"));
+            _currentScope.AddSymbol(new SymbolInfo(ns, SymbolKind.Namespace, span, detail: $"namespace {ns}", origin: builtIn));
         }
     }
 

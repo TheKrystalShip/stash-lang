@@ -24,6 +24,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Stdlib\Fixtures\*.txt" />
+    <EmbeddedResource Include="Lsp\Snapshots\*.txt" />
   </ItemGroup>
 
   <ItemGroup>

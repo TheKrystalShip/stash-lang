@@ -147,10 +147,16 @@ public class CompletionHandler : CompletionHandlerBase
     private CompletionList BuildFullCompletionList(Uri uri, int line, int col)
     {
         var items = new List<CompletionItem>();
+        // Shared across every pass: the first pass to claim a name wins, so stdlib
+        // namespaces / functions don't double-up with the same symbol that
+        // SymbolCollector also injects into the global scope (so hover/goto-def
+        // can resolve them). Without this, "fs", "arr", "alias" etc. appear twice.
+        var seen = new HashSet<string>();
 
         // Keywords
         foreach (var kw in Keywords.All)
         {
+            if (!seen.Add(kw)) continue;
             items.Add(new CompletionItem
             {
                 Label = kw,
@@ -162,6 +168,7 @@ public class CompletionHandler : CompletionHandlerBase
         // Built-in functions
         foreach (var fn in StdlibRegistry.Functions)
         {
+            if (!seen.Add(fn.Name)) continue;
             items.Add(new CompletionItem
             {
                 Label = fn.Name,
@@ -176,6 +183,7 @@ public class CompletionHandler : CompletionHandlerBase
         // Built-in namespaces
         foreach (var ns in StdlibRegistry.NamespaceNames)
         {
+            if (!seen.Add(ns)) continue;
             items.Add(new CompletionItem
             {
                 Label = ns,
@@ -188,16 +196,15 @@ public class CompletionHandler : CompletionHandlerBase
         var result = _analysis.GetCachedResult(uri);
         if (result != null)
         {
-            var seen = new HashSet<string>();
             foreach (var sym in result.Symbols.GetVisibleSymbols(line, col))
             {
-                // Member-only symbols are never valid as bare identifiers in Stash —
-                // they're always dot-accessed (instance.field, Type.method, Enum.Member,
-                // self.field inside methods). Excluding them here keeps the unqualified
-                // completion list focused on names that are actually callable at the cursor.
-                if (sym.Kind == StashSymbolKind.Field ||
-                    sym.Kind == StashSymbolKind.Method ||
-                    sym.Kind == StashSymbolKind.EnumMember)
+                // Symbols that require qualification (struct fields, methods, enum
+                // members) are never valid as bare identifiers in Stash — they're
+                // always reached via a dot prefix (instance.field, Type.method,
+                // Enum.Member, self.field inside methods). The Accessibility tag is
+                // auto-derived from Kind on SymbolInfo, so this filter stays correct
+                // for any future member-style kind without code changes here.
+                if (sym.Accessibility == SymbolAccessibility.RequiresQualification)
                 {
                     continue;
                 }

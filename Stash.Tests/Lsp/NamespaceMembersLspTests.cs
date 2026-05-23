@@ -270,6 +270,34 @@ public class NamespaceMembersLspTests
         Assert.Contains(items, i => i.Label == "name");
     }
 
+    /// <summary>
+    /// Stdlib namespaces are surfaced by two passes — the explicit
+    /// <c>StdlibRegistry.NamespaceNames</c> loop and <c>GetVisibleSymbols</c>
+    /// (which returns the <c>Kind.Namespace</c> symbols that <c>SymbolCollector</c>
+    /// injects for hover/goto-def). Each name must appear at most once in the
+    /// unqualified completion list.
+    /// </summary>
+    [Fact]
+    public void Completion_Unqualified_StdlibNamespacesAreNotDuplicated()
+    {
+        var items = InvokeUnqualifiedCompletion("\n").ToList();
+
+        foreach (var ns in StdlibRegistry.NamespaceNames)
+        {
+            int count = items.Count(i => i.Label == ns);
+            Assert.True(count <= 1, $"namespace '{ns}' appeared {count} times in completion list");
+        }
+    }
+
+    [Fact]
+    public void Completion_Unqualified_NoLabelAppearsMoreThanOnce()
+    {
+        var items = InvokeUnqualifiedCompletion("\n").ToList();
+
+        var duplicates = items.GroupBy(i => i.Label).Where(g => g.Count() > 1).ToList();
+        Assert.Empty(duplicates);
+    }
+
     private static System.Collections.Generic.IEnumerable<CompletionItem> InvokeUnqualifiedCompletion(string source)
     {
         // Position cursor on a fresh empty line at the end of the source.
