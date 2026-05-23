@@ -1,0 +1,94 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py <feature>
+
+schema_version: 1
+
+feature: readable-disassembly
+title: Readable Disassembly
+brief: ./brief.md
+
+created: 2026-05-17
+architect_session: opus-readable-disassembly-2026-05-17
+
+# Cheap check that every phase shares.
+default_verify:
+  - dotnet build Stash.Bytecode
+
+# Disassembler-only feature — scope is intentionally narrow.
+scope:
+  - Stash.Bytecode/Bytecode/Disassembler.cs
+  - Stash.Bytecode/Bytecode/BespokeOperandFormatters.cs
+  - Stash.Tests/Bytecode/DisassemblerTests.cs
+  - .claude/repo.md
+
+phases:
+  - id: P1
+    title: Resolve CallBuiltIn name from IC slot
+    deps: []
+    files:
+      - Stash.Bytecode/Bytecode/BespokeOperandFormatters.cs
+      - Stash.Bytecode/Bytecode/Disassembler.cs
+      - Stash.Tests/Bytecode/DisassemblerTests.cs
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~DisassemblerTests|FullyQualifiedName~DisassemblerOpCodeFixesTests"
+    done_when:
+      - 'The CallBuiltIn bespoke formatter prints the resolved method name (e.g. ".println") instead of "[ic:N]" by reading Chunk.ICSlots[icSlot].ConstantIndex and looking up Chunk.Constants.'
+      - 'When the receiver register can be traced via a bounded backward scan (<= 8 instructions) to a GetGlobal / GetUpval / Move with a known name, the comment includes the namespace prefix (e.g. "io.println").'
+      - 'When the scan fails, the comment falls back to the method-only form (e.g. ".println(2 args)") and never prints "[ic:N]" for a normal CallBuiltIn.'
+      - 'At least one new golden-file disassembly test covers a script with io.println() and asserts "io.println" appears in the disassembly.'
+    notes: |
+      Touch only the OpCode.CallBuiltIn entry in BespokeOperandFormatters.cs and any small
+      helper added to Disassembler.cs (e.g. a static ResolveBuiltinCallName(chunk, instrIdx)
+      that does the IC-slot lookup and the backward scan). Do not change Compact-mode output.
+
+  - id: P2
+    title: "Enable .locals: section in chunk header"
+    deps: [P1]
+    files:
+      - Stash.Bytecode/Bytecode/Disassembler.cs
+      - Stash.Tests/Bytecode/DisassemblerTests.cs
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~DisassemblerTests|FullyQualifiedName~DisassemblerOpCodeFixesTests"
+    done_when:
+      - 'DisassembleChunk emits a ".locals:" section between ".const_global_inits:" and ".code:" whenever chunk.LocalNames has entries and Compact mode is off.'
+      - Each listed slot shows its register, name, and role (param / local / const / internal) using the rules already coded in EmitLocalsSection.
+      - The section is absent in Compact mode and absent when chunk.LocalNames is null or empty.
+      - 'At least one new golden-file test covers a function chunk with mixed param/local/const/internal slots and asserts the .locals: section content.'
+    notes: |
+      EmitLocalsSection already exists at lines ~266-296 of Disassembler.cs. The call site is
+      commented out near line 138. Uncomment it; verify the role classification matches the
+      angle-bracket convention for compiler-managed slots; do not change the legend format
+      unless a test reveals a bug.
+
+  - id: P3
+    title: Register-name annotations on instructions
+    deps: [P2]
+    files:
+      - Stash.Bytecode/Bytecode/Disassembler.cs
+      - Stash.Bytecode/Bytecode/BespokeOperandFormatters.cs
+      - Stash.Tests/Bytecode/DisassemblerTests.cs
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~DisassemblerTests|FullyQualifiedName~DisassemblerOpCodeFixesTests"
+      - "output=$(dotnet test --filter 'FullyQualifiedName~Bytecode' 2>&1); echo \"$output\" | tail -6; echo \"$output\" | grep -E 'Failed: +0,' > /dev/null"
+    done_when:
+      - EmitInstruction appends register-name annotations to the comment column for every operand whose slot has an entry in chunk.LocalNames; unnamed slots are omitted.
+      - 'Annotations are deduplicated and ordered by operand position; on instructions with an existing bespoke comment, annotations are appended after a "  |  " separator with the bespoke comment first.'
+      - Compact mode output is byte-for-byte identical to its pre-feature output (a golden compact-mode regression test passes).
+      - The full Bytecode test category passes (dotnet test --filter "FullyQualifiedName~Bytecode").
+    notes: |
+      Add a helper such as BuildRegisterAnnotations(chunk, op, word) that returns the
+      annotation string given an opcode and the named LocalNames map. Use OpCodeMetadata
+      operand-role flags if available; otherwise hand-encode per InstrFmt (ABC/ABx/AsBx/Ax)
+      using OpCodeMetadata.GetFormat to know which fields are register slots vs immediates.
+
+# Full final acceptance run by `/done` before promoting to 4-done/.
+final_verify:
+  - dotnet build
+  - "output=$(dotnet test --filter 'FullyQualifiedName~Bytecode' 2>&1); echo \"$output\" | tail -6; echo \"$output\" | grep -E 'Failed: +0,' > /dev/null"
+  - "output=$(dotnet test 2>&1); echo \"$output\" | tail -6; echo \"$output\" | grep -E 'Failed: +0,' > /dev/null"

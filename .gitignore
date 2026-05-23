@@ -31,9 +31,6 @@ examples/packages/**/stashes/
 .DS_Store
 Thumbs.db
 
-# Spec files
-.kanban/
-
 # Compiled stash files
 *.stashc
 

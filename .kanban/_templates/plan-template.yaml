@@ -1,0 +1,79 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py <feature>
+
+schema_version: 1
+
+# Slug must match the directory name under .kanban/2-in-progress/ and the
+# `feature` field in checkpoint.yaml.
+feature: feature-slug
+
+# Human-readable title (used in commit messages and review docs).
+title: Feature Title
+
+# Relative path from this file's directory. This is the human source of truth.
+brief: ./brief.md
+
+created: 2026-05-16
+architect_session: optional-session-id-or-note
+
+# Default verify command run after every phase (in addition to phase-specific verify).
+# Keep it cheap — it runs on every phase. Heavier checks belong in per-phase verify.
+default_verify:
+  - dotnet build
+
+# Optional broad scope. This is a safety rail, not a prison. Implementers should
+# trust the phase file list by default, but may make small documented corrections
+# when discovery was stale (renamed file, moved helper, wrong verify filter).
+scope:
+  - Stash.Core/**
+  - Stash.Bytecode/**
+
+phases:
+  - id: 1A
+    title: AST nodes + visitors
+    deps: []
+    files:
+      - Stash.Core/Parsing/AST/NewNode.cs
+      - Stash.Core/Parsing/Parser.cs
+      - Stash.Analysis/Visitors/*.cs
+    verify:
+      - dotnet build Stash.Core Stash.Analysis
+      - dotnet test --filter "FullyQualifiedName~ParserTests|FullyQualifiedName~FormatterTests"
+    done_when:
+      - Export syntax parses and round-trips through the formatter.
+      - Every required AST visitor compiles with the new node shape.
+    notes: |
+      Keep phase-specific reminders here. Put design decisions in brief.md.
+
+  - id: 1B
+    title: Bytecode layer
+    deps: [1A]
+    files:
+      - Stash.Bytecode/Bytecode/OpCode.cs
+      - Stash.Bytecode/Bytecode/Disassembler.cs
+      - Stash.Bytecode/Bytecode/BytecodeVerifier.cs
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~DisassemblerTests|FullyQualifiedName~BytecodeVerifierTests"
+    done_when:
+      - New bytecode instructions disassemble and verify correctly.
+
+  - id: 1C
+    title: VM execution
+    deps: [1B]
+    files:
+      - Stash.Bytecode/VM/VirtualMachine.*.cs
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~VMTests"
+    done_when:
+      - The feature works through the normal runtime path, not only isolated helpers.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum.
+final_verify:
+  - dotnet build
+  - dotnet test

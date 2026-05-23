@@ -1,0 +1,310 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py cli-arg-parsing
+
+schema_version: 1
+
+feature: cli-arg-parsing
+title: CLI Argument Parsing — Declarative Stdlib Schema
+
+brief: ./brief.md
+
+created: 2026-05-18
+architect_session: opus-architect-2026-05-18
+
+default_verify:
+  - dotnet build Stash.sln
+
+# Hard scope. Implementers may not touch files outside this list unless the
+# phase explicitly extends scope.
+scope:
+  - Stash.Stdlib/**
+  - Stash.Core/**
+  - Stash.Bytecode/**
+  - Stash.Analysis/**
+  - Stash.Lsp/**
+  - Stash.Cli/**
+  - Stash.Docs/**
+  - Stash.Tests/**
+  - docs/**
+  - examples/**
+  - CHANGELOG.md
+
+phases:
+  - id: P1
+    title: Core schema model + builders
+    deps: []
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Schema.cs
+      - Stash.Stdlib/Namespaces/NamespaceRegistry.cs
+      - Stash.Tests/Stdlib/CliSchemaBuilderTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliSchemaBuilderTests"
+    non_goals:
+      - Do not implement the parsing engine (P3).
+      - Do not implement help rendering (P6).
+      - Do not register error types yet (P2 — schema-time errors throw a placeholder ValueError until P2 lands; rewire to CliSchemaError in P2).
+      - Do not remove args namespace yet (P8).
+    done_when:
+      - "cli.schema, cli.positional, cli.option, cli.flag, cli.command are registered on the `cli` namespace and return their respective struct values."
+      - "cli.schema({...}) validates at construction: duplicate short / duplicate long / repeated-positional-not-last / unknown-type-tag / default-fails-conversion / reserved --help shadowing all fail synchronously."
+      - "CliSchema, CliArgSpec, CliCommandSpec, CliCommand, CliParseResult are declared as [StashStruct]s and visible to user code."
+      - "Unit tests exercise every schema-time validation rule."
+      - "All previously-passing stdlib tests still pass."
+    notes: |
+      - Builders live next to existing stdlib namespaces in Stash.Stdlib/BuiltIns/.
+      - Type tags v1: "string", "int", "float", "bool", "duration", "ip", "bytesize", "semver".
+        Unknown tag is a construction-time failure (placeholder ValueError in P1, retypes to
+        CliSchemaError in P2).
+      - Defer the IStashCallable validate-callback wiring to P5; in P1 the `validate` key is
+        recorded onto CliArgSpec but never invoked.
+
+  - id: P2
+    title: Error registry — nine [StashError] subclasses
+    deps: [P1]
+    files:
+      - Stash.Core/Runtime/Errors/CliSchemaError.cs
+      - Stash.Core/Runtime/Errors/CliMissingRequired.cs
+      - Stash.Core/Runtime/Errors/CliUnknownOption.cs
+      - Stash.Core/Runtime/Errors/CliMissingValue.cs
+      - Stash.Core/Runtime/Errors/CliInvalidValue.cs
+      - Stash.Core/Runtime/Errors/CliUnexpectedPositional.cs
+      - Stash.Core/Runtime/Errors/CliAmbiguousOption.cs
+      - Stash.Core/Runtime/Errors/CliValidationFailed.cs
+      - Stash.Core/Runtime/Errors/CliUnknownCommand.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Schema.cs
+      - Stash.Tests/Runtime/CliErrorRegistryTests.cs
+    verify:
+      - dotnet build Stash.Core
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliErrorRegistryTests|FullyQualifiedName~CliSchemaBuilderTests"
+    non_goals:
+      - Do not change the parsing engine (P3).
+      - Do not modify BuiltInErrorRegistry's generation strategy.
+    done_when:
+      - "All nine error types are decorated with [StashError] and define the exact Properties / PropertyTypes shown in brief.md Error model."
+      - "BuiltInErrorRegistry.NameOf(typeof(CliSchemaError)) (and the other eight) returns the expected Stash-side name."
+      - "try { cli.schema({...invalid...}) } catch CliSchemaError as e { ... } works end-to-end, with e.field / e.reason accessible from Stash."
+      - "P1 schema-time validation now raises CliSchemaError (not the placeholder)."
+
+  - id: P3
+    title: Parsing engine + cli.tryParse
+    deps: [P2]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Tests/Stdlib/CliTryParseTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliTryParseTests"
+    non_goals:
+      - Do not implement subcommands (P4).
+      - Do not implement min/max/pattern/validate callback (P5) — accept those keys but ignore at runtime, with a TODO comment pointing at P5.
+      - Do not implement help rendering (P6) — helpRequested is detected but no text is returned.
+      - Do not implement cli.parse exit wrapper (P7).
+    done_when:
+      - "cli.tryParse(schema, argv) end-to-end parses positionals (single, optional with default, repeated trailing), options (long, short, --name=value, -nVALUE, repeated, choices, env fallback, -- boundary), and flags (default false, default:true, --no-name when negatable:true, bundling -abc and -vfFILE)."
+      - "Each of the relevant CliError subclasses (CliMissingRequired, CliUnknownOption, CliMissingValue, CliInvalidValue, CliUnexpectedPositional, CliAmbiguousOption) is reachable through a dedicated test."
+      - "cli.tryParse(schema, [\"--help\"]) returns a result with helpRequested:true and does not throw."
+      - "Type-tag conversion uses the same engines (conv.toInt, conv.toFloat, conv.toBool, time.duration, net.ip, bytesize, semver) the brief specifies."
+
+  - id: P4
+    title: Subcommand parsing
+    deps: [P3]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Tests/Stdlib/CliSubcommandTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliSubcommandTests"
+    non_goals:
+      - Do not change help rendering (P6 owns subcommand-scoped help formatting).
+      - Do not change schema construction; subcommand validation already lives in P1.
+    done_when:
+      - "A schema with one level of cli.command({...}) parses correctly; the result dict contains a `command` key whose value is a CliCommand with name, path:[\"<sub>\"], and the parsed leaf values."
+      - "A two-level schema (e.g. `remote add`) yields path:[\"remote\",\"add\"] and the leaf-schema values are populated."
+      - "Global flags declared at the root carry through to the subcommand parse state."
+      - "Unknown subcommand raises CliUnknownCommand with `name` and `candidates` populated."
+      - "Help flag at the subcommand position is recognised and reported via helpRequested (still wired in P7 once cli.parse exists)."
+
+  - id: P5
+    title: Validation pipeline (min / max / pattern / validate callback)
+    deps: [P3]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Validation.cs
+      - Stash.Tests/Stdlib/CliValidationPipelineTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliValidationPipelineTests"
+    non_goals:
+      - Do not change error class shapes (P2 is authoritative).
+      - Do not change subcommand semantics (P4).
+    done_when:
+      - "Validation runs strictly in the documented order: token-level → type conversion → choices → min/max/pattern → user validate callback."
+      - "`min` and `max` apply only to numeric type tags (int, float, bytesize, duration, semver where numeric ordering is meaningful); applying them to non-numeric tags raises CliSchemaError at construction."
+      - "`pattern` (regex) applies only to the \"string\" type tag; misuse is a CliSchemaError at construction."
+      - "User validate callback is invoked via the same IStashCallable dispatch path that arr.map / arr.filter use; returning true succeeds, returning false raises CliValidationFailed with a generic message, returning a string uses that string as CliValidationFailed.message."
+      - "Missing-required checks run after all per-argument validation."
+
+  - id: P6
+    title: Help rendering — cli.help / cli.printHelp
+    deps: [P1, P4]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Help.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Tests/Stdlib/CliHelpRenderTests.cs
+      - Stash.Tests/Stdlib/Fixtures/cli_help_flat.txt
+      - Stash.Tests/Stdlib/Fixtures/cli_help_subcommands.txt
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliHelpRenderTests"
+    non_goals:
+      - Do not call exit from here — that is P7's job.
+      - Do not implement static --help discovery (P10).
+    done_when:
+      - "cli.help(schema) returns a string containing: program name + usage line; positional argument table; option table (long + short + metavar + help text + default annotation); subcommand list (when present)."
+      - "The `command` option (dot-separated path) routes help rendering to the selected subcommand."
+      - "The `width` option wraps help text at the specified column."
+      - "Snapshot fixtures exist for (a) a flat schema, (b) a subcommand schema. Snapshots match deterministically."
+      - "cli.printHelp(schema) writes the same string to stdout via io.println."
+
+  - id: P7
+    title: cli.parse exit/print wrapper + argv default
+    deps: [P3, P4, P5, P6]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Tests/Stdlib/CliParseExitTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliParseExitTests"
+    non_goals:
+      - Do not implement cli.build (P8).
+      - Do not add cli.argv / cli.argc (P8).
+    done_when:
+      - "cli.parse(schema) with no argv reads IInterpreterContext.ScriptArgs and parses against it."
+      - "On --help or -h, cli.parse prints cli.help(schema) to stdout and calls exit(0)."
+      - "On any parse failure (any of the nine CliError subclasses except CliSchemaError, which is construction-time), cli.parse prints a short error message + abbreviated usage to stderr and calls exit(2)."
+      - "On parse success, cli.parse returns the same dict shape cli.tryParse(...).value would have produced."
+      - "Test verifies the wrapper invokes the existing `exit` global rather than throwing — exit code 0 vs 2 is observable from a child-process integration test."
+
+  - id: P8
+    title: cli.build (inverse) + remove args namespace + add cli.argv / cli.argc
+    deps: [P7]
+    files:
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Build.cs
+      - Stash.Stdlib/BuiltIns/ArgsBuiltIns.cs
+      - Stash.Stdlib/Namespaces/NamespaceRegistry.cs
+      - Stash.Tests/Stdlib/CliBuildTests.cs
+      - Stash.Tests/Stdlib/CliArgvTests.cs
+      - Stash.Tests/Stdlib/ArgsRemovalTests.cs
+      - Stash.Tests/Interpreting/ArgsNamespaceTests.cs
+      - Stash.Tests/Interpreting/DictArgParseTests.cs
+      - Stash.Tests/Interpreting/ArgsBuildTests.cs
+      - Stash.Tests/Interpreting/CliExecutionTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliBuildTests|FullyQualifiedName~CliArgvTests|FullyQualifiedName~ArgsRemovalTests"
+    non_goals:
+      - Do not migrate in-tree args.* callers (examples/, the @stash/cli package set) — that is the follow-up migration spec.
+      - Do not add a [StashDeprecated] shim — the entire namespace goes.
+    done_when:
+      - "cli.build(schema, values) validates values matches the schema and returns an argv string array such that cli.parse(schema, cli.build(schema, parsedValues)) == parsedValues for round-trippable schemas."
+      - "cli.build rejects values that don't match the schema (raises CliSchemaError or a clearly-named follow-up error)."
+      - "cli.argv() returns IInterpreterContext.ScriptArgs as array<string>; cli.argc() returns its length."
+      - "cli.argv() content matches the three documented invocation modes (`stash script.stash a b` → [\"a\",\"b\"]; `stash -c '...'` → []; REPL → [])."
+      - "args.list, args.count, args.parse, args.build no longer resolve at runtime — calling any of them raises the standard 'Undefined namespace' / 'Unknown function' runtime error."
+      - "The old test files ArgsNamespaceTests.cs, DictArgParseTests.cs, ArgsBuildTests.cs are marked [Fact(Skip = \"args namespace removed in cli-arg-parsing; migrated by follow-up spec\")] (or the file-level [Collection]/class-level skip equivalent) so the Stash.Tests build stays green. CliExecutionTests.cs has its three `args.list()` sites converted to `cli.argv()` (mechanical edit, not a behavior change)."
+    notes: |
+      - The Skip annotation on the old args.* tests is the agreed-on bridge: the follow-up migration
+        spec will remove the skip and rewrite the assertions on top of cli.*. Adding the Skip is
+        explicitly inside this phase's scope; rewriting the test bodies is explicitly outside.
+      - CliExecutionTests.cs is a partial exception — the three `args.list()` sites are a mechanical
+        rename to `cli.argv()`, not a semantic migration, so they belong in this phase rather than the
+        follow-up spec.
+      - Verify NamespaceRegistry no longer registers ArgsNamespace. Removing the file alone is not
+        sufficient — the registration entry must go too.
+
+  - id: P9
+    title: LSP diagnostics + hover / completion over literal schemas
+    deps: [P1, P2]
+    files:
+      - Stash.Lsp/Handlers/CompletionHandler.cs
+      - Stash.Lsp/Handlers/HoverHandler.cs
+      - Stash.Analysis/Cli/CliSchemaAnalyzer.cs
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
+      - Stash.Tests/Lsp/CliSchemaLspTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet build Stash.Analysis
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~CliSchemaLspTests"
+    non_goals:
+      - Do not implement static `stash --help` (P10).
+      - Do not surface diagnostics for dynamically-constructed schemas — they degrade silently.
+    done_when:
+      - "Hover on the parsed-result identifier (e.g. `args` in `args = cli.parse(schema)`) — only when the schema is a literal cli.schema({...}) bound to a top-level identifier — lists the declared fields and their type tags."
+      - "Duplicate `short:` option inside a literal cli.schema({...}) emits a diagnostic at the offending value."
+      - "Unknown type-tag string literal emits a diagnostic at the offending string."
+      - "Completion for `args.<field>` after a literal cli.parse(schema) returns the schema's dict keys."
+      - "Dynamically-constructed schemas produce no diagnostics, no field completion, and no test failures."
+
+  - id: P10
+    title: stash --help script.stash literal-only static mode
+    deps: [P6, P9]
+    files:
+      - Stash.Cli/Program.cs
+      - Stash.Cli/Modes/StaticHelpMode.cs
+      - Stash.Analysis/Cli/CliSchemaAnalyzer.cs
+      - Stash.Analysis/Cli/LiteralSchemaBuilder.cs
+      - Stash.Tests/Cli/StaticHelpModeTests.cs
+      - Stash.Tests/Analysis/LiteralSchemaPredicateTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet build Stash.Analysis
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~StaticHelpModeTests|FullyQualifiedName~LiteralSchemaPredicateTests"
+    non_goals:
+      - Do not execute the script (Stash.Cli/Program.cs short-circuits before running the bytecode VM in this mode).
+      - Do not implement a sandboxed sub-interpreter — that is a follow-up spec.
+    done_when:
+      - "stash --help script.stash recognises a top-level binding named `schema` (override via `// @cli-schema-binding: <name>`) whose initializer is a literal cli.schema({...}) call."
+      - "The literal-ness predicate admits exactly: IntegerLiteral, FloatLiteral, StringLiteral, BoolLiteral, NullLiteral, IpAddressLiteral, DurationLiteral, ByteSizeLiteral, SemVerLiteral, ArrayLiteral (recursive), DictLiteral (recursive), and UnaryExpr(Minus, IntegerLiteral|FloatLiteral) — no other unary forms."
+      - "Predicate-level tests confirm: default:-1 is literal; default:-1.5 is literal; default:!true is non-literal; default:-x (unary minus on identifier) is non-literal; default:--1 (double unary minus) is non-literal."
+      - "Against a fully-literal fixture, `stash --help fixture.stash` prints the rendered help (built directly from the literal AST, no script execution) and exits 0."
+      - "Against a non-literal initializer (or a fixture with no `schema` binding), `stash --help fixture.stash` prints the documented generic fallback message and exits 0."
+      - "The comment marker `// @cli-schema-binding: customName` redirects the analyzer to a binding named `customName`."
+
+  - id: P11
+    title: Docs regeneration + examples
+    deps: [P8, P10]
+    files:
+      - examples/cli_basic.stash
+      - examples/cli_subcommands.stash
+      - docs/Stash — Standard Library Reference.md
+      - docs/Stash — Language Specification.md
+      - CHANGELOG.md
+    verify:
+      - dotnet run --project Stash.Docs/
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~StandardLibraryReferenceTests"
+    non_goals:
+      - Do not hand-edit docs/Stash — Standard Library Reference.md — it is regenerated from metadata.
+      - Do not document migration of in-tree args.* callers (separate follow-up spec).
+    done_when:
+      - "`dotnet run --project Stash.Docs/` exits clean and the regenerated docs/Stash — Standard Library Reference.md contains the entire `cli.*` namespace and all nine `Cli*` error types with their structured properties."
+      - "Stash.Tests StandardLibraryReferenceTests passes."
+      - "docs/Stash — Language Specification.md notes (in the stdlib section) that args.* has been removed and points to cli.*."
+      - "examples/cli_basic.stash demonstrates positionals, options, flags, defaults, --help, and runs cleanly under `stash examples/cli_basic.stash <argv>`."
+      - "examples/cli_subcommands.stash demonstrates a two-level subcommand schema (e.g. `remote add`) and runs cleanly."
+      - "CHANGELOG.md gains a bullet describing the new cli.* namespace and the removal of args.*."
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet run --project Stash.Docs/
+  - dotnet test Stash.Tests --filter "FullyQualifiedName~CliSchemaBuilderTests|FullyQualifiedName~CliErrorRegistryTests|FullyQualifiedName~CliTryParseTests|FullyQualifiedName~CliSubcommandTests|FullyQualifiedName~CliValidationPipelineTests|FullyQualifiedName~CliHelpRenderTests|FullyQualifiedName~CliParseExitTests|FullyQualifiedName~CliBuildTests|FullyQualifiedName~CliArgvTests|FullyQualifiedName~ArgsRemovalTests|FullyQualifiedName~CliSchemaLspTests|FullyQualifiedName~StaticHelpModeTests|FullyQualifiedName~LiteralSchemaPredicateTests|FullyQualifiedName~StandardLibraryReferenceTests"

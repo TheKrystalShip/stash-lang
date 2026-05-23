@@ -1,0 +1,109 @@
+schema_version: 1
+feature: cli-arg-parsing
+current: null
+updated: '2026-05-22T16:47:40Z'
+phases:
+  P1:
+    status: done
+    commit: d618184e5af24872f298d6547643683f4f9f7816
+    verified: true
+    started: '2026-05-19T15:13:05Z'
+    completed: '2026-05-19T15:29:02Z'
+    attempts: 1
+    notes: 'CliBuiltIns.cs + Schema.cs partial: 5 builders + 5 structs; 40 unit tests; docs regenerated;
+      defaultVal renaming for reserved keyword'
+  P10:
+    status: done
+    commit: 2c3e9de3886cb25c083183f0bdef950a62c7d6cb
+    verified: true
+    started: '2026-05-22T08:59:50Z'
+    completed: '2026-05-22T09:38:00Z'
+    attempts: 1
+    notes: 'Static --help mode: LiteralSchemaBuilder + StaticHelpMode + Program.cs wiring + 41 tests green'
+  P11:
+    status: done
+    commit: f69e0504426034bfe49348b13297ebf53730d6fb
+    verified: true
+    started: '2026-05-22T09:40:49Z'
+    completed: '2026-05-22T09:49:47Z'
+    attempts: 1
+    notes: Docs regenerated with full cli.* namespace; Language Spec updated with args.* removal note;
+      two runnable examples added; CHANGELOG bullet added
+  P2:
+    status: done
+    commit: e6e054e32ec165a902924577513cb3479190f509
+    verified: true
+    started: '2026-05-19T15:30:56Z'
+    completed: '2026-05-19T15:41:35Z'
+    attempts: 1
+    notes: nine [StashError] subclasses in Stash.Core/Runtime/Errors/; CliBuiltIns.Schema.cs rewired from
+      ValueError to CliSchemaError; CliSchemaBuilderTests updated; docs regenerated
+  P3:
+    status: done
+    commit: df7a5be33585219af48a2017d573be1d297deaf8
+    verified: true
+    started: '2026-05-19T15:43:02Z'
+    completed: '2026-05-19T16:00:10Z'
+    attempts: 1
+    notes: 'Full parse engine: positionals/options/flags/repeated/choices/env/defaults/bundling/negation;
+      all six error types; helpRequested detection; StashError wrapping'
+  P4:
+    status: done
+    commit: 6bb4fc11811596b84944ef598896253380c5f558
+    verified: true
+    started: '2026-05-21T23:53:28Z'
+    completed: '2026-05-22T00:01:49Z'
+    attempts: 1
+    notes: Subcommand dispatch with two-level recursion, global flag passthrough, CliUnknownCommand with
+      candidates, help flag at any depth
+  P5:
+    status: done
+    commit: 07353ffc3fbdf247729f3be37bfefcf8da098161
+    verified: true
+    started: '2026-05-22T00:02:31Z'
+    completed: '2026-05-22T00:24:02Z'
+    attempts: 1
+    notes: 'Validation pipeline: min/max/pattern/validate callback wired; construction-time type/constraint
+      compatibility checks added to Schema.cs (plan correction)'
+  P6:
+    status: done
+    commit: 2efd1d8b5420456751c37bad13e89adea2708ffe
+    verified: true
+    started: '2026-05-22T00:24:56Z'
+    completed: '2026-05-22T00:36:18Z'
+    attempts: 1
+    notes: cli.help + cli.printHelp with command routing, width wrapping, snapshot fixtures
+  P7:
+    status: done
+    commit: 83ff6eca6943a21fcabb707da64fa3ddfe3d184c
+    verified: true
+    started: '2026-05-22T07:49:44Z'
+    completed: '2026-05-22T07:55:33Z'
+    attempts: 1
+    notes: 'cli.parse wrapper: reads ScriptArgs by default, exits 0 on --help (stdout), exits 2 on parse
+      error (stderr + abbreviated usage), returns dict on success; 15 tests all pass'
+  P8:
+    status: done
+    commit: 288f7f4c425f2c823f8958239e251dbb162d6151
+    verified: true
+    started: '2026-05-22T07:58:51Z'
+    completed: '2026-05-22T08:15:15Z'
+    attempts: 1
+    notes: "cli.build + cli.argv + cli.argc implemented; args namespace deleted; three legacy test files\
+      \ bridge-skipped; CliExecutionTests 3x args.list \u2192 cli.argv"
+  P9:
+    status: done
+    commit: ded541650ab2ecbfb60a41605ddb687406dce487
+    verified: true
+    started: '2026-05-22T08:16:21Z'
+    completed: '2026-05-22T08:42:21Z'
+    attempts: 1
+    notes: 'CliSchemaAnalyzer + CliSchemaIndex: SA1501/SA1502 diagnostics for duplicate short and unknown
+      type tag; hover shows fields on cli.parse result vars; completion offers schema fields after dot;
+      dynamic schemas silently skipped; 14 tests pass'
+review:
+  status: resolved
+  started: '2026-05-22T16:05:17Z'
+  resolved: '2026-05-22T16:47:40Z'
+  findings_open: 0
+  findings_fixed: 0

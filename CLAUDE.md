@@ -35,6 +35,10 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 | `status.py` | Compact text status for `/resume` |
 | `promote-done.sh` | Final acceptance + move to `4-done/` |
 
+### `final_verify` must filter documented flakies
+
+When authoring `plan.yaml`, narrow `final_verify`'s `dotnet test` step to exclude documented flaky / environment-dependent classes (see `.claude/repo.md` "Known Issues"). Bare `dotnet test` fails `/done` due to pre-existing `DiffPackageTests`, `Registry*Tests`, `NetBuiltInsTests`, parallel-execution flakies, etc. — these are not feature regressions. Precedent: `exports-private-default` and `stdlib-namespace-members` `plan.yaml` carry the canonical filter shape.
+
 ## Specialized agents
 
 This project's agents live in `.claude/agents/`. Under the checkpoint workflow, you typically never invoke an agent directly — the slash commands do it for you.

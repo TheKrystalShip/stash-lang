@@ -239,6 +239,16 @@ This runs `final_verify`, refuses open findings, promotes the directory to `.kan
 
 ---
 
+## Filing Bugs Discovered During Work
+
+When any agent or human encounters a bug **unrelated to the current feature** during workflow phases (architect design, implementer phase, reviewer review, resolver fix), they MUST:
+
+1. Copy `.kanban/_templates/bug-template.md` to `.kanban/0-backlog/bugs/<descriptive-name>.md`.
+2. Fill in every section. Sections that don't apply get a one-line "N/A — reason" entry, not deletion.
+3. Do not attempt to fix the bug as part of the current work unless explicitly authorized — file the stub and continue with the current scope.
+
+Reviewers in particular: out-of-scope bugs surfaced during `/feature-review` go in `0-backlog/bugs/` using the template, NOT in `review.md`. `review.md` is exclusively for findings about the feature under review.
+
 ## Recovery
 
 Use `/resume [slug]` whenever you are unsure.

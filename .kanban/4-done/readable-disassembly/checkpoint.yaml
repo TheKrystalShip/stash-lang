@@ -1,0 +1,38 @@
+schema_version: 1
+feature: readable-disassembly
+current: null
+updated: '2026-05-17T17:13:20Z'
+phases:
+  P1:
+    status: done
+    commit: 29ca06833bd5ea40b2758ee1eeb89a83866d19c3
+    verified: true
+    started: '2026-05-17T15:54:14Z'
+    completed: '2026-05-17T16:00:37Z'
+    attempts: 1
+    notes: CallBuiltIn formatter now resolves method name from ICSlots and namespace from backward scan;
+      io.println(2 args) replaces [ic:N]
+  P2:
+    status: done
+    commit: f9c25a2608353151bf6769ce29384b7565cac3ae
+    verified: true
+    started: '2026-05-17T16:02:25Z'
+    completed: '2026-05-17T16:04:33Z'
+    attempts: 1
+    notes: Uncommented EmitLocalsSection call; added 3 golden-file tests for mixed slot roles, compact
+      suppression, and null LocalNames suppression
+  P3:
+    status: done
+    commit: 3b6d3c5ff00cd4c61a70515414c4a7109d6913e6
+    verified: true
+    started: '2026-05-17T16:05:41Z'
+    completed: '2026-05-17T16:27:45Z'
+    attempts: 1
+    notes: BuildRegisterAnnotations() uses OpCodeMetadata role flags; dedup A->B->C order; bespoke+separator;
+      compact guard; 5 new tests (35 total)
+review:
+  status: resolved
+  started: '2026-05-17T16:38:14Z'
+  resolved: '2026-05-17T17:13:20Z'
+  findings_open: 0
+  findings_fixed: 0

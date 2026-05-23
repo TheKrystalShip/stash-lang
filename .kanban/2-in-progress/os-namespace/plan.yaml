@@ -1,0 +1,156 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py os-namespace
+
+schema_version: 1
+
+feature: os-namespace
+
+title: OS Namespace Standard Library
+
+brief: ./brief.md
+
+created: 2026-05-22
+architect_session: opus-4.7
+
+# Default verify run after every phase, in addition to per-phase verify.
+default_verify:
+  - dotnet build
+
+# Scope is a safety rail, not a prison. Phases may touch files outside this list
+# when discovery was stale; record any deviation in the phase notes.
+scope:
+  - "Stash.Stdlib/**"
+  - "Stash.Tests/**"
+  - "examples/**"
+  - "docs/**"
+  - ".github/instructions/**"
+  - "CHANGELOG.md"
+
+phases:
+  - id: P1
+    title: Namespace skeleton, Platform enum, PlatformInfo struct, registration
+    deps: []
+    files:
+      - Stash.Stdlib/BuiltIns/OsBuiltIns.cs
+      - Stash.Stdlib/StdlibDefinitions.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - 'dotnet test --filter "FullyQualifiedName~StdlibConsistencyTests"'
+    done_when:
+      - 'OsBuiltIns.cs exists with a [StashNamespace] class, the Platform enum (all 11 members: Windows..Unknown), and the PlatformInfo record marked [StashStruct] per the brief.'
+      - 'The string "os" appears in StdlibRegistry.NamespaceNames at runtime.'
+      - 'All Stash-visible names come from nameof() or named private const strings; no inline string literals for type or member names.'
+    notes: |
+      Reference pattern: FsBuiltIns.cs (WatchEventType / FileInfo) and ProcessBuiltIns.cs (ExecMode / ProcessResult).
+      Use Raw = true on functions that return Platform or PlatformInfo so they can construct StashEnumValue / StashStructInstance explicitly.
+      Wire the registration into whatever namespace-factory site the other BuiltIns classes use; do not invent a new mechanism.
+
+  - id: P2
+    title: Platform identity functions (platform, name, isXxx, isUnix)
+    deps: [P1]
+    files:
+      - Stash.Stdlib/BuiltIns/OsBuiltIns.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - 'dotnet test --filter "FullyQualifiedName~StdlibConsistencyTests"'
+    done_when:
+      - 'os.platform() returns the matching Platform enum value on the test host.'
+      - 'os.name() returns the documented lowercase string for the host (windows, linux, macos, freebsd, android, ios, tvos, watchos, browser, wasi, or unknown).'
+      - 'os.isWindows / isLinux / isMacOS / isFreeBSD / isAndroid / isIOS / isBrowser each forward to OperatingSystem.IsXxx().'
+      - 'os.isUnix() returns true iff the host is one of Linux, MacOS, FreeBSD, Android, IOS, TvOS, WatchOS; the C# summary explicitly says this is NOT a POSIX compliance claim.'
+
+  - id: P3
+    title: Runtime architecture, description, framework, version, endianness, version-at-least helpers
+    deps: [P1]
+    files:
+      - Stash.Stdlib/BuiltIns/OsBuiltIns.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - 'dotnet test --filter "FullyQualifiedName~StdlibConsistencyTests"'
+    done_when:
+      - 'os.arch() and os.processArch() return non-empty ToLowerInvariant() strings sourced from RuntimeInformation.OSArchitecture and ProcessArchitecture; the C# summary enumerates the known set and notes that the set is open and runtime-derived.'
+      - 'os.description() / os.framework() / os.version() forward to RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription, Environment.OSVersion.VersionString respectively.'
+      - 'os.endianness() returns a named const for little or big based on BitConverter.IsLittleEndian.'
+      - 'os.isMacOSVersionAtLeast / isWindowsVersionAtLeast / isLinuxVersionAtLeast return false on the wrong host (never throw) and forward to OperatingSystem.IsXxxVersionAtLeast on the matching host.'
+
+  - id: P4
+    title: os.info() PlatformInfo snapshot (non-memoized)
+    deps: [P2, P3]
+    files:
+      - Stash.Stdlib/BuiltIns/OsBuiltIns.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - 'dotnet test --filter "FullyQualifiedName~StdlibConsistencyTests"'
+    done_when:
+      - 'os.info() returns a PlatformInfo whose 9 fields (platform, name, isUnix, arch, processArch, description, framework, version, endianness) each equal the corresponding individual helper result.'
+      - 'Two successive os.info() calls produce equal field values but are independently constructed; no memoization, no cached StashStructInstance.'
+
+  - id: P5
+    title: io.pathSeparator() and io.newLine() additions
+    deps: []
+    files:
+      - Stash.Stdlib/BuiltIns/IoBuiltIns.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - 'dotnet test --filter "FullyQualifiedName~StdlibConsistencyTests|FullyQualifiedName~IoBuiltInsTests"'
+    done_when:
+      - 'io.pathSeparator() returns Path.PathSeparator.ToString().'
+      - 'io.newLine() returns Environment.NewLine.'
+      - 'Both functions are registered, appear in stdlib metadata, and are not duplicated anywhere in os or PlatformInfo.'
+
+  - id: P6
+    title: Delete env.os / env.arch and migrate all in-tree callers
+    deps: [P2, P3]
+    files:
+      - Stash.Stdlib/BuiltIns/EnvBuiltIns.cs
+      - examples/system_info.stash
+      - examples/namespaces.stash
+      - Stash.Tests/Interpreting/EnvBuiltInsTests.cs
+      - Stash.Tests/Interpreting/InterpreterTests.cs
+      - .github/instructions/stdlib.instructions.md
+      - Stash.Stdlib/BuiltIns/CLAUDE.md
+    verify:
+      - dotnet build
+      - 'dotnet test --filter "FullyQualifiedName~EnvBuiltInsTests|FullyQualifiedName~InterpreterTests|FullyQualifiedName~StdlibConsistencyTests"'
+    done_when:
+      - 'EnvBuiltIns.cs no longer declares Os() or Arch() and they are absent from stdlib metadata.'
+      - 'Calling env.os() or env.arch() from a Stash script raises an unknown-function error.'
+      - 'All four enumerated caller sites (examples/system_info.stash, examples/namespaces.stash, Stash.Tests/Interpreting/EnvBuiltInsTests.cs, Stash.Tests/Interpreting/InterpreterTests.cs) compile and run against os.name() / os.arch().'
+      - '.github/instructions/stdlib.instructions.md and Stash.Stdlib/BuiltIns/CLAUDE.md no longer reference env.os for platform branching guidance.'
+
+  - id: P7
+    title: Dedicated OsBuiltInsTests plus io additions tests
+    deps: [P4, P5, P6]
+    files:
+      - Stash.Tests/Stdlib/OsBuiltInsTests.cs
+      - Stash.Tests/Stdlib/IoBuiltInsTests.cs
+    verify:
+      - dotnet build
+      - 'dotnet test --filter "FullyQualifiedName~OsBuiltInsTests|FullyQualifiedName~IoBuiltInsTests|FullyQualifiedName~StdlibConsistencyTests"'
+    done_when:
+      - 'OsBuiltInsTests covers every assertion enumerated under Tests in the abstract: enum and struct metadata, platform/name match, precondition-guarded isWindows/isLinux/isMacOS, isUnix, arch/processArch roundtrip, description/framework/version non-empty, endianness match, version-at-least false-on-wrong-host, info() field equality and two-call equality, env.os/env.arch absence, os in NamespaceNames.'
+      - 'IoBuiltInsTests asserts io.pathSeparator() == Path.PathSeparator.ToString() and io.newLine() == Environment.NewLine.'
+      - 'All new tests pass on the developer host without platform-specific assertions that would fail elsewhere (precondition-guard where needed).'
+
+  - id: P8
+    title: Regenerate stdlib reference, update spec / authored docs, CHANGELOG
+    deps: [P4, P5, P6, P7]
+    files:
+      - docs/Stash — Standard Library Reference.md
+      - docs/Stash — Language Specification.md
+      - CHANGELOG.md
+    verify:
+      - dotnet run --project Stash.Docs/
+      - 'dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests"'
+    done_when:
+      - 'docs/Stash — Standard Library Reference.md is regenerated (not hand-edited) and includes os.* and the two new io.* entries while no longer listing env.os / env.arch.'
+      - 'Authored docs and the language specification no longer reference env.os / env.arch and point at os.name() / os.arch() where appropriate.'
+      - 'CHANGELOG.md has a breaking-change entry for env.os / env.arch removal and an additions entry for the os namespace plus io.pathSeparator / io.newLine.'
+
+# Final acceptance — run by /done before promoting to 4-done/.
+final_verify:
+  - dotnet build
+  - dotnet test

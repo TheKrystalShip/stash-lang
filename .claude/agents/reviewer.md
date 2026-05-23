@@ -70,4 +70,4 @@ Severities: `CRITICAL`, `IMPORTANT`, `MINOR`.
 - Do not edit source files.
 - Do not move the feature directory.
 - Do not pad findings.
-- Put unrelated pre-existing bugs in `.claude/repo.md` or `.kanban/0-backlog/`, not in `review.md`.
+- Put unrelated pre-existing bugs in `.kanban/0-backlog/bugs/` using `.kanban/_templates/bug-template.md` (mandatory shape) — not in `review.md`. See `.claude/WORKFLOW.md` "Filing Bugs Discovered During Work" for the rule.
