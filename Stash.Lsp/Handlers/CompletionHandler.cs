@@ -463,6 +463,23 @@ public class CompletionHandler : CompletionHandlerBase
                         : null
                 });
             }
+            // Data members ([StashMember]) — use Property kind to distinguish from Function callables.
+            // Property matches the C#-property idiom: looks like a field but invokes a getter underneath.
+            foreach (var m in StdlibRegistry.GetNamespaceDataMembers(prefix))
+            {
+                string? docValue = m.Documentation;
+                var throwsSection = ThrowsRenderer.Render(m.Throws);
+                if (throwsSection != null) docValue = (docValue ?? "") + throwsSection;
+                items.Add(new CompletionItem
+                {
+                    Label = m.Name,
+                    Kind = LspCompletionItemKind.Property,
+                    Detail = m.Detail,
+                    Documentation = docValue != null
+                        ? new MarkupContent { Kind = MarkupKind.Markdown, Value = docValue }
+                        : null
+                });
+            }
             foreach (var c in StdlibRegistry.GetNamespaceConstants(prefix))
             {
                 items.Add(new CompletionItem

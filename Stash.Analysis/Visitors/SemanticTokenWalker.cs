@@ -236,6 +236,15 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                     return;
                 }
 
+                // DataMembers ([StashMember]) — classified as property (read-only, built-in).
+                // Member access `ns.x` where `x` is a DataMember highlights as a property
+                // rather than a function, matching the completion-item kind chosen for P6.
+                if (StdlibRegistry.TryGetNamespaceDataMember(qualifiedName, out _))
+                {
+                    EmitFromToken(memberToken, TokenTypeProperty, ModifierDefaultLibrary | ModifierReadonly);
+                    return;
+                }
+
                 if (StdlibRegistry.Enums.Any(e => e.Name == memberName && e.Namespace == namespaceName))
                 {
                     EmitFromToken(memberToken, TokenTypeEnum, 0);

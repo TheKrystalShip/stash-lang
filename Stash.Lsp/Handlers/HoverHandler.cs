@@ -118,7 +118,7 @@ public class HoverHandler : HoverHandlerBase
                     })
                 });
             }
-            // Try built-in namespace constants (e.g., process.SIGTERM) and functions (e.g., arr.map)
+            // Try built-in namespace constants, data members, and functions
             {
                 if (dotPrefix != null)
                 {
@@ -130,6 +130,28 @@ public class HoverHandler : HoverHandlerBase
                         {
                             markdown += "\n\n---\n\n" + constant.Documentation;
                         }
+                        return Task.FromResult<Hover?>(new Hover
+                        {
+                            Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                            {
+                                Kind = MarkupKind.Markdown,
+                                Value = markdown
+                            })
+                        });
+                    }
+
+                    // ── Data member hover (registered via [StashMember]) ──────────
+                    // Renders as `member[live] ns.name: type` — NOT as a function signature.
+                    // The [live] stability indicator in Detail is produced by NamespaceMember.Detail.
+                    if (StdlibRegistry.TryGetNamespaceDataMember(qualifiedName, out var dataMember))
+                    {
+                        var markdown = $"```stash\n{dataMember.Detail}\n```\n*member* — from `{dotPrefix}`";
+                        if (dataMember.Documentation != null)
+                        {
+                            markdown += "\n\n---\n\n" + FormatDocumentation(dataMember.Documentation);
+                        }
+                        var memberThrows = ThrowsRenderer.Render(dataMember.Throws);
+                        if (memberThrows != null) markdown += memberThrows;
                         return Task.FromResult<Hover?>(new Hover
                         {
                             Contents = new MarkedStringsOrMarkupContent(new MarkupContent

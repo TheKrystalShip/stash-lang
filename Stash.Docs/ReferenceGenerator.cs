@@ -259,6 +259,7 @@ public static class ReferenceGenerator
 
         EmitTypesSection(sb, ns.Structs, ns.Enums, headingLevel: 3);
         EmitConstantsSection(sb, ns.Constants);
+        EmitMembersSection(sb, ns.Members, ns.RequiredCapability);
 
         if (ns.Functions.Count > 0)
         {
@@ -428,6 +429,47 @@ public static class ReferenceGenerator
               .Append(InlineCodeIfShort(c.Value)).Append(" | ")
               .Append(EscapeTableCell(desc)).AppendLine(" |");
         }
+        sb.AppendLine();
+    }
+
+    // ── Members ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Emits a "### Members" subsection for all <see cref="NamespaceMember"/> entries
+    /// registered via <c>[StashMember]</c> on the given namespace. The subsection is
+    /// rendered separately from the Functions section so users can distinguish read-only
+    /// data members from callable functions.
+    /// </summary>
+    private static void EmitMembersSection(StringBuilder sb, IReadOnlyList<NamespaceMember>? members, StashCapabilities nsCapability)
+    {
+        if (members is null || members.Count == 0) return;
+
+        sb.AppendLine("### Members");
+        sb.AppendLine();
+        sb.AppendLine("| Member | Type | Stability | Throws | Description |");
+        sb.AppendLine("| ------ | ---- | --------- | ------ | ----------- |");
+
+        foreach (var m in members)
+        {
+            var doc = DocString.Parse(m.Documentation);
+            string desc = doc.SummaryFirstSentence();
+            if (m.Deprecation is not null)
+            {
+                string suffix = $"_Deprecated — use `{m.Deprecation.ReplacementQualifiedName}`._";
+                desc = string.IsNullOrEmpty(desc) ? suffix : desc + " " + suffix;
+            }
+
+            string stabilityLabel = m.Stability == Stash.Stdlib.Abstractions.Stability.Live
+                ? "`live`"
+                : "`cached`";
+
+            sb.Append("| `").Append(m.QualifiedName).Append("` | ")
+              .Append(FormatType(m.ReturnType)).Append(" | ")
+              .Append(stabilityLabel).Append(" | ")
+              .Append(ThrowsCell(m.Throws)).Append(" | ")
+              .Append(EscapeTableCell(desc)).AppendLine(" |");
+        }
+
         sb.AppendLine();
     }
 

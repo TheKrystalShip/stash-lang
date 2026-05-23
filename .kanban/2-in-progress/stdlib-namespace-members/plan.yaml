@@ -188,6 +188,10 @@ phases:
       - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
       - Stash.Tests/Lsp/NamespaceMembersLspTests.cs
       - Stash.Tests/Dap/NamespaceMembersDapTests.cs
+      # Plan deviation: registry query methods for DataMembers needed for LSP/hover/completion.
+      - Stash.Stdlib/Registry/StdlibRegistry.cs
+      # Plan deviation: SemanticTokenWalker classifies DataMember tokens as property kind.
+      - Stash.Analysis/Visitors/SemanticTokenWalker.cs
     verify:
       - dotnet run --project Stash.Docs/
       - dotnet build

@@ -2623,6 +2623,13 @@ Result returned by cli.tryParse.
 | `error` | `any` |
 | `helpRequested` | `bool` |
 
+### Members
+
+| Member | Type | Stability | Throws | Description |
+| ------ | ---- | --------- | ------ | ----------- |
+| `cli.argv` | `array` | `cached` | — | The raw script argv as supplied by the host. |
+| `cli.argc` | `int` | `cached` | — | The number of raw script arguments. |
+
 ### Functions
 
 | Function | Returns | Throws | Description |
@@ -3990,6 +3997,17 @@ Decodes a hexadecimal string to a byte array.
 **Capability:** `Environment`
 **Throws:** `CommandError`, `IOError`, `TypeError`, `ValueError`
 
+### Members
+
+| Member | Type | Stability | Throws | Description |
+| ------ | ---- | --------- | ------ | ----------- |
+| `env.cwd` | `string` | `live` | `IOError` | The current working directory path. |
+| `env.home` | `string` | `cached` | — | The current user's home directory path. |
+| `env.hostname` | `string` | `cached` | — | The machine's hostname. |
+| `env.user` | `string` | `cached` | — | The current user's login name. |
+| `env.os` | `string` | `cached` | — | The current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'. |
+| `env.arch` | `string` | `cached` | — | The CPU architecture (e.g. |
+
 ### Functions
 
 | Function | Returns | Throws | Description |
@@ -5173,6 +5191,12 @@ Checks whether a string is valid JSON without parsing it into a value.
 ## `log` — Structured Logging
 
 **Capability:** _none — always available_
+
+### Members
+
+| Member | Type | Stability | Throws | Description |
+| ------ | ---- | --------- | ------ | ----------- |
+| `log.level` | `string` | `live` | — | The current minimum log level. |
 
 ### Functions
 

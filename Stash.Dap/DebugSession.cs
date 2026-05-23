@@ -13,6 +13,7 @@ using Stash.Debugging;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
+using NamespaceMemberPayload = Stash.Stdlib.Models.NamespaceMemberPayload;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
@@ -805,9 +806,40 @@ public class DebugSession : IDebugger
                     break;
 
                 case StashNamespace ns:
-                    foreach (var (memberName, memberValue) in ns.GetAllMembers().OrderBy(kv => kv.Key))
+                    foreach (var (memberName, memberValue) in ns.GetAllMemberValues().OrderBy(kv => kv.Key))
                     {
-                        variables.Add(FormatVariable(memberName, memberValue));
+                        // DataMember payloads must be resolved by invoking the getter against the
+                        // current interpreter context so the variable view shows the actual value.
+                        if (memberValue.ToObject() is NamespaceMemberPayload payload)
+                        {
+                            try
+                            {
+                                var ctx = _vm?.Context;
+                                if (ctx != null)
+                                {
+                                    var resolved = payload.Invoke(ctx);
+                                    // Label as "member" (or "member (live)") to distinguish from
+                                    // BuiltInFunction entries which get type "function".
+                                    string memberType = payload.Stability == Stash.Stdlib.Abstractions.Stability.Live
+                                        ? "member (live)"
+                                        : "member";
+                                    var resolvedVar = FormatVariable(memberName, resolved.ToObject());
+                                    variables.Add(resolvedVar with { Type = memberType });
+                                }
+                                else
+                                {
+                                    variables.Add(new Variable { Name = memberName, Value = "<member — no context>", Type = "member" });
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                variables.Add(new Variable { Name = memberName, Value = $"<error: {ex.Message}>", Type = "member" });
+                            }
+                        }
+                        else
+                        {
+                            variables.Add(FormatVariable(memberName, memberValue.ToObject()));
+                        }
                     }
 
                     break;

@@ -61,6 +61,17 @@ public static partial class StdlibRegistry
 
     private static readonly FrozenDictionary<string, IReadOnlyList<NamespaceConstant>> _namespaceConstantsByNamespace;
 
+    /// <summary>
+    /// Data members (registered via <c>[StashMember]</c>) grouped by namespace name.
+    /// Separate from <see cref="_namespaceMembersByNamespace"/> which groups <see cref="NamespaceFunction"/>s.
+    /// </summary>
+    private static readonly FrozenDictionary<string, IReadOnlyList<NamespaceMember>> _namespaceDataMembersByNamespace;
+
+    /// <summary>
+    /// Qualified names (ns.member) → <see cref="NamespaceMember"/> for all data members.
+    /// </summary>
+    private static readonly FrozenDictionary<string, NamespaceMember> _namespaceDataMembersByQualifiedName;
+
     private static readonly FrozenDictionary<string, string> _ufcsTypeToNamespace;
 
     /// <summary>
@@ -111,6 +122,16 @@ public static partial class StdlibRegistry
         _namespaceConstantsByNamespace = NamespaceConstants.GroupBy(c => c.Namespace)
             .ToFrozenDictionary(g => g.Key, g => (IReadOnlyList<NamespaceConstant>)g.ToList());
 
+        // Data members from NamespaceDefinition.Members (registered via [StashMember])
+        var allDataMembers = StdlibDefinitions.Namespaces
+            .Where(d => !d.IsGlobal && d.Members is not null)
+            .SelectMany(d => d.Members!)
+            .ToArray();
+        _namespaceDataMembersByNamespace = allDataMembers.GroupBy(m => m.Namespace)
+            .ToFrozenDictionary(g => g.Key, g => (IReadOnlyList<NamespaceMember>)g.ToList());
+        _namespaceDataMembersByQualifiedName = allDataMembers
+            .ToFrozenDictionary(m => m.QualifiedName);
+
         _ufcsTypeToNamespace = new Dictionary<string, string>
         {
             ["string"] = "str",
@@ -150,6 +171,21 @@ public static partial class StdlibRegistry
 
     public static IEnumerable<NamespaceFunction> GetNamespaceMembers(string namespaceName)
         => _namespaceMembersByNamespace.TryGetValue(namespaceName, out var members) ? members : [];
+
+    /// <summary>
+    /// Returns all <see cref="NamespaceMember"/> data members for a built-in namespace.
+    /// These are entries registered via <c>[StashMember]</c> — distinct from
+    /// functions returned by <see cref="GetNamespaceMembers"/>.
+    /// </summary>
+    public static IEnumerable<NamespaceMember> GetNamespaceDataMembers(string namespaceName)
+        => _namespaceDataMembersByNamespace.TryGetValue(namespaceName, out var members) ? members : [];
+
+    /// <summary>
+    /// Tries to find a <see cref="NamespaceMember"/> data member by its qualified name (e.g. <c>cli.argv</c>).
+    /// Returns <c>true</c> and sets <paramref name="member"/> when found.
+    /// </summary>
+    public static bool TryGetNamespaceDataMember(string qualifiedName, out NamespaceMember member)
+        => _namespaceDataMembersByQualifiedName.TryGetValue(qualifiedName, out member!);
 
     public static IEnumerable<NamespaceConstant> GetNamespaceConstants(string namespaceName)
         => _namespaceConstantsByNamespace.TryGetValue(namespaceName, out var constants) ? constants : [];
