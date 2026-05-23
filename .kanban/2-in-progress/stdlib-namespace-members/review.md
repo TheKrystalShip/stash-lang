@@ -115,7 +115,8 @@ dotnet test --filter "FullyQualifiedName~DictFrozenInputTests"
 
 ## F03 — [IMPORTANT] CSE-ineligibility name check is broader than the brief acknowledges; `log.level` user-shadowing is silent
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 970fe84
 **Files:** `Stash.Bytecode/Optimization/LocalValueNumberingPass.cs:226`, `Stash.Stdlib/Registry/StdlibRegistry.cs:91`
 **Phase:** P3
 **Commit:** 01c0737
@@ -159,7 +160,8 @@ dotnet test --filter "FullyQualifiedName~NamespaceDotResolutionTests|FullyQualif
 
 ## F04 — [MINOR] Function-reference behavior for user-module aliases is not pinned by tests
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 970fe84
 **Files:** `Stash.Tests/Language/FunctionReferenceTests.cs`, `Stash.Tests/Modules/ConstReexportTests.cs`
 **Phase:** P7
 **Commit:** 092b150
