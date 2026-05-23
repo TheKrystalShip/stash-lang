@@ -173,6 +173,46 @@ public class CliMembersTests : StashTestBase
     }
 
     // =========================================================================
+    // Non-mutating arr.* helpers accept frozen cli.argv (F01 regression)
+    //
+    // Each test calls a non-mutating arr.* helper on cli.argv and asserts the
+    // expected return value — not TypeError. These cover three dispatch paths:
+    //   arr.slice  — Raw handler, uses SvArgs.StashList
+    //   arr.map    — typed handler, uses SvArgs.StashList via generated marshal
+    //   arr.join   — typed handler, non-list-returning path
+    // =========================================================================
+
+    [Fact]
+    public void FrozenRead_ArrSlice_ReturnsPortion()
+    {
+        var result = RunWithArgs("""
+            let result = arr.slice(cli.argv, 0, 2);
+        """, ["a", "b", "c"]);
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(new List<object?> { "a", "b" }, list);
+    }
+
+    [Fact]
+    public void FrozenRead_ArrMap_TransformsElements()
+    {
+        var result = RunWithArgs("""
+            fn upper(x) { return str.upper(x); }
+            let result = arr.map(cli.argv, upper);
+        """, ["a", "b", "c"]);
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(new List<object?> { "A", "B", "C" }, list);
+    }
+
+    [Fact]
+    public void FrozenRead_ArrJoin_ConcatenatesElements()
+    {
+        var result = RunWithArgs("""
+            let result = arr.join(cli.argv, ",");
+        """, ["a", "b", "c"]);
+        Assert.Equal("a,b,c", result);
+    }
+
+    // =========================================================================
     // SA0846: old call form cli.argc() / cli.argv() is a compile-time error
     // =========================================================================
 
