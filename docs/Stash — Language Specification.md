@@ -35,11 +35,13 @@ protocols are specified separately.
 8. [Statements and Control Flow](#statements-and-control-flow)
 9. [Functions, Closures, and Async](#functions-closures-and-async)
 10. [Aggregate Types and Members](#aggregate-types-and-members)
-11. [Shell Integration](#shell-integration)
-12. [Errors and Cleanup](#errors-and-cleanup)
-13. [Runtime Behavior](#runtime-behavior)
-14. [Appendix A: Grammar](#appendix-a-grammar)
-15. [Appendix B: Reserved and Contextual Syntax](#appendix-b-reserved-and-contextual-syntax)
+11. [Function References](#function-references)
+12. [Namespace Members](#namespace-members)
+13. [Shell Integration](#shell-integration)
+14. [Errors and Cleanup](#errors-and-cleanup)
+15. [Runtime Behavior](#runtime-behavior)
+16. [Appendix A: Grammar](#appendix-a-grammar)
+17. [Appendix B: Reserved and Contextual Syntax](#appendix-b-reserved-and-contextual-syntax)
 
 ---
 
@@ -1384,6 +1386,188 @@ When resolving `receiver.name(...)`, the implementation must search in this orde
 
 Ambiguous extension or UFCS matches produce a runtime error or static diagnostic.
 
+## Function References
+
+Every namespace entry has a static declaration kind: `Function`, `DataMember`, or
+`Constant`. When the bare member-access form `ns.name` is used and `name` is a
+`Function`-kind entry, the result is the **function reference** — the callable
+value stored at that slot.  The function reference can be captured in a variable,
+passed as an argument, and invoked like any other callable.
+
+```stash
+let printer = io.println;
+printer("hello");           // "hello" — captured function, called later
+
+let upper = str.upper;
+io.println(upper("abc"));  // "ABC"
+
+let abs = math.abs;
+io.println(abs(-5));        // 5
+```
+
+The type of a function reference is `"function"`, which `typeof` confirms:
+
+```stash
+io.println(typeof(io.println));   // "function"
+```
+
+This works because `ns.name` always means "load the value declared at the slot."
+For a `Function` slot, that value is callable. For a `DataMember` slot, the value
+is the result of invoking the registered getter (not callable). For a `Constant`
+slot, the value is the stored snapshot.
+
+**Key asymmetry to internalize:**
+
+- `Function`-kind entries yield a **callable** when accessed bare — a first-class
+  function reference that can be stored, passed, and invoked.
+- `DataMember`-kind entries yield the **underlying value** computed by the
+  registered getter — they are **not callable**. Calling a `DataMember` with
+  parentheses (`ns.member(...)`) is a compile-time error (SA0846).
+- `Constant`-kind entries yield the stored snapshot. Constants may be callable if
+  the stored value is itself callable, but the common case is a plain value (e.g.
+  `math.PI`).
+
+Assigning a captured function reference to a variable, returning it from a
+function, or passing it as an argument all behave the same as any other first-class
+value in Stash. Function references are ordinary values.
+
+## Namespace Members
+
+A **namespace member** is a read-only, context-bound value exposed by a stdlib
+namespace through a bare property access. Unlike a function entry (which stores a
+callable), a member entry stores a getter that is invoked when the member is
+accessed. The result — an integer, string, array, or other value — is returned
+directly to the caller without the need for parentheses.
+
+```stash
+io.println(cli.argc);     // number of script arguments (e.g. 3)
+io.println(cli.argv);     // array of script arguments (e.g. ["arg1", "arg2", "arg3"])
+io.println(env.cwd);      // current working directory (e.g. "/home/user/project")
+io.println(env.os);       // operating system name (e.g. "linux")
+```
+
+### Declaration Kinds
+
+Every entry in a namespace carries one of three static declaration kinds:
+
+| Kind         | `ns.x` yields                         | `ns.x(...)` allowed?         |
+| ------------ | -------------------------------------- | ---------------------------- |
+| `Function`   | the function reference (callable)      | yes — normal call            |
+| `DataMember` | result of invoking the getter          | **no — SA0846 at compile time** |
+| `Constant`   | the stored snapshot                    | only if the value is callable |
+
+Kinds are fixed at registration time and cannot change. Calling a `DataMember`
+with parentheses is always a compile-time error (SA0846 — "X is a value member,
+not a function. Drop the parentheses."). There is no runtime fallback that
+detects-and-invokes.
+
+### Stability: Cached and Live Members
+
+Each `DataMember` carries a **stability annotation** that controls how often the
+getter is invoked:
+
+- **`Cached` (default)**: the getter is invoked on first access; the result is
+  stored. Subsequent accesses return the same reference. Identity is preserved
+  across the process lifetime. Examples: `cli.argc`, `cli.argv`, `env.os`,
+  `env.arch`.
+
+- **`Live`**: the getter is invoked on every access. Returned values may differ
+  between accesses if the underlying host state changed. Example: `env.cwd`
+  (changes after `env.chdir`).
+
+This stability split is modeled directly on **JavaScript ES module bindings**:
+`Cached` members behave like `const` exports from a JS ES module (identity-stable
+for the binding's lifetime), while `Live` members behave like `let` exports that
+the source module reassigns (re-evaluated on each access, no identity guarantee).
+
+```stash
+// Live member — env.cwd re-reads the host on each access
+io.println(env.cwd);           // "/home/user/project"
+env.chdir("/tmp");
+io.println(env.cwd);           // "/tmp" — reflects the chdir
+```
+
+### Cross-Language Framing
+
+Namespace members are modeled on two established precedents:
+
+**JS ES module live bindings** — The `Cached`/`Live` stability split mirrors the
+JS ES module design directly. A `Cached` member behaves like a `const` export from
+a JS ES module: the binding is set once and its identity is stable for the module's
+lifetime. A `Live` member behaves like a `let` export that the source module
+reassigns: each read goes back to the source for the current value. Like an ES
+module binding, bare access returns a value and assignment is a static error
+(SA0845 — "X is read-only"), mirroring a `TypeError: Assignment to constant
+variable.` on module bindings.
+
+**C# properties** — Like a C# property, what looks like a field access actually
+invokes a getter under the hood. LSP hover surfaces the declaration kind so the
+distinction is not hidden from tool users. Python (`sys.argv = []` silently
+succeeds) and Go (relies on naming convention) are explicitly **not** the model.
+
+### Read-Only Contract
+
+Namespace members are read-only. Assignment is rejected statically:
+
+```stash
+cli.argv = [];   // SA0845 — 'argv' is read-only (compile-time error)
+```
+
+For dynamic receivers (where the namespace is accessed through a variable), the
+runtime raises `ReadOnlyError`:
+
+```stash
+let ns = cli;
+try {
+    ns.argc = 0;
+} catch (ReadOnlyError e) {
+    io.println("caught: " + e.message);
+    // "caught: Cannot assign to 'cli.argc': namespace members are read-only."
+}
+```
+
+### Side-Effect Contract
+
+Namespace member access is not a pure O(1) field read. The precise contract is:
+
+1. **`Cached` members** return the same reference across all accesses for the
+   process lifetime — the getter runs at most once and the result is memoized.
+   Identity is stable: `cli.argv === cli.argv` holds.
+
+2. **`Live` members** invoke the getter on every access. Returned values may be
+   distinct between accesses if the underlying host state changed. Identity is
+   **not** guaranteed: two successive reads of `env.cwd` after an `env.chdir` may
+   return different strings.
+
+3. **Reference-typed returns are frozen at the boundary** regardless of stability
+   mode. Arrays and dicts returned by a member getter are frozen before being
+   handed to the caller, identical to the frozen-collection semantics used
+   elsewhere in the stdlib. As a result, `cli.argv[0] = "x"` raises a
+   frozen-write error rather than silently mutating the backing array.
+
+4. **Getters may throw.** Each member's documentation lists its `Throws` contract.
+   `env.cwd` may throw `IOError` if the working directory cannot be determined;
+   members with no listed throws are guaranteed not to throw under normal
+   conditions.
+
+### v1 Member Set
+
+The following eight members were migrated from zero-argument functions to namespace
+members in the same release that introduced this feature. Their old call form
+(`ns.x()`) is a compile-time error (SA0846); rewrite all call sites to bare
+access (`ns.x`).
+
+| Member          | Stability | Throws     | Notes                                             |
+| --------------- | --------- | ---------- | ------------------------------------------------- |
+| `cli.argc`      | Cached    | —          | Count of script arguments. Set at process start.  |
+| `cli.argv`      | Cached    | —          | Array of script arguments. Frozen; mutation errors. |
+| `env.cwd`       | Live      | `IOError`  | Current working directory. Re-read on each access. |
+| `env.home`      | Cached    | —          | User home directory. Process-lifetime constant.   |
+| `env.user`      | Cached    | —          | Current username. Requires `Environment` capability. |
+| `env.hostname`  | Cached    | —          | Host name. Requires `Environment` capability.     |
+| `env.os`        | Cached    | —          | Operating system name (e.g. `"linux"`).           |
+| `env.arch`      | Cached    | —          | CPU architecture (e.g. `"x64"`).                 |
+
 ## Shell Integration
 
 ### Command Expressions
@@ -1500,7 +1684,7 @@ Script arguments are accessed through the `cli` namespace. The `args` namespace
 (`args.list`, `args.count`, `args.parse`, `args.build`) was removed in the same
 release that introduced `cli`; it is not available in conforming implementations.
 
-Use `cli.argv()` to retrieve the raw argument array and `cli.argc()` to get the
+Use `cli.argv` to retrieve the raw argument array and `cli.argc` to get the
 count. For typed, validated, and documented argument parsing use `cli.schema`,
 `cli.parse`, and `cli.tryParse`:
 

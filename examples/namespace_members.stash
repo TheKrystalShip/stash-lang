@@ -1,0 +1,78 @@
+#!/usr/bin/env stash
+// namespace_members.stash — demonstrates stdlib namespace members
+//
+// Run with: stash namespace_members.stash arg1 arg2 arg3
+
+// ── 1. Bare member access (no parentheses) ──────────────────────────────────
+
+// cli.argc and cli.argv are Cached DataMembers: set at process start.
+io.println("=== cli members ===");
+io.println("argc: " + cli.argc);    // 3  (when called with arg1 arg2 arg3)
+io.println("argv: " + cli.argv);    // [arg1, arg2, arg3]
+
+// env.os and env.arch are also Cached: they never change during the process.
+io.println("=== env members ===");
+io.println("os:   " + env.os);
+io.println("arch: " + env.arch);
+
+// ── 2. Live member: env.cwd re-reads on each access ─────────────────────────
+
+io.println("=== env.cwd (Live) ===");
+let before = env.cwd;
+io.println("before chdir: " + before);
+
+env.chdir("/tmp");
+let after = env.cwd;
+io.println("after chdir:  " + after);    // /tmp
+
+// Restore original directory so the rest of the script works normally.
+env.chdir(before);
+
+// ── 3. Function references ───────────────────────────────────────────────────
+//
+// Bare access to a Function-kind namespace entry yields the function value
+// itself — a first-class callable.
+
+io.println("=== function references ===");
+
+// Capture io.println as a first-class value.
+let print = io.println;
+print("captured io.println works");
+
+// Capture str.upper and apply it.
+let upper = str.upper;
+io.println(upper("function reference: str.upper"));
+
+// Capture math.abs.
+let abs = math.abs;
+io.println("math.abs(-7) via reference: " + abs(-7));
+
+// typeof on a function-kind entry returns "function".
+io.println("typeof(io.println) = " + typeof(io.println));
+
+// ── 4. Read-only contract — ReadOnlyError via dynamic receiver ───────────────
+//
+// Static assignment (cli.argc = 0) is a compile-time error (SA0845).
+// To demonstrate the runtime ReadOnlyError we use a dynamic receiver.
+
+io.println("=== ReadOnlyError demo ===");
+let ns = cli;
+try {
+    ns.argc = 0;
+} catch (ReadOnlyError e) {
+    io.println("caught ReadOnlyError: " + e.message);
+}
+
+// ── 5. Frozen boundary on Cached array members ───────────────────────────────
+//
+// cli.argv is frozen at the boundary. Attempting to mutate it raises a
+// frozen-write error.
+
+io.println("=== frozen argv ===");
+try {
+    cli.argv[0] = "mutated";
+} catch (e) {
+    io.println("caught mutation attempt: " + e.message);
+}
+
+io.println("done");

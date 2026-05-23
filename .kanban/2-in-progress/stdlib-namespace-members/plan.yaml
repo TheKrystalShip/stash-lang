@@ -215,7 +215,9 @@ phases:
       - examples/namespace_members.stash
       - CHANGELOG.md
       - Stash.Tests/Language/FunctionReferenceTests.cs
-      - Stash.Tests/Documentation/StandardLibraryReferenceTests.cs
+      # Plan correction: StandardLibraryReferenceTests lives in Stdlib/, not Documentation/.
+      # Verify still works because it filters by class name (FullyQualifiedName~StandardLibraryReferenceTests).
+      - Stash.Tests/Stdlib/StandardLibraryReferenceTests.cs
     verify:
       - dotnet run --project Stash.Docs/
       - dotnet build

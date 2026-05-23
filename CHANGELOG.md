@@ -74,6 +74,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`RegistrationEnabled` defaults to `false` (breaking change)** — `appsettings.json` and the C# default now ship with `RegistrationEnabled: false`. Self-hosters running a private registry no longer need to explicitly disable open registration. **Action required on upgrade:** self-hosters who relied on the previous `true` default must add `"Auth": { "RegistrationEnabled": true }` to their `appsettings.json` to restore open sign-up. The `appsettings.Development.json` override keeps the value `true` for local development.
 - **Registration-disabled 403 body is now structured** — when registration is disabled, `POST /api/v1/auth/register` returns `{ "error": "registration_disabled", "message": "User registration is disabled on this registry." }`.
 
+### Breaking changes
+
+#### Standard Library — Namespace members replace zero-argument getters (SA0846)
+
+Eight stdlib functions that read inherent script/process identity have been
+converted from zero-argument functions to **read-only namespace members**. The old
+call form (`ns.x()`) is now a **compile-time error** (SA0846 — "X is a value
+member, not a function"). Rewrite every call site to bare member access:
+
+| Old call form (SA0846 error) | New bare form |
+| ---------------------------- | ------------- |
+| `cli.argc()`                 | `cli.argc`    |
+| `cli.argv()`                 | `cli.argv`    |
+| `env.cwd()`                  | `env.cwd`     |
+| `env.home()`                 | `env.home`    |
+| `env.user()`                 | `env.user`    |
+| `env.hostname()`             | `env.hostname` |
+| `env.os()`                   | `env.os`      |
+| `env.arch()`                 | `env.arch`    |
+
+There is no deprecation window and no AST sugar that silently strips the parentheses.
+Every affected call site must be updated before recompiling. Diagnostic SA0846
+("X is a value member, not a function. Drop the parentheses.") is emitted at the
+call site in the source file.
+
+Assignment to any of these members (e.g. `cli.argv = []`) is a compile-time error
+SA0845 ("X is read-only") for statically-typed receivers. Dynamic-receiver
+assignment reaches a `ReadOnlyError` runtime error, catchable as
+`catch (ReadOnlyError e)`.
+
+`cli.argv` is frozen at the boundary — `cli.argv[0] = "x"` raises a frozen-write
+error rather than silently mutating the argument array.
+
 ### Internal
 
 - **Typed Error Hierarchy — C# API breaking change** — `RuntimeError` no longer accepts a string `errorType` parameter. All runtime errors are now thrown as one of 12 typed subclasses (`ValueError`, `TypeError`, `ParseError`, `IndexError`, `IOError`, `NotSupportedError`, `TimeoutError`, `CommandError`, `LockError`, `AliasError`, `StateError`, `CancellationError`), each decorated with `[StashError]` and discovered via the generated `BuiltInErrorRegistry`. `StashErrorTypes` (the constants class) has been deleted. `StashFnAttribute.Throws` (string[]) has been replaced with `ThrowsTypes` (Type[]). `ErrorTypeRegistry._subtypes` and related string-based matching infrastructure removed. The Stash language runtime behavior is **unchanged** — `e.type` in catch clauses continues to work identically; the change is entirely in the C# embedding API. Embedders that construct `new RuntimeError("msg", null, StashErrorTypes.X)` must migrate to the corresponding subclass constructor.
