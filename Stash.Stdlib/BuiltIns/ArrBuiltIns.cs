@@ -24,7 +24,7 @@ public static partial class ArrBuiltIns
     private static void Push(IInterpreterContext ctx, StashValue array, StashValue value)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taPush)
         {
             taPush.Add(value);
@@ -47,7 +47,7 @@ public static partial class ArrBuiltIns
     private static StashValue Pop(IInterpreterContext ctx, StashValue array)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taPop)
         {
             if (taPop.Count == 0)
@@ -88,7 +88,7 @@ public static partial class ArrBuiltIns
     private static void Insert(IInterpreterContext ctx, StashValue array, long index, StashValue value)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taInsert)
         {
             int i = (int)(index < 0 ? index + taInsert.Count : index);
@@ -117,7 +117,7 @@ public static partial class ArrBuiltIns
     private static StashValue RemoveAt(IInterpreterContext ctx, StashValue array, long index)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taRemoveAt)
         {
             int i = (int)(index < 0 ? index + taRemoveAt.Count : index);
@@ -146,7 +146,7 @@ public static partial class ArrBuiltIns
     private static bool Remove(IInterpreterContext ctx, StashValue array, StashValue value)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taRemove)
         {
             object? target = value.ToObject();
@@ -184,7 +184,7 @@ public static partial class ArrBuiltIns
     private static void Clear(IInterpreterContext ctx, StashValue array)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taClear)
         {
             taClear.Clear();
@@ -346,7 +346,7 @@ public static partial class ArrBuiltIns
     private static void Reverse(IInterpreterContext ctx, StashValue array)
     {
         if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (array.IsObj && array.AsObj is StashTypedArray taReverse)
         {
             for (int i = 0, j = taReverse.Count - 1; i < j; i++, j--)
@@ -379,7 +379,7 @@ public static partial class ArrBuiltIns
             throw new RuntimeError("'arr.sort' requires 1 or 2 arguments.");
         StashValue arrSortVal = args[0];
         if (arrSortVal.IsObj && arrSortVal.AsObj is StashFrozenArray)
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
         if (arrSortVal.IsObj && arrSortVal.AsObj is StashTypedArray taSort)
         {
             var tempList = new List<StashValue>(taSort.Count);

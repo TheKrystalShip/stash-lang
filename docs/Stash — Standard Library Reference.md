@@ -3499,7 +3499,7 @@ Writes an array of arrays or dictionaries to a CSV file.
 ## `dict` — Dictionary Operations
 
 **Capability:** _none — always available_
-**Throws:** `TypeError`
+**Throws:** `ReadOnlyError`, `TypeError`
 
 ### Functions
 
@@ -3507,10 +3507,10 @@ Writes an array of arrays or dictionaries to a CSV file.
 | -------- | ------- | ------ | ----------- |
 | `dict.new` | `dict` | — | Creates and returns a new empty dictionary. |
 | `dict.get` | `any` | `TypeError` | Returns the value for key, or null if not found. |
-| `dict.set` | `void` | `TypeError` | Sets a key-value pair in the dictionary. |
+| `dict.set` | `void` | `ReadOnlyError`, `TypeError` | Sets a key-value pair in the dictionary. |
 | `dict.has` | `bool` | `TypeError` | Returns true if the dictionary contains the key. |
-| `dict.remove` | `bool` | `TypeError` | Removes a key from the dictionary. |
-| `dict.clear` | `void` | — | Removes all entries from the dictionary. |
+| `dict.remove` | `bool` | `ReadOnlyError`, `TypeError` | Removes a key from the dictionary. |
+| `dict.clear` | `void` | `ReadOnlyError` | Removes all entries from the dictionary. |
 | `dict.keys` | `array` | — | Returns an array of all keys in the dictionary. |
 | `dict.values` | `array` | — | Returns an array of all values in the dictionary. |
 | `dict.size` | `int` | — | Returns the number of entries in the dictionary. |
@@ -3565,6 +3565,7 @@ Sets a key-value pair in the dictionary. Modifies in place.
 
 **Throws:**
 
+- `ReadOnlyError` — if `dict` is a read-only dictionary returned by a namespace member
 - `TypeError` — if `key` is null
 
 #### `dict.has(dict: dict, key: any) -> bool`
@@ -3595,6 +3596,7 @@ Removes a key from the dictionary. Returns true if it existed.
 
 **Throws:**
 
+- `ReadOnlyError` — if `dict` is a read-only dictionary returned by a namespace member
 - `TypeError` — if `key` is null
 
 #### `dict.clear(dict: dict) -> void`
@@ -3606,6 +3608,10 @@ Removes all entries from the dictionary.
 - `dict`: `dict` — The dictionary to clear
 
 **Returns:** `void`
+
+**Throws:**
+
+- `ReadOnlyError` — if `dict` is a read-only dictionary returned by a namespace member
 
 #### `dict.keys(dict: dict) -> array`
 
