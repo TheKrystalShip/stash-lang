@@ -92,7 +92,7 @@ phases:
       - "Reference-typed return values from a DataMember getter (arrays, dicts) are frozen at the boundary regardless of stability mode; a unit test attempts mutation through the returned reference and observes the standard frozen-write error rather than silent mutation. Primitive returns (int, string, bool, float) are unaffected."
 
   - id: P3
-    title: Compile-time DotExpr resolution + SA08xx for call-of-DataMember
+    title: "Compile-time DotExpr resolution + SA08xx for call-of-DataMember (incl. CSE-ineligibility for Live members — known regression vector surfaced in P2)"
     deps: [P1, P2]
     files:
       - Stash.Bytecode/Compiler/Compiler.Expressions.cs
@@ -111,6 +111,7 @@ phases:
       - "Compiling `cli.argc(extra)` (DataMember with arguments) also raises SA08xx — call-of-DataMember is rejected regardless of arity."
       - "A dynamic receiver (`let n = cli; n.argc;`) compiles without SA08xx and resolves at runtime via the kind-aware VMGetField path."
       - "The chosen SA08xx diagnostic ID is recorded in brief.md's Decision Log."
+      - "A `Live`-stability DataMember access is CSE-ineligible: a regression test compiles a function with `let a = ns.liveMember; let b = ns.liveMember;` where the underlying getter counts invocations, and asserts the counter equals 2 after one call. The compiler must not collapse the two reads into one."
 
   - id: P4
     title: Read-only enforcement — SA0845 + ReadOnlyError (built-in + user-module const)
@@ -138,7 +139,7 @@ phases:
       - "If ModuleExports does not already carry per-export const-ness, the brief's open question is closed here — either by threading the bit through or by recording in the Decision Log that user-module enforcement slips to a follow-up."
 
   - id: P5
-    title: Migrate v1 set (hard break) + audit existing `()` call sites in repo
+    title: "Migrate v1 set (hard break) + audit existing `()` call sites in repo + audit mutating arr.*/dict.* helpers for frozen-input rejection (footgun surfaced in P2)"
     deps: [P3, P4]
     files:
       - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
@@ -163,6 +164,7 @@ phases:
       - "Regression test: after `os.chdir(\"/tmp\")` (or equivalent), a subsequent read of `env.cwd` returns the new directory — proving the Live annotation re-invokes the getter."
       - "Regression test: two successive reads of `cli.argv` return the same reference (identity-stable across accesses), demonstrating the Cached annotation in effect."
       - "Regression test: `cli.argv[0] = \"x\"` raises a frozen-write error rather than silently mutating the returned array; the same holds for any reference-typed Cached member."
+      - "Every mutating helper in the `arr.*` and `dict.*` namespaces rejects frozen-collection inputs upfront with the standard frozen-write error: a regression test invokes `arr.push(cli.argv, \"x\")` (and equivalents for `arr.pop`, `arr.set`, `arr.append`, `dict.set`, `dict.remove`, `dict.clear`, plus any other in-place mutators present in the current stdlib) and asserts the frozen-write error rather than silent mutation. A literal enumeration of the audited helpers must be present in the test class."
 
   - id: P6
     title: LSP + DAP + docs + playground + VS Code grammar
