@@ -4,11 +4,12 @@ using System.Collections.Generic;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 
 /// <summary>
 /// A read-only view over a <see cref="List{T}">List&lt;StashValue&gt;</see> returned by a
-/// <c>DataMember</c> getter. All write operations throw <see cref="RuntimeError"/> with the
+/// <c>DataMember</c> getter. All write operations throw <see cref="ReadOnlyError"/> with the
 /// canonical frozen-write message so that <c>cli.argv[0] = "x"</c> fails rather than silently
 /// mutating a shared or cached array.
 /// </summary>
@@ -50,7 +51,7 @@ public sealed class StashFrozenArray : IVMTyped, IVMIndexable, IVMIterable, IVMS
 
     public void VMSetIndex(StashValue index, StashValue value, SourceSpan? span)
     {
-        throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.", span);
+        throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.", span);
     }
 
     public IVMIterator VMGetIterator(bool indexed)

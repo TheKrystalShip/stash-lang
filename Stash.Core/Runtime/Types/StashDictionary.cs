@@ -3,6 +3,7 @@ namespace Stash.Runtime.Types;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 using Stash.Common;
 
@@ -22,7 +23,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
 
     /// <summary>
     /// Freezes the dictionary, making all subsequent write operations throw
-    /// <see cref="RuntimeError"/>. Used by the DataMember read path to honour the
+    /// <see cref="ReadOnlyError"/>. Used by the DataMember read path to honour the
     /// side-effect contract: reference-typed returns are frozen at the boundary.
     /// </summary>
     public void Freeze() => _frozen = true;
@@ -30,7 +31,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     public void Set(object key, StashValue value)
     {
         if (_frozen)
-            throw new RuntimeError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
         ValidateKey(key);
         _entries[key] = value;
     }
@@ -48,14 +49,14 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     public bool Remove(object key)
     {
         if (_frozen)
-            throw new RuntimeError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
         return _entries.Remove(key);
     }
 
     public void Clear()
     {
         if (_frozen)
-            throw new RuntimeError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
         _entries.Clear();
     }
 
