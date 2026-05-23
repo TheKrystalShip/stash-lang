@@ -42,10 +42,13 @@ public static partial class DictBuiltIns
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key</param>
     /// <param name="value">The value to set</param>
+    /// <exception cref="RuntimeError">if `dict` is a read-only dictionary returned by a namespace member</exception>
     /// <exception cref="TypeError">if `key` is null</exception>
     [StashFn(ReturnType = "void")]
     private static void Set(StashDictionary dict, StashValue key, StashValue value)
     {
+        if (dict.IsFrozen)
+            throw new ReadOnlyError("Cannot mutate a read-only dict returned by a namespace member.");
         var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
         dict.Set(keyObj, value);
     }
@@ -65,20 +68,26 @@ public static partial class DictBuiltIns
     /// <summary>Removes a key from the dictionary. Returns true if it existed.</summary>
     /// <param name="dict">The dictionary</param>
     /// <param name="key">The key to remove</param>
+    /// <exception cref="RuntimeError">if `dict` is a read-only dictionary returned by a namespace member</exception>
     /// <exception cref="TypeError">if `key` is null</exception>
     /// <returns>true if the key was removed</returns>
     [StashFn(ReturnType = "bool")]
     private static bool Remove(StashDictionary dict, StashValue key)
     {
+        if (dict.IsFrozen)
+            throw new ReadOnlyError("Cannot mutate a read-only dict returned by a namespace member.");
         var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
         return dict.Remove(keyObj);
     }
 
     /// <summary>Removes all entries from the dictionary.</summary>
     /// <param name="dict">The dictionary to clear</param>
+    /// <exception cref="RuntimeError">if `dict` is a read-only dictionary returned by a namespace member</exception>
     [StashFn(ReturnType = "void")]
     private static void Clear(StashDictionary dict)
     {
+        if (dict.IsFrozen)
+            throw new ReadOnlyError("Cannot mutate a read-only dict returned by a namespace member.");
         dict.Clear();
     }
 
