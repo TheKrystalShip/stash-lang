@@ -72,7 +72,8 @@ dotnet run --project Stash.Cli/ -- /tmp/v.stash a b c
 
 ## F02 — [IMPORTANT] `dict.*` mutating helpers were not audited for frozen-input rejection
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 6d23225
 **Files:** `Stash.Stdlib/BuiltIns/DictBuiltIns.cs:47` (`Set`), `:71` (`Remove`), `:80` (`Clear`); add any other in-place mutators in the same file
 **Phase:** P5
 **Commit:** e911ff6
