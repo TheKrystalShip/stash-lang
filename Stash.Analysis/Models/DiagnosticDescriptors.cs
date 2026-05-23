@@ -125,6 +125,11 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0843 = new("SA0843", "Cannot 'unset' const in script", DiagnosticLevel.Error, "Bindings", "Cannot 'unset' 'const' binding '{0}' in a script (allowed in REPL only).");
     public static readonly DiagnosticDescriptor SA0844 = new("SA0844", "'unset' must be top-level", DiagnosticLevel.Error, "Bindings", "'unset' is only valid at the top level of a script or REPL input.");
 
+    // SA0845 is reserved for P4 (read-only assignment enforcement).
+
+    /// <summary>SA0846 — emitted when a namespace data member is called like a function.</summary>
+    public static readonly DiagnosticDescriptor SA0846 = new("SA0846", "Call of namespace data member", DiagnosticLevel.Error, "Namespaces", "'{0}' is a value member, not a function. Drop the parentheses to read its value.");
+
     // ── SA085x — Aliases ──────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0850 = new("SA0850", "Invalid alias name", DiagnosticLevel.Error, "Aliases", "Alias name '{0}' must be a valid identifier (letters, digits, underscores; cannot start with digit).");
     public static readonly DiagnosticDescriptor SA0851 = new("SA0851", "Empty alias confirm prompt", DiagnosticLevel.Warning, "Aliases", "AliasOptions.confirm is empty; the user will see no prompt text.");
@@ -367,6 +372,7 @@ public static class DiagnosticDescriptors
         dict[SA0842.Code] = SA0842;
         dict[SA0843.Code] = SA0843;
         dict[SA0844.Code] = SA0844;
+        dict[SA0846.Code] = SA0846;
         dict[SA0850.Code] = SA0850;
         dict[SA0851.Code] = SA0851;
         dict[SA0860.Code] = SA0860;

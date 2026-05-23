@@ -58,6 +58,7 @@ public static class RuleRegistry
             // Functions & Calls (SA04xx)
             new UserFunctionArityRule(),
             new BuiltInFunctionArityRule(),
+            new NamespaceMemberCallRule(),
             new ArgumentTypeMismatchRule(),
             new MissingReturnRule(),
             new TooManyParametersRule(),

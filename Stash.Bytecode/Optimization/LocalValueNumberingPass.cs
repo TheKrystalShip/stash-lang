@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Stash.Runtime;
+using Stash.Stdlib;
 
 namespace Stash.Bytecode.Optimization;
 
@@ -50,7 +51,7 @@ internal sealed class LocalValueNumberingPass : IBytecodePass
         _nextVn = 1;
 
         foreach (BasicBlock block in cfg.Blocks)
-            rewrittenCount += ProcessBlock(block, cfg);
+            rewrittenCount += ProcessBlock(block, cfg, builder);
 
         return new PassResult
         {
@@ -97,7 +98,7 @@ internal sealed class LocalValueNumberingPass : IBytecodePass
 
     // ── Per-block LVN ──────────────────────────────────────────────────────────
 
-    private int ProcessBlock(BasicBlock block, ControlFlowGraph cfg)
+    private int ProcessBlock(BasicBlock block, ControlFlowGraph cfg, ChunkBuilder builder)
     {
         // regToVN[r] = VN assigned to register r  (0 = no VN / untracked)
         var regToVN = new Dictionary<int, int>();
@@ -210,6 +211,28 @@ internal sealed class LocalValueNumberingPass : IBytecodePass
             }
 
             ExpressionKey key = keyOpt.Value;
+
+            // ── Live DataMember CSE-ineligibility check ──────────────────────
+            // A GetField/GetFieldIC whose name constant is a Live-stability namespace
+            // data member must never be collapsed by CSE — the getter must re-run on
+            // every access.  Skip inserting into exprToVN; assign a fresh opaque VN so
+            // the register is still tracked, but no future instruction can reuse it as
+            // a VN-HIT source.
+            if (isFieldOp && (op == OpCode.GetField || op == OpCode.GetFieldIC))
+            {
+                var constants = builder.RawConstants;
+                if (c < constants.Count &&
+                    constants[c].AsObj is string memberName &&
+                    StdlibRegistry.LiveMemberNames.Contains(memberName))
+                {
+                    int freshVn = FreshVn();
+                    KillReg(a, regToVN, vnToReg);
+                    regToVN[a] = freshVn;
+                    vnToReg[freshVn] = a;
+                    // Do NOT add to exprToVN or activeFieldKeys — this read is opaque.
+                    continue;
+                }
+            }
 
             // ── VN HIT check ─────────────────────────────────────────────────
 

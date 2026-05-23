@@ -4,7 +4,9 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
+using Stash.Stdlib.Abstractions;
 using Stash.Stdlib.Models;
+using Stash.Stdlib.Registration;
 
 /// <summary>
 /// Single source of truth for all built-in functions, types, namespaces, and type metadata
@@ -61,6 +63,22 @@ public static partial class StdlibRegistry
 
     private static readonly FrozenDictionary<string, string> _ufcsTypeToNamespace;
 
+    /// <summary>
+    /// Qualified names (ns.member) → DeclarationKind for all namespace entries.
+    /// Used by analysis rules and the compiler to resolve the kind of a DotExpr at
+    /// compile-time when the receiver is a known built-in namespace identifier.
+    /// </summary>
+    private static readonly FrozenDictionary<string, DeclarationKind> _declarationKindByQualifiedName;
+
+    /// <summary>
+    /// Names (unqualified) of all <c>Live</c>-stability data members across all built-in
+    /// namespaces.  Used by the LVN optimiser to mark GetFieldIC instructions on these names
+    /// as CSE-ineligible (the getter must be re-invoked on every access).
+    /// Over-conservative for user structs with the same field name — the unsoundness is
+    /// accepted because it is safe (no wrong behaviour, only missed optimisation).
+    /// </summary>
+    public static readonly FrozenSet<string> LiveMemberNames;
+
     static StdlibRegistry()
     {
         ValidTypes = PrimitiveTypes.Names
@@ -98,6 +116,28 @@ public static partial class StdlibRegistry
             ["string"] = "str",
             ["array"] = "arr",
         }.ToFrozenDictionary();
+
+        // Build the declaration-kind lookup and Live-member name set from all non-global namespaces.
+        var kindDict = new Dictionary<string, DeclarationKind>();
+        var liveNames = new HashSet<string>();
+        foreach (var nsDef in StdlibDefinitions.Namespaces.Where(d => !d.IsGlobal))
+        {
+            foreach (var (name, kind) in nsDef.Declarations)
+            {
+                string qualified = $"{nsDef.Name}.{name}";
+                kindDict[qualified] = kind;
+            }
+            if (nsDef.Members is not null)
+            {
+                foreach (var m in nsDef.Members)
+                {
+                    if (m.Stability == Stability.Live)
+                        liveNames.Add(m.Name);
+                }
+            }
+        }
+        _declarationKindByQualifiedName = kindDict.ToFrozenDictionary();
+        LiveMemberNames = liveNames.ToFrozenSet();
     }
 
     // ── Public query methods ──
@@ -120,6 +160,14 @@ public static partial class StdlibRegistry
     public static bool IsBuiltInFunction(string name) => _builtInFunctionNames.Contains(name);
 
     public static bool IsBuiltInNamespace(string name) => _namespaceNameSet.Contains(name);
+
+    /// <summary>
+    /// Looks up the <see cref="DeclarationKind"/> for a qualified namespace entry (e.g. <c>cli.argc</c>).
+    /// Returns <c>true</c> and sets <paramref name="kind"/> when the qualified name is known;
+    /// returns <c>false</c> when the namespace or member is not in the built-in registry.
+    /// </summary>
+    public static bool TryGetDeclarationKind(string qualifiedName, out DeclarationKind kind)
+        => _declarationKindByQualifiedName.TryGetValue(qualifiedName, out kind);
 
     /// <summary>
     /// Returns the namespace name that provides UFCS methods for a given Stash runtime type,

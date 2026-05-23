@@ -67,6 +67,16 @@ public static partial class LogBuiltIns
         EmitTyped(ctx, LevelError, message, data);
     }
 
+    /// <summary>
+    /// The current minimum log level. Re-read on every access because <c>log.setLevel</c> can
+    /// change it at runtime. Returns one of: <c>'debug'</c>, <c>'info'</c>, <c>'warn'</c>,
+    /// <c>'error'</c>.
+    /// </summary>
+    /// <returns>The active log-level string</returns>
+    [StashMember(Stability = Stability.Live, ReturnType = "string")]
+    private static StashValue Level(IInterpreterContext ctx)
+        => StashValue.FromObj(LevelNames[ctx.LoggerState.Level].Trim().ToLowerInvariant());
+
     /// <summary>Sets the minimum log level. Messages below this level are suppressed.</summary>
     /// <param name="level">One of: 'debug', 'info', 'warn', 'error'</param>
     /// <returns>null</returns>
