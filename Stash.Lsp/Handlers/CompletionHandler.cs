@@ -15,6 +15,8 @@ using Stash.Analysis;
 using Stash.Lexing;
 using Stash.Stdlib;
 using Stash.Lsp.Analysis;
+using Stash.Lsp.Completion;
+using Stash.Lsp.Completion.Providers;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 
@@ -48,16 +50,82 @@ public class CompletionHandler : CompletionHandlerBase
     private readonly ILogger<CompletionHandler> _logger;
 
     /// <summary>
+    /// When <see langword="true"/>, the default-mode completion branch uses the new provider
+    /// pipeline (<see cref="CompletionDispatcher"/>) instead of the monolithic
+    /// <see cref="BuildFullCompletionList"/>. This field is <see langword="false"/> in
+    /// production (live request path unchanged) and set to <see langword="true"/> only by
+    /// the test-only constructor seam during phases 2–4.
+    /// Removed in Phase 5 when the cutover is complete.
+    /// </summary>
+    private readonly bool _useNewPipeline;
+
+    /// <summary>
+    /// The dispatcher pre-wired with the Default-mode provider pipeline.
+    /// Non-null only when <see cref="_useNewPipeline"/> is <see langword="true"/>.
+    /// </summary>
+    private readonly CompletionDispatcher? _dispatcher;
+
+    /// <summary>
     /// Initialises a new instance of <see cref="CompletionHandler"/> with the services
     /// needed to resolve completion items.
     /// </summary>
     /// <param name="analysis">Analysis engine providing cached <see cref="AnalysisResult"/> data.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
+    /// <param name="logger">Logger for diagnostic output.</param>
     public CompletionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<CompletionHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
         _logger = logger;
+        _useNewPipeline = false;
+        _dispatcher = null;
+    }
+
+    /// <summary>
+    /// Test-only constructor that enables the new provider pipeline for the Default
+    /// completion mode. The live request path for all other modes is unchanged.
+    /// This constructor is <c>internal</c> and accessible only from <c>Stash.Tests</c>
+    /// via <c>InternalsVisibleTo</c>. Removed in Phase 5.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing cached <see cref="AnalysisResult"/> data.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
+    /// <param name="logger">Logger for diagnostic output.</param>
+    /// <param name="useNewPipeline">
+    /// Pass <see langword="true"/> to route Default-mode completions through the new
+    /// provider pipeline. Must be <see langword="false"/> in production code.
+    /// </param>
+    internal CompletionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<CompletionHandler> logger, bool useNewPipeline)
+    {
+        _analysis = analysis;
+        _documents = documents;
+        _logger = logger;
+        _useNewPipeline = useNewPipeline;
+        if (useNewPipeline)
+        {
+            _dispatcher = BuildDefaultPipeline();
+        }
+    }
+
+    /// <summary>
+    /// Constructs a <see cref="CompletionDispatcher"/> pre-wired with the four Default-mode
+    /// providers in ascending priority order (10 → 40).
+    /// </summary>
+    private static CompletionDispatcher BuildDefaultPipeline()
+    {
+        var defaultProviders = new ICompletionProvider[]
+        {
+            new KeywordCompletionProvider(),
+            new StdlibFunctionCompletionProvider(),
+            new StdlibNamespaceCompletionProvider(),
+            new ScopedSymbolCompletionProvider(),
+        };
+
+        var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
+        {
+            [CompletionMode.Default] = defaultProviders,
+        };
+
+        return new CompletionDispatcher(pipelines);
     }
 
     /// <summary>
@@ -129,7 +197,25 @@ public class CompletionHandler : CompletionHandlerBase
             return Task.FromResult(typeItems);
         }
 
-        // Default: full completion list
+        // Default: full completion list.
+        // When the new pipeline is enabled (test-only, phases 2–4), delegate to the dispatcher.
+        if (_useNewPipeline && _dispatcher != null)
+        {
+            var cachedResult = _analysis.GetCachedResult(uri);
+            var ctx = new Stash.Lsp.Completion.CompletionContext(
+                Uri: uri,
+                LspLine: line,
+                LspColumn: col,
+                CurrentLine: currentLine,
+                Mode: CompletionMode.Default,
+                DotPrefix: null,
+                Analysis: cachedResult,
+                TriggerCharacter: request.Context?.TriggerCharacter?[0]);
+            var newList = _dispatcher.Run(ctx);
+            _logger.LogDebug("Completion (new pipeline): {Count} items for {Uri}", newList.Items?.Count() ?? 0, request.TextDocument.Uri);
+            return Task.FromResult(newList);
+        }
+
         var fullList = BuildFullCompletionList(uri, line + 1, col + 1);
         _logger.LogDebug("Completion: {Count} items for {Uri}", fullList.Items?.Count() ?? 0, request.TextDocument.Uri);
         return Task.FromResult(fullList);
@@ -851,7 +937,12 @@ public class CompletionHandler : CompletionHandlerBase
     /// </summary>
     /// <param name="kind">The Stash symbol kind to map.</param>
     /// <returns>The equivalent LSP completion item kind.</returns>
-    private static LspCompletionItemKind MapCompletionKind(StashSymbolKind kind) => kind switch
+    /// <summary>
+    /// Maps a Stash <see cref="StashSymbolKind"/> to the equivalent LSP completion item kind.
+    /// Promoted to <c>internal</c> so completion providers can call it without duplication.
+    /// Will be relocated to <c>Stash.Lsp/Completion/</c> in Phase 5.
+    /// </summary>
+    internal static LspCompletionItemKind MapCompletionKind(StashSymbolKind kind) => kind switch
     {
         StashSymbolKind.Function => LspCompletionItemKind.Function,
         StashSymbolKind.Variable => LspCompletionItemKind.Variable,
@@ -866,7 +957,13 @@ public class CompletionHandler : CompletionHandlerBase
         _ => LspCompletionItemKind.Text
     };
 
-    private static Stash.Stdlib.Models.ThrowsEntry[]? AdaptThrows(
+    /// <summary>
+    /// Converts AST throws entries to stdlib model throws entries so they can be
+    /// rendered by <see cref="ThrowsRenderer.Render"/>. Promoted to <c>internal</c>
+    /// so completion providers can call it without duplication.
+    /// Will be relocated to <c>Stash.Lsp/Completion/</c> in Phase 5.
+    /// </summary>
+    internal static Stash.Stdlib.Models.ThrowsEntry[]? AdaptThrows(
         IReadOnlyList<Stash.Parsing.AST.ThrowsEntry>? throws)
     {
         if (throws == null || throws.Count == 0) return null;
