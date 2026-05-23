@@ -39,6 +39,15 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 
 When authoring `plan.yaml`, narrow `final_verify`'s `dotnet test` step to exclude documented flaky / environment-dependent classes (see `.claude/repo.md` "Known Issues"). Bare `dotnet test` fails `/done` due to pre-existing `DiffPackageTests`, `Registry*Tests`, `NetBuiltInsTests`, parallel-execution flakies, etc. — these are not feature regressions. Precedent: `exports-private-default` and `stdlib-namespace-members` `plan.yaml` carry the canonical filter shape.
 
+### Implementer must chore-commit the checkpoint advance
+
+`advance-checkpoint.py <slug> <id> done` rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the phase commit, leaving the tree dirty. The next `/next-phase` refuses on dirty tree as a safety check. The `/next-phase` implementer prompt must instruct the agent to follow the advance with a tiny chore commit:
+
+```bash
+git add .kanban/2-in-progress/<slug>/checkpoint.yaml
+git commit -m "chore(<slug>): record <id> done state"
+```
+
 ## Specialized agents
 
 This project's agents live in `.claude/agents/`. Under the checkpoint workflow, you typically never invoke an agent directly — the slash commands do it for you.

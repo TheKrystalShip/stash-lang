@@ -134,6 +134,14 @@ Register new handlers in `StashLanguageServer.cs` via `.WithHandler<NewHandler>(
 3. On analysis complete: publish diagnostics, refresh semantic tokens, **re-analyze dependent files** (files that import this one)
 4. On **close**: cancel pending analysis, clear diagnostics
 
+## Symbol filtering invariant
+
+When building unqualified completion or symbol lists from `GetVisibleSymbols`, filter by `SymbolInfo.Accessibility == BareIdentifier` — member-only kinds (`Field`, `Method`, `EnumMember`) auto-derive to `RequiresQualification` and must not appear as bare identifiers. To split user code from stdlib-injected resolution helpers, also check `SymbolInfo.Origin == SymbolOrigin.BuiltinStdlib`. The stdlib symbols `SymbolCollector.RegisterBuiltIns` injects exist for *resolution* (hover, goto-def, rename); presentation handlers must filter them or they'll leak (and duplicate, since stdlib also has registry-driven enumeration paths).
+
+## OmniSharp quirk: `CompletionItem.Data` null round-trip
+
+A `null` `CompletionItem.Data` comes back as an empty `JToken` after the LSP round-trip, not as `null`. Use `string.IsNullOrEmpty` rather than `== null` when asserting "no Data set".
+
 ## Tests
 
 LSP analysis tests live in `Stash.Tests/Analysis/` (15 files):

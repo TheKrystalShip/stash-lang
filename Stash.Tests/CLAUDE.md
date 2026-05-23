@@ -49,6 +49,16 @@ dotnet test -v normal                                          # Verbose output
 
 Tests that load fixture files (e.g. expected-output snapshots) use the **embedded-resource** pattern, never `CopyToOutputDirectory`. Add `<EmbeddedResource Include="Path\To\*.txt" />` to `Stash.Tests.csproj` and read via `Assembly.GetManifestResourceStream("Stash.Tests.Path.To.Filename.txt")`.
 
+### Completion surface snapshots
+
+`Stash.Tests/Lsp/CompletionSurfaceSnapshotTests.cs` locks in the LSP completion set for canonical cursor positions. Fixtures live under `Stash.Tests/Lsp/Snapshots/*.txt` as embedded resources. Re-baseline after an intentional change with:
+
+```bash
+STASH_SNAPSHOT_REGEN=1 dotnet test --filter FullyQualifiedName~CompletionSurfaceSnapshotTests
+```
+
+The regen run intentionally fails so the new fixture shows up as a working-tree diff (no silent re-baselining).
+
 ### Interpreting Tests
 
 Each built-in namespace test file uses this shared pattern:
