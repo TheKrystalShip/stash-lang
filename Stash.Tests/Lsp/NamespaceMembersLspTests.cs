@@ -210,6 +210,98 @@ public class NamespaceMembersLspTests
         }
     }
 
+    // ── Unqualified completion: member-only symbols must NOT leak ─────────────
+
+    /// <summary>
+    /// Stdlib struct fields are registered into the global scope (so hover/goto-def
+    /// work for them), but they must NOT surface in the unqualified completion list
+    /// — they are always dot-accessed (instance.field). Regression test for the bug
+    /// where typing in file scope offered "debounce: field of WatchOptions" etc.
+    /// </summary>
+    [Fact]
+    public void Completion_Unqualified_ExcludesStdlibStructFieldsMethodsAndEnumMembers()
+    {
+        var items = InvokeUnqualifiedCompletion("\n").ToList();
+
+        // Sanity: namespaces and keywords still appear.
+        Assert.Contains(items, i => i.Label == "fs" && i.Kind == CompletionItemKind.Module);
+        Assert.Contains(items, i => i.Label == "let" && i.Kind == CompletionItemKind.Keyword);
+
+        // No stdlib struct field (e.g. WatchOptions.debounce, TcpServer.active).
+        Assert.DoesNotContain(items, i => i.Kind == CompletionItemKind.Field);
+        // No struct method.
+        Assert.DoesNotContain(items, i => i.Kind == CompletionItemKind.Method);
+        // No enum member (e.g. WatchEventType.Deleted).
+        Assert.DoesNotContain(items, i => i.Kind == CompletionItemKind.EnumMember);
+    }
+
+    /// <summary>
+    /// User-defined struct fields/methods and enum members are also member-only
+    /// and must be suppressed in unqualified completion.
+    /// </summary>
+    [Fact]
+    public void Completion_Unqualified_ExcludesUserStructFieldsAndEnumMembers()
+    {
+        const string src = "struct Point { x, y }\nenum Color { Red, Green }\n";
+        var items = InvokeUnqualifiedCompletion(src).ToList();
+
+        Assert.DoesNotContain(items, i => i.Label == "x");
+        Assert.DoesNotContain(items, i => i.Label == "y");
+        Assert.DoesNotContain(items, i => i.Label == "Red");
+        Assert.DoesNotContain(items, i => i.Label == "Green");
+
+        // The type names themselves still appear.
+        Assert.Contains(items, i => i.Label == "Point");
+        Assert.Contains(items, i => i.Label == "Color");
+    }
+
+    /// <summary>
+    /// Parameters also carry a non-null ParentName (their owning function), but they
+    /// must still appear in unqualified completion inside the function body. This
+    /// guards against an over-broad "skip anything with ParentName" filter.
+    /// </summary>
+    [Fact]
+    public void Completion_Unqualified_IncludesFunctionParameters()
+    {
+        // Cursor sits on line 2 inside the body of fn greet(name).
+        const string src = "fn greet(name) {\n\n}\n";
+        var items = InvokeUnqualifiedCompletionAt(src, line: 1, character: 0).ToList();
+
+        Assert.Contains(items, i => i.Label == "name");
+    }
+
+    private static System.Collections.Generic.IEnumerable<CompletionItem> InvokeUnqualifiedCompletion(string source)
+    {
+        // Position cursor on a fresh empty line at the end of the source.
+        var lines = source.Split('\n');
+        int line = lines.Length - 1;
+        int character = lines[line].Length;
+        return InvokeUnqualifiedCompletionAt(source + "\n", line + 1, 0);
+    }
+
+    private static System.Collections.Generic.IEnumerable<CompletionItem> InvokeUnqualifiedCompletionAt(
+        string source, int line, int character)
+    {
+        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+        var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
+        var logger = NullLogger<CompletionHandler>.Instance;
+
+        var uri = new Uri($"file:///test/unqualified_{Guid.NewGuid():N}.stash");
+        docs.Open(uri, source, 1);
+        engine.Analyze(uri, source);
+        var handler = new CompletionHandler(engine, docs, logger);
+
+        var request = new CompletionParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = uri },
+            Position = new Position { Line = line, Character = character },
+            Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+        };
+
+        var result = handler.Handle(request, default).Result;
+        return result.Items ?? Enumerable.Empty<CompletionItem>();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static (CompletionHandler Handler, Uri Uri, string Source) CreateCompletionHandler()

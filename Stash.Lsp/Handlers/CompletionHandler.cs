@@ -191,6 +191,17 @@ public class CompletionHandler : CompletionHandlerBase
             var seen = new HashSet<string>();
             foreach (var sym in result.Symbols.GetVisibleSymbols(line, col))
             {
+                // Member-only symbols are never valid as bare identifiers in Stash —
+                // they're always dot-accessed (instance.field, Type.method, Enum.Member,
+                // self.field inside methods). Excluding them here keeps the unqualified
+                // completion list focused on names that are actually callable at the cursor.
+                if (sym.Kind == StashSymbolKind.Field ||
+                    sym.Kind == StashSymbolKind.Method ||
+                    sym.Kind == StashSymbolKind.EnumMember)
+                {
+                    continue;
+                }
+
                 if (!seen.Add(sym.Name))
                 {
                     continue;
