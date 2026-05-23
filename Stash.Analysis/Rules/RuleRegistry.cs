@@ -1,6 +1,7 @@
 namespace Stash.Analysis.Rules;
 
 using System.Collections.Generic;
+using Stash.Analysis.Rules.Assignment;
 using Stash.Analysis.Rules.Functions;
 using Stash.Analysis.Rules.Performance;
 using Stash.Analysis.Rules.Throws;
@@ -54,6 +55,9 @@ public static class RuleRegistry
             new NullFlowRule(),
             new ExhaustiveMatchRule(),
             new InvalidRegexPatternRule(),
+
+            // Namespaces — read-only assignment (SA0845)
+            new ReadOnlyNamespaceAssignmentRule(),
 
             // Functions & Calls (SA04xx)
             new UserFunctionArityRule(),

@@ -490,6 +490,14 @@ public sealed partial class VirtualMachine
 
     private static void SetFieldValue(object? obj, string name, object? value, SourceSpan? span)
     {
+        // StashNamespace receivers (both built-in and user-module aliases) are always read-only.
+        // Raise ReadOnlyError rather than the generic RuntimeError so callers can catch it specifically.
+        if (obj is StashNamespace ns)
+        {
+            throw new ReadOnlyError(
+                $"Cannot assign to '{ns.Name}.{name}': namespace members are read-only.", span);
+        }
+
         if (obj is IVMFieldMutable mutable)
         {
             mutable.VMSetField(name, StashValue.FromObject(value), span);

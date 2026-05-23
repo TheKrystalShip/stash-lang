@@ -125,7 +125,12 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0843 = new("SA0843", "Cannot 'unset' const in script", DiagnosticLevel.Error, "Bindings", "Cannot 'unset' 'const' binding '{0}' in a script (allowed in REPL only).");
     public static readonly DiagnosticDescriptor SA0844 = new("SA0844", "'unset' must be top-level", DiagnosticLevel.Error, "Bindings", "'unset' is only valid at the top level of a script or REPL input.");
 
-    // SA0845 is reserved for P4 (read-only assignment enforcement).
+    /// <summary>
+    /// SA0845 — emitted when an assignment targets a read-only namespace member or a namespace alias.
+    /// Applies to built-in namespaces and user-module aliases (all exported symbols are immutable
+    /// since SA0805 prohibits exporting mutable <c>let</c> bindings).
+    /// </summary>
+    public static readonly DiagnosticDescriptor SA0845 = new("SA0845", "Assignment to read-only namespace member", DiagnosticLevel.Error, "Namespaces", "'{0}' is read-only. Namespace members and namespace-aliased values cannot be reassigned.");
 
     /// <summary>SA0846 — emitted when a namespace data member is called like a function.</summary>
     public static readonly DiagnosticDescriptor SA0846 = new("SA0846", "Call of namespace data member", DiagnosticLevel.Error, "Namespaces", "'{0}' is a value member, not a function. Drop the parentheses to read its value.");
@@ -372,6 +377,7 @@ public static class DiagnosticDescriptors
         dict[SA0842.Code] = SA0842;
         dict[SA0843.Code] = SA0843;
         dict[SA0844.Code] = SA0844;
+        dict[SA0845.Code] = SA0845;
         dict[SA0846.Code] = SA0846;
         dict[SA0850.Code] = SA0850;
         dict[SA0851.Code] = SA0851;

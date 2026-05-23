@@ -117,13 +117,18 @@ phases:
     title: Read-only enforcement — SA0845 + ReadOnlyError (built-in + user-module const)
     deps: [P2, P3]
     files:
-      - Stash.Runtime/Errors/ReadOnlyError.cs
+      # Corrected paths (plan had stale locations):
+      # Stash.Runtime/Errors/ -> Stash.Core/Runtime/Errors/ (consistent with IOError, TypeError, etc.)
+      # Stash.Analysis/Diagnostics/DiagnosticCodes.cs -> Stash.Analysis/Models/DiagnosticDescriptors.cs (where P3 placed SA0846)
+      # Stash.Analysis/Visitors/SemanticValidator.cs -> rule file per P3 convention
+      # Stash.Analysis/Visitors/SymbolCollector.cs -> not needed; alias scan done in rule via AllStatements
+      # Stash.Bytecode/VM/VirtualMachine.Modules.cs -> not modified; module alias namespaces handled uniformly via StashNamespace check
+      # Stash.Bytecode/Bytecode/Metadata.cs -> not modified; no opcode throws-list pattern found for SetField
+      - Stash.Core/Runtime/Errors/ReadOnlyError.cs
       - Stash.Bytecode/VM/VirtualMachine.TypeOps.cs
-      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
-      - Stash.Bytecode/Bytecode/Metadata.cs
-      - Stash.Analysis/Visitors/SemanticValidator.cs
-      - Stash.Analysis/Visitors/SymbolCollector.cs
-      - Stash.Analysis/Diagnostics/DiagnosticCodes.cs
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
+      - Stash.Analysis/Rules/Assignment/ReadOnlyNamespaceAssignmentRule.cs
+      - Stash.Analysis/Rules/RuleRegistry.cs
       - Stash.Tests/Analysis/ReadOnlyNamespaceTests.cs
       - Stash.Tests/Runtime/ReadOnlyErrorTests.cs
       - Stash.Tests/Modules/ConstReexportTests.cs
