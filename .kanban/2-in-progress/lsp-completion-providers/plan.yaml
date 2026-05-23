@@ -1,0 +1,156 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose
+# in brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py lsp-completion-providers
+
+schema_version: 1
+
+feature: lsp-completion-providers
+title: LSP Layered Completion Provider Model
+brief: ./brief.md
+
+created: 2026-05-23
+architect_session: opus-4.7-2026-05-23
+
+# Default verify run after every phase, in addition to phase-specific verify.
+default_verify:
+  - dotnet build
+
+# Broad scope. Implementer trusts per-phase `files` first; this is a safety rail.
+scope:
+  - Stash.Lsp/**
+  - Stash.Tests/Lsp/**
+
+phases:
+  - id: P1
+    title: Introduce completion abstractions and sink
+    deps: []
+    files:
+      - Stash.Lsp/Completion/CompletionMode.cs
+      - Stash.Lsp/Completion/CompletionContext.cs
+      - Stash.Lsp/Completion/CompletionCandidate.cs
+      - Stash.Lsp/Completion/ICompletionProvider.cs
+      - Stash.Lsp/Completion/CompletionItemSink.cs
+      - Stash.Lsp/Completion/CompletionDispatcher.cs
+      - Stash.Tests/Lsp/Completion/CompletionItemSinkTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~CompletionItemSinkTests"
+    done_when:
+      - The six new types compile and have XML doc comments on every public surface.
+      - CompletionItemSink.Add is idempotent on Label; first Add wins, verified by unit test.
+      - CompletionItemSink.Materialize returns a CompletionList whose Item order matches insertion order.
+      - Sink rejects candidates with Accessibility == RequiresQualification when the dispatcher's Mode == Default, verified by unit test.
+      - CompletionHandler.cs is unchanged (additive phase).
+    notes: |
+      Pure scaffolding. No handler edit. Always track SourceTag on candidates per
+      Decision Log Q1 resolution. Sink uses a HashSet<string> seen + ordered List<CompletionItem>.
+
+  - id: P2
+    title: Port default-mode providers behind parallel path
+    deps: [P1]
+    files:
+      - Stash.Lsp/Completion/Providers/KeywordCompletionProvider.cs
+      - Stash.Lsp/Completion/Providers/StdlibFunctionCompletionProvider.cs
+      - Stash.Lsp/Completion/Providers/StdlibNamespaceCompletionProvider.cs
+      - Stash.Lsp/Completion/Providers/ScopedSymbolCompletionProvider.cs
+      - Stash.Lsp/Handlers/CompletionHandler.cs
+      - Stash.Tests/Lsp/Completion/DefaultModeProvidersTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~DefaultModeProvidersTests|FullyQualifiedName~NamespaceMembersLspTests"
+    done_when:
+      - The four default-mode providers exist and emit candidates with stable SourcePriority (10/20/30/40).
+      - ScopedSymbolCompletionProvider filters out symbols with Accessibility == RequiresQualification.
+      - ScopedSymbolCompletionProvider filters out symbols with Origin == BuiltinStdlib.
+      - CompletionHandler exposes a private `_useNewPipeline` boolean (default false) and a test-only constructor seam to enable it; live request path is unchanged.
+      - Unit tests confirm the new pipeline's Default-mode output for the bug-1 scenario (member leakage) and bug-2 scenario (namespace dedup) matches the post-fix monolith output.
+      - NamespaceMembersLspTests still pass unmodified.
+
+  - id: P3
+    title: Port dot-completion provider with six ordered strategies
+    deps: [P2]
+    files:
+      - Stash.Lsp/Completion/Providers/DotCompletionProvider.cs
+      - Stash.Lsp/Completion/Providers/Dot/IDotStrategy.cs
+      - Stash.Lsp/Completion/Providers/Dot/BuiltInNamespaceDotStrategy.cs
+      - Stash.Lsp/Completion/Providers/Dot/ImportAliasDotStrategy.cs
+      - Stash.Lsp/Completion/Providers/Dot/StructOrUserEnumDotStrategy.cs
+      - Stash.Lsp/Completion/Providers/Dot/UfcsDotStrategy.cs
+      - Stash.Lsp/Completion/Providers/Dot/CliSchemaDotStrategy.cs
+      - Stash.Lsp/Completion/Providers/Dot/NamespaceImportEnumDotStrategy.cs
+      - Stash.Tests/Lsp/Completion/DotCompletionProviderTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~DotCompletionProviderTests|FullyQualifiedName~NamespaceMembersLspTests"
+    done_when:
+      - DotCompletionProvider invokes the six strategies in the exact order listed in brief.md "Provider taxonomy" (BuiltInNs, ImportAlias, StructOrUserEnum, Ufcs, CliSchema, NamespaceImportEnum).
+      - Each strategy's output for canonical prefixes (`arr.`, `mymod.`, `point.`, `"hello".`, `parsed.`, `utils.LogLevel.`) matches the pre-refactor handler's output for the same prefix.
+      - UfcsDotStrategy is skipped when the receiver resolves to a user-defined struct.
+      - Live request path still goes through the old HandleDotCompletion (parallel path).
+    notes: |
+      Ordering is load-bearing. The current HandleDotCompletion has "items.Count == 0"
+      gates between several branches — preserve those as early-returns inside each strategy
+      or as a sink-aware "skip if any earlier strategy produced output" check, whichever
+      mirrors the current semantics exactly.
+
+  - id: P4
+    title: Port context-mode providers (import-string, after-is, after-extend)
+    deps: [P1]
+    files:
+      - Stash.Lsp/Completion/Providers/ImportPathCompletionProvider.cs
+      - Stash.Lsp/Completion/Providers/IsTypeCompletionProvider.cs
+      - Stash.Lsp/Completion/Providers/ExtendTypeCompletionProvider.cs
+      - Stash.Lsp/Completion/CursorContextClassifier.cs
+      - Stash.Tests/Lsp/Completion/ContextModeProvidersTests.cs
+      - Stash.Tests/Lsp/Completion/CursorContextClassifierTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~ContextModeProvidersTests|FullyQualifiedName~CursorContextClassifierTests"
+    done_when:
+      - CursorContextClassifier returns CompletionMode in the same order the current handler's if-chain decides (ImportString > Dot > AfterExtend > AfterIs > Default).
+      - ImportPathCompletionProvider produces the same package list (including @scope/name) that the current GetImportCompletions does for the same project layout.
+      - IsTypeCompletionProvider emits one candidate per StdlibRegistry.TypeDescriptions entry.
+      - ExtendTypeCompletionProvider emits built-in extendable types + user-defined struct names with the same dedup behavior as the current BuildExtendTypeCompletionList.
+      - Live request path is unchanged.
+
+  - id: P5
+    title: Cut over CompletionHandler to the dispatcher and delete the old path
+    deps: [P2, P3, P4]
+    files:
+      - Stash.Lsp/Handlers/CompletionHandler.cs
+      - Stash.Lsp/StashLanguageServer.cs
+      - Stash.Lsp/Completion/CompletionDispatcher.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~Lsp"
+    done_when:
+      - CompletionHandler.Handle is under 80 lines and contains no enumeration logic — it only builds CompletionContext, calls CompletionDispatcher.Run, and returns the result.
+      - BuildFullCompletionList, HandleDotCompletion, BuildTypeCompletionList, BuildExtendTypeCompletionList, GetImportCompletions, IsInsideString, IsAfterIsKeyword, IsAfterExtendKeyword, GetDotPrefix, AdaptThrows, MapCompletionKind are no longer private members of CompletionHandler — they are deleted or relocated under Stash.Lsp/Completion/.
+      - The `_useNewPipeline` parallel-path field is removed.
+      - CompletionDispatcher and its providers are registered as singletons in StashLanguageServer.cs.
+      - Every test under Stash.Tests/Lsp/ passes unmodified — in particular NamespaceMembersLspTests.
+
+  - id: P6
+    title: Lock down completion behavior with surface snapshot tests
+    deps: [P5]
+    files:
+      - Stash.Tests/Lsp/CompletionSurfaceSnapshotTests.cs
+      - Stash.Tests/Lsp/Completion/Fixtures/*.stash
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~NamespaceMembersLspTests"
+    done_when:
+      - Snapshot suite contains at least one fixture per CompletionMode (Default, Dot, ImportString, AfterIs, AfterExtend), plus one fixture per IDotStrategy branch within Dot (6 fixtures).
+      - Each snapshot asserts an ordered list of expected labels with their SourceTag (curated subset, not the full candidate list) so that adding a new stdlib function does not break unrelated snapshots.
+      - Each snapshot includes one anti-assertion: labels that must NOT appear (e.g., stdlib field names in Default mode — locks in the bug-1 fix).
+      - The test class's XML doc comment cross-references this RFC (`.kanban/4-done/lsp-completion-providers/brief.md` after promotion).
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Filter shape copied from .kanban/4-done/stdlib-namespace-members/plan.yaml,
+# minus the DAP-only and stdlib-docs exclusions (this feature touches neither).
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount"
+  - python3 scripts/checkpoint/validate-spec.py lsp-completion-providers
