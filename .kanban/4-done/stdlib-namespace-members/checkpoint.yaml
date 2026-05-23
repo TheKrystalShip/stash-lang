@@ -1,0 +1,81 @@
+schema_version: 1
+feature: stdlib-namespace-members
+current: null
+updated: '2026-05-23T14:27:20Z'
+phases:
+  P1:
+    status: done
+    commit: f2a4cac3f233b2fc9dda46551fda1e6227d6373c
+    verified: true
+    started: '2026-05-22T20:19:05Z'
+    completed: '2026-05-22T20:32:42Z'
+    attempts: 1
+    notes: Added [StashMember] attribute, Stability enum, DeclarationKind enum, NamespaceMember/NamespaceMemberPayload
+      models, NamespaceBuilder.Member(), NamespaceDefinition.Declarations table, and source generator
+      support with 5 new diagnostics (STASH_MEM001-005); 25 tests passing
+  P2:
+    status: done
+    commit: be336f0802f3098d75ab2b5dbd39d4e1f98f0d92
+    verified: true
+    started: '2026-05-22T20:48:17Z'
+    completed: '2026-05-23T04:15:13Z'
+    attempts: 1
+    notes: DataMember dispatch in VMGetField+IC, StashFrozenArray freeze boundary, Cached/Live stability;
+      15/15 tests pass; adjacent-CSE limitation flagged
+  P3:
+    status: done
+    commit: 01c0737cad21cf9c19fcff6f2ea9d1f9485cc81a
+    verified: true
+    started: '2026-05-23T07:58:23Z'
+    completed: '2026-05-23T08:21:30Z'
+    attempts: 1
+    notes: SA0846 diagnostic + NamespaceMemberCallRule + StdlibRegistry.TryGetDeclarationKind + LiveMemberNames
+      + LVN CSE-ineligibility for Live members + log.level DataMember + 19 tests passing
+  P4:
+    status: done
+    commit: da75ddfee6f582c03180a211e7f6788ba00c1a3d
+    verified: true
+    started: '2026-05-23T08:25:41Z'
+    completed: '2026-05-23T08:52:14Z'
+    attempts: 1
+    notes: "SA0845 diagnostic + ReadOnlyError type + ReadOnlyNamespaceAssignmentRule; user-module const-ness\
+      \ resolved in Decision Log (no schema change needed \u2014 SA0805 + Freeze invariants sufficient);\
+      \ 25 tests passing"
+  P5:
+    status: done
+    commit: e911ff6a19e4143e50ef0aefde55b84691b23df5
+    verified: true
+    started: '2026-05-23T08:56:50Z'
+    completed: '2026-05-23T10:10:36Z'
+    attempts: 1
+    notes: 'Migrated 8 v1 members to [StashMember]; added frozen-write guards to 8 arr.* helpers; fixed
+      GlobalBuiltIns.Typeof to handle IVMTyped (StashFrozenArray); regenerated stdlib reference docs;
+      all P5-specific tests pass (36 CliMembersTests + EnvMembersTests). Plan deviation: added Stash.Cli/ShellSugarDesugarer.cs,
+      CliBuiltIns.Build/Parse.cs, ArrBuiltIns.cs, GlobalBuiltIns.cs to file list (stale plan). Cache-contamination
+      design concern filed in notes.'
+  P6:
+    status: done
+    commit: 9ef21e08bc227be1b50bc84a490dae40c202af1d
+    verified: true
+    started: '2026-05-23T13:02:42Z'
+    completed: '2026-05-23T13:22:50Z'
+    attempts: 1
+    notes: LSP completion/hover/semantic-tokens for DataMembers; DAP auto-invoke with 'member'/'member
+      (live)' labels; docs Members section regenerated; playground+grammar audited (no changes needed);
+      20 tests passing
+  P7:
+    status: done
+    commit: 092b150ee6662fe839728093ae7d53137c063ee7
+    verified: true
+    started: '2026-05-23T13:27:12Z'
+    completed: '2026-05-23T13:37:02Z'
+    attempts: 1
+    notes: "Language spec \xA711 Function References + \xA712 Namespace Members; example namespace_members.stash;\
+      \ CHANGELOG Breaking changes; FunctionReferenceTests (14 tests); plan.yaml corrected for Documentation\u2192\
+      Stdlib path"
+review:
+  status: resolved
+  started: '2026-05-23T13:52:51Z'
+  resolved: '2026-05-23T14:27:20Z'
+  findings_open: 0
+  findings_fixed: 0
