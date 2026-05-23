@@ -106,31 +106,42 @@ public static partial class EnvBuiltIns
         return existed;
     }
 
-    /// <summary>Returns the current working directory path.</summary>
-    /// <returns>The current working directory</returns>
-    [StashFn]
-    public static string Cwd() => System.Environment.CurrentDirectory;
+    /// <summary>
+    /// The current working directory path. Re-read on every access because
+    /// <c>env.chdir</c> can change it at runtime.
+    /// </summary>
+    /// <exception cref="IOError">if the current directory cannot be determined</exception>
+    [StashMember(Stability = Stability.Live, Capability = StashCapabilities.Environment,
+        ReturnType = "string", Throws = new[] { typeof(IOError) })]
+    public static string Cwd(IInterpreterContext ctx) => System.Environment.CurrentDirectory;
 
-    /// <summary>Returns the current user's home directory path.</summary>
-    /// <returns>The home directory path</returns>
-    [StashFn]
-    public static string Home() =>
+    /// <summary>
+    /// The current user's home directory path. Cached on first access; stable for the
+    /// process lifetime.
+    /// </summary>
+    [StashMember(Capability = StashCapabilities.Environment, ReturnType = "string")]
+    public static string Home(IInterpreterContext ctx) =>
         System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
 
-    /// <summary>Returns the machine's hostname.</summary>
-    /// <returns>The hostname</returns>
-    [StashFn]
-    public static string Hostname() => System.Environment.MachineName;
+    /// <summary>
+    /// The machine's hostname. Cached on first access; stable for the process lifetime.
+    /// </summary>
+    [StashMember(Capability = StashCapabilities.Environment, ReturnType = "string")]
+    public static string Hostname(IInterpreterContext ctx) => System.Environment.MachineName;
 
-    /// <summary>Returns the current user's login name.</summary>
-    /// <returns>The username</returns>
-    [StashFn]
-    public static string User() => System.Environment.UserName;
+    /// <summary>
+    /// The current user's login name. Cached on first access; stable for the process
+    /// lifetime.
+    /// </summary>
+    [StashMember(Capability = StashCapabilities.Environment, ReturnType = "string")]
+    public static string User(IInterpreterContext ctx) => System.Environment.UserName;
 
-    /// <summary>Returns the current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'.</summary>
-    /// <returns>The OS name</returns>
-    [StashFn]
-    public static string Os()
+    /// <summary>
+    /// The current operating system as a string: <c>'linux'</c>, <c>'macos'</c>,
+    /// <c>'windows'</c>, or <c>'unknown'</c>. Cached on first access.
+    /// </summary>
+    [StashMember(ReturnType = "string")]
+    public static string Os(IInterpreterContext ctx)
     {
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
             return "linux";
@@ -141,10 +152,11 @@ public static partial class EnvBuiltIns
         return "unknown";
     }
 
-    /// <summary>Returns the CPU architecture (e.g. 'x64', 'arm64').</summary>
-    /// <returns>The architecture name</returns>
-    [StashFn]
-    public static string Arch() =>
+    /// <summary>
+    /// The CPU architecture (e.g. <c>'x64'</c>, <c>'arm64'</c>). Cached on first access.
+    /// </summary>
+    [StashMember(ReturnType = "string")]
+    public static string Arch(IInterpreterContext ctx) =>
         System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
 
     /// <summary>Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.</summary>

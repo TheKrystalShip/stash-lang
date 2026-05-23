@@ -116,7 +116,7 @@ public class EnvBuiltInsTests : StashTestBase
     [Fact]
     public void Cwd_ReturnsNonEmptyString()
     {
-        var result = Run("let result = env.cwd();");
+        var result = Run("let result = env.cwd;");
         Assert.IsType<string>(result);
         Assert.NotEmpty((string)result!);
     }
@@ -124,7 +124,7 @@ public class EnvBuiltInsTests : StashTestBase
     [Fact]
     public void Home_ReturnsNonEmptyString()
     {
-        var result = Run("let result = env.home();");
+        var result = Run("let result = env.home;");
         Assert.IsType<string>(result);
         Assert.NotEmpty((string)result!);
     }
@@ -132,7 +132,7 @@ public class EnvBuiltInsTests : StashTestBase
     [Fact]
     public void Hostname_ReturnsNonEmptyString()
     {
-        var result = Run("let result = env.hostname();");
+        var result = Run("let result = env.hostname;");
         Assert.IsType<string>(result);
         Assert.NotEmpty((string)result!);
     }
@@ -140,7 +140,7 @@ public class EnvBuiltInsTests : StashTestBase
     [Fact]
     public void User_ReturnsNonEmptyString()
     {
-        var result = Run("let result = env.user();");
+        var result = Run("let result = env.user;");
         Assert.IsType<string>(result);
         Assert.NotEmpty((string)result!);
     }
@@ -150,7 +150,7 @@ public class EnvBuiltInsTests : StashTestBase
     [Fact]
     public void Os_ReturnsKnownPlatformString()
     {
-        var result = Run("let result = env.os();");
+        var result = Run("let result = env.os;");
         Assert.IsType<string>(result);
         var os = (string)result!;
         Assert.Contains(os, new[] { "linux", "macos", "windows", "unknown" });
@@ -159,7 +159,7 @@ public class EnvBuiltInsTests : StashTestBase
     [Fact]
     public void Arch_ReturnsNonEmptyString()
     {
-        var result = Run("let result = env.arch();");
+        var result = Run("let result = env.arch;");
         Assert.IsType<string>(result);
         Assert.NotEmpty((string)result!);
     }

@@ -62,7 +62,7 @@ log.setLevel("info"); // restore
 
 // ─── 7. File output ────────────────────────────────────────────────────────
 
-let log_path = path.join(env.cwd(), "app.log");
+let log_path = path.join(env.cwd, "app.log");
 log.setOutput(log_path);
 log.info("This goes to the log file", { source: "example" });
 log.warn("File logging active", { path: log_path });

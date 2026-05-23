@@ -3,6 +3,7 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using System.Collections.Generic;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 using Stash.Runtime.Errors;
 using Stash.Stdlib.Abstractions;
@@ -53,6 +54,7 @@ public static partial class GlobalBuiltIns
             StashByteSize => StashByteSize.PrimitiveTypeName,
             StashIpAddress => StashIpAddress.PrimitiveTypeName,
             StashSemVer => StashSemVer.PrimitiveTypeName,
+            IVMTyped typed => typed.VMTypeName,
             IStashCallable => "function",
             _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : ctx.ResolveRegisteredTypeName(obj)
         });

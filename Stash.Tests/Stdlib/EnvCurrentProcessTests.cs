@@ -55,7 +55,7 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         {
             var (chunk, vm) = BuildVM($$"""
                 env.chdir("{{dir}}");
-                return env.cwd();
+                return env.cwd;
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(resolved, result);
@@ -196,9 +196,9 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                let before = env.cwd();
+                let before = env.cwd;
                 env.withDir("{{dir}}", () => null);
-                return env.cwd() == before;
+                return env.cwd == before;
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(true, result);
@@ -220,13 +220,13 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         try
         {
             var (chunk, vm) = BuildVM($$"""
-                let before = env.cwd();
+                let before = env.cwd;
                 try {
                     env.withDir("{{dir}}", () => {
                         throw "deliberate";
                     });
                 }
-                return env.cwd() == before;
+                return env.cwd == before;
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(true, result);

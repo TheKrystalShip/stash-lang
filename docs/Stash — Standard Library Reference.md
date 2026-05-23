@@ -159,6 +159,7 @@ required. They can be thrown with struct-literal syntax and caught by typed `cat
 | `LockError` | `message: string`, `path: string` | File-lock acquisition failed. |
 | `NotSupportedError` | `message: string` | Operation is not supported on this platform or for this value. |
 | `ParseError` | `message: string` | Parsing failed (JSON, INI, TOML, CSV, number conversion, etc.). |
+| `ReadOnlyError` | `message: string` | Thrown when an assignment targets a read-only namespace member, a const re-export, or a built-in namespace value. |
 | `StateError` | `message: string` | Object is in an invalid state for the requested operation. |
 | `TimeoutError` | `message: string` | Operation timed out (timeout block or stdlib timeout parameter). |
 | `TypeError` | `message: string` | Argument or operand has the wrong type. |
@@ -2627,8 +2628,6 @@ Result returned by cli.tryParse.
 | Function | Returns | Throws | Description |
 | -------- | ------- | ------ | ----------- |
 | `cli.build` | `array` | `TypeError`, `CliSchemaError` | Renders a values dict back to an argv string array. |
-| `cli.argv` | `array` | — | Returns the raw script argv as supplied by the host. |
-| `cli.argc` | `int` | — | Returns the number of raw script arguments. |
 | `cli.positional` | `CliArgSpec` | `CliSchemaError` | Declares a positional argument. |
 | `cli.option` | `CliArgSpec` | `CliSchemaError` | Declares a named option that takes a value. |
 | `cli.flag` | `CliArgSpec` | — | Declares a boolean flag. |
@@ -2656,18 +2655,6 @@ Renders a values dict back to an argv string array. Round-trips for round-trippa
 
 - `TypeError` — if schema is not a CliSchema or values is not a dict
 - `CliSchemaError` — if a value cannot be serialized for the declared spec (type mismatch, choices violation, constraint violation)
-
-#### `cli.argv() -> array`
-
-Returns the raw script argv as supplied by the host. Replaces args.list.
-
-**Returns:** `array` — array<string> of script arguments (empty when invoked via -c or REPL)
-
-#### `cli.argc() -> int`
-
-Returns the number of raw script arguments. Replaces args.count.
-
-**Returns:** `int` — int count of script arguments
 
 #### `cli.positional(typeTag: any, ...options: any) -> CliArgSpec`
 
@@ -2775,7 +2762,7 @@ Parses an argv array against a CliSchema. Never exits; returns a CliParseResult.
 **Parameters:**
 
 - `schema`: `any` — A CliSchema built by cli.schema()
-- `argv`: `any` — Optional array of strings to parse (defaults to cli.argv())
+- `argv`: `any` — Optional array of strings to parse (defaults to cli.argv)
 
 **Returns:** `CliParseResult` — CliParseResult with ok, value, error, and helpRequested fields
 
@@ -2790,7 +2777,7 @@ Parses an argv array against a CliSchema. On --help, prints help and exits 0. On
 **Parameters:**
 
 - `schema`: `any` — A CliSchema built by cli.schema()
-- `argv`: `any` — Optional array of strings to parse (defaults to cli.argv() / ScriptArgs)
+- `argv`: `any` — Optional array of strings to parse (defaults to cli.argv / ScriptArgs)
 
 **Returns:** `dict` — dict of parsed values (same shape as cli.tryParse(...).value)
 
@@ -4014,12 +4001,6 @@ Decodes a hexadecimal string to a byte array.
 | `env.withPrefix` | `dict` | — | Returns a dictionary of all environment variables whose names start with the given prefix. |
 | `env.remove` | `null` | — | Removes an environment variable. |
 | `env.unset` | `bool` | `ValueError` | Removes the environment variable 'name'. |
-| `env.cwd` | `string` | — | Returns the current working directory path. |
-| `env.home` | `string` | — | Returns the current user's home directory path. |
-| `env.hostname` | `string` | — | Returns the machine's hostname. |
-| `env.user` | `string` | — | Returns the current user's login name. |
-| `env.os` | `string` | — | Returns the current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'. |
-| `env.arch` | `string` | — | Returns the CPU architecture (e.g. |
 | `env.loadFile` | `int` | `IOError` | Loads environment variables from a .env file. |
 | `env.saveFile` | `null` | `IOError` | Saves all current environment variables to a .env file at the given path. |
 | `env.chdir` | `null` | `CommandError`, `TypeError` | Changes the current working directory to the given path and pushes it onto the directory stack. |
@@ -4106,42 +4087,6 @@ Removes the environment variable 'name'. Returns true if the variable existed, f
 **Throws:**
 
 - `ValueError` — if `name` is empty, contains '=', or contains a null character
-
-#### `env.cwd() -> string`
-
-Returns the current working directory path.
-
-**Returns:** `string` — The current working directory
-
-#### `env.home() -> string`
-
-Returns the current user's home directory path.
-
-**Returns:** `string` — The home directory path
-
-#### `env.hostname() -> string`
-
-Returns the machine's hostname.
-
-**Returns:** `string` — The hostname
-
-#### `env.user() -> string`
-
-Returns the current user's login name.
-
-**Returns:** `string` — The username
-
-#### `env.os() -> string`
-
-Returns the current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'.
-
-**Returns:** `string` — The OS name
-
-#### `env.arch() -> string`
-
-Returns the CPU architecture (e.g. 'x64', 'arm64').
-
-**Returns:** `string` — The architecture name
 
 #### `env.loadFile(path: string, ...prefix: string) -> int`
 

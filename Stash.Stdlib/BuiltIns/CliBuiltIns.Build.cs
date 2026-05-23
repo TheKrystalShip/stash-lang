@@ -54,9 +54,11 @@ public static partial class CliBuiltIns
 
     // ── cli.argv ──────────────────────────────────────────────────────────────
 
-    /// <summary>Returns the raw script argv as supplied by the host. Replaces args.list.</summary>
-    /// <returns>array&lt;string&gt; of script arguments (empty when invoked via -c or REPL)</returns>
-    [StashFn(ReturnType = "array")]
+    /// <summary>
+    /// The raw script argv as supplied by the host. Cached on first access; the returned
+    /// array is frozen — assignment into it raises a frozen-write error.
+    /// </summary>
+    [StashMember(ReturnType = "array")]
     private static List<StashValue> Argv(IInterpreterContext ctx)
     {
         var result = new List<StashValue>();
@@ -67,9 +69,11 @@ public static partial class CliBuiltIns
 
     // ── cli.argc ──────────────────────────────────────────────────────────────
 
-    /// <summary>Returns the number of raw script arguments. Replaces args.count.</summary>
-    /// <returns>int count of script arguments</returns>
-    [StashFn(ReturnType = "int")]
+    /// <summary>
+    /// The number of raw script arguments. Cached on first access and stable for the
+    /// process lifetime.
+    /// </summary>
+    [StashMember(ReturnType = "int")]
     private static long Argc(IInterpreterContext ctx)
     {
         return (long)(ctx.ScriptArgs?.Length ?? 0);

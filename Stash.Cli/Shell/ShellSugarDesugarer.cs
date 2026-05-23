@@ -108,7 +108,7 @@ internal static class ShellSugarDesugarer
 
         // `cd -` (or `cd "-"`, `cd \-` — all expand to the literal string "-") → pop dir.
         if (arg == "-")
-            return "env.popDir(); io.println(env.cwd());";
+            return "env.popDir(); io.println(env.cwd);";
 
         return $"env.chdir(\"{EscapeForStashString(arg)}\");";
     }
@@ -118,7 +118,7 @@ internal static class ShellSugarDesugarer
         if (args.Count > 0)
             throw new CommandError("pwd: too many arguments", exitCode: -1);
 
-        return "io.println(env.cwd());";
+        return "io.println(env.cwd);";
     }
 
     internal static string DesugarExit(string program, IReadOnlyList<string> args)

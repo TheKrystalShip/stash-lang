@@ -64,7 +64,7 @@ public class ShellSugarDesugarerTests
     public void Cd_DashLiteral_DesugarsToPopDirAndPrint()
     {
         string source = ShellSugarDesugarer.DesugarCd(["-"]);
-        Assert.Equal("env.popDir(); io.println(env.cwd());", source);
+        Assert.Equal("env.popDir(); io.println(env.cwd);", source);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class ShellSugarDesugarerTests
     public void Pwd_NoArgs_DesugarsToPrintCwd()
     {
         string source = ShellSugarDesugarer.DesugarPwd([]);
-        Assert.Equal("io.println(env.cwd());", source);
+        Assert.Equal("io.println(env.cwd);", source);
     }
 
     [Fact]

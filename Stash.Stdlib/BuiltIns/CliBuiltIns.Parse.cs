@@ -37,7 +37,7 @@ public static partial class CliBuiltIns
 
     /// <summary>Parses an argv array against a CliSchema. Never exits; returns a CliParseResult.</summary>
     /// <param name="schema">A CliSchema built by cli.schema()</param>
-    /// <param name="argv">Optional array of strings to parse (defaults to cli.argv())</param>
+    /// <param name="argv">Optional array of strings to parse (defaults to cli.argv)</param>
     /// <exception cref="TypeError">if schema is not a CliSchema</exception>
     /// <returns>CliParseResult with ok, value, error, and helpRequested fields</returns>
     [StashFn(Raw = true, ReturnType = "CliParseResult")]
@@ -92,7 +92,7 @@ public static partial class CliBuiltIns
 
     /// <summary>Parses an argv array against a CliSchema. On --help, prints help and exits 0. On failure, prints a short error to stderr and exits 2. On success, returns the parsed values dict.</summary>
     /// <param name="schema">A CliSchema built by cli.schema()</param>
-    /// <param name="argv">Optional array of strings to parse (defaults to cli.argv() / ScriptArgs)</param>
+    /// <param name="argv">Optional array of strings to parse (defaults to cli.argv / ScriptArgs)</param>
     /// <exception cref="TypeError">if schema is not a CliSchema</exception>
     /// <returns>dict of parsed values (same shape as cli.tryParse(...).value)</returns>
     [StashFn(Raw = true, Capability = StashCapabilities.Environment, ReturnType = "dict")]

@@ -67,7 +67,7 @@ const rebuilt = cli.build(schema, parsed);
 io.println("rebuilt argv: " + conv.toStr(rebuilt));
 
 // ── Raw argv access ──────────────────────────────────────────────────────────
-// cli.argv() and cli.argc() expose the raw script arguments without parsing.
+// cli.argv and cli.argc expose the raw script arguments without parsing.
 
-io.println("raw argv:  " + conv.toStr(cli.argv()));
-io.println("raw argc:  " + conv.toStr(cli.argc()));
+io.println("raw argv:  " + conv.toStr(cli.argv));
+io.println("raw argc:  " + conv.toStr(cli.argc));

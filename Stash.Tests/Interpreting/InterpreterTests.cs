@@ -5154,9 +5154,9 @@ fn makeAdder(x) {
         if (OperatingSystem.IsWindows()) return;
 
         var result = Run(@"
-            let original = env.cwd();
+            let original = env.cwd;
             env.chdir(""/tmp"");
-            let result = env.cwd();
+            let result = env.cwd;
             env.chdir(original);
         ");
         Assert.Equal("/tmp", result);
@@ -5184,7 +5184,7 @@ fn makeAdder(x) {
         if (OperatingSystem.IsWindows()) return;
 
         var result = Run(@"
-            let original = env.cwd();
+            let original = env.cwd;
             let result = env.chdir(""/tmp"");
             env.chdir(original);
         ");
@@ -5200,7 +5200,7 @@ fn makeAdder(x) {
 
         var result = Run(@"
             let result = env.withDir(""/tmp"", () => {
-                return env.cwd();
+                return env.cwd;
             });
         ");
         Assert.Equal("/tmp", result);
@@ -5212,9 +5212,9 @@ fn makeAdder(x) {
         if (OperatingSystem.IsWindows()) return;
 
         var result = Run(@"
-            let before = env.cwd();
+            let before = env.cwd;
             env.withDir(""/tmp"", () => {});
-            let result = env.cwd() == before;
+            let result = env.cwd == before;
         ");
         Assert.Equal(true, result);
     }
@@ -5225,13 +5225,13 @@ fn makeAdder(x) {
         if (OperatingSystem.IsWindows()) return;
 
         var result = Run(@"
-            let before = env.cwd();
+            let before = env.cwd;
             try {
                 env.withDir(""/tmp"", () => {
                     throw ""deliberate error"";
                 });
             }
-            let result = env.cwd() == before;
+            let result = env.cwd == before;
         ");
         Assert.Equal(true, result);
     }
@@ -5279,7 +5279,7 @@ fn makeAdder(x) {
         if (OperatingSystem.IsWindows()) return;
 
         var result = Run(@"
-            let result = env.withDir(""/tmp"", () => env.cwd());
+            let result = env.withDir(""/tmp"", () => env.cwd);
         ");
         Assert.Equal("/tmp", result);
     }
@@ -7559,7 +7559,7 @@ let result = labels;
     [Fact]
     public void EnvCwd_ReturnsString()
     {
-        var result = Run("let result = env.cwd();");
+        var result = Run("let result = env.cwd;");
         Assert.IsType<string>(result);
         Assert.True(((string)result!).Length > 0);
     }
@@ -7567,35 +7567,35 @@ let result = labels;
     [Fact]
     public void EnvHome_ReturnsString()
     {
-        var result = Run("let result = env.home();");
+        var result = Run("let result = env.home;");
         Assert.IsType<string>(result);
     }
 
     [Fact]
     public void EnvHostname_ReturnsString()
     {
-        var result = Run("let result = env.hostname();");
+        var result = Run("let result = env.hostname;");
         Assert.IsType<string>(result);
     }
 
     [Fact]
     public void EnvUser_ReturnsString()
     {
-        var result = Run("let result = env.user();");
+        var result = Run("let result = env.user;");
         Assert.IsType<string>(result);
     }
 
     [Fact]
     public void EnvOs_ReturnsKnownValue()
     {
-        var result = (string)Run("let result = env.os();")!;
+        var result = (string)Run("let result = env.os;")!;
         Assert.Contains(result, new[] { "linux", "macos", "windows", "unknown" });
     }
 
     [Fact]
     public void EnvArch_ReturnsString()
     {
-        var result = (string)Run("let result = env.arch();")!;
+        var result = (string)Run("let result = env.arch;")!;
         Assert.True(result.Length > 0);
     }
 

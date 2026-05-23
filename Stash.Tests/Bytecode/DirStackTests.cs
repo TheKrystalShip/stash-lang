@@ -82,7 +82,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         {
             var (chunk, vm) = BuildVM($$"""
                 env.chdir("{{dir}}");
-                return env.cwd();
+                return env.cwd;
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(resolvedDir, result);
@@ -155,7 +155,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
                 env.chdir("{{dir1}}");
                 env.chdir("{{dir2}}");
                 env.popDir();
-                return env.cwd();
+                return env.cwd;
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(resolvedDir1, result);
@@ -321,7 +321,7 @@ public class DirStackTests : Stash.Tests.Interpreting.StashTestBase
         {
             var (chunk, vm) = BuildVM($$"""
                 process.chdir("{{dir}}");
-                return env.cwd();
+                return env.cwd;
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(resolvedDir, result);

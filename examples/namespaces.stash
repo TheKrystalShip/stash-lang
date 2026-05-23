@@ -75,12 +75,12 @@ io.println();
 io.println("=== 2. Environment & System Info ===");
 
 // System profile
-io.println($"  User     : {env.user()}");
-io.println($"  Hostname : {env.hostname()}");
-io.println($"  OS       : {env.os()}");
-io.println($"  Arch     : {env.arch()}");
-io.println($"  Home     : {env.home()}");
-io.println($"  CWD      : {env.cwd()}");
+io.println($"  User     : {env.user}");
+io.println($"  Hostname : {env.hostname}");
+io.println($"  OS       : {env.os}");
+io.println($"  Arch     : {env.arch}");
+io.println($"  Home     : {env.home}");
+io.println($"  CWD      : {env.cwd}");
 
 // Read / write / check variables
 env.set("STASH_APP", "demo");

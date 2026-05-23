@@ -147,7 +147,7 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
         var orig = Environment.CurrentDirectory;
         try
         {
-            var result = Run($"env.chdir(\"{TestDir}\"); let result = env.cwd();");
+            var result = Run($"env.chdir(\"{TestDir}\"); let result = env.cwd;");
             Assert.Equal(TestDir, result);
         }
         finally
@@ -165,7 +165,7 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void WithDir_ExecutesInGivenDir()
     {
-        var result = Run($"let result = env.withDir(\"{TestDir}\", () => env.cwd());");
+        var result = Run($"let result = env.withDir(\"{TestDir}\", () => env.cwd);");
         Assert.Equal(TestDir, result);
     }
 
@@ -174,9 +174,9 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
     {
         var orig = Environment.CurrentDirectory;
         var result = Run(
-            $"let before = env.cwd();" +
+            $"let before = env.cwd;" +
             $"env.withDir(\"{TestDir}\", () => null);" +
-            $"let result = env.cwd();");
+            $"let result = env.cwd;");
         Assert.Equal(orig, result);
     }
 
