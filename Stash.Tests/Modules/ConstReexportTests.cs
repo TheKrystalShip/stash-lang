@@ -57,6 +57,26 @@ public class ConstReexportTests : AnalysisTestBase
         return Assert.ThrowsAny<RuntimeError>(() => vm.Execute(mainChunk));
     }
 
+    /// <summary>
+    /// Executes <paramref name="mainSource"/> inside a VM that resolves all module
+    /// paths to <paramref name="moduleChunk"/> and returns the value of a "result"
+    /// variable from the executed script.
+    /// </summary>
+    private static object? RunWithModule(Chunk moduleChunk, string mainSource)
+    {
+        string full = mainSource + "\nreturn result;";
+        var mainTokens = new Lexer(full, "<main>").ScanTokens();
+        var mainStmts = new Parser(mainTokens).ParseProgram();
+        SemanticResolver.Resolve(mainStmts);
+        var mainChunk = Compiler.Compile(mainStmts);
+
+        var globals = StdlibDefinitions.CreateVMGlobals();
+        var vm = new VirtualMachine(globals);
+        vm.ModuleLoader = (_, _) => moduleChunk;
+
+        return vm.Execute(mainChunk);
+    }
+
     // =========================================================================
     // Static SA0845 — user-module alias assignment
     // =========================================================================
@@ -158,5 +178,47 @@ public class ConstReexportTests : AnalysisTestBase
         Assert.IsType<ReadOnlyError>(error);
         // The error message should mention the namespace name.
         Assert.Contains("mod", error.Message);
+    }
+
+    // =========================================================================
+    // F04 — Function-reference behavior for user-module aliases (coverage pin)
+    //
+    // The brief (§ Function References, Decision Log 2026-05-23) states that
+    // `ns.fn` is uniform across stdlib and user-module receivers — both go
+    // through StashNamespace.VMGetField and yield a callable value.
+    // These tests pin the user-module half of that contract.
+    // =========================================================================
+
+    [Fact]
+    public void ImportAs_FunctionReference_CaptureAndCall_ReturnsCorrectValue()
+    {
+        // Module exports a simple fn helper(x) { return x + 1; }
+        Chunk moduleChunk = CompileModule("""
+            export fn helper(x) { return x + 1; }
+            """);
+
+        // Capture the reference bare (no parens), call it, assign to result.
+        object? result = RunWithModule(moduleChunk, """
+            import "./f.stash" as f;
+            let h = f.helper;
+            let result = h(41);
+            """);
+
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void ImportAs_FunctionReference_TypeofIsFunction()
+    {
+        Chunk moduleChunk = CompileModule("""
+            export fn helper(x) { return x + 1; }
+            """);
+
+        object? result = RunWithModule(moduleChunk, """
+            import "./f.stash" as f;
+            let result = typeof(f.helper);
+            """);
+
+        Assert.Equal("function", result);
     }
 }
