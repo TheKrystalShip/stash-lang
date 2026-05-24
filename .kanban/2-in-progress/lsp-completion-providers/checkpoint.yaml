@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-completion-providers
 current: null
-updated: '2026-05-24T00:19:17Z'
+updated: '2026-05-24T00:42:00Z'
 phases:
   P1:
     status: done
@@ -31,13 +31,14 @@ phases:
     notes: DotCompletionProvider + 6 IDotStrategy sub-objects port HandleDotCompletion; parallel-path
       test seam extended to Dot mode; DotResolutionContext added (plan correction)
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 549e2345bab9c3f031526449fd9c18a4227e9426
+    verified: true
+    started: '2026-05-24T00:24:36Z'
+    completed: '2026-05-24T00:42:00Z'
+    attempts: 1
+    notes: CursorContextClassifier + ImportPath/IsType/ExtendType providers; ExtendType derives built-in
+      set from PrimitiveTypes; all 58 tests pass
   P5:
     status: pending
     commit: null
