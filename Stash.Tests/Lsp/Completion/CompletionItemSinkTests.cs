@@ -39,9 +39,9 @@ public class CompletionItemSinkTests
     public void Add_DistinctLabels_AllKept()
     {
         var sink = new CompletionItemSink(CompletionMode.Default);
-        sink.Add(new CompletionCandidate("alpha", LspCompletionItemKind.Keyword));
-        sink.Add(new CompletionCandidate("beta",  LspCompletionItemKind.Function));
-        sink.Add(new CompletionCandidate("gamma", LspCompletionItemKind.Variable));
+        sink.Add(new CompletionCandidate("alpha", LspCompletionItemKind.Keyword, SourceTag: "t"));
+        sink.Add(new CompletionCandidate("beta",  LspCompletionItemKind.Function, SourceTag: "t"));
+        sink.Add(new CompletionCandidate("gamma", LspCompletionItemKind.Variable, SourceTag: "t"));
 
         var list  = sink.Materialize();
         Assert.Equal(3, list.Items.Count());
@@ -57,7 +57,7 @@ public class CompletionItemSinkTests
         var sink = new CompletionItemSink(CompletionMode.Default);
         var labels = new[] { "charlie", "alpha", "bravo" };
         foreach (var l in labels)
-            sink.Add(new CompletionCandidate(l, LspCompletionItemKind.Keyword));
+            sink.Add(new CompletionCandidate(l, LspCompletionItemKind.Keyword, SourceTag: "t"));
 
         var materialized = sink.Materialize().Items.Select(i => i.Label).ToList();
         Assert.Equal(labels, materialized);
@@ -74,6 +74,7 @@ public class CompletionItemSinkTests
         var candidate = new CompletionCandidate(
             "fieldName",
             LspCompletionItemKind.Field,
+            SourceTag: "t",
             Accessibility: SymbolAccessibility.RequiresQualification);
 
         sink.Add(candidate);
@@ -89,6 +90,7 @@ public class CompletionItemSinkTests
         var candidate = new CompletionCandidate(
             "fieldName",
             LspCompletionItemKind.Field,
+            SourceTag: "t",
             Accessibility: SymbolAccessibility.RequiresQualification);
 
         sink.Add(candidate);
@@ -105,6 +107,7 @@ public class CompletionItemSinkTests
         var candidate = new CompletionCandidate(
             "myVar",
             LspCompletionItemKind.Variable,
+            SourceTag: "t",
             Accessibility: SymbolAccessibility.BareIdentifier);
 
         sink.Add(candidate);
@@ -118,7 +121,7 @@ public class CompletionItemSinkTests
     {
         // Unclassified candidates (no Accessibility set) must not be filtered.
         var sink = new CompletionItemSink(CompletionMode.Default);
-        var candidate = new CompletionCandidate("unclassified", LspCompletionItemKind.Keyword);
+        var candidate = new CompletionCandidate("unclassified", LspCompletionItemKind.Keyword, SourceTag: "t");
 
         sink.Add(candidate);
 
@@ -145,18 +148,4 @@ public class CompletionItemSinkTests
         Assert.Equal("StdlibFunctionProvider", item.Data?.ToString());
     }
 
-    [Fact]
-    public void Add_CandidateWithoutSourceTag_DataIsNullOrEmpty()
-    {
-        // When no SourceTag is set, Data must not carry a source tag string.
-        // OmniSharp wraps null Data in a JToken whose ToString() returns "".
-        var sink = new CompletionItemSink(CompletionMode.Default);
-        var candidate = new CompletionCandidate("println", LspCompletionItemKind.Function);
-
-        sink.Add(candidate);
-
-        var item = sink.Materialize().Items.Single();
-        Assert.True(string.IsNullOrEmpty(item.Data?.ToString()),
-            $"Expected Data to be null or empty when SourceTag is absent, but was: '{item.Data}'");
-    }
 }

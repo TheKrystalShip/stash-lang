@@ -97,7 +97,7 @@ public sealed class CompletionItemSink
                 : null,
             // Round-trip SourceTag through Data so diagnostics and snapshot tests can
             // inspect which provider contributed each item after materialization.
-            // Null when no tag is set so that callers' null checks remain meaningful.
+            // SourceTag is non-nullable on CompletionCandidate (Decision Log Q1: always track).
             Data = candidate.SourceTag
         };
 

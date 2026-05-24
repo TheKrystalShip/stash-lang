@@ -23,10 +23,10 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// the same label. Defaults to <c>100</c>.
 /// </param>
 /// <param name="SourceTag">
-/// Optional opaque tag identifying which provider produced this candidate.
+/// Opaque tag identifying which provider produced this candidate.
 /// Always tracked per the Q1 decision in the feature Decision Log — invaluable for
-/// diagnosing "wrong completion appeared" reports. Never <see langword="null"/> when
-/// set; omit by passing <see langword="null"/>.
+/// diagnosing "wrong completion appeared" reports. Must not be <see langword="null"/>;
+/// providers must supply a non-empty string (e.g. <c>nameof(MyProvider)</c>).
 /// </param>
 /// <param name="Accessibility">
 /// Carries the originating <see cref="SymbolAccessibility"/> so the sink can enforce
@@ -40,5 +40,5 @@ public sealed record CompletionCandidate(
     string? Detail = null,
     string? Documentation = null,
     int SourcePriority = 100,
-    string? SourceTag = null,
+    string SourceTag = "",
     SymbolAccessibility? Accessibility = null);

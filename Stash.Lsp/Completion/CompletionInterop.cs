@@ -12,23 +12,51 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 public static class CompletionInterop
 {
     /// <summary>
-    /// Maps a Stash <see cref="StashSymbolKind"/> to the equivalent LSP completion item kind.
+    /// Maps a Stash <see cref="StashSymbolKind"/> to the LSP completion kind appropriate
+    /// for a <strong>bare identifier</strong> context (Default-mode completion).
+    /// </summary>
+    /// <param name="kind">The Stash symbol kind to map.</param>
+    /// <returns>
+    /// The equivalent LSP completion item kind, or <see langword="null"/> when
+    /// <paramref name="kind"/> is a member-only kind (<c>Field</c>, <c>EnumMember</c>)
+    /// that must never appear as a bare identifier.
+    /// Callers in Default-mode providers should skip the candidate when <see langword="null"/>
+    /// is returned — this indicates a provider bug (member kind bypassed the accessibility
+    /// pre-filter).
+    /// </returns>
+    public static LspCompletionItemKind? MapBareIdentifierKind(StashSymbolKind kind) => kind switch
+    {
+        StashSymbolKind.Function     => LspCompletionItemKind.Function,
+        StashSymbolKind.Variable     => LspCompletionItemKind.Variable,
+        StashSymbolKind.Constant     => LspCompletionItemKind.Constant,
+        StashSymbolKind.Struct       => LspCompletionItemKind.Struct,
+        StashSymbolKind.Enum         => LspCompletionItemKind.Enum,
+        StashSymbolKind.Parameter    => LspCompletionItemKind.Variable,
+        StashSymbolKind.LoopVariable => LspCompletionItemKind.Variable,
+        StashSymbolKind.Namespace    => LspCompletionItemKind.Module,
+        // Field and EnumMember are member-only kinds — not valid as bare identifiers.
+        _                            => null
+    };
+
+    /// <summary>
+    /// Maps a Stash <see cref="StashSymbolKind"/> to the LSP completion kind appropriate
+    /// for a <strong>dot-access</strong> context (Dot-mode completion strategies).
     /// </summary>
     /// <param name="kind">The Stash symbol kind to map.</param>
     /// <returns>The equivalent LSP completion item kind.</returns>
-    public static LspCompletionItemKind MapCompletionKind(StashSymbolKind kind) => kind switch
+    public static LspCompletionItemKind MapMemberKind(StashSymbolKind kind) => kind switch
     {
-        StashSymbolKind.Function => LspCompletionItemKind.Function,
-        StashSymbolKind.Variable => LspCompletionItemKind.Variable,
-        StashSymbolKind.Constant => LspCompletionItemKind.Constant,
-        StashSymbolKind.Struct => LspCompletionItemKind.Struct,
-        StashSymbolKind.Enum => LspCompletionItemKind.Enum,
-        StashSymbolKind.EnumMember => LspCompletionItemKind.EnumMember,
-        StashSymbolKind.Field => LspCompletionItemKind.Field,
-        StashSymbolKind.Parameter => LspCompletionItemKind.Variable,
+        StashSymbolKind.Function     => LspCompletionItemKind.Function,
+        StashSymbolKind.Variable     => LspCompletionItemKind.Variable,
+        StashSymbolKind.Constant     => LspCompletionItemKind.Constant,
+        StashSymbolKind.Struct       => LspCompletionItemKind.Struct,
+        StashSymbolKind.Enum         => LspCompletionItemKind.Enum,
+        StashSymbolKind.EnumMember   => LspCompletionItemKind.EnumMember,
+        StashSymbolKind.Field        => LspCompletionItemKind.Field,
+        StashSymbolKind.Parameter    => LspCompletionItemKind.Variable,
         StashSymbolKind.LoopVariable => LspCompletionItemKind.Variable,
-        StashSymbolKind.Namespace => LspCompletionItemKind.Module,
-        _ => LspCompletionItemKind.Text
+        StashSymbolKind.Namespace    => LspCompletionItemKind.Module,
+        _                            => LspCompletionItemKind.Text
     };
 
     /// <summary>

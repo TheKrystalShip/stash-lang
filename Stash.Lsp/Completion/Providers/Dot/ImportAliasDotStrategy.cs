@@ -36,7 +36,7 @@ public sealed class ImportAliasDotStrategy : IDotStrategy
         {
             yield return new CompletionCandidate(
                 Label: sym.Name,
-                Kind: CompletionInterop.MapCompletionKind(sym.Kind),
+                Kind: CompletionInterop.MapMemberKind(sym.Kind),
                 Detail: sym.Detail,
                 SourcePriority: 110,
                 SourceTag: nameof(ImportAliasDotStrategy));

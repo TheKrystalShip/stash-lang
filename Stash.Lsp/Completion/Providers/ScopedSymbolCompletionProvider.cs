@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using Stash.Analysis;
 using Stash.Lsp.Handlers;
 using Stash.Stdlib;
-using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 
 /// <summary>
 /// Emits <see cref="CompletionCandidate"/> instances for user-defined and user-visible
@@ -78,9 +77,15 @@ public sealed class ScopedSymbolCompletionProvider : ICompletionProvider
                     doc = (doc ?? "") + throwsSection;
             }
 
+            // MapBareIdentifierKind returns null for member-only kinds (Field, EnumMember).
+            // The accessibility pre-filter above makes this branch structurally unreachable;
+            // skip defensively in case a future change breaks that invariant.
+            var lspKind = CompletionInterop.MapBareIdentifierKind(sym.Kind);
+            if (lspKind is null) continue;
+
             yield return new CompletionCandidate(
                 Label: sym.Name,
-                Kind: CompletionInterop.MapCompletionKind(sym.Kind),
+                Kind: lspKind.Value,
                 Detail: sym.Detail,
                 Documentation: doc,
                 SourcePriority: 40,
