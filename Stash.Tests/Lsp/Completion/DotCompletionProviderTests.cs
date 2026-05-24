@@ -366,7 +366,7 @@ public class DotCompletionProviderTests
         var liveUri = new Uri($"file:///test/live_{Guid.NewGuid():N}.stash");
         liveDocs.Open(liveUri, src, 1);
         liveEngine.Analyze(liveUri, src);
-        var liveHandler = new CompletionHandler(liveEngine, liveDocs, liveLogger);
+        var liveHandler = new CompletionHandler(liveEngine, liveDocs, liveLogger, BuildDispatcher());
 
         var request = new CompletionParams
         {
@@ -396,7 +396,7 @@ public class DotCompletionProviderTests
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
 
-        var handler = new CompletionHandler(engine, docs, logger, useNewPipeline: true);
+        var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
 
         // Position cursor at the end of the line containing prefix + "."
         var lines = source.Split('\n');
@@ -439,7 +439,7 @@ public class DotCompletionProviderTests
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
 
-        var handler = new CompletionHandler(engine, docs, logger);
+        var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
 
         var lines = source.Split('\n');
         int dotLine = 0;
@@ -599,5 +599,24 @@ public class DotCompletionProviderTests
         var ctx = BuildDotContext(prefix, source);
         var resolution = new DotResolutionContext(PrefixDef: null, StructName: prefix);
         return new NamespaceImportEnumDotStrategy().Apply(ctx, prefix, resolution);
+    }
+
+    private static CompletionDispatcher BuildDispatcher()
+    {
+        var pipelines = new System.Collections.Generic.Dictionary<CompletionMode, System.Collections.Generic.IReadOnlyList<ICompletionProvider>>
+        {
+            [CompletionMode.Default] = new ICompletionProvider[]
+            {
+                new KeywordCompletionProvider(),
+                new StdlibFunctionCompletionProvider(),
+                new StdlibNamespaceCompletionProvider(),
+                new ScopedSymbolCompletionProvider(),
+            },
+            [CompletionMode.Dot] = new ICompletionProvider[] { new DotCompletionProvider() },
+            [CompletionMode.ImportString] = new ICompletionProvider[] { new ImportPathCompletionProvider() },
+            [CompletionMode.AfterIs] = new ICompletionProvider[] { new IsTypeCompletionProvider() },
+            [CompletionMode.AfterExtend] = new ICompletionProvider[] { new ExtendTypeCompletionProvider() },
+        };
+        return new CompletionDispatcher(pipelines);
     }
 }

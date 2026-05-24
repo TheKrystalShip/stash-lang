@@ -40,10 +40,9 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// </list>
 /// <para>
 ///   Documentation for user functions with <c>@throws</c> entries is rendered via
-///   <see cref="CompletionHandler.AdaptThrows"/> and
+///   <see cref="CompletionInterop.AdaptThrows"/> and
 ///   <see cref="ThrowsRenderer.Render"/> to match the behaviour of the monolith's
-///   <c>BuildFullCompletionList</c>. Both helpers remain on <c>CompletionHandler</c>
-///   as <c>internal static</c> until Phase 5 relocates them.
+///   <c>BuildFullCompletionList</c>.
 /// </para>
 /// </remarks>
 public sealed class ScopedSymbolCompletionProvider : ICompletionProvider
@@ -75,7 +74,7 @@ public sealed class ScopedSymbolCompletionProvider : ICompletionProvider
             string? doc = sym.Documentation;
             if (sym.Throws != null)
             {
-                var adapted = CompletionHandler.AdaptThrows(sym.Throws);
+                var adapted = CompletionInterop.AdaptThrows(sym.Throws);
                 var throwsSection = ThrowsRenderer.Render(adapted);
                 if (throwsSection != null)
                     doc = (doc ?? "") + throwsSection;
@@ -83,11 +82,11 @@ public sealed class ScopedSymbolCompletionProvider : ICompletionProvider
 
             yield return new CompletionCandidate(
                 Label: sym.Name,
-                Kind: CompletionHandler.MapCompletionKind(sym.Kind),
+                Kind: CompletionInterop.MapCompletionKind(sym.Kind),
                 Detail: sym.Detail,
                 Documentation: doc,
                 SourcePriority: 40,
-                SourceTag: "ScopedSymbolCompletionProvider",
+                SourceTag: nameof(ScopedSymbolCompletionProvider),
                 Accessibility: sym.Accessibility);
         }
     }

@@ -8,6 +8,9 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using Stash.Lsp.Completion;
+using Stash.Lsp.Completion.Providers;
+using Stash.Lsp.Completion.Providers.Dot;
 using Stash.Lsp.Handlers;
 
 /// <summary>
@@ -43,6 +46,36 @@ public static class StashLanguageServer
                     services.AddSingleton<DocumentManager>();
                     services.AddSingleton<AnalysisEngine>();
                     services.AddSingleton<WorkspaceScanner>();
+                    services.AddSingleton<CompletionDispatcher>(_ =>
+                    {
+                        var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
+                        {
+                            [CompletionMode.Default] = new ICompletionProvider[]
+                            {
+                                new KeywordCompletionProvider(),
+                                new StdlibFunctionCompletionProvider(),
+                                new StdlibNamespaceCompletionProvider(),
+                                new ScopedSymbolCompletionProvider(),
+                            },
+                            [CompletionMode.Dot] = new ICompletionProvider[]
+                            {
+                                new DotCompletionProvider(),
+                            },
+                            [CompletionMode.ImportString] = new ICompletionProvider[]
+                            {
+                                new ImportPathCompletionProvider(),
+                            },
+                            [CompletionMode.AfterIs] = new ICompletionProvider[]
+                            {
+                                new IsTypeCompletionProvider(),
+                            },
+                            [CompletionMode.AfterExtend] = new ICompletionProvider[]
+                            {
+                                new ExtendTypeCompletionProvider(),
+                            },
+                        };
+                        return new CompletionDispatcher(pipelines);
+                    });
                 })
                 .WithHandler<TextDocumentSyncHandler>()
                 .WithHandler<DocumentSymbolHandler>()

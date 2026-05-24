@@ -9,6 +9,7 @@ using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Stash.Lsp.Completion;
 using Stash.Lsp.Completion.Providers;
+using Stash.Lsp.Completion.Providers.Dot;
 using Stash.Lsp.Handlers;
 using Stash.Stdlib;
 using Xunit;
@@ -311,7 +312,7 @@ public class DefaultModeProvidersTests
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
 
-        var handler = new CompletionHandler(engine, docs, logger, useNewPipeline: true);
+        var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
 
         var request = new CompletionParams
         {
@@ -341,8 +342,9 @@ public class DefaultModeProvidersTests
         docs.Open(uri, fullSource, 1);
         engine.Analyze(uri, fullSource);
 
-        var liveHandler = new CompletionHandler(engine, docs, logger);
-        var newHandler  = new CompletionHandler(engine, docs, logger, useNewPipeline: true);
+        var dispatcher = BuildDispatcher();
+        var liveHandler = new CompletionHandler(engine, docs, logger, dispatcher);
+        var newHandler  = liveHandler; // single pipeline post-cutover
 
         var request = new CompletionParams
         {
@@ -387,5 +389,24 @@ public class DefaultModeProvidersTests
             DotPrefix: null,
             Analysis: result,
             TriggerCharacter: null);
+    }
+
+    private static CompletionDispatcher BuildDispatcher()
+    {
+        var pipelines = new System.Collections.Generic.Dictionary<CompletionMode, System.Collections.Generic.IReadOnlyList<ICompletionProvider>>
+        {
+            [CompletionMode.Default] = new ICompletionProvider[]
+            {
+                new KeywordCompletionProvider(),
+                new StdlibFunctionCompletionProvider(),
+                new StdlibNamespaceCompletionProvider(),
+                new ScopedSymbolCompletionProvider(),
+            },
+            [CompletionMode.Dot] = new ICompletionProvider[] { new DotCompletionProvider() },
+            [CompletionMode.ImportString] = new ICompletionProvider[] { new ImportPathCompletionProvider() },
+            [CompletionMode.AfterIs] = new ICompletionProvider[] { new IsTypeCompletionProvider() },
+            [CompletionMode.AfterExtend] = new ICompletionProvider[] { new ExtendTypeCompletionProvider() },
+        };
+        return new CompletionDispatcher(pipelines);
     }
 }

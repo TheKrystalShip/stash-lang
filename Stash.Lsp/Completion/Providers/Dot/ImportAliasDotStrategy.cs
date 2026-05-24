@@ -1,7 +1,6 @@
 namespace Stash.Lsp.Completion.Providers.Dot;
 
 using System.Collections.Generic;
-using Stash.Lsp.Handlers;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 
 /// <summary>
@@ -38,7 +37,7 @@ public sealed class ImportAliasDotStrategy : IDotStrategy
         {
             yield return new CompletionCandidate(
                 Label: sym.Name,
-                Kind: CompletionHandler.MapCompletionKind(sym.Kind),
+                Kind: CompletionInterop.MapCompletionKind(sym.Kind),
                 Detail: sym.Detail,
                 SourcePriority: 110,
                 SourceTag: nameof(ImportAliasDotStrategy));

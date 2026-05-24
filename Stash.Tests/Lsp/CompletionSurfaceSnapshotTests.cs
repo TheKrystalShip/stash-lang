@@ -13,8 +13,12 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
 using Stash.Stdlib;
 using Stash.Lsp.Analysis;
+using Stash.Lsp.Completion;
+using Stash.Lsp.Completion.Providers;
+using Stash.Lsp.Completion.Providers.Dot;
 using Stash.Lsp.Handlers;
 using Xunit;
+using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext;
 
 /// <summary>
 /// Golden snapshot tests for the LSP completion surface at canonical cursor positions.
@@ -230,16 +234,35 @@ public class CompletionSurfaceSnapshotTests
         var uri = new Uri($"file:///test/snapshot_{Guid.NewGuid():N}.stash");
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
-        var handler = new CompletionHandler(engine, docs, logger);
+        var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
 
         var request = new CompletionParams
         {
             TextDocument = new TextDocumentIdentifier { Uri = uri },
             Position = new Position { Line = line, Character = character },
-            Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+            Context = new LspCompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
         };
 
         var result = handler.Handle(request, default).Result;
         return result.Items ?? Enumerable.Empty<CompletionItem>();
+    }
+
+    private static CompletionDispatcher BuildDispatcher()
+    {
+        var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
+        {
+            [CompletionMode.Default] = new ICompletionProvider[]
+            {
+                new KeywordCompletionProvider(),
+                new StdlibFunctionCompletionProvider(),
+                new StdlibNamespaceCompletionProvider(),
+                new ScopedSymbolCompletionProvider(),
+            },
+            [CompletionMode.Dot] = new ICompletionProvider[] { new DotCompletionProvider() },
+            [CompletionMode.ImportString] = new ICompletionProvider[] { new ImportPathCompletionProvider() },
+            [CompletionMode.AfterIs] = new ICompletionProvider[] { new IsTypeCompletionProvider() },
+            [CompletionMode.AfterExtend] = new ICompletionProvider[] { new ExtendTypeCompletionProvider() },
+        };
+        return new CompletionDispatcher(pipelines);
     }
 }

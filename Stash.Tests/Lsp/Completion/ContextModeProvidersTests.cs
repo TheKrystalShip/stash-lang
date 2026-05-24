@@ -10,6 +10,7 @@ using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Stash.Lsp.Completion;
 using Stash.Lsp.Completion.Providers;
+using Stash.Lsp.Completion.Providers.Dot;
 using Stash.Common;
 using Stash.Stdlib;
 using Xunit;
@@ -457,8 +458,9 @@ public class ContextModeProvidersTests
         docs.Open(uri, fullSource, 1);
         engine.Analyze(uri, fullSource);
 
-        var liveHandler = new Stash.Lsp.Handlers.CompletionHandler(engine, docs, logger);
-        var newHandler  = new Stash.Lsp.Handlers.CompletionHandler(engine, docs, logger, useNewPipeline: true);
+        var dispatcher = BuildDispatcher();
+        var liveHandler = new Stash.Lsp.Handlers.CompletionHandler(engine, docs, logger, dispatcher);
+        var newHandler  = liveHandler; // single pipeline post-cutover
 
         var request = new CompletionParams
         {
@@ -516,5 +518,24 @@ public class ContextModeProvidersTests
         {
             try { Directory.Delete(Root, recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    private static Stash.Lsp.Completion.CompletionDispatcher BuildDispatcher()
+    {
+        var pipelines = new Dictionary<Stash.Lsp.Completion.CompletionMode, IReadOnlyList<Stash.Lsp.Completion.ICompletionProvider>>
+        {
+            [Stash.Lsp.Completion.CompletionMode.Default] = new Stash.Lsp.Completion.ICompletionProvider[]
+            {
+                new KeywordCompletionProvider(),
+                new StdlibFunctionCompletionProvider(),
+                new StdlibNamespaceCompletionProvider(),
+                new ScopedSymbolCompletionProvider(),
+            },
+            [Stash.Lsp.Completion.CompletionMode.Dot] = new Stash.Lsp.Completion.ICompletionProvider[] { new DotCompletionProvider() },
+            [Stash.Lsp.Completion.CompletionMode.ImportString] = new Stash.Lsp.Completion.ICompletionProvider[] { new ImportPathCompletionProvider() },
+            [Stash.Lsp.Completion.CompletionMode.AfterIs] = new Stash.Lsp.Completion.ICompletionProvider[] { new IsTypeCompletionProvider() },
+            [Stash.Lsp.Completion.CompletionMode.AfterExtend] = new Stash.Lsp.Completion.ICompletionProvider[] { new ExtendTypeCompletionProvider() },
+        };
+        return new Stash.Lsp.Completion.CompletionDispatcher(pipelines);
     }
 }

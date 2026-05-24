@@ -13,8 +13,12 @@ using Stash.Stdlib;
 using Stash.Stdlib.Models;
 using Stash.Stdlib.Abstractions;
 using Stash.Lsp.Analysis;
+using Stash.Lsp.Completion;
+using Stash.Lsp.Completion.Providers;
+using Stash.Lsp.Completion.Providers.Dot;
 using Stash.Lsp.Handlers;
 using Xunit;
+using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext;
 
 /// <summary>
 /// Tests for P6: LSP completion and hover over built-in namespace data members
@@ -317,13 +321,13 @@ public class NamespaceMembersLspTests
         var uri = new Uri($"file:///test/unqualified_{Guid.NewGuid():N}.stash");
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
-        var handler = new CompletionHandler(engine, docs, logger);
+        var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
 
         var request = new CompletionParams
         {
             TextDocument = new TextDocumentIdentifier { Uri = uri },
             Position = new Position { Line = line, Character = character },
-            Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+            Context = new LspCompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
         };
 
         var result = handler.Handle(request, default).Result;
@@ -343,7 +347,7 @@ public class NamespaceMembersLspTests
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
 
-        return (new CompletionHandler(engine, docs, logger), uri, source);
+        return (new CompletionHandler(engine, docs, logger, BuildDispatcher()), uri, source);
     }
 
     /// <summary>
@@ -363,17 +367,36 @@ public class NamespaceMembersLspTests
         var testUri = new Uri($"file:///test/completions_{prefix}.stash");
         docs.Open(testUri, testSource, 1);
         engine.Analyze(testUri, testSource);
-        var testHandler = new CompletionHandler(engine, docs, newLogger);
+        var testHandler = new CompletionHandler(engine, docs, newLogger, BuildDispatcher());
 
         // The dot is at position (0, prefix.Length + 1) — we want completions after the dot.
         var request = new CompletionParams
         {
             TextDocument = new TextDocumentIdentifier { Uri = testUri },
             Position = new Position { Line = 0, Character = prefix.Length + 1 },
-            Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
+            Context = new LspCompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
         };
 
         var result = testHandler.Handle(request, default).Result;
         return result.Items ?? Enumerable.Empty<CompletionItem>();
+    }
+
+    private static CompletionDispatcher BuildDispatcher()
+    {
+        var pipelines = new System.Collections.Generic.Dictionary<CompletionMode, System.Collections.Generic.IReadOnlyList<ICompletionProvider>>
+        {
+            [CompletionMode.Default] = new ICompletionProvider[]
+            {
+                new KeywordCompletionProvider(),
+                new StdlibFunctionCompletionProvider(),
+                new StdlibNamespaceCompletionProvider(),
+                new ScopedSymbolCompletionProvider(),
+            },
+            [CompletionMode.Dot] = new ICompletionProvider[] { new DotCompletionProvider() },
+            [CompletionMode.ImportString] = new ICompletionProvider[] { new ImportPathCompletionProvider() },
+            [CompletionMode.AfterIs] = new ICompletionProvider[] { new IsTypeCompletionProvider() },
+            [CompletionMode.AfterExtend] = new ICompletionProvider[] { new ExtendTypeCompletionProvider() },
+        };
+        return new CompletionDispatcher(pipelines);
     }
 }
