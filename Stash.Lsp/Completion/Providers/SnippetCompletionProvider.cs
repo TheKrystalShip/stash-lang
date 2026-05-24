@@ -12,36 +12,33 @@ using LspInsertTextFormat = OmniSharp.Extensions.LanguageServer.Protocol.Models.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <see cref="SourcePriority"/> is <c>50</c> — strictly greater than
-/// <see cref="ScopedSymbolCompletionProvider"/>'s priority of <c>40</c>. In the sink's
-/// first-wins label dedup race this means a user-scoped symbol that shares a label with
-/// a snippet prefix wins (the symbol provider runs earlier in the pipeline, lower number =
-/// higher precedence). Decision Log Q9.
+/// <see cref="SourcePriority"/> is <c>1000</c> — deliberately deprioritised far below every
+/// other Default-mode provider (keywords=10, stdlib fns=20, stdlib namespaces=30, scoped
+/// symbols=40) so snippets never get in the way of normal typing. Users see them only after
+/// scrolling past the higher-signal candidates. This matches the project policy that
+/// completion should not surprise users with workflow templates when they know what they
+/// want to type. (Decision Log: user feedback after P2.)
 /// </para>
 /// <para>
 /// In P2, every bundled snippet has <c>Scope = Any</c>, so no cursor-position gating is
 /// applied. P4 introduces <c>SnippetContext.Classify</c> to restrict scope-gated snippets.
 /// </para>
 /// <para>
-/// <b>Note on keyword-prefix collisions:</b> several bundled snippets share a prefix with
-/// a Stash keyword (e.g. <c>fn</c>, <c>let</c>, <c>for</c>, <c>if</c>, <c>struct</c>).
-/// Because <see cref="KeywordCompletionProvider"/> runs first in the Default pipeline
-/// (priority 10) and the sink does label-based first-wins dedup, these snippet candidates
-/// are silently dropped. Only non-keyword prefixes (e.g. <c>fori</c>, <c>ife</c>) surface
-/// in Default mode. This is intentional per Decision Log Q9: user-visible symbols — and
-/// keywords — shadow snippets sharing their label. Full snippet surfacing for keyword-prefix
-/// snippets requires P4's context-aware pipeline ordering or a separate snippet-only
-/// resolution path.
+/// <b>Note on keyword-prefix collisions:</b> snippet prefixes must NOT shadow Stash
+/// keywords (<c>fn</c>, <c>let</c>, <c>for</c>, <c>if</c>, <c>struct</c>, etc.). The bundled
+/// seed renames them to non-keyword forms (<c>fnd</c>, <c>letv</c>, <c>fore</c>, <c>ifc</c>,
+/// <c>strc</c>) so all 7 snippets actually surface. Project / user snippet sources added in
+/// later phases inherit this rule via <c>SnippetValidator</c> — see Decision Log Q1.
 /// </para>
 /// </remarks>
 public sealed class SnippetCompletionProvider : ICompletionProvider
 {
     /// <summary>
-    /// Priority value for snippet candidates.
-    /// Strictly greater than <see cref="ScopedSymbolCompletionProvider"/>'s priority (40),
-    /// so user symbols win the dedup race over same-prefixed snippets.
+    /// Priority value for snippet candidates. Set deliberately high (lower precedence) at
+    /// <c>1000</c> so snippets land below every other Default-mode provider — users have to
+    /// scroll past keywords / stdlib / scoped symbols to find them.
     /// </summary>
-    public const int SourcePriority = 50;
+    public const int SourcePriority = 1000;
 
     private readonly ISnippetRegistry _registry;
 

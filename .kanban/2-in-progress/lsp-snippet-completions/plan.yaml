@@ -101,6 +101,15 @@ phases:
       and can be stubbed in tests (the regression test injects a no-op facade
       and asserts the logger received the structured payload).
 
+      LOAD-ERRORS CONTRACT (load-bearing, P2 plan correction): ISnippetRegistry
+      gained a LoadErrors accessor in P2 — this phase consumes it as the single
+      source. The reporter MUST surface every LoadErrors entry via both
+      window/showMessage AND ILogger.LogError exactly once per LSP startup so
+      users see every invalid snippet (name + reason + source) and can fix
+      them. Errors that aren't surfaced are pure noise. Pin a test asserting
+      "for every LoadErrors entry, exactly one ShowMessage and one LogError
+      fired carrying the matching SnippetId in the payload."
+
   - id: P4
     title: Context-aware snippets — scope vocabulary, SnippetContext helper, provider gating
     deps: [P3]

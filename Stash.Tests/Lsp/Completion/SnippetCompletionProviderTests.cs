@@ -67,9 +67,9 @@ public class SnippetCompletionProviderTests
     }
 
     [Fact]
-    public void SnippetCompletionProvider_SourcePriority_Is50()
+    public void SnippetCompletionProvider_SourcePriority_Is1000()
     {
-        Assert.Equal(50, SnippetCompletionProvider.SourcePriority);
+        Assert.Equal(1000, SnippetCompletionProvider.SourcePriority);
     }
 
     [Fact]
@@ -81,7 +81,7 @@ public class SnippetCompletionProviderTests
         var candidates = provider.Provide(ctx).ToList();
 
         Assert.Single(candidates);
-        Assert.Equal(50, candidates[0].SourcePriority);
+        Assert.Equal(1000, candidates[0].SourcePriority);
     }
 
     // ── Candidate shape ──────────────────────────────────────────────────────────
@@ -172,12 +172,12 @@ public class SnippetCompletionProviderTests
     }
 
     [Fact]
-    public void EndToEnd_DefaultMode_KeywordPrefixSnippets_ShadowedByKeywordProvider()
+    public void EndToEnd_DefaultMode_KeywordsAndSnippetsCoexistWithoutCollision()
     {
-        // "fn", "let", "for", "if", "struct" are Stash keywords — KeywordCompletionProvider
-        // (priority 10) runs first and wins the dedup race. The same-prefix snippet entries
-        // are silently dropped by the sink. This is intentional per Decision Log Q9.
-        // Verify: the items appear with Kind=Keyword, NOT Kind=Snippet.
+        // Snippet prefixes were renamed away from Stash keywords (fn→fnd, let→letv,
+        // for→fore, if→ifc, struct→strc) so each label has exactly one owner: the
+        // Stash keyword appears with Kind=Keyword; the snippet appears with Kind=Snippet.
+        // Validates that the rename eliminates the keyword/snippet collision class.
         var items = InvokeCompletionAt("\n", line: 0, col: 0, includeSnippets: true).ToList();
 
         foreach (var kw in new[] { "fn", "let", "for", "if", "struct" })
@@ -185,6 +185,13 @@ public class SnippetCompletionProviderTests
             var item = items.FirstOrDefault(i => i.Label == kw);
             Assert.NotNull(item);
             Assert.Equal(LspCompletionItemKind.Keyword, item!.Kind);
+        }
+
+        foreach (var snippet in new[] { "fnd", "letv", "fore", "ifc", "strc" })
+        {
+            var item = items.FirstOrDefault(i => i.Label == snippet);
+            Assert.NotNull(item);
+            Assert.Equal(LspCompletionItemKind.Snippet, item!.Kind);
         }
     }
 
@@ -229,8 +236,9 @@ public class SnippetCompletionProviderTests
         var registry = new BundledSnippetRegistry();
         var prefixes = registry.Snapshot().Select(s => s.Prefix).ToHashSet();
 
-        // Required seed: fn, let, for, if, struct (from brief done_when), plus fori and ife
-        foreach (var expected in new[] { "fn", "let", "for", "if", "struct", "fori", "ife" })
+        // Required seed: renamed away from Stash keywords so they actually surface
+        // (fn/let/for/if/struct were renamed to fnd/letv/fore/ifc/strc).
+        foreach (var expected in new[] { "fnd", "letv", "fore", "ifc", "strc", "fori", "ife" })
             Assert.Contains(expected, prefixes);
     }
 

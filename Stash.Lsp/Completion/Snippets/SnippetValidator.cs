@@ -220,17 +220,21 @@ public static class SnippetValidator
             }
 
             // $N — bare tabstop (digits only)
-            // Special case: $0 is the final cursor position (no semantic content); strip to empty.
             // $N for N > 0 becomes __snip_N so the parser sees a valid identifier.
+            // $0 is the final cursor position (no semantic content) and substitutes to
+            // `null;` — a valid Stash expression statement that parses cleanly in any
+            // block-body position (the empirically dominant location for $0). Empty-
+            // string substitution would silently rely on empty blocks being legal;
+            // `null;` is a real statement so snippets that put $0 in non-statement
+            // positions fail validation loudly instead of producing invalid Stash on
+            // expansion.
             if (char.IsDigit(next))
             {
                 int start = i + 1;
                 int j = start;
                 while (j < body.Length && char.IsDigit(body[j])) j++;
                 var n = body.Substring(start, j - start);
-                if (n != "0")
-                    sb.Append($"__snip_{n}");
-                // $0: append nothing (final cursor marker, no parse value)
+                sb.Append(n == "0" ? "null;" : $"__snip_{n}");
                 i = j;
                 continue;
             }
@@ -253,9 +257,8 @@ public static class SnippetValidator
 
                 if (body[j] == '}')
                 {
-                    // ${N} → __snip_N (or empty if N == 0, the final cursor position)
-                    if (n != "0")
-                        sb.Append($"__snip_{n}");
+                    // ${N} → __snip_N. ${0} → null; (see bare-$N substitution above).
+                    sb.Append(n == "0" ? "null;" : $"__snip_{n}");
                     i = j + 1;
                     continue;
                 }

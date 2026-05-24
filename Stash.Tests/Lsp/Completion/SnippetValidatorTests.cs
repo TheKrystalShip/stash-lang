@@ -217,11 +217,14 @@ public class SnippetValidatorTests
     }
 
     [Fact]
-    public void StripTabstops_DollarZero_StrippedToEmpty()
+    public void StripTabstops_DollarZero_SubstitutedWithNullStatement()
     {
-        // $0 is the final cursor position — no semantic content, strip to empty string.
+        // $0 is the final cursor position — substituted with `null;`, a benign Stash
+        // statement that parses cleanly in any block-body position. Empty-string
+        // substitution would silently rely on empty blocks being legal; `null;` makes
+        // the snippet validator's parse check honest.
         var stripped = SnippetValidator.StripTabstops("let x = 1; $0");
-        Assert.Equal("let x = 1; ", stripped);
+        Assert.Equal("let x = 1; null;", stripped);
     }
 
     [Fact]

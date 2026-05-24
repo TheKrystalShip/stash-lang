@@ -1,6 +1,6 @@
 {
   "Function Declaration": {
-    "prefix": "fn",
+    "prefix": "fnd",
     "body": [
       "fn ${1:name}(${2:params}) {",
       "\t$0",
@@ -9,12 +9,12 @@
     "description": "Declare a function"
   },
   "Variable Declaration": {
-    "prefix": "let",
+    "prefix": "letv",
     "body": "let ${1:name} = ${2:value};",
     "description": "Declare a mutable variable"
   },
   "Struct Declaration": {
-    "prefix": "struct",
+    "prefix": "strc",
     "body": [
       "struct ${1:Name} {",
       "\t${2:field1},",
@@ -24,7 +24,7 @@
     "description": "Declare a struct"
   },
   "If Statement": {
-    "prefix": "if",
+    "prefix": "ifc",
     "body": [
       "if (${1:condition}) {",
       "\t$0",
@@ -33,13 +33,13 @@
     "description": "If statement"
   },
   "For-In Loop": {
-    "prefix": "for",
+    "prefix": "fore",
     "body": [
       "for (let ${1:item} in ${2:collection}) {",
       "\t$0",
       "}"
     ],
-    "description": "For-in loop"
+    "description": "For-each loop"
   },
   "C-Style For Loop": {
     "prefix": "fori",
