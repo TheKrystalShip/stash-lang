@@ -10,7 +10,8 @@
 
 ## F01 — [IMPORTANT] `extend`-mode completion suggests seven types the runtime rejects
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 4bcfb3a
 **Files:** `Stash.Lsp/Completion/Providers/ExtendTypeCompletionProvider.cs:41-53`
 **Phase:** P4
 **Commit:** 549e234
