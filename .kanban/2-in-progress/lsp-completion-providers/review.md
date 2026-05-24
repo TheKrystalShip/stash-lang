@@ -148,7 +148,8 @@ dotnet test --filter "FullyQualifiedName~DotCompletionProviderTests"
 
 ## F03 — [MINOR] `CompletionItemSink.Add` stores `null` `SourceTag` as `null` `Data`, conflicting with the documented OmniSharp round-trip quirk
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e1aabb8
 **Files:** `Stash.Lsp/Completion/CompletionItemSink.cs:98-102`, `Stash.Lsp/CLAUDE.md` ("OmniSharp quirk: `CompletionItem.Data` null round-trip")
 **Phase:** P1
 **Commit:** 2dcfe08
@@ -200,7 +201,8 @@ dotnet test --filter "FullyQualifiedName~CompletionItemSinkTests"
 
 ## F04 — [MINOR] `CompletionInterop.MapCompletionKind` maps `SymbolKind.Field` and `SymbolKind.EnumMember` to LSP kinds that the brief says should never reach the wire from `ScopedSymbolCompletionProvider`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e1aabb8
 **Files:** `Stash.Lsp/Completion/CompletionInterop.cs:19-32`, `Stash.Lsp/Completion/Providers/ScopedSymbolCompletionProvider.cs:60-69`
 **Phase:** P5
 **Commit:** 68e9533
