@@ -107,8 +107,8 @@ public class CompletionHandler : CompletionHandlerBase
     }
 
     /// <summary>
-    /// Constructs a <see cref="CompletionDispatcher"/> pre-wired with the four Default-mode
-    /// providers in ascending priority order (10 → 40).
+    /// Constructs a <see cref="CompletionDispatcher"/> pre-wired with the Default-mode
+    /// providers (priority 10–40) and the Dot-mode provider (phases 2–3 parallel path).
     /// </summary>
     private static CompletionDispatcher BuildDefaultPipeline()
     {
@@ -120,9 +120,15 @@ public class CompletionHandler : CompletionHandlerBase
             new ScopedSymbolCompletionProvider(),
         };
 
+        var dotProviders = new ICompletionProvider[]
+        {
+            new DotCompletionProvider(),
+        };
+
         var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
         {
             [CompletionMode.Default] = defaultProviders,
+            [CompletionMode.Dot] = dotProviders,
         };
 
         return new CompletionDispatcher(pipelines);
@@ -175,6 +181,25 @@ public class CompletionHandler : CompletionHandlerBase
             var prefix = GetDotPrefix(currentLine, col);
             if (prefix != null)
             {
+                // When the new pipeline is enabled (test-only, phases 2–4), delegate to the dispatcher
+                // for Dot mode. Live request path stays on HandleDotCompletion (parallel path).
+                if (_useNewPipeline && _dispatcher != null)
+                {
+                    var cachedResult = _analysis.GetCachedResult(uri);
+                    var ctx = new Stash.Lsp.Completion.CompletionContext(
+                        Uri: uri,
+                        LspLine: line,
+                        LspColumn: col,
+                        CurrentLine: currentLine,
+                        Mode: CompletionMode.Dot,
+                        DotPrefix: prefix,
+                        Analysis: cachedResult,
+                        TriggerCharacter: request.Context?.TriggerCharacter?[0]);
+                    var newList = _dispatcher.Run(ctx);
+                    _logger.LogDebug("Completion (new pipeline dot): {Count} items for {Uri}", newList.Items?.Count() ?? 0, request.TextDocument.Uri);
+                    return Task.FromResult(newList);
+                }
+
                 var completionList = HandleDotCompletion(prefix, uri, line, col);
                 _logger.LogDebug("Completion: {Count} items for {Uri}", completionList.Items?.Count() ?? 0, request.TextDocument.Uri);
                 return Task.FromResult(completionList);

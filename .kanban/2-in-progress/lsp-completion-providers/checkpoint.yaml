@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-completion-providers
-current: null
-updated: '2026-05-23T20:34:30Z'
+current: P3
+updated: '2026-05-23T23:59:31Z'
 phases:
   P1:
     status: done
@@ -22,12 +22,12 @@ phases:
     notes: Four default-mode providers added behind _useNewPipeline=false parallel path; bug-1 (member
       leakage) and bug-2 (namespace dedup) fixed and verified by 26 new unit tests
   P3:
-    status: pending
+    status: in_progress
     commit: null
     verified: false
-    started: null
+    started: '2026-05-23T23:59:31Z'
     completed: null
-    attempts: 0
+    attempts: 1
     notes: ''
   P4:
     status: pending
