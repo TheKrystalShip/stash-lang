@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-completion-providers
-current: P3
-updated: '2026-05-23T23:59:31Z'
+current: null
+updated: '2026-05-24T00:19:17Z'
 phases:
   P1:
     status: done
@@ -22,13 +22,14 @@ phases:
     notes: Four default-mode providers added behind _useNewPipeline=false parallel path; bug-1 (member
       leakage) and bug-2 (namespace dedup) fixed and verified by 26 new unit tests
   P3:
-    status: in_progress
-    commit: null
-    verified: false
+    status: done
+    commit: 93bb7e3c37cee9210748c10c925a8959700c36df
+    verified: true
     started: '2026-05-23T23:59:31Z'
-    completed: null
+    completed: '2026-05-24T00:19:17Z'
     attempts: 1
-    notes: ''
+    notes: DotCompletionProvider + 6 IDotStrategy sub-objects port HandleDotCompletion; parallel-path
+      test seam extended to Dot mode; DotResolutionContext added (plan correction)
   P4:
     status: pending
     commit: null
