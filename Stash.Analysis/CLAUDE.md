@@ -51,3 +51,7 @@
 | `Stash.Analysis/Models/DiagnosticDescriptor.cs`  | Descriptor record + `CreateDiagnostic` / `CreateUnnecessaryDiagnostic` factory methods |
 | `Stash.Analysis/Models/DiagnosticDescriptors.cs` | Central registry of all SA-codes (single source of truth)                              |
 | `Stash.Analysis/Models/SemanticDiagnostics.cs`   | Diagnostic data class (do not construct directly for coded diagnostics)                |
+
+## Coordinate convention — 1-based vs 0-based
+
+`ScopeTree.FindScopeAt(line, col)`, `ScopeTree.GetVisibleSymbols(line, col)`, and most other position-taking methods in `Stash.Analysis` use **1-based** coordinates (matching analyzer internals). LSP requests carry **0-based** coordinates. Bridge by adding `+1` to both axes at the LSP/analysis boundary: `analysis.Symbols.FindScopeAt(ctx.LspLine + 1, ctx.LspColumn + 1)`. Forgetting the `+1` is a real footgun — symptoms include "scope classifier returns the wrong ancestor" or "GetVisibleSymbols returns nothing at the cursor". Existing precedent in `Stash.Lsp/Completion/Providers/ScopedSymbolCompletionProvider.cs` and `Stash.Lsp/Completion/Snippets/SnippetContext.cs`.
