@@ -1,0 +1,63 @@
+{
+  "Function Declaration": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Declare a function"
+  },
+  "Variable Declaration": {
+    "prefix": "let",
+    "body": "let ${1:name} = ${2:value};",
+    "description": "Declare a mutable variable"
+  },
+  "Struct Declaration": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "\t${2:field1},",
+      "\t${3:field2}",
+      "}"
+    ],
+    "description": "Declare a struct"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "For-In Loop": {
+    "prefix": "for",
+    "body": [
+      "for (let ${1:item} in ${2:collection}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "For-in loop"
+  },
+  "C-Style For Loop": {
+    "prefix": "fori",
+    "body": [
+      "for (let ${1:i} = ${2:0}; ${1:i} < ${3:10}; ${1:i}++) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "C-style for loop"
+  },
+  "If-Else Statement": {
+    "prefix": "ife",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$0",
+      "} else {",
+      "}"
+    ],
+    "description": "If-else statement"
+  }
+}

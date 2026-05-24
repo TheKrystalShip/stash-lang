@@ -11,6 +11,7 @@ using Stash.Lsp.Analysis;
 using Stash.Lsp.Completion;
 using Stash.Lsp.Completion.Providers;
 using Stash.Lsp.Completion.Providers.Dot;
+using Stash.Lsp.Completion.Snippets;
 using Stash.Lsp.Handlers;
 
 /// <summary>
@@ -50,6 +51,9 @@ public static class StashLanguageServer
                     services.AddSingleton<StdlibFunctionCompletionProvider>();
                     services.AddSingleton<StdlibNamespaceCompletionProvider>();
                     services.AddSingleton<ScopedSymbolCompletionProvider>();
+                    services.AddSingleton<BundledSnippetRegistry>();
+                    services.AddSingleton<ISnippetRegistry>(sp => sp.GetRequiredService<BundledSnippetRegistry>());
+                    services.AddSingleton<SnippetCompletionProvider>();
                     services.AddSingleton<DotCompletionProvider>();
                     services.AddSingleton<ImportPathCompletionProvider>();
                     services.AddSingleton<IsTypeCompletionProvider>();
@@ -64,6 +68,7 @@ public static class StashLanguageServer
                                 sp.GetRequiredService<StdlibFunctionCompletionProvider>(),
                                 sp.GetRequiredService<StdlibNamespaceCompletionProvider>(),
                                 sp.GetRequiredService<ScopedSymbolCompletionProvider>(),
+                                sp.GetRequiredService<SnippetCompletionProvider>(),
                             },
                             [CompletionMode.Dot] = new ICompletionProvider[]
                             {

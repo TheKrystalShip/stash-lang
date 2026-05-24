@@ -33,4 +33,8 @@
     <PackageReference Include="OmniSharp.Extensions.LanguageServer" Version="0.19.9" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Completion/Snippets/bundled.json" />
+  </ItemGroup>
+
 </Project>
