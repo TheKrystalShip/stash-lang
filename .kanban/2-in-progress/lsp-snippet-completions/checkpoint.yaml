@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-snippet-completions
 current: null
-updated: '2026-05-24T17:25:00Z'
+updated: '2026-05-24T21:20:23Z'
 phases:
   P1:
     status: done
@@ -22,13 +22,14 @@ phases:
     notes: Snippet model, bundled registry (7-entry seed), 7-rule validator, SnippetCompletionProvider
       (priority 50). All 42 targeted tests pass. Keyword-prefix collision documented.
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c3f6db850a4dc9a332adbc62e53bde70666829cc
+    verified: true
+    started: '2026-05-24T20:39:10Z'
+    completed: '2026-05-24T21:20:23Z'
+    attempts: 1
+    notes: SnippetDiagnosticsReporter (delegate-seam) + DI wiring; 8 tests covering LSP-stays-up guarantee
+      and one-log-per-error / one-summary-popup contract.
   P4:
     status: pending
     commit: null
