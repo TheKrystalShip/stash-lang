@@ -295,7 +295,7 @@ partial class Compiler
         }
 
         string typeName = stmt.TypeName.ToCanonicalString();
-        bool isBuiltIn = typeName is "string" or "array" or "dict" or "int" or "float";
+        bool isBuiltIn = PrimitiveTypes.ExtendableNames.Contains(typeName);
 
         var methodNames = new List<string>();
         var methodChunks = new List<Chunk>();

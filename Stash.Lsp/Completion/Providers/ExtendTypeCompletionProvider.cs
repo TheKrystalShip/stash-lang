@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Analysis;
+using Stash.Common;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 
@@ -23,23 +24,21 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// built-ins always win on collision.
 /// </para>
 /// <para>
-/// The extendable built-in types are hardcoded here to match the runtime whitelist in
-/// <c>Stash.Bytecode/Compilation/Compiler.Declarations.cs</c> (the <c>isBuiltIn</c> check).
-/// Only these five types are accepted by the runtime's <c>extend</c> execution path; all
-/// other primitive types (including <c>byte</c>, <c>duration</c>, <c>range</c>, etc.)
-/// produce a <c>RuntimeError: Cannot extend '...': not a known type.</c> error.
-/// If the runtime list changes, update <see cref="BuiltInExtendableTypes"/> to match.
+/// The extendable built-in types are derived from <see cref="PrimitiveTypes.ExtendableNames"/>
+/// — the single source of truth — so they automatically stay in sync with the bytecode
+/// compiler's acceptance check. Drift is guarded by <c>PrimitiveCapabilityInvariantTests</c>.
 /// </para>
 /// </remarks>
 public sealed class ExtendTypeCompletionProvider : ICompletionProvider
 {
     /// <summary>
     /// The canonical set of built-in types that the Stash runtime accepts as
-    /// <c>extend</c> targets. Matches the <c>isBuiltIn</c> check in
-    /// <c>Stash.Bytecode/Compilation/Compiler.Declarations.cs</c>.
+    /// <c>extend</c> targets. Derived from <see cref="PrimitiveTypes.ExtendableNames"/>
+    /// — the single source of truth. Alphabetical order is imposed explicitly because
+    /// <c>FrozenSet</c> enumeration order is not guaranteed.
     /// </summary>
     public static readonly IReadOnlyList<string> BuiltInExtendableTypes =
-        ["array", "dict", "float", "int", "string"];
+        PrimitiveTypes.ExtendableNames.OrderBy(n => n, StringComparer.Ordinal).ToArray();
 
     /// <inheritdoc />
     public bool AppliesTo(CompletionContext ctx) => ctx.Mode == CompletionMode.AfterExtend;
