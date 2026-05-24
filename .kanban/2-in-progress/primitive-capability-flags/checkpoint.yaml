@@ -1,7 +1,7 @@
 schema_version: 1
 feature: primitive-capability-flags
 current: null
-updated: '2026-05-24T16:09:55Z'
+updated: '2026-05-24T16:31:19Z'
 phases:
   P1:
     status: done
@@ -21,8 +21,8 @@ phases:
     attempts: 1
     notes: Compiler and LSP consumers migrated; PrimitiveCapabilityInvariantTests added; 50 tests pass
 review:
-  status: not_started
+  status: resolved
   started: null
-  resolved: null
+  resolved: '2026-05-24T16:31:19Z'
   findings_open: 0
   findings_fixed: 0
