@@ -46,32 +46,40 @@ public static class StashLanguageServer
                     services.AddSingleton<DocumentManager>();
                     services.AddSingleton<AnalysisEngine>();
                     services.AddSingleton<WorkspaceScanner>();
-                    services.AddSingleton<CompletionDispatcher>(_ =>
+                    services.AddSingleton<KeywordCompletionProvider>();
+                    services.AddSingleton<StdlibFunctionCompletionProvider>();
+                    services.AddSingleton<StdlibNamespaceCompletionProvider>();
+                    services.AddSingleton<ScopedSymbolCompletionProvider>();
+                    services.AddSingleton<DotCompletionProvider>();
+                    services.AddSingleton<ImportPathCompletionProvider>();
+                    services.AddSingleton<IsTypeCompletionProvider>();
+                    services.AddSingleton<ExtendTypeCompletionProvider>();
+                    services.AddSingleton<CompletionDispatcher>(sp =>
                     {
                         var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
                         {
                             [CompletionMode.Default] = new ICompletionProvider[]
                             {
-                                new KeywordCompletionProvider(),
-                                new StdlibFunctionCompletionProvider(),
-                                new StdlibNamespaceCompletionProvider(),
-                                new ScopedSymbolCompletionProvider(),
+                                sp.GetRequiredService<KeywordCompletionProvider>(),
+                                sp.GetRequiredService<StdlibFunctionCompletionProvider>(),
+                                sp.GetRequiredService<StdlibNamespaceCompletionProvider>(),
+                                sp.GetRequiredService<ScopedSymbolCompletionProvider>(),
                             },
                             [CompletionMode.Dot] = new ICompletionProvider[]
                             {
-                                new DotCompletionProvider(),
+                                sp.GetRequiredService<DotCompletionProvider>(),
                             },
                             [CompletionMode.ImportString] = new ICompletionProvider[]
                             {
-                                new ImportPathCompletionProvider(),
+                                sp.GetRequiredService<ImportPathCompletionProvider>(),
                             },
                             [CompletionMode.AfterIs] = new ICompletionProvider[]
                             {
-                                new IsTypeCompletionProvider(),
+                                sp.GetRequiredService<IsTypeCompletionProvider>(),
                             },
                             [CompletionMode.AfterExtend] = new ICompletionProvider[]
                             {
-                                new ExtendTypeCompletionProvider(),
+                                sp.GetRequiredService<ExtendTypeCompletionProvider>(),
                             },
                         };
                         return new CompletionDispatcher(pipelines);

@@ -6,6 +6,8 @@ using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
+using Stash.Analysis.Cli;
+using Stash.Common;
 using Stash.Lsp.Analysis;
 using Stash.Lsp.Completion;
 using Stash.Lsp.Completion.Providers;
@@ -15,6 +17,7 @@ using Stash.Stdlib;
 using Xunit;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Unit tests for <see cref="DotCompletionProvider"/> and its six <see cref="IDotStrategy"/>
@@ -316,6 +319,114 @@ public class DotCompletionProviderTests
         Assert.Contains("y", labels);
     }
 
+    // ── Strategy 5+6 gating: assert dispatcher-level gating logic ─────────────────
+
+    /// <summary>
+    /// Strategy 5 (CliSchemaDotStrategy) must be suppressed when strategies 3+4 produced output.
+    /// Scenario: prefix <c>p</c> resolves to a user struct instance (strategy 3 fires), AND
+    /// the CLI schema also has an entry for <c>p</c>. The CLI-schema items must not appear.
+    /// </summary>
+    [Fact]
+    public void DotCompletionProvider_Strategy5_SuppressedWhenStrategies3and4Emit()
+    {
+        // Build a scope with: struct P, field "width" on P, and variable "p" of type P.
+        var span = new SourceSpan("", 0, 0, int.MaxValue, int.MaxValue);
+        var scope = new Scope(ScopeKind.Global, null, span);
+        scope.AddSymbol(new SymbolInfo("P", StashSymbolKind.Struct, span));
+        scope.AddSymbol(new SymbolInfo("width", StashSymbolKind.Field, span, parentName: "P"));
+        scope.AddSymbol(new SymbolInfo("p", StashSymbolKind.Variable, span, typeHint: "P"));
+        var scopeTree = new ScopeTree(scope);
+
+        // Build a CLI schema entry for "p" (would fire strategy 5 if gating is absent).
+        var schemaIndex = new CliSchemaIndex();
+        schemaIndex.Add("p", new CliSchemaInfo(new List<CliFieldInfo> { new CliFieldInfo("host", "string") }));
+
+        var result = BuildSyntheticAnalysisResult(scopeTree, cliSchema: schemaIndex);
+        var provider = new DotCompletionProvider();
+        var ctx = BuildSyntheticDotContext("p", result);
+
+        var candidates = provider.Provide(ctx).ToList();
+
+        // Strategy 3 must fire: struct field "width" appears.
+        Assert.Contains(candidates, c => c.Label == "width" && c.SourceTag == nameof(StructOrUserEnumDotStrategy));
+
+        // Strategy 5 must be suppressed: no CliSchemaDotStrategy items.
+        Assert.DoesNotContain(candidates, c => c.SourceTag == nameof(CliSchemaDotStrategy));
+    }
+
+    /// <summary>
+    /// Strategy 5 (CliSchemaDotStrategy) must fire when strategies 3+4 produced nothing.
+    /// Scenario: prefix <c>p</c> has no struct/UFCS match, but the CLI schema has an entry.
+    /// </summary>
+    [Fact]
+    public void DotCompletionProvider_Strategy5_FiresWhenAccumulatedIsEmpty()
+    {
+        // Empty scope — no struct or variable named "p".
+        var span = new SourceSpan("", 0, 0, int.MaxValue, int.MaxValue);
+        var scope = new Scope(ScopeKind.Global, null, span);
+        var scopeTree = new ScopeTree(scope);
+
+        // CLI schema for "p" with a declared field.
+        var schemaIndex = new CliSchemaIndex();
+        schemaIndex.Add("p", new CliSchemaInfo(new List<CliFieldInfo> { new CliFieldInfo("host", "string") }));
+
+        var result = BuildSyntheticAnalysisResult(scopeTree, cliSchema: schemaIndex);
+        var provider = new DotCompletionProvider();
+        var ctx = BuildSyntheticDotContext("p", result);
+
+        var candidates = provider.Provide(ctx).ToList();
+
+        // Strategy 5 must fire: CLI-schema field "host" appears.
+        Assert.Contains(candidates, c => c.Label == "host" && c.SourceTag == nameof(CliSchemaDotStrategy));
+    }
+
+    /// <summary>
+    /// Strategy 6 (NamespaceImportEnumDotStrategy) must be suppressed when strategies 3+4 produced output.
+    /// Scenario: prefix <c>E</c> resolves to a user struct (strategy 3 fires), AND a namespace-imported
+    /// module also exports an enum named <c>E</c>. The namespace-import items must not appear.
+    /// </summary>
+    [Fact]
+    public void DotCompletionProvider_Strategy6_SuppressedWhenStrategies3and4Emit()
+    {
+        // Build a scope with: struct E, field "value" on E, and treat prefix "E" as a struct type.
+        var span = new SourceSpan("", 0, 0, int.MaxValue, int.MaxValue);
+        var scope = new Scope(ScopeKind.Global, null, span);
+        scope.AddSymbol(new SymbolInfo("E", StashSymbolKind.Struct, span));
+        scope.AddSymbol(new SymbolInfo("value", StashSymbolKind.Field, span, parentName: "E"));
+        var scopeTree = new ScopeTree(scope);
+
+        // Build a module with enum E and members — would fire strategy 6 if gating is absent.
+        var modSpan = new SourceSpan("", 0, 0, int.MaxValue, int.MaxValue);
+        var modScope = new Scope(ScopeKind.Global, null, modSpan);
+        modScope.AddSymbol(new SymbolInfo("E", StashSymbolKind.Enum, modSpan));
+        modScope.AddSymbol(new SymbolInfo("Alpha", StashSymbolKind.EnumMember, modSpan, parentName: "E"));
+        modScope.AddSymbol(new SymbolInfo("Beta", StashSymbolKind.EnumMember, modSpan, parentName: "E"));
+        var modScopeTree = new ScopeTree(modScope);
+        var moduleInfo = new ImportResolver.ModuleInfo(
+            new Uri("file:///fake/mymod.stash"),
+            "/fake/mymod.stash",
+            modScopeTree,
+            new List<Stash.Common.DiagnosticError>());
+
+        var namespaceImports = new Dictionary<string, ImportResolver.ModuleInfo>
+        {
+            ["mymod"] = moduleInfo,
+        };
+
+        var result = BuildSyntheticAnalysisResult(scopeTree, namespaceImports: namespaceImports);
+        var provider = new DotCompletionProvider();
+        // The prefix "E" is the struct type; DotCompletionProvider.ResolvePrefix will find it via Symbols.All.
+        var ctx = BuildSyntheticDotContext("E", result);
+
+        var candidates = provider.Provide(ctx).ToList();
+
+        // Strategy 3 must fire: struct field "value" appears.
+        Assert.Contains(candidates, c => c.Label == "value" && c.SourceTag == nameof(StructOrUserEnumDotStrategy));
+
+        // Strategy 6 must be suppressed: no NamespaceImportEnumDotStrategy items.
+        Assert.DoesNotContain(candidates, c => c.SourceTag == nameof(NamespaceImportEnumDotStrategy));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -511,5 +622,52 @@ public class DotCompletionProviderTests
             [CompletionMode.AfterExtend] = new ICompletionProvider[] { new ExtendTypeCompletionProvider() },
         };
         return new CompletionDispatcher(pipelines);
+    }
+
+    // ── Synthetic AnalysisResult helpers (for gating tests) ──────────────────
+
+    /// <summary>
+    /// Builds a minimal <see cref="AnalysisResult"/> with the given scope tree and optional
+    /// CLI schema / namespace imports. Used by gating tests that need to control which
+    /// strategies 3–6 see without going through a full analysis pipeline.
+    /// </summary>
+    private static AnalysisResult BuildSyntheticAnalysisResult(
+        ScopeTree scopeTree,
+        CliSchemaIndex? cliSchema = null,
+        Dictionary<string, ImportResolver.ModuleInfo>? namespaceImports = null)
+    {
+        return new AnalysisResult(
+            tokens: new List<Stash.Lexing.Token>(),
+            statements: new List<Stash.Parsing.AST.Stmt>(),
+            lexErrors: new List<string>(),
+            parseErrors: new List<string>(),
+            structuredLexErrors: new List<Stash.Common.DiagnosticError>(),
+            structuredParseErrors: new List<Stash.Common.DiagnosticError>(),
+            symbols: scopeTree,
+            semanticDiagnostics: new List<SemanticDiagnostic>(),
+            namespaceImports: namespaceImports,
+            cliSchema: cliSchema);
+    }
+
+    /// <summary>
+    /// Builds a Dot-mode <see cref="CompletionContext"/> backed by a pre-built
+    /// <see cref="AnalysisResult"/>. Line/column are set to 0 so that
+    /// <see cref="DotCompletionProvider"/> calls <c>GetVisibleSymbols(1, 1)</c>,
+    /// which includes symbols whose <see cref="SourceSpan.StartLine"/> is 0.
+    /// </summary>
+    private static Stash.Lsp.Completion.CompletionContext BuildSyntheticDotContext(
+        string prefix,
+        AnalysisResult result)
+    {
+        var uri = new Uri($"file:///test/gate_{Guid.NewGuid():N}.stash");
+        return new Stash.Lsp.Completion.CompletionContext(
+            Uri: uri,
+            LspLine: 0,
+            LspColumn: 0,
+            CurrentLine: null,
+            Mode: CompletionMode.Dot,
+            DotPrefix: prefix,
+            Analysis: result,
+            TriggerCharacter: '.');
     }
 }
