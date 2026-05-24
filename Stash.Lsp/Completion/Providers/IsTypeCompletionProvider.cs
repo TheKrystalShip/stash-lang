@@ -6,8 +6,7 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 
 /// <summary>
 /// Provides type-name completion candidates for expressions of the form <c>value is &lt;type&gt;</c>.
-/// Emits one candidate per entry in <see cref="StdlibRegistry.TypeDescriptions"/>, matching the
-/// monolithic <c>BuildTypeCompletionList</c> implementation exactly.
+/// Emits one candidate per entry in <see cref="StdlibRegistry.TypeDescriptions"/>.
 /// </summary>
 /// <remarks>
 /// Applies exclusively to <see cref="CompletionMode.AfterIs"/> mode.

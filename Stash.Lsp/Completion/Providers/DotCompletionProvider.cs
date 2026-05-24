@@ -13,8 +13,7 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The six strategies are invoked in a fixed, load-bearing order that mirrors the
-/// <c>HandleDotCompletion</c> branch sequence in the pre-refactor monolith:
+/// The six strategies are invoked in a fixed, load-bearing order:
 /// </para>
 /// <list type="number">
 ///   <item><see cref="BuiltInNamespaceDotStrategy"/> — built-in namespace prefix (e.g., <c>arr.</c>). Hard early-return on match.</item>

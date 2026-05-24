@@ -36,16 +36,14 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 ///     If none of the above yielded results and the prefix contains a dot (e.g.,
 ///     <c>task.Status</c>), attempt to resolve a built-in namespace's nested enum
 ///     (e.g., <c>task.Status.</c> → members of the <c>Status</c> enum in namespace
-///     <c>task</c>). This sub-branch mirrors the inline check at line 739 of the monolith.
+///     <c>task</c>).
 ///   </item>
 /// </list>
 /// <para>
-/// <strong>Gating semantics:</strong> This strategy runs <em>regardless</em> of whether
-/// strategy 2 produced results — but strategies 1 and 2 short-circuit via hard early-returns
-/// before this strategy is reached. Within this strategy, the struct/enum resolution runs
-/// without an early-return; the UfcsDotStrategy (strategy 4) is invoked by the provider
-/// immediately after this strategy and contributes to the same accumulated candidate list,
-/// mirroring the monolith's parallel execution of the struct and UFCS blocks.
+/// <strong>Gating semantics:</strong> This strategy runs whenever strategies 1 and 2 did
+/// not short-circuit. Its candidates accumulate alongside the UfcsDotStrategy (strategy 4),
+/// which is invoked immediately after — the two run in parallel and both contribute to the
+/// same candidate list.
 /// </para>
 /// <para>
 /// <see cref="CompletionCandidate.SourcePriority"/>: <c>120</c> (strategy 3 of 6).
@@ -149,12 +147,9 @@ public sealed class StructOrUserEnumDotStrategy : IDotStrategy
         }
 
         // ── Built-in namespace nested-enum sub-branch (e.g., task.Status.) ─────
-        // This handles dot-access on a dotted prefix that refers to a namespace's
-        // nested enum: e.g., prefix = "task.Status" → ns = "task", enum = "Status".
-        // Mirrors monolith line 739, which is nested inside the `if (result != null)` block.
-        // Gate: only attempt this when no items have been emitted yet by this strategy
-        // (the provider's accumulation check is done at the DotCompletionProvider level,
-        // but since this is a yield-based method we track via the dotted-prefix check).
+        // Handles dot-access on a dotted prefix that refers to a namespace's nested enum:
+        // e.g., prefix = "task.Status" → ns = "task", enum = "Status". The dotted-prefix
+        // check itself acts as the gate (only triggered when the prefix is qualified).
         if (prefix.Contains('.'))
         {
             int dotIndex = prefix.LastIndexOf('.');

@@ -1,9 +1,7 @@
 namespace Stash.Lsp.Completion;
 
 /// <summary>
-/// Classifies the completion cursor context into a single <see cref="CompletionMode"/>
-/// using the same precedence chain as the monolithic
-/// <c>CompletionHandler.Handle</c> if-chain.
+/// Classifies the completion cursor context into a single <see cref="CompletionMode"/>.
 /// </summary>
 /// <remarks>
 /// Precedence (first match wins):
@@ -14,13 +12,6 @@ namespace Stash.Lsp.Completion;
 ///   <item><see cref="CompletionMode.AfterIs"/> — cursor is in the type-name position after the <c>is</c> keyword.</item>
 ///   <item><see cref="CompletionMode.Default"/> — everything else.</item>
 /// </list>
-/// <para>
-/// The private static helpers (<c>IsInsideString</c>, <c>GetDotPrefix</c>,
-/// <c>IsAfterIsKeyword</c>, <c>IsAfterExtendKeyword</c>) are intentionally
-/// duplicated from <c>CompletionHandler</c>. Phase 5 will delete the originals
-/// when the cutover is complete; keeping them here avoids a cross-type dependency
-/// on an <c>internal static</c> that will disappear.
-/// </para>
 /// </remarks>
 public static class CursorContextClassifier
 {

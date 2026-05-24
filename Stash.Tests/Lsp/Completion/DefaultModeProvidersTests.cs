@@ -17,10 +17,13 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext;
 
 /// <summary>
-/// Unit tests for the four Default-mode completion providers added in Phase 2
-/// of the <c>lsp-completion-providers</c> feature.
-/// Tests confirm that the new pipeline reproduces the post-fix monolith output
-/// for the two regressions: member leakage (bug-1) and namespace deduplication (bug-2).
+/// Unit tests for the four Default-mode completion providers
+/// (<see cref="KeywordCompletionProvider"/>, <see cref="StdlibFunctionCompletionProvider"/>,
+/// <see cref="StdlibNamespaceCompletionProvider"/>, <see cref="ScopedSymbolCompletionProvider"/>).
+/// Covers the two regression scenarios that motivated the
+/// <see cref="SymbolAccessibility"/> / <see cref="SymbolOrigin"/> filtering contract:
+/// member-only symbols must not leak into the unqualified list, and stdlib namespaces
+/// must appear exactly once.
 /// </summary>
 public class DefaultModeProvidersTests
 {
@@ -84,17 +87,17 @@ public class DefaultModeProvidersTests
         Assert.False(new ScopedSymbolCompletionProvider().AppliesTo(ctx));
     }
 
-    // ── Bug-1: member leakage ────────────────────────────────────────────────────
+    // ── Member-leakage invariant ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Bug-1 regression (commit 7c3f098): stdlib struct fields/methods and enum members
-    /// must NOT appear in unqualified (Default-mode) completions via the new pipeline.
-    /// They are always accessed via dot notation and are never valid bare identifiers.
+    /// Stdlib struct fields/methods and enum members must NOT appear in unqualified
+    /// completions — they are always reached through dot notation and are never
+    /// valid as bare identifiers.
     /// </summary>
     [Fact]
-    public void NewPipeline_DefaultMode_ExcludesStdlibStructFieldsAndEnumMembers()
+    public void DefaultMode_ExcludesStdlibStructFieldsAndEnumMembers()
     {
-        var items = InvokeNewPipelineCompletion("\n").ToList();
+        var items = InvokeCompletion("\n").ToList();
 
         // No stdlib struct field should leak.
         Assert.DoesNotContain(items, i => i.Kind == LspCompletionItemKind.Field);
@@ -105,13 +108,14 @@ public class DefaultModeProvidersTests
     }
 
     /// <summary>
-    /// Bug-1 regression: user-defined struct fields and enum members must also be excluded.
+    /// User-defined struct fields and enum members carry the same accessibility
+    /// constraint as their stdlib counterparts.
     /// </summary>
     [Fact]
-    public void NewPipeline_DefaultMode_ExcludesUserStructFieldsAndEnumMembers()
+    public void DefaultMode_ExcludesUserStructFieldsAndEnumMembers()
     {
         const string src = "struct Point { x, y }\nenum Color { Red, Green }\n\n";
-        var items = InvokeNewPipelineCompletion(src).ToList();
+        var items = InvokeCompletion(src).ToList();
 
         Assert.DoesNotContain(items, i => i.Label == "x");
         Assert.DoesNotContain(items, i => i.Label == "y");
@@ -128,63 +132,70 @@ public class DefaultModeProvidersTests
     /// guards against an over-broad "skip all RequiresQualification" filter.
     /// </summary>
     [Fact]
-    public void NewPipeline_DefaultMode_IncludesFunctionParameters()
+    public void DefaultMode_IncludesFunctionParameters()
     {
         const string src = "fn greet(name) {\n\n}\n";
         // Cursor sits on line 2 (0-based: 1), col 0 — inside the function body.
-        var items = InvokeNewPipelineCompletionAt(src, line: 1, col: 0).ToList();
+        var items = InvokeCompletionAt(src, line: 1, col: 0).ToList();
 
         Assert.Contains(items, i => i.Label == "name");
     }
 
-    // ── Bug-2: namespace deduplication ──────────────────────────────────────────
+    // ── Namespace deduplication ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Bug-2 regression: each stdlib namespace must appear exactly once.
-    /// The scoped-symbol pass also returns Kind.Namespace entries that SymbolCollector
-    /// injected for hover/goto-def — ScopedSymbolCompletionProvider must exclude them
-    /// via the Origin == BuiltinStdlib filter so the sink's first-wins dedup is
+    /// Each stdlib namespace must appear exactly once. The scoped-symbol pass also
+    /// returns <c>Kind.Namespace</c> entries that <c>SymbolCollector</c> injects for
+    /// hover/goto-def — <see cref="ScopedSymbolCompletionProvider"/> excludes them via
+    /// the <c>Origin == BuiltinStdlib</c> filter so the sink's first-wins dedup is
     /// not the sole guard.
     /// </summary>
     [Fact]
-    public void NewPipeline_DefaultMode_StdlibNamespacesAreNotDuplicated()
+    public void DefaultMode_StdlibNamespacesAreNotDuplicated()
     {
-        var items = InvokeNewPipelineCompletion("\n").ToList();
+        var items = InvokeCompletion("\n").ToList();
 
         foreach (var ns in StdlibRegistry.NamespaceNames)
         {
             int count = items.Count(i => i.Label == ns);
-            Assert.True(count <= 1, $"namespace '{ns}' appeared {count} times in new-pipeline completion list");
+            Assert.True(count <= 1, $"namespace '{ns}' appeared {count} times in completion list");
         }
     }
 
     [Fact]
-    public void NewPipeline_DefaultMode_NoLabelAppearsMoreThanOnce()
+    public void DefaultMode_NoLabelAppearsMoreThanOnce()
     {
-        var items = InvokeNewPipelineCompletion("\n").ToList();
+        var items = InvokeCompletion("\n").ToList();
 
         var duplicates = items.GroupBy(i => i.Label).Where(g => g.Count() > 1).ToList();
         Assert.Empty(duplicates);
     }
 
-    // ── Content parity with monolith ─────────────────────────────────────────────
+    // ── Default-mode content surface ─────────────────────────────────────────────
 
     [Fact]
-    public void NewPipeline_DefaultMode_ContainsKeywords()
+    public void DefaultMode_ContainsKeywords()
     {
-        var items = InvokeNewPipelineCompletion("\n").ToList();
+        var items = InvokeCompletion("\n").ToList();
 
         Assert.Contains(items, i => i.Label == "let" && i.Kind == LspCompletionItemKind.Keyword);
         Assert.Contains(items, i => i.Label == "fn" && i.Kind == LspCompletionItemKind.Keyword);
     }
 
     [Fact]
-    public void NewPipeline_DefaultMode_ContainsStdlibNamespaces()
+    public void DefaultMode_ContainsStdlibNamespaces()
     {
-        var items = InvokeNewPipelineCompletion("\n").ToList();
+        var items = InvokeCompletion("\n").ToList();
 
         Assert.Contains(items, i => i.Label == "fs" && i.Kind == LspCompletionItemKind.Module);
         Assert.Contains(items, i => i.Label == "io" && i.Kind == LspCompletionItemKind.Module);
+    }
+
+    [Fact]
+    public void DefaultMode_ProducesNonEmptyList()
+    {
+        var items = InvokeCompletion("\n").ToList();
+        Assert.NotEmpty(items);
     }
 
     // ── ScopedSymbolCompletionProvider filter contract ───────────────────────────
@@ -267,48 +278,23 @@ public class DefaultModeProvidersTests
         Assert.All(candidates, c => Assert.Equal("ScopedSymbolCompletionProvider", c.SourceTag));
     }
 
-    // ── CompletionHandler test-seam ──────────────────────────────────────────────
-
-    [Fact]
-    public void CompletionHandler_UseNewPipeline_ProducesNonEmptyDefaultList()
-    {
-        var items = InvokeNewPipelineCompletion("\n").ToList();
-        Assert.NotEmpty(items);
-    }
-
-    [Fact]
-    public void CompletionHandler_DefaultPipeline_LivePathUnchanged()
-    {
-        // The live path (useNewPipeline = false) must still return the same shape.
-        var (liveItems, newItems) = InvokeBoths("\n");
-
-        // Both paths must include keywords and namespaces.
-        Assert.Contains(liveItems, i => i.Label == "let");
-        Assert.Contains(newItems, i => i.Label == "let");
-        Assert.Contains(liveItems, i => i.Label == "io");
-        Assert.Contains(newItems, i => i.Label == "io");
-    }
-
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Invokes the new pipeline via the test-only CompletionHandler constructor.
-    /// </summary>
-    private static IEnumerable<CompletionItem> InvokeNewPipelineCompletion(string source)
+    /// <summary>Invokes the completion handler at the end of <paramref name="source"/>.</summary>
+    private static IEnumerable<CompletionItem> InvokeCompletion(string source)
     {
         var lines = source.Split('\n');
         int line = lines.Length - 1;
-        return InvokeNewPipelineCompletionAt(source + "\n", line + 1, 0);
+        return InvokeCompletionAt(source + "\n", line + 1, 0);
     }
 
-    private static IEnumerable<CompletionItem> InvokeNewPipelineCompletionAt(
-        string source, int line, int col)
+    private static IEnumerable<CompletionItem> InvokeCompletionAt(string source, int line, int col)
     {
         var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
         var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
         var logger = NullLogger<CompletionHandler>.Instance;
 
-        var uri = new Uri($"file:///test/np_{Guid.NewGuid():N}.stash");
+        var uri = new Uri($"file:///test/dmp_{Guid.NewGuid():N}.stash");
         docs.Open(uri, source, 1);
         engine.Analyze(uri, source);
 
@@ -318,51 +304,11 @@ public class DefaultModeProvidersTests
         {
             TextDocument = new TextDocumentIdentifier { Uri = uri },
             Position = new Position { Line = line, Character = col },
-            Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
-            {
-                TriggerKind = CompletionTriggerKind.Invoked
-            }
+            Context = new LspCompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
         };
 
         var result = handler.Handle(request, default).Result;
         return result.Items ?? Enumerable.Empty<CompletionItem>();
-    }
-
-    /// <summary>Returns (liveItems, newItems) for the same source to compare the two paths.</summary>
-    private static (List<CompletionItem> Live, List<CompletionItem> New) InvokeBoths(string source)
-    {
-        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
-        var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
-        var logger = NullLogger<CompletionHandler>.Instance;
-
-        var lines = source.Split('\n');
-        int line = lines.Length;
-        string fullSource = source + "\n";
-        var uri = new Uri($"file:///test/both_{Guid.NewGuid():N}.stash");
-        docs.Open(uri, fullSource, 1);
-        engine.Analyze(uri, fullSource);
-
-        var dispatcher = BuildDispatcher();
-        var liveHandler = new CompletionHandler(engine, docs, logger, dispatcher);
-        var newHandler  = liveHandler; // single pipeline post-cutover
-
-        var request = new CompletionParams
-        {
-            TextDocument = new TextDocumentIdentifier { Uri = uri },
-            Position = new Position { Line = line, Character = 0 },
-            Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
-            {
-                TriggerKind = CompletionTriggerKind.Invoked
-            }
-        };
-
-        var liveResult = liveHandler.Handle(request, default).Result;
-        var newResult  = newHandler.Handle(request, default).Result;
-
-        return (
-            (liveResult.Items ?? Enumerable.Empty<CompletionItem>()).ToList(),
-            (newResult.Items  ?? Enumerable.Empty<CompletionItem>()).ToList()
-        );
     }
 
     /// <summary>Builds a Default-mode CompletionContext backed by an analyzed source.</summary>
@@ -393,7 +339,7 @@ public class DefaultModeProvidersTests
 
     private static CompletionDispatcher BuildDispatcher()
     {
-        var pipelines = new System.Collections.Generic.Dictionary<CompletionMode, System.Collections.Generic.IReadOnlyList<ICompletionProvider>>
+        var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
         {
             [CompletionMode.Default] = new ICompletionProvider[]
             {

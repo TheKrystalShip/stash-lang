@@ -9,9 +9,9 @@ using System.Collections.Generic;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Ordering is load-bearing — it mirrors the fall-through branches in the monolith's
-/// <c>HandleDotCompletion</c> method. Do not reorder without consulting the Decision Log
-/// in <c>.kanban/2-in-progress/lsp-completion-providers/brief.md</c>.
+/// Ordering is load-bearing. Do not reorder without consulting the per-strategy
+/// gating documentation on <see cref="DotCompletionProvider"/> and on each concrete
+/// strategy.
 /// </para>
 /// <para>
 /// Some strategies short-circuit the pipeline by returning a non-empty list that causes

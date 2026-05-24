@@ -18,15 +18,11 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext;
 
 /// <summary>
-/// Unit tests for the three context-mode completion providers added in Phase 4
-/// of the <c>lsp-completion-providers</c> feature:
-/// <see cref="ImportPathCompletionProvider"/>, <see cref="IsTypeCompletionProvider"/>,
-/// and <see cref="ExtendTypeCompletionProvider"/>.
+/// Unit tests for the three context-mode completion providers:
+/// <see cref="ImportPathCompletionProvider"/> (in import-path strings),
+/// <see cref="IsTypeCompletionProvider"/> (after the <c>is</c> keyword), and
+/// <see cref="ExtendTypeCompletionProvider"/> (after the <c>extend</c> keyword).
 /// </summary>
-/// <remarks>
-/// All three providers are parallel-path only: the live request path in
-/// <c>CompletionHandler.Handle</c> is unchanged in this phase.
-/// </remarks>
 public class ContextModeProvidersTests
 {
     // ── ImportPathCompletionProvider — AppliesTo gate ────────────────────────────
@@ -353,27 +349,6 @@ public class ContextModeProvidersTests
         Assert.Equal("ExtendTypeCompletionProvider", candidate.SourceTag);
     }
 
-    // ── Live request path unchanged ──────────────────────────────────────────────
-
-    [Fact]
-    public void CompletionHandler_LivePath_IsUnchanged_AfterExtend()
-    {
-        // Invoke via the live path (useNewPipeline=false) on an "extend " line.
-        // The monolith must still return BuildExtendTypeCompletionList's output.
-        var (liveItems, _) = InvokeBoths("extend ");
-        Assert.Contains(liveItems, i => i.Label == "string");
-        Assert.Contains(liveItems, i => i.Label == "array");
-    }
-
-    [Fact]
-    public void CompletionHandler_LivePath_IsUnchanged_AfterIs()
-    {
-        // Same for "is " — monolith must return BuildTypeCompletionList's output.
-        var (liveItems, _) = InvokeBoths("x is ");
-        // TypeDescriptions must include "string"
-        Assert.Contains(liveItems, i => i.Label == "string");
-    }
-
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -441,46 +416,6 @@ public class ContextModeProvidersTests
             TriggerCharacter: null);
     }
 
-    /// <summary>Returns (liveItems, newItems) via both CompletionHandler paths at end of source.</summary>
-    private static (List<CompletionItem> Live, List<CompletionItem> New) InvokeBoths(string source)
-    {
-        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
-        var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
-        var logger = NullLogger<Stash.Lsp.Handlers.CompletionHandler>.Instance;
-
-        string fullSource = source + "\n";
-        var lines = fullSource.Split('\n');
-        // Position at the last non-empty line to trigger the context
-        int targetLine = 0;
-        int targetCol = source.TrimEnd('\n').Length;
-
-        var uri = new Uri($"file:///test/both_{Guid.NewGuid():N}.stash");
-        docs.Open(uri, fullSource, 1);
-        engine.Analyze(uri, fullSource);
-
-        var dispatcher = BuildDispatcher();
-        var liveHandler = new Stash.Lsp.Handlers.CompletionHandler(engine, docs, logger, dispatcher);
-        var newHandler  = liveHandler; // single pipeline post-cutover
-
-        var request = new CompletionParams
-        {
-            TextDocument = new TextDocumentIdentifier { Uri = uri },
-            Position = new Position { Line = targetLine, Character = targetCol },
-            Context = new OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext
-            {
-                TriggerKind = CompletionTriggerKind.Invoked
-            }
-        };
-
-        var liveResult = liveHandler.Handle(request, default).Result;
-        var newResult  = newHandler.Handle(request, default).Result;
-
-        return (
-            (liveResult.Items ?? Enumerable.Empty<CompletionItem>()).ToList(),
-            (newResult.Items  ?? Enumerable.Empty<CompletionItem>()).ToList()
-        );
-    }
-
     // ── Temporary directory helper ────────────────────────────────────────────────
 
     /// <summary>
@@ -520,22 +455,4 @@ public class ContextModeProvidersTests
         }
     }
 
-    private static Stash.Lsp.Completion.CompletionDispatcher BuildDispatcher()
-    {
-        var pipelines = new Dictionary<Stash.Lsp.Completion.CompletionMode, IReadOnlyList<Stash.Lsp.Completion.ICompletionProvider>>
-        {
-            [Stash.Lsp.Completion.CompletionMode.Default] = new Stash.Lsp.Completion.ICompletionProvider[]
-            {
-                new KeywordCompletionProvider(),
-                new StdlibFunctionCompletionProvider(),
-                new StdlibNamespaceCompletionProvider(),
-                new ScopedSymbolCompletionProvider(),
-            },
-            [Stash.Lsp.Completion.CompletionMode.Dot] = new Stash.Lsp.Completion.ICompletionProvider[] { new DotCompletionProvider() },
-            [Stash.Lsp.Completion.CompletionMode.ImportString] = new Stash.Lsp.Completion.ICompletionProvider[] { new ImportPathCompletionProvider() },
-            [Stash.Lsp.Completion.CompletionMode.AfterIs] = new Stash.Lsp.Completion.ICompletionProvider[] { new IsTypeCompletionProvider() },
-            [Stash.Lsp.Completion.CompletionMode.AfterExtend] = new Stash.Lsp.Completion.ICompletionProvider[] { new ExtendTypeCompletionProvider() },
-        };
-        return new Stash.Lsp.Completion.CompletionDispatcher(pipelines);
-    }
 }

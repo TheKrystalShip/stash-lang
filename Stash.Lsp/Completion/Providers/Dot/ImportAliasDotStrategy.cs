@@ -15,8 +15,7 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// <para>
 /// <strong>Gating semantics:</strong> This strategy short-circuits the pipeline on a
 /// match — the <see cref="DotCompletionProvider"/> performs a <em>hard early-return</em>
-/// after this strategy if it emits anything. Mirrors the monolith's
-/// <c>return new CompletionList(items);</c> at line 621.
+/// after this strategy if it emits anything.
 /// </para>
 /// <para>
 /// <see cref="CompletionCandidate.SourcePriority"/>: <c>110</c> (strategy 2 of 6).

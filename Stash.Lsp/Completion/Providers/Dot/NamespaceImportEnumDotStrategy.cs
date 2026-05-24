@@ -14,14 +14,12 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// <remarks>
 /// <para>
 /// Searches each namespace-imported module for an enum named <paramref name="prefix"/>.
-/// When found, emits that enum's members. Stops at the first matching enum (mirrors
-/// the monolith's <c>break</c> after the first hit).
+/// When found, emits that enum's members and stops at the first matching enum.
 /// </para>
 /// <para>
 /// <strong>Gating semantics:</strong> This strategy is only attempted when the accumulated
 /// candidate list from strategies 3–5 is empty. It does not itself short-circuit — the
 /// provider accumulates its output and returns at the end.
-/// Mirrors monolith lines 789–810: <c>if (items.Count == 0)</c> gate.
 /// </para>
 /// <para>
 /// <see cref="CompletionCandidate.SourcePriority"/>: <c>150</c> (strategy 6 of 6).
@@ -56,7 +54,7 @@ public sealed class NamespaceImportEnumDotStrategy : IDotStrategy
                     Accessibility: SymbolAccessibility.BareIdentifier);
             }
 
-            // Stop at the first matching enum — mirrors the monolith's `break`.
+            // Stop at the first matching enum.
             yield break;
         }
     }

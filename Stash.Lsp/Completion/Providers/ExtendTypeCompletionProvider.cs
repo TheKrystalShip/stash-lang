@@ -29,8 +29,7 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// The extendable built-in types are derived from <see cref="PrimitiveTypes.Names"/>
 /// by excluding meta/structural types (<c>bool</c>, <c>null</c>, <c>struct</c>,
 /// <c>enum</c>, <c>function</c>, <c>namespace</c>) and typed-array variants (names
-/// containing <c>[]</c>). This matches the monolith's <c>BuildExtendTypeCompletionList</c>
-/// list exactly while keeping the source of truth in <see cref="PrimitiveTypes"/>.
+/// containing <c>[]</c>) — <see cref="PrimitiveTypes"/> is the single source of truth.
 /// </para>
 /// </remarks>
 public sealed class ExtendTypeCompletionProvider : ICompletionProvider

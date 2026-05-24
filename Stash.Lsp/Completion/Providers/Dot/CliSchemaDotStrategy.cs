@@ -16,8 +16,7 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// <para>
 /// <strong>Gating semantics:</strong> This strategy is only attempted when the accumulated
 /// candidate list from strategies 3 and 4 is empty. If it finds a CLI schema and emits
-/// candidates, the <see cref="DotCompletionProvider"/> performs an early-return (mirrors
-/// monolith lines 766–786: <c>if (items.Count == 0) … if (items.Count > 0) return …</c>).
+/// candidates, the <see cref="DotCompletionProvider"/> performs an early-return.
 /// </para>
 /// <para>
 /// <see cref="CompletionCandidate.SourcePriority"/>: <c>140</c> (strategy 5 of 6).

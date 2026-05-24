@@ -40,9 +40,7 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// </list>
 /// <para>
 ///   Documentation for user functions with <c>@throws</c> entries is rendered via
-///   <see cref="CompletionInterop.AdaptThrows"/> and
-///   <see cref="ThrowsRenderer.Render"/> to match the behaviour of the monolith's
-///   <c>BuildFullCompletionList</c>.
+///   <see cref="CompletionInterop.AdaptThrows"/> and <see cref="ThrowsRenderer.Render"/>.
 /// </para>
 /// </remarks>
 public sealed class ScopedSymbolCompletionProvider : ICompletionProvider
@@ -70,7 +68,7 @@ public sealed class ScopedSymbolCompletionProvider : ICompletionProvider
             if (sym.Origin == SymbolOrigin.BuiltinStdlib)
                 continue;
 
-            // Render @throws entries into the documentation block, matching the monolith.
+            // Render @throws entries into the documentation block.
             string? doc = sym.Documentation;
             if (sym.Throws != null)
             {

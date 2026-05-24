@@ -21,8 +21,6 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// <para>
 /// <strong>Skipped when:</strong> the prefix resolves to a user-defined struct type
 /// (<c>prefixDef.Kind == Struct</c>). User-defined structs are not UFCS-eligible.
-/// Mirrors the monolith guard at line 683:
-/// <c>var ufcsNamespace = prefixDef?.Kind != StashSymbolKind.Struct ? … : null;</c>.
 /// </para>
 /// <para>
 /// <strong>Gating semantics:</strong> Runs <em>in parallel</em> with strategy 3

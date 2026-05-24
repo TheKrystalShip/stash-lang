@@ -10,8 +10,7 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// Provides package-name completion candidates when the cursor is inside an import-path
 /// string (i.e., the string argument to a <c>from … import</c> or bare <c>import</c>
 /// statement). Non-import strings yield no candidates, which causes the dispatcher to
-/// return an empty <see cref="OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionList"/>
-/// — the same behaviour as the monolithic handler's "suppress" path.
+/// return an empty <see cref="OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionList"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -102,7 +101,6 @@ public sealed class ImportPathCompletionProvider : ICompletionProvider
     /// <summary>
     /// Determines whether the cursor position within <paramref name="line"/> is inside
     /// a string that is part of an <c>import</c> or <c>from … import</c> statement.
-    /// Matches the same logic as the monolithic <c>GetImportCompletions</c>.
     /// </summary>
     /// <param name="line">The source line text.</param>
     /// <param name="col">The 0-based cursor column.</param>

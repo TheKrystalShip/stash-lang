@@ -18,16 +18,17 @@ using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models
 
 /// <summary>
 /// Unit tests for <see cref="DotCompletionProvider"/> and its six <see cref="IDotStrategy"/>
-/// implementations, added in Phase 3 of the <c>lsp-completion-providers</c> feature.
+/// implementations.
 /// </summary>
 /// <remarks>
 /// Tests verify that:
 /// <list type="bullet">
 ///   <item>The provider only applies in <see cref="CompletionMode.Dot"/> with a non-null prefix.</item>
-///   <item>Each strategy fires for its canonical prefix and produces the same output as the pre-refactor handler.</item>
-///   <item>The six strategies are invoked in the correct load-bearing order.</item>
+///   <item>Each strategy fires for its canonical prefix and emits candidates with the right kind / source priority / source tag.</item>
+///   <item>The six strategies are invoked in the correct load-bearing order, with the documented gating semantics
+///     (strategies 1 and 2 short-circuit; strategies 3 and 4 run in parallel; strategies 5 and 6 only fire when
+///     the accumulated output is still empty).</item>
 ///   <item>UFCS is skipped for user-defined struct receivers.</item>
-///   <item>The live request path is unchanged (parallel path).</item>
 /// </list>
 /// </remarks>
 public class DotCompletionProviderTests
@@ -96,17 +97,6 @@ public class DotCompletionProviderTests
         Assert.Empty(candidates);
     }
 
-    [Fact]
-    public void BuiltInNamespaceDotStrategy_ParityWithMonolith_ArrDot()
-    {
-        // The new strategy must produce the same labels as the live HandleDotCompletion.
-        var newLabels = InvokeProviderViaNewPipeline("arr", "arr.\n")
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        var liveLabels = InvokeLiveHandlerDot("arr", "arr.\n")
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        Assert.Equal(liveLabels, newLabels);
-    }
-
     // ── Strategy 2: ImportAliasDotStrategy ───────────────────────────────────────
 
     [Fact]
@@ -167,17 +157,6 @@ public class DotCompletionProviderTests
     {
         var candidates = InvokeStrategy3("unknownVar", "let x = 1;\n").ToList();
         Assert.Empty(candidates);
-    }
-
-    [Fact]
-    public void StructOrUserEnumDotStrategy_ParityWithMonolith_PointDot()
-    {
-        const string src = "struct Point { x, y }\nlet point: Point = Point { x: 1, y: 2 };\n";
-        var newLabels = InvokeProviderViaNewPipeline("point", src + "point.\n")
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        var liveLabels = InvokeLiveHandlerDot("point", src + "point.\n")
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        Assert.Equal(liveLabels, newLabels);
     }
 
     // ── Strategy 4: UfcsDotStrategy ──────────────────────────────────────────────
@@ -275,7 +254,7 @@ public class DotCompletionProviderTests
         // "arr" is both a built-in namespace name and could be a variable name.
         // The built-in namespace check (strategy 1) must win and hard-return.
         const string src = "let arr = 1;\n";
-        var candidates = InvokeProviderViaNewPipeline("arr", src + "arr.\n").ToList();
+        var candidates = InvokeDotCompletion("arr", src + "arr.\n").ToList();
 
         // Must contain Function-kind items (from the built-in arr namespace), not just Variable.
         Assert.Contains(candidates, i => i.Kind == LspCompletionItemKind.Function);
@@ -293,7 +272,7 @@ public class DotCompletionProviderTests
     {
         // A string variable: strategy 3 finds no user struct, strategy 4 (UFCS) emits methods.
         const string src = "let msg: string = \"hello\";\n";
-        var candidates = InvokeProviderViaNewPipeline("msg", src + "msg.\n").ToList();
+        var candidates = InvokeDotCompletion("msg", src + "msg.\n").ToList();
 
         // Must contain Method-kind items from UFCS (str namespace).
         Assert.Contains(candidates, i => i.Kind == LspCompletionItemKind.Method);
@@ -305,7 +284,7 @@ public class DotCompletionProviderTests
     public void DotCompletionProvider_UfcsSkipped_ForUserDefinedStructReceiver()
     {
         const string src = "struct MyStruct { value }\nlet obj: MyStruct = MyStruct { value: 1 };\n";
-        var candidates = InvokeProviderViaNewPipeline("obj", src + "obj.\n").ToList();
+        var candidates = InvokeDotCompletion("obj", src + "obj.\n").ToList();
 
         // Must contain Field-kind from strategy 3 (struct fields).
         Assert.Contains(candidates, i => i.Label == "value" && i.Kind == LspCompletionItemKind.Field);
@@ -318,75 +297,31 @@ public class DotCompletionProviderTests
         Assert.Empty(ufcsCandidates);
     }
 
-    // ── Parity with monolith for canonical prefixes ───────────────────────────────
+    // ── End-to-end dot-mode smoke ─────────────────────────────────────────────────
 
     [Fact]
-    public void NewPipeline_DotMode_ArrDot_MatchesMonolith()
+    public void DotCompletionProvider_ArrDot_ProducesNamespaceMembers()
     {
-        var newLabels = InvokeProviderViaNewPipeline("arr", "arr.\n")
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        var liveLabels = InvokeLiveHandlerDot("arr", "arr.\n")
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        Assert.Equal(liveLabels, newLabels);
-    }
-
-    [Fact]
-    public void NewPipeline_DotMode_PointDot_MatchesMonolith()
-    {
-        const string src = "struct Point { x, y }\nlet point: Point = Point { x: 1, y: 2 };\npoint.\n";
-        var newLabels = InvokeProviderViaNewPipeline("point", src)
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        var liveLabels = InvokeLiveHandlerDot("point", src)
-            .Select(i => i.Label).OrderBy(x => x).ToList();
-        Assert.Equal(liveLabels, newLabels);
-    }
-
-    // ── Live request path unchanged ───────────────────────────────────────────────
-
-    [Fact]
-    public void LiveRequestPath_StillGoesThrough_OldHandleDotCompletion()
-    {
-        // The live handler (useNewPipeline = false) must produce arr. completions
-        // identical to the known-good baseline.
-        var liveItems = InvokeLiveHandlerDot("arr", "arr.\n").ToList();
-        Assert.NotEmpty(liveItems);
-        // Spot-check: arr.push should exist.
-        Assert.Contains(liveItems, i => i.Label == "push");
-    }
-
-    [Fact]
-    public void LiveRequestPath_ArrDot_OutputUnchanged_WhenNewPipelineIsOff()
-    {
-        // Test that the production handler (not useNewPipeline) produces arr. results,
-        // confirming P3 did not break the live path.
-        var liveEngine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
-        var liveDocs = new DocumentManager(NullLogger<DocumentManager>.Instance);
-        var liveLogger = NullLogger<CompletionHandler>.Instance;
-        const string src = "arr.\n";
-        var liveUri = new Uri($"file:///test/live_{Guid.NewGuid():N}.stash");
-        liveDocs.Open(liveUri, src, 1);
-        liveEngine.Analyze(liveUri, src);
-        var liveHandler = new CompletionHandler(liveEngine, liveDocs, liveLogger, BuildDispatcher());
-
-        var request = new CompletionParams
-        {
-            TextDocument = new TextDocumentIdentifier { Uri = liveUri },
-            Position = new Position { Line = 0, Character = 4 }, // after "arr."
-            Context = new LspCompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
-        };
-        var result = liveHandler.Handle(request, default).Result;
-        var items = (result.Items ?? Enumerable.Empty<CompletionItem>()).ToList();
+        var items = InvokeDotCompletion("arr", "arr.\n").ToList();
         Assert.NotEmpty(items);
         Assert.Contains(items, i => i.Label == "push");
+    }
+
+    [Fact]
+    public void DotCompletionProvider_PointDot_ProducesStructFields()
+    {
+        const string src = "struct Point { x, y }\nlet point: Point = Point { x: 1, y: 2 };\npoint.\n";
+        var labels = InvokeDotCompletion("point", src).Select(i => i.Label).ToHashSet();
+        Assert.Contains("x", labels);
+        Assert.Contains("y", labels);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Invokes <see cref="DotCompletionProvider.Provide"/> directly via the dispatcher
-    /// using the test-only <see cref="CompletionHandler"/> constructor seam.
+    /// Invokes the completion handler in dot mode at the line containing <paramref name="prefix"/><c>.</c>.
     /// </summary>
-    private static IEnumerable<CompletionItem> InvokeProviderViaNewPipeline(string prefix, string source)
+    private static IEnumerable<CompletionItem> InvokeDotCompletion(string prefix, string source)
     {
         var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
         var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
@@ -399,48 +334,6 @@ public class DotCompletionProviderTests
         var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
 
         // Position cursor at the end of the line containing prefix + "."
-        var lines = source.Split('\n');
-        int dotLine = 0;
-        for (int i = 0; i < lines.Length; i++)
-        {
-            if (lines[i].TrimEnd() == prefix + ".")
-            {
-                dotLine = i;
-                break;
-            }
-        }
-        int dotCol = prefix.Length + 1;
-
-        var request = new CompletionParams
-        {
-            TextDocument = new TextDocumentIdentifier { Uri = uri },
-            Position = new Position { Line = dotLine, Character = dotCol },
-            Context = new LspCompletionContext
-            {
-                TriggerKind = CompletionTriggerKind.TriggerCharacter,
-                TriggerCharacter = "."
-            }
-        };
-
-        var result = handler.Handle(request, default).Result;
-        return result.Items ?? Enumerable.Empty<CompletionItem>();
-    }
-
-    /// <summary>
-    /// Invokes the live (pre-refactor) <c>HandleDotCompletion</c> path for comparison.
-    /// </summary>
-    private static IEnumerable<CompletionItem> InvokeLiveHandlerDot(string prefix, string source)
-    {
-        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
-        var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
-        var logger = NullLogger<CompletionHandler>.Instance;
-
-        var uri = new Uri($"file:///test/dot_live_{Guid.NewGuid():N}.stash");
-        docs.Open(uri, source, 1);
-        engine.Analyze(uri, source);
-
-        var handler = new CompletionHandler(engine, docs, logger, BuildDispatcher());
-
         var lines = source.Split('\n');
         int dotLine = 0;
         for (int i = 0; i < lines.Length; i++)

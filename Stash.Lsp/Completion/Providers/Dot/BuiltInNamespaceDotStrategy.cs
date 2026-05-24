@@ -17,8 +17,7 @@ using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Model
 /// <para>
 /// <strong>Gating semantics:</strong> This strategy always produces results when the prefix
 /// is a known built-in namespace, and the <see cref="DotCompletionProvider"/> performs a
-/// <em>hard early-return</em> after this strategy if it emits anything — exactly matching
-/// the monolith's <c>return new CompletionList(items);</c> at line 605. Subsequent
+/// <em>hard early-return</em> after this strategy if it emits anything — subsequent
 /// strategies are not invoked.
 /// </para>
 /// <para>
