@@ -1,0 +1,8 @@
+// Fixture: Dot mode — user struct instance.
+// Used by: Snapshot_Dot_StructInstance_EmitsFieldsAndMethods
+struct Rect {
+  width, height
+  fn area() { self.width * self.height }
+}
+let r: Rect = Rect { width: 10, height: 5 };
+r.

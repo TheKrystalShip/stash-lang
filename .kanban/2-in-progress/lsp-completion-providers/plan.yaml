@@ -138,6 +138,7 @@ phases:
     files:
       - Stash.Tests/Lsp/CompletionSurfaceSnapshotTests.cs
       - Stash.Tests/Lsp/Completion/Fixtures/*.stash
+      - Stash.Tests/Stash.Tests.csproj
     verify:
       - dotnet build
       - dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~NamespaceMembersLspTests"

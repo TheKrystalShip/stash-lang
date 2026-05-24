@@ -1,0 +1,8 @@
+// Fixture: Dot mode — CLI schema result variable.
+// Used by: Snapshot_Dot_CliSchema_EmitsSchemaFields
+const schema = cli.schema({
+  name: { short: "n", type: "string" },
+  verbose: { short: "v", type: "bool" },
+});
+const parsed = cli.parse(schema);
+parsed.

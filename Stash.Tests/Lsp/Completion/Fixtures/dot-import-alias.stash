@@ -1,0 +1,6 @@
+// Fixture: Dot mode — import alias prefix.
+// Used by: Snapshot_Dot_ImportAlias_EmitsModuleExports
+// Note: This fixture is used as a template; the actual source is constructed
+// programmatically in the test with a real module file on disk.
+import "mylib" as mylib;
+mylib.

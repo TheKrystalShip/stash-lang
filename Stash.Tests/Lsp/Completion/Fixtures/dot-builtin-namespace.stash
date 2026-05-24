@@ -1,0 +1,3 @@
+// Fixture: Dot mode — built-in namespace prefix (arr).
+// Used by: Snapshot_Dot_BuiltInNamespace_EmitsRegistryMembers
+arr.

@@ -1,0 +1,3 @@
+// Fixture: ImportString mode — cursor inside an import path string.
+// Used by: Snapshot_ImportString_FromStatement_EmitsPackageNames
+from "|"

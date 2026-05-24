@@ -1,0 +1,6 @@
+// Fixture: Dot mode — enum exported from a namespace-imported module.
+// Used by: Snapshot_Dot_NamespaceImportEnum_EmitsEnumMembers
+// Note: The actual test constructs the analysis result programmatically with a
+// real module on disk, injecting an imported enum via the analysis engine.
+import "utils" as utils;
+utils.LogLevel.

@@ -1,0 +1,3 @@
+// Fixture: AfterExtend mode — cursor in type-name position after 'extend'.
+// Used by: Snapshot_AfterExtend_EmitsExtendableTypes
+extend

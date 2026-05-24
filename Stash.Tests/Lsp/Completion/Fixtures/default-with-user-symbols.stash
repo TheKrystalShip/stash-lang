@@ -1,0 +1,3 @@
+// Fixture: Default mode with one user variable in scope.
+// Used by: Snapshot_Default_WithUserVariable_IncludesUserVar
+let myCount = 42;

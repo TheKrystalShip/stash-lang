@@ -1,0 +1,4 @@
+// Fixture: Dot mode — UFCS on a string variable.
+// Used by: Snapshot_Dot_Ufcs_StringVariable_EmitsStringMethods
+let greeting: string = "hello";
+greeting.
