@@ -87,7 +87,8 @@ dotnet run --project Stash.Cli/ -c Release -- /tmp/t.stash   # must still error;
 
 ## F02 — [MINOR] Dot-strategy gating (strategies 5 and 6 only fire when accumulated empty) is uncovered by tests
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** da0f85a
 **Files:** `Stash.Lsp/Completion/Providers/DotCompletionProvider.cs:76-99`, `Stash.Tests/Lsp/Completion/DotCompletionProviderTests.cs`
 **Phase:** P3 / P6
 **Commit:** 93bb7e3, 89087ed
@@ -254,7 +255,8 @@ dotnet test --filter "FullyQualifiedName~CompletionItemSinkTests|FullyQualifiedN
 
 ## F05 — [NIT] P5 done_when says "CompletionDispatcher and its providers are registered as singletons"; only the dispatcher is DI-registered
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** da0f85a
 **Files:** `Stash.Lsp/StashLanguageServer.cs:49-78`
 **Phase:** P5
 **Commit:** 68e9533

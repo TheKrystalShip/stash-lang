@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-completion-providers
 current: null
-updated: '2026-05-24T11:32:31Z'
+updated: '2026-05-24T11:44:37Z'
 phases:
   P1:
     status: done
@@ -59,8 +59,8 @@ phases:
     notes: Added 29 snapshot tests covering all 5 CompletionModes and all 6 IDotStrategy branches with
       anti-assertions; 11 .stash fixture files; csproj plan correction
 review:
-  status: in_progress
+  status: resolved
   started: '2026-05-24T10:40:17Z'
-  resolved: null
+  resolved: '2026-05-24T11:44:37Z'
   findings_open: 0
   findings_fixed: 0
