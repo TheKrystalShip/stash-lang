@@ -1,0 +1,158 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose
+# in brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py lsp-snippet-completions
+
+schema_version: 1
+
+feature: lsp-snippet-completions
+title: LSP Snippet Completions
+brief: ./brief.md
+
+created: 2026-05-24
+architect_session: opus-4.7-2026-05-24
+
+# Default verify run after every phase, in addition to phase-specific verify.
+default_verify:
+  - dotnet build
+
+# Broad scope. Implementer trusts per-phase `files` first; this is a safety rail.
+scope:
+  - Stash.Lsp/**
+  - Stash.Tests/Lsp/**
+  - .vscode/extensions/stash-lang/**
+
+phases:
+  - id: P1
+    title: Extend CompletionCandidate and sink with insertion-template fields
+    deps: []
+    files:
+      - Stash.Lsp/Completion/CompletionCandidate.cs
+      - Stash.Lsp/Completion/CompletionItemSink.cs
+      - Stash.Tests/Lsp/Completion/CompletionItemSinkTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~CompletionItemSinkTests"
+    done_when:
+      - CompletionCandidate carries optional InsertText (string?) and InsertTextFormat (defaulting to PlainText).
+      - All existing CompletionCandidate construction sites compile unchanged (additive positional defaults).
+      - CompletionItemSink.Add copies InsertText to CompletionItem.InsertText and InsertTextFormat to CompletionItem.InsertTextFormat when InsertText is non-null.
+      - When InsertText is null, the materialized CompletionItem leaves InsertText unset and clients still insert Label (no behavior change), verified by snapshot/unit test.
+      - A new unit test asserts a candidate with InsertText snippet body and InsertTextFormat=Snippet round-trips intact through Materialize().
+    notes: |
+      Pure scaffolding. No new provider yet, no JSON, no DI changes. This phase
+      must keep all existing CompletionSurfaceSnapshotTests green unmodified.
+
+  - id: P2
+    title: Snippet model, bundled registry, validator, and provider (no context-awareness, no UI)
+    deps: [P1]
+    files:
+      - Stash.Lsp/Completion/Snippets/Snippet.cs
+      - Stash.Lsp/Completion/Snippets/SnippetScope.cs
+      - Stash.Lsp/Completion/Snippets/SnippetSourceKind.cs
+      - Stash.Lsp/Completion/Snippets/ISnippetRegistry.cs
+      - Stash.Lsp/Completion/Snippets/BundledSnippetRegistry.cs
+      - Stash.Lsp/Completion/Snippets/SnippetValidator.cs
+      - Stash.Lsp/Completion/Snippets/SnippetLoadError.cs
+      - Stash.Lsp/Completion/Snippets/RawSnippet.cs
+      - Stash.Lsp/Completion/Snippets/bundled.json
+      - Stash.Lsp/Completion/Providers/SnippetCompletionProvider.cs
+      - Stash.Lsp/StashLanguageServer.cs
+      - Stash.Lsp/Stash.Lsp.csproj
+      - Stash.Tests/Lsp/Completion/SnippetValidatorTests.cs
+      - Stash.Tests/Lsp/Completion/SnippetCompletionProviderTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~SnippetValidatorTests|FullyQualifiedName~SnippetCompletionProviderTests"
+    done_when:
+      - bundled.json exists as a tiny seed (at least the fn / let / for / if / struct snippets from the VSCode extension) and is embedded as a resource via the csproj.
+      - SnippetValidator enforces all seven validation rules from brief Q1 (prefix shape, body presence, lex, parse, tabstop syntax, scope value, per-source uniqueness) with one test per rule.
+      - Tabstop-strip step substitutes default-text placeholders with their default and bare $N with __snip_N, then re-runs lex+parse, verified by a snippet whose placeholder is an identifier slot.
+      - BundledSnippetRegistry loads, validates, and exposes Snapshot() returning only valid snippets; collected SnippetLoadErrors are accessible to callers (still no UI in this phase — surfacing arrives in P3).
+      - SnippetCompletionProvider is registered for CompletionMode.Default with SourcePriority strictly greater than ScopedSymbolCompletionProvider's priority (snippet loses dedup to user-scope symbols).
+      - End-to-end test, completion at any Default-mode position emits the seed snippets as CompletionItems with InsertTextFormat=Snippet and Kind=Snippet.
+      - Symbol-vs-snippet collision test, when a user variable shares a snippet prefix, the variable appears and the snippet does not.
+    notes: |
+      No context gating yet — every bundled snippet has Scope=Any in this phase
+      so the surface tests don't depend on cursor position. P4 introduces gating.
+      No window/showMessage call yet — that's P3.
+
+  - id: P3
+    title: Failure-surfacing — window/showMessage + ILogger, LSP-stays-up guarantee
+    deps: [P2]
+    files:
+      - Stash.Lsp/Completion/Snippets/BundledSnippetRegistry.cs
+      - Stash.Lsp/Completion/Snippets/SnippetDiagnosticsReporter.cs
+      - Stash.Lsp/StashLanguageServer.cs
+      - Stash.Tests/Lsp/Completion/SnippetFailureSurfacingTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~SnippetFailureSurfacingTests"
+    done_when:
+      - When the bundled JSON contains one or more invalid snippets, the LSP startup pipeline does not throw and the LSP serves other completion modes normally (regression test asserts this by spinning a server with a poisoned bundle resource).
+      - Each invalid snippet produces exactly one ILogger.LogError entry with a structured payload containing SnippetId / SourceLocation / Reason.
+      - On startup, ILanguageServerFacade.Window.ShowMessage is invoked exactly once with MessageType.Error and a message naming the count and source.
+      - When the bundled JSON is itself malformed (top-level parse failure), the registry returns an empty Snapshot and still surfaces a single Error-severity ShowMessage notification, no exception escapes.
+      - Valid snippets in a partially-corrupted bundle continue to be served.
+    notes: |
+      Use the OmniSharp ILanguageServerFacade.Window.ShowMessage API.
+      SnippetDiagnosticsReporter is a thin seam that takes the facade + logger
+      and can be stubbed in tests (the regression test injects a no-op facade
+      and asserts the logger received the structured payload).
+
+  - id: P4
+    title: Context-aware snippets — scope vocabulary, SnippetContext helper, provider gating
+    deps: [P3]
+    files:
+      - Stash.Lsp/Completion/Snippets/SnippetContext.cs
+      - Stash.Lsp/Completion/Snippets/SnippetScope.cs
+      - Stash.Lsp/Completion/Snippets/SnippetValidator.cs
+      - Stash.Lsp/Completion/Snippets/bundled.json
+      - Stash.Lsp/Completion/Providers/SnippetCompletionProvider.cs
+      - Stash.Tests/Lsp/Completion/SnippetContextTests.cs
+      - Stash.Tests/Lsp/Completion/SnippetCompletionProviderTests.cs
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~SnippetContextTests|FullyQualifiedName~SnippetCompletionProviderTests"
+    done_when:
+      - SnippetContext.Classify maps a (ScopeTree, line, col) to one of Any/TopLevel/FnBody/LoopBody by walking Scope.Parent for the nearest Function/Loop ancestor; TopLevel for Global.
+      - SnippetScope.Matches(snippetScope, cursorScope) returns true iff snippetScope==Any or snippetScope==cursorScope.
+      - SnippetValidator accepts the new scope vocabulary values (case-insensitive) and rejects unknown values with a SnippetLoadError citing the snippet Id.
+      - Bundled snippets are reclassified per brief, declaration snippets (fn, struct, enum, interface, import, shebang) declare top-level; statement snippets that require a function body (return, while, for, fori, forr, try, pln, aeq, atrue) declare fn-body; the rest stay Any or pick the narrowest sensible scope.
+      - SnippetCompletionProvider gates emission on SnippetContext.Classify, verified by a fixture pair (cursor at top-level vs cursor inside an fn body) asserting different snippet sets appear.
+      - No snippet appears in Dot mode (verified by surface snapshot or explicit provider-mode assertion).
+
+  - id: P5
+    title: Migrate JSON from VS Code extension into LSP and delete extension snippet source
+    deps: [P4]
+    files:
+      - Stash.Lsp/Completion/Snippets/bundled.json
+      - .vscode/extensions/stash-lang/package.json
+      - .vscode/extensions/stash-lang/snippets/stash.json
+      - Stash.Tests/Lsp/Completion/CompletionSurfaceSnapshotTests.cs
+      - Stash.Tests/Lsp/Completion/Snapshots/Default_WithSnippets.txt
+    verify:
+      - dotnet build Stash.Lsp
+      - dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~SnippetCompletionProviderTests|FullyQualifiedName~SnippetValidatorTests"
+    done_when:
+      - bundled.json contains a 1:1 migration of every entry from .vscode/extensions/stash-lang/snippets/stash.json that passes the validator, each tagged with the correct scope per P4 reclassification.
+      - Any seed entries that fail validation are fixed in bundled.json (not silently dropped); a brief Decision Log entry records each fix.
+      - .vscode/extensions/stash-lang/snippets/stash.json is deleted.
+      - .vscode/extensions/stash-lang/package.json no longer contains a contributes.snippets key for the stash language.
+      - A new snapshot test (Default_WithSnippets.txt) locks the full snippet candidate surface in Default mode and is added to CompletionSurfaceSnapshotTests's fixture rotation.
+      - The .vscode/extensions/stash-lang/snippets/stash-tpl.json file is left untouched (the .tpl language is not LSP-served — see brief Non-Goals / Open Questions).
+    notes: |
+      The migration is intentionally sequenced as two commits in this single phase:
+      (1) populate bundled.json from the extension; (2) delete the extension JSON
+      and remove the package.json key. Do them in that order so a bisect inside
+      this phase never hits a "snippets missing on both sides" state.
+      See Decision Log Q10.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Filter excludes documented flakies per .claude/repo.md "Known Issues" — same shape as
+# the precedent feature lsp-completion-providers/plan.yaml.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount"
+  - python3 scripts/checkpoint/validate-spec.py lsp-snippet-completions
