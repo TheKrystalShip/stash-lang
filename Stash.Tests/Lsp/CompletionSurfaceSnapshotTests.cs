@@ -566,6 +566,19 @@ public class CompletionSurfaceSnapshotTests
                 Assert.DoesNotContain(ns, candidateLabels);
             }
         }
+
+        // Regression net: primitive types that the runtime's extend-compiler check rejects
+        // must NOT be offered as completions. Suggesting them sets up a UX trap where the
+        // user picks a completion the runtime then refuses with
+        // "RuntimeError: Cannot extend '<name>': not a known type." The list below tracks
+        // primitives historically misclassified as extendable; if any future primitive
+        // becomes genuinely extendable, drop it from this list AND add it to
+        // ExtendTypeCompletionProvider.BuiltInExtendableTypes.
+        var runtimeRejected = new[] { "byte", "bytesize", "duration", "future", "ipaddress", "range", "secret", "semver" };
+        foreach (var t in runtimeRejected)
+        {
+            Assert.DoesNotContain(t, candidateLabels);
+        }
     }
 
     // ── Snapshot machinery ───────────────────────────────────────────────────

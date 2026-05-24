@@ -1,20 +1,17 @@
 namespace Stash.Lsp.Completion.Providers;
 
 using System;
-using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Analysis;
-using Stash.Common;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Provides type-name completion candidates for <c>extend</c> declarations.
-/// Emits built-in extendable types first (derived from <see cref="PrimitiveTypes"/>),
-/// then user-defined struct names from the current analysis result, with deduplication
-/// that prevents built-in names from appearing twice if a user defines a struct with
-/// the same name.
+/// Emits built-in extendable types first, then user-defined struct names from the current
+/// analysis result, with deduplication that prevents built-in names from appearing twice
+/// if a user defines a struct with the same name.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -26,31 +23,23 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// built-ins always win on collision.
 /// </para>
 /// <para>
-/// The extendable built-in types are derived from <see cref="PrimitiveTypes.Names"/>
-/// by excluding meta/structural types (<c>bool</c>, <c>null</c>, <c>struct</c>,
-/// <c>enum</c>, <c>function</c>, <c>namespace</c>) and typed-array variants (names
-/// containing <c>[]</c>) — <see cref="PrimitiveTypes"/> is the single source of truth.
+/// The extendable built-in types are hardcoded here to match the runtime whitelist in
+/// <c>Stash.Bytecode/Compilation/Compiler.Declarations.cs</c> (the <c>isBuiltIn</c> check).
+/// Only these five types are accepted by the runtime's <c>extend</c> execution path; all
+/// other primitive types (including <c>byte</c>, <c>duration</c>, <c>range</c>, etc.)
+/// produce a <c>RuntimeError: Cannot extend '...': not a known type.</c> error.
+/// If the runtime list changes, update <see cref="BuiltInExtendableTypes"/> to match.
 /// </para>
 /// </remarks>
 public sealed class ExtendTypeCompletionProvider : ICompletionProvider
 {
     /// <summary>
-    /// Primitive type names that are NOT extendable — structural or meta types.
-    /// Derived from <see cref="PrimitiveTypes.Names"/> by exclusion.
+    /// The canonical set of built-in types that the Stash runtime accepts as
+    /// <c>extend</c> targets. Matches the <c>isBuiltIn</c> check in
+    /// <c>Stash.Bytecode/Compilation/Compiler.Declarations.cs</c>.
     /// </summary>
-    private static readonly FrozenSet<string> _nonExtendable =
-        new HashSet<string>(StringComparer.Ordinal) { "bool", "null", "struct", "enum", "function", "namespace" }
-            .ToFrozenSet();
-
-    /// <summary>
-    /// The built-in extendable type names, derived from <see cref="PrimitiveTypes.Names"/>
-    /// by excluding non-extendable types and typed-array variants (e.g., <c>int[]</c>).
-    /// </summary>
-    private static readonly IReadOnlyList<string> _builtInExtendableTypes =
-        PrimitiveTypes.Names
-            .Where(static n => !_nonExtendable.Contains(n) && !n.Contains('['))
-            .OrderBy(static n => n, StringComparer.Ordinal)
-            .ToArray();
+    public static readonly IReadOnlyList<string> BuiltInExtendableTypes =
+        ["array", "dict", "float", "int", "string"];
 
     /// <inheritdoc />
     public bool AppliesTo(CompletionContext ctx) => ctx.Mode == CompletionMode.AfterExtend;
@@ -59,7 +48,7 @@ public sealed class ExtendTypeCompletionProvider : ICompletionProvider
     public IEnumerable<CompletionCandidate> Provide(CompletionContext ctx)
     {
         // Built-in extendable types — always emitted first
-        foreach (var typeName in _builtInExtendableTypes)
+        foreach (var typeName in BuiltInExtendableTypes)
         {
             yield return new CompletionCandidate(
                 Label: typeName,
@@ -75,7 +64,7 @@ public sealed class ExtendTypeCompletionProvider : ICompletionProvider
             yield break;
         }
 
-        var seen = new HashSet<string>(_builtInExtendableTypes, StringComparer.Ordinal);
+        var seen = new HashSet<string>(BuiltInExtendableTypes, StringComparer.Ordinal);
         foreach (var sym in ctx.Analysis.Symbols.All.Where(s => s.Kind == StashSymbolKind.Struct))
         {
             if (!seen.Add(sym.Name))

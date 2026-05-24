@@ -352,17 +352,11 @@ public class ContextModeProvidersTests
     // ── Helpers ──────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Returns the extendable built-in type names by mirroring the filter that
-    /// <see cref="ExtendTypeCompletionProvider"/> applies to <see cref="PrimitiveTypes.Names"/>:
-    /// exclude meta/structural types and typed-array variants.
+    /// Returns the canonical set of built-in types accepted by the runtime's
+    /// <c>extend</c> compiler check. Production code is the single source of truth.
     /// </summary>
     private static IEnumerable<string> ExtendableBuiltInTypes()
-    {
-        var nonExtendable = new HashSet<string>(StringComparer.Ordinal)
-            { "bool", "null", "struct", "enum", "function", "namespace" };
-        return PrimitiveTypes.Names
-            .Where(n => !nonExtendable.Contains(n) && !n.Contains('['));
-    }
+        => ExtendTypeCompletionProvider.BuiltInExtendableTypes;
 
     private static Stash.Lsp.Completion.CompletionContext BuildContextForMode(CompletionMode mode, string source, int line = 0, int col = 0)
     {
