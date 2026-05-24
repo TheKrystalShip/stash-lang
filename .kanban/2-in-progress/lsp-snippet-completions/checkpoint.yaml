@@ -1,16 +1,17 @@
 schema_version: 1
 feature: lsp-snippet-completions
 current: null
-updated: '2026-05-24T15:35:37Z'
+updated: '2026-05-24T16:48:19Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: afd2a10469e70ee1908cf075eb6dda74f7096541
+    verified: true
+    started: '2026-05-24T16:42:24Z'
+    completed: '2026-05-24T16:48:19Z'
+    attempts: 1
+    notes: Added InsertText/InsertTextFormat fields to CompletionCandidate; sink copies them when non-null;
+      2 new unit tests; all LSP tests green
   P2:
     status: pending
     commit: null
