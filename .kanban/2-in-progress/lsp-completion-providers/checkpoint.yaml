@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-completion-providers
 current: null
-updated: '2026-05-24T01:05:38Z'
+updated: '2026-05-24T01:38:18Z'
 phases:
   P1:
     status: done
@@ -50,13 +50,14 @@ phases:
       relocated to CompletionInterop.cs; dispatcher singleton in StashLanguageServer; all 297 LSP tests
       pass; snapshot re-baselined to remove member-leakage artifacts
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 89087ed4338b7cc44b82a2c44a10646c2f8fd315
+    verified: true
+    started: '2026-05-24T01:22:31Z'
+    completed: '2026-05-24T01:38:18Z'
+    attempts: 1
+    notes: Added 29 snapshot tests covering all 5 CompletionModes and all 6 IDotStrategy branches with
+      anti-assertions; 11 .stash fixture files; csproj plan correction
 review:
   status: not_started
   started: null
