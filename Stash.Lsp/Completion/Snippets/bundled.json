@@ -6,7 +6,8 @@
       "\t$0",
       "}"
     ],
-    "description": "Declare a function"
+    "description": "Declare a function",
+    "scope": "top-level"
   },
   "Variable Declaration": {
     "prefix": "letv",
@@ -21,7 +22,8 @@
       "\t${3:field2}",
       "}"
     ],
-    "description": "Declare a struct"
+    "description": "Declare a struct",
+    "scope": "top-level"
   },
   "If Statement": {
     "prefix": "ifc",

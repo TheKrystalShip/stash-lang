@@ -243,11 +243,50 @@ public class SnippetCompletionProviderTests
     }
 
     [Fact]
-    public void BundledRegistry_AllSnippets_HaveScopeAny()
+    public void BundledRegistry_DeclarationSnippets_HaveScopeTopLevel()
     {
-        // P2: all bundled snippets must have Scope=Any (no gating yet).
+        // P4: declaration snippets (fnd, strc) must be scope=TopLevel.
         var registry = new BundledSnippetRegistry();
-        Assert.All(registry.Snapshot(), s => Assert.Equal(SnippetScope.Any, s.Scope));
+        var byPrefix = registry.Snapshot().ToDictionary(s => s.Prefix);
+
+        Assert.Equal(SnippetScope.TopLevel, byPrefix["fnd"].Scope);
+        Assert.Equal(SnippetScope.TopLevel, byPrefix["strc"].Scope);
+    }
+
+    [Fact]
+    public void BundledRegistry_StatementSnippets_HaveScopeAny()
+    {
+        // P4: statement snippets (letv, ifc, ife, fore, fori) remain scope=Any.
+        var registry = new BundledSnippetRegistry();
+        var byPrefix = registry.Snapshot().ToDictionary(s => s.Prefix);
+
+        foreach (var prefix in new[] { "letv", "ifc", "ife", "fore", "fori" })
+            Assert.Equal(SnippetScope.Any, byPrefix[prefix].Scope);
+    }
+
+    // ── Scope-gated provider fixture pair ────────────────────────────────────────
+
+    [Fact]
+    public void Provider_TopLevelCursor_EmitsDeclarationSnippets()
+    {
+        // Cursor at top level (line 0, col 0 of empty document) must see fnd and strc.
+        var items = InvokeCompletionAt("\n", line: 0, col: 0, includeSnippets: true).ToList();
+
+        Assert.Contains(items, i => i.Label == "fnd" && i.Kind == LspCompletionItemKind.Snippet);
+        Assert.Contains(items, i => i.Label == "strc" && i.Kind == LspCompletionItemKind.Snippet);
+    }
+
+    [Fact]
+    public void Provider_FnBodyCursor_DoesNotEmitDeclarationSnippets()
+    {
+        // Cursor inside a function body must NOT see fnd or strc (they are TopLevel-only).
+        // Source: a function with a body containing a let statement so the cursor
+        // at line 1 is inside the function scope.
+        const string src = "fn foo() {\nlet x = 1;\n}\n";
+        var items = InvokeCompletionAt(src, line: 1, col: 0, includeSnippets: true).ToList();
+
+        Assert.DoesNotContain(items, i => i.Label == "fnd");
+        Assert.DoesNotContain(items, i => i.Label == "strc");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────────

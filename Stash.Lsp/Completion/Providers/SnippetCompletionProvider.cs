@@ -56,10 +56,13 @@ public sealed class SnippetCompletionProvider : ICompletionProvider
     /// <inheritdoc />
     public IEnumerable<CompletionCandidate> Provide(CompletionContext ctx)
     {
-        // P2: no cursor-scope gating — all snippets have Scope=Any.
-        // P4 will add: var cursorScope = SnippetContext.Classify(ctx.Analysis.ScopeTree, ctx.LspLine, ctx.LspColumn);
+        var cursorScope = SnippetContext.Classify(ctx.Analysis?.Symbols, ctx.LspLine, ctx.LspColumn);
+
         foreach (var snippet in _registry.Snapshot())
         {
+            if (!SnippetContext.Matches(snippet.Scope, cursorScope))
+                continue;
+
             yield return new CompletionCandidate(
                 Label: snippet.Prefix,
                 Kind: LspCompletionItemKind.Snippet,
