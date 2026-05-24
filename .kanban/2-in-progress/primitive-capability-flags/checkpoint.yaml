@@ -1,7 +1,7 @@
 schema_version: 1
 feature: primitive-capability-flags
 current: null
-updated: '2026-05-24T15:57:51Z'
+updated: '2026-05-24T16:09:55Z'
 phases:
   P1:
     status: done
@@ -13,13 +13,13 @@ phases:
     notes: PrimitiveCapability enum, PrimitiveTypeEntry record, PrimitiveTypes migrated, ExtendableNames
       + Entries exposed; 4 tests pass
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 97337bd6fbdc545b5fc4817163f7025aefdc60b7
+    verified: true
+    started: '2026-05-24T15:58:13Z'
+    completed: '2026-05-24T16:09:55Z'
+    attempts: 1
+    notes: Compiler and LSP consumers migrated; PrimitiveCapabilityInvariantTests added; 50 tests pass
 review:
   status: not_started
   started: null
