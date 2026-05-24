@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Window;
 using OmniSharp.Extensions.LanguageServer.Server;
 using Stash.Analysis;
 using Stash.Lsp.Analysis;
@@ -54,6 +56,7 @@ public static class StashLanguageServer
                     services.AddSingleton<BundledSnippetRegistry>();
                     services.AddSingleton<ISnippetRegistry>(sp => sp.GetRequiredService<BundledSnippetRegistry>());
                     services.AddSingleton<SnippetCompletionProvider>();
+                    services.AddSingleton<SnippetDiagnosticsReporter>();
                     services.AddSingleton<DotCompletionProvider>();
                     services.AddSingleton<ImportPathCompletionProvider>();
                     services.AddSingleton<IsTypeCompletionProvider>();
@@ -160,6 +163,25 @@ public static class StashLanguageServer
                     catch (Exception ex)
                     {
                         logger?.LogError(ex, "Failed to initialize workspace scanner");
+                    }
+
+                    try
+                    {
+                        // Surface snippet load failures via window/showMessage + log so users
+                        // see every invalid snippet and can fix them. The reporter is itself
+                        // failure-isolated and cannot throw out of this block — the LSP-stays-up
+                        // guarantee is the load-bearing behavioral constraint of the snippet feature.
+                        var registry = server.Services.GetRequiredService<BundledSnippetRegistry>();
+                        var reporter = server.Services.GetRequiredService<SnippetDiagnosticsReporter>();
+                        var window = server.Window;
+                        reporter.Report(
+                            (type, message) => window.Show(new ShowMessageParams { Type = type, Message = message }),
+                            registry.LoadErrors,
+                            "bundled snippets");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError(ex, "Snippet diagnostics reporting failed (LSP continues)");
                     }
 
                     return Task.CompletedTask;
