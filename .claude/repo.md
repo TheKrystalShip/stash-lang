@@ -29,6 +29,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 
 - os-namespace — OS Namespace Standard Library | .kanban/2-in-progress/os-namespace/ | 8 phases | started 2026-05-22
 - lsp-completion-providers — LSP Layered Completion Provider Model | .kanban/2-in-progress/lsp-completion-providers/ | 6 phases | started 2026-05-23
+- primitive-capability-flags — Capability metadata on PrimitiveTypes | .kanban/2-in-progress/primitive-capability-flags/ | 2 phases | started 2026-05-24
 
 _no features in flight_
 

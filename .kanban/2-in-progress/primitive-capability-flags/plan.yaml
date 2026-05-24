@@ -1,0 +1,107 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py <feature>
+
+schema_version: 1
+
+feature: primitive-capability-flags
+title: Capability metadata on PrimitiveTypes
+brief: ./brief.md
+
+created: 2026-05-24
+architect_session: architect-2026-05-24-primitive-capability-flags
+
+# Sequencing note: this feature must not start until `lsp-completion-providers`
+# has been promoted to .kanban/4-done/. See brief.md Non-Goals.
+
+default_verify:
+  - dotnet build
+
+scope:
+  - Stash.Core/Common/**
+  - Stash.Bytecode/Compilation/**
+  - Stash.Lsp/Completion/Providers/**
+  - Stash.Tests/Core/**
+
+phases:
+  - id: P1
+    title: Introduce PrimitiveCapability infrastructure in Stash.Common
+    deps: []
+    files:
+      - Stash.Core/Common/PrimitiveCapability.cs
+      - Stash.Core/Common/PrimitiveTypeEntry.cs
+      - Stash.Core/Common/PrimitiveTypes.cs
+      - Stash.Tests/Core/PrimitiveTypesExtendableNamesTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~PrimitiveTypesExtendableNamesTests|FullyQualifiedName~IVMPrimitiveTypeInvariantTests"
+    done_when:
+      - "`Stash.Common.PrimitiveCapability` exists as a `[Flags]` enum with members `None = 0` and `Extendable = 1 << 0`."
+      - "`Stash.Common.PrimitiveTypeEntry` exists as a positional `record (string Name, string Description, PrimitiveCapability Caps)`."
+      - "`PrimitiveTypes._languagePrimitives` and `_runtimePrimitives` are typed `PrimitiveTypeEntry[]`; literal-tuple syntax is gone."
+      - "Existing `PrimitiveTypes.Names` (FrozenSet) and `PrimitiveTypes.Descriptions` (FrozenDictionary) public surface are present with identical content."
+      - "`PrimitiveTypes.ExtendableNames` is a `public static readonly FrozenSet<string>` containing exactly `{string, array, dict, int, float}`."
+      - "A new unit test `PrimitiveTypesExtendableNamesTests` asserts `ExtendableNames` set-equals `{string, array, dict, int, float}`."
+      - "No consumer (`Compiler.Declarations.cs`, `ExtendTypeCompletionProvider.cs`) is modified in this phase — change is additive only."
+      - "`IVMPrimitiveTypeInvariantTests` continues to pass without modification."
+    notes: |
+      Strictly additive change in Stash.Common. The Read<T>() helper now returns a
+      PrimitiveTypeEntry instead of a tuple — its signature changes from
+      `(string Name, string Description) Read<T>()` to `PrimitiveTypeEntry Read<T>()`,
+      and every Read<T>() row gets `Caps: PrimitiveCapability.None` (no runtime
+      opaque primitive is extendable today).
+
+      Language-level primitive entries get explicit Caps values per brief.md:
+      Extendable: int, float, string, array, dict
+      None:       bool, byte, null, struct, enum, function, namespace, and every typed-array variant.
+
+  - id: P2
+    title: Migrate consumers to PrimitiveTypes.ExtendableNames and add invariant test
+    deps: [P1]
+    files:
+      - Stash.Bytecode/Compilation/Compiler.Declarations.cs
+      - Stash.Lsp/Completion/Providers/ExtendTypeCompletionProvider.cs
+      - Stash.Tests/Core/PrimitiveCapabilityInvariantTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~PrimitiveCapabilityInvariantTests|FullyQualifiedName~PrimitiveTypesExtendableNamesTests|FullyQualifiedName~ContextModeProvidersTests|FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~ExtendStmt|FullyQualifiedName~BytecodeVmTests.Extend"
+    done_when:
+      - "`Compiler.Declarations.cs` no longer contains the literal `typeName is \"string\" or \"array\" or \"dict\" or \"int\" or \"float\"` switch expression; the acceptance check goes through `PrimitiveTypes.ExtendableNames.Contains(typeName)`."
+      - "`ExtendTypeCompletionProvider.BuiltInExtendableTypes` is no longer initialized from a literal collection; it is derived from `PrimitiveTypes.ExtendableNames` via `OrderBy(n => n, StringComparer.Ordinal).ToArray()` so its public observed order remains `[\"array\", \"dict\", \"float\", \"int\", \"string\"]`."
+      - "`PrimitiveCapabilityInvariantTests` exists in `Stash.Tests/Core/` with at minimum two tests:\n  (a) every primitive whose entry has `Caps.HasFlag(Extendable)` compiles `extend <name> { fn foo() { return 1; } }` without error,\n  (b) every primitive whose entry does NOT have `Caps.HasFlag(Extendable)` causes the same compilation/execution to raise a `RuntimeError` whose message contains `Cannot extend '<name>': not a known type.`."
+      - "`Stash.Tests/Lsp/Completion/ContextModeProvidersTests.ExtendableBuiltInTypes()` continues to read `ExtendTypeCompletionProvider.BuiltInExtendableTypes` and its consuming tests pass with no source changes."
+      - "`CompletionSurfaceSnapshotTests.Snapshot_AfterExtend` passes without snapshot regeneration."
+      - "`grep -rn 'is \"string\" or \"array\" or \"dict\" or \"int\" or \"float\"' Stash.Bytecode/` returns no matches."
+      - "`grep -rn '\\[\"array\", \"dict\", \"float\", \"int\", \"string\"\\]' Stash.Lsp/` returns no matches."
+    notes: |
+      Public API of ExtendTypeCompletionProvider.BuiltInExtendableTypes is preserved
+      (same name, same IReadOnlyList<string> shape, same ordering). Only the
+      initialization expression changes.
+
+      The invariant test should mirror the style of IVMPrimitiveTypeInvariantTests
+      (data-driven over PrimitiveTypes' authoritative entry list). It needs access
+      to the per-entry Caps value — if the existing public surface doesn't expose
+      it yet (only ExtendableNames is required by the brief), add a minimal
+      `public static IReadOnlyCollection<PrimitiveTypeEntry> Entries` accessor in
+      this phase OR have the test reflect the Caps via the same FrozenSet check
+      pattern. Prefer adding the accessor — it's cheap and lets future capability
+      tests reuse the iteration shape.
+
+      For test infrastructure: PrimitiveTypeEntry has Caps, so the test parameter
+      source can iterate `PrimitiveTypes.Entries.Where(e => e.Caps.HasFlag(...))`
+      and `Entries.Where(e => !e.Caps.HasFlag(...))`. Skip typed-array names
+      (`int[]`, `float[]`, etc.) in the negative-case test if the compiler's
+      extend parser rejects them at the syntax level rather than at the
+      acceptance check — verify empirically; if so, document the skip with a
+      comment pointing to the parser rule.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Filter narrowed to feature-relevant test surface; pre-existing flaky test
+# classes are tracked in .claude/repo.md Known Issues and excluded here
+# following the canonical shape from exports-private-default / stdlib-namespace-members.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "(FullyQualifiedName~Stash.Tests.Analysis|FullyQualifiedName~Stash.Tests.Bytecode|FullyQualifiedName~Stash.Tests.Lsp|FullyQualifiedName~Stash.Tests.Core|FullyQualifiedName~Stash.Tests.Interpreting.TaskBuiltInsTests)&FullyQualifiedName!~FuzzHarnessTests"
+  - dotnet test --filter "FullyQualifiedName~DapIntegrationTests.LoadedSources_WithImport_BothSourcesAppear"
