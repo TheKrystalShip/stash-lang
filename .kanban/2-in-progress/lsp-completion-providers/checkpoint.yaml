@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-completion-providers
 current: null
-updated: '2026-05-24T00:42:00Z'
+updated: '2026-05-24T01:05:38Z'
 phases:
   P1:
     status: done
@@ -40,13 +40,15 @@ phases:
     notes: CursorContextClassifier + ImportPath/IsType/ExtendType providers; ExtendType derives built-in
       set from PrimitiveTypes; all 58 tests pass
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 68e953393f9430789b769fa5f33c908ff3336384
+    verified: true
+    started: '2026-05-24T00:46:16Z'
+    completed: '2026-05-24T01:05:38Z'
+    attempts: 1
+    notes: CompletionHandler.Handle is 42 lines; 11 old methods deleted; MapCompletionKind+AdaptThrows
+      relocated to CompletionInterop.cs; dispatcher singleton in StashLanguageServer; all 297 LSP tests
+      pass; snapshot re-baselined to remove member-leakage artifacts
   P6:
     status: pending
     commit: null
