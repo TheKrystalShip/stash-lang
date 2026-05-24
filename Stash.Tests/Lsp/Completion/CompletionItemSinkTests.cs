@@ -6,6 +6,7 @@ using Stash.Analysis;
 using Stash.Lsp.Completion;
 using Xunit;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
+using LspInsertTextFormat = OmniSharp.Extensions.LanguageServer.Protocol.Models.InsertTextFormat;
 
 /// <summary>
 /// Unit tests for <see cref="CompletionItemSink"/> dedup, ordering, and
@@ -146,6 +147,47 @@ public class CompletionItemSinkTests
 
         var item = sink.Materialize().Items.Single();
         Assert.Equal("StdlibFunctionProvider", item.Data?.ToString());
+    }
+
+    // -------------------------------------------------------------------------
+    // InsertText / InsertTextFormat round-trip
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void Add_CandidateWithSnippetInsertText_RoundTripsThroughMaterialize()
+    {
+        // A snippet candidate with tab-stops must survive the sink round-trip intact.
+        var sink = new CompletionItemSink(CompletionMode.Default);
+        var candidate = new CompletionCandidate(
+            "for",
+            LspCompletionItemKind.Keyword,
+            SourceTag: "SnippetProvider",
+            InsertText: "for ${1:item} in ${2:collection} {\n\t$0\n}",
+            InsertTextFormat: LspInsertTextFormat.Snippet);
+
+        sink.Add(candidate);
+
+        var item = sink.Materialize().Items.Single();
+        Assert.Equal("for ${1:item} in ${2:collection} {\n\t$0\n}", item.InsertText);
+        Assert.Equal(LspInsertTextFormat.Snippet, item.InsertTextFormat);
+    }
+
+    [Fact]
+    public void Add_CandidateWithNullInsertText_MaterializedItemLeavesInsertTextUnset()
+    {
+        // When InsertText is null the IDE inserts the Label — the sink must NOT set InsertText.
+        var sink = new CompletionItemSink(CompletionMode.Default);
+        var candidate = new CompletionCandidate(
+            "myVar",
+            LspCompletionItemKind.Variable,
+            SourceTag: "t");
+
+        sink.Add(candidate);
+
+        var item = sink.Materialize().Items.Single();
+        Assert.True(
+            string.IsNullOrEmpty(item.InsertText),
+            "InsertText should be unset when the candidate carries no InsertText.");
     }
 
 }

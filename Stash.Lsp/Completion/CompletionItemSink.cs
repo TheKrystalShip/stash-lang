@@ -98,7 +98,15 @@ public sealed class CompletionItemSink
             // Round-trip SourceTag through Data so diagnostics and snapshot tests can
             // inspect which provider contributed each item after materialization.
             // SourceTag is non-nullable on CompletionCandidate (Decision Log Q1: always track).
-            Data = candidate.SourceTag
+            Data = candidate.SourceTag,
+            // Copy insertion-template fields only when InsertText is explicitly provided.
+            // When null, the IDE falls back to inserting Label (existing behaviour unchanged).
+            // InsertTextFormat defaults to PlainText on CompletionItem, so omitting it when
+            // InsertText is null preserves the pre-existing wire format.
+            InsertText = candidate.InsertText,
+            InsertTextFormat = candidate.InsertText is not null
+                ? candidate.InsertTextFormat
+                : InsertTextFormat.PlainText
         };
 
         _items.Add(item);
