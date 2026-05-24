@@ -107,8 +107,10 @@ public class CompletionHandler : CompletionHandlerBase
     }
 
     /// <summary>
-    /// Constructs a <see cref="CompletionDispatcher"/> pre-wired with the Default-mode
-    /// providers (priority 10–40) and the Dot-mode provider (phases 2–3 parallel path).
+    /// Constructs a <see cref="CompletionDispatcher"/> pre-wired with all five mode
+    /// pipelines (Default, Dot, ImportString, AfterIs, AfterExtend).
+    /// The three context-mode pipelines are added in Phase 4; the live request path
+    /// continues to use the old monolithic methods until Phase 5.
     /// </summary>
     private static CompletionDispatcher BuildDefaultPipeline()
     {
@@ -125,10 +127,28 @@ public class CompletionHandler : CompletionHandlerBase
             new DotCompletionProvider(),
         };
 
+        var importStringProviders = new ICompletionProvider[]
+        {
+            new ImportPathCompletionProvider(),
+        };
+
+        var afterIsProviders = new ICompletionProvider[]
+        {
+            new IsTypeCompletionProvider(),
+        };
+
+        var afterExtendProviders = new ICompletionProvider[]
+        {
+            new ExtendTypeCompletionProvider(),
+        };
+
         var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
         {
             [CompletionMode.Default] = defaultProviders,
             [CompletionMode.Dot] = dotProviders,
+            [CompletionMode.ImportString] = importStringProviders,
+            [CompletionMode.AfterIs] = afterIsProviders,
+            [CompletionMode.AfterExtend] = afterExtendProviders,
         };
 
         return new CompletionDispatcher(pipelines);
