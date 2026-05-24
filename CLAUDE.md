@@ -39,14 +39,27 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 
 When authoring `plan.yaml`, narrow `final_verify`'s `dotnet test` step to exclude documented flaky / environment-dependent classes (see `.claude/repo.md` "Known Issues"). Bare `dotnet test` fails `/done` due to pre-existing `DiffPackageTests`, `Registry*Tests`, `NetBuiltInsTests`, parallel-execution flakies, etc. — these are not feature regressions. Precedent: `exports-private-default` and `stdlib-namespace-members` `plan.yaml` carry the canonical filter shape.
 
-### Implementer must chore-commit the checkpoint advance
+### Every workflow agent leaves the tree dirty after a state advance
 
-`advance-checkpoint.py <slug> <id> done` rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the phase commit, leaving the tree dirty. The next `/next-phase` refuses on dirty tree as a safety check. The `/next-phase` implementer prompt must instruct the agent to follow the advance with a tiny chore commit:
+`advance-checkpoint.py` (called by implementer, reviewer, and resolver flows) rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the corresponding code commit. Reviewer also writes a new `review.md`; resolver also flips finding statuses inside `review.md`. Every subsequent workflow command refuses on dirty tree. The orchestrator must follow each agent turn with a tiny chore commit:
 
 ```bash
+# implementer (after a phase commit)
 git add .kanban/2-in-progress/<slug>/checkpoint.yaml
 git commit -m "chore(<slug>): record <id> done state"
+
+# reviewer (after writing review.md)
+git add .kanban/2-in-progress/<slug>/review.md .kanban/2-in-progress/<slug>/checkpoint.yaml
+git commit -m "chore(<slug>): land review.md (<severity counts>)"
+
+# resolver (after a fix commit)
+git add .kanban/2-in-progress/<slug>/review.md .kanban/2-in-progress/<slug>/checkpoint.yaml
+git commit -m "chore(<slug>): record <Fxx> fixed"
 ```
+
+### Subagents can return interrupted mid-edit reports
+
+The `implementer`, `resolver`, and `architect` agents occasionally return their final message mid-action — the tree is partially edited, no commit landed, no verify ran. After every subagent turn, check `git status --porcelain` and `git log -1 --oneline` to confirm the expected commit landed. If the tree is dirty with in-scope files but no commit appears, the orchestrator must finish the work: run the union of the agent's verify commands, commit using the agent's intended message format, write the corresponding `review.md` / `checkpoint.yaml` updates, and chore-commit those.
 
 ## Specialized agents
 
