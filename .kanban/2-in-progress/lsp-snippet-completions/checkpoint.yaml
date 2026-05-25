@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-snippet-completions
 current: null
-updated: '2026-05-24T21:30:50Z'
+updated: '2026-05-25T10:21:45Z'
 phases:
   P1:
     status: done
@@ -40,13 +40,14 @@ phases:
     notes: "SnippetContext.Classify (1-based coord conversion), Matches helper, fnd/strc\u2192TopLevel,\
       \ provider gated. 38 tests green."
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 2f71240856e931af411bd70bb3d6f22e6f4472e1
+    verified: true
+    started: '2026-05-25T09:49:54Z'
+    completed: '2026-05-25T10:21:45Z'
+    attempts: 1
+    notes: migrated 39 snippets from VSCode extension; extension snippet source deleted; LSP is single
+      source; 376 LSP tests green + 1 pre-existing skip
 review:
   status: not_started
   started: null
