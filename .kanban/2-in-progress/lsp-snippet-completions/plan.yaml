@@ -139,8 +139,8 @@ phases:
       - Stash.Lsp/Completion/Snippets/bundled.json
       - .vscode/extensions/stash-lang/package.json
       - .vscode/extensions/stash-lang/snippets/stash.json
-      - Stash.Tests/Lsp/Completion/CompletionSurfaceSnapshotTests.cs
-      - Stash.Tests/Lsp/Completion/Snapshots/Default_WithSnippets.txt
+      - Stash.Tests/Lsp/CompletionSurfaceSnapshotTests.cs
+      - Stash.Tests/Lsp/Snapshots/default-with-snippets.completion.txt
     verify:
       - dotnet build Stash.Lsp
       - dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~SnippetCompletionProviderTests|FullyQualifiedName~SnippetValidatorTests"

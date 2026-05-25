@@ -18,6 +18,7 @@ using Stash.Lsp.Analysis;
 using Stash.Lsp.Completion;
 using Stash.Lsp.Completion.Providers;
 using Stash.Lsp.Completion.Providers.Dot;
+using Stash.Lsp.Completion.Snippets;
 using Stash.Lsp.Handlers;
 using Xunit;
 using LspCompletionContext = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionContext;
@@ -581,6 +582,31 @@ public class CompletionSurfaceSnapshotTests
         }
     }
 
+    // ── Default mode with snippets snapshot ──────────────────────────────────
+
+    /// <summary>
+    /// Locks the full snippet candidate surface in Default mode at a top-level cursor.
+    /// The dispatcher includes <see cref="SnippetCompletionProvider"/> backed by the
+    /// <see cref="BundledSnippetRegistry"/>, so every bundled snippet (those gated to
+    /// <see cref="Stash.Lsp.Completion.Snippets.SnippetScope.Any"/> or
+    /// <see cref="Stash.Lsp.Completion.Snippets.SnippetScope.TopLevel"/>)
+    /// must appear alongside keywords, stdlib functions, and stdlib namespaces.
+    /// </summary>
+    /// <remarks>
+    /// Fixture location: <c>Stash.Tests/Lsp/Snapshots/default-with-snippets.completion.txt</c>
+    /// (deviation from brief's <c>Default_WithSnippets.txt</c> path — reuses the existing
+    /// embedded-resource machinery which resolves names as
+    /// <c>Stash.Tests.Lsp.Snapshots.&lt;name&gt;.completion.txt</c>).
+    /// Re-baseline with:
+    /// <code>STASH_SNAPSHOT_REGEN=1 dotnet test --filter FullyQualifiedName~Snapshot_Default_WithSnippets</code>
+    /// </remarks>
+    [Fact]
+    public void Snapshot_Default_WithSnippets()
+    {
+        var items = InvokeUnqualifiedCompletionWithSnippets("\n");
+        AssertSnapshot("default-with-snippets", items);
+    }
+
     // ── Snapshot machinery ───────────────────────────────────────────────────
 
     /// <summary>
@@ -682,6 +708,39 @@ public class CompletionSurfaceSnapshotTests
         return result.Items ?? Enumerable.Empty<CompletionItem>();
     }
 
+    private static IEnumerable<CompletionItem> InvokeUnqualifiedCompletionWithSnippets(string source)
+    {
+        var lines = source.Split('\n');
+        int line = lines.Length - 1;
+        return InvokeCompletionAtWithDispatcher(
+            source + (source.EndsWith("\n") ? "" : "\n"),
+            line, 0,
+            BuildDispatcherWithSnippets());
+    }
+
+    private static IEnumerable<CompletionItem> InvokeCompletionAtWithDispatcher(
+        string source, int line, int character, CompletionDispatcher dispatcher)
+    {
+        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+        var docs = new DocumentManager(NullLogger<DocumentManager>.Instance);
+        var logger = NullLogger<CompletionHandler>.Instance;
+
+        var uri = new Uri($"file:///test/snapshot_{Guid.NewGuid():N}.stash");
+        docs.Open(uri, source, 1);
+        engine.Analyze(uri, source);
+        var handler = new CompletionHandler(engine, docs, logger, dispatcher);
+
+        var request = new CompletionParams
+        {
+            TextDocument = new TextDocumentIdentifier { Uri = uri },
+            Position = new Position { Line = line, Character = character },
+            Context = new LspCompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+        };
+
+        var result = handler.Handle(request, default).Result;
+        return result.Items ?? Enumerable.Empty<CompletionItem>();
+    }
+
     private static CompletionDispatcher BuildDispatcher()
     {
         var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
@@ -692,6 +751,26 @@ public class CompletionSurfaceSnapshotTests
                 new StdlibFunctionCompletionProvider(),
                 new StdlibNamespaceCompletionProvider(),
                 new ScopedSymbolCompletionProvider(),
+            },
+            [CompletionMode.Dot] = new ICompletionProvider[] { new DotCompletionProvider() },
+            [CompletionMode.ImportString] = new ICompletionProvider[] { new ImportPathCompletionProvider() },
+            [CompletionMode.AfterIs] = new ICompletionProvider[] { new IsTypeCompletionProvider() },
+            [CompletionMode.AfterExtend] = new ICompletionProvider[] { new ExtendTypeCompletionProvider() },
+        };
+        return new CompletionDispatcher(pipelines);
+    }
+
+    private static CompletionDispatcher BuildDispatcherWithSnippets()
+    {
+        var pipelines = new Dictionary<CompletionMode, IReadOnlyList<ICompletionProvider>>
+        {
+            [CompletionMode.Default] = new ICompletionProvider[]
+            {
+                new KeywordCompletionProvider(),
+                new StdlibFunctionCompletionProvider(),
+                new StdlibNamespaceCompletionProvider(),
+                new ScopedSymbolCompletionProvider(),
+                new SnippetCompletionProvider(new BundledSnippetRegistry()),
             },
             [CompletionMode.Dot] = new ICompletionProvider[] { new DotCompletionProvider() },
             [CompletionMode.ImportString] = new ICompletionProvider[] { new ImportPathCompletionProvider() },
