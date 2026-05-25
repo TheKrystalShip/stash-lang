@@ -99,10 +99,6 @@
     ],
     "snippets": [
       {
-        "language": "stash",
-        "path": "./snippets/stash.json"
-      },
-      {
         "language": "stash-tpl",
         "path": "./snippets/stash-tpl.json"
       }
