@@ -13,7 +13,8 @@ Summary: **3 IMPORTANT, 2 MINOR, 0 CRITICAL** — feature is functionally sound 
 
 ## F01 — [IMPORTANT] `fore` / `fori` scope tag violates P4 `done_when` and AC
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 63ef055
 **Files:** `Stash.Lsp/Completion/Snippets/bundled.json:141-158`, `Stash.Tests/Lsp/Completion/SnippetCompletionProviderTests.cs:256-265`
 **Phase:** P4 / P5
 **Commit:** `5013c86`, `bb77cdc`
@@ -57,7 +58,8 @@ After fix, top-level completion at `line 0, col 0` of an empty doc must not cont
 
 ## F02 — [IMPORTANT] 18 snippet prefixes renamed without spec amendment; brief still references the old names
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 63ef055
 **Files:** `Stash.Lsp/Completion/Snippets/bundled.json` (all renamed entries), `.kanban/2-in-progress/lsp-snippet-completions/brief.md:319-322` (AC), commit message `0edffd6`
 **Phase:** P2-fix / P5
 **Commit:** `0edffd6`, `bb77cdc`
