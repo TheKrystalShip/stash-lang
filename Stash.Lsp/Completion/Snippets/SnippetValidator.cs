@@ -8,11 +8,11 @@ using Stash.Lexing;
 using Stash.Parsing;
 
 /// <summary>
-/// Validates raw snippet definitions against the seven rules defined in the brief Decision Log Q1
+/// Validates raw snippet definitions against the eight rules defined in the brief Decision Log Q1
 /// and returns valid <see cref="Snippet"/> instances along with any <see cref="SnippetLoadError"/>s.
 /// </summary>
 /// <remarks>
-/// <para>The seven rules (each failure rejects the snippet and records a <see cref="SnippetLoadError"/>):</para>
+/// <para>The eight rules (each failure rejects the snippet and records a <see cref="SnippetLoadError"/>):</para>
 /// <list type="number">
 ///   <item><description><b>Prefix shape.</b> Non-empty; matches <c>[A-Za-z_][A-Za-z0-9_.]*</c>.</description></item>
 ///   <item><description><b>Body presence.</b> Non-empty after array-join.</description></item>
@@ -21,6 +21,9 @@ using Stash.Parsing;
 ///   <item><description><b>Tabstop syntax well-formed.</b> All <c>$…</c> sequences are valid tabstop forms.</description></item>
 ///   <item><description><b>Scope value.</b> Resolves to a known <see cref="SnippetScope"/> (case-insensitive); absent defaults to <see cref="SnippetScope.Any"/>.</description></item>
 ///   <item><description><b>Per-source uniqueness.</b> <c>(prefix, scope)</c> is unique within the same source.</description></item>
+///   <item><description><b>Final-cursor placement valid.</b> Deleting every <c>$0</c> / <c>${0}</c> / <c>${0:default}</c>
+///   from the body must still produce a body that lexes and parses — i.e. the cursor placeholder appears only where
+///   its absence leaves syntactically complete Stash code.</description></item>
 /// </list>
 /// </remarks>
 public static class SnippetValidator
@@ -136,6 +139,20 @@ public static class SnippetValidator
                 continue;
             }
 
+            // ── Rule 8: Final-cursor placement valid ────────────────────────────────
+            // Delete every $0 / ${0} / ${0:default} marker and re-run lex+parse — but
+            // accept the "zero statements" case (empty body is valid Stash: empty
+            // function body, shebang-only file, etc.). Only outright parse errors
+            // reject. This catches `let x = $0;` (→ `let x = ;` parse fail) without
+            // rejecting `#!/usr/bin/env stash\n$0` (→ shebang-only file, valid).
+            var bodyWithoutFinalCursor = StripTabstopsForPlacementCheck(body);
+            if (!TryLexAndParseAllowingEmpty(bodyWithoutFinalCursor, out var placementError))
+            {
+                errors.Add(new SnippetLoadError(id, sourceLocation,
+                    $"$0 final-cursor position is invalid: removing it leaves unparseable body — {placementError}"));
+                continue;
+            }
+
             // ── Rule 7: Per-source uniqueness ───────────────────────────────────────
             var scopeKey = (raw.Prefix, scope);
             var dupeKey = (raw.Prefix, raw.Scope ?? "");
@@ -180,12 +197,16 @@ public static class SnippetValidator
     /// Substitution rules:
     /// <list type="bullet">
     ///   <item><description><c>${N:default}</c> → <c>default</c> (lifts the default text into the body).</description></item>
-    ///   <item><description><c>${N}</c> → <c>__snip_N</c>.</description></item>
-    ///   <item><description><c>$N</c> → <c>__snip_N</c>.</description></item>
-    ///   <item><description><c>$0</c> → <c>__snip_0</c>.</description></item>
+    ///   <item><description><c>${N}</c> → <c>__snip_N</c> (including <c>${0}</c> → <c>__snip_0</c>).</description></item>
+    ///   <item><description><c>$N</c> → <c>__snip_N</c> (including <c>$0</c> → <c>__snip_0</c>).</description></item>
     ///   <item><description><c>${N|opt1,opt2|}</c> → first option, or <c>__snip_N</c> if no options.</description></item>
     /// </list>
     /// Stash interpolation prefixes (<c>$"…"</c>, <c>$(…)</c>) are left untouched.
+    /// <para>
+    /// Note: <c>$0</c> and <c>${0}</c> use the same uniform <c>__snip_0</c> substitution as all other tabstops.
+    /// A separate Rule 8 placement check (via <see cref="StripTabstopsForPlacementCheck"/>) validates that
+    /// removing <c>$0</c> entirely still leaves a parseable body — catching non-statement positions loudly.
+    /// </para>
     /// </remarks>
     internal static string StripTabstops(string body)
     {
@@ -219,15 +240,14 @@ public static class SnippetValidator
                 continue;
             }
 
-            // $N — bare tabstop (digits only)
-            // $N for N > 0 becomes __snip_N so the parser sees a valid identifier.
-            // $0 is the final cursor position (no semantic content) and substitutes to
-            // `null;` — a valid Stash expression statement that parses cleanly in any
-            // block-body position (the empirically dominant location for $0). Empty-
-            // string substitution would silently rely on empty blocks being legal;
-            // `null;` is a real statement so snippets that put $0 in non-statement
-            // positions fail validation loudly instead of producing invalid Stash on
-            // expansion.
+            // $N — bare tabstop (digits only). For N > 0 use __snip_N (synthetic identifier);
+            // for $0 (final cursor) substitute `null;` — a complete Stash expression statement
+            // that parses cleanly in the dominant `\t$0\n}` block-body position. Snippets that
+            // put $0 in a non-statement position (e.g. `[$0]` → `[null;]`) fail Rule 3/4 parse,
+            // so the substitution is also a loud-failure check for misplaced $0. A separate
+            // Rule 8 placement check independently asserts that deleting $0 entirely leaves
+            // parseable code — defense in depth covering cases where `null;` substitution would
+            // pass but the editor's actual expansion (which removes $0) would not.
             if (char.IsDigit(next))
             {
                 int start = i + 1;
@@ -257,7 +277,7 @@ public static class SnippetValidator
 
                 if (body[j] == '}')
                 {
-                    // ${N} → __snip_N. ${0} → null; (see bare-$N substitution above).
+                    // ${N} → __snip_N. ${0} → null; (same as the bare-$0 form above).
                     sb.Append(n == "0" ? "null;" : $"__snip_{n}");
                     i = j + 1;
                     continue;
@@ -297,6 +317,138 @@ public static class SnippetValidator
                     else
                     {
                         sb.Append($"__snip_{n}");
+                        i = j + 1;
+                    }
+                    continue;
+                }
+
+                // Unrecognised ${…} form — leave as-is
+                sb.Append(body[i++]);
+                continue;
+            }
+
+            // Lone $ not followed by digit, {, ", ( — leave as-is
+            sb.Append(body[i++]);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Produces a version of <paramref name="body"/> with all <c>$0</c>, <c>${0}</c>, and
+    /// <c>${0:default}</c> occurrences deleted (not substituted). All other tabstops are
+    /// handled identically to <see cref="StripTabstops"/>. The result is used by Rule 8
+    /// (final-cursor placement check) to verify that removing the cursor marker entirely
+    /// still leaves a lexable and parseable body.
+    /// </summary>
+    internal static string StripTabstopsForPlacementCheck(string body)
+    {
+        if (!body.Contains('$'))
+            return body;
+
+        var sb = new StringBuilder(body.Length);
+        int i = 0;
+        while (i < body.Length)
+        {
+            if (body[i] != '$')
+            {
+                sb.Append(body[i++]);
+                continue;
+            }
+
+            if (i + 1 >= body.Length)
+            {
+                sb.Append(body[i++]);
+                continue;
+            }
+
+            char next = body[i + 1];
+
+            // Stash interpolation: $" or $( — pass through untouched
+            if (next == '"' || next == '(')
+            {
+                sb.Append(body[i++]);
+                continue;
+            }
+
+            // $N — bare tabstop. $0 → deleted; $N (N>0) → __snip_N.
+            if (char.IsDigit(next))
+            {
+                int start = i + 1;
+                int j = start;
+                while (j < body.Length && char.IsDigit(body[j])) j++;
+                var n = body.Substring(start, j - start);
+                if (n != "0")
+                    sb.Append($"__snip_{n}");
+                // n == "0": delete (append nothing)
+                i = j;
+                continue;
+            }
+
+            // ${…} forms
+            if (next == '{')
+            {
+                int braceStart = i + 2;
+                int j = braceStart;
+                while (j < body.Length && char.IsDigit(body[j])) j++;
+                var n = body.Substring(braceStart, j - braceStart);
+
+                if (j >= body.Length)
+                {
+                    sb.Append(body[i++]);
+                    continue;
+                }
+
+                if (body[j] == '}')
+                {
+                    // ${0} → deleted; ${N} → __snip_N.
+                    if (n != "0")
+                        sb.Append($"__snip_{n}");
+                    i = j + 1;
+                    continue;
+                }
+
+                if (body[j] == ':')
+                {
+                    // ${0:default} → deleted (the whole form); ${N:default} → default text.
+                    int defaultStart = j + 1;
+                    int depth = 1;
+                    int k = defaultStart;
+                    while (k < body.Length && depth > 0)
+                    {
+                        if (body[k] == '{') depth++;
+                        else if (body[k] == '}') depth--;
+                        if (depth > 0) k++;
+                        else break;
+                    }
+                    if (n != "0")
+                    {
+                        var defaultText = body.Substring(defaultStart, k - defaultStart);
+                        sb.Append(defaultText);
+                    }
+                    // n == "0": delete the whole ${0:default} form (append nothing)
+                    i = k + 1;
+                    continue;
+                }
+
+                if (body[j] == '|')
+                {
+                    // ${N|opt1,opt2|} → first option or __snip_N. $0 form not expected but handled.
+                    int optStart = j + 1;
+                    int pipeClose = body.IndexOf('|', optStart);
+                    if (pipeClose >= 0 && pipeClose + 1 < body.Length && body[pipeClose + 1] == '}')
+                    {
+                        if (n != "0")
+                        {
+                            var opts = body.Substring(optStart, pipeClose - optStart).Split(',');
+                            sb.Append(opts.Length > 0 && opts[0].Length > 0 ? opts[0] : $"__snip_{n}");
+                        }
+                        i = pipeClose + 2;
+                    }
+                    else
+                    {
+                        if (n != "0")
+                            sb.Append($"__snip_{n}");
                         i = j + 1;
                     }
                     continue;
@@ -521,5 +673,24 @@ public static class SnippetValidator
 
         error = null;
         return true;
+    }
+
+    /// <summary>
+    /// Variant of <see cref="TryLexAndParse"/> used by the Rule 8 final-cursor placement
+    /// check. Accepts bodies that produce zero statements (a shebang-only file or an
+    /// empty block body is valid Stash); only outright lex/parse errors reject.
+    /// </summary>
+    private static bool TryLexAndParseAllowingEmpty(string body, out string? error)
+    {
+        if (TryLexAndParse(body, out error)) return true;
+        // The "no statements" rejection from TryLexAndParse is acceptable here —
+        // the placement check is asking "does removing $0 leave broken syntax?",
+        // and an empty body is not broken syntax.
+        if (error == "body produced no statements after parsing")
+        {
+            error = null;
+            return true;
+        }
+        return false;
     }
 }

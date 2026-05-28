@@ -103,12 +103,13 @@ phases:
 
       LOAD-ERRORS CONTRACT (load-bearing, P2 plan correction): ISnippetRegistry
       gained a LoadErrors accessor in P2 — this phase consumes it as the single
-      source. The reporter MUST surface every LoadErrors entry via both
-      window/showMessage AND ILogger.LogError exactly once per LSP startup so
-      users see every invalid snippet (name + reason + source) and can fix
-      them. Errors that aren't surfaced are pure noise. Pin a test asserting
-      "for every LoadErrors entry, exactly one ShowMessage and one LogError
-      fired carrying the matching SnippetId in the payload."
+      source. The reporter emits exactly one showMessage (summary popup with
+      count + source) plus exactly one LogError per LoadErrors entry. The
+      per-error detail (id + reason + source) lives in the log, not the popup,
+      to avoid spamming users with N popups. Pin a test asserting "for every
+      LoadErrors entry, exactly one LogError fires carrying the matching
+      SnippetId in the payload; and exactly one ShowMessage fires per startup
+      with severity=Error and a message naming the error count and source."
 
   - id: P4
     title: Context-aware snippets — scope vocabulary, SnippetContext helper, provider gating

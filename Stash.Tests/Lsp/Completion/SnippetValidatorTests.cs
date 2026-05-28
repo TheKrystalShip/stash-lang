@@ -219,10 +219,13 @@ public class SnippetValidatorTests
     [Fact]
     public void StripTabstops_DollarZero_SubstitutedWithNullStatement()
     {
-        // $0 is the final cursor position — substituted with `null;`, a benign Stash
-        // statement that parses cleanly in any block-body position. Empty-string
-        // substitution would silently rely on empty blocks being legal; `null;` makes
-        // the snippet validator's parse check honest.
+        // $0 is the final cursor position — substituted with `null;`, a complete Stash
+        // expression statement that parses cleanly in the dominant `\t$0\n}` block-body
+        // position. Snippets that place $0 in a non-statement position fail Rule 3/4
+        // because the `null;` substitution produces invalid syntax (e.g. `[null;]` is
+        // a parse error). A separate Rule 8 placement check provides defense-in-depth
+        // for the case where `null;` happens to parse but the editor's deletion at
+        // expansion time would not.
         var stripped = SnippetValidator.StripTabstops("let x = 1; $0");
         Assert.Equal("let x = 1; null;", stripped);
     }
@@ -246,13 +249,13 @@ public class SnippetValidatorTests
     public void StripTabstops_IdentifierSlot_ParsesAsValidStash()
     {
         // A placeholder like ${1:item} in a for-in loop becomes "item" — a valid identifier.
-        // $0 (final cursor) becomes empty.
+        // $0 (final cursor) becomes `null;` — a valid Stash expression statement.
         var body = "for (let ${1:item} in ${2:collection}) {\n\t$0\n}";
         var stripped = SnippetValidator.StripTabstops(body);
-        // After strip: "for (let item in collection) {\n\t\n}"
+        // After strip: "for (let item in collection) {\n\tnull;\n}"
         Assert.Contains("item", stripped);
         Assert.Contains("collection", stripped);
-        Assert.DoesNotContain("__snip_0", stripped);  // $0 → empty
+        Assert.Contains("null;", stripped);  // $0 → null; (statement-position substitution)
     }
 
     [Fact]
@@ -270,6 +273,48 @@ public class SnippetValidatorTests
         var stripped = SnippetValidator.StripTabstops("let x: ${1|int,string|} = __snip_2;");
         Assert.Contains("int", stripped);
         Assert.DoesNotContain("string", stripped);
+    }
+
+    // ── Rule 8: Final-cursor placement ($0) validation ──────────────────────────
+
+    [Fact]
+    public void Validate_DollarZeroInBlockBody_PassesValidation()
+    {
+        // The dominant snippet pattern: $0 inside a function body, between braces.
+        // StripTabstops → "fn name() {\n\tnull;\n}" — parses (Rule 3/4 OK).
+        // Rule 8 placement: delete $0 → "fn name() {\n\t\n}" — parses (empty body OK).
+        // Both checks pass, snippet is valid.
+        var raw = MakeRaw(prefix: "validtabs", body: "fn ${1:name}() {\n\t$0\n}");
+        var result = Validate(("Valid Tabstops", raw));
+        Assert.Empty(result.Errors);
+        Assert.Single(result.Valid);
+    }
+
+    [Fact]
+    public void Validate_DollarZeroInArrayLiteral_RejectsLoudly()
+    {
+        // [$0] → StripTabstops → [null;] → parse error (semicolon inside array literal).
+        // Rule 3/4 catches this without needing Rule 8 — the `null;` substitution is
+        // already a loud-failure check for $0 in non-statement positions.
+        var raw = MakeRaw(prefix: "arrsnip", body: "let arr = [$0];");
+        var result = Validate(("Array Zero", raw));
+
+        Assert.Empty(result.Valid);
+        Assert.Single(result.Errors);
+    }
+
+    [Fact]
+    public void Validate_DollarZeroAfterEquals_RejectsLoudly()
+    {
+        // let x = $0; → StripTabstops → let x = null;; → parse error (double semicolon).
+        // Rule 3/4 catches this directly via the `null;` substitution. Rule 8 placement
+        // check (let x = ;) also fails as defense-in-depth, but the substitution-path
+        // rejection fires first.
+        var raw = MakeRaw(prefix: "badcursor", body: "let x = $0;");
+        var result = Validate(("Bad Cursor Placement", raw));
+
+        Assert.Empty(result.Valid);
+        Assert.Single(result.Errors);
     }
 
     // ── Snippet Id shape ────────────────────────────────────────────────────────
