@@ -1,16 +1,17 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-22T17:33:05Z'
+updated: '2026-05-28T23:57:25Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 0a07c2b966fc2c4b8c8b52ce6674b05e38006608
+    verified: true
+    started: '2026-05-28T23:52:44Z'
+    completed: '2026-05-28T23:57:25Z'
+    attempts: 1
+    notes: 'OsBuiltIns.cs created: ungated [StashNamespace], Platform enum (11 members), PlatformInfo
+      [StashStruct] (9 fields); generator auto-registers ''os'' in NamespaceNames; no inline string literals'
   P2:
     status: pending
     commit: null
