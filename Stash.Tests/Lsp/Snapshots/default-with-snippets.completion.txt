@@ -101,8 +101,6 @@ Snippet	elvw
 Snippet	enmd
 Snippet	fnd
 Snippet	fnt
-Snippet	fore
-Snippet	fori
 Snippet	ifc
 Snippet	ife
 Snippet	imp

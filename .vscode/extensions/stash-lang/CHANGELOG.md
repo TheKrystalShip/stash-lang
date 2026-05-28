@@ -5,6 +5,47 @@ All notable changes to the **Stash Language** extension will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+#### Snippets — moved to LSP, prefixes renamed
+
+Stash code snippets are now provided by the LSP server (`bundled.json`) rather than VS Code's
+built-in snippet engine. Snippets are now context-aware: statement-body snippets (loops, return,
+try, etc.) only appear inside function bodies; declaration snippets (function, struct, etc.) only
+appear at the top level.
+
+**18 snippet prefixes were renamed** to avoid collisions with Stash language keywords that the
+completion provider surfaces at higher priority. If a snippet stopped triggering after upgrading,
+use the new prefix:
+
+| Old prefix (VS Code) | New prefix (LSP) |
+| -------------------- | ---------------- |
+| `fn`                 | `fnd`            |
+| `let`                | `letv`           |
+| `const`              | `cst`            |
+| `for`                | `fore`           |
+| `if`                 | `ifc`            |
+| `struct`             | `strc`           |
+| `enum`               | `enmd`           |
+| `interface`          | `intfc`          |
+| `while`              | `whl`            |
+| `try`                | `tryc`           |
+| `switch`             | `swtch`          |
+| `import`             | `imp`            |
+| `return`             | `retn`           |
+| `str`                | `istr`           |
+| `constt`             | `cstt`           |
+| `structt`            | `strct`          |
+| `interfacet`         | `intfct`         |
+| `elevate`            | `elv`            |
+| `elevatewith`        | `elvw`           |
+
+Snippet prefixes not listed above are unchanged.
+
+---
+
 ## [0.1.0] — 2026-03-27
 
 ### Added

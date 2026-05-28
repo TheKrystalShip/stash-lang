@@ -145,7 +145,7 @@ phases:
       - dotnet build Stash.Lsp
       - dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~SnippetCompletionProviderTests|FullyQualifiedName~SnippetValidatorTests"
     done_when:
-      - bundled.json contains a 1:1 migration of every entry from .vscode/extensions/stash-lang/snippets/stash.json that passes the validator, each tagged with the correct scope per P4 reclassification.
+      - bundled.json contains a 1:1 migration of every entry from .vscode/extensions/stash-lang/snippets/stash.json that passes the validator, each tagged with the correct scope per P4 reclassification, with prefix renames per brief.md Decision Log Q12 (18 prefixes renamed to avoid keyword shadowing).
       - Any seed entries that fail validation are fixed in bundled.json (not silently dropped); a brief Decision Log entry records each fix.
       - .vscode/extensions/stash-lang/snippets/stash.json is deleted.
       - .vscode/extensions/stash-lang/package.json no longer contains a contributes.snippets key for the stash language.

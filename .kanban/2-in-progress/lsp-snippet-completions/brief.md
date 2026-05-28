@@ -315,12 +315,14 @@ into `Stash.Lsp/Completion/Snippets/bundled.json` (embedded resource); the exten
 
 ## Acceptance Criteria
 
-- A user typing `fo` in a function body in any LSP-aware editor sees `for` (For-In Loop) and
-  `fori` (C-style for loop) as completion items with `InsertTextFormat.Snippet`, and accepting one
-  inserts a body with tabstops.
-- A user typing `fo` at top-level (outside any function) **does not** see the `for` snippet
-  (gated to `fn-body`); other top-level snippets like `fn`, `struct`, `import` still appear.
-- An in-scope user variable named `for` shadows the snippet (variable appears, snippet does not),
+- A user typing `fo` inside a function body (e.g. `fn foo() { … }`) in any LSP-aware editor sees
+  `fore` (For-In Loop) and `fori` (C-style for loop) as completion items with
+  `InsertTextFormat.Snippet`, and accepting one inserts a body with tabstops. (Note: the shipped
+  prefixes are `fore` and `fori`, not `for`/`fori`, per Decision Log Q12 — prefix renames to avoid
+  keyword shadowing.)
+- A user typing `fo` at top-level (outside any function) **does not** see the `fore` snippet
+  (gated to `fn-body`); other top-level snippets like `fnd`, `strc`, `imp` still appear.
+- An in-scope user variable named `fore` shadows the snippet (variable appears, snippet does not),
   because the symbol provider's priority is lower-numbered than the snippet provider's.
 - Corrupting `bundled.json` (deleting a required field, breaking JSON syntax, or inserting a
   snippet whose body is `let x =` — unparseable) causes:
@@ -355,7 +357,7 @@ list there. Phase IDs are `P1`-`P5`.
 | Date       | Decision                                                                                                         | Rationale                                                                                                                                          |
 | ---------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2026-05-24 | **Q1: Validation bar = lex + parse (no semantic resolution).**                                                  | Catches syntactic rot (the real motivation) without rejecting placeholder identifiers. Semantic checks would reject legitimate `${1:myStruct}` references that don't resolve. |
-| 2026-05-24 | **Q2: Source format = JSON, identical to VS Code snippet schema + optional `scope` field.**                     | Zero migration friction; reuses System.Text.Json; users editing project/user snippets can reuse mental model from VS Code. No new parser.        |
+| 2026-05-24 | **Q2: Source format = JSON, identical to VS Code snippet schema + optional `scope` field.**                     | Zero structural migration friction; reuses System.Text.Json; users editing project/user snippets can reuse mental model from VS Code. No new parser. Note: 18 bundled snippet prefixes were renamed from their VS Code originals to avoid keyword shadowing — see Q12 for the full rename table. |
 | 2026-05-24 | **Q3: Unique snippet Id = `"<source>:<prefix>:<scope>"`.**                                                       | Display name may be missing or duplicated; prefix may collide across scopes by design (e.g. `return` in `fn-body` vs nothing top-level). Composite key uniquely names a snippet for error messages and dedup. |
 | 2026-05-24 | **Q4: Cross-source precedence is per `(prefix, scope)` pair, full override (not merge).**                       | Predictable: a user who overrides `for` in `fn-body` doesn't have to also restate other scopes. Same `(prefix, scope)` in a higher-precedence source fully replaces the lower-precedence definition; different scopes coexist. |
 | 2026-05-24 | **Q5: File-watching deferred. Registry is reload-friendly (`Reload()` method on interface).**                   | V1 has no non-bundled sources; bundled changes require a new LSP build anyway. The method exists so the future project/user implementations can be hooked into the document-sync handler without interface churn. |
@@ -365,6 +367,7 @@ list there. Phase IDs are `P1`-`P5`.
 | 2026-05-24 | **Q9: Snippet priority strictly greater than `ScopedSymbolCompletionProvider.SourcePriority`.**                  | Symbols win dedup race with snippets sharing a prefix - preserves VS Code precedent that user code shadows snippets, avoids accidental refactor pain.                                                                     |
 | 2026-05-24 | **Q10: Migration sequenced as two commits in one PR. LSP-side first (snippets visible in both LSP and extension), then extension cleanup.** | Eliminates any window where snippets are missing on both sides; bisect-friendly.                                                                                                                                          |
 | 2026-05-24 | **Q11: v1 scope vocabulary = `Any \| TopLevel \| FnBody \| LoopBody`.**                                          | These are the only scopes derivable from existing `ScopeKind` (`Global / Function / Block / Loop`). Struct/enum/interface bodies are not separate scopes today; gating on them would require a new analysis pass (forbidden). |
+| 2026-05-26 | **Q12: Keyword-prefix collision — 18 bundled snippet prefixes renamed to non-keyword forms (commit `0edffd6`).**  | `KeywordCompletionProvider` (priority 10) runs before the snippet provider (priority 1000). Snippets sharing a Stash keyword prefix would always be shadowed by the keyword entry and never reach the user. Prefixes renamed: `fn→fnd`, `let→letv`, `const→cst`, `for→fore`, `if→ifc`, `struct→strc`, `enum→enmd`, `interface→intfc`, `while→whl`, `try→tryc`, `switch→swtch`, `import→imp`, `return→retn`, `str→istr`, `constt→cstt`, `structt→strct`, `interfacet→intfct`, `elevate→elv`, `elevatewith→elvw`. Users upgrading from the VS Code extension's built-in snippets will see their old prefix muscle memory broken; see the extension CHANGELOG for a migration table. |
 
 ## Risks
 

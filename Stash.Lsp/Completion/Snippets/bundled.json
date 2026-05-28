@@ -145,7 +145,8 @@
       "\t$0",
       "}"
     ],
-    "description": "For-in loop"
+    "description": "For-in loop",
+    "scope": "fn-body"
   },
   "C-Style For Loop": {
     "prefix": "fori",
@@ -154,7 +155,8 @@
       "\t$0",
       "}"
     ],
-    "description": "C-style for loop"
+    "description": "C-style for loop",
+    "scope": "fn-body"
   },
   "For-In Range Loop": {
     "prefix": "forr",

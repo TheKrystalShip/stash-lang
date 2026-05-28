@@ -149,8 +149,10 @@ public class SnippetCompletionProviderTests
     public void EndToEnd_DefaultMode_ForI_SnippetAppearsWithSnippetKindAndFormat()
     {
         // "fori" is NOT a Stash keyword, so it won't be blocked by KeywordCompletionProvider.
-        // End-to-end: the snippet should appear in the CompletionHandler output.
-        var items = InvokeCompletionAt("\n", line: 0, col: 0, includeSnippets: true).ToList();
+        // End-to-end: the snippet should appear in the CompletionHandler output inside a fn body.
+        // (fori is fn-body scoped per F01 fix — it does not appear at top-level.)
+        const string src = "fn foo() {\nlet x = 1;\n}\n";
+        var items = InvokeCompletionAt(src, line: 1, col: 0, includeSnippets: true).ToList();
         var forI = items.FirstOrDefault(i => i.Label == "fori");
 
         Assert.NotNull(forI);
@@ -178,18 +180,32 @@ public class SnippetCompletionProviderTests
         // for→fore, if→ifc, struct→strc) so each label has exactly one owner: the
         // Stash keyword appears with Kind=Keyword; the snippet appears with Kind=Snippet.
         // Validates that the rename eliminates the keyword/snippet collision class.
-        var items = InvokeCompletionAt("\n", line: 0, col: 0, includeSnippets: true).ToList();
+        // Note: fore is fn-body scoped (F01 fix); fnd/strc are TopLevel-only.
+        // We verify keywords at top-level and fn-body snippets inside a function body.
+        var topLevelItems = InvokeCompletionAt("\n", line: 0, col: 0, includeSnippets: true).ToList();
+        const string fnBodySrc = "fn foo() {\nlet x = 1;\n}\n";
+        var fnBodyItems = InvokeCompletionAt(fnBodySrc, line: 1, col: 0, includeSnippets: true).ToList();
 
+        // Keywords must appear with Kind=Keyword at top-level.
         foreach (var kw in new[] { "fn", "let", "for", "if", "struct" })
         {
-            var item = items.FirstOrDefault(i => i.Label == kw);
+            var item = topLevelItems.FirstOrDefault(i => i.Label == kw);
             Assert.NotNull(item);
             Assert.Equal(LspCompletionItemKind.Keyword, item!.Kind);
         }
 
-        foreach (var snippet in new[] { "fnd", "letv", "fore", "ifc", "strc" })
+        // TopLevel-scoped snippets appear at top-level.
+        foreach (var snippet in new[] { "fnd", "strc" })
         {
-            var item = items.FirstOrDefault(i => i.Label == snippet);
+            var item = topLevelItems.FirstOrDefault(i => i.Label == snippet);
+            Assert.NotNull(item);
+            Assert.Equal(LspCompletionItemKind.Snippet, item!.Kind);
+        }
+
+        // fn-body-scoped and Any-scoped snippets appear inside a function body.
+        foreach (var snippet in new[] { "letv", "fore", "ifc" })
+        {
+            var item = fnBodyItems.FirstOrDefault(i => i.Label == snippet);
             Assert.NotNull(item);
             Assert.Equal(LspCompletionItemKind.Snippet, item!.Kind);
         }
@@ -256,12 +272,24 @@ public class SnippetCompletionProviderTests
     [Fact]
     public void BundledRegistry_StatementSnippets_HaveScopeAny()
     {
-        // P4: statement snippets (letv, ifc, ife, fore, fori) remain scope=Any.
+        // P4: statement snippets that are not gated to fn-body remain scope=Any.
         var registry = new BundledSnippetRegistry();
         var byPrefix = registry.Snapshot().ToDictionary(s => s.Prefix);
 
-        foreach (var prefix in new[] { "letv", "ifc", "ife", "fore", "fori" })
+        foreach (var prefix in new[] { "letv", "ifc", "ife" })
             Assert.Equal(SnippetScope.Any, byPrefix[prefix].Scope);
+    }
+
+    [Fact]
+    public void BundledRegistry_LoopSnippets_HaveScopeFnBody()
+    {
+        // F01 fix: fore (For-In Loop) and fori (C-Style For Loop) must be fn-body scoped
+        // per plan.yaml P4 done_when and brief.md AC ("does not see the for snippet at top-level").
+        var registry = new BundledSnippetRegistry();
+        var byPrefix = registry.Snapshot().ToDictionary(s => s.Prefix);
+
+        foreach (var prefix in new[] { "fore", "fori" })
+            Assert.Equal(SnippetScope.FnBody, byPrefix[prefix].Scope);
     }
 
     // ── Scope-gated provider fixture pair ────────────────────────────────────────
