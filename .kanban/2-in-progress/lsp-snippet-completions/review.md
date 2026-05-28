@@ -105,7 +105,8 @@ Read brief.md and plan.yaml after the edits; cross-reference the prefix list in 
 
 ## F03 — [IMPORTANT] `$0` → `null;` substitution is fragile in non-block-body positions
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 6bb3aff
 **Files:** `Stash.Lsp/Completion/Snippets/SnippetValidator.cs:225-240, 258-263`
 **Phase:** P2-fix
 **Commit:** `0edffd6`
@@ -157,7 +158,8 @@ dotnet test --filter "FullyQualifiedName~SnippetValidatorTests"
 
 ## F04 — [MINOR] `SnippetCompletionProvider` priority 1000 contradicts brief Q9 phrasing
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 6bb3aff
 **Files:** `Stash.Lsp/Completion/Providers/SnippetCompletionProvider.cs:41`, `brief.md` Decision Log Q9
 **Phase:** P2-fix
 **Commit:** `0edffd6`
@@ -184,7 +186,8 @@ No test change required; documentation only.
 
 ## F05 — [MINOR] LOAD-ERRORS CONTRACT in plan vs implemented "single summary popup" semantics
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 6bb3aff
 **Files:** `Stash.Lsp/Completion/Snippets/SnippetDiagnosticsReporter.cs:81-95`, `plan.yaml` P3 notes block
 **Phase:** P3
 **Commit:** `c3f6db8`

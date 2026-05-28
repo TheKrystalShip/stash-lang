@@ -1,7 +1,7 @@
 schema_version: 1
 feature: lsp-snippet-completions
 current: null
-updated: '2026-05-28T18:25:34Z'
+updated: '2026-05-28T18:52:53Z'
 phases:
   P1:
     status: done
@@ -49,8 +49,8 @@ phases:
     notes: migrated 39 snippets from VSCode extension; extension snippet source deleted; LSP is single
       source; 376 LSP tests green + 1 pre-existing skip
 review:
-  status: in_progress
+  status: resolved
   started: '2026-05-25T10:38:46Z'
-  resolved: null
+  resolved: '2026-05-28T18:52:53Z'
   findings_open: 0
   findings_fixed: 0
