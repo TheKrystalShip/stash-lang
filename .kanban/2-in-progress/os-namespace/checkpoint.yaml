@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T00:05:59Z'
+updated: '2026-05-29T00:14:29Z'
 phases:
   P1:
     status: done
@@ -22,13 +22,15 @@ phases:
     notes: Added platform(), name(), isWindows/Linux/isMacOS/isFreeBSD/isAndroid/isIOS/isBrowser(), isUnix()
       with POSIX disclaimer; added using System for ReadOnlySpan
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c496c2a5e154f09fc24b2e6b9d063aaf1c11a84e
+    verified: true
+    started: '2026-05-29T00:10:17Z'
+    completed: '2026-05-29T00:14:29Z'
+    attempts: 1
+    notes: Added arch, processArch, description, framework, version, endianness with named consts, and
+      isMacOSVersionAtLeast/isWindowsVersionAtLeast/isLinuxVersionAtLeast (Linux uses OSVersion.Version
+      comparison since OperatingSystem.IsLinuxVersionAtLeast does not exist in .NET)
   P4:
     status: pending
     commit: null
