@@ -1,16 +1,17 @@
 schema_version: 1
 feature: registry-scope-foundation
 current: null
-updated: '2026-05-29T15:22:04Z'
+updated: '2026-05-29T15:33:08Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 22525c32eb8b637323396904595d5aa729a9c02c
+    verified: true
+    started: '2026-05-29T15:27:48Z'
+    completed: '2026-05-29T15:33:08Z'
+    attempts: 1
+    notes: Dropped LocalPackageName regex; IsValidPackageName now accepts only @scope/name (bounded segments);
+      tests updated; plan.yaml path corrected.
   P2:
     status: pending
     commit: null
