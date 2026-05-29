@@ -164,7 +164,13 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                      _context.PackageRoles.Any(r =>
                         r.PackageName == p.Name &&
                         r.PrincipalType == "org" &&
-                        r.PrincipalId == s.OwnerOrgId))));
+                        r.PrincipalId == s.OwnerOrgId))) ||
+                // Branch 4: internal + user-owned scope: caller is the scope owner (brief branch (b))
+                (p.Visibility == "internal" &&
+                    _context.Scopes.Any(s =>
+                        s.OwnerType == "user" &&
+                        s.OwnerUsername == callerUsername &&
+                        p.Name.StartsWith("@" + s.Name + "/"))));
         }
 
         int totalCount = await queryable.CountAsync();

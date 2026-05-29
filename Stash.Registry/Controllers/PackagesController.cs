@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stash.Common;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -619,8 +620,13 @@ public class PackagesController : ControllerBase
     /// Returns <c>true</c> when the current caller is allowed to read the package.
     /// <list type="bullet">
     ///   <item><description><c>public</c> — always readable.</description></item>
-    ///   <item><description><c>private</c> — caller must have a read-scoped JWT AND at least <c>reader</c> permission.</description></item>
-    ///   <item><description><c>internal</c> — same requirements as <c>private</c> in P4; org-member shortcut is added in P5.</description></item>
+    ///   <item><description><c>private</c> — caller must have a read-scoped JWT AND at least <c>reader</c> permission on the package.</description></item>
+    ///   <item><description>
+    ///     <c>internal</c> — caller must have a read-scoped JWT AND one of:
+    ///     (a) the scope is org-owned and the caller is a member of that org,
+    ///     (b) the scope is user-owned and the caller is the scope owner, or
+    ///     (c) the caller has at least <c>reader</c> permission on the package directly.
+    ///   </description></item>
     /// </list>
     /// </summary>
     private async Task<bool> CanReadPackageAsync(PackageRecord package)
@@ -643,6 +649,29 @@ public class PackagesController : ControllerBase
         if (isAdmin)
             return true;
 
+        // internal: explicit three-branch semantics (brief lines 197-201)
+        if (package.Visibility == "internal")
+        {
+            string scopeName = PackageManifest.SplitScopedName(package.Name).Scope;
+            var scope = await _db.GetScopeAsync(scopeName);
+
+            // (a) org-owned scope: caller is an org member
+            if (scope?.OwnerType == "org" && scope.OwnerOrgId != null)
+            {
+                var members = await _db.GetOrgMembersAsync(scope.OwnerOrgId);
+                if (members.Any(m => m.Username == username))
+                    return true;
+            }
+
+            // (b) user-owned scope: caller is the scope owner
+            if (scope?.OwnerType == "user" && scope.OwnerUsername == username)
+                return true;
+
+            // (c) fall through to direct package role check
+            return await _db.HasPackagePermissionAsync(package.Name, username, "reader");
+        }
+
+        // private (and any other non-public value): direct role check only
         return await _db.HasPackagePermissionAsync(package.Name, username, "reader");
     }
 

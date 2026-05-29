@@ -3,16 +3,23 @@ using System.Collections.Generic;
 using System.Formats.Tar;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Configuration;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
 using Stash.Registry.Storage;
+using Xunit;
 
 namespace Stash.Tests.Registry;
 
@@ -235,6 +242,36 @@ public sealed class RegistryVisibilityTests : IDisposable
         Assert.Equal("internal-accessible", result.Packages[0].Name);
     }
 
+    // ── F04: internal visibility — search branch (b): user-owned scope, no package_roles row ──
+
+    [Fact]
+    public async Task Search_Internal_UserOwnedScope_ScopeOwnerSees_WithoutPackageRole()
+    {
+        // Arrange: alice has a user-owned scope (auto-provisioned) and an internal package in it.
+        // alice has NO package_roles row — access should be granted via the user-owned-scope branch.
+        await _db.CreateUserWithScopeAsync("alice", "hash");
+        await _db.CreatePackageAsync(MakePackage("@alice/secret-lib", "internal"));
+
+        // alice searches — should see the package even without a package_roles entry
+        SearchResult result = await _db.SearchPackagesAsync("secret-lib", 1, 20, "alice");
+
+        Assert.Single(result.Packages);
+        Assert.Equal("@alice/secret-lib", result.Packages[0].Name);
+    }
+
+    [Fact]
+    public async Task Search_Internal_UserOwnedScope_OtherUserDoesNotSee_WithoutPackageRole()
+    {
+        // bob has no package_roles row and is not the scope owner → should not see alice's internal pkg
+        await _db.CreateUserWithScopeAsync("alice", "hash");
+        await _db.CreateUserWithScopeAsync("bob", "hash");
+        await _db.CreatePackageAsync(MakePackage("@alice/hidden-lib", "internal"));
+
+        SearchResult result = await _db.SearchPackagesAsync("hidden-lib", 1, 20, "bob");
+
+        Assert.Empty(result.Packages);
+    }
+
     // ── PackageRecord default visibility ─────────────────────────────────────────
 
     [Fact]
@@ -253,5 +290,151 @@ public sealed class RegistryVisibilityTests : IDisposable
         PackageRecord? fetched = await _db.GetPackageAsync("default-vis-test");
         Assert.NotNull(fetched);
         Assert.Equal("public", fetched.Visibility);
+    }
+}
+
+/// <summary>
+/// F04: HTTP-level integration tests for the explicit <c>internal</c> visibility branches
+/// in <c>CanReadPackageAsync</c> (brief lines 197-201).
+/// </summary>
+public sealed class RegistryInternalVisibilityEndpointTests : IDisposable
+{
+    private SqliteConnection? _connection;
+
+    public void Dispose() => _connection?.Dispose();
+
+    private WebApplicationFactory<Stash.Registry.Program> CreateFactory(out SqliteConnection conn)
+    {
+        _connection?.Dispose();
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+        conn = _connection;
+        var capturedConn = conn;
+
+        return new WebApplicationFactory<Stash.Registry.Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("environment", "Development");
+                builder.ConfigureTestServices(services =>
+                {
+                    var descriptor = services.SingleOrDefault(d =>
+                        d.ServiceType == typeof(DbContextOptions<RegistryDbContext>));
+                    if (descriptor != null)
+                        services.Remove(descriptor);
+
+                    services.AddDbContext<RegistryDbContext>(options =>
+                        options.UseSqlite(capturedConn));
+
+                    var sp = services.BuildServiceProvider();
+                    using var scope = sp.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+                    db.Initialize();
+                });
+            });
+    }
+
+    private static StringContent Json(object body) =>
+        new StringContent(System.Text.Json.JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json");
+
+    /// <summary>Registers a user, logs in, and returns the Bearer token.</summary>
+    private static async Task<string> RegisterAndLoginAsync(HttpClient client, string username, string password = "Password123!")
+    {
+        await client.PostAsync("/api/v1/auth/register", Json(new { username, password }));
+        var resp = await client.PostAsync("/api/v1/auth/login", Json(new { username, password }));
+        resp.EnsureSuccessStatusCode();
+        string json = await resp.Content.ReadAsStringAsync();
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("accessToken").GetString()!;
+    }
+
+    private static PackageRecord MakePackage(string name, string visibility) => new()
+    {
+        Name = name,
+        Latest = "1.0.0",
+        Visibility = visibility,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow
+    };
+
+    // ── Branch (a): org-owned scope, caller is org member, no direct package_roles row ──
+
+    [Fact]
+    public async Task CanRead_Internal_OrgOwnedScope_OrgMemberNoDirectRole_Returns200()
+    {
+        await using var factory = CreateFactory(out _);
+        using var client = factory.CreateClient();
+
+        // alice creates the org (becomes owner), bob joins as member
+        string aliceToken = await RegisterAndLoginAsync(client,"alice");
+        string bobToken = await RegisterAndLoginAsync(client,"bob");
+
+        // alice creates the org "acme" via the API
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aliceToken);
+        await client.PostAsync("/api/v1/orgs", Json(new { name = "acme", displayName = "Acme Corp" }));
+
+        // alice adds bob as org member
+        var orgMembersResp = await client.PostAsync("/api/v1/orgs/acme/members",
+            Json(new { username = "bob", role = "member" }));
+        Assert.True(orgMembersResp.IsSuccessStatusCode, $"Add member failed: {await orgMembersResp.Content.ReadAsStringAsync()}");
+
+        // Seed: internal package in the @acme scope, NO package_roles entry for bob
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+        await db.CreatePackageAsync(MakePackage("@acme/internal-tool", "internal"));
+
+        // bob reads the package — should be 200 (branch a: org member)
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bobToken);
+        var response = await client.GetAsync("/api/v1/packages/acme/internal-tool");
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // ── Branch (b): user-owned scope, caller is the scope owner, no direct package_roles row ──
+
+    [Fact]
+    public async Task CanRead_Internal_UserOwnedScope_ScopeOwnerNoDirectRole_Returns200()
+    {
+        await using var factory = CreateFactory(out _);
+        using var client = factory.CreateClient();
+
+        string aliceToken = await RegisterAndLoginAsync(client,"alice");
+
+        // Seed: internal package in alice's user-owned @alice scope, NO package_roles row
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+        await db.CreatePackageAsync(MakePackage("@alice/private-utils", "internal"));
+
+        // alice reads — should be 200 (branch b: scope owner)
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aliceToken);
+        var response = await client.GetAsync("/api/v1/packages/alice/private-utils");
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, response.StatusCode);
+    }
+
+    // ── Unrelated caller: no membership, no role → 404 ──
+
+    [Fact]
+    public async Task CanRead_Internal_UnrelatedCaller_Returns404()
+    {
+        await using var factory = CreateFactory(out _);
+        using var client = factory.CreateClient();
+
+        await RegisterAndLoginAsync(client,"alice");
+        string bobToken = await RegisterAndLoginAsync(client,"bob");
+
+        // Seed: internal package in alice's scope; bob has no role, no membership
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+        await db.CreatePackageAsync(MakePackage("@alice/secret-thing", "internal"));
+
+        // bob reads — should be 404
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bobToken);
+        var response = await client.GetAsync("/api/v1/packages/alice/secret-thing");
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 }
