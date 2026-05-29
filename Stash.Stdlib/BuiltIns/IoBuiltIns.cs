@@ -1,6 +1,7 @@
 namespace Stash.Stdlib.BuiltIns;
 
 using System;
+using System.IO;
 using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -133,6 +134,16 @@ public static partial class IoBuiltIns
         }
         return StashValue.FromObj(new StashSecret(StashValue.FromObj(collected)));
     }
+
+    /// <summary>Returns the platform-specific path-list separator character as a string (`:` on Unix, `;` on Windows).</summary>
+    /// <returns>The path-list separator character used by the current OS to separate entries in a PATH-style list</returns>
+    [StashFn(ReturnType = "string")]
+    private static string PathSeparator() => Path.PathSeparator.ToString();
+
+    /// <summary>Returns the platform-specific newline string (`\n` on Unix, `\r\n` on Windows).</summary>
+    /// <returns>The newline sequence used by the current OS</returns>
+    [StashFn(ReturnType = "string")]
+    private static string NewLine() => Environment.NewLine;
 
     private static string ReadPasswordInteractive(IInterpreterContext ctx)
     {
