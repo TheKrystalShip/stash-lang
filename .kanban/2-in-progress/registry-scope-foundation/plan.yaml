@@ -1,0 +1,186 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py registry-scope-foundation
+
+schema_version: 1
+
+feature: registry-scope-foundation
+title: Registry P1 — Organizations, Scopes, and Visibility Foundation
+brief: ./brief.md
+
+created: 2026-05-29
+architect_session: registry-scope-foundation-2026-05-29
+
+# Default verify command run after every phase.
+default_verify:
+  - dotnet build
+
+# Broad scope rail. Implementers may correct stale paths; see brief.md.
+scope:
+  - Stash.Core/Common/**
+  - Stash.Registry/**
+  - Stash.Cli/PackageManager/**
+  - Stash.Tests/Registry/**
+  - examples/packages/**
+  - docs/**
+
+phases:
+  - id: P1
+    title: Mandatory scoped package-name grammar
+    deps: []
+    files:
+      - Stash.Core/Common/PackageManifest.cs
+      - Stash.Tests/PackageManifestTests.cs
+    verify:
+      - dotnet build Stash.Core
+      - dotnet test --filter "FullyQualifiedName~PackageManifestTests"
+    done_when:
+      - "PackageManifest.IsValidPackageName(\"foo\") returns false and IsValidPackageName(\"@scope/foo\") returns true."
+      - "The LocalPackageName() regex no longer exists in PackagingRegexes."
+      - "PackageManifest.ValidateForPublishing rejects a flat name with an error referencing only the scoped grammar."
+    notes: |
+      This is the keystone change consumed by both Stash.Cli (publish path)
+      and Stash.Registry (PackageService.Publish). Do not add a
+      back-compat alias path.
+
+  - id: P2
+    title: EF schema cut — orgs, teams, scopes, package_roles, visibility
+    deps: [P1]
+    files:
+      - Stash.Registry/Database/Models/OrganizationRecord.cs
+      - Stash.Registry/Database/Models/OrgMemberEntry.cs
+      - Stash.Registry/Database/Models/TeamRecord.cs
+      - Stash.Registry/Database/Models/TeamMemberEntry.cs
+      - Stash.Registry/Database/Models/ScopeRecord.cs
+      - Stash.Registry/Database/Models/PackageRoleEntry.cs
+      - Stash.Registry/Database/Models/PackageRecord.cs
+      - Stash.Registry/Database/RegistryDbContext.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Database/Models/OwnerEntity.cs
+      - Stash.Tests/Registry/RegistryScopeAndOrgTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryScopeAndOrgTests|FullyQualifiedName~SqliteDatabaseTests"
+    done_when:
+      - "OwnerEntry / OwnerEntity.cs and the owners table are deleted; no code references them."
+      - "A fresh SQLite registry initialized via IRegistryDatabase.Initialize() exposes organizations, org_members, teams, team_members, scopes, package_roles tables and a packages.visibility column with CHECK constraint."
+      - "PackageRoleEntry supports principal_type in {user, team, org} and role in {owner, maintainer, publisher, reader}."
+      - "ScopeRecord enforces a single owner via owner_type in {user, org, system} with exactly one owner_username or owner_org_id populated for non-system rows."
+    notes: |
+      One migration. Visibility ships with the schema (D5). The owners
+      table is replaced, not extended (D3).
+
+  - id: P3
+    title: Scope provisioning — bootstrap + registration auto-provision
+    deps: [P2]
+    files:
+      - Stash.Registry/Bootstrap/AdminBootstrapper.cs
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Tests/Registry/RegistryScopeAndOrgTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryScopeAndOrgTests|FullyQualifiedName~AuthControllerTests"
+    done_when:
+      - "Server startup against a fresh DB seeds @stash and @admin as system scopes."
+      - "Registering user 'alice' creates the @alice scope owned by alice in the same transaction."
+      - "Registering a username that collides with an existing scope (user, org, or system) fails with HTTP 409 and creates no user row."
+
+  - id: P4
+    title: Visibility enforcement + RequireReadScope + delete publish-time 403
+    deps: [P3]
+    files:
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/Services/PackageService.cs
+      - Stash.Registry/Services/PrivatePackageException.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/SearchController.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Contracts/PackageContracts.cs
+      - Stash.Tests/Registry/RegistryVisibilityTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryVisibilityTests|FullyQualifiedName~PackageServiceTests"
+    done_when:
+      - "Stash.Registry/Services/PrivatePackageException.cs is deleted and the private-flag branch in PackageService.Publish is removed; publishing a manifest with \"private\": true succeeds (visibility unchanged from package default)."
+      - "Startup.cs registers a RequireReadScope policy accepting token_scope in {read, publish, admin}."
+      - "GET /api/v1/packages/{scope}/{name} on a private package returns 404 to an unauthenticated caller, 404 to an authenticated caller without reader permission, and 200 to a caller with reader plus a read-scoped JWT."
+      - "PATCH /api/v1/packages/{scope}/{name}/visibility flips package visibility and is rejected for non-owner callers with 403."
+      - "Search results omit private/internal packages the caller cannot see."
+
+  - id: P5
+    title: Org, scope, role REST surface
+    deps: [P3]
+    files:
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Contracts/OrganizationContracts.cs
+      - Stash.Registry/Contracts/ScopeContracts.cs
+      - Stash.Registry/Contracts/PackageContracts.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Tests/Registry/RegistryScopeAndOrgTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryScopeAndOrgTests|FullyQualifiedName~AdminControllerTests"
+    done_when:
+      - "POST /api/v1/orgs creates an org, assigns the caller as org owner, and creates a scope of the same name owned by the org."
+      - "POST /api/v1/scopes rejects collisions with usernames, existing scopes, and reserved system scopes."
+      - "PUT /api/v1/packages/{scope}/{name}/roles assigns a role and is rejected for non-owner callers with 403."
+      - "Permission resolution combines direct user role, team-mediated roles, and org-mediated roles per the role-permission matrix in brief.md."
+
+  - id: P6
+    title: Route migration — scoped controller routes + CLI call sites
+    deps: [P4, P5]
+    files:
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Cli/PackageManager/RegistryClient.cs
+      - Stash.Core/Common/PackageManifest.cs
+      - Stash.Tests/Registry/RegistryRoutesTests.cs
+      - examples/packages/oci/stash.json
+      - examples/packages/systemd/stash.json
+      - examples/packages/podman/stash.json
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~RegistryRoutesTests|FullyQualifiedName~PackageInstallerTests"
+    done_when:
+      - "All flat /api/v1/packages/{name} routes return 404 on the server; only /api/v1/packages/{scope}/{name} variants serve traffic."
+      - "Stash.Cli/PackageManager/RegistryClient.cs contains no remaining single-segment /packages/{...} call site; every URL is built as /packages/{scope}/{name}."
+      - "An end-to-end CLI publish + install of @alice/widget against a fresh registry round-trips through the scoped routes."
+      - "Stash.Core/Common/PackageManifest.cs exposes a SplitScopedName helper that returns (scope, localName) for a valid @scope/name input."
+
+  - id: P7
+    title: Docs, example, and language-spec grammar note
+    deps: [P6]
+    files:
+      - "docs/Registry — Package Registry.md"
+      - "docs/Stash — Language Specification.md"
+      - examples/packages/CLAUDE.md
+      - examples/packages/oci/stash.json
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~PackageManifestTests|FullyQualifiedName~RegistryRoutesTests"
+    done_when:
+      - "docs/Registry — Package Registry.md documents the scoped grammar, the role-permission matrix, the visibility states (public/private/internal), the RequireReadScope policy, and every new endpoint listed in brief.md."
+      - "docs/Stash — Language Specification.md describes the @scope/name package-name grammar with the new regex."
+      - "All example package manifests under examples/packages/ use @scope/name names and parse cleanly via PackageManifest.ValidateForPublishing."
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Filter excludes documented flakies / environment-dependent classes per
+# .claude/repo.md "Known Issues". This feature does not touch stdlib
+# namespaces, so stdlib enforcement meta-tests are intentionally NOT added.
+# The feature's own new test classes (RegistryScopeAndOrgTests,
+# RegistryVisibilityTests, RegistryRoutesTests) are NOT in the exclude list
+# and will run.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount"
+  - python3 scripts/checkpoint/validate-spec.py registry-scope-foundation
