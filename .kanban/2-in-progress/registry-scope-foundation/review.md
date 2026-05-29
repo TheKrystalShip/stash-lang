@@ -11,7 +11,8 @@
 
 ## F01 — [HIGH] CLI package-manager test fixtures still use flat names — 17+ test failures
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 79af0d8
 **Files:** `Stash.Tests/Interpreting/PackageInstallerTests.cs:325,1022,1286` (and the `PackageCacheTests`, `LockFileFreshnessTests`, `DeprecationWarningTests`, `InstallAtomicityTests` classes living in the same file), `Stash.Tests/Interpreting/CliPackageCommandsTests.cs`
 **Phase:** P1 / P6 (fallout from the grammar tightening; P6 owns the CLI-side migration)
 **Commit:** 22525c3 (P1, root cause), 6c9b005 (P6, missed scope)
