@@ -296,7 +296,9 @@ dotnet test --filter "FullyQualifiedName~RegistryVisibilityTests|FullyQualifiedN
 
 ## F04 — [MEDIUM] `internal` visibility is treated as `private` — org-member shortcut never implemented
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** d8cec0b
+**Note:** `internal` now implements all three brief branches (a)/(b)/(c) in both `CanReadPackageAsync` (read gate) and `SearchPackagesAsync` (search predicate). Branch (b) — user-owned scope, caller is scope owner, no package_roles row — was the missing case; all branches are exercised by new tests.
 **Files:** `Stash.Registry/Controllers/PackagesController.cs:616-647`
 **Phase:** P4 (deferred to P5 in source comment; never landed)
 **Commit:** 34c3c96 (deferred), no follow-up commit
