@@ -67,6 +67,11 @@ public static partial class OsBuiltIns
         string Version,
         string Endianness);
 
+    // ── Named constants for Stash-visible string values ──────────────────────
+
+    private const string EndiannessLittle = "little";
+    private const string EndiannessBig    = "big";
+
     // ── Private detection helper ──────────────────────────────────────────────
 
     /// <summary>
@@ -185,4 +190,120 @@ public static partial class OsBuiltIns
         || OperatingSystem.IsIOS()
         || OperatingSystem.IsTvOS()
         || OperatingSystem.IsWatchOS();
+
+    // ── Runtime architecture functions ────────────────────────────────────────
+
+    /// <summary>
+    /// Returns the operating-system architecture as a lowercase string sourced from
+    /// <c>RuntimeInformation.OSArchitecture</c>.
+    /// Known values at time of writing: <c>"x86"</c>, <c>"x64"</c>, <c>"arm"</c>,
+    /// <c>"arm64"</c>, <c>"wasm"</c>, <c>"s390x"</c>, <c>"loongarch64"</c>,
+    /// <c>"armv6"</c>, <c>"ppc64le"</c>, <c>"riscv64"</c>.
+    /// The set is open and runtime-derived — new .NET targets may produce additional values.
+    /// </summary>
+    /// <returns>Lowercase OS architecture string.</returns>
+    [StashFn]
+    public static string Arch()
+        => RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+
+    /// <summary>
+    /// Returns the process architecture as a lowercase string sourced from
+    /// <c>RuntimeInformation.ProcessArchitecture</c>.
+    /// Known values at time of writing: <c>"x86"</c>, <c>"x64"</c>, <c>"arm"</c>,
+    /// <c>"arm64"</c>, <c>"wasm"</c>, <c>"s390x"</c>, <c>"loongarch64"</c>,
+    /// <c>"armv6"</c>, <c>"ppc64le"</c>, <c>"riscv64"</c>.
+    /// The set is open and runtime-derived — new .NET targets may produce additional values.
+    /// </summary>
+    /// <returns>Lowercase process architecture string.</returns>
+    [StashFn]
+    public static string ProcessArch()
+        => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+
+    // ── Runtime metadata functions ────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns a human-readable description of the current operating system,
+    /// sourced from <c>RuntimeInformation.OSDescription</c>.
+    /// Example: <c>"Linux 6.1.0-21-amd64 #1 SMP Debian 6.1.90-1 (2024-05-03)"</c>.
+    /// </summary>
+    /// <returns>OS description string.</returns>
+    [StashFn]
+    public static string Description()
+        => RuntimeInformation.OSDescription;
+
+    /// <summary>
+    /// Returns a description of the .NET framework in use,
+    /// sourced from <c>RuntimeInformation.FrameworkDescription</c>.
+    /// Example: <c>".NET 8.0.6"</c>.
+    /// </summary>
+    /// <returns>Framework description string.</returns>
+    [StashFn]
+    public static string Framework()
+        => RuntimeInformation.FrameworkDescription;
+
+    /// <summary>
+    /// Returns the operating system version string sourced from
+    /// <c>Environment.OSVersion.VersionString</c>.
+    /// Example: <c>"Unix 6.1.0.21"</c> or <c>"Microsoft Windows NT 10.0.19045.0"</c>.
+    /// </summary>
+    /// <returns>OS version string.</returns>
+    [StashFn]
+    public static string Version()
+        => Environment.OSVersion.VersionString;
+
+    /// <summary>
+    /// Returns the byte order of the current host as a string.
+    /// Returns <c>"little"</c> on little-endian hosts and <c>"big"</c> on big-endian hosts,
+    /// based on <c>BitConverter.IsLittleEndian</c>.
+    /// </summary>
+    /// <returns><c>"little"</c> or <c>"big"</c>.</returns>
+    [StashFn]
+    public static string Endianness()
+        => BitConverter.IsLittleEndian ? EndiannessLittle : EndiannessBig;
+
+    // ── Version-at-least helpers ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <c>true</c> if the host is macOS and the OS version is at least the specified
+    /// major/minor/build. Returns <c>false</c> on non-macOS hosts without throwing.
+    /// Delegates to <c>OperatingSystem.IsMacOSVersionAtLeast</c> on matching hosts.
+    /// </summary>
+    /// <param name="major">Major version number.</param>
+    /// <param name="minor">(optional) Minor version number. Defaults to 0.</param>
+    /// <param name="build">(optional) Build version number. Defaults to 0.</param>
+    /// <returns><c>true</c> if running on macOS at or above the specified version, otherwise <c>false</c>.</returns>
+    [StashFn(Name = "isMacOSVersionAtLeast")]
+    public static bool IsMacOsVersionAtLeast(long major, long minor = 0L, long build = 0L)
+        => OperatingSystem.IsMacOSVersionAtLeast((int)major, (int)minor, (int)build);
+
+    /// <summary>
+    /// Returns <c>true</c> if the host is Windows and the OS version is at least the specified
+    /// major/minor/build/revision. Returns <c>false</c> on non-Windows hosts without throwing.
+    /// Delegates to <c>OperatingSystem.IsWindowsVersionAtLeast</c> on matching hosts.
+    /// </summary>
+    /// <param name="major">Major version number.</param>
+    /// <param name="minor">(optional) Minor version number. Defaults to 0.</param>
+    /// <param name="build">(optional) Build version number. Defaults to 0.</param>
+    /// <param name="revision">(optional) Revision number. Defaults to 0.</param>
+    /// <returns><c>true</c> if running on Windows at or above the specified version, otherwise <c>false</c>.</returns>
+    [StashFn]
+    public static bool IsWindowsVersionAtLeast(long major, long minor = 0L, long build = 0L, long revision = 0L)
+        => OperatingSystem.IsWindowsVersionAtLeast((int)major, (int)minor, (int)build, (int)revision);
+
+    /// <summary>
+    /// Returns <c>true</c> if the host is Linux and the kernel version is at least the specified
+    /// major/minor. Returns <c>false</c> on non-Linux hosts without throwing.
+    /// Uses <c>Environment.OSVersion.Version</c> for version comparison on Linux hosts.
+    /// </summary>
+    /// <param name="major">Major version number.</param>
+    /// <param name="minor">(optional) Minor version number. Defaults to 0.</param>
+    /// <returns><c>true</c> if running on Linux at or above the specified version, otherwise <c>false</c>.</returns>
+    [StashFn]
+    public static bool IsLinuxVersionAtLeast(long major, long minor = 0L)
+    {
+        if (!OperatingSystem.IsLinux()) return false;
+        var v = Environment.OSVersion.Version;
+        if (v.Major != (int)major) return v.Major > (int)major;
+        return v.Minor >= (int)minor;
+    }
 }
