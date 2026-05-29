@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T08:49:59Z'
+updated: '2026-05-29T08:55:30Z'
 phases:
   P1:
     status: done

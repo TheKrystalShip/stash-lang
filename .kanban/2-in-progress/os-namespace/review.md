@@ -137,7 +137,8 @@ python3 scripts/checkpoint/validate-spec.py os-namespace
 
 ## F04 — [MINOR] os.isLinuxVersionAtLeast uses Environment.OSVersion.Version, divergent from Windows/macOS pattern
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9510ade
 **Files:** `Stash.Stdlib/BuiltIns/OsBuiltIns.cs:332-339`
 **Phase:** P3
 **Commit:** c496c2a
@@ -183,7 +184,8 @@ grep -n "isLinuxVersionAtLeast" "docs/Stash — Language Specification.md" "docs
 
 ## F05 — [MINOR] PlatformInfo construction duplicates per-field logic, inviting drift from individual helpers
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9510ade
 **Files:** `Stash.Stdlib/BuiltIns/OsBuiltIns.cs:276-293`
 **Phase:** P4
 **Commit:** e9ba10b
