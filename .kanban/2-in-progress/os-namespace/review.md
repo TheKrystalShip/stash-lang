@@ -12,7 +12,8 @@
 
 ## F01 — [CRITICAL] io.pathSeparator / io.newLine missing throws metadata classification (Wave1 coverage regression)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0a8c5c0
 **Files:** `Stash.Tests/Stdlib/SourceGenerator/Wave1ThrowsCoverageTests.cs:16`, `Stash.Stdlib/BuiltIns/IoBuiltIns.cs:138-148`
 **Phase:** P5
 **Commit:** 442f4a4
@@ -54,7 +55,8 @@ dotnet test --filter "FullyQualifiedName~Wave1ThrowsCoverageTests"
 
 ## F02 — [CRITICAL] LSP completion snapshots not regenerated after os namespace addition
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0a8c5c0
 **Files:** `Stash.Tests/Lsp/Snapshots/default-with-snippets.completion.txt`, `Stash.Tests/Lsp/Snapshots/empty-file.completion.txt`
 **Phase:** P1 (surfaced after P1; not re-baselined through P8)
 **Commit:** 0a07c2b (root cause), final state at 339f422
