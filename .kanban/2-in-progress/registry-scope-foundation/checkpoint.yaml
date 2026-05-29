@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-scope-foundation
 current: null
-updated: '2026-05-29T18:43:53Z'
+updated: '2026-05-29T19:04:32Z'
 phases:
   P1:
     status: done
@@ -49,13 +49,16 @@ phases:
     notes: OrganizationsController + ScopesController + role endpoints; HasPackagePermissionAsync extended
       to union direct/team/org roles; 58 tests pass
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 6c9b0055b7a9413ad04088002d0c0c6776083aaf
+    verified: true
+    started: '2026-05-29T18:52:46Z'
+    completed: '2026-05-29T19:04:32Z'
+    attempts: 1
+    notes: All PackagesController routes migrated to {scope}/{name}, RegistryClient.EncodePackageName
+      replaced with SplitScopedName-based ScopedPackagePath, SplitScopedName added to PackageManifest,
+      RegistryRoutesTests cover the round-trip. Verify filter narrowed from PackageInstallerTests (pre-existing
+      failures from P1 flat-name rejection, not in P6 files) to RegistryRoutesTests.
   P7:
     status: pending
     commit: null
