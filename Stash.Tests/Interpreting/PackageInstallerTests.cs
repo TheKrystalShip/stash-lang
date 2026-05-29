@@ -121,7 +121,7 @@ public class PackageCacheTests : IDisposable
 
     public PackageCacheTests()
     {
-        _pkgName = $"test-pkg-{Guid.NewGuid():N}";
+        _pkgName = $"@test/pkg-{Guid.NewGuid():N}";
         _tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(_tempDir);
     }
@@ -138,10 +138,10 @@ public class PackageCacheTests : IDisposable
     [Fact]
     public void PackageCache_GetCachePath_ReturnsExpectedPath()
     {
-        string path = PackageCache.GetCachePath("mylib", "1.2.3");
+        string path = PackageCache.GetCachePath("@mylib/lib", "1.2.3");
 
-        Assert.Contains("mylib", path);
-        Assert.EndsWith(Path.Combine("mylib", "1.2.3.tar.gz"), path);
+        Assert.Contains("mylib-lib", path);
+        Assert.EndsWith(Path.Combine("mylib-lib", "1.2.3.tar.gz"), path);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public class PackageInstallerTests : IDisposable
 
     public PackageInstallerTests()
     {
-        _pkgName = $"test-pkg-{Guid.NewGuid():N}";
+        _pkgName = $"@test/pkg-{Guid.NewGuid():N}";
         _tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(_tempDir);
     }
@@ -316,11 +316,12 @@ public class PackageInstallerTests : IDisposable
 
     private string CreateAndCachePackage(string pkgName, string version)
     {
-        string pkgSrcDir = Path.Combine(_tempDir, $"pkg-src-{pkgName}-{version}");
+        string safeName = pkgName.TrimStart('@').Replace('/', '-');
+        string pkgSrcDir = Path.Combine(_tempDir, $"pkg-src-{safeName}-{version}");
         Directory.CreateDirectory(pkgSrcDir);
         File.WriteAllText(Path.Combine(pkgSrcDir, "main.stash"), $"// {pkgName} v{version}");
 
-        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        string tarball = Path.Combine(_tempDir, $"{safeName}-{version}.tar.gz");
         Tarball.Pack(pkgSrcDir, tarball);
         PackageCache.Store(pkgName, version, tarball);
         return PackageCache.GetCachePath(pkgName, version);
@@ -479,7 +480,7 @@ public class IntegrityVerificationTests : IDisposable
 
     public IntegrityVerificationTests()
     {
-        _pkgName = $"integrity-pkg-{Guid.NewGuid():N}";
+        _pkgName = $"@integrity/pkg-{Guid.NewGuid():N}";
         _tempDir = Path.Combine(Path.GetTempPath(), $"stash-integrity-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDir);
     }
@@ -903,10 +904,11 @@ public class DeprecationWarningTests : IDisposable
 
     private string CreateAndCachePackage(string pkgName, string version)
     {
-        string srcDir = Path.Combine(_tempDir, $"src-{pkgName}-{version}");
+        string safeName = pkgName.TrimStart('@').Replace('/', '-');
+        string srcDir = Path.Combine(_tempDir, $"src-{safeName}-{version}");
         Directory.CreateDirectory(srcDir);
         File.WriteAllText(Path.Combine(srcDir, "main.stash"), $"// {pkgName}");
-        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        string tarball = Path.Combine(_tempDir, $"{safeName}-{version}.tar.gz");
         Tarball.Pack(srcDir, tarball);
         PackageCache.Store(pkgName, version, tarball);
         return tarball;
@@ -917,11 +919,11 @@ public class DeprecationWarningTests : IDisposable
     {
         string projectDir = Path.Combine(_tempDir, "proj-one");
         Directory.CreateDirectory(projectDir);
-        WriteManifest(projectDir, new Dictionary<string, string> { ["old-lib"] = "^1.0.0" });
-        CreateAndCachePackage("old-lib", "1.0.0");
+        WriteManifest(projectDir, new Dictionary<string, string> { ["@libs/old-lib"] = "^1.0.0" });
+        CreateAndCachePackage("@libs/old-lib", "1.0.0");
 
         var source = new MockSource();
-        source.Add("old-lib", "1.0.0", deprecated: true, deprecationMessage: "use new-lib instead");
+        source.Add("@libs/old-lib", "1.0.0", deprecated: true, deprecationMessage: "use new-lib instead");
 
         string stderr = CaptureStdErr(() => PackageInstaller.Install(projectDir, source));
 
@@ -929,7 +931,7 @@ public class DeprecationWarningTests : IDisposable
             .Where(l => l.StartsWith("warning:", StringComparison.Ordinal))
             .ToList();
         Assert.Single(warningLines);
-        Assert.Equal("warning: old-lib@1.0.0 is deprecated: use new-lib instead", warningLines[0]);
+        Assert.Equal("warning: @libs/old-lib@1.0.0 is deprecated: use new-lib instead", warningLines[0]);
     }
 
     [Fact]
@@ -939,15 +941,15 @@ public class DeprecationWarningTests : IDisposable
         Directory.CreateDirectory(projectDir);
         WriteManifest(projectDir, new Dictionary<string, string>
         {
-            ["alpha"] = "^1.0.0",
-            ["beta"] = "^2.0.0"
+            ["@suite/alpha"] = "^1.0.0",
+            ["@suite/beta"] = "^2.0.0"
         });
-        CreateAndCachePackage("alpha", "1.0.0");
-        CreateAndCachePackage("beta", "2.0.0");
+        CreateAndCachePackage("@suite/alpha", "1.0.0");
+        CreateAndCachePackage("@suite/beta", "2.0.0");
 
         var source = new MockSource();
-        source.Add("alpha", "1.0.0", deprecated: true, deprecationMessage: "alpha is old");
-        source.Add("beta", "2.0.0", deprecated: true, deprecationMessage: "beta is retired");
+        source.Add("@suite/alpha", "1.0.0", deprecated: true, deprecationMessage: "alpha is old");
+        source.Add("@suite/beta", "2.0.0", deprecated: true, deprecationMessage: "beta is retired");
 
         string stderr = CaptureStdErr(() => PackageInstaller.Install(projectDir, source));
 
@@ -956,8 +958,8 @@ public class DeprecationWarningTests : IDisposable
             .ToList();
         // Exactly two warnings, one per package (no duplicates).
         Assert.Equal(2, warningLines.Count);
-        Assert.Contains("warning: alpha@1.0.0 is deprecated: alpha is old", warningLines);
-        Assert.Contains("warning: beta@2.0.0 is deprecated: beta is retired", warningLines);
+        Assert.Contains("warning: @suite/alpha@1.0.0 is deprecated: alpha is old", warningLines);
+        Assert.Contains("warning: @suite/beta@2.0.0 is deprecated: beta is retired", warningLines);
     }
 
     [Fact]
@@ -965,11 +967,11 @@ public class DeprecationWarningTests : IDisposable
     {
         string projectDir = Path.Combine(_tempDir, "proj-clean");
         Directory.CreateDirectory(projectDir);
-        WriteManifest(projectDir, new Dictionary<string, string> { ["clean-lib"] = "^3.0.0" });
-        CreateAndCachePackage("clean-lib", "3.0.0");
+        WriteManifest(projectDir, new Dictionary<string, string> { ["@suite/clean-lib"] = "^3.0.0" });
+        CreateAndCachePackage("@suite/clean-lib", "3.0.0");
 
         var source = new MockSource();
-        source.Add("clean-lib", "3.0.0", deprecated: false);
+        source.Add("@suite/clean-lib", "3.0.0", deprecated: false);
 
         string stderr = CaptureStdErr(() => PackageInstaller.Install(projectDir, source));
 
@@ -1014,10 +1016,11 @@ public class InstallAtomicityTests : IDisposable
 
     private string CreateAndCachePackage(string pkgName, string version)
     {
-        string srcDir = Path.Combine(_tempDir, $"src-{pkgName}-{version}");
+        string safeName = pkgName.TrimStart('@').Replace('/', '-');
+        string srcDir = Path.Combine(_tempDir, $"src-{safeName}-{version}");
         Directory.CreateDirectory(srcDir);
         File.WriteAllText(Path.Combine(srcDir, "main.stash"), $"// {pkgName} v{version}");
-        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        string tarball = Path.Combine(_tempDir, $"{safeName}-{version}.tar.gz");
         Tarball.Pack(srcDir, tarball);
         PackageCache.Store(pkgName, version, tarball);
         return tarball;
@@ -1126,7 +1129,7 @@ public class InstallAtomicityTests : IDisposable
     public void InstallNew_Success_ManifestNotWrittenByInstaller()
     {
         // The installer itself must NOT write stash.json — that is InstallCommand's job.
-        string pkgName = $"atomic-pkg-{Guid.NewGuid():N}";
+        string pkgName = $"@atomic/pkg-{Guid.NewGuid():N}";
         string projectDir = Path.Combine(_tempDir, "atomicity-success");
         Directory.CreateDirectory(projectDir);
         WriteManifest(projectDir); // no deps on disk
@@ -1198,7 +1201,7 @@ public class InstallAtomicityTests : IDisposable
         // mismatch must leave BOTH stash.json AND stash-lock.json byte-identical to
         // their pre-command state. The earlier implementation wrote the new lock file
         // before InstallFromLockFile ran, leaking a lock entry on extraction failure.
-        string pkgName = $"atomic-bad-{Guid.NewGuid():N}";
+        string pkgName = $"@atomic/bad-{Guid.NewGuid():N}";
         string projectDir = Path.Combine(_tempDir, "atomicity-integrity");
         Directory.CreateDirectory(projectDir);
         WriteManifest(projectDir);
@@ -1278,10 +1281,11 @@ public class LockFileFreshnessTests : IDisposable
 
     private string CreateAndCachePackage(string pkgName, string version)
     {
-        string srcDir = Path.Combine(_tempDir, $"src-{pkgName}-{version}");
+        string safeName = pkgName.TrimStart('@').Replace('/', '-');
+        string srcDir = Path.Combine(_tempDir, $"src-{safeName}-{version}");
         Directory.CreateDirectory(srcDir);
         File.WriteAllText(Path.Combine(srcDir, "main.stash"), $"// {pkgName} v{version}");
-        string tarball = Path.Combine(_tempDir, $"{pkgName}-{version}.tar.gz");
+        string tarball = Path.Combine(_tempDir, $"{safeName}-{version}.tar.gz");
         Tarball.Pack(srcDir, tarball);
         PackageCache.Store(pkgName, version, tarball);
         return tarball;
@@ -1325,7 +1329,7 @@ public class LockFileFreshnessTests : IDisposable
     [Fact]
     public void Install_RemovesOrphanLockEntry_AndDirectory()
     {
-        string orphanPkg = $"orphan-{Guid.NewGuid():N}";
+        string orphanPkg = $"@test/orphan-{Guid.NewGuid():N}";
         string projectDir = Path.Combine(_tempDir, "orphan-test");
         Directory.CreateDirectory(projectDir);
         // Manifest no longer lists orphanPkg.
@@ -1366,8 +1370,8 @@ public class LockFileFreshnessTests : IDisposable
     {
         // "a" depends on "b" transitively.  Manifest only lists "a".
         // The lock must keep "b" because it is reachable through "a".
-        string pkgA = $"pkg-a-{Guid.NewGuid():N}";
-        string pkgB = $"pkg-b-{Guid.NewGuid():N}";
+        string pkgA = $"@pkg/a-{Guid.NewGuid():N}";
+        string pkgB = $"@pkg/b-{Guid.NewGuid():N}";
         string projectDir = Path.Combine(_tempDir, "transitive-test");
         Directory.CreateDirectory(projectDir);
         WriteManifest(projectDir, new Dictionary<string, string> { [pkgA] = "^1.0.0" });
@@ -1409,7 +1413,7 @@ public class LockFileFreshnessTests : IDisposable
     [Fact]
     public void Install_ConstraintUpgrade_ResolvesNewVersion()
     {
-        string pkgName = $"upgrade-pkg-{Guid.NewGuid():N}";
+        string pkgName = $"@upgrade/pkg-{Guid.NewGuid():N}";
         string projectDir = Path.Combine(_tempDir, "constraint-upgrade");
         Directory.CreateDirectory(projectDir);
         // Manifest now requires ^2.0.0.
@@ -1455,7 +1459,7 @@ public class LockFileFreshnessTests : IDisposable
     {
         // Lock is fully up-to-date: constraint satisfied, no orphans.
         // Passing null source proves that no resolution occurs.
-        string pkgName = $"fastpath-pkg-{Guid.NewGuid():N}";
+        string pkgName = $"@fastpath/pkg-{Guid.NewGuid():N}";
         string projectDir = Path.Combine(_tempDir, "fast-path");
         Directory.CreateDirectory(projectDir);
         WriteManifest(projectDir, new Dictionary<string, string> { [pkgName] = "^1.0.0" });

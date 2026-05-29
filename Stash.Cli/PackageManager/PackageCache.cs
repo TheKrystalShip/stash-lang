@@ -136,7 +136,8 @@ public static class PackageCache
     /// <param name="packageName">The name of the package whose cache entries to remove.</param>
     public static void ClearPackage(string packageName)
     {
-        string packageDir = Path.Combine(GetCacheDir(), packageName);
+        string sanitizedName = packageName.TrimStart('@').Replace('/', '-');
+        string packageDir = Path.Combine(GetCacheDir(), sanitizedName);
         if (Directory.Exists(packageDir))
         {
             Directory.Delete(packageDir, recursive: true);
