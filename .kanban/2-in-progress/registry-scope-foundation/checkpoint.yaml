@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-scope-foundation
 current: null
-updated: '2026-05-29T19:22:47Z'
+updated: '2026-05-29T19:52:19Z'
 phases:
   P1:
     status: done
@@ -71,8 +71,8 @@ phases:
       private-field and regex updated. Stash.Registry/CLAUDE.md refreshed (entity list, route table, JWT
       claim, key rules).'
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: '2026-05-29T19:52:19Z'
   resolved: null
   findings_open: 0
   findings_fixed: 0
