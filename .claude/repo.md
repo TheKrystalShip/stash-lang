@@ -27,7 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
-_no features in flight_
+- registry-scope-foundation — Registry P1 — Organizations, Scopes, and Visibility Foundation | .kanban/2-in-progress/registry-scope-foundation/ | 7 phases
 
 ---
 
