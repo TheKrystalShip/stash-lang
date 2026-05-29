@@ -62,3 +62,11 @@ Create or update a `.stash` file in `examples/` that showcases the new functiona
 - Add xUnit tests in `Stash.Tests/` covering happy paths, edge cases, and error conditions.
 - Follow naming: `{Feature}_{Scenario}_{Expected}()`.
 - Run `dotnet test` and confirm zero failures before considering the feature complete.
+
+### Enforcement meta-tests (handle during implementation, not at review)
+
+These guard the checklist above and fail loudly on omissions — address them in the same phase, not after review:
+
+- **New stdlib function** → `Wave1ThrowsCoverageTests` fails unless the function has `<exception>` throws metadata OR is added to that test's `NoThrowAllowList` (allow-list is correct for infallible reads).
+- **New namespace / changed completion surface** → `CompletionSurfaceSnapshotTests` fails until re-baselined: `STASH_SNAPSHOT_REGEN=1 dotnet test --filter FullyQualifiedName~CompletionSurfaceSnapshotTests` (see `Stash.Tests/CLAUDE.md`).
+- When a `plan.yaml` `final_verify` filter is narrowed, **include these two classes plus `StandardLibraryReferenceTests`** so the gate still catches checklist omissions.
