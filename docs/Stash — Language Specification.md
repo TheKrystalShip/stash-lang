@@ -1567,6 +1567,22 @@ were subsequently removed — platform and architecture queries now live in the
 | `env.user`      | Cached    | —          | Current username. Requires `Environment` capability. |
 | `env.hostname`  | Cached    | —          | Host name. Requires `Environment` capability.     |
 
+### OS Namespace: Platform Version Semantics
+
+The `os` namespace provides `os.isMacOSVersionAtLeast`, `os.isWindowsVersionAtLeast`, and
+`os.isLinuxVersionAtLeast` as cross-platform guards. All three return `false` on the wrong host
+without throwing. However, their underlying version sources differ:
+
+- `os.isMacOSVersionAtLeast` and `os.isWindowsVersionAtLeast` delegate to
+  `OperatingSystem.IsMacOSVersionAtLeast` / `OperatingSystem.IsWindowsVersionAtLeast`.
+- `os.isLinuxVersionAtLeast(major, minor?)` compares against the **kernel version** reported
+  by `Environment.OSVersion.Version` (the numeric components of `uname -r`), not a distribution
+  release number. This is the only Linux version information available from .NET, because
+  `OperatingSystem` exposes no `IsLinuxVersionAtLeast` equivalent.
+
+Scripts that need to test "are we on Ubuntu 24.04?" cannot use this helper; it reports the
+kernel version only.
+
 ## Shell Integration
 
 ### Command Expressions

@@ -6537,7 +6537,7 @@ Returns true if the host is Windows and the OS version is at least the specified
 
 #### `os.isLinuxVersionAtLeast(major: int, ...minor: int) -> bool`
 
-Returns true if the host is Linux and the kernel version is at least the specified major/minor. Returns false on non-Linux hosts without throwing. Uses Environment.OSVersion.Version for version comparison on Linux hosts.
+Returns true if the host is Linux and the kernel version is at least the specified major/minor. Returns false on non-Linux hosts without throwing. Uses Environment.OSVersion.Version (which reflects the kernel version from uname -r) for comparison on Linux hosts; this is the kernel version, not a distribution release number, because .NET exposes no OperatingSystem.IsLinuxVersionAtLeast equivalent.
 
 **Parameters:**
 

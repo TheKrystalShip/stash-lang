@@ -282,12 +282,12 @@ public static partial class OsBuiltIns
             ["platform"]    = StashValue.FromObj(new StashEnumValue(nameof(Platform), platform.ToString())),
             ["name"]        = StashValue.FromObj(platform.ToString().ToLowerInvariant()),
             ["isUnix"]      = StashValue.FromBool(IsUnix()),
-            ["arch"]        = StashValue.FromObj(RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()),
-            ["processArch"] = StashValue.FromObj(RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()),
-            ["description"] = StashValue.FromObj(RuntimeInformation.OSDescription),
-            ["framework"]   = StashValue.FromObj(RuntimeInformation.FrameworkDescription),
-            ["version"]     = StashValue.FromObj(Environment.OSVersion.VersionString),
-            ["endianness"]  = StashValue.FromObj(BitConverter.IsLittleEndian ? EndiannessLittle : EndiannessBig),
+            ["arch"]        = StashValue.FromObj(Arch()),
+            ["processArch"] = StashValue.FromObj(ProcessArch()),
+            ["description"] = StashValue.FromObj(Description()),
+            ["framework"]   = StashValue.FromObj(Framework()),
+            ["version"]     = StashValue.FromObj(Version()),
+            ["endianness"]  = StashValue.FromObj(Endianness()),
         };
         return StashValue.FromObj(new StashInstance(nameof(PlatformInfo), fields));
     }
@@ -324,7 +324,10 @@ public static partial class OsBuiltIns
     /// <summary>
     /// Returns <c>true</c> if the host is Linux and the kernel version is at least the specified
     /// major/minor. Returns <c>false</c> on non-Linux hosts without throwing.
-    /// Uses <c>Environment.OSVersion.Version</c> for version comparison on Linux hosts.
+    /// Uses <c>Environment.OSVersion.Version</c> (which reflects the kernel version from
+    /// <c>uname -r</c>) for comparison on Linux hosts; this is the kernel version, not a
+    /// distribution release number, because .NET exposes no <c>OperatingSystem.IsLinuxVersionAtLeast</c>
+    /// equivalent.
     /// </summary>
     /// <param name="major">Major version number.</param>
     /// <param name="minor">(optional) Minor version number. Defaults to 0.</param>
