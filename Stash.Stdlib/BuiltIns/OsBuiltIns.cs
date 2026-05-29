@@ -1,6 +1,7 @@
 namespace Stash.Stdlib.BuiltIns;
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -260,6 +261,36 @@ public static partial class OsBuiltIns
     [StashFn]
     public static string Endianness()
         => BitConverter.IsLittleEndian ? EndiannessLittle : EndiannessBig;
+
+    // ── Aggregate snapshot ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns a <c>PlatformInfo</c> struct snapshot containing all nine platform and runtime
+    /// metadata fields evaluated at the moment of the call.
+    /// Each field is identical to the value returned by the corresponding individual <c>os.*</c>
+    /// function (e.g. <c>os.info().platform</c> equals <c>os.platform()</c>).
+    /// </summary>
+    /// <returns>A <c>PlatformInfo</c> struct with fields:
+    /// <c>platform</c>, <c>name</c>, <c>isUnix</c>, <c>arch</c>, <c>processArch</c>,
+    /// <c>description</c>, <c>framework</c>, <c>version</c>, <c>endianness</c>.</returns>
+    [StashFn(Raw = true, ReturnType = nameof(PlatformInfo))]
+    private static StashValue Info(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        var platform = DetectPlatform();
+        var fields = new Dictionary<string, StashValue>(9)
+        {
+            ["platform"]    = StashValue.FromObj(new StashEnumValue(nameof(Platform), platform.ToString())),
+            ["name"]        = StashValue.FromObj(platform.ToString().ToLowerInvariant()),
+            ["isUnix"]      = StashValue.FromBool(IsUnix()),
+            ["arch"]        = StashValue.FromObj(RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant()),
+            ["processArch"] = StashValue.FromObj(RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()),
+            ["description"] = StashValue.FromObj(RuntimeInformation.OSDescription),
+            ["framework"]   = StashValue.FromObj(RuntimeInformation.FrameworkDescription),
+            ["version"]     = StashValue.FromObj(Environment.OSVersion.VersionString),
+            ["endianness"]  = StashValue.FromObj(BitConverter.IsLittleEndian ? EndiannessLittle : EndiannessBig),
+        };
+        return StashValue.FromObj(new StashInstance(nameof(PlatformInfo), fields));
+    }
 
     // ── Version-at-least helpers ──────────────────────────────────────────────
 
