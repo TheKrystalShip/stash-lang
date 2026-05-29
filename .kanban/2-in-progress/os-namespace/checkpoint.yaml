@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T08:04:21Z'
+updated: '2026-05-29T08:30:00Z'
 phases:
   P1:
     status: done
@@ -68,13 +68,14 @@ phases:
     notes: Created OsBuiltInsTests.cs with full coverage; added pathSeparator/newLine to IoBuiltInsTests;
       corrected stale plan.yaml path for IoBuiltInsTests
   P8:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4228ff844c9edfc3d14ab188e3f10494689d4dda
+    verified: true
+    started: '2026-05-29T08:26:09Z'
+    completed: '2026-05-29T08:30:00Z'
+    attempts: 1
+    notes: Regenerated stdlib reference, removed env.os/env.arch from spec, updated v1 member table, added
+      CHANGELOG entries for os namespace additions and env.os/env.arch breaking removal
 review:
   status: not_started
   started: null
