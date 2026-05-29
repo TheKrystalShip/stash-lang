@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T00:14:29Z'
+updated: '2026-05-29T07:00:33Z'
 phases:
   P1:
     status: done
@@ -32,13 +32,14 @@ phases:
       isMacOSVersionAtLeast/isWindowsVersionAtLeast/isLinuxVersionAtLeast (Linux uses OSVersion.Version
       comparison since OperatingSystem.IsLinuxVersionAtLeast does not exist in .NET)
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e9ba10b20a8f4114ef5909ae15693d00ccb75a80
+    verified: true
+    started: '2026-05-29T06:57:47Z'
+    completed: '2026-05-29T07:00:33Z'
+    attempts: 1
+    notes: Added os.info() Raw StashFn returning StashInstance('PlatformInfo') with 9 fields from existing
+      helpers
   P5:
     status: pending
     commit: null
