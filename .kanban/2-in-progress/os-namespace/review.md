@@ -97,7 +97,7 @@ dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests"
 ## F03 — [IMPORTANT] final_verify uses bare `dotnet test` — violates CLAUDE.md filter requirement
 
 **Status:** fixed
-**Fixed in:** TBD
+**Fixed in:** 2a8b93d
 **Files:** `.kanban/2-in-progress/os-namespace/plan.yaml:156-158`
 **Phase:** cross-phase (plan-level)
 **Commit:** -
