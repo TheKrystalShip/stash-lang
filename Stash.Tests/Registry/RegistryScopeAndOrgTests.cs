@@ -774,4 +774,92 @@ public sealed class RegistryScopeAndOrgTests
         bool hasMaintainer = await db.HasPackagePermissionAsync("@acme/widget", "bob", "maintainer");
         Assert.True(hasMaintainer);
     }
+
+    // ── F03: Search visibility — org-mediated and team-mediated readers ───────
+
+    [Fact]
+    public async Task Search_OrgOwnerWithNoDirectRole_CanFindPrivatePackageInOrgScope()
+    {
+        // Regression for F03: an org owner with NO direct package_roles row must still
+        // appear in search results for private packages in their org's scope.
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        var pkg = MakePackage("@acme/widget");
+        pkg.Visibility = "private";
+        await db.CreatePackageAsync(pkg);
+        // No direct package_roles row for alice on @acme/widget
+
+        SearchResult result = await db.SearchPackagesAsync("widget", 1, 20, "alice");
+
+        Assert.Single(result.Packages);
+        Assert.Equal("@acme/widget", result.Packages[0].Name);
+    }
+
+    [Fact]
+    public async Task Search_TeamMediatedReader_CanFindPrivatePackage()
+    {
+        // Anti-drift test: search must grant access via team-mediated branch,
+        // matching HasPackagePermissionAsync("reader") exactly.
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        var team = await db.CreateTeamAsync(org.Id, "readers-team");
+        await db.AddTeamMemberAsync(team.Id, "bob");
+        // bob is NOT an org member — only a team member
+
+        var pkg = MakePackage("@acme/lib");
+        pkg.Visibility = "private";
+        await db.CreatePackageAsync(pkg);
+        await db.AssignPackageRoleAsync("@acme/lib", "team", team.Id, "reader");
+
+        SearchResult result = await db.SearchPackagesAsync("lib", 1, 20, "bob");
+
+        // Both the read gate and search must agree: bob can read via team role
+        bool canRead = await db.HasPackagePermissionAsync("@acme/lib", "bob", "reader");
+        Assert.True(canRead);
+        Assert.Equal(canRead, result.Packages.Any(p => p.Name == "@acme/lib"));
+    }
+
+    [Fact]
+    public async Task Search_OrgMediatedReader_CanFindPrivatePackage()
+    {
+        // Plain org member (not owner) inherits reader floor and must appear in search.
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.AddOrgMemberAsync(org.Id, "bob", "member");
+
+        var pkg = MakePackage("@acme/internal-pkg");
+        pkg.Visibility = "private";
+        await db.CreatePackageAsync(pkg);
+        // No direct package_roles row for bob
+
+        SearchResult result = await db.SearchPackagesAsync("internal-pkg", 1, 20, "bob");
+
+        bool canRead = await db.HasPackagePermissionAsync("@acme/internal-pkg", "bob", "reader");
+        Assert.True(canRead); // sanity: org member has reader floor
+        Assert.Equal(canRead, result.Packages.Any(p => p.Name == "@acme/internal-pkg"));
+    }
+
+    [Fact]
+    public async Task Search_UserOutsideOrg_CannotFindPrivateOrgPackage()
+    {
+        // charlie is not an org member and has no roles — must not see private org packages.
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("charlie", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        var pkg = MakePackage("@acme/secret");
+        pkg.Visibility = "private";
+        await db.CreatePackageAsync(pkg);
+
+        SearchResult result = await db.SearchPackagesAsync("secret", 1, 20, "charlie");
+
+        Assert.Empty(result.Packages);
+    }
 }

@@ -131,13 +131,40 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         }
         else
         {
-            // Include public packages + private/internal packages the caller can read (direct user role).
+            // Include public packages + private/internal packages the caller can read.
+            // "Can read" mirrors HasPackagePermissionAsync's three branches:
+            //   1. Direct user-principal role
+            //   2. Team-mediated role (caller is a member of a team with a role on the package)
+            //   3. Org-mediated: the package's scope is org-owned AND the caller is an org member
+            //      (org_member→reader floor), OR an explicit org-principal role row exists.
+            // internal and private are treated identically here (matching today's controller);
+            // the internal-specific shortcut is tracked in F04.
             queryable = queryable.Where(p =>
                 p.Visibility == "public" ||
+                // Branch 1: direct user role
                 _context.PackageRoles.Any(r =>
                     r.PackageName == p.Name &&
                     r.PrincipalType == "user" &&
-                    r.PrincipalId == callerUsername));
+                    r.PrincipalId == callerUsername) ||
+                // Branch 2: team-mediated role
+                _context.PackageRoles.Any(r =>
+                    r.PackageName == p.Name &&
+                    r.PrincipalType == "team" &&
+                    _context.TeamMembers.Any(tm =>
+                        tm.TeamId == r.PrincipalId &&
+                        tm.Username == callerUsername)) ||
+                // Branch 3: org-mediated (scope is org-owned; caller is org member OR explicit org role)
+                _context.Scopes.Any(s =>
+                    s.OwnerType == "org" &&
+                    s.OwnerOrgId != null &&
+                    p.Name.StartsWith("@" + s.Name + "/") &&
+                    (_context.OrgMembers.Any(m =>
+                        m.OrgId == s.OwnerOrgId &&
+                        m.Username == callerUsername) ||
+                     _context.PackageRoles.Any(r =>
+                        r.PackageName == p.Name &&
+                        r.PrincipalType == "org" &&
+                        r.PrincipalId == s.OwnerOrgId))));
         }
 
         int totalCount = await queryable.CountAsync();
