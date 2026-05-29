@@ -804,41 +804,47 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     }
 
     /// <summary>
-    /// Grants ownership of a package to an additional user.
+    /// Grants ownership of a package to a user by assigning them the <c>owner</c> role.
     /// </summary>
     /// <remarks>
-    /// Issues <c>PUT /admin/packages/{name}/owners</c> with an
-    /// <see cref="OwnerUpdateRequest"/> body that adds <paramref name="username"/>.
+    /// Issues <c>PUT /admin/packages/{scope}/{name}/roles</c> with an
+    /// <see cref="AssignRoleRequest"/> body setting <c>principal_type = "user"</c>,
+    /// <c>principal_id = username</c>, and <c>role = "owner"</c>.
     /// </remarks>
     /// <param name="packageName">The name of the package to update ownership for.</param>
-    /// <param name="username">The username to add as an owner.</param>
+    /// <param name="username">The username to grant owner role to.</param>
     /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
     public bool AddOwner(string packageName, string username)
     {
         EnsureTokenFresh();
-        var body = JsonSerializer.Serialize(new OwnerUpdateRequest { Add = [username], Remove = [] }, CliJsonContext.Default.OwnerUpdateRequest);
+        var body = JsonSerializer.Serialize(new AssignRoleRequest { PrincipalType = "user", PrincipalId = username, Role = "owner" }, CliJsonContext.Default.AssignRoleRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/owners", content).GetAwaiter().GetResult();
+        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/roles", content).GetAwaiter().GetResult();
         return response.IsSuccessStatusCode;
     }
 
     /// <summary>
-    /// Revokes ownership of a package from a user.
+    /// Role revocation is not yet exposed over HTTP in this registry version.
     /// </summary>
     /// <remarks>
-    /// Issues <c>PUT /admin/packages/{name}/owners</c> with an
-    /// <see cref="OwnerUpdateRequest"/> body that removes <paramref name="username"/>.
+    /// The database layer has <c>RevokePackageRoleAsync</c> but no DELETE/revoke route
+    /// exists on the registry API. This method always throws so the caller surfaces a
+    /// clear, honest error rather than silently hitting a 404 or silently succeeding
+    /// with a misleading re-assignment. Tracked in
+    /// <c>.kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md</c>.
     /// </remarks>
-    /// <param name="packageName">The name of the package to update ownership for.</param>
-    /// <param name="username">The username to remove from the package's owner list.</param>
-    /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
+    /// <param name="packageName">Unused — no request is issued.</param>
+    /// <param name="username">Unused — no request is issued.</param>
+    /// <returns>Never returns — always throws.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Always thrown; role revocation is not available in this registry version.
+    /// </exception>
     public bool RemoveOwner(string packageName, string username)
     {
-        EnsureTokenFresh();
-        var body = JsonSerializer.Serialize(new OwnerUpdateRequest { Add = [], Remove = [username] }, CliJsonContext.Default.OwnerUpdateRequest);
-        var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/owners", content).GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
+        throw new InvalidOperationException(
+            "Role revocation is not yet supported by this registry version. " +
+            "The server has no HTTP endpoint to revoke a package role. " +
+            "See .kanban/0-backlog/bugs/ for the tracked follow-up.");
     }
 
     /// <summary>

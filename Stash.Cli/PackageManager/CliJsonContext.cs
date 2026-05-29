@@ -32,7 +32,7 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(SearchResultPackage))]
 [JsonSerializable(typeof(List<SearchResultPackage>))]
 [JsonSerializable(typeof(LoginRequest))]
-[JsonSerializable(typeof(OwnerUpdateRequest))]
+[JsonSerializable(typeof(AssignRoleRequest))]
 [JsonSerializable(typeof(TokenCreateRequest))]
 [JsonSerializable(typeof(TokenCreateResult))]
 [JsonSerializable(typeof(TokenListResult))]
@@ -63,18 +63,22 @@ internal sealed class LoginRequest
 }
 
 /// <summary>
-/// Request body sent to <c>PUT /admin/packages/{name}/owners</c> to add or remove
-/// package owners in a single operation.
+/// Request body sent to <c>PUT /admin/packages/{scope}/{name}/roles</c> to assign a
+/// role to a principal (user, team, or org).
 /// </summary>
-internal sealed class OwnerUpdateRequest
+internal sealed class AssignRoleRequest
 {
-    /// <summary>Usernames to grant ownership to.</summary>
-    [JsonPropertyName("add")]
-    public string[] Add { get; set; } = [];
+    /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
+    [JsonPropertyName("principal_type")]
+    public required string PrincipalType { get; set; }
 
-    /// <summary>Usernames to revoke ownership from.</summary>
-    [JsonPropertyName("remove")]
-    public string[] Remove { get; set; } = [];
+    /// <summary>The principal identifier — username, team ID, or org name.</summary>
+    [JsonPropertyName("principal_id")]
+    public required string PrincipalId { get; set; }
+
+    /// <summary>The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</summary>
+    [JsonPropertyName("role")]
+    public required string Role { get; set; }
 }
 
 /// <summary>
