@@ -1443,7 +1443,7 @@ directly to the caller without the need for parentheses.
 io.println(cli.argc);     // number of script arguments (e.g. 3)
 io.println(cli.argv);     // array of script arguments (e.g. ["arg1", "arg2", "arg3"])
 io.println(env.cwd);      // current working directory (e.g. "/home/user/project")
-io.println(env.os);       // operating system name (e.g. "linux")
+io.println(os.name());    // operating system name (e.g. "linux")
 ```
 
 ### Declaration Kinds
@@ -1468,8 +1468,7 @@ getter is invoked:
 
 - **`Cached` (default)**: the getter is invoked on first access; the result is
   stored. Subsequent accesses return the same reference. Identity is preserved
-  across the process lifetime. Examples: `cli.argc`, `cli.argv`, `env.os`,
-  `env.arch`.
+  across the process lifetime. Examples: `cli.argc`, `cli.argv`, `env.home`.
 
 - **`Live`**: the getter is invoked on every access. Returned values may differ
   between accesses if the underlying host state changed. Example: `env.cwd`
@@ -1552,10 +1551,12 @@ Namespace member access is not a pure O(1) field read. The precise contract is:
 
 ### v1 Member Set
 
-The following eight members were migrated from zero-argument functions to namespace
+The following six members were migrated from zero-argument functions to namespace
 members in the same release that introduced this feature. Their old call form
 (`ns.x()`) is a compile-time error (SA0846); rewrite all call sites to bare
-access (`ns.x`).
+access (`ns.x`). (The original set also included `env.os` and `env.arch`, which
+were subsequently removed — platform and architecture queries now live in the
+`os` namespace as `os.name()` and `os.arch()`.)
 
 | Member          | Stability | Throws     | Notes                                             |
 | --------------- | --------- | ---------- | ------------------------------------------------- |
@@ -1565,8 +1566,6 @@ access (`ns.x`).
 | `env.home`      | Cached    | —          | User home directory. Process-lifetime constant.   |
 | `env.user`      | Cached    | —          | Current username. Requires `Environment` capability. |
 | `env.hostname`  | Cached    | —          | Host name. Requires `Environment` capability.     |
-| `env.os`        | Cached    | —          | Operating system name (e.g. `"linux"`).           |
-| `env.arch`      | Cached    | —          | CPU architecture (e.g. `"x64"`).                 |
 
 ## Shell Integration
 

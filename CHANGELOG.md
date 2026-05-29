@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Standard Library
 
+- **`os` namespace — platform and operating-system introspection:** New ungated `os` namespace exposes .NET's `OperatingSystem`, `RuntimeInformation`, `Environment.OSVersion`, and `BitConverter` APIs through a deterministic, side-effect-free surface. Platform identity: `os.platform() -> Platform` (enum: `Windows`, `Linux`, `MacOS`, `FreeBSD`, `Android`, `IOS`, `TvOS`, `WatchOS`, `Browser`, `Wasi`, `Unknown`), `os.name() -> string` (lowercase stable string), per-platform predicates `os.isWindows()`, `os.isLinux()`, `os.isMacOS()`, `os.isFreeBSD()`, `os.isAndroid()`, `os.isIOS()`, `os.isBrowser()`, `os.isUnix()`. Runtime metadata: `os.arch() -> string`, `os.processArch() -> string`, `os.description() -> string`, `os.framework() -> string`, `os.version() -> string`, `os.endianness() -> string` (`"little"` or `"big"`). Version helpers: `os.isMacOSVersionAtLeast(major, minor?, build?)`, `os.isWindowsVersionAtLeast(major, minor?, build?, revision?)`, `os.isLinuxVersionAtLeast(major, minor?)` — all return `false` on the wrong host without throwing. Snapshot: `os.info() -> PlatformInfo` struct (fields: `platform`, `name`, `isUnix`, `arch`, `processArch`, `description`, `framework`, `version`, `endianness`). No capability gate — `os` reports immutable process-scoped facts and is available in every sandbox profile. **Breaking change:** `env.os` and `env.arch` are removed with no compatibility aliases; migrate to `os.name()` and `os.arch()` respectively (see breaking-changes section below).
+
+- **`io.pathSeparator()` and `io.newLine()`** — Two new `io` functions expose platform text-I/O conventions: `io.pathSeparator()` returns `Path.PathSeparator` as a string (`"/"` on Unix, `"\\"` on Windows); `io.newLine()` returns `Environment.NewLine` (`"\n"` on Unix, `"\r\n"` on Windows). These live on `io` (not `os`) because they are text-stream conventions, not platform-identity facts.
+
 - **`cli` namespace — declarative CLI argument parsing (replaces `args`):** New `cli` namespace replaces the removed `args` namespace (`args.list`, `args.count`, `args.parse`, `args.build`) with a typed, composable, schema-driven API. Schemas are ordinary Stash values built from `cli.positional`, `cli.option`, `cli.flag`, and `cli.command`; `cli.schema()` validates the schema at construction time. `cli.parse(schema)` parses `cli.argv()` by default — printing help and exiting 0 on `--help`, printing the error and exiting 2 on failure. `cli.tryParse(schema)` returns a `CliParseResult` and never calls `exit`, making it safe for tests and libraries. `cli.build(schema, values)` round-trips a parsed dict back to an argv array. Nine typed error subclasses (`CliSchemaError`, `CliMissingRequired`, `CliUnknownOption`, `CliMissingValue`, `CliInvalidValue`, `CliUnexpectedPositional`, `CliAmbiguousOption`, `CliValidationFailed`, `CliUnknownCommand`) carry structured properties for programmatic error handling. Raw argument access moves to `cli.argv()` / `cli.argc()`. Type tags supported: `"string"`, `"int"`, `"float"`, `"bool"`, `"duration"`, `"ip"`, `"bytesize"`, `"semver"`. **Breaking change:** `args.list`, `args.count`, `args.parse`, and `args.build` are removed and raise an "Undefined namespace" runtime error. Migration: replace `args.list()` with `cli.argv()`, `args.count()` with `cli.argc()`, and hand-rolled `args.parse` usage with `cli.schema` + `cli.parse`.
 
 - **`str.shellSplit(s) -> array<string>`** — POSIX-shell-style word-splitting that honors `'...'` (literal contents — no escapes), `"..."` (with `\"` and `\\` escapes), and backslash escapes outside of single quotes. Throws `ValueError("unterminated quote in str.shellSplit")` on an unterminated quote. Pairs with array-spread for the common "command-line string → argv" pattern: `$(python ${...str.shellSplit(line)})`. Companion to the existing `str.words(s)` (naive Unicode-whitespace split).
@@ -91,8 +95,6 @@ member, not a function"). Rewrite every call site to bare member access:
 | `env.home()`                 | `env.home`    |
 | `env.user()`                 | `env.user`    |
 | `env.hostname()`             | `env.hostname` |
-| `env.os()`                   | `env.os`      |
-| `env.arch()`                 | `env.arch`    |
 
 There is no deprecation window and no AST sugar that silently strips the parentheses.
 Every affected call site must be updated before recompiling. Diagnostic SA0846
@@ -106,6 +108,22 @@ assignment reaches a `ReadOnlyError` runtime error, catchable as
 
 `cli.argv` is frozen at the boundary — `cli.argv[0] = "x"` raises a frozen-write
 error rather than silently mutating the argument array.
+
+#### Standard Library — `env.os` and `env.arch` removed (migrate to `os` namespace)
+
+`env.os` and `env.arch` — the two platform-identity members introduced in the SA0846
+namespace-members release — are removed with no compatibility aliases. Platform and
+architecture queries now belong exclusively to the new `os` namespace:
+
+| Old form (now raises `UnknownFunctionError`) | New form |
+| -------------------------------------------- | -------- |
+| `env.os`                                     | `os.name()` |
+| `env.arch`                                   | `os.arch()` |
+
+There is no deprecation window. `env.os` and `env.arch` no longer exist in the
+`env` namespace; any script referencing them will receive an "Undefined namespace
+member" error at runtime. **Migration:** replace every `env.os` read with
+`os.name()` and every `env.arch` read with `os.arch()`.
 
 ### Internal
 

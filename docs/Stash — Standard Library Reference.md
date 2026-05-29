@@ -44,31 +44,32 @@
 23. [`log`](#log--structured-logging)
 24. [`math`](#math--math-functions)
 25. [`net`](#net--networking-utilities)
-26. [`path`](#path--path-manipulation)
-27. [`pkg`](#pkg--package-manager)
-28. [`process`](#process--process-management)
-29. [`prompt`](#prompt--repl-prompt-customisation)
-30. [`re`](#re--regular-expressions)
-31. [`scheduler`](#scheduler--os-service-management)
-32. [`sftp`](#sftp--sftp-file-transfer)
-33. [`shell`](#shell--interactive-shell-state)
-34. [`signal`](#signal--signal-handling)
-35. [`ssh`](#ssh--ssh-remote-execution)
-36. [`str`](#str--string-operations)
-37. [`sys`](#sys--system-information)
-38. [`task`](#task--parallel-tasks)
-39. [`tcp`](#tcp--tcp-sockets)
-40. [`term`](#term--terminal-formatting)
-41. [`test`](#test--test-framework)
-42. [`time`](#time--time-and-date)
-43. [`toml`](#toml--toml)
-44. [`tpl`](#tpl--templating)
-45. [`udp`](#udp--udp-datagrams)
-46. [`ws`](#ws--websockets)
-47. [`xml`](#xml--xml)
-48. [`yaml`](#yaml--yaml)
-49. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
-50. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
+26. [`os`](#os--os)
+27. [`path`](#path--path-manipulation)
+28. [`pkg`](#pkg--package-manager)
+29. [`process`](#process--process-management)
+30. [`prompt`](#prompt--repl-prompt-customisation)
+31. [`re`](#re--regular-expressions)
+32. [`scheduler`](#scheduler--os-service-management)
+33. [`sftp`](#sftp--sftp-file-transfer)
+34. [`shell`](#shell--interactive-shell-state)
+35. [`signal`](#signal--signal-handling)
+36. [`ssh`](#ssh--ssh-remote-execution)
+37. [`str`](#str--string-operations)
+38. [`sys`](#sys--system-information)
+39. [`task`](#task--parallel-tasks)
+40. [`tcp`](#tcp--tcp-sockets)
+41. [`term`](#term--terminal-formatting)
+42. [`test`](#test--test-framework)
+43. [`time`](#time--time-and-date)
+44. [`toml`](#toml--toml)
+45. [`tpl`](#tpl--templating)
+46. [`udp`](#udp--udp-datagrams)
+47. [`ws`](#ws--websockets)
+48. [`xml`](#xml--xml)
+49. [`yaml`](#yaml--yaml)
+50. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
+51. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
 
 ---
 
@@ -4011,8 +4012,6 @@ Decodes a hexadecimal string to a byte array.
 | `env.home` | `string` | `cached` | — | The current user's home directory path. |
 | `env.hostname` | `string` | `cached` | — | The machine's hostname. |
 | `env.user` | `string` | `cached` | — | The current user's login name. |
-| `env.os` | `string` | `cached` | — | The current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'. |
-| `env.arch` | `string` | `cached` | — | The CPU architecture (e.g. |
 
 ### Functions
 
@@ -5032,6 +5031,8 @@ Converts a dictionary to INI-formatted text.
 | `io.readLine` | `string` | — | Displays a prompt and reads a line of input from the user. |
 | `io.confirm` | `bool` | `TypeError` | Prompts the user for a yes/no confirmation. |
 | `io.readPassword` | `secret` | `IOError`, `TypeError` | Reads a password from stdin without echoing typed characters. |
+| `io.pathSeparator` | `string` | — | Returns the platform-specific path-list separator character as a string (`:` on Unix, `;` on Windows). |
+| `io.newLine` | `string` | — | Returns the platform-specific newline string (`\n` on Unix, `\r\n` on Windows). |
 
 ### Function Details
 
@@ -5114,6 +5115,18 @@ Reads a password from stdin without echoing typed characters. Returns a secret.
 
 - `IOError` — if input is closed or cancelled (Ctrl-C)
 - `TypeError` — if the optional prompt argument is not a string
+
+#### `io.pathSeparator() -> string`
+
+Returns the platform-specific path-list separator character as a string (`:` on Unix, `;` on Windows).
+
+**Returns:** `string` — The path-list separator character used by the current OS to separate entries in a PATH-style list
+
+#### `io.newLine() -> string`
+
+Returns the platform-specific newline string (`\n` on Unix, `\r\n` on Windows).
+
+**Returns:** `string` — The newline sequence used by the current OS
 
 ---
 
@@ -6337,6 +6350,201 @@ Deprecated. Use tcp.serverClose.
 **Throws:**
 
 - `TypeError` — if any argument has the wrong type
+
+---
+
+## `os` — os
+
+**Capability:** _none — always available_
+
+### Types
+
+#### `PlatformInfo` struct
+
+A snapshot of platform identity and runtime metadata returned by os.info(). Fields mirror the individual os.* helpers evaluated once per call; no memoization and no reference-equality guarantee across calls.
+
+| Field | Type |
+| ----- | ---- |
+| `platform` | `any` |
+| `name` | `string` |
+| `isUnix` | `bool` |
+| `arch` | `string` |
+| `processArch` | `string` |
+| `description` | `string` |
+| `framework` | `string` |
+| `version` | `string` |
+| `endianness` | `string` |
+
+#### `Platform` enum
+
+The host operating system platform, as reported by the .NET runtime. Member spelling follows .NET enum naming verbatim (OperatingSystem.IsXxx() parity). Only Windows, Linux, and Browser (Wasm) are officially tested; all other members are present for forward-compatibility with every platform .NET supports.
+
+Members: `Windows`, `Linux`, `MacOS`, `FreeBSD`, `Android`, `IOS`, `TvOS`, `WatchOS`, `Browser`, `Wasi`, `Unknown`
+
+### Functions
+
+| Function | Returns | Throws | Description |
+| -------- | ------- | ------ | ----------- |
+| `os.platform` | `Platform` | — | Returns the host platform as a Platform enum value. |
+| `os.name` | `string` | — | Returns the host platform as a stable lowercase string. |
+| `os.isWindows` | `bool` | — | Returns true if the host operating system is Windows. |
+| `os.isLinux` | `bool` | — | Returns true if the host operating system is Linux. |
+| `os.isMacOS` | `bool` | — | Returns true if the host operating system is macOS. |
+| `os.isFreeBSD` | `bool` | — | Returns true if the host operating system is FreeBSD. |
+| `os.isAndroid` | `bool` | — | Returns true if the host operating system is Android. |
+| `os.isIOS` | `bool` | — | Returns true if the host operating system is iOS. |
+| `os.isBrowser` | `bool` | — | Returns true if the host is running in a browser (WebAssembly). |
+| `os.isUnix` | `bool` | — | Returns true if the host is a Unix-like operating system: Linux, macOS, FreeBSD, Android, iOS, tvOS, or watchOS. |
+| `os.arch` | `string` | — | Returns the operating-system architecture as a lowercase string sourced from RuntimeInformation.OSArchitecture. |
+| `os.processArch` | `string` | — | Returns the process architecture as a lowercase string sourced from RuntimeInformation.ProcessArchitecture. |
+| `os.description` | `string` | — | Returns a human-readable description of the current operating system, sourced from RuntimeInformation.OSDescription. |
+| `os.framework` | `string` | — | Returns a description of the .NET framework in use, sourced from RuntimeInformation.FrameworkDescription. |
+| `os.version` | `string` | — | Returns the operating system version string sourced from Environment.OSVersion.VersionString. |
+| `os.endianness` | `string` | — | Returns the byte order of the current host as a string. |
+| `os.info` | `PlatformInfo` | — | Returns a PlatformInfo struct snapshot containing all nine platform and runtime metadata fields evaluated at the moment of the call. |
+| `os.isMacOSVersionAtLeast` | `bool` | — | Returns true if the host is macOS and the OS version is at least the specified major/minor/build. |
+| `os.isWindowsVersionAtLeast` | `bool` | — | Returns true if the host is Windows and the OS version is at least the specified major/minor/build/revision. |
+| `os.isLinuxVersionAtLeast` | `bool` | — | Returns true if the host is Linux and the kernel version is at least the specified major/minor. |
+
+### Function Details
+
+#### `os.platform() -> Platform`
+
+Returns the host platform as a Platform enum value. Sourced from OperatingSystem.IsXxx(); returns Platform.Unknown on unrecognised hosts — never throws.
+
+**Returns:** `Platform` — A Platform enum value identifying the host operating system.
+
+#### `os.name() -> string`
+
+Returns the host platform as a stable lowercase string. Possible values: "windows", "linux", "macos", "freebsd", "android", "ios", "tvos", "watchos", "browser", "wasi", or "unknown". These strings are part of the API contract.
+
+**Returns:** `string` — Lowercase platform name string.
+
+#### `os.isWindows() -> bool`
+
+Returns true if the host operating system is Windows. Delegates to OperatingSystem.IsWindows().
+
+**Returns:** `bool` — true on Windows, otherwise false.
+
+#### `os.isLinux() -> bool`
+
+Returns true if the host operating system is Linux. Delegates to OperatingSystem.IsLinux().
+
+**Returns:** `bool` — true on Linux, otherwise false.
+
+#### `os.isMacOS() -> bool`
+
+Returns true if the host operating system is macOS. Delegates to OperatingSystem.IsMacOS().
+
+**Returns:** `bool` — true on macOS, otherwise false.
+
+#### `os.isFreeBSD() -> bool`
+
+Returns true if the host operating system is FreeBSD. Delegates to OperatingSystem.IsFreeBSD().
+
+**Returns:** `bool` — true on FreeBSD, otherwise false.
+
+#### `os.isAndroid() -> bool`
+
+Returns true if the host operating system is Android. Delegates to OperatingSystem.IsAndroid().
+
+**Returns:** `bool` — true on Android, otherwise false.
+
+#### `os.isIOS() -> bool`
+
+Returns true if the host operating system is iOS. Delegates to OperatingSystem.IsIOS().
+
+**Returns:** `bool` — true on iOS, otherwise false.
+
+#### `os.isBrowser() -> bool`
+
+Returns true if the host is running in a browser (WebAssembly). Delegates to OperatingSystem.IsBrowser().
+
+**Returns:** `bool` — true in a browser/Wasm environment, otherwise false.
+
+#### `os.isUnix() -> bool`
+
+Returns true if the host is a Unix-like operating system: Linux, macOS, FreeBSD, Android, iOS, tvOS, or watchOS. This is a portability convenience predicate — it is not a POSIX compliance claim. Stash makes no promise about POSIX API availability on these platforms.
+
+**Returns:** `bool` — true on Unix-like hosts, otherwise false.
+
+#### `os.arch() -> string`
+
+Returns the operating-system architecture as a lowercase string sourced from RuntimeInformation.OSArchitecture. Known values at time of writing: "x86", "x64", "arm", "arm64", "wasm", "s390x", "loongarch64", "armv6", "ppc64le", "riscv64". The set is open and runtime-derived — new .NET targets may produce additional values.
+
+**Returns:** `string` — Lowercase OS architecture string.
+
+#### `os.processArch() -> string`
+
+Returns the process architecture as a lowercase string sourced from RuntimeInformation.ProcessArchitecture. Known values at time of writing: "x86", "x64", "arm", "arm64", "wasm", "s390x", "loongarch64", "armv6", "ppc64le", "riscv64". The set is open and runtime-derived — new .NET targets may produce additional values.
+
+**Returns:** `string` — Lowercase process architecture string.
+
+#### `os.description() -> string`
+
+Returns a human-readable description of the current operating system, sourced from RuntimeInformation.OSDescription. Example: "Linux 6.1.0-21-amd64 #1 SMP Debian 6.1.90-1 (2024-05-03)".
+
+**Returns:** `string` — OS description string.
+
+#### `os.framework() -> string`
+
+Returns a description of the .NET framework in use, sourced from RuntimeInformation.FrameworkDescription. Example: ".NET 8.0.6".
+
+**Returns:** `string` — Framework description string.
+
+#### `os.version() -> string`
+
+Returns the operating system version string sourced from Environment.OSVersion.VersionString. Example: "Unix 6.1.0.21" or "Microsoft Windows NT 10.0.19045.0".
+
+**Returns:** `string` — OS version string.
+
+#### `os.endianness() -> string`
+
+Returns the byte order of the current host as a string. Returns "little" on little-endian hosts and "big" on big-endian hosts, based on BitConverter.IsLittleEndian.
+
+**Returns:** `string` — "little" or "big".
+
+#### `os.info() -> PlatformInfo`
+
+Returns a PlatformInfo struct snapshot containing all nine platform and runtime metadata fields evaluated at the moment of the call. Each field is identical to the value returned by the corresponding individual os.* function (e.g. os.info().platform equals os.platform()).
+
+**Returns:** `PlatformInfo` — A PlatformInfo struct with fields: platform, name, isUnix, arch, processArch, description, framework, version, endianness.
+
+#### `os.isMacOSVersionAtLeast(major: int, minor: int, ...build: int) -> bool`
+
+Returns true if the host is macOS and the OS version is at least the specified major/minor/build. Returns false on non-macOS hosts without throwing. Delegates to OperatingSystem.IsMacOSVersionAtLeast on matching hosts.
+
+**Parameters:**
+
+- `major`: `int` — Major version number.
+- `minor`: `int` — (optional) Minor version number. Defaults to 0.
+- `build`: `int` — (optional) Build version number. Defaults to 0.
+
+**Returns:** `bool` — true if running on macOS at or above the specified version, otherwise false.
+
+#### `os.isWindowsVersionAtLeast(major: int, minor: int, build: int, ...revision: int) -> bool`
+
+Returns true if the host is Windows and the OS version is at least the specified major/minor/build/revision. Returns false on non-Windows hosts without throwing. Delegates to OperatingSystem.IsWindowsVersionAtLeast on matching hosts.
+
+**Parameters:**
+
+- `major`: `int` — Major version number.
+- `minor`: `int` — (optional) Minor version number. Defaults to 0.
+- `build`: `int` — (optional) Build version number. Defaults to 0.
+- `revision`: `int` — (optional) Revision number. Defaults to 0.
+
+**Returns:** `bool` — true if running on Windows at or above the specified version, otherwise false.
+
+#### `os.isLinuxVersionAtLeast(major: int, ...minor: int) -> bool`
+
+Returns true if the host is Linux and the kernel version is at least the specified major/minor. Returns false on non-Linux hosts without throwing. Uses Environment.OSVersion.Version for version comparison on Linux hosts.
+
+**Parameters:**
+
+- `major`: `int` — Major version number.
+- `minor`: `int` — (optional) Minor version number. Defaults to 0.
+
+**Returns:** `bool` — true if running on Linux at or above the specified version, otherwise false.
 
 ---
 
