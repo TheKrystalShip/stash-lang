@@ -205,7 +205,9 @@ dotnet build
 
 ## F03 — [HIGH] Search visibility filter ignores team- and org-mediated permissions
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 2218ffa
+**Note:** `internal` and `private` are treated identically in search (matching today's controller at PackagesController.cs:623); the `internal`-specific shortcut remains tracked in F04.
 **Files:** `Stash.Registry/Database/StashRegistryDatabase.cs:119-152`
 **Phase:** P4
 **Commit:** 34c3c96
