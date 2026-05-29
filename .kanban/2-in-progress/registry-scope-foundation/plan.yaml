@@ -32,7 +32,7 @@ phases:
     deps: []
     files:
       - Stash.Core/Common/PackageManifest.cs
-      - Stash.Tests/PackageManifestTests.cs
+      - Stash.Tests/Common/PackageManifestTests.cs
     verify:
       - dotnet build Stash.Core
       - dotnet test --filter "FullyQualifiedName~PackageManifestTests"

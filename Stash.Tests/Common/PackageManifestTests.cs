@@ -273,9 +273,9 @@ public class PackageManifestTests
     [InlineData("my-package")]
     [InlineData("a")]
     [InlineData("test123")]
-    public void IsValidPackageName_ValidName_ReturnsTrue(string name)
+    public void IsValidPackageName_FlatName_ReturnsFalse(string name)
     {
-        Assert.True(PackageManifest.IsValidPackageName(name));
+        Assert.False(PackageManifest.IsValidPackageName(name));
     }
 
     [Theory]
@@ -315,7 +315,7 @@ public class PackageManifestTests
     [Fact]
     public void Validate_ValidManifest_ReturnsEmptyErrors()
     {
-        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0" };
+        var manifest = new PackageManifest { Name = "@scope/my-package", Version = "1.0.0" };
 
         var errors = manifest.Validate();
 
@@ -335,7 +335,7 @@ public class PackageManifestTests
     [Fact]
     public void Validate_InvalidVersion_ReturnsVersionError()
     {
-        var manifest = new PackageManifest { Name = "my-package", Version = "not-semver" };
+        var manifest = new PackageManifest { Name = "@scope/my-package", Version = "not-semver" };
 
         var errors = manifest.Validate();
 
@@ -347,7 +347,7 @@ public class PackageManifestTests
     {
         var manifest = new PackageManifest
         {
-            Name = "my-package",
+            Name = "@scope/my-package",
             Version = "1.0.0",
             Dependencies = new Dictionary<string, string> { { "some-lib", "!!invalid!!" } }
         };
@@ -362,7 +362,7 @@ public class PackageManifestTests
     {
         var manifest = new PackageManifest
         {
-            Name = "my-package",
+            Name = "@scope/my-package",
             Version = "1.0.0",
             Dependencies = new Dictionary<string, string> { { "git-dep", "git:https://github.com/example/repo" } }
         };
@@ -375,11 +375,21 @@ public class PackageManifestTests
     [Fact]
     public void ValidateForPublishing_CompleteValidManifest_ReturnsEmptyErrors()
     {
-        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0" };
+        var manifest = new PackageManifest { Name = "@scope/my-package", Version = "1.0.0" };
 
         var errors = manifest.ValidateForPublishing();
 
         Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void ValidateForPublishing_FlatName_ReturnsNameError()
+    {
+        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0" };
+
+        var errors = manifest.ValidateForPublishing();
+
+        Assert.Contains(errors, e => e.Contains("Invalid package name") && e.Contains("@"));
     }
 
     [Fact]
@@ -395,7 +405,7 @@ public class PackageManifestTests
     [Fact]
     public void ValidateForPublishing_MissingVersion_ReturnsVersionError()
     {
-        var manifest = new PackageManifest { Name = "my-package" };
+        var manifest = new PackageManifest { Name = "@scope/my-package" };
 
         var errors = manifest.ValidateForPublishing();
 

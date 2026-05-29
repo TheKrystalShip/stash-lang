@@ -15,19 +15,12 @@ public static partial class PackagingRegexes
 {
     /// <summary>
     /// Returns a compiled <see cref="System.Text.RegularExpressions.Regex"/> that matches a
-    /// namespaced package name of the form <c>@scope/name</c>.
+    /// scoped package name of the form <c>@scope/name</c>, where each segment starts with a
+    /// lowercase letter, contains only <c>[a-z0-9-]</c>, and is between 1 and 39 characters.
     /// </summary>
-    /// <returns>A <see cref="System.Text.RegularExpressions.Regex"/> matching <c>^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$</c>.</returns>
-    [GeneratedRegex(@"^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$", RegexOptions.Compiled)]
+    /// <returns>A <see cref="System.Text.RegularExpressions.Regex"/> matching <c>^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$</c>.</returns>
+    [GeneratedRegex(@"^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$", RegexOptions.Compiled)]
     public static partial Regex NamespacedPackageName();
-
-    /// <summary>
-    /// Returns a compiled <see cref="System.Text.RegularExpressions.Regex"/> that matches a
-    /// simple (non-scoped) package name such as <c>my-package</c>.
-    /// </summary>
-    /// <returns>A <see cref="System.Text.RegularExpressions.Regex"/> matching <c>^[a-z][a-z0-9-]*$</c>.</returns>
-    [GeneratedRegex(@"^[a-z][a-z0-9-]*$", RegexOptions.Compiled)]
-    public static partial Regex LocalPackageName();
 }
 
 /// <summary>
@@ -50,8 +43,9 @@ public static partial class PackagingRegexes
 public class PackageManifest
 {
     /// <summary>
-    /// Gets or sets the package name, either a simple name such as <c>my-pkg</c> or a scoped
-    /// name such as <c>@scope/my-pkg</c>.
+    /// Gets or sets the package name. Must be a scoped name of the form <c>@scope/my-pkg</c>,
+    /// where both segments start with a lowercase letter, contain only <c>[a-z0-9-]</c>,
+    /// and are between 1 and 39 characters each.
     /// </summary>
     [JsonPropertyName("name")]
     public string? Name { get; set; }
@@ -170,11 +164,12 @@ public class PackageManifest
 
     /// <summary>
     /// Validates whether <paramref name="name"/> is a legal Stash package name.
-    /// Simple names must match <c>^[a-z][a-z0-9-]*$</c>; scoped names must match
-    /// <c>^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$</c>. Both forms are limited to 64 characters.
+    /// Only scoped names of the form <c>@scope/name</c> are accepted, where each segment starts
+    /// with a lowercase letter, contains only <c>[a-z0-9-]</c>, and is between 1 and 39
+    /// characters. The combined name must be at most 64 characters.
     /// </summary>
     /// <param name="name">The package name string to validate.</param>
-    /// <returns><c>true</c> if <paramref name="name"/> is a valid package name; otherwise <c>false</c>.</returns>
+    /// <returns><c>true</c> if <paramref name="name"/> is a valid scoped package name; otherwise <c>false</c>.</returns>
     public static bool IsValidPackageName(string name)
     {
         if (name.Length > 64)
@@ -182,12 +177,7 @@ public class PackageManifest
             return false;
         }
 
-        if (name.StartsWith('@'))
-        {
-            return PackagingRegexes.NamespacedPackageName().IsMatch(name);
-        }
-
-        return PackagingRegexes.LocalPackageName().IsMatch(name);
+        return PackagingRegexes.NamespacedPackageName().IsMatch(name);
     }
 
     /// <summary>
@@ -203,7 +193,7 @@ public class PackageManifest
 
         if (Name != null && !IsValidPackageName(Name))
         {
-            errors.Add($"Invalid package name '{Name}'. Must match ^[a-z][a-z0-9-]*$ or ^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$ and be at most 64 characters.");
+            errors.Add($"Invalid package name '{Name}'. Must match ^@[a-z][a-z0-9-]{{0,38}}/[a-z][a-z0-9-]{{0,38}}$ and be at most 64 characters.");
         }
 
         if (Version != null && !SemVer.TryParse(Version, out _))
