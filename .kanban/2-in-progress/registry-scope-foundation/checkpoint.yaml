@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-scope-foundation
 current: null
-updated: '2026-05-29T18:27:22Z'
+updated: '2026-05-29T18:43:53Z'
 phases:
   P1:
     status: done
@@ -40,13 +40,14 @@ phases:
     notes: Deleted PrivatePackageException; added RequireReadScope policy; visibility enforcement on GET/download
       endpoints; PATCH visibility endpoint; search filtering; 40 tests pass
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 74ea0f7a88eba1cbb7c69920411537d5eacd68e0
+    verified: true
+    started: '2026-05-29T18:36:21Z'
+    completed: '2026-05-29T18:43:53Z'
+    attempts: 1
+    notes: OrganizationsController + ScopesController + role endpoints; HasPackagePermissionAsync extended
+      to union direct/team/org roles; 58 tests pass
   P6:
     status: pending
     commit: null
