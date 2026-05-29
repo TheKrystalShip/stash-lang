@@ -319,6 +319,38 @@ module resolution base.
 Import cycles produce a runtime error unless an implementation explicitly documents
 cycle handling.
 
+### Package Name Grammar
+
+A **package name** is the string value used to identify a published package in `stash.json` manifests and in import paths that reference registry packages. Only the **scoped form** is valid:
+
+```
+@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}
+```
+
+Formally:
+
+```
+packageName = "@" scopeSegment "/" nameSegment
+scopeSegment = [a-z][a-z0-9-]{0,38}
+nameSegment  = [a-z][a-z0-9-]{0,38}
+```
+
+Rules:
+- Each segment starts with a lowercase ASCII letter (`[a-z]`).
+- Each segment contains only lowercase letters, digits, and hyphens (`[a-z0-9-]`).
+- Each segment is between 1 and 39 characters (one leading letter plus up to 38 continuation characters).
+- The `@` prefix is mandatory; flat (unscoped) names such as `http` or `stash-http` are invalid.
+- The `/` separator is mandatory and appears exactly once, after the scope segment.
+- Combined length of `@{scope}/{name}` must not exceed 64 characters.
+
+Examples of valid names: `@stash/http`, `@my-org/widget`, `@alice/tools`.
+Examples of invalid names: `http` (no scope), `@stash` (no `/`), `@Stash/Http` (uppercase), `@stash/` (empty name segment).
+
+`PackageManifest.IsValidPackageName` implements this check using the generated regex
+`^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$`. `ValidateForPublishing` rejects a manifest whose `name` does not match.
+
+In URL routing the leading `@` is stripped: package `@stash/http` is addressed as `/api/v1/packages/stash/http`. The registry server canonicalizes back to the `@{scope}/{name}` form for response bodies and database lookups.
+
 ### Exports
 
 By default, every top-level binding in a Stash module is **module-private** —

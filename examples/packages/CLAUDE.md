@@ -69,14 +69,14 @@ Idiomatic (matches `@stash/log`, `@stash/cli`, `@stash/docker`):
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `name` | publish | Unscoped `^[a-z][a-z0-9-]*$` or scoped `^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$`. Max 64 chars. Case-sensitive. |
+| `name` | publish | Scoped form only: `^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$`. Max 64 chars. Case-sensitive. Flat unscoped names are rejected by the validator. |
 | `version` | publish | SemVer. `0.x` is allowed but caret rules narrow (see "Versioning"). |
 | `description` | no | One line. Shown in registry search. |
 | `main` | no | Defaults to `index.stash`. Keep the default unless you have a strong reason. |
 | `stash` | no | Minimum interpreter version. Use `">=1.0.0"` unless you depend on a newer feature. |
 | `files` | no | Publish allowlist. Set this — the default packs more than you want. The canonical value is `["lib/", "index.stash", "README.md", "LICENSE"]`. |
 | `dependencies` | no | See "Dependencies". |
-| `private` | no | `true` blocks `stash pkg publish`. Use for internal-only packages. |
+| `private` | no | Tolerated in JSON deserialization for backward compatibility but **ignored** by the registry. Package visibility is a server-side state set via `PATCH /packages/{scope}/{name}/visibility`; this field has no effect on publishing. |
 | `keywords` | no | Lowercase tags for registry search. |
 
 Pitfalls:

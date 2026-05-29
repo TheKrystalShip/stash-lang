@@ -26,20 +26,22 @@ Stash.Registry/
 │   └── RateLimitingConfig.cs     → Per-category rate limits
 ├── Controllers/                  → REST API endpoints
 │   ├── AuthController.cs         → Login, register, tokens, whoami
-│   ├── PackagesController.cs     → Get, publish, unpublish, download
+│   ├── PackagesController.cs     → Get, publish, unpublish, download, roles, visibility
+│   ├── OrganizationsController.cs → Org CRUD, members, teams
+│   ├── ScopesController.cs       → Scope resolution and claims
 │   ├── SearchController.cs       → Search with pagination
-│   └── AdminController.cs        → Stats, user/owner mgmt, audit log
+│   └── AdminController.cs        → Stats, user mgmt, package role override, audit log
 ├── Contracts/                    → DTO classes
 │   ├── AuthContracts.cs          → Login/Register/Token request/response
-│   ├── PackageContracts.cs       → Package/version detail, publish/unpublish
+│   ├── PackageContracts.cs       → Package/version detail, publish/unpublish, roles, visibility
 │   ├── SearchContracts.cs        → Search results, pagination
-│   ├── AdminContracts.cs         → User/owner management, stats, audit
+│   ├── AdminContracts.cs         → User management, stats, audit
 │   └── CommonContracts.cs        → ErrorResponse, SuccessResponse, HealthCheck
 ├── Database/                     → EF Core data layer
-│   ├── RegistryDbContext.cs      → DbContext with 6 DbSets
+│   ├── RegistryDbContext.cs      → DbContext with 12 DbSets
 │   ├── IRegistryDatabase.cs      → 40+ CRUD methods
 │   ├── StashRegistryDatabase.cs  → EF Core implementation
-│   └── Models/                   → Entity models (PackageRecord, VersionRecord, etc.)
+│   └── Models/                   → Entity models (PackageRecord, VersionRecord, OrganizationRecord, etc.)
 ├── Services/                     → Business logic
 │   ├── PackageService.cs         → Publish/unpublish workflows
 │   ├── AuditService.cs           → Audit logging
@@ -102,20 +104,22 @@ public class PackagesController : ControllerBase
         _packageService = packageService;
     }
 
-    [HttpGet("{name}")]
-    public IActionResult GetPackage(string name) { ... }
+    [HttpGet("{scope}/{name}")]
+    public IActionResult GetPackage(string scope, string name) { ... }
 
-    [HttpPut("{name}")]
+    [HttpPut("{scope}/{name}")]
     [Authorize(Policy = "RequirePublishScope")]
-    public async Task<IActionResult> Publish(string name) { ... }
+    public async Task<IActionResult> Publish(string scope, string name) { ... }
 }
 ```
 
 **Key rules:**
 
-- Public read endpoints (GET packages, search, download, health) require **no authentication**
+- Public read endpoints (GET packages, search, download, health) require **no authentication** for `public` packages; `private`/`internal` packages require a `read`-scoped (or higher) JWT and caller permission
+- Unauthorized callers on private/internal packages receive `404 Not Found` (not `403`) to avoid leaking package existence
 - Publish/unpublish require a token with `publish` or `admin` scope
 - Admin endpoints require `admin` scope AND `admin` role
+- Four authorization policies: `RequireReadScope` (`token_scope ∈ {read, publish, admin}`), `RequirePublishScope` (`token_scope ∈ {publish, admin}`), `RequireAdminScope` (`token_scope == admin`), `RequireAdmin` (`token_scope == admin` AND `role == admin`)
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
 - Success responses use `SuccessResponse` or typed DTOs
 
@@ -130,23 +134,38 @@ public class PackagesController : ControllerBase
 | POST   | `/api/v1/auth/tokens`                        | Bearer        | AuthController     |
 | GET    | `/api/v1/auth/tokens`                        | Bearer        | AuthController     |
 | DELETE | `/api/v1/auth/tokens/{id}`                   | Bearer        | AuthController     |
-| GET    | `/api/v1/packages/{name}`                    | None          | PackagesController |
-| GET    | `/api/v1/packages/{name}/{version}`          | None          | PackagesController |
-| GET    | `/api/v1/packages/{name}/{version}/download` | None          | PackagesController |
-| PUT    | `/api/v1/packages/{name}`                    | publish scope | PackagesController |
-| DELETE | `/api/v1/packages/{name}/{version}`          | publish scope | PackagesController |
-| GET    | `/api/v1/search?q=...`                       | None          | SearchController   |
-| GET    | `/api/v1/admin/stats`                        | admin         | AdminController    |
-| POST   | `/api/v1/admin/users`                        | admin         | AdminController    |
-| DELETE | `/api/v1/admin/users/{username}`             | admin         | AdminController    |
-| PUT    | `/api/v1/admin/packages/{name}/owners`       | admin         | AdminController    |
-| GET    | `/api/v1/admin/audit-log`                    | admin         | AdminController    |
+| GET    | `/api/v1/packages/{scope}/{name}`                      | None (public) | PackagesController       |
+| GET    | `/api/v1/packages/{scope}/{name}/{version}`            | None (public) | PackagesController       |
+| GET    | `/api/v1/packages/{scope}/{name}/{version}/download`   | None (public) | PackagesController       |
+| PUT    | `/api/v1/packages/{scope}/{name}`                      | publish scope | PackagesController       |
+| DELETE | `/api/v1/packages/{scope}/{name}/{version}`            | publish scope | PackagesController       |
+| PATCH  | `/api/v1/packages/{scope}/{name}/deprecate`            | publish scope | PackagesController       |
+| DELETE | `/api/v1/packages/{scope}/{name}/deprecate`            | publish scope | PackagesController       |
+| PATCH  | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope | PackagesController       |
+| DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope | PackagesController       |
+| GET    | `/api/v1/packages/{scope}/{name}/roles`                | admin         | PackagesController       |
+| PUT    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope | PackagesController       |
+| PATCH  | `/api/v1/packages/{scope}/{name}/visibility`           | publish scope | PackagesController       |
+| GET    | `/api/v1/search?q=...`                                 | None          | SearchController         |
+| POST   | `/api/v1/orgs`                                         | publish scope | OrganizationsController  |
+| GET    | `/api/v1/orgs/{org}`                                   | None          | OrganizationsController  |
+| POST   | `/api/v1/orgs/{org}/members`                           | publish scope | OrganizationsController  |
+| DELETE | `/api/v1/orgs/{org}/members/{username}`                | publish scope | OrganizationsController  |
+| POST   | `/api/v1/orgs/{org}/teams`                             | publish scope | OrganizationsController  |
+| POST   | `/api/v1/orgs/{org}/teams/{team}/members`              | publish scope | OrganizationsController  |
+| GET    | `/api/v1/scopes/{scope}`                               | None          | ScopesController         |
+| POST   | `/api/v1/scopes`                                       | publish scope | ScopesController         |
+| GET    | `/api/v1/admin/stats`                                  | admin         | AdminController          |
+| POST   | `/api/v1/admin/users`                                  | admin         | AdminController          |
+| DELETE | `/api/v1/admin/users/{username}`                       | admin         | AdminController          |
+| PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin         | AdminController          |
+| GET    | `/api/v1/admin/audit-log`                              | admin         | AdminController          |
 
 ## Database Layer
 
 ### Entity Models (Database/Models/)
 
-Six entities: `PackageRecord`, `VersionRecord`, `UserRecord`, `TokenRecord`, `OwnerEntry`, `AuditEntry`. Column names use snake_case in the database, configured in `RegistryDbContext.OnModelCreating`.
+Eleven entities: `PackageRecord`, `VersionRecord`, `UserRecord`, `TokenRecord`, `RefreshTokenRecord`, `AuditEntry`, `OrganizationRecord`, `OrgMemberEntry`, `TeamRecord`, `TeamMemberEntry`, `ScopeRecord`, `PackageRoleEntry`. The old `OwnerEntry` table and model have been replaced by `PackageRoleEntry` (D3 clean break). Column names use snake_case in the database, configured in `RegistryDbContext.OnModelCreating`.
 
 ### IRegistryDatabase Interface
 
@@ -167,13 +186,13 @@ Six entities: `PackageRecord`, `VersionRecord`, `UserRecord`, `TokenRecord`, `Ow
 
 ### JWT Token Structure
 
-| Claim   | Description                             |
-| ------- | --------------------------------------- |
-| `sub`   | Username                                |
-| `jti`   | Token ID (for revocation via DB lookup) |
-| `scope` | `read`, `publish`, or `admin`           |
-| `role`  | `user` or `admin`                       |
-| `exp`   | Expiry timestamp                        |
+| Claim         | Description                             |
+| ------------- | --------------------------------------- |
+| `sub`         | Username                                |
+| `jti`         | Token ID (for revocation via DB lookup) |
+| `token_scope` | `read`, `publish`, or `admin`           |
+| `role`        | `user` or `admin`                       |
+| `exp`         | Expiry timestamp                        |
 
 ### Auth Provider Interface
 
@@ -231,15 +250,16 @@ All configuration lives in `appsettings.json` with typed models in `Configuratio
 
 Tests live in `Stash.Tests/Registry/` and follow the project-wide `{Feature}_{Scenario}_{Expected}()` naming convention:
 
-| Test File                   | Covers                                     |
-| --------------------------- | ------------------------------------------ |
-| `RegistryConfigTests.cs`    | Configuration parsing and defaults         |
-| `SqliteDatabaseTests.cs`    | Database CRUD operations (SQLite)          |
-| `LocalAuthProviderTests.cs` | Password auth, user creation               |
-| `FileSystemStorageTests.cs` | Tarball storage, path traversal protection |
-| `PackageServiceTests.cs`    | Publish/unpublish business logic           |
-| `AuditServiceTests.cs`      | Audit log recording                        |
-| `UserConfigTests.cs`        | CLI user config (`~/.stash/config.json`)   |
+| Test File                   | Covers                                                |
+| --------------------------- | ----------------------------------------------------- |
+| `RegistryConfigTests.cs`    | Configuration parsing and defaults                    |
+| `SqliteDatabaseTests.cs`    | Database CRUD operations (SQLite)                     |
+| `LocalAuthProviderTests.cs` | Password auth, user creation                          |
+| `FileSystemStorageTests.cs` | Tarball storage, path traversal protection            |
+| `PackageServiceTests.cs`    | Publish/unpublish business logic                      |
+| `AuditServiceTests.cs`      | Audit log recording                                   |
+| `UserConfigTests.cs`        | CLI user config (`~/.stash/config.json`)              |
+| `RegistryRoutesTests.cs`    | Scoped route shapes for all PackagesController routes |
 
 When adding new features, add corresponding tests in `Stash.Tests/Registry/`. Use `dotnet test --filter "FullyQualifiedName~Registry"` to run registry tests.
 
