@@ -291,6 +291,49 @@ public interface IRegistryDatabase
     /// </summary>
     Task CleanExpiredRefreshTokensAsync();
 
+    // Scope operations (P3 — bootstrap + registration provisioning)
+
+    /// <summary>
+    /// Returns <c>true</c> if a scope with the given name (without the leading <c>@</c>) exists.
+    /// The check covers all owner types: <c>user</c>, <c>org</c>, and <c>system</c>.
+    /// </summary>
+    /// <param name="name">The bare scope name (e.g. <c>"alice"</c>, <c>"stash"</c>).</param>
+    Task<bool> ScopeExistsAsync(string name);
+
+    /// <summary>
+    /// Persists a new <see cref="ScopeRecord"/>. Throws if the name is already taken.
+    /// </summary>
+    /// <param name="scope">The scope record to insert.</param>
+    Task CreateScopeAsync(ScopeRecord scope);
+
+    /// <summary>
+    /// Retrieves a scope record by its bare name (without the leading <c>@</c>).
+    /// </summary>
+    /// <param name="name">The bare scope name.</param>
+    /// <returns>The <see cref="ScopeRecord"/> if found, or <c>null</c>.</returns>
+    Task<ScopeRecord?> GetScopeAsync(string name);
+
+    /// <summary>
+    /// Seeds the reserved system scopes (<c>@stash</c> and <c>@admin</c>) if they do not
+    /// already exist. Safe to call on every startup — idempotent.
+    /// </summary>
+    Task SeedSystemScopesAsync();
+
+    /// <summary>
+    /// Creates a new user and atomically provisions the <c>@&lt;username&gt;</c> personal scope
+    /// in a single database transaction. If the scope name already exists (any owner type)
+    /// the operation rolls back and throws <see cref="InvalidOperationException"/> so that the
+    /// caller can surface an HTTP 409.
+    /// </summary>
+    /// <param name="username">The unique username (also becomes the scope name).</param>
+    /// <param name="passwordHash">The pre-hashed password.</param>
+    /// <returns>The role assigned: <c>"admin"</c> (first user) or <c>"user"</c>.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the username already exists as a user, or when a scope named
+    /// <paramref name="username"/> already exists (user, org, or system).
+    /// </exception>
+    Task<string> CreateUserWithScopeAsync(string username, string passwordHash);
+
     // Package role operations (replaces the old owner operations — D3 clean break)
 
     /// <summary>

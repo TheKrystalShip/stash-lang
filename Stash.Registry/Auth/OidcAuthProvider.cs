@@ -104,4 +104,12 @@ public sealed class OidcAuthProvider : IAuthProvider
         throw new NotSupportedException(
             "Bootstrap admin creation is not supported for OIDC providers.");
     }
+
+    /// <summary>Not implemented. User registration with scope provisioning is not supported for OIDC providers.</summary>
+    /// <exception cref="NotSupportedException">Always thrown.</exception>
+    public Task<string> CreateUserWithScopeAsync(string username, string password)
+    {
+        throw new NotSupportedException(
+            "User registration is not supported for OIDC providers.");
+    }
 }

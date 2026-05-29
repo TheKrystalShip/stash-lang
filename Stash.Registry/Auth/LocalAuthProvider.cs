@@ -108,6 +108,13 @@ public sealed class LocalAuthProvider : IAuthProvider
         return await _db.CreateUserBootstrappingAdminAsync(username, hash);
     }
 
+    /// <inheritdoc/>
+    public async Task<string> CreateUserWithScopeAsync(string username, string password)
+    {
+        string hash = HashPassword(password);
+        return await _db.CreateUserWithScopeAsync(username, hash);
+    }
+
     /// <summary>
     /// Hashes a password with Argon2id using a random 128-bit salt and OWASP-recommended parameters.
     /// Returns a PHC-format string: $argon2id$v=19$m=19456,t=2,p=1$&lt;base64-salt&gt;$&lt;base64-hash&gt;

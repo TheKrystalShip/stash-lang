@@ -22,10 +22,14 @@ public sealed class AdminBootstrapper
 
     public async Task RunAsync()
     {
+        // Always seed system scopes — idempotent, independent of admin-password config.
+        await _db.SeedSystemScopesAsync();
+        _logger.LogDebug("System scopes (@stash, @admin) verified/seeded.");
+
         var b = _config.Bootstrap;
         if (string.IsNullOrEmpty(b.AdminPasswordEnv))
         {
-            return; // disabled
+            return; // admin bootstrap disabled
         }
 
         string? password = Environment.GetEnvironmentVariable(b.AdminPasswordEnv);
@@ -59,5 +63,24 @@ public sealed class AdminBootstrapper
             username,
             b.AdminPasswordEnv);
         // NEVER log the password.
+
+        // Auto-provision @<username> personal scope for the bootstrap admin user.
+        // Skip if the scope name already exists (e.g. 'admin' is already a system scope).
+        bool scopeExists = await _db.ScopeExistsAsync(username);
+        if (!scopeExists)
+        {
+            await _db.CreateScopeAsync(new Database.Models.ScopeRecord
+            {
+                Name = username,
+                OwnerType = "user",
+                OwnerUsername = username,
+                OwnerOrgId = null
+            });
+            _logger.LogDebug("Personal scope '@{User}' provisioned for bootstrap admin.", username);
+        }
+        else
+        {
+            _logger.LogDebug("Scope '@{User}' already exists; skipping personal scope provisioning for bootstrap admin.", username);
+        }
     }
 }

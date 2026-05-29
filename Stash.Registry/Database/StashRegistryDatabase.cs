@@ -432,6 +432,89 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         await _context.SaveChangesAsync();
     }
 
+    // ── Scope operations ─────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<bool> ScopeExistsAsync(string name)
+    {
+        return await _context.Scopes.AnyAsync(s => s.Name == name);
+    }
+
+    /// <inheritdoc/>
+    public async Task CreateScopeAsync(ScopeRecord scope)
+    {
+        _context.Scopes.Add(scope);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<ScopeRecord?> GetScopeAsync(string name)
+    {
+        return await _context.Scopes.AsNoTracking().FirstOrDefaultAsync(s => s.Name == name);
+    }
+
+    /// <inheritdoc/>
+    public async Task SeedSystemScopesAsync()
+    {
+        string[] systemScopes = ["stash", "admin"];
+        foreach (string scopeName in systemScopes)
+        {
+            bool exists = await _context.Scopes.AnyAsync(s => s.Name == scopeName);
+            if (!exists)
+            {
+                _context.Scopes.Add(new ScopeRecord
+                {
+                    Name = scopeName,
+                    OwnerType = "system",
+                    OwnerUsername = null,
+                    OwnerOrgId = null
+                });
+            }
+        }
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<string> CreateUserWithScopeAsync(string username, string passwordHash)
+    {
+        using var tx = await _context.Database.BeginTransactionAsync();
+
+        // Check for existing user
+        var existingUser = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+        if (existingUser is not null)
+            throw new InvalidOperationException($"Username '{username}' is already taken.");
+
+        // Check for scope collision (covers user, org, and system scopes — e.g. @stash, @admin)
+        bool scopeExists = await _context.Scopes.AnyAsync(s => s.Name == username);
+        if (scopeExists)
+            throw new InvalidOperationException($"Username '{username}' conflicts with an existing scope.");
+
+        // First user becomes admin
+        long count = await _context.Users.LongCountAsync();
+        string role = count == 0 ? "admin" : "user";
+
+        _context.Users.Add(new UserRecord
+        {
+            Username = username,
+            PasswordHash = passwordHash,
+            Role = role,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        // Auto-provision the @<username> personal scope
+        _context.Scopes.Add(new ScopeRecord
+        {
+            Name = username,
+            OwnerType = "user",
+            OwnerUsername = username,
+            OwnerOrgId = null
+        });
+
+        await _context.SaveChangesAsync();
+        await tx.CommitAsync();
+        return role;
+    }
+
     // ── Package role operations ───────────────────────────────────────────────
 
     // Role ordering for HasPackagePermissionAsync (P2 direct-only; inheritance added in P5).

@@ -25,4 +25,12 @@ public interface IAuthProvider
     /// </summary>
     /// <returns>The role assigned: "admin" or "user".</returns>
     Task<string> CreateUserBootstrappingAdminAsync(string username, string password);
+
+    /// <summary>
+    /// Creates a new user and atomically provisions the <c>@&lt;username&gt;</c> personal scope
+    /// in a single database transaction. Throws <see cref="InvalidOperationException"/> if the
+    /// username already exists as a user or if a scope of the same name exists (user, org, or system).
+    /// </summary>
+    /// <returns>The role assigned: "admin" (first user) or "user".</returns>
+    Task<string> CreateUserWithScopeAsync(string username, string password);
 }

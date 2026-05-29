@@ -214,7 +214,7 @@ public class AuthController : ControllerBase
 
         try
         {
-            string role = await _authProvider.CreateUserBootstrappingAdminAsync(username, password);
+            string role = await _authProvider.CreateUserWithScopeAsync(username, password);
             if (role == "admin")
             {
                 _logger.LogInformation(

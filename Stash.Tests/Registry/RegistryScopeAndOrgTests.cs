@@ -312,4 +312,162 @@ public sealed class RegistryScopeAndOrgTests
             $"INSERT INTO org_members (org_id, username, org_role, joined_at) " +
             $"VALUES ('org-{orgRole}', 'alice', '{orgRole}', '2026-01-01')");
     }
+
+    // ── P3: Bootstrap system scope seeding ───────────────────────────────────────
+
+    [Fact]
+    public async Task SeedSystemScopes_FreshDb_CreatesBothSystemScopes()
+    {
+        var (db, _) = CreateTestDb();
+
+        await db.SeedSystemScopesAsync();
+
+        ScopeRecord? stashScope = await db.GetScopeAsync("stash");
+        ScopeRecord? adminScope = await db.GetScopeAsync("admin");
+
+        Assert.NotNull(stashScope);
+        Assert.Equal("system", stashScope.OwnerType);
+        Assert.Null(stashScope.OwnerUsername);
+        Assert.Null(stashScope.OwnerOrgId);
+
+        Assert.NotNull(adminScope);
+        Assert.Equal("system", adminScope.OwnerType);
+        Assert.Null(adminScope.OwnerUsername);
+        Assert.Null(adminScope.OwnerOrgId);
+    }
+
+    [Fact]
+    public async Task SeedSystemScopes_AlreadySeeded_IsIdempotent()
+    {
+        var (db, _) = CreateTestDb();
+
+        // Seed twice — should not throw or duplicate
+        await db.SeedSystemScopesAsync();
+        await db.SeedSystemScopesAsync();
+
+        ScopeRecord? stashScope = await db.GetScopeAsync("stash");
+        ScopeRecord? adminScope = await db.GetScopeAsync("admin");
+
+        Assert.NotNull(stashScope);
+        Assert.NotNull(adminScope);
+    }
+
+    // ── P3: Registration auto-provisions @<username> scope ──────────────────────
+
+    [Fact]
+    public async Task CreateUserWithScope_NewUser_ProvisionesPersonalScope()
+    {
+        var (db, _) = CreateTestDb();
+
+        await db.CreateUserWithScopeAsync("alice", "h4sh3d");
+
+        ScopeRecord? scope = await db.GetScopeAsync("alice");
+        Assert.NotNull(scope);
+        Assert.Equal("user", scope.OwnerType);
+        Assert.Equal("alice", scope.OwnerUsername);
+        Assert.Null(scope.OwnerOrgId);
+    }
+
+    [Fact]
+    public async Task CreateUserWithScope_FirstUser_BecomesAdmin()
+    {
+        var (db, _) = CreateTestDb();
+
+        string role = await db.CreateUserWithScopeAsync("alice", "h4sh3d");
+
+        Assert.Equal("admin", role);
+    }
+
+    [Fact]
+    public async Task CreateUserWithScope_SecondUser_GetsUserRole()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "h4sh3d");
+
+        string role = await db.CreateUserWithScopeAsync("bob", "h4sh3d");
+
+        Assert.Equal("user", role);
+    }
+
+    [Fact]
+    public async Task CreateUserWithScope_DuplicateUsername_ThrowsAndNoOrphanScope()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "h4sh3d");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateUserWithScopeAsync("alice", "other-hash"));
+
+        // Scope must exist exactly once (from the first call)
+        bool scopeExists = await db.ScopeExistsAsync("alice");
+        Assert.True(scopeExists);
+    }
+
+    // ── P3: Registration collision with existing scopes (done_when #3) ──────────
+
+    [Fact]
+    public async Task CreateUserWithScope_CollisionWithSystemScope_Throws409()
+    {
+        var (db, _) = CreateTestDb();
+
+        // Seed system scopes first (as bootstrap does)
+        await db.SeedSystemScopesAsync();
+
+        // 'stash' is a system scope — registering a user named 'stash' must fail
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateUserWithScopeAsync("stash", "h4sh3d"));
+
+        Assert.Contains("scope", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+        // No user row must have been created
+        var user = await db.GetUserAsync("stash");
+        Assert.Null(user);
+    }
+
+    [Fact]
+    public async Task CreateUserWithScope_CollisionWithAdminSystemScope_Throws()
+    {
+        var (db, _) = CreateTestDb();
+        await db.SeedSystemScopesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateUserWithScopeAsync("admin", "h4sh3d"));
+
+        var user = await db.GetUserAsync("admin");
+        Assert.Null(user);
+    }
+
+    [Fact]
+    public async Task CreateUserWithScope_CollisionWithExistingUserScope_ThrowsAndRollsBack()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "h4sh3d");
+
+        // Register 'alice' again — the scope 'alice' already exists (user-owned)
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateUserWithScopeAsync("alice", "other-hash"));
+    }
+
+    // ── P3: ScopeExistsAsync ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ScopeExistsAsync_NonExistentScope_ReturnsFalse()
+    {
+        var (db, _) = CreateTestDb();
+
+        bool exists = await db.ScopeExistsAsync("nonexistent");
+
+        Assert.False(exists);
+    }
+
+    [Fact]
+    public async Task ScopeExistsAsync_ExistingScope_ReturnsTrue()
+    {
+        var (db, _) = CreateTestDb();
+        await db.SeedSystemScopesAsync();
+
+        bool exists = await db.ScopeExistsAsync("stash");
+
+        Assert.True(exists);
+    }
 }
