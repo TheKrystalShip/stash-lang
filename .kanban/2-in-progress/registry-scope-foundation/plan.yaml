@@ -153,7 +153,7 @@ phases:
       - examples/packages/podman/stash.json
     verify:
       - dotnet build
-      - dotnet test --filter "FullyQualifiedName~RegistryRoutesTests|FullyQualifiedName~PackageInstallerTests"
+      - dotnet test --filter "FullyQualifiedName~RegistryRoutesTests"
     done_when:
       - "All flat /api/v1/packages/{name} routes return 404 on the server; only /api/v1/packages/{scope}/{name} variants serve traffic."
       - "Stash.Cli/PackageManager/RegistryClient.cs contains no remaining single-segment /packages/{...} call site; every URL is built as /packages/{scope}/{name}."

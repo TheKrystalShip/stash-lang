@@ -26,6 +26,11 @@ namespace Stash.Registry.Controllers;
 /// performed against the <see cref="IRegistryDatabase"/> ownership table before
 /// any write is accepted.
 /// </para>
+/// <para>
+/// All routes use the two-segment form <c>/packages/{scope}/{name}</c> where
+/// <c>{scope}</c> is the bare scope name without the leading <c>@</c>.
+/// Flat single-segment routes are no longer served.
+/// </para>
 /// </remarks>
 [ApiController]
 [Route("api/v1/packages")]
@@ -66,7 +71,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Gets package metadata including all published versions.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <remarks>
     /// No authentication required for public packages. Private/internal packages return 404
     /// to unauthenticated callers or callers without reader permission plus a read-scoped JWT.
@@ -76,33 +82,33 @@ public class PackagesController : ControllerBase
     /// owner list, and a version map, or <c>404</c> if the package does not exist or is not visible.
     /// </returns>
     [AllowAnonymous]
-    [HttpGet("{name}")]
-    public async Task<IActionResult> GetPackage(string name)
+    [HttpGet("{scope}/{name}")]
+    public async Task<IActionResult> GetPackage(string scope, string name)
     {
-        string decodedName = Uri.UnescapeDataString(name);
-        PackageRecord? package = await _db.GetPackageAsync(decodedName);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
         {
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
         }
 
         if (!await CanReadPackageAsync(package))
         {
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
         }
 
-        List<string> allVersions = await _db.GetAllVersionsAsync(decodedName);
+        List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
         var versionsDict = new Dictionary<string, VersionDetailResponse>();
         foreach (string v in allVersions)
         {
-            VersionRecord? vr = await _db.GetPackageVersionAsync(decodedName, v);
+            VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, v);
             if (vr != null)
             {
                 versionsDict[v] = BuildVersionResponse(vr);
             }
         }
 
-        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(decodedName);
+        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
         List<string> owners = roles
             .Where(r => r.PrincipalType == "user" && r.Role == "owner")
             .Select(r => r.PrincipalId)
@@ -138,7 +144,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Gets metadata for a specific version of a package.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <param name="version">The exact semantic version string.</param>
     /// <remarks>No authentication required.</remarks>
     /// <returns>
@@ -146,21 +153,21 @@ public class PackagesController : ControllerBase
     /// or <c>404</c> if the package or version does not exist.
     /// </returns>
     [AllowAnonymous]
-    [HttpGet("{name}/{version}")]
-    public async Task<IActionResult> GetVersion(string name, string version)
+    [HttpGet("{scope}/{name}/{version}")]
+    public async Task<IActionResult> GetVersion(string scope, string name, string version)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
 
-        PackageRecord? package = await _db.GetPackageAsync(decodedName);
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null || !await CanReadPackageAsync(package))
         {
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
         }
 
-        VersionRecord? vr = await _db.GetPackageVersionAsync(decodedName, version);
+        VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, version);
         if (vr == null)
         {
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
         }
 
         return Ok(BuildVersionResponse(vr));
@@ -169,7 +176,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Downloads the tarball for a specific package version.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <param name="version">The exact semantic version string.</param>
     /// <remarks>
     /// Streams the compressed tarball from <see cref="IPackageStorage"/> with content
@@ -183,24 +191,24 @@ public class PackagesController : ControllerBase
     /// or <c>404</c> if the version record or its tarball cannot be found.
     /// </returns>
     [AllowAnonymous]
-    [HttpGet("{name}/{version}/download")]
-    public async Task<IActionResult> DownloadVersion(string name, string version)
+    [HttpGet("{scope}/{name}/{version}/download")]
+    public async Task<IActionResult> DownloadVersion(string scope, string name, string version)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
 
-        PackageRecord? package = await _db.GetPackageAsync(decodedName);
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null || !await CanReadPackageAsync(package))
         {
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
         }
 
-        VersionRecord? versionRecord = await _db.GetPackageVersionAsync(decodedName, version);
+        VersionRecord? versionRecord = await _db.GetPackageVersionAsync(packageName, version);
         if (versionRecord == null)
         {
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
         }
 
-        Stream? stream = await _storage.RetrieveAsync(decodedName, version);
+        Stream? stream = await _storage.RetrieveAsync(packageName, version);
         if (stream == null)
         {
             return NotFound(new ErrorResponse { Error = "Package tarball not found in storage." });
@@ -211,13 +219,14 @@ public class PackagesController : ControllerBase
             Response.Headers["X-Integrity"] = versionRecord.Integrity;
         }
 
-        return File(stream, "application/gzip", $"{decodedName.Replace('/', '-')}-{version}.tgz");
+        return File(stream, "application/gzip", $"{packageName.Replace('/', '-').TrimStart('@', '-')}-{version}.tgz");
     }
 
     /// <summary>
     /// Publishes a new package or a new version of an existing package.
     /// </summary>
-    /// <param name="name">The URL-encoded package name to publish under.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <remarks>
     /// Reads the package tarball from the raw request body. An optional
     /// <c>X-Integrity</c> header may be supplied for client-side integrity
@@ -235,17 +244,17 @@ public class PackagesController : ControllerBase
     /// or <c>409</c> with a <see cref="VersionConflictResponse"/> if the version already exists.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpPut("{name}")]
-    public async Task<IActionResult> PublishPackage(string name)
+    [HttpPut("{scope}/{name}")]
+    public async Task<IActionResult> PublishPackage(string scope, string name)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        bool packageExists = await _db.PackageExistsAsync(decodedName);
-        bool isOwner = packageExists && await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool packageExists = await _db.PackageExistsAsync(packageName);
+        bool isOwner = packageExists && await _db.HasPackagePermissionAsync(packageName, username, "owner");
         if (packageExists && !isOwner)
         {
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
         }
 
         string? clientIntegrity = Request.Headers["X-Integrity"];
@@ -270,7 +279,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Removes a specific version of a package from the registry.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <param name="version">The exact semantic version string to remove.</param>
     /// <remarks>
     /// The caller must be an owner of the package or hold an <c>admin</c>-scoped
@@ -285,18 +295,18 @@ public class PackagesController : ControllerBase
     /// or <c>403</c> if the caller does not have permission.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpDelete("{name}/{version}")]
-    public async Task<IActionResult> UnpublishVersion(string name, string version)
+    [HttpDelete("{scope}/{name}/{version}")]
+    public async Task<IActionResult> UnpublishVersion(string scope, string name, string version)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
         try
         {
-            await _packageService.UnpublishAsync(decodedName, version, username);
+            await _packageService.UnpublishAsync(packageName, version, username);
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _auditService.LogUnpublishAsync(decodedName, version, username, ip);
-            return Ok(new UnpublishResponse { Package = decodedName, Version = version });
+            await _auditService.LogUnpublishAsync(packageName, version, username, ip);
+            return Ok(new UnpublishResponse { Package = packageName, Version = version });
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -313,37 +323,38 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Marks an entire package as deprecated.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <returns>
     /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
     /// <c>400</c> if the request body is invalid or the package does not exist,
     /// or <c>403</c> if the caller is not an owner.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpPatch("{name}/deprecate")]
-    public async Task<IActionResult> DeprecatePackage(string name, [FromBody] DeprecatePackageRequest request)
+    [HttpPatch("{scope}/{name}/deprecate")]
+    public async Task<IActionResult> DeprecatePackage(string scope, string name, [FromBody] DeprecatePackageRequest request)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.PackageExistsAsync(decodedName))
+        if (!await _db.PackageExistsAsync(packageName))
         {
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
         }
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
         }
 
         try
         {
-            await _deprecationService.DeprecatePackageAsync(decodedName, request.Message, request.Alternative, username);
+            await _deprecationService.DeprecatePackageAsync(packageName, request.Message, request.Alternative, username);
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _auditService.LogPackageDeprecateAsync(decodedName, username, ip);
-            return Ok(new DeprecationResponse { Package = decodedName, Deprecated = true });
+            await _auditService.LogPackageDeprecateAsync(packageName, username, ip);
+            return Ok(new DeprecationResponse { Package = packageName, Deprecated = true });
         }
         catch (InvalidOperationException ex)
         {
@@ -354,37 +365,38 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Removes the deprecation status from a package.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <returns>
     /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
     /// <c>400</c> if the package does not exist,
     /// or <c>403</c> if the caller is not an owner.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpDelete("{name}/deprecate")]
-    public async Task<IActionResult> UndeprecatePackage(string name)
+    [HttpDelete("{scope}/{name}/deprecate")]
+    public async Task<IActionResult> UndeprecatePackage(string scope, string name)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.PackageExistsAsync(decodedName))
+        if (!await _db.PackageExistsAsync(packageName))
         {
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
         }
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
         }
 
         try
         {
-            await _deprecationService.UndeprecatePackageAsync(decodedName);
+            await _deprecationService.UndeprecatePackageAsync(packageName);
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _auditService.LogPackageUndeprecateAsync(decodedName, username, ip);
-            return Ok(new DeprecationResponse { Package = decodedName, Deprecated = false });
+            await _auditService.LogPackageUndeprecateAsync(packageName, username, ip);
+            return Ok(new DeprecationResponse { Package = packageName, Deprecated = false });
         }
         catch (InvalidOperationException ex)
         {
@@ -395,7 +407,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Marks a specific version of a package as deprecated.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <param name="version">The exact semantic version string.</param>
     /// <returns>
     /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
@@ -403,30 +416,30 @@ public class PackagesController : ControllerBase
     /// or <c>403</c> if the caller is not an owner.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpPatch("{name}/{version}/deprecate")]
-    public async Task<IActionResult> DeprecateVersion(string name, string version, [FromBody] DeprecateVersionRequest request)
+    [HttpPatch("{scope}/{name}/{version}/deprecate")]
+    public async Task<IActionResult> DeprecateVersion(string scope, string name, string version, [FromBody] DeprecateVersionRequest request)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.VersionExistsAsync(decodedName, version))
+        if (!await _db.VersionExistsAsync(packageName, version))
         {
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
         }
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
         }
 
         try
         {
-            await _deprecationService.DeprecateVersionAsync(decodedName, version, request.Message, username);
+            await _deprecationService.DeprecateVersionAsync(packageName, version, request.Message, username);
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _auditService.LogVersionDeprecateAsync(decodedName, version, username, ip);
-            return Ok(new DeprecationResponse { Package = decodedName, Version = version, Deprecated = true });
+            await _auditService.LogVersionDeprecateAsync(packageName, version, username, ip);
+            return Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = true });
         }
         catch (InvalidOperationException ex)
         {
@@ -437,7 +450,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Removes the deprecation status from a specific version.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <param name="version">The exact semantic version string.</param>
     /// <returns>
     /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
@@ -445,30 +459,30 @@ public class PackagesController : ControllerBase
     /// or <c>403</c> if the caller is not an owner.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpDelete("{name}/{version}/deprecate")]
-    public async Task<IActionResult> UndeprecateVersion(string name, string version)
+    [HttpDelete("{scope}/{name}/{version}/deprecate")]
+    public async Task<IActionResult> UndeprecateVersion(string scope, string name, string version)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.VersionExistsAsync(decodedName, version))
+        if (!await _db.VersionExistsAsync(packageName, version))
         {
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
         }
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
         }
 
         try
         {
-            await _deprecationService.UndeprecateVersionAsync(decodedName, version);
+            await _deprecationService.UndeprecateVersionAsync(packageName, version);
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-            await _auditService.LogVersionUndeprecateAsync(decodedName, version, username, ip);
-            return Ok(new DeprecationResponse { Package = decodedName, Version = version, Deprecated = false });
+            await _auditService.LogVersionUndeprecateAsync(packageName, version, username, ip);
+            return Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = false });
         }
         catch (InvalidOperationException ex)
         {
@@ -481,7 +495,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Lists all role entries for a package. Only the package owner may invoke this endpoint.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <returns>
     /// <c>200</c> with a <see cref="PackageRolesListResponse"/>,
     /// <c>401</c> if unauthenticated,
@@ -489,24 +504,24 @@ public class PackagesController : ControllerBase
     /// or <c>404</c> if the package does not exist.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpGet("{name}/roles")]
-    public async Task<IActionResult> GetRoles(string name)
+    [HttpGet("{scope}/{name}/roles")]
+    public async Task<IActionResult> GetRoles(string scope, string name)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.PackageExistsAsync(decodedName))
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+        if (!await _db.PackageExistsAsync(packageName))
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
 
-        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(decodedName);
+        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
         return Ok(new PackageRolesListResponse
         {
-            Package = decodedName,
+            Package = packageName,
             Roles = roles.Select(r => new PackageRoleResponse
             {
                 PrincipalType = r.PrincipalType,
@@ -519,7 +534,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Assigns a role to a principal on a package. Only the package owner may invoke this endpoint.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <returns>
     /// <c>200</c> on success,
     /// <c>400</c> if the request body is invalid,
@@ -528,19 +544,19 @@ public class PackagesController : ControllerBase
     /// or <c>404</c> if the package does not exist.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpPut("{name}/roles")]
-    public async Task<IActionResult> AssignRole(string name, [FromBody] AssignRoleRequest request)
+    [HttpPut("{scope}/{name}/roles")]
+    public async Task<IActionResult> AssignRole(string scope, string name, [FromBody] AssignRoleRequest request)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.PackageExistsAsync(decodedName))
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+        if (!await _db.PackageExistsAsync(packageName))
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
 
         string[] validPrincipalTypes = ["user", "team", "org"];
         if (!Array.Exists(validPrincipalTypes, p => p == request.PrincipalType))
@@ -550,7 +566,7 @@ public class PackagesController : ControllerBase
         if (!Array.Exists(validRoles, r => r == request.Role))
             return BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
 
-        await _db.AssignPackageRoleAsync(decodedName, request.PrincipalType, request.PrincipalId, request.Role);
+        await _db.AssignPackageRoleAsync(packageName, request.PrincipalType, request.PrincipalId, request.Role);
         return Ok(new SuccessResponse());
     }
 
@@ -559,7 +575,8 @@ public class PackagesController : ControllerBase
     /// <summary>
     /// Changes the visibility of a package. Only the package owner may invoke this endpoint.
     /// </summary>
-    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <returns>
     /// <c>200</c> with a <see cref="SetVisibilityResponse"/> on success,
     /// <c>400</c> if the visibility value is invalid or the package does not exist,
@@ -567,22 +584,22 @@ public class PackagesController : ControllerBase
     /// or <c>403</c> if the caller is not an owner.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
-    [HttpPatch("{name}/visibility")]
-    public async Task<IActionResult> SetVisibility(string name, [FromBody] SetVisibilityRequest request)
+    [HttpPatch("{scope}/{name}/visibility")]
+    public async Task<IActionResult> SetVisibility(string scope, string name, [FromBody] SetVisibilityRequest request)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.PackageExistsAsync(decodedName))
+        if (!await _db.PackageExistsAsync(packageName))
         {
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
         }
 
-        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isOwner = await _db.HasPackagePermissionAsync(packageName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{packageName}'." });
         }
 
         string[] validVisibilities = ["public", "private", "internal"];
@@ -591,9 +608,9 @@ public class PackagesController : ControllerBase
             return BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
         }
 
-        await _db.SetPackageVisibilityAsync(decodedName, request.Visibility);
+        await _db.SetPackageVisibilityAsync(packageName, request.Visibility);
 
-        return Ok(new SetVisibilityResponse { Package = decodedName, Visibility = request.Visibility });
+        return Ok(new SetVisibilityResponse { Package = packageName, Visibility = request.Visibility });
     }
 
     // ── Visibility helper ─────────────────────────────────────────────────────

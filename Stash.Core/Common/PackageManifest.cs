@@ -249,6 +249,37 @@ public class PackageManifest
     }
 
     /// <summary>
+    /// Splits a valid scoped package name of the form <c>@scope/name</c> into its
+    /// bare scope and local name components.
+    /// </summary>
+    /// <param name="name">
+    /// A valid scoped package name, e.g. <c>@alice/widget</c>. Must satisfy
+    /// <see cref="IsValidPackageName"/>.
+    /// </param>
+    /// <returns>
+    /// A tuple of (<c>Scope</c>, <c>LocalName</c>) where <c>Scope</c> is the bare
+    /// scope string without the leading <c>@</c> (e.g. <c>alice</c>) and
+    /// <c>LocalName</c> is the name segment (e.g. <c>widget</c>).
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="name"/> is not a valid scoped package name.
+    /// </exception>
+    public static (string Scope, string LocalName) SplitScopedName(string name)
+    {
+        if (!IsValidPackageName(name))
+        {
+            throw new ArgumentException(
+                $"'{name}' is not a valid scoped package name. Expected @scope/name format.",
+                nameof(name));
+        }
+
+        // Strip the leading '@', then split on the first '/'
+        ReadOnlySpan<char> rest = name.AsSpan(1); // skip '@'
+        int slash = rest.IndexOf('/');
+        return (rest[..slash].ToString(), rest[(slash + 1)..].ToString());
+    }
+
+    /// <summary>
     /// Validates whether <paramref name="constraint"/> is a legal version constraint: either a
     /// <c>git:</c> URI or a value parseable as a <see cref="SemVerRange"/>.
     /// </summary>

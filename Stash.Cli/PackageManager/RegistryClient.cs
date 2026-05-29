@@ -29,16 +29,16 @@ namespace Stash.Cli.PackageManager;
 /// <para>
 /// API surface (relative to <c>baseUrl</c>):
 /// <list type="bullet">
-///   <item><description><c>GET  /packages/{name}</c> — package metadata with version list</description></item>
-///   <item><description><c>GET  /packages/{name}/{version}</c> — single-version metadata</description></item>
-///   <item><description><c>GET  /packages/{name}/{version}/download</c> — tarball download URL</description></item>
-///   <item><description><c>PUT  /packages/{name}</c> — publish a new version (tarball body)</description></item>
-///   <item><description><c>DELETE /packages/{name}/{version}</c> — unpublish a version</description></item>
+///   <item><description><c>GET  /packages/{scope}/{name}</c> — package metadata with version list</description></item>
+///   <item><description><c>GET  /packages/{scope}/{name}/{version}</c> — single-version metadata</description></item>
+///   <item><description><c>GET  /packages/{scope}/{name}/{version}/download</c> — tarball download URL</description></item>
+///   <item><description><c>PUT  /packages/{scope}/{name}</c> — publish a new version (tarball body)</description></item>
+///   <item><description><c>DELETE /packages/{scope}/{name}/{version}</c> — unpublish a version</description></item>
 ///   <item><description><c>GET  /search?q=…</c> — full-text package search</description></item>
 ///   <item><description><c>POST /auth/login</c> — obtain a bearer token</description></item>
 ///   <item><description><c>POST /auth/register</c> — create a new account</description></item>
 ///   <item><description><c>GET  /auth/whoami</c> — return the authenticated username</description></item>
-///   <item><description><c>PUT  /admin/packages/{name}/owners</c> — manage package ownership</description></item>
+///   <item><description><c>PUT  /admin/packages/{scope}/{name}/roles</c> — manage package roles</description></item>
 /// </list>
 /// </para>
 /// </remarks>
@@ -222,7 +222,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </exception>
     public List<SemVer> GetAvailableVersions(string packageName)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -260,7 +260,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <exception cref="HttpRequestException">Thrown for non-404 HTTP error responses.</exception>
     public (List<SemVer> Versions, SemVer? Latest) GetVersionsAndLatest(string packageName)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -313,7 +313,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </exception>
     public PackageManifest? GetManifest(string packageName, SemVer version)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -379,7 +379,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <returns>The absolute download URL string.</returns>
     public string GetResolvedUrl(string packageName, SemVer version)
     {
-        return $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}/download";
+        return $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}/download";
     }
 
     /// <summary>
@@ -400,7 +400,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </exception>
     public string? GetIntegrity(string packageName, SemVer version)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -437,7 +437,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </exception>
     public (bool Deprecated, string? Message) GetDeprecation(string packageName, SemVer version)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -673,7 +673,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             content.Headers.Add("X-Integrity", integrity);
         }
 
-        var response = _http.PutAsync($"{_baseUrl}/packages/{EncodePackageName(name)}", content).GetAwaiter().GetResult();
+        var response = _http.PutAsync($"{_baseUrl}/packages/{ScopedPackagePath(name)}", content).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
             string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -697,7 +697,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     public bool Unpublish(string packageName, string version)
     {
         EnsureTokenFresh();
-        var response = _http.DeleteAsync($"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}").GetAwaiter().GetResult();
+        var response = _http.DeleteAsync($"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}").GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
             string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -749,7 +749,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </exception>
     public string? GetPackageInfo(string packageName)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -777,7 +777,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </exception>
     public List<string>? GetOwners(string packageName)
     {
-        string url = $"{_baseUrl}/packages/{EncodePackageName(packageName)}";
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
@@ -818,7 +818,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         EnsureTokenFresh();
         var body = JsonSerializer.Serialize(new OwnerUpdateRequest { Add = [username], Remove = [] }, CliJsonContext.Default.OwnerUpdateRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{EncodePackageName(packageName)}/owners", content).GetAwaiter().GetResult();
+        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/owners", content).GetAwaiter().GetResult();
         return response.IsSuccessStatusCode;
     }
 
@@ -837,7 +837,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         EnsureTokenFresh();
         var body = JsonSerializer.Serialize(new OwnerUpdateRequest { Add = [], Remove = [username] }, CliJsonContext.Default.OwnerUpdateRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{EncodePackageName(packageName)}/owners", content).GetAwaiter().GetResult();
+        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/owners", content).GetAwaiter().GetResult();
         return response.IsSuccessStatusCode;
     }
 
@@ -919,7 +919,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         string body = JsonSerializer.Serialize(
             new DeprecatePackageCliRequest { Message = message, Alternative = alternative },
             CliJsonContext.Default.DeprecatePackageCliRequest);
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{EncodePackageName(packageName)}/deprecate")
+        var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/deprecate")
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -946,7 +946,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     public bool UndeprecatePackage(string packageName)
     {
         EnsureTokenFresh();
-        var response = _http.DeleteAsync($"{_baseUrl}/packages/{EncodePackageName(packageName)}/deprecate").GetAwaiter().GetResult();
+        var response = _http.DeleteAsync($"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/deprecate").GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
             string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -975,7 +975,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         string body = JsonSerializer.Serialize(
             new DeprecateVersionCliRequest { Message = message },
             CliJsonContext.Default.DeprecateVersionCliRequest);
-        var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}/deprecate")
+        var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}/deprecate")
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
@@ -1003,7 +1003,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     public bool UndeprecateVersion(string packageName, string version)
     {
         EnsureTokenFresh();
-        var response = _http.DeleteAsync($"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}/deprecate").GetAwaiter().GetResult();
+        var response = _http.DeleteAsync($"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}/deprecate").GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
             string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -1012,25 +1012,26 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         return true;
     }
 
-    // Encode scoped package names: @scope/name → @scope%2Fname
     /// <summary>
-    /// URL-encodes a package name for use in registry API path segments.
+    /// Builds the two-segment URL path for a scoped package name.
     /// </summary>
     /// <remarks>
-    /// Scoped packages (e.g. <c>@scope/name</c>) have the <c>/</c> between scope and
-    /// name percent-encoded as <c>%2F</c> so the entire scoped name fits in one path
-    /// segment. All other names are encoded with <see cref="Uri.EscapeDataString"/>.
+    /// <para>
+    /// Splits <paramref name="name"/> (e.g. <c>@alice/widget</c>) into its bare scope
+    /// and local name components using <see cref="PackageManifest.SplitScopedName"/>,
+    /// then percent-encodes each segment independently and joins them with <c>/</c>.
+    /// </para>
+    /// <para>
+    /// Example: <c>@alice/widget</c> → <c>alice/widget</c> for use in a URL path like
+    /// <c>/packages/alice/widget</c>.
+    /// </para>
     /// </remarks>
-    /// <param name="name">The raw package name to encode.</param>
-    /// <returns>The URL-safe encoded name suitable for use in a URL path segment.</returns>
-    private static string EncodePackageName(string name)
+    /// <param name="name">A valid scoped package name of the form <c>@scope/name</c>.</param>
+    /// <returns>The two-segment path string (e.g. <c>alice/widget</c>).</returns>
+    private static string ScopedPackagePath(string name)
     {
-        if (name.StartsWith("@") && name.Contains('/'))
-        {
-            int slashIdx = name.IndexOf('/');
-            return name[..slashIdx] + "%2F" + name[(slashIdx + 1)..];
-        }
-        return Uri.EscapeDataString(name);
+        var (scope, localName) = PackageManifest.SplitScopedName(name);
+        return $"{Uri.EscapeDataString(scope)}/{Uri.EscapeDataString(localName)}";
     }
 
     /// <summary>
