@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T07:48:08Z'
+updated: '2026-05-29T08:04:21Z'
 phases:
   P1:
     status: done
@@ -59,13 +59,14 @@ phases:
     notes: Removed Os()/Arch() from EnvBuiltIns.cs; migrated 4 caller sites + 2 undercounted callers (EnvMembersTests.cs,
       namespace_members.stash); updated stdlib.instructions.md and CLAUDE.md guidance
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b18aabb2e25f2b988ec7b6c784567f31428695a5
+    verified: true
+    started: '2026-05-29T07:52:50Z'
+    completed: '2026-05-29T08:04:21Z'
+    attempts: 1
+    notes: Created OsBuiltInsTests.cs with full coverage; added pathSeparator/newLine to IoBuiltInsTests;
+      corrected stale plan.yaml path for IoBuiltInsTests
   P8:
     status: pending
     commit: null
