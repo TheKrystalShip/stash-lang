@@ -104,7 +104,9 @@ Expected: 0 failures.
 
 ## F02 — [HIGH] Dead `AddOwner` / `RemoveOwner` in `RegistryClient` — wrong URL and wrong body
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 219bde6
+AddOwner wired to admin roles route; RemoveOwner fails honestly — revoke-over-HTTP deferred, tracked in .kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md
 **Files:** `Stash.Cli/PackageManager/RegistryClient.cs:816-823`, `Stash.Cli/PackageManager/RegistryClient.cs:835-842`
 **Phase:** P5 / P6
 **Commit:** 74ea0f7 (P5 renamed endpoint), 6c9b005 (P6 migrated the path token but missed the rest)
