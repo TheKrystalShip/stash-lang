@@ -55,4 +55,10 @@ public sealed class PackageRecord
 
     /// <summary>The username of the user who deprecated this package, or <c>null</c> if not deprecated.</summary>
     public string? DeprecatedBy { get; set; }
+
+    /// <summary>
+    /// The visibility of the package: <c>public</c>, <c>private</c>, or <c>internal</c>.
+    /// Defaults to <c>public</c>. Enforced by a CHECK constraint in the database.
+    /// </summary>
+    public string Visibility { get; set; } = "public";
 }

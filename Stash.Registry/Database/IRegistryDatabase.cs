@@ -291,35 +291,42 @@ public interface IRegistryDatabase
     /// </summary>
     Task CleanExpiredRefreshTokensAsync();
 
-    // Ownership operations
-    /// <summary>
-    /// Returns the list of owners for a package, ordered alphabetically.
-    /// </summary>
-    /// <param name="packageName">The package name.</param>
-    /// <returns>A list of usernames that own the package.</returns>
-    Task<List<string>> GetOwnersAsync(string packageName);
+    // Package role operations (replaces the old owner operations — D3 clean break)
 
     /// <summary>
-    /// Adds a user as an owner of a package (no-op if already an owner).
+    /// Assigns a role to a principal on a package, replacing any existing role for that principal.
     /// </summary>
     /// <param name="packageName">The package name.</param>
-    /// <param name="username">The username to add as an owner.</param>
-    Task AddOwnerAsync(string packageName, string username);
+    /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
+    /// <param name="principalId">The principal identifier (username, team ID, or org ID).</param>
+    /// <param name="role">The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
+    Task AssignPackageRoleAsync(string packageName, string principalType, string principalId, string role);
 
     /// <summary>
-    /// Removes an owner from a package (no-op if the user is not an owner).
+    /// Revokes the role of a principal on a package (no-op if no role is assigned).
     /// </summary>
     /// <param name="packageName">The package name.</param>
-    /// <param name="username">The username to remove from the owner list.</param>
-    Task RemoveOwnerAsync(string packageName, string username);
+    /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
+    /// <param name="principalId">The principal identifier.</param>
+    Task RevokePackageRoleAsync(string packageName, string principalType, string principalId);
 
     /// <summary>
-    /// Checks whether a user is an owner of a package.
+    /// Returns all role entries for a package.
+    /// </summary>
+    /// <param name="packageName">The package name.</param>
+    /// <returns>A list of <see cref="PackageRoleEntry"/> objects for the package.</returns>
+    Task<List<PackageRoleEntry>> GetPackageRolesAsync(string packageName);
+
+    /// <summary>
+    /// Checks whether a user (directly or via a matching principal entry) has at least
+    /// the specified role on the package. In P2 only direct user-principal role entries
+    /// are checked; team and org inheritance is added in P5.
     /// </summary>
     /// <param name="packageName">The package name.</param>
     /// <param name="username">The username to test.</param>
-    /// <returns><c>true</c> if the user owns the package; otherwise <c>false</c>.</returns>
-    Task<bool> IsOwnerAsync(string packageName, string username);
+    /// <param name="role">The minimum role required: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
+    /// <returns><c>true</c> if the user has the specified or higher role; otherwise <c>false</c>.</returns>
+    Task<bool> HasPackagePermissionAsync(string packageName, string username, string role);
 
     // Audit operations
     /// <summary>

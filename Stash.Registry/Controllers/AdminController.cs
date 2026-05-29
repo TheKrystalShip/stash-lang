@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -207,7 +208,7 @@ public class AdminController : ControllerBase
         {
             foreach (string owner in body.Add)
             {
-                await _db.AddOwnerAsync(decodedName, owner);
+                await _db.AssignPackageRoleAsync(decodedName, "user", owner, "owner");
                 await _auditService.LogOwnerAddAsync(decodedName, username, owner, ip);
             }
         }
@@ -216,12 +217,17 @@ public class AdminController : ControllerBase
         {
             foreach (string owner in body.Remove)
             {
-                await _db.RemoveOwnerAsync(decodedName, owner);
+                await _db.RevokePackageRoleAsync(decodedName, "user", owner);
                 await _auditService.LogOwnerRemoveAsync(decodedName, username, owner, ip);
             }
         }
 
-        List<string> owners = await _db.GetOwnersAsync(decodedName);
+        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(decodedName);
+        List<string> owners = roles
+            .Where(r => r.PrincipalType == "user" && r.Role == "owner")
+            .Select(r => r.PrincipalId)
+            .OrderBy(u => u)
+            .ToList();
         return Ok(new OwnerListResponse { Owners = owners });
     }
 

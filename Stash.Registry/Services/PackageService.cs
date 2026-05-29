@@ -107,7 +107,7 @@ public sealed class PackageService
                 UpdatedAt = DateTime.UtcNow
             });
 
-            await _db.AddOwnerAsync(packageName, username);
+            await _db.AssignPackageRoleAsync(packageName, "user", username, "owner");
         }
 
         string? dependenciesJson = manifest.Dependencies != null
@@ -157,7 +157,7 @@ public sealed class PackageService
         VersionRecord versionRecord = await _db.GetPackageVersionAsync(name, version)
             ?? throw new InvalidOperationException($"Version {version} of '{name}' not found.");
 
-        if (!await _db.IsOwnerAsync(name, username))
+        if (!await _db.HasPackagePermissionAsync(name, username, "owner"))
         {
             throw new UnauthorizedAccessException($"User '{username}' is not an owner of '{name}'.");
         }

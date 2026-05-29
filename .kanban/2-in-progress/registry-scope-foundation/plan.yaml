@@ -60,6 +60,9 @@ phases:
       - Stash.Registry/Database/IRegistryDatabase.cs
       - Stash.Registry/Database/StashRegistryDatabase.cs
       - Stash.Registry/Database/Models/OwnerEntity.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Services/PackageService.cs
       - Stash.Tests/Registry/RegistryScopeAndOrgTests.cs
     verify:
       - dotnet build Stash.Registry

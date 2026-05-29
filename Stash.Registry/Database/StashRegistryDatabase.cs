@@ -274,10 +274,12 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     /// <inheritdoc/>
     public async Task DeleteUserAsync(string username)
     {
-        // Owners have no FK to users, so remove manually.
+        // Remove user's direct package role entries (no FK to users).
         // Tokens cascade via FK, so EF handles those automatically.
-        var ownerEntries = await _context.Owners.Where(o => o.Username == username).ToListAsync();
-        _context.Owners.RemoveRange(ownerEntries);
+        var roleEntries = await _context.PackageRoles
+            .Where(r => r.PrincipalType == "user" && r.PrincipalId == username)
+            .ToListAsync();
+        _context.PackageRoles.RemoveRange(roleEntries);
 
         var user = await _context.Users.FindAsync(username);
         if (user != null)
@@ -430,45 +432,73 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         await _context.SaveChangesAsync();
     }
 
-    // ── Ownership operations ──────────────────────────────────────────────────
+    // ── Package role operations ───────────────────────────────────────────────
+
+    // Role ordering for HasPackagePermissionAsync (P2 direct-only; inheritance added in P5).
+    private static readonly string[] RoleOrder = ["owner", "maintainer", "publisher", "reader"];
+
+    private static int RoleRank(string role)
+    {
+        int idx = Array.IndexOf(RoleOrder, role);
+        return idx < 0 ? int.MaxValue : idx;
+    }
 
     /// <inheritdoc/>
-    public async Task<List<string>> GetOwnersAsync(string packageName)
+    public async Task AssignPackageRoleAsync(
+        string packageName, string principalType, string principalId, string role)
     {
-        return await _context.Owners
+        var existing = await _context.PackageRoles
+            .FindAsync(packageName, principalType, principalId);
+        if (existing != null)
+        {
+            existing.Role = role;
+        }
+        else
+        {
+            _context.PackageRoles.Add(new PackageRoleEntry
+            {
+                PackageName = packageName,
+                PrincipalType = principalType,
+                PrincipalId = principalId,
+                Role = role
+            });
+        }
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task RevokePackageRoleAsync(string packageName, string principalType, string principalId)
+    {
+        var entry = await _context.PackageRoles.FindAsync(packageName, principalType, principalId);
+        if (entry != null)
+        {
+            _context.PackageRoles.Remove(entry);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<PackageRoleEntry>> GetPackageRolesAsync(string packageName)
+    {
+        return await _context.PackageRoles
             .AsNoTracking()
-            .Where(o => o.PackageName == packageName)
-            .OrderBy(o => o.Username)
-            .Select(o => o.Username)
+            .Where(r => r.PackageName == packageName)
             .ToListAsync();
     }
 
     /// <inheritdoc/>
-    public async Task AddOwnerAsync(string packageName, string username)
+    public async Task<bool> HasPackagePermissionAsync(string packageName, string username, string role)
     {
-        bool exists = await _context.Owners.AnyAsync(o => o.PackageName == packageName && o.Username == username);
-        if (!exists)
-        {
-            _context.Owners.Add(new OwnerEntry { PackageName = packageName, Username = username });
-            await _context.SaveChangesAsync();
-        }
-    }
+        // P2: direct user-principal lookup only; team/org inheritance added in P5.
+        var entry = await _context.PackageRoles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r =>
+                r.PackageName == packageName &&
+                r.PrincipalType == "user" &&
+                r.PrincipalId == username);
 
-    /// <inheritdoc/>
-    public async Task RemoveOwnerAsync(string packageName, string username)
-    {
-        var entry = await _context.Owners.FindAsync(packageName, username);
-        if (entry != null)
-        {
-            _context.Owners.Remove(entry);
-            await _context.SaveChangesAsync();
-        }
-    }
-
-    /// <inheritdoc/>
-    public async Task<bool> IsOwnerAsync(string packageName, string username)
-    {
-        return await _context.Owners.AnyAsync(o => o.PackageName == packageName && o.Username == username);
+        if (entry == null) return false;
+        return RoleRank(entry.Role) <= RoleRank(role);
     }
 
     // ── Audit operations ──────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -93,7 +94,12 @@ public class PackagesController : ControllerBase
             }
         }
 
-        List<string> owners = await _db.GetOwnersAsync(decodedName);
+        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(decodedName);
+        List<string> owners = roles
+            .Where(r => r.PrincipalType == "user" && r.Role == "owner")
+            .Select(r => r.PrincipalId)
+            .OrderBy(u => u)
+            .ToList();
         List<string>? keywords = null;
         if (package.Keywords != null)
         {
@@ -214,7 +220,7 @@ public class PackagesController : ControllerBase
         string username = User.Identity!.Name!;
 
         bool packageExists = await _db.PackageExistsAsync(decodedName);
-        bool isOwner = packageExists && await _db.IsOwnerAsync(decodedName, username);
+        bool isOwner = packageExists && await _db.HasPackagePermissionAsync(decodedName, username, "owner");
         if (packageExists && !isOwner)
         {
             return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
@@ -307,7 +313,7 @@ public class PackagesController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
         }
 
-        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
@@ -348,7 +354,7 @@ public class PackagesController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
         }
 
-        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
@@ -390,7 +396,7 @@ public class PackagesController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
         }
 
-        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {
@@ -432,7 +438,7 @@ public class PackagesController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
         }
 
-        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
         bool isAdmin = User.IsInRole("admin");
         if (!isOwner && !isAdmin)
         {

@@ -407,47 +407,84 @@ public sealed class SqliteDatabaseTests
         Assert.Empty(tokens);
     }
 
-    // ── Ownership operations ────────────────────────────────────────────
+    // ── Package role operations ─────────────────────────────────────────
 
     [Fact]
-    public async Task AddOwner_GetOwners_Works()
+    public async Task AssignPackageRole_GetPackageRoles_RoundTrips()
     {
         var db = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("own-pkg"));
-        await db.AddOwnerAsync("own-pkg", "alice");
-        await db.AddOwnerAsync("own-pkg", "bob");
+        await db.CreatePackageAsync(MakePackage("@alice/widget"));
+        await db.AssignPackageRoleAsync("@alice/widget", "user", "alice", "owner");
+        await db.AssignPackageRoleAsync("@alice/widget", "user", "bob", "publisher");
 
-        List<string> owners = await db.GetOwnersAsync("own-pkg");
+        List<PackageRoleEntry> roles = await db.GetPackageRolesAsync("@alice/widget");
 
-        Assert.Equal(2, owners.Count);
-        Assert.Contains("alice", owners);
-        Assert.Contains("bob", owners);
+        Assert.Equal(2, roles.Count);
+        Assert.Contains(roles, r => r.PrincipalId == "alice" && r.Role == "owner");
+        Assert.Contains(roles, r => r.PrincipalId == "bob" && r.Role == "publisher");
     }
 
     [Fact]
-    public async Task RemoveOwner_RemovesOwner()
+    public async Task AssignPackageRole_ReplacesExistingRole()
     {
         var db = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("rmown-pkg"));
-        await db.AddOwnerAsync("rmown-pkg", "alice");
-        await db.AddOwnerAsync("rmown-pkg", "bob");
+        await db.CreatePackageAsync(MakePackage("@alice/tool"));
+        await db.AssignPackageRoleAsync("@alice/tool", "user", "alice", "publisher");
+        await db.AssignPackageRoleAsync("@alice/tool", "user", "alice", "owner");
 
-        await db.RemoveOwnerAsync("rmown-pkg", "alice");
+        List<PackageRoleEntry> roles = await db.GetPackageRolesAsync("@alice/tool");
 
-        List<string> owners = await db.GetOwnersAsync("rmown-pkg");
-        Assert.Single(owners);
-        Assert.Equal("bob", owners[0]);
+        Assert.Single(roles);
+        Assert.Equal("owner", roles[0].Role);
     }
 
     [Fact]
-    public async Task IsOwner_ReturnsCorrectly()
+    public async Task RevokePackageRole_RemovesEntry()
     {
         var db = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("isown-pkg"));
-        await db.AddOwnerAsync("isown-pkg", "alice");
+        await db.CreatePackageAsync(MakePackage("@alice/lib"));
+        await db.AssignPackageRoleAsync("@alice/lib", "user", "alice", "owner");
+        await db.AssignPackageRoleAsync("@alice/lib", "user", "bob", "reader");
 
-        Assert.True(await db.IsOwnerAsync("isown-pkg", "alice"));
-        Assert.False(await db.IsOwnerAsync("isown-pkg", "bob"));
+        await db.RevokePackageRoleAsync("@alice/lib", "user", "bob");
+
+        List<PackageRoleEntry> roles = await db.GetPackageRolesAsync("@alice/lib");
+        Assert.Single(roles);
+        Assert.Equal("alice", roles[0].PrincipalId);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_OwnerCanDoEverything()
+    {
+        var db = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@alice/perm-pkg"));
+        await db.AssignPackageRoleAsync("@alice/perm-pkg", "user", "alice", "owner");
+
+        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "owner"));
+        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "maintainer"));
+        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "publisher"));
+        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "reader"));
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_ReaderCannotPublish()
+    {
+        var db = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@alice/guarded"));
+        await db.AssignPackageRoleAsync("@alice/guarded", "user", "bob", "reader");
+
+        Assert.True(await db.HasPackagePermissionAsync("@alice/guarded", "bob", "reader"));
+        Assert.False(await db.HasPackagePermissionAsync("@alice/guarded", "bob", "publisher"));
+        Assert.False(await db.HasPackagePermissionAsync("@alice/guarded", "bob", "owner"));
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_NoRole_ReturnsFalse()
+    {
+        var db = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@alice/no-role-pkg"));
+
+        Assert.False(await db.HasPackagePermissionAsync("@alice/no-role-pkg", "alice", "reader"));
     }
 
     // ── Audit operations ────────────────────────────────────────────────

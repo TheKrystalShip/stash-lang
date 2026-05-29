@@ -297,7 +297,7 @@ public sealed class PackageServiceTests : IDisposable
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         });
-        await _db.AddOwnerAsync("exp-pkg", "alice");
+        await _db.AssignPackageRoleAsync("exp-pkg", "user", "alice", "owner");
         await _db.AddVersionAsync("exp-pkg", new VersionRecord
         {
             PackageName = "exp-pkg",
