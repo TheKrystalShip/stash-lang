@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T08:55:30Z'
+updated: '2026-05-29T08:56:05Z'
 phases:
   P1:
     status: done
@@ -77,8 +77,8 @@ phases:
     notes: Regenerated stdlib reference, removed env.os/env.arch from spec, updated v1 member table, added
       CHANGELOG entries for os namespace additions and env.os/env.arch breaking removal
 review:
-  status: in_progress
+  status: resolved
   started: '2026-05-29T08:43:16Z'
-  resolved: null
+  resolved: '2026-05-29T08:56:05Z'
   findings_open: 0
   findings_fixed: 0
