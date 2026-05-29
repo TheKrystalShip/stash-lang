@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-scope-foundation
 current: null
-updated: '2026-05-29T15:47:58Z'
+updated: '2026-05-29T15:59:42Z'
 phases:
   P1:
     status: done
@@ -22,13 +22,14 @@ phases:
     notes: Deleted OwnerEntity/owners table; added orgs/teams/scopes/package_roles/packages.visibility
       with CHECK constraints; role-aware interface replaces owner interface; 69 tests pass.
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 3a5b0fd59153854ba895ee5a5c7d49460f11599f
+    verified: true
+    started: '2026-05-29T15:51:15Z'
+    completed: '2026-05-29T15:59:42Z'
+    attempts: 1
+    notes: System scopes (@stash, @admin) seeded idempotently at startup; registration auto-provisions
+      @<username> scope in same transaction; scope collision against any owner type returns 409
   P4:
     status: pending
     commit: null
