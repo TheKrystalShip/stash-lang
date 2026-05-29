@@ -1,7 +1,7 @@
 schema_version: 1
 feature: os-namespace
 current: null
-updated: '2026-05-29T07:35:06Z'
+updated: '2026-05-29T07:48:08Z'
 phases:
   P1:
     status: done
@@ -50,13 +50,14 @@ phases:
     notes: Added io.pathSeparator() returning Path.PathSeparator.ToString() and io.newLine() returning
       Environment.NewLine to IoBuiltIns.cs
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4f263feb2b0255b78add5a4e988e92bcda36b538
+    verified: true
+    started: '2026-05-29T07:42:08Z'
+    completed: '2026-05-29T07:48:08Z'
+    attempts: 1
+    notes: Removed Os()/Arch() from EnvBuiltIns.cs; migrated 4 caller sites + 2 undercounted callers (EnvMembersTests.cs,
+      namespace_members.stash); updated stdlib.instructions.md and CLAUDE.md guidance
   P7:
     status: pending
     commit: null
