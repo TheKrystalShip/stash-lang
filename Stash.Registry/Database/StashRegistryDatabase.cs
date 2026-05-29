@@ -601,16 +601,85 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     /// <inheritdoc/>
     public async Task<bool> HasPackagePermissionAsync(string packageName, string username, string role)
     {
-        // P2: direct user-principal lookup only; team/org inheritance added in P5.
-        var entry = await _context.PackageRoles
+        // Collect all effective roles for the user on the package and pick the highest.
+        // P5: union of direct user role + team-mediated + org-mediated (scope owner) roles.
+
+        string? bestRole = null;
+
+        // 1. Direct user-principal role
+        var directEntry = await _context.PackageRoles
             .AsNoTracking()
             .FirstOrDefaultAsync(r =>
                 r.PackageName == packageName &&
                 r.PrincipalType == "user" &&
                 r.PrincipalId == username);
+        if (directEntry != null)
+            bestRole = BestRole(bestRole, directEntry.Role);
 
-        if (entry == null) return false;
-        return RoleRank(entry.Role) <= RoleRank(role);
+        // 2. Team-mediated roles: find all teams the user belongs to that have a role on the package
+        var teamIds = await _context.TeamMembers
+            .AsNoTracking()
+            .Where(tm => tm.Username == username)
+            .Select(tm => tm.TeamId)
+            .ToListAsync();
+
+        if (teamIds.Count > 0)
+        {
+            var teamRoles = await _context.PackageRoles
+                .AsNoTracking()
+                .Where(r => r.PackageName == packageName && r.PrincipalType == "team" && teamIds.Contains(r.PrincipalId))
+                .ToListAsync();
+            foreach (var tr in teamRoles)
+                bestRole = BestRole(bestRole, tr.Role);
+        }
+
+        // 3. Org-mediated roles: extract scope from package name (@scope/name), find org owner of that scope,
+        //    check if user is an org member, and apply org_member -> reader / org_owner -> owner inheritance.
+        string? scopeName = ExtractScopeName(packageName);
+        if (scopeName != null)
+        {
+            var scope = await _context.Scopes.AsNoTracking().FirstOrDefaultAsync(s => s.Name == scopeName);
+            if (scope?.OwnerType == "org" && scope.OwnerOrgId != null)
+            {
+                var orgMember = await _context.OrgMembers
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(m => m.OrgId == scope.OwnerOrgId && m.Username == username);
+                if (orgMember != null)
+                {
+                    // Org owners inherit package owner; org members inherit reader on private/internal packages
+                    string inheritedRole = orgMember.OrgRole == "owner" ? "owner" : "reader";
+                    bestRole = BestRole(bestRole, inheritedRole);
+                }
+
+                // Also check explicit org-principal role
+                var orgRoleEntry = await _context.PackageRoles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r =>
+                        r.PackageName == packageName &&
+                        r.PrincipalType == "org" &&
+                        r.PrincipalId == scope.OwnerOrgId);
+                if (orgRoleEntry != null)
+                    bestRole = BestRole(bestRole, orgRoleEntry.Role);
+            }
+        }
+
+        if (bestRole == null) return false;
+        return RoleRank(bestRole) <= RoleRank(role);
+    }
+
+    /// <summary>Returns the role with the lower rank (higher permission) of the two, or <paramref name="b"/> if <paramref name="a"/> is null.</summary>
+    private static string BestRole(string? a, string b) =>
+        a == null ? b : (RoleRank(a) <= RoleRank(b) ? a : b);
+
+    /// <summary>Extracts the bare scope name from a scoped package name like <c>@scope/name</c>.</summary>
+    private static string? ExtractScopeName(string packageName)
+    {
+        if (!packageName.StartsWith('@'))
+            return null;
+        int slash = packageName.IndexOf('/');
+        if (slash < 2)
+            return null;
+        return packageName[1..slash];
     }
 
     // ── Audit operations ──────────────────────────────────────────────────────
@@ -646,5 +715,151 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .ToListAsync();
 
         return new SearchResult<AuditEntry> { Items = items, TotalCount = totalCount };
+    }
+
+    // ── Organization operations ───────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<OrganizationRecord> CreateOrgAsync(string name, string? displayName, string createdBy)
+    {
+        using var tx = await _context.Database.BeginTransactionAsync();
+
+        // Check for scope collision (covers user, org, and system)
+        bool scopeExists = await _context.Scopes.AnyAsync(s => s.Name == name);
+        if (scopeExists)
+            throw new InvalidOperationException($"A scope named '{name}' already exists.");
+
+        // Check for org name collision
+        bool orgExists = await _context.Organizations.AnyAsync(o => o.Name == name);
+        if (orgExists)
+            throw new InvalidOperationException($"An organization named '{name}' already exists.");
+
+        var org = new OrganizationRecord
+        {
+            Id = Guid.NewGuid().ToString(),
+            Name = name,
+            DisplayName = displayName,
+            CreatedAt = DateTime.UtcNow,
+            CreatedBy = createdBy
+        };
+        _context.Organizations.Add(org);
+
+        // Auto-provision the org scope
+        _context.Scopes.Add(new ScopeRecord
+        {
+            Name = name,
+            OwnerType = "org",
+            OwnerOrgId = org.Id,
+            OwnerUsername = null
+        });
+
+        // Add creator as org owner
+        _context.OrgMembers.Add(new OrgMemberEntry
+        {
+            OrgId = org.Id,
+            Username = createdBy,
+            OrgRole = "owner",
+            JoinedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+        await tx.CommitAsync();
+        return org;
+    }
+
+    /// <inheritdoc/>
+    public async Task<OrganizationRecord?> GetOrgAsync(string name)
+    {
+        return await _context.Organizations.AsNoTracking().FirstOrDefaultAsync(o => o.Name == name);
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<OrgMemberEntry>> GetOrgMembersAsync(string orgId)
+    {
+        return await _context.OrgMembers.AsNoTracking().Where(m => m.OrgId == orgId).ToListAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task AddOrgMemberAsync(string orgId, string username, string orgRole)
+    {
+        bool alreadyMember = await _context.OrgMembers.AnyAsync(m => m.OrgId == orgId && m.Username == username);
+        if (alreadyMember)
+            throw new InvalidOperationException($"User '{username}' is already a member of this organization.");
+
+        _context.OrgMembers.Add(new OrgMemberEntry
+        {
+            OrgId = orgId,
+            Username = username,
+            OrgRole = orgRole,
+            JoinedAt = DateTime.UtcNow
+        });
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task RemoveOrgMemberAsync(string orgId, string username)
+    {
+        var entry = await _context.OrgMembers.FirstOrDefaultAsync(m => m.OrgId == orgId && m.Username == username);
+        if (entry != null)
+        {
+            _context.OrgMembers.Remove(entry);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> IsOrgOwnerAsync(string orgId, string username)
+    {
+        return await _context.OrgMembers.AnyAsync(m =>
+            m.OrgId == orgId && m.Username == username && m.OrgRole == "owner");
+    }
+
+    // ── Team operations ───────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<TeamRecord> CreateTeamAsync(string orgId, string name)
+    {
+        bool exists = await _context.Teams.AnyAsync(t => t.OrgId == orgId && t.Name == name);
+        if (exists)
+            throw new InvalidOperationException($"A team named '{name}' already exists in this organization.");
+
+        var team = new TeamRecord
+        {
+            Id = Guid.NewGuid().ToString(),
+            OrgId = orgId,
+            Name = name,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Teams.Add(team);
+        await _context.SaveChangesAsync();
+        return team;
+    }
+
+    /// <inheritdoc/>
+    public async Task<TeamRecord?> GetTeamAsync(string teamId)
+    {
+        return await _context.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.Id == teamId);
+    }
+
+    /// <inheritdoc/>
+    public async Task<TeamRecord?> GetTeamByNameAsync(string orgId, string name)
+    {
+        return await _context.Teams.AsNoTracking().FirstOrDefaultAsync(t => t.OrgId == orgId && t.Name == name);
+    }
+
+    /// <inheritdoc/>
+    public async Task AddTeamMemberAsync(string teamId, string username)
+    {
+        bool alreadyMember = await _context.TeamMembers.AnyAsync(m => m.TeamId == teamId && m.Username == username);
+        if (!alreadyMember)
+        {
+            _context.TeamMembers.Add(new TeamMemberEntry
+            {
+                TeamId = teamId,
+                Username = username,
+                JoinedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+        }
     }
 }

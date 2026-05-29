@@ -476,6 +476,84 @@ public class PackagesController : ControllerBase
         }
     }
 
+    // ── Role endpoints ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Lists all role entries for a package. Only the package owner may invoke this endpoint.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="PackageRolesListResponse"/>,
+    /// <c>401</c> if unauthenticated,
+    /// <c>403</c> if the caller is not an owner,
+    /// or <c>404</c> if the package does not exist.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpGet("{name}/roles")]
+    public async Task<IActionResult> GetRoles(string name)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.PackageExistsAsync(decodedName))
+            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+
+        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(decodedName);
+        return Ok(new PackageRolesListResponse
+        {
+            Package = decodedName,
+            Roles = roles.Select(r => new PackageRoleResponse
+            {
+                PrincipalType = r.PrincipalType,
+                PrincipalId = r.PrincipalId,
+                Role = r.Role
+            }).ToList()
+        });
+    }
+
+    /// <summary>
+    /// Assigns a role to a principal on a package. Only the package owner may invoke this endpoint.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <returns>
+    /// <c>200</c> on success,
+    /// <c>400</c> if the request body is invalid,
+    /// <c>401</c> if unauthenticated,
+    /// <c>403</c> if the caller is not an owner,
+    /// or <c>404</c> if the package does not exist.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpPut("{name}/roles")]
+    public async Task<IActionResult> AssignRole(string name, [FromBody] AssignRoleRequest request)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.PackageExistsAsync(decodedName))
+            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+
+        string[] validPrincipalTypes = ["user", "team", "org"];
+        if (!Array.Exists(validPrincipalTypes, p => p == request.PrincipalType))
+            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: user, team, org." });
+
+        string[] validRoles = ["owner", "maintainer", "publisher", "reader"];
+        if (!Array.Exists(validRoles, r => r == request.Role))
+            return BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
+
+        await _db.AssignPackageRoleAsync(decodedName, request.PrincipalType, request.PrincipalId, request.Role);
+        return Ok(new SuccessResponse());
+    }
+
     // ── Visibility endpoint ───────────────────────────────────────────────────
 
     /// <summary>

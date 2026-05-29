@@ -370,6 +370,91 @@ public interface IRegistryDatabase
     /// <param name="visibility">The new visibility: <c>public</c>, <c>private</c>, or <c>internal</c>.</param>
     Task SetPackageVisibilityAsync(string name, string visibility);
 
+    // Organization operations (P5)
+
+    /// <summary>
+    /// Creates a new organization and its associated scope in a single transaction.
+    /// The creator is automatically added as an <c>owner</c> of the org and the org's scope.
+    /// </summary>
+    /// <param name="name">The org name (lower-case, same grammar as a scope name).</param>
+    /// <param name="displayName">An optional human-readable display name.</param>
+    /// <param name="createdBy">The username of the creating user.</param>
+    /// <returns>The newly created <see cref="OrganizationRecord"/>.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when a scope or org with the same name already exists.
+    /// </exception>
+    Task<OrganizationRecord> CreateOrgAsync(string name, string? displayName, string createdBy);
+
+    /// <summary>
+    /// Retrieves an organization by its name.
+    /// </summary>
+    /// <param name="name">The org name (without the leading <c>@</c>).</param>
+    /// <returns>The <see cref="OrganizationRecord"/> if found, or <c>null</c>.</returns>
+    Task<OrganizationRecord?> GetOrgAsync(string name);
+
+    /// <summary>
+    /// Returns all members of an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <returns>A list of <see cref="OrgMemberEntry"/> records.</returns>
+    Task<List<OrgMemberEntry>> GetOrgMembersAsync(string orgId);
+
+    /// <summary>
+    /// Adds a user to an organization with the specified role.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="username">The username to add.</param>
+    /// <param name="orgRole">The role: <c>owner</c> or <c>member</c>.</param>
+    /// <exception cref="InvalidOperationException">If the user is already a member.</exception>
+    Task AddOrgMemberAsync(string orgId, string username, string orgRole);
+
+    /// <summary>
+    /// Removes a user from an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="username">The username to remove.</param>
+    Task RemoveOrgMemberAsync(string orgId, string username);
+
+    /// <summary>
+    /// Returns whether the given user is an owner of the specified organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="username">The username to check.</param>
+    Task<bool> IsOrgOwnerAsync(string orgId, string username);
+
+    // Team operations (P5)
+
+    /// <summary>
+    /// Creates a new team within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="name">The team name (unique within the org).</param>
+    /// <returns>The newly created <see cref="TeamRecord"/>.</returns>
+    /// <exception cref="InvalidOperationException">If a team with the same name already exists in the org.</exception>
+    Task<TeamRecord> CreateTeamAsync(string orgId, string name);
+
+    /// <summary>
+    /// Retrieves a team by its identifier.
+    /// </summary>
+    /// <param name="teamId">The team identifier.</param>
+    /// <returns>The <see cref="TeamRecord"/> if found, or <c>null</c>.</returns>
+    Task<TeamRecord?> GetTeamAsync(string teamId);
+
+    /// <summary>
+    /// Retrieves a team by org ID and name.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="name">The team name.</param>
+    /// <returns>The <see cref="TeamRecord"/> if found, or <c>null</c>.</returns>
+    Task<TeamRecord?> GetTeamByNameAsync(string orgId, string name);
+
+    /// <summary>
+    /// Adds a user to a team.
+    /// </summary>
+    /// <param name="teamId">The team identifier.</param>
+    /// <param name="username">The username to add.</param>
+    Task AddTeamMemberAsync(string teamId, string username);
+
     /// <summary>
     /// Searches packages by name or description with visibility filtering.
     /// </summary>

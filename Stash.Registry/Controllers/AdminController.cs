@@ -168,67 +168,58 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
-    /// Adds or removes package owners.
+    /// Assigns a role to a principal on a package (admin override).
     /// </summary>
-    /// <param name="name">The URL-encoded package name whose ownership list is being modified.</param>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <param name="name">The package's local name within the scope.</param>
     /// <remarks>
-    /// Reads an <see cref="OwnerUpdateRequest"/> JSON body with optional <c>add</c> and
-    /// <c>remove</c> owner lists. Each addition and removal is recorded individually in
-    /// the audit log. Requires an admin JWT.
+    /// Reads an <see cref="AssignRoleRequest"/> JSON body specifying the principal type,
+    /// principal identifier, and role to assign. Requires an admin JWT.
+    /// This replaces the legacy <c>PUT /admin/packages/{name}/owners</c> endpoint.
     /// </remarks>
     /// <returns>
-    /// <c>200</c> with an <see cref="OwnerListResponse"/> containing the updated owner list,
-    /// <c>400</c> if the request body is malformed,
+    /// <c>200</c> on success,
+    /// <c>400</c> if the request body is malformed or the role/principal type is invalid,
     /// or <c>404</c> if the package does not exist.
     /// </returns>
-    [HttpPut("packages/{name}/owners")]
-    public async Task<IActionResult> ManageOwners(string name)
+    [HttpPut("packages/{scope}/{name}/roles")]
+    public async Task<IActionResult> AdminAssignRole(string scope, string name)
     {
-        string decodedName = Uri.UnescapeDataString(name);
+        string packageName = $"@{Uri.UnescapeDataString(scope)}/{Uri.UnescapeDataString(name)}";
         string username = User.Identity!.Name!;
 
-        if (!await _db.PackageExistsAsync(decodedName))
+        if (!await _db.PackageExistsAsync(packageName))
         {
-            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
         }
 
-        OwnerUpdateRequest? body;
+        AssignRoleRequest? body;
         try
         {
-            body = await JsonSerializer.DeserializeAsync<OwnerUpdateRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            body = await JsonSerializer.DeserializeAsync<AssignRoleRequest>(
+                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         }
         catch (JsonException)
         {
             return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
+        if (body == null)
+            return BadRequest(new ErrorResponse { Error = "Request body is required." });
+
+        string[] validPrincipalTypes = ["user", "team", "org"];
+        if (!Array.Exists(validPrincipalTypes, p => p == body.PrincipalType))
+            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: user, team, org." });
+
+        string[] validRoles = ["owner", "maintainer", "publisher", "reader"];
+        if (!Array.Exists(validRoles, r => r == body.Role))
+            return BadRequest(new ErrorResponse { Error = $"Invalid role '{body.Role}'. Must be one of: owner, maintainer, publisher, reader." });
+
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _db.AssignPackageRoleAsync(packageName, body.PrincipalType, body.PrincipalId, body.Role);
+        await _auditService.LogOwnerAddAsync(packageName, username, body.PrincipalId, ip);
 
-        if (body?.Add != null)
-        {
-            foreach (string owner in body.Add)
-            {
-                await _db.AssignPackageRoleAsync(decodedName, "user", owner, "owner");
-                await _auditService.LogOwnerAddAsync(decodedName, username, owner, ip);
-            }
-        }
-
-        if (body?.Remove != null)
-        {
-            foreach (string owner in body.Remove)
-            {
-                await _db.RevokePackageRoleAsync(decodedName, "user", owner);
-                await _auditService.LogOwnerRemoveAsync(decodedName, username, owner, ip);
-            }
-        }
-
-        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(decodedName);
-        List<string> owners = roles
-            .Where(r => r.PrincipalType == "user" && r.Role == "owner")
-            .Select(r => r.PrincipalId)
-            .OrderBy(u => u)
-            .ToList();
-        return Ok(new OwnerListResponse { Owners = owners });
+        return Ok(new SuccessResponse());
     }
 
     /// <summary>

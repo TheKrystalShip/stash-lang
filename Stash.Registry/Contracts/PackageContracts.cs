@@ -195,6 +195,56 @@ public sealed class SetVisibilityResponse
 }
 
 /// <summary>
+/// Request body for the <c>PUT /api/v1/packages/{scope}/{name}/roles</c> endpoint.
+/// </summary>
+public sealed class AssignRoleRequest
+{
+    /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
+    [JsonPropertyName("principal_type")]
+    public required string PrincipalType { get; set; }
+
+    /// <summary>The principal identifier — username, team ID, or org name.</summary>
+    [JsonPropertyName("principal_id")]
+    public required string PrincipalId { get; set; }
+
+    /// <summary>The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</summary>
+    [JsonPropertyName("role")]
+    public required string Role { get; set; }
+}
+
+/// <summary>
+/// A single role entry in the package roles list.
+/// </summary>
+public sealed class PackageRoleResponse
+{
+    /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
+    [JsonPropertyName("principal_type")]
+    public required string PrincipalType { get; set; }
+
+    /// <summary>The principal identifier.</summary>
+    [JsonPropertyName("principal_id")]
+    public required string PrincipalId { get; set; }
+
+    /// <summary>The assigned role.</summary>
+    [JsonPropertyName("role")]
+    public required string Role { get; set; }
+}
+
+/// <summary>
+/// Response body returned by the <c>GET /api/v1/packages/{scope}/{name}/roles</c> endpoint.
+/// </summary>
+public sealed class PackageRolesListResponse
+{
+    /// <summary>The package name.</summary>
+    [JsonPropertyName("package")]
+    public required string Package { get; set; }
+
+    /// <summary>All role entries for the package.</summary>
+    [JsonPropertyName("roles")]
+    public required List<PackageRoleResponse> Roles { get; set; }
+}
+
+/// <summary>
 /// Response body returned by deprecation and undeprecation endpoints.
 /// </summary>
 public sealed class DeprecationResponse

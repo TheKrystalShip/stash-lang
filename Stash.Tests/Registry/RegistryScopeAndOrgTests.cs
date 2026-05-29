@@ -470,4 +470,308 @@ public sealed class RegistryScopeAndOrgTests
 
         Assert.True(exists);
     }
+
+    // ── P5: Organization creation ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateOrgAsync_NewOrg_CreatesOrgAndScope()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+
+        var org = await db.CreateOrgAsync("acme", "Acme Corp", "alice");
+
+        Assert.NotNull(org);
+        Assert.Equal("acme", org.Name);
+        Assert.Equal("Acme Corp", org.DisplayName);
+        Assert.Equal("alice", org.CreatedBy);
+
+        // The scope should have been provisioned
+        var scope = await db.GetScopeAsync("acme");
+        Assert.NotNull(scope);
+        Assert.Equal("org", scope.OwnerType);
+        Assert.Equal(org.Id, scope.OwnerOrgId);
+        Assert.Null(scope.OwnerUsername);
+    }
+
+    [Fact]
+    public async Task CreateOrgAsync_NewOrg_CreatorBecomesOwner()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        bool isOwner = await db.IsOrgOwnerAsync(org.Id, "alice");
+        Assert.True(isOwner);
+    }
+
+    [Fact]
+    public async Task CreateOrgAsync_CollidingScope_Throws()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        // 'alice' scope already exists from user registration
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateOrgAsync("alice", null, "alice"));
+    }
+
+    [Fact]
+    public async Task CreateOrgAsync_CollidingSystemScope_Throws()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.SeedSystemScopesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateOrgAsync("stash", null, "alice"));
+    }
+
+    [Fact]
+    public async Task GetOrgAsync_ExistingOrg_ReturnsOrg()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateOrgAsync("acme", "Acme", "alice");
+
+        var org = await db.GetOrgAsync("acme");
+        Assert.NotNull(org);
+        Assert.Equal("acme", org.Name);
+    }
+
+    [Fact]
+    public async Task GetOrgAsync_NonExistent_ReturnsNull()
+    {
+        var (db, _) = CreateTestDb();
+
+        var org = await db.GetOrgAsync("nonexistent");
+        Assert.Null(org);
+    }
+
+    // ── P5: Org membership ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task AddOrgMemberAsync_ValidUser_AddsMember()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        await db.AddOrgMemberAsync(org.Id, "bob", "member");
+
+        var members = await db.GetOrgMembersAsync(org.Id);
+        Assert.Contains(members, m => m.Username == "bob" && m.OrgRole == "member");
+    }
+
+    [Fact]
+    public async Task AddOrgMemberAsync_DuplicateMember_Throws()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        // alice is already an owner-member from CreateOrgAsync
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.AddOrgMemberAsync(org.Id, "alice", "member"));
+    }
+
+    [Fact]
+    public async Task RemoveOrgMemberAsync_ExistingMember_RemovesMember()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.AddOrgMemberAsync(org.Id, "bob", "member");
+
+        await db.RemoveOrgMemberAsync(org.Id, "bob");
+
+        var members = await db.GetOrgMembersAsync(org.Id);
+        Assert.DoesNotContain(members, m => m.Username == "bob");
+    }
+
+    [Fact]
+    public async Task IsOrgOwnerAsync_OwnerUser_ReturnsTrue()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        bool isOwner = await db.IsOrgOwnerAsync(org.Id, "alice");
+        Assert.True(isOwner);
+    }
+
+    [Fact]
+    public async Task IsOrgOwnerAsync_MemberUser_ReturnsFalse()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.AddOrgMemberAsync(org.Id, "bob", "member");
+
+        bool isOwner = await db.IsOrgOwnerAsync(org.Id, "bob");
+        Assert.False(isOwner);
+    }
+
+    // ── P5: Team operations ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateTeamAsync_ValidOrg_CreatesTeam()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        var team = await db.CreateTeamAsync(org.Id, "engineering");
+
+        Assert.NotNull(team);
+        Assert.Equal("engineering", team.Name);
+        Assert.Equal(org.Id, team.OrgId);
+    }
+
+    [Fact]
+    public async Task CreateTeamAsync_DuplicateNameInSameOrg_Throws()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.CreateTeamAsync(org.Id, "engineering");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            db.CreateTeamAsync(org.Id, "engineering"));
+    }
+
+    [Fact]
+    public async Task AddTeamMemberAsync_ValidTeam_AddsMember()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        var team = await db.CreateTeamAsync(org.Id, "engineering");
+
+        await db.AddTeamMemberAsync(team.Id, "bob");
+
+        var teamRecord = await db.GetTeamAsync(team.Id);
+        Assert.NotNull(teamRecord);
+    }
+
+    [Fact]
+    public async Task GetTeamByNameAsync_ExistingTeam_ReturnsTeam()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.CreateTeamAsync(org.Id, "engineering");
+
+        var team = await db.GetTeamByNameAsync(org.Id, "engineering");
+        Assert.NotNull(team);
+        Assert.Equal("engineering", team.Name);
+    }
+
+    // ── P5: Permission resolution — direct + team + org ───────────────────────
+
+    [Fact]
+    public async Task HasPackagePermission_DirectUserRole_ReturnsTrue()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+        await db.AssignPackageRoleAsync("@acme/widget", "user", "alice", "publisher");
+
+        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "alice", "publisher");
+        Assert.True(hasPermission);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_DirectUserRole_HigherRequired_ReturnsFalse()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+        await db.AssignPackageRoleAsync("@acme/widget", "user", "alice", "reader");
+
+        // reader cannot publish
+        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "alice", "publisher");
+        Assert.False(hasPermission);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_TeamMediated_ReturnsTrue()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        var team = await db.CreateTeamAsync(org.Id, "engineering");
+        await db.AddTeamMemberAsync(team.Id, "bob");
+
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+        // Assign team a publisher role
+        await db.AssignPackageRoleAsync("@acme/widget", "team", team.Id, "publisher");
+
+        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "bob", "publisher");
+        Assert.True(hasPermission);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_OrgOwnerInheritsPackageOwner()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+
+        // Create a package in the acme scope — alice is org owner
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+
+        // alice should have owner permission via org ownership
+        bool hasOwner = await db.HasPackagePermissionAsync("@acme/widget", "alice", "owner");
+        Assert.True(hasOwner);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_OrgMemberInheritsReader()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.AddOrgMemberAsync(org.Id, "bob", "member");
+
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+
+        // bob is a regular member — should have reader (not publisher)
+        bool hasReader = await db.HasPackagePermissionAsync("@acme/widget", "bob", "reader");
+        bool hasPublisher = await db.HasPackagePermissionAsync("@acme/widget", "bob", "publisher");
+        Assert.True(hasReader);
+        Assert.False(hasPublisher);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_NoRole_ReturnsFalse()
+    {
+        var (db, _) = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+
+        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "charlie", "reader");
+        Assert.False(hasPermission);
+    }
+
+    [Fact]
+    public async Task HasPackagePermission_ExplicitRoleBeatsOrgInheritance()
+    {
+        // Bob is org member (reader by inheritance) but also has explicit maintainer role.
+        // The higher role (maintainer) should win.
+        var (db, _) = CreateTestDb();
+        await db.CreateUserWithScopeAsync("alice", "hash");
+        await db.CreateUserWithScopeAsync("bob", "hash");
+        var org = await db.CreateOrgAsync("acme", null, "alice");
+        await db.AddOrgMemberAsync(org.Id, "bob", "member");
+
+        await db.CreatePackageAsync(MakePackage("@acme/widget"));
+        await db.AssignPackageRoleAsync("@acme/widget", "user", "bob", "maintainer");
+
+        bool hasMaintainer = await db.HasPackagePermissionAsync("@acme/widget", "bob", "maintainer");
+        Assert.True(hasMaintainer);
+    }
 }
