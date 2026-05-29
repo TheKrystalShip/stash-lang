@@ -58,15 +58,6 @@ public sealed class PackageService
                 "Invalid package manifest: " + string.Join("; ", errors));
         }
 
-        if (manifest.Private == true)
-        {
-            string rejectedName = manifest.Name ?? "<unknown>";
-            _logger.LogInformation(
-                "Rejected publish of private package '{Package}' by user '{User}'.",
-                rejectedName, username);
-            throw new PrivatePackageException(rejectedName);
-        }
-
         if (!HasStashFile(tarballBytes))
         {
             throw new InvalidOperationException("Package must contain at least one .stash file.");

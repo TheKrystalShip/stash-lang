@@ -108,7 +108,7 @@ public sealed class PackageServiceTests : IDisposable
         using (var gz = new GZipStream(ms, CompressionLevel.Optimal, leaveOpen: true))
         using (var tar = new TarWriter(gz, TarEntryFormat.Pax, leaveOpen: true))
         {
-            var manifest = new { name = "no-stash-pkg", version = "1.0.0", description = "test", license = "MIT" };
+            var manifest = new { name = "@test/no-stash-pkg", version = "1.0.0", description = "test", license = "MIT" };
             byte[] manifestBytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(manifest));
             var entry = new PaxTarEntry(TarEntryType.RegularFile, "stash.json")
             {
@@ -137,12 +137,12 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_ValidTarball_Succeeds()
     {
-        byte[] tarball = CreateTestTarball("test-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/test-pkg", "1.0.0");
         using var stream = new MemoryStream(tarball);
 
         VersionRecord result = await _service.Publish(stream, "alice", null);
 
-        Assert.Equal("test-pkg", result.PackageName);
+        Assert.Equal("@test/test-pkg", result.PackageName);
         Assert.Equal("1.0.0", result.Version);
         Assert.Equal("alice", result.PublishedBy);
     }
@@ -150,28 +150,28 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_StoresInDatabase()
     {
-        byte[] tarball = CreateTestTarball("db-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/db-pkg", "1.0.0");
         using var stream = new MemoryStream(tarball);
         await _service.Publish(stream, "alice", null);
 
-        Assert.True(await _db.PackageExistsAsync("db-pkg"));
-        Assert.True(await _db.VersionExistsAsync("db-pkg", "1.0.0"));
+        Assert.True(await _db.PackageExistsAsync("@test/db-pkg"));
+        Assert.True(await _db.VersionExistsAsync("@test/db-pkg", "1.0.0"));
     }
 
     [Fact]
     public async Task Publish_StoresInStorage()
     {
-        byte[] tarball = CreateTestTarball("store-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/store-pkg", "1.0.0");
         using var stream = new MemoryStream(tarball);
         await _service.Publish(stream, "alice", null);
 
-        Assert.True(await _storage.ExistsAsync("store-pkg", "1.0.0"));
+        Assert.True(await _storage.ExistsAsync("@test/store-pkg", "1.0.0"));
     }
 
     [Fact]
     public async Task Publish_ComputesIntegrity()
     {
-        byte[] tarball = CreateTestTarball("int-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/int-pkg", "1.0.0");
         string expectedIntegrity = ComputeIntegrity(tarball);
         using var stream = new MemoryStream(tarball);
 
@@ -183,11 +183,11 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_ExtractsReadme()
     {
-        byte[] tarball = CreateTestTarball("readme-pkg", "1.0.0", readme: "# My Package");
+        byte[] tarball = CreateTestTarball("@test/readme-pkg", "1.0.0", readme: "# My Package");
         using var stream = new MemoryStream(tarball);
         await _service.Publish(stream, "alice", null);
 
-        PackageRecord? pkg = await _db.GetPackageAsync("readme-pkg");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/readme-pkg");
         Assert.NotNull(pkg);
         Assert.Equal("# My Package", pkg.Readme);
     }
@@ -195,21 +195,21 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_DuplicateVersion_ThrowsVersionConflict()
     {
-        byte[] tarball1 = CreateTestTarball("dup-pkg", "1.0.0");
+        byte[] tarball1 = CreateTestTarball("@test/dup-pkg", "1.0.0");
         using (var s1 = new MemoryStream(tarball1))
         {
             await _service.Publish(s1, "alice", null);
         }
 
-        byte[] tarball2 = CreateTestTarball("dup-pkg", "1.0.0");
+        byte[] tarball2 = CreateTestTarball("@test/dup-pkg", "1.0.0");
         using var s2 = new MemoryStream(tarball2);
 
         var ex = await Assert.ThrowsAsync<VersionConflictException>(async () => await _service.Publish(s2, "alice", null));
-        Assert.Equal("dup-pkg", ex.PackageName);
+        Assert.Equal("@test/dup-pkg", ex.PackageName);
         Assert.Equal("1.0.0", ex.Version);
         // Verify the 409 controller path has a clear message (not a generic 400 string).
         Assert.Contains("1.0.0", ex.Message);
-        Assert.Contains("dup-pkg", ex.Message);
+        Assert.Contains("@test/dup-pkg", ex.Message);
     }
 
     [Fact]
@@ -236,7 +236,7 @@ public sealed class PackageServiceTests : IDisposable
     public async Task Publish_TooLarge_Throws()
     {
         _config.Security.MaxPackageSize = "1"; // 1 byte — any tarball exceeds this
-        byte[] tarball = CreateTestTarball("big-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/big-pkg", "1.0.0");
         using var stream = new MemoryStream(tarball);
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await _service.Publish(stream, "alice", null));
@@ -245,7 +245,7 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_IntegrityMismatch_Throws()
     {
-        byte[] tarball = CreateTestTarball("mismatch-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/mismatch-pkg", "1.0.0");
         using var stream = new MemoryStream(tarball);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -258,30 +258,30 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Unpublish_ValidRequest_Succeeds()
     {
-        byte[] tarball = CreateTestTarball("unpub-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/unpub-pkg", "1.0.0");
         using (var s = new MemoryStream(tarball))
         {
             await _service.Publish(s, "alice", null);
         }
 
-        bool result = await _service.UnpublishAsync("unpub-pkg", "1.0.0", "alice");
+        bool result = await _service.UnpublishAsync("@test/unpub-pkg", "1.0.0", "alice");
 
         Assert.True(result);
-        Assert.False(await _db.VersionExistsAsync("unpub-pkg", "1.0.0"));
-        Assert.False(await _storage.ExistsAsync("unpub-pkg", "1.0.0"));
+        Assert.False(await _db.VersionExistsAsync("@test/unpub-pkg", "1.0.0"));
+        Assert.False(await _storage.ExistsAsync("@test/unpub-pkg", "1.0.0"));
     }
 
     [Fact]
     public async Task Unpublish_NotOwner_Throws()
     {
-        byte[] tarball = CreateTestTarball("own-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/own-pkg", "1.0.0");
         using (var s = new MemoryStream(tarball))
         {
             await _service.Publish(s, "alice", null);
         }
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            async () => await _service.UnpublishAsync("own-pkg", "1.0.0", "bob"));
+            async () => await _service.UnpublishAsync("@test/own-pkg", "1.0.0", "bob"));
     }
 
     [Fact]
@@ -291,16 +291,16 @@ public sealed class PackageServiceTests : IDisposable
         // to deterministically exceed the default 72h unpublish window
         await _db.CreatePackageAsync(new PackageRecord
         {
-            Name = "exp-pkg",
+            Name = "@test/exp-pkg",
             Description = "test",
             Latest = "1.0.0",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         });
-        await _db.AssignPackageRoleAsync("exp-pkg", "user", "alice", "owner");
-        await _db.AddVersionAsync("exp-pkg", new VersionRecord
+        await _db.AssignPackageRoleAsync("@test/exp-pkg", "user", "alice", "owner");
+        await _db.AddVersionAsync("@test/exp-pkg", new VersionRecord
         {
-            PackageName = "exp-pkg",
+            PackageName = "@test/exp-pkg",
             Version = "1.0.0",
             Integrity = "sha256-test",
             PublishedAt = DateTime.UtcNow.AddDays(-30),
@@ -308,14 +308,14 @@ public sealed class PackageServiceTests : IDisposable
         });
 
         await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.UnpublishAsync("exp-pkg", "1.0.0", "alice"));
+            async () => await _service.UnpublishAsync("@test/exp-pkg", "1.0.0", "alice"));
     }
 
     [Fact]
     public async Task Unpublish_NonExistent_Throws()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await _service.UnpublishAsync("ghost-pkg", "1.0.0", "alice"));
+            async () => await _service.UnpublishAsync("@test/ghost-pkg", "1.0.0", "alice"));
     }
 
     // ── Get operations ──────────────────────────────────────────────────
@@ -323,16 +323,16 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task GetPackage_ReturnsPackage()
     {
-        byte[] tarball = CreateTestTarball("get-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/get-pkg", "1.0.0");
         using (var s = new MemoryStream(tarball))
         {
             await _service.Publish(s, "alice", null);
         }
 
-        PackageRecord? result = await _service.GetPackageAsync("get-pkg");
+        PackageRecord? result = await _service.GetPackageAsync("@test/get-pkg");
 
         Assert.NotNull(result);
-        Assert.Equal("get-pkg", result.Name);
+        Assert.Equal("@test/get-pkg", result.Name);
     }
 
     [Fact]
@@ -346,13 +346,13 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task GetVersion_ReturnsVersion()
     {
-        byte[] tarball = CreateTestTarball("ver-pkg", "2.0.0");
+        byte[] tarball = CreateTestTarball("@test/ver-pkg", "2.0.0");
         using (var s = new MemoryStream(tarball))
         {
             await _service.Publish(s, "alice", null);
         }
 
-        VersionRecord? result = await _service.GetVersionAsync("ver-pkg", "2.0.0");
+        VersionRecord? result = await _service.GetVersionAsync("@test/ver-pkg", "2.0.0");
 
         Assert.NotNull(result);
         Assert.Equal("2.0.0", result.Version);
@@ -361,13 +361,13 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task DownloadPackage_ReturnsStream()
     {
-        byte[] tarball = CreateTestTarball("dl-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/dl-pkg", "1.0.0");
         using (var s = new MemoryStream(tarball))
         {
             await _service.Publish(s, "alice", null);
         }
 
-        using Stream? result = await _service.DownloadPackageAsync("dl-pkg", "1.0.0");
+        using Stream? result = await _service.DownloadPackageAsync("@test/dl-pkg", "1.0.0");
 
         Assert.NotNull(result);
         Assert.True(result.Length > 0);
@@ -378,13 +378,13 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_LowerSemverAfterHigher_LatestRemainsHigher()
     {
-        using (var s = new MemoryStream(CreateTestTarball("semver-a", "2.0.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-a", "2.0.0")))
             await _service.Publish(s, "alice", null);
 
-        using (var s = new MemoryStream(CreateTestTarball("semver-a", "1.5.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-a", "1.5.0")))
             await _service.Publish(s, "alice", null);
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-a");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-a");
         Assert.NotNull(pkg);
         Assert.Equal("2.0.0", pkg.Latest);
     }
@@ -392,13 +392,13 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_HigherSemverAfterLower_LatestUpdates()
     {
-        using (var s = new MemoryStream(CreateTestTarball("semver-b", "2.0.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-b", "2.0.0")))
             await _service.Publish(s, "alice", null);
 
-        using (var s = new MemoryStream(CreateTestTarball("semver-b", "2.1.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-b", "2.1.0")))
             await _service.Publish(s, "alice", null);
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-b");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-b");
         Assert.NotNull(pkg);
         Assert.Equal("2.1.0", pkg.Latest);
     }
@@ -406,10 +406,10 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_PrereleaseOnly_LatestIsPrerelease()
     {
-        using (var s = new MemoryStream(CreateTestTarball("semver-c", "1.0.0-rc.1")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-c", "1.0.0-rc.1")))
             await _service.Publish(s, "alice", null);
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-c");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-c");
         Assert.NotNull(pkg);
         Assert.Equal("1.0.0-rc.1", pkg.Latest);
     }
@@ -417,13 +417,13 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_StableAfterPrerelease_LatestPromotesToStable()
     {
-        using (var s = new MemoryStream(CreateTestTarball("semver-d", "1.0.0-rc.1")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-d", "1.0.0-rc.1")))
             await _service.Publish(s, "alice", null);
 
-        using (var s = new MemoryStream(CreateTestTarball("semver-d", "1.0.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-d", "1.0.0")))
             await _service.Publish(s, "alice", null);
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-d");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-d");
         Assert.NotNull(pkg);
         Assert.Equal("1.0.0", pkg.Latest);
     }
@@ -431,13 +431,13 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_PrereleaseAfterStable_LatestStaysStable()
     {
-        using (var s = new MemoryStream(CreateTestTarball("semver-e", "1.0.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-e", "1.0.0")))
             await _service.Publish(s, "alice", null);
 
-        using (var s = new MemoryStream(CreateTestTarball("semver-e", "1.1.0-rc.1")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-e", "1.1.0-rc.1")))
             await _service.Publish(s, "alice", null);
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-e");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-e");
         Assert.NotNull(pkg);
         Assert.Equal("1.0.0", pkg.Latest);
     }
@@ -447,13 +447,13 @@ public sealed class PackageServiceTests : IDisposable
     {
         foreach (var ver in new[] { "1.0.0", "2.0.0", "3.0.0" })
         {
-            using var s = new MemoryStream(CreateTestTarball("semver-f", ver));
+            using var s = new MemoryStream(CreateTestTarball("@test/semver-f", ver));
             await _service.Publish(s, "alice", null);
         }
 
-        await _service.UnpublishAsync("semver-f", "3.0.0", "alice");
+        await _service.UnpublishAsync("@test/semver-f", "3.0.0", "alice");
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-f");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-f");
         Assert.NotNull(pkg);
         Assert.Equal("2.0.0", pkg.Latest);
     }
@@ -461,15 +461,15 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Unpublish_AllStable_PromotesPrereleaseToLatest()
     {
-        using (var s = new MemoryStream(CreateTestTarball("semver-g", "1.0.0")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-g", "1.0.0")))
             await _service.Publish(s, "alice", null);
 
-        using (var s = new MemoryStream(CreateTestTarball("semver-g", "2.0.0-rc.1")))
+        using (var s = new MemoryStream(CreateTestTarball("@test/semver-g", "2.0.0-rc.1")))
             await _service.Publish(s, "alice", null);
 
-        await _service.UnpublishAsync("semver-g", "1.0.0", "alice");
+        await _service.UnpublishAsync("@test/semver-g", "1.0.0", "alice");
 
-        PackageRecord? pkg = await _db.GetPackageAsync("semver-g");
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/semver-g");
         Assert.NotNull(pkg);
         Assert.Equal("2.0.0-rc.1", pkg.Latest);
     }
@@ -485,51 +485,46 @@ public sealed class PackageServiceTests : IDisposable
     [Fact]
     public async Task Publish_StoresIntegrityOnVersionRecord()
     {
-        byte[] tarball = CreateTestTarball("integrity-svc-pkg", "1.0.0");
+        byte[] tarball = CreateTestTarball("@test/integrity-svc-pkg", "1.0.0");
         using (var s = new MemoryStream(tarball))
             await _service.Publish(s, "alice", null);
 
-        VersionRecord? vr = await _db.GetPackageVersionAsync("integrity-svc-pkg", "1.0.0");
+        VersionRecord? vr = await _db.GetPackageVersionAsync("@test/integrity-svc-pkg", "1.0.0");
         Assert.NotNull(vr);
         Assert.False(string.IsNullOrEmpty(vr.Integrity),
             "Publish must store a non-empty Integrity field so DownloadVersion can emit X-Integrity.");
         Assert.StartsWith("sha256-", vr.Integrity);
     }
 
-    // ── Private package rejection ────────────────────────────────────────────
+    // ── Private manifest flag is ignored (D7 — visibility is server-side state) ─
 
     [Fact]
-    public async Task Publish_PrivateTrue_ThrowsPrivatePackageException()
+    public async Task Publish_PrivateTrueInManifest_Succeeds()
     {
-        byte[] tarball = CreateTestTarball("private-pkg", "1.0.0", isPrivate: true);
+        // D7: the manifest "private": true flag no longer blocks publishing.
+        // Visibility is a server-side state; the manifest field is ignored.
+        byte[] tarball = CreateTestTarball("@test/private-pkg", "1.0.0", isPrivate: true);
         using var stream = new MemoryStream(tarball);
 
-        var ex = await Assert.ThrowsAsync<PrivatePackageException>(
-            () => _service.Publish(stream, "alice", null));
-        Assert.Equal("private-pkg", ex.PackageName);
-    }
+        VersionRecord vr = await _service.Publish(stream, "alice", null);
 
-    [Fact]
-    public async Task Publish_PrivateTrue_DoesNotCreateDatabaseRow()
-    {
-        byte[] tarball = CreateTestTarball("private-pkg2", "1.0.0", isPrivate: true);
-        using var stream = new MemoryStream(tarball);
-
-        await Assert.ThrowsAsync<PrivatePackageException>(
-            () => _service.Publish(stream, "alice", null));
-
-        Assert.False(await _db.PackageExistsAsync("private-pkg2"));
+        Assert.Equal("@test/private-pkg", vr.PackageName);
+        Assert.Equal("1.0.0", vr.Version);
+        // Package defaults to public visibility regardless of the manifest flag.
+        PackageRecord? pkg = await _db.GetPackageAsync("@test/private-pkg");
+        Assert.NotNull(pkg);
+        Assert.Equal("public", pkg.Visibility);
     }
 
     [Fact]
     public async Task Publish_PrivateFalse_Succeeds()
     {
-        byte[] tarball = CreateTestTarball("public-pkg", "1.0.0", isPrivate: false);
+        byte[] tarball = CreateTestTarball("@test/public-pkg", "1.0.0", isPrivate: false);
         using var stream = new MemoryStream(tarball);
 
         VersionRecord vr = await _service.Publish(stream, "alice", null);
 
-        Assert.Equal("public-pkg", vr.PackageName);
+        Assert.Equal("@test/public-pkg", vr.PackageName);
         Assert.Equal("1.0.0", vr.Version);
     }
 }

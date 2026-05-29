@@ -157,7 +157,7 @@ public sealed class SqliteDatabaseTests
         await db.CreatePackageAsync(MakePackage("search-alpha"));
         await db.CreatePackageAsync(MakePackage("search-beta"));
 
-        SearchResult result = await db.SearchPackagesAsync("alpha", 1, 10);
+        SearchResult result = await db.SearchPackagesAsync("alpha", 1, 10, null);
 
         Assert.Equal(1, result.TotalCount);
         Assert.Single(result.Packages);
@@ -172,7 +172,7 @@ public sealed class SqliteDatabaseTests
         pkg.Description = "A unique-description here";
         await db.CreatePackageAsync(pkg);
 
-        SearchResult result = await db.SearchPackagesAsync("unique-description", 1, 10);
+        SearchResult result = await db.SearchPackagesAsync("unique-description", 1, 10, null);
 
         Assert.Equal(1, result.TotalCount);
         Assert.Equal("pkg-x", result.Packages[0].Name);
@@ -184,7 +184,7 @@ public sealed class SqliteDatabaseTests
         var db = CreateTestDb();
         await db.CreatePackageAsync(MakePackage("no-match-pkg"));
 
-        SearchResult result = await db.SearchPackagesAsync("zzzzz-nonexistent", 1, 10);
+        SearchResult result = await db.SearchPackagesAsync("zzzzz-nonexistent", 1, 10, null);
 
         Assert.Equal(0, result.TotalCount);
         Assert.Empty(result.Packages);
@@ -199,9 +199,9 @@ public sealed class SqliteDatabaseTests
             await db.CreatePackageAsync(MakePackage($"page-pkg-{i}"));
         }
 
-        SearchResult page1 = await db.SearchPackagesAsync("page-pkg", 1, 2);
-        SearchResult page2 = await db.SearchPackagesAsync("page-pkg", 2, 2);
-        SearchResult page3 = await db.SearchPackagesAsync("page-pkg", 3, 2);
+        SearchResult page1 = await db.SearchPackagesAsync("page-pkg", 1, 2, null);
+        SearchResult page2 = await db.SearchPackagesAsync("page-pkg", 2, 2, null);
+        SearchResult page3 = await db.SearchPackagesAsync("page-pkg", 3, 2, null);
 
         Assert.Equal(5, page1.TotalCount);
         Assert.Equal(2, page1.Packages.Count);

@@ -106,6 +106,8 @@ public sealed class Startup
             });
 
         services.AddAuthorizationBuilder()
+            .AddPolicy("RequireReadScope", policy =>
+                policy.RequireClaim("token_scope", "read", "publish", "admin"))
             .AddPolicy("RequirePublishScope", policy =>
                 policy.RequireClaim("token_scope", "publish", "admin"))
             .AddPolicy("RequireAdminScope", policy =>

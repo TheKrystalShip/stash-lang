@@ -32,21 +32,6 @@ public sealed class VersionConflictResponse
 }
 
 /// <summary>
-/// Error response body returned when a publish request is rejected because the
-/// manifest declares <c>"private": true</c> (HTTP 403).
-/// </summary>
-public sealed class PrivatePackageResponse
-{
-    /// <summary>Machine-readable error code. Always <c>"private_package"</c>.</summary>
-    [JsonPropertyName("error")]
-    public string Error { get; set; } = "private_package";
-
-    /// <summary>Human-readable description of the rejection.</summary>
-    [JsonPropertyName("message")]
-    public required string Message { get; set; }
-}
-
-/// <summary>
 /// Standard success response body used by endpoints that have no additional data to return.
 /// </summary>
 public sealed class SuccessResponse

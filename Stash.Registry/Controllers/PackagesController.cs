@@ -67,10 +67,13 @@ public class PackagesController : ControllerBase
     /// Gets package metadata including all published versions.
     /// </summary>
     /// <param name="name">The URL-encoded package name.</param>
-    /// <remarks>No authentication required.</remarks>
+    /// <remarks>
+    /// No authentication required for public packages. Private/internal packages return 404
+    /// to unauthenticated callers or callers without reader permission plus a read-scoped JWT.
+    /// </remarks>
     /// <returns>
     /// <c>200</c> with a <see cref="PackageDetailResponse"/> containing package info,
-    /// owner list, and a version map, or <c>404</c> if the package does not exist.
+    /// owner list, and a version map, or <c>404</c> if the package does not exist or is not visible.
     /// </returns>
     [AllowAnonymous]
     [HttpGet("{name}")]
@@ -79,6 +82,11 @@ public class PackagesController : ControllerBase
         string decodedName = Uri.UnescapeDataString(name);
         PackageRecord? package = await _db.GetPackageAsync(decodedName);
         if (package == null)
+        {
+            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+        }
+
+        if (!await CanReadPackageAsync(package))
         {
             return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
         }
@@ -142,6 +150,13 @@ public class PackagesController : ControllerBase
     public async Task<IActionResult> GetVersion(string name, string version)
     {
         string decodedName = Uri.UnescapeDataString(name);
+
+        PackageRecord? package = await _db.GetPackageAsync(decodedName);
+        if (package == null || !await CanReadPackageAsync(package))
+        {
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+        }
+
         VersionRecord? vr = await _db.GetPackageVersionAsync(decodedName, version);
         if (vr == null)
         {
@@ -172,6 +187,13 @@ public class PackagesController : ControllerBase
     public async Task<IActionResult> DownloadVersion(string name, string version)
     {
         string decodedName = Uri.UnescapeDataString(name);
+
+        PackageRecord? package = await _db.GetPackageAsync(decodedName);
+        if (package == null || !await CanReadPackageAsync(package))
+        {
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+        }
+
         VersionRecord? versionRecord = await _db.GetPackageVersionAsync(decodedName, version);
         if (versionRecord == null)
         {
@@ -209,7 +231,7 @@ public class PackagesController : ControllerBase
     /// <c>400</c> if the tarball is malformed (missing manifest, no <c>.stash</c> files,
     /// integrity mismatch, etc.),
     /// <c>401</c> if unauthenticated,
-    /// <c>403</c> if the user is not an owner of the package, or with a <see cref="PrivatePackageResponse"/> if the manifest declares <c>"private": true</c>,
+    /// <c>403</c> if the user is not an owner of the package,
     /// or <c>409</c> with a <see cref="VersionConflictResponse"/> if the version already exists.
     /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
@@ -234,10 +256,6 @@ public class PackagesController : ControllerBase
             string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
             await _auditService.LogPublishAsync(vr.PackageName, vr.Version, username, ip);
             return StatusCode(201, new PublishResponse { Package = vr.PackageName, Version = vr.Version, Integrity = vr.Integrity });
-        }
-        catch (PrivatePackageException ex)
-        {
-            return StatusCode(403, new PrivatePackageResponse { Message = ex.Message });
         }
         catch (VersionConflictException ex)
         {
@@ -456,6 +474,81 @@ public class PackagesController : ControllerBase
         {
             return BadRequest(new ErrorResponse { Error = ex.Message });
         }
+    }
+
+    // ── Visibility endpoint ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Changes the visibility of a package. Only the package owner may invoke this endpoint.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="SetVisibilityResponse"/> on success,
+    /// <c>400</c> if the visibility value is invalid or the package does not exist,
+    /// <c>401</c> if unauthenticated,
+    /// or <c>403</c> if the caller is not an owner.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpPatch("{name}/visibility")]
+    public async Task<IActionResult> SetVisibility(string name, [FromBody] SetVisibilityRequest request)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.PackageExistsAsync(decodedName))
+        {
+            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+        }
+
+        bool isOwner = await _db.HasPackagePermissionAsync(decodedName, username, "owner");
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+        {
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+        }
+
+        string[] validVisibilities = ["public", "private", "internal"];
+        if (string.IsNullOrEmpty(request.Visibility) || !Array.Exists(validVisibilities, v => v == request.Visibility))
+        {
+            return BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
+        }
+
+        await _db.SetPackageVisibilityAsync(decodedName, request.Visibility);
+
+        return Ok(new SetVisibilityResponse { Package = decodedName, Visibility = request.Visibility });
+    }
+
+    // ── Visibility helper ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <c>true</c> when the current caller is allowed to read the package.
+    /// <list type="bullet">
+    ///   <item><description><c>public</c> — always readable.</description></item>
+    ///   <item><description><c>private</c> — caller must have a read-scoped JWT AND at least <c>reader</c> permission.</description></item>
+    ///   <item><description><c>internal</c> — same requirements as <c>private</c> in P4; org-member shortcut is added in P5.</description></item>
+    /// </list>
+    /// </summary>
+    private async Task<bool> CanReadPackageAsync(PackageRecord package)
+    {
+        if (package.Visibility == "public")
+            return true;
+
+        // private / internal: require authenticated caller with read-scoped JWT
+        if (!User.Identity?.IsAuthenticated ?? true)
+            return false;
+
+        // Validate token scope (read, publish, or admin)
+        string? tokenScope = User.FindFirst("token_scope")?.Value;
+        if (tokenScope is not ("read" or "publish" or "admin"))
+            return false;
+
+        // Check the caller has at least reader permission on the package
+        string username = User.Identity!.Name!;
+        bool isAdmin = User.IsInRole("admin");
+        if (isAdmin)
+            return true;
+
+        return await _db.HasPackagePermissionAsync(package.Name, username, "reader");
     }
 
     /// <summary>

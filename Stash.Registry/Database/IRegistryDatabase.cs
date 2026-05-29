@@ -80,14 +80,6 @@ public interface IRegistryDatabase
     /// <param name="version">The exact semantic version string to remove.</param>
     Task DeleteVersionAsync(string packageName, string version);
 
-    /// <summary>
-    /// Searches packages by name or description and returns a paginated result set.
-    /// </summary>
-    /// <param name="query">A partial name or description to match (SQL <c>LIKE</c> pattern).</param>
-    /// <param name="page">The 1-based page number.</param>
-    /// <param name="pageSize">The maximum number of results per page.</param>
-    /// <returns>A <see cref="SearchResult"/> with the matching <see cref="PackageRecord"/> list and total count.</returns>
-    Task<SearchResult> SearchPackagesAsync(string query, int page, int pageSize);
 
     /// <summary>
     /// Returns all published version strings for a package, ordered by publish date descending.
@@ -370,6 +362,26 @@ public interface IRegistryDatabase
     /// <param name="role">The minimum role required: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
     /// <returns><c>true</c> if the user has the specified or higher role; otherwise <c>false</c>.</returns>
     Task<bool> HasPackagePermissionAsync(string packageName, string username, string role);
+
+    /// <summary>
+    /// Sets the visibility of a package to the specified value.
+    /// </summary>
+    /// <param name="name">The package name.</param>
+    /// <param name="visibility">The new visibility: <c>public</c>, <c>private</c>, or <c>internal</c>.</param>
+    Task SetPackageVisibilityAsync(string name, string visibility);
+
+    /// <summary>
+    /// Searches packages by name or description with visibility filtering.
+    /// </summary>
+    /// <param name="query">A partial name or description to match (SQL <c>LIKE</c> pattern).</param>
+    /// <param name="page">The 1-based page number.</param>
+    /// <param name="pageSize">The maximum number of results per page.</param>
+    /// <param name="callerUsername">
+    /// The authenticated caller's username, or <c>null</c> if unauthenticated. Unauthenticated
+    /// callers see only <c>public</c> packages.
+    /// </param>
+    /// <returns>A <see cref="SearchResult"/> with the matching <see cref="PackageRecord"/> list and total count.</returns>
+    Task<SearchResult> SearchPackagesAsync(string query, int page, int pageSize, string? callerUsername);
 
     // Audit operations
     /// <summary>

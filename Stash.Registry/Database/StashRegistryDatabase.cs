@@ -116,12 +116,29 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
-    public async Task<SearchResult> SearchPackagesAsync(string query, int page, int pageSize)
+    public async Task<SearchResult> SearchPackagesAsync(string query, int page, int pageSize, string? callerUsername)
     {
         string pattern = $"%{query}%";
         var queryable = _context.Packages.Where(p =>
             EF.Functions.Like(p.Name, pattern) ||
             EF.Functions.Like(p.Description ?? "", pattern));
+
+        // Visibility filter: unauthenticated callers see only public packages;
+        // authenticated callers also see private/internal packages they have at least reader on.
+        if (callerUsername == null)
+        {
+            queryable = queryable.Where(p => p.Visibility == "public");
+        }
+        else
+        {
+            // Include public packages + private/internal packages the caller can read (direct user role).
+            queryable = queryable.Where(p =>
+                p.Visibility == "public" ||
+                _context.PackageRoles.Any(r =>
+                    r.PackageName == p.Name &&
+                    r.PrincipalType == "user" &&
+                    r.PrincipalId == callerUsername));
+        }
 
         int totalCount = await queryable.CountAsync();
         var packages = await queryable
@@ -132,6 +149,18 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .ToListAsync();
 
         return new SearchResult { Packages = packages, TotalCount = totalCount };
+    }
+
+    /// <inheritdoc/>
+    public async Task SetPackageVisibilityAsync(string name, string visibility)
+    {
+        var package = await _context.Packages.FindAsync(name);
+        if (package != null)
+        {
+            package.Visibility = visibility;
+            package.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
     }
 
     /// <inheritdoc/>

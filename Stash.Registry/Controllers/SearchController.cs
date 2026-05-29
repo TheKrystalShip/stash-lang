@@ -72,7 +72,11 @@ public sealed class SearchController : ControllerBase
             pageSize = Math.Min(parsedPageSize, 100);
         }
 
-        SearchResult result = await _db.SearchPackagesAsync(query, page, pageSize);
+        // Pass the caller's username so that visibility filtering can include private/internal
+        // packages the caller has permission to read. Unauthenticated callers get null and see
+        // only public packages.
+        string? callerUsername = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
+        SearchResult result = await _db.SearchPackagesAsync(query, page, pageSize, callerUsername);
 
         List<PackageSummaryResponse> packages = result.Packages.Select(p =>
         {

@@ -167,6 +167,34 @@ public sealed class DeprecateVersionRequest
 }
 
 /// <summary>
+/// Request body for the <c>PATCH /api/v1/packages/{name}/visibility</c> endpoint.
+/// </summary>
+public sealed class SetVisibilityRequest
+{
+    /// <summary>The new visibility value: <c>public</c>, <c>private</c>, or <c>internal</c>.</summary>
+    [JsonPropertyName("visibility")]
+    public required string Visibility { get; set; }
+}
+
+/// <summary>
+/// Response body returned by the <c>PATCH /api/v1/packages/{name}/visibility</c> endpoint on success.
+/// </summary>
+public sealed class SetVisibilityResponse
+{
+    /// <summary>Indicates whether the operation succeeded.</summary>
+    [JsonPropertyName("ok")]
+    public bool Ok { get; set; } = true;
+
+    /// <summary>The package name.</summary>
+    [JsonPropertyName("package")]
+    public required string Package { get; set; }
+
+    /// <summary>The new visibility value that was applied.</summary>
+    [JsonPropertyName("visibility")]
+    public required string Visibility { get; set; }
+}
+
+/// <summary>
 /// Response body returned by deprecation and undeprecation endpoints.
 /// </summary>
 public sealed class DeprecationResponse
