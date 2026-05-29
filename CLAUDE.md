@@ -39,15 +39,21 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 
 When authoring `plan.yaml`, narrow `final_verify`'s `dotnet test` step to exclude documented flaky / environment-dependent classes (see `.claude/repo.md` "Known Issues"). Bare `dotnet test` fails `/done` due to pre-existing `DiffPackageTests`, `Registry*Tests`, `NetBuiltInsTests`, parallel-execution flakies, etc. — these are not feature regressions. Precedent: `exports-private-default` and `stdlib-namespace-members` `plan.yaml` carry the canonical filter shape.
 
-### Every workflow agent leaves the tree dirty after a state advance
+### Workflow agents advance checkpoint state after the code commit
 
-`advance-checkpoint.py` (called by implementer, reviewer, and resolver flows) rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the corresponding code commit. Reviewer also writes a new `review.md`; resolver also flips finding statuses inside `review.md`. Every subsequent workflow command refuses on dirty tree. The orchestrator must follow each agent turn with a tiny chore commit:
+`advance-checkpoint.py` (called by implementer, reviewer, and resolver flows) rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the corresponding code commit. Reviewer also writes a new `review.md`; resolver also flips finding statuses inside `review.md`. A turn that stops there ends dirty, and the next workflow command refuses on a dirty tree.
+
+**The implementer owns its own chore commit.** Per `.claude/agents/implementer.md` step 7, every implementer phase ends by committing the checkpoint advance (`chore(<slug>): record <id> done state`) so the tree is clean between phases. After an implementer turn the orchestrator's job is to *verify* this — `git status --porcelain` should already be clean. Only as a **fallback**, when the implementer didn't do its job (dirty `checkpoint.yaml`, no chore commit landed), does the orchestrator commit it:
 
 ```bash
-# implementer (after a phase commit)
+# fallback only — implementer should have already committed this
 git add .kanban/2-in-progress/<slug>/checkpoint.yaml
 git commit -m "chore(<slug>): record <id> done state"
+```
 
+Reviewer and resolver still rely on an orchestrator follow-up commit (they advance state at the end of their turn):
+
+```bash
 # reviewer (after writing review.md)
 git add .kanban/2-in-progress/<slug>/review.md .kanban/2-in-progress/<slug>/checkpoint.yaml
 git commit -m "chore(<slug>): land review.md (<severity counts>)"

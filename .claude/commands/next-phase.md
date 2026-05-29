@@ -119,12 +119,15 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
 4. **Batch contract** — the implementer must process selected phases sequentially. For each phase: mark it `in_progress` if it is not already, implement only that phase's intent, run `verify-phase.sh`, commit, advance it to `done`, then continue to the next selected phase.
 5. **Verification contract** — for each phase, the implementer must run `bash scripts/checkpoint/verify-phase.sh <slug> <id>` (not just the bare verify commands — the script also enforces scope).
 6. **Commit contract** — one commit per phase, using the exact commit message format from `.claude/agents/implementer.md`. Verify must pass before each commit.
-7. **Advance contract** — after each green phase commit:
+7. **Advance contract** — after each green phase commit, advance the phase and then chore-commit the checkpoint so the tree is clean between phases (the implementer owns this commit, not the orchestrator):
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> <id> done \
        --commit "$(git rev-parse HEAD)" --verified true \
        --notes "<one-line summary>"
+   git add .kanban/2-in-progress/<slug>/checkpoint.yaml
+   git commit -m "chore(<slug>): record <id> done state"
    ```
+   Feat commits must stage only code/test files — never `git add -A` — so checkpoint churn never leaks into them.
 8. **Failure protocol** — if a selected phase cannot be made to pass after bounded plan corrections, run:
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> <id> failed \
@@ -135,7 +138,7 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
 ## After the implementer returns
 
 1. Read the implementer's report.
-2. Confirm with `git log -1 --oneline` and `python3 scripts/checkpoint/status.py "$SLUG"` that the state advanced as expected.
+2. Confirm with `git log -1 --oneline`, `git status --porcelain`, and `python3 scripts/checkpoint/status.py "$SLUG"` that the state advanced as expected. The implementer should have left the tree **clean** (it owns its chore commit). If `checkpoint.yaml` is still dirty with no `chore(<slug>): record <id> done state` commit, the implementer didn't finish — commit it yourself as a fallback before reporting.
 3. Tell the user:
    - On success: completed phase ids, commit SHAs, the next phase id (or "all phases done → `/feature-review <slug>`")
    - On failure: failed phase id, any completed phase ids, failure reason, suggested next action

@@ -72,7 +72,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
    bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>
    ```
 
-5. Commit the current phase:
+5. Commit the current phase. Stage **only** the code and test files you changed — never `git add -A`/`git add .` — so the feat commit stays free of checkpoint churn (a pending `in_progress` marker for a batched next phase must not leak into this commit):
 
    ```text
    feat(<slug>): phase <id> — <phase title>
@@ -91,11 +91,20 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
        --notes "<one-line summary>"
    ```
 
-7. If another selected phase remains, mark it `in_progress` and repeat from step 2:
+7. **Chore-commit the checkpoint advance.** This is your responsibility, not the orchestrator's — every phase must end with the working tree clean:
+
+   ```bash
+   git add .kanban/2-in-progress/<slug>/checkpoint.yaml
+   git commit -m "chore(<slug>): record <id> done state"
+   ```
+
+8. If another selected phase remains, mark it `in_progress` and repeat from step 2:
 
    ```bash
    python3 scripts/checkpoint/advance-checkpoint.py <slug> <next-id> in_progress
    ```
+
+   This re-dirties `checkpoint.yaml`; that's fine — the next phase's step 7 chore commit sweeps it up. Just keep its feat commit (step 5) code-only so the marker doesn't leak in.
 
 ## Failure Protocol
 
