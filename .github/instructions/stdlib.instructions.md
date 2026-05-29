@@ -128,7 +128,7 @@ Use the base `RuntimeError(message, span)` only for truly uncategorized internal
 
 ## Cross-Platform Requirement
 
-Stash runs on Linux, macOS, and Windows. All built-in functions must work across all three platforms. Use `RuntimeInformation` or `env.os` for platform-specific behavior. Avoid hardcoding Unix paths or shell commands.
+Stash runs on Linux, macOS, and Windows. All built-in functions must work across all three platforms. Use `RuntimeInformation` for platform-specific behavior in C# built-ins; from Stash scripts, use `os.name()` or `os.isWindows()` / `os.isLinux()` / `os.isMacOS()`. Avoid hardcoding Unix paths or shell commands.
 
 ## Shared Helpers (RuntimeValues.cs)
 

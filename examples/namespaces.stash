@@ -77,8 +77,8 @@ io.println("=== 2. Environment & System Info ===");
 // System profile
 io.println($"  User     : {env.user}");
 io.println($"  Hostname : {env.hostname}");
-io.println($"  OS       : {env.os}");
-io.println($"  Arch     : {env.arch}");
+io.println($"  OS       : {os.name()}");
+io.println($"  Arch     : {os.arch()}");
 io.println($"  Home     : {env.home}");
 io.println($"  CWD      : {env.cwd}");
 

@@ -7586,16 +7586,16 @@ let result = labels;
     }
 
     [Fact]
-    public void EnvOs_ReturnsKnownValue()
+    public void OsName_ReturnsKnownValue()
     {
-        var result = (string)Run("let result = env.os;")!;
+        var result = (string)Run("let result = os.name();")!;
         Assert.Contains(result, new[] { "linux", "macos", "windows", "unknown" });
     }
 
     [Fact]
-    public void EnvArch_ReturnsString()
+    public void OsArch_ReturnsString()
     {
-        var result = (string)Run("let result = env.arch;")!;
+        var result = (string)Run("let result = os.arch();")!;
         Assert.True(result.Length > 0);
     }
 

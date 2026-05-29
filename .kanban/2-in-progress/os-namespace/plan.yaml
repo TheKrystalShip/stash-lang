@@ -108,13 +108,15 @@ phases:
       - Stash.Stdlib/BuiltIns/EnvBuiltIns.cs
       - examples/system_info.stash
       - examples/namespaces.stash
+      - examples/namespace_members.stash
       - Stash.Tests/Interpreting/EnvBuiltInsTests.cs
       - Stash.Tests/Interpreting/InterpreterTests.cs
+      - Stash.Tests/Stdlib/EnvMembersTests.cs
       - .github/instructions/stdlib.instructions.md
       - Stash.Stdlib/BuiltIns/CLAUDE.md
     verify:
       - dotnet build
-      - 'dotnet test --filter "FullyQualifiedName~EnvBuiltInsTests|FullyQualifiedName~InterpreterTests|FullyQualifiedName~StdlibConsistencyTests"'
+      - 'dotnet test --filter "FullyQualifiedName~EnvBuiltInsTests|FullyQualifiedName~InterpreterTests|FullyQualifiedName~StdlibConsistencyTests|FullyQualifiedName~EnvMembersTests"'
     done_when:
       - 'EnvBuiltIns.cs no longer declares Os() or Arch() and they are absent from stdlib metadata.'
       - 'Calling env.os() or env.arch() from a Stash script raises an unknown-function error.'

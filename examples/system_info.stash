@@ -50,7 +50,7 @@ io.println(term.bold("═" * W));
 io.println(term.bold("  System Information Dashboard"));
 io.println(term.bold("═" * W));
 row("Host:", term.bold(env.hostname));
-row("OS:", env.os);
+row("OS:", os.name());
 row("Time:", time.format(time.now(), "yyyy-MM-dd HH:mm:ss"));
 row("PID:", sys.pid());
 row("Temp dir:", sys.tempDir());

@@ -145,23 +145,20 @@ public class EnvBuiltInsTests : StashTestBase
         Assert.NotEmpty((string)result!);
     }
 
-    // ── env.os / env.arch ────────────────────────────────────────────────────
+    // ── env.os / env.arch removed — use os.name() / os.arch() instead ──────────
 
     [Fact]
-    public void Os_ReturnsKnownPlatformString()
+    public void Os_RaisesUnknownMemberError()
     {
-        var result = Run("let result = env.os;");
-        Assert.IsType<string>(result);
-        var os = (string)result!;
-        Assert.Contains(os, new[] { "linux", "macos", "windows", "unknown" });
+        // env.os was removed in the os-namespace change; use os.name() instead.
+        RunExpectingError("let result = env.os;");
     }
 
     [Fact]
-    public void Arch_ReturnsNonEmptyString()
+    public void Arch_RaisesUnknownMemberError()
     {
-        var result = Run("let result = env.arch;");
-        Assert.IsType<string>(result);
-        Assert.NotEmpty((string)result!);
+        // env.arch was removed in the os-namespace change; use os.arch() instead.
+        RunExpectingError("let result = env.arch;");
     }
 
     // ── env.get with PATH ─────────────────────────────────────────────────────

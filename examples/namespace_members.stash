@@ -10,10 +10,10 @@ io.println("=== cli members ===");
 io.println("argc: " + cli.argc);    // 3  (when called with arg1 arg2 arg3)
 io.println("argv: " + cli.argv);    // [arg1, arg2, arg3]
 
-// env.os and env.arch are also Cached: they never change during the process.
-io.println("=== env members ===");
-io.println("os:   " + env.os);
-io.println("arch: " + env.arch);
+// os.name() and os.arch() are pure runtime-introspection functions; they never change during the process.
+io.println("=== os functions ===");
+io.println("os:   " + os.name());
+io.println("arch: " + os.arch());
 
 // ── 2. Live member: env.cwd re-reads on each access ─────────────────────────
 

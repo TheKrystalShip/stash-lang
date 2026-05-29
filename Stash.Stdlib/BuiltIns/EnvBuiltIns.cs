@@ -136,29 +136,6 @@ public static partial class EnvBuiltIns
     [StashMember(Capability = StashCapabilities.Environment, ReturnType = "string")]
     public static string User(IInterpreterContext ctx) => System.Environment.UserName;
 
-    /// <summary>
-    /// The current operating system as a string: <c>'linux'</c>, <c>'macos'</c>,
-    /// <c>'windows'</c>, or <c>'unknown'</c>. Cached on first access.
-    /// </summary>
-    [StashMember(ReturnType = "string")]
-    public static string Os(IInterpreterContext ctx)
-    {
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
-            return "linux";
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
-            return "macos";
-        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
-            return "windows";
-        return "unknown";
-    }
-
-    /// <summary>
-    /// The CPU architecture (e.g. <c>'x64'</c>, <c>'arm64'</c>). Cached on first access.
-    /// </summary>
-    [StashMember(ReturnType = "string")]
-    public static string Arch(IInterpreterContext ctx) =>
-        System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
-
     /// <summary>Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.</summary>
     /// <param name="path">Path to the .env file</param>
     /// <param name="prefix">Optional prefix to prepend to all variable names</param>

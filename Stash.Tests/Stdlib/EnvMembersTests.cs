@@ -14,13 +14,14 @@ using Stash.Tests.Interpreting;
 using Xunit;
 
 /// <summary>
-/// Tests for the P5 v1 migration of env.cwd, env.home, env.user, env.hostname,
-/// env.os, env.arch as [StashMember] data members.
+/// Tests for the P5 v1 migration of env.cwd, env.home, env.user, env.hostname
+/// as [StashMember] data members. env.os and env.arch were removed in the
+/// os-namespace change (P6); use os.name() / os.arch() instead.
 /// </summary>
 public class EnvMembersTests : StashTestBase
 {
     // =========================================================================
-    // typeof returns "string" (not "function") for all 6 env members
+    // typeof returns "string" (not "function") for env members
     // =========================================================================
 
     [Fact]
@@ -51,22 +52,8 @@ public class EnvMembersTests : StashTestBase
         Assert.Equal("string", result);
     }
 
-    [Fact]
-    public void Os_TypeofReturnsString()
-    {
-        var result = Run("let result = typeof(env.os);");
-        Assert.Equal("string", result);
-    }
-
-    [Fact]
-    public void Arch_TypeofReturnsString()
-    {
-        var result = Run("let result = typeof(env.arch);");
-        Assert.Equal("string", result);
-    }
-
     // =========================================================================
-    // All 6 members return non-empty strings
+    // All env members return non-empty strings
     // =========================================================================
 
     [Fact]
@@ -97,23 +84,6 @@ public class EnvMembersTests : StashTestBase
     public void Hostname_ReturnsNonEmptyString()
     {
         var result = Run("let result = env.hostname;");
-        Assert.IsType<string>(result);
-        Assert.NotEmpty((string)result!);
-    }
-
-    [Fact]
-    public void Os_ReturnsKnownPlatformString()
-    {
-        var result = Run("let result = env.os;");
-        Assert.IsType<string>(result);
-        var os = (string)result!;
-        Assert.Contains(os, new[] { "linux", "macos", "windows", "unknown" });
-    }
-
-    [Fact]
-    public void Arch_ReturnsNonEmptyString()
-    {
-        var result = Run("let result = env.arch;");
         Assert.IsType<string>(result);
         Assert.NotEmpty((string)result!);
     }
@@ -215,20 +185,6 @@ public class EnvMembersTests : StashTestBase
     public void Hostname_CallForm_RaisesCompileTimeSA0846()
     {
         var diagnostics = GetCompileDiagnostics("env.hostname();");
-        Assert.Contains(diagnostics, d => d.Code == "SA0846");
-    }
-
-    [Fact]
-    public void Os_CallForm_RaisesCompileTimeSA0846()
-    {
-        var diagnostics = GetCompileDiagnostics("env.os();");
-        Assert.Contains(diagnostics, d => d.Code == "SA0846");
-    }
-
-    [Fact]
-    public void Arch_CallForm_RaisesCompileTimeSA0846()
-    {
-        var diagnostics = GetCompileDiagnostics("env.arch();");
         Assert.Contains(diagnostics, d => d.Code == "SA0846");
     }
 

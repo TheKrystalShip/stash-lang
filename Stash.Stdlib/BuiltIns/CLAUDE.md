@@ -173,7 +173,7 @@ Built-ins that terminate the script must call `GlobalBuiltIns.EmitExitImpl(ctx, 
 
 ## Cross-Platform Requirement
 
-Every namespace must work on Linux, macOS, and Windows. Use `RuntimeInformation` or `env.os` for branching. Avoid hard-coded Unix paths or shell commands. Capability-gated namespaces with platform-specific dependencies (e.g. `Renci.SshNet`) are loaded lazily — the namespace's factory is only invoked when the capability is enabled, so referenced types are never JITted in environments that don't support them.
+Every namespace must work on Linux, macOS, and Windows. Use `RuntimeInformation` for branching in C# built-in code; from Stash scripts, use `os.name()` or the `os.isXxx()` predicates. Avoid hard-coded Unix paths or shell commands. Capability-gated namespaces with platform-specific dependencies (e.g. `Renci.SshNet`) are loaded lazily — the namespace's factory is only invoked when the capability is enabled, so referenced types are never JITted in environments that don't support them.
 
 ## Adding a New Built-In
 
