@@ -70,6 +70,7 @@ Module	json
 Module	log
 Module	math
 Module	net
+Module	os
 Module	path
 Module	pkg
 Module	process

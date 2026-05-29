@@ -13,7 +13,7 @@ public class Wave1ThrowsCoverageTests
     private static readonly Dictionary<string, HashSet<string>> NoThrowAllowList = new()
     {
         ["fs"] = new() { "exists", "dirExists", "pathExists", "isFile", "isDir", "isSymlink", "tempFile", "tempDir", "readable", "writable", "executable" },
-        ["io"] = new() { "println", "print", "eprintln", "eprint", "readLine" },
+        ["io"] = new() { "println", "print", "eprintln", "eprint", "readLine", "pathSeparator", "newLine" },
         ["conv"] = new() { "toStr", "toBool" },
         ["json"] = new(), // every json fn throws
         ["http"] = new(), // every http fn throws
