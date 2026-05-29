@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-scope-foundation
 current: null
-updated: '2026-05-29T19:04:32Z'
+updated: '2026-05-29T19:22:47Z'
 phases:
   P1:
     status: done
@@ -60,13 +60,16 @@ phases:
       RegistryRoutesTests cover the round-trip. Verify filter narrowed from PackageInstallerTests (pre-existing
       failures from P1 flat-name rejection, not in P6 files) to RegistryRoutesTests.
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: effe75084f9a00b75c1233f6d3f2110ff9c22950
+    verified: true
+    started: '2026-05-29T19:10:29Z'
+    completed: '2026-05-29T19:22:47Z'
+    attempts: 1
+    notes: 'Registry doc fully updated: scoped routes, role matrix, visibility states, RequireReadScope,
+      new org/scope/roles endpoints, schema. Language spec package-name grammar added. examples/packages/CLAUDE.md
+      private-field and regex updated. Stash.Registry/CLAUDE.md refreshed (entity list, route table, JWT
+      claim, key rules).'
 review:
   status: not_started
   started: null
