@@ -128,7 +128,7 @@ phases:
     deps: [P4, P5, P6]
     files:
       - Stash.Tests/Stdlib/OsBuiltInsTests.cs
-      - Stash.Tests/Stdlib/IoBuiltInsTests.cs
+      - Stash.Tests/Interpreting/IoBuiltInsTests.cs
     verify:
       - dotnet build
       - 'dotnet test --filter "FullyQualifiedName~OsBuiltInsTests|FullyQualifiedName~IoBuiltInsTests|FullyQualifiedName~StdlibConsistencyTests"'

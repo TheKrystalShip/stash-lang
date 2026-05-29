@@ -281,4 +281,22 @@ public class IoBuiltInsTests : StashTestBase
         var secret = Assert.IsType<StashSecret>(result);
         Assert.Equal("hunter2", secret.Reveal().AsObj);
     }
+
+    // ── io.pathSeparator() and io.newLine() (P5/os-namespace additions) ──────
+
+    [Fact]
+    public void PathSeparator_MatchesDotNetPathPathSeparator()
+    {
+        string expected = System.IO.Path.PathSeparator.ToString();
+        var result = Run("let result = io.pathSeparator();");
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void NewLine_MatchesDotNetEnvironmentNewLine()
+    {
+        string expected = System.Environment.NewLine;
+        var result = Run("let result = io.newLine();");
+        Assert.Equal(expected, result);
+    }
 }
