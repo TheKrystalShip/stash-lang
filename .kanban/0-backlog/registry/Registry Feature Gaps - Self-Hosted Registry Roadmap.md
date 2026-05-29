@@ -5,6 +5,8 @@
 > **Priority:** High
 > **Discovery context:** Requested review of Stash's self-hosted package registry against mature package registry ecosystems. Focus areas included usage metrics, audit logs, supply-chain trust, governance, package visibility, and operational readiness.
 
+> **⚠ Branching decisions locked 2026-05-29 — see [Locked Decisions](#locked-decisions-2026-05-29) at the end of this document.** That addendum is authoritative. Where it conflicts with an earlier section (notably the original *Recommended Roadmap*, *Suggested Card Split*, *Open Design Questions*, and Gaps §7/§8), the addendum wins; the earlier text is retained for context only. Spec from the addendum.
+
 ## Background
 
 The Stash package registry already has a solid v1 package-feed foundation. The current reference document defines:
@@ -324,75 +326,33 @@ The shared pattern: mature registries evolve from "store and fetch packages" int
 
 ### 7. Vulnerability Advisories and `stash pkg audit`
 
+> **Superseded by a dedicated doc (decision D16).** The advisory/vulnerability model is owned in full by
+> **`Registry Security Reports and Advisories - Vulnerability Handling Roadmap.md`** (report lifecycle, report/advisory/CVE statuses, coordinated disclosure, CLI/website surfaces). Spec advisories from that document, not from here, to avoid two conflicting advisory models.
+
 **Gap:** The registry has no first-class security advisory or vulnerability model.
 
 **Why it matters:** Registries are the natural place to publish and consume vulnerability metadata. Without this, Stash cannot warn users when dependency resolution selects known-vulnerable versions.
 
-**Recommended capabilities:**
-
-- Add advisory records:
-  - advisory ID
-  - package name
-  - affected version ranges
-  - patched versions
-  - severity
-  - CVE IDs
-  - GHSA IDs or other external IDs
-  - title
-  - description
-  - references
-  - published timestamp
-  - updated timestamp
-  - withdrawn timestamp
-- Add version metadata fields:
-  - `vulnerable`
-  - `advisories`
-- Add CLI command:
-  - `stash pkg audit`
-- Add install-time warnings or failures based on policy.
-
-**Potential endpoints:**
-
-- `GET /api/v1/advisories`
-- `POST /api/v1/admin/advisories`
-- `PATCH /api/v1/admin/advisories/{id}`
-- `DELETE /api/v1/admin/advisories/{id}`
-- `GET /api/v1/packages/{name}/advisories`
-- `GET /api/v1/packages/{name}/{version}/advisories`
-
-**Implementation notes:**
-
-- Use Stash's semver model carefully for affected range evaluation.
-- Advisories should work for private packages too.
-- Keep advisory IDs registry-local, but allow external IDs.
+**Scope of this entry:** record the gap only. All recommended capabilities, the advisory schema, endpoints, resolver integration, and `stash pkg audit` are specified in the dedicated security doc above.
 
 ### 8. Reserved Namespaces and Verified Publishers
 
-**Gap:** Any first publisher can claim any package name that passes manifest validation. There is no prefix reservation or verified publisher signal.
+> **Largely dissolved into scope allocation (decisions D1/D4).** With mandatory `@scope/name` packages, there are no flat names to prefix-reserve — "reserving `stash-*`" becomes "owning the `@stash` scope." The open scopes-vs-prefix question is resolved in favour of npm-style scopes. The standalone reserved-prefix card is dropped; what remains here is verified-publisher metadata, which attaches to the scope owner (user or org).
 
-**Why it matters:** Reserved prefixes reduce dependency confusion and impersonation risks. Verified publisher signals improve trust in search and metadata pages.
+**Gap:** Without namespace ownership, any first publisher can claim any name, enabling dependency confusion and impersonation. There is also no verified-publisher signal.
 
-**Recommended capabilities:**
+**Why it matters:** Scope ownership eliminates the flat-name land-grab. Verified-publisher signals improve trust in search and metadata pages.
 
-- Add reserved prefixes:
-  - `stash-*`
-  - organization prefixes
-  - scoped names if the package naming model supports them later
-- Add verified publisher metadata.
-- Prevent unauthorized publish under reserved prefixes.
+**Recommended capabilities (post-decision):**
+
+- Reservation is handled by scope allocation (see decisions **D1/D2/D4** in the [Locked Decisions](#locked-decisions-2026-05-29) addendum) — `@stash` and other protected scopes are owned, not pattern-matched. Note: §3 below ("Organizations, Teams, and Package-Level Roles") predates the scope decision and does not yet describe scopes; the scope model lives only in the addendum.
+- Add verified-publisher metadata on the scope owner (user or org).
 - Surface verified status in search and package metadata.
 
 **Potential endpoints:**
 
-- `POST /api/v1/admin/reserved-prefixes`
-- `GET /api/v1/admin/reserved-prefixes`
-- `DELETE /api/v1/admin/reserved-prefixes/{id}`
 - `PATCH /api/v1/orgs/{org}/verification`
-
-**Implementation notes:**
-
-- Decide whether Stash wants npm-style scopes, e.g. `@org/pkg`, or NuGet-style prefix reservation.
-- Prefix reservation is simpler and compatible with the current package name model.
+- Scope allocation/claim endpoints are **not yet defined anywhere** — they are a TODO for the architect when speccing the org/scope foundation (P1).
 
 ## Strong Next-Layer Features
 
@@ -558,6 +518,8 @@ The shared pattern: mature registries evolve from "store and fetch packages" int
 
 ## Recommended Roadmap
 
+> **Superseded by the post-decision roadmap in [Locked Decisions](#locked-decisions-2026-05-29).** The phase ordering below predates the namespace decisions (mandatory scopes, orgs-first, merged visibility), which invert "metrics first." Use the addendum's roadmap table; the phases below are kept for the original reasoning.
+
 ### Phase 1 - Observability and Metrics
 
 Start with package usage metrics and richer admin stats.
@@ -687,9 +649,9 @@ The following individual backlog cards can be created from this roadmap:
 - Registry Permissions - Organizations, Teams, and Package Roles
 - Registry Trusted Publishing - OIDC Token Exchange for CI
 - Registry Provenance - Publish Attestations and Verification Metadata
-- Registry Advisories - Vulnerability Database and Audit API
-- CLI Package Audit - Consume Registry Advisories
-- Registry Namespace Reservation - Prefixes and Verified Publishers
+- ~~Registry Advisories - Vulnerability Database and Audit API~~ → owned by the dedicated security doc (D16); do not create a duplicate card here
+- ~~CLI Package Audit - Consume Registry Advisories~~ → covered by the security doc + the CLI Evolution Plan
+- ~~Registry Namespace Reservation - Prefixes and Verified Publishers~~ → folded into the org/scope card (D4); only verified-publisher metadata remains
 - Registry Dist-Tags - Release Channels
 - Registry Lifecycle States - Yank, Unlist, Quarantine, Block
 - Registry Webhooks - Event Delivery and Delivery Logs
@@ -698,6 +660,8 @@ The following individual backlog cards can be created from this roadmap:
 - Registry Backup and Restore - Export, Import, and Integrity Verification
 
 ## Open Design Questions
+
+> **Resolved 2026-05-29 — see [Locked Decisions](#locked-decisions-2026-05-29).** All eight questions below have been answered (and two derived questions added). The list is retained for traceability; the addendum carries the resolutions.
 
 - Should Stash package names support npm-style scopes like `@org/pkg`, or should the registry use NuGet-style prefix reservation while keeping the current name grammar?
 - Should private package support be implemented before organizations, or should visibility wait for the full organization/team permission model?
@@ -711,7 +675,93 @@ The following individual backlog cards can be created from this roadmap:
 ## Out of Scope for This Backlog Item
 
 - Implementing any one of these features directly.
-- Changing the current `/api/v1` registry contract before a concrete feature spec exists.
+- ~~Changing the current `/api/v1` registry contract before a concrete feature spec exists.~~ → **Superseded by D20:** the scope migration breaks the v1 contract in place. This is now sanctioned and is the P1 deliverable.
 - Editing generated standard library docs.
 - Designing a public hosted Stash registry policy. This document is focused on the self-hosted registry.
+
+## Locked Decisions (2026-05-29)
+
+This addendum is **authoritative**. It records branching decisions taken in a design review and supersedes any conflicting earlier section. It is written to hand directly to the architect (`/spec`).
+
+### Corrected current-state baselines
+
+These were verified against the registry source and correct framings used earlier in this document:
+
+- **Private packages are actively rejected, not merely absent.** `Stash.Registry/Services/PrivatePackageException.cs` maps a manifest with `"private": true` to HTTP 403 at publish (`PackagesController.cs`). Visibility work must *replace this rejection path*, not build on a blank slate.
+- **Audit Log v2 is not a schema change.** `Database/Models/AuditEntry.cs` already carries `User`, `Target`, `Ip`, `Package`, `Version`, `Timestamp` and is append-only. Only `AuditService.GetAuditLogAsync` is narrow (filters package + action). v2 = widen the query + add new action *strings* (free-form column) + export/retention/tamper-evidence.
+- **The `read` scope is inert.** `TokenRecord.Scope` accepts `"read"`, but `Startup.cs` defines only `RequirePublishScope`/`RequireAdminScope`/`RequireAdmin` — there is no `RequireReadScope` policy and no read endpoint enforces one.
+- **Ownership is a flat user-only join.** `Database/Models/OwnerEntry.cs` is `(PackageName, Username)`. The org/team/role model replaces this table; it cannot extend it.
+- **S3 and OIDC are explicit stubs** throwing `NotSupportedException` (`Storage/S3Storage.cs`, `Auth/OidcAuthProvider.cs`).
+- **`GET /api/v1/admin/stats` returns only `{ Users }`** (`AdminController.cs`).
+
+### Decision ledger
+
+| ID | Decision | Notes / consequence |
+| --- | --- | --- |
+| **D1** | All packages use mandatory `@scope/name`. No flat names. | Breaking; acceptable pre-1.0. Touches grammar, resolver, lockfiles, every `/packages/{name}` route. |
+| **D2** | Scope owner is **polymorphic: user or org**. `@username` auto-provisioned per user; `@orgname` per org. | Org/scope schema must model `scope_owner = user \| org` from the start. |
+| **D3** | **No legacy migration — clean break.** Existing flat-named packages do not carry forward; there is no old-name→scoped-name alias and no backward compatibility. References to pre-scope names simply stop resolving. | Justified by pre-1.0 status. Dissolves both former migration residuals (no alias subsystem to build; no multi-owner tie-break, since nothing is re-homed). |
+| **D4** | Reserved-prefix card dissolves into scope allocation. `stash-*` → own the `@stash` scope. Drop standalone flat-prefix reservation. | Only verified-publisher metadata survives from old §8. |
+| **D5** | Visibility (`public`/`private`/`internal`) ships **with** the org/team/role schema — one migration. | Not a user-scoped pre-step. |
+| **D6** | Add the missing `RequireReadScope` policy; enforce on metadata/version/download/search. | Makes the `read` scope meaningful. |
+| **D7** | Replace the publish-time 403 on `"private": true` with the visibility model. | Behavior reversal on a live path. |
+| **D8** | Download metrics = short-retention raw events + daily/hourly rollups. | Raw TTL ~30–90d; rollups permanent. Retention job required. |
+| **D9** | Metrics read path carries a visibility gate from day one. | Avoids retrofitting auth onto already-public metrics endpoints. |
+| **D10** | "Storage bytes" reads a DB column written at publish, not a filesystem stat. | Backend-agnostic for future S3. |
+| **D11** | IP handling operator-configurable (`raw\|truncated\|hashed\|off`), default **hashed** (HMAC + server secret). | Applies to both metrics and audit. |
+| **D12** | Audit Log v2 = query plumbing + new action strings + export/retention/tamper-evidence. **Not** a schema change. | See corrected baseline above. |
+| **D13** | Downloads stay **out** of the audit log (separate surface). | Keeps audit low-volume and its tamper chain clean. |
+| **D14** | Trusted publishing: provider abstraction, **GitHub Actions first**. | Mirror existing `IAuthProvider`/`IPackageStorage` stub pattern. |
+| **D15** | Provenance **advisory by default** + per-prefix/per-package enforce knob. | Don't break existing publish flows on day one. |
+| **D16** | Advisories owned by `Registry Security Reports and Advisories…` as source-of-truth. | §7 here is a pointer only. |
+| **D17** | Lifecycle install semantics: `quarantine` blocks always (even locked) · `yank` installs only-if-locked · `unlist` hides-not-blocks · `deprecate` advisory. | Resolver behavior spec. |
+| **D18** | This roadmap is the **master index**; deep-dives live in the sibling docs (see *Related Documents*). | Prevents duplicate/conflicting specs. |
+| **D19** | **Unified scope namespace.** A scope name maps to exactly one owner (user *or* org, never both); usernames and org names share one pool and cannot collide. System scopes (`@stash`, `@admin`, …) reserved at bootstrap. | Schema: single `scopes` table with `owner_type`. Registration must reject an org name that collides with an existing username and vice versa. |
+| **D20** | **Break `/api/v1` in place.** Flat `/packages/{name}` routes are replaced by scoped `/packages/{scope}/{name}` routes under v1; no parallel old contract, no `/api/v2`. | Consistent with D3 clean break. Existing registry data does not carry forward — operators republish under scopes. Supersedes the old *Out of Scope* guard on the v1 contract. |
+
+### Migration — resolved (clean break, no migration)
+
+Both former residuals are **closed** by the clean-break decision (D3):
+
+- **Name-alias / backward resolution — not built.** Old flat names hard-break. There is no alias table and no resolver shim; references to pre-scope names (`foo`) simply stop resolving. Accepted breakage, justified by pre-1.0 status.
+- **Multi-owner tie-break — moot.** Because nothing is re-homed, the "which owner's scope does `foo` migrate into" question disappears with the migration itself.
+
+### Resolution of the original Open Design Questions
+
+1. Scopes vs prefix reservation → **npm-style scopes** (D1).
+2. Visibility before or with orgs → **with orgs** (D5).
+3. Metrics raw / rollup / both → **both** (D8).
+4. IP raw / truncated / hashed / configurable → **operator-configurable, default hashed** (D11).
+5. Audit read events include downloads → **no, separate** (D13).
+6. Trusted publishing single-provider vs abstraction → **abstraction, GitHub first** (D14).
+7. Provenance advisory vs enforceable → **advisory + enforce knob** (D15).
+8. Lockfile behavior for quarantined/yanked/unlisted → **D17**.
+
+Derived questions added by the scope decision:
+
+- Unscoped names coexist vs mandatory → **mandatory scopes** (D1).
+- New Phase 1 → **org/scope foundation first** (revised roadmap below).
+- Personal vs org-only scopes → **personal + org scopes** (D2).
+- Scope namespace collision (user vs org) → **unified namespace + reserved system scopes** (D19).
+- API contract break handling → **break `/api/v1` in place** (D20).
+
+### Revised roadmap (post-decision)
+
+| Phase | Content | Note |
+| --- | --- | --- |
+| **P1** | Orgs + teams + roles + **mandatory scopes** (polymorphic owner) + visibility + `RequireReadScope` + **legacy migration** | New foundation; the largest/riskiest block now goes first. Architect should decompose into checkpoint sub-phases (e.g. scope grammar → org/role schema → visibility enforcement → migration tooling). |
+| **P2** | Download metrics (raw + rollup, visibility-gated, scoped routes) + expanded `GET /admin/stats` | Built on scoped routes from the start (no re-pathing). |
+| **P3** | Audit Log v2 | Cheap — schema already present (D12). |
+| **P4** | Trusted publishing + provenance | Builds on P1 orgs. |
+| **P5** | Advisories + `stash pkg audit` | Per D16; spec from the security doc. |
+| **P6** | Dist-tags + lifecycle states | Per D17. |
+| *Cross-cutting* | S3/MinIO storage, backup/restore, webhooks, operational metrics (`/metrics`, `/healthz`, `/readyz`) | Independent of the namespace work; slot opportunistically. |
+
+### Related Documents (D18)
+
+This document is the index. Spec the following areas from their dedicated docs, not from the summaries here:
+
+- **Advisories / vulnerability handling** → `Registry Security Reports and Advisories - Vulnerability Handling Roadmap.md` (source-of-truth for the advisory model; §7 here is a pointer).
+- **CLI surface** (`stash pkg audit`, `stash pkg verify`, install-by-tag, daily-workflow reliability) → `Registry and Package CLI - Incremental Evolution Plan.md`.
+- **Web client + the read-facing API shape** (metrics/visibility/audit as consumed by a website) → `Registry Website - Optional Web Client and API Readiness.md` (its "Registry API Changes Needed" section overlaps Gaps §1/§2/§4 — reconcile, don't duplicate).
 
