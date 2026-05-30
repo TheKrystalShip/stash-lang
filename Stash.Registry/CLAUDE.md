@@ -63,9 +63,16 @@ Stash.Registry/
 ```
 Client (stash pkg CLI / HTTP)
     → RateLimitingMiddleware (IP/user-based throttling)
-    → JWT Authentication (Bearer token + JTI revocation check)
-    → Authorization (bare [Authorize] + IRegistryAuthorizer PDP)
-    → Controllers (Auth, Packages, Search, Admin)
+    → UseAuthentication() — JWT Bearer validation; sets HttpContext.User
+    → JTI revocation middleware — rejects revoked tokens with 401 before
+      any endpoint (runs between UseAuthentication and UseAuthorization)
+    → UseAuthorization() — [Authorize] authentication gate
+    → RegistryAuthorizeFilter (IAsyncAuthorizationFilter, per-request)
+        — principal-build → resource-resolve → PDP call → unified deny
+        — runs for every [RegistryAuthorize(RegistryAction.X)] endpoint
+        — four [ImperativeAuthz] endpoints bypass this filter and call
+          the PDP inline (see Controller Pattern below)
+    → Controllers (Auth, Packages, Orgs, Scopes, Search, Admin)
         → PackageService / AuditService / IAuthProvider
     → IRegistryDatabase (EF Core: SQLite or PostgreSQL)
     → IPackageStorage (Filesystem or S3)
@@ -73,16 +80,18 @@ Client (stash pkg CLI / HTTP)
 
 ## DI Services (Startup.cs)
 
-| Service             | Lifetime  | Role                                       |
-| ------------------- | --------- | ------------------------------------------ |
-| `RegistryConfig`    | Singleton | Parsed `appsettings.json` configuration    |
-| `RegistryDbContext` | Scoped    | EF Core DbContext (SQLite or PostgreSQL)   |
-| `IRegistryDatabase` | Scoped    | Database abstraction (40+ CRUD methods)    |
-| `IPackageStorage`   | Singleton | Tarball storage (filesystem or S3)         |
-| `IAuthProvider`     | Singleton | Auth backend (local, LDAP stub, OIDC stub) |
-| `JwtTokenService`   | Singleton | JWT creation and validation                |
-| `PackageService`    | Scoped    | Publish/unpublish business logic           |
-| `AuditService`      | Scoped    | Audit log recording                        |
+| Service                          | Lifetime  | Role                                                             |
+| -------------------------------- | --------- | ---------------------------------------------------------------- |
+| `RegistryConfig`                 | Singleton | Parsed `appsettings.json` configuration                          |
+| `RegistryDbContext`              | Scoped    | EF Core DbContext (SQLite or PostgreSQL)                         |
+| `IRegistryDatabase`              | Scoped    | Database abstraction (40+ CRUD methods)                          |
+| `IPackageStorage`                | Singleton | Tarball storage (filesystem or S3)                               |
+| `IAuthProvider`                  | Singleton | Auth backend (local, LDAP stub, OIDC stub)                       |
+| `JwtTokenService`                | Singleton | JWT creation and validation                                      |
+| `PackageService`                 | Scoped    | Publish/unpublish business logic                                  |
+| `AuditService`                   | Scoped    | Audit log recording                                              |
+| `IRegistryAuthorizer`            | Scoped    | PDP — two-axis authz (ceiling × resource role)                   |
+| `IRegistryAuthzPrincipalFactory` | Singleton | Builds typed `Principal` from `ClaimsPrincipal` (shared factory) |
 
 ## Controller Pattern
 
@@ -104,23 +113,63 @@ public class PackagesController : ControllerBase
         _packageService = packageService;
     }
 
+    // Public endpoint — no auth required; [PublicEndpoint] satisfies AuthzCoverageMetaTests
     [HttpGet("{scope}/{name}")]
+    [PublicEndpoint("package metadata is publicly readable")]
     public IActionResult GetPackage(string scope, string name) { ... }
 
-    [HttpPut("{scope}/{name}")]
-    [Authorize]   // authentication only — the PDP (IRegistryAuthorizer) makes the authorization decision
-    public async Task<IActionResult> Publish(string scope, string name) { ... }
+    // Authenticated + declarative PDP dispatch — [RegistryAuthorize] is the canonical pattern
+    [Authorize]
+    [RegistryAuthorize(RegistryAction.UnpublishVersion)]
+    [HttpDelete("{scope}/{name}/{version}")]
+    public async Task<IActionResult> UnpublishVersion(string scope, string name, string version)
+    {
+        // RegistryAuthorizeFilter has already run: principal built, PDP called, deny handled.
+        // The action body contains only the actual work — no PDP block, no deny response.
+        ...
+    }
 }
 ```
 
+**Declarative authorization (`[RegistryAuthorize]`) — the canonical pattern for authenticated endpoints:**
+
+`[RegistryAuthorize(RegistryAction.X)]` is the standard declaration for any endpoint that must consult the PDP. It is always composed with `[Authorize]` — it does NOT replace it:
+
+- `[Authorize]` handles authentication (JWT validation via `UseAuthorization()`).
+- `[RegistryAuthorize(RegistryAction.X)]` triggers `RegistryAuthorizeFilter`, which builds the typed `Principal`, resolves the `ResourceRef` from route values, calls `IRegistryAuthorizer.AuthorizeAsync`, and renders the unified deny response (`context.Result`) before the action body runs.
+- The action body is pure work — no PDP call, no deny block.
+
+~33 controller actions carry this pattern.
+
+**Audited exemptions (`[ImperativeAuthz]`) — for endpoints with pre/post-PDP dependencies:**
+
+Four endpoints cannot express their authorization as a simple resource-action pair and carry `[ImperativeAuthz("reason")]` instead. They call the PDP inline. The attribute documents the deferred work and satisfies `AuthzDispatchCoverageMetaTests`:
+
+```csharp
+[Authorize]
+[ImperativeAuthz("dynamic action choice: CreatePackage vs PublishVersion depends on a DB existence check; folded into PDP in registry-authz-pdp-completion")]
+[HttpPut("{scope}/{name}")]
+public async Task<IActionResult> PublishPackage(string scope, string name) { ... }
+```
+
+The four `[ImperativeAuthz]` endpoints and their planned folds into `registry-authz-pdp-completion`:
+
+| Endpoint | Reason | Deferred work |
+| -------- | ------ | ------------- |
+| `PackagesController.PublishPackage` | Dynamic `CreatePackage` vs `PublishVersion` action depends on DB existence check | Fold into PDP in `registry-authz-pdp-completion` |
+| `OrganizationsController.DeleteOrg` | Uses `AddOrgMember` authz action (known wrong-action bug) | Fix and fold in `registry-authz-pdp-completion` |
+| `ScopesController.ClaimScope` | Post-PDP owner-type and org-ownership checks require inline logic | Fold in `registry-authz-pdp-completion` |
+| `ScopesController.DeleteScope` | Post-PDP audit targeting `@{scope}` requires inline coordination | Fold in `registry-authz-pdp-completion` |
+
 **Key rules:**
 
-- Public read endpoints (GET packages, search, download, health) carry `[PublicEndpoint("reason")]` instead of `[Authorize]`; the JTI revocation check still fires on every authenticated request including public endpoints
-- Unauthorized callers on private/internal packages receive `404 Not Found` (not `403`) to avoid leaking package existence
+- Public read endpoints (GET packages, search, download, health) carry `[PublicEndpoint("reason")]` instead of `[Authorize]`; the JTI revocation middleware still rejects revoked tokens even on public endpoints
+- `AuthzCoverageMetaTests` requires every action to carry `[Authorize]` or `[PublicEndpoint]` (authentication classification); `AuthzDispatchCoverageMetaTests` additionally requires every non-`[PublicEndpoint]` action to carry `[RegistryAuthorize]` or `[ImperativeAuthz]` (PDP dispatch classification). Class-level `[Authorize]` alone does NOT satisfy the dispatch requirement.
+- Unauthorized callers on private/internal packages receive `404 Not Found` (not `403`) to avoid leaking package existence — this mapping (`VisibilityHidden`/`PackageNotFound` → 404) lives in `AuthzDenyResponse` and applies uniformly to all endpoints via the filter
 - Publish/unpublish require a token with `publish` or `admin` coarse ceiling; the PDP checks the ceiling first, then the package role
 - Admin endpoints require `admin` ceiling AND `admin` role; the admin short-circuit resolves the resource-side dimension to effective `owner` but does NOT bypass the ceiling check
-- Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. Named string authorization policies have been removed; endpoints carry bare `[Authorize]` (authentication) and the PDP carries the authorization logic.
-- **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `ReservedScopes`, `Visibilities`) and wire strings are parsed into enums at the boundary (`BuildPrincipal` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
+- Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. The shared `RegistryAuthorizeFilter` performs this dispatch for the ~33 clean endpoints; the four `[ImperativeAuthz]` endpoints still call the PDP inline.
+- **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `ReservedScopes`, `Visibilities`) and wire strings are parsed into enums at the boundary (`IRegistryAuthzPrincipalFactory` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
 - Centralized bounded values used as EF column defaults must be `const string`, not `static readonly` — `RegistryDbContext` `.HasDefaultValue(...)` and C# field initializers (e.g. `PackageRecord.Visibility = Visibilities.Public`) both require a compile-time constant
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
 - Success responses use `SuccessResponse` or typed DTOs
@@ -252,16 +301,28 @@ All configuration lives in `appsettings.json` with typed models in `Configuratio
 
 Tests live in `Stash.Tests/Registry/` and follow the project-wide `{Feature}_{Scenario}_{Expected}()` naming convention:
 
-| Test File                   | Covers                                                |
-| --------------------------- | ----------------------------------------------------- |
-| `RegistryConfigTests.cs`    | Configuration parsing and defaults                    |
-| `SqliteDatabaseTests.cs`    | Database CRUD operations (SQLite)                     |
-| `LocalAuthProviderTests.cs` | Password auth, user creation                          |
-| `FileSystemStorageTests.cs` | Tarball storage, path traversal protection            |
-| `PackageServiceTests.cs`    | Publish/unpublish business logic                      |
-| `AuditServiceTests.cs`      | Audit log recording                                   |
-| `UserConfigTests.cs`        | CLI user config (`~/.stash/config.json`)              |
-| `RegistryRoutesTests.cs`    | Scoped route shapes for all PackagesController routes |
+| Test File                              | Covers                                                |
+| -------------------------------------- | ----------------------------------------------------- |
+| `RegistryConfigTests.cs`               | Configuration parsing and defaults                    |
+| `SqliteDatabaseTests.cs`               | Database CRUD operations (SQLite)                     |
+| `LocalAuthProviderTests.cs`            | Password auth, user creation                          |
+| `FileSystemStorageTests.cs`            | Tarball storage, path traversal protection            |
+| `PackageServiceTests.cs`               | Publish/unpublish business logic                      |
+| `AuditServiceTests.cs`                 | Audit log recording                                   |
+| `UserConfigTests.cs`                   | CLI user config (`~/.stash/config.json`)              |
+| `RegistryRoutesTests.cs`               | Scoped route shapes for all PackagesController routes |
+
+### Authorization meta-tests (Stash.Tests/Registry/Authz/)
+
+Several meta-tests enforce structural invariants that must stay green when adding or modifying controller actions:
+
+| Test Class                        | What it guarantees                                                                                                                                 |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AuthzCoverageMetaTests`          | Every action on a production controller carries `[Authorize]` or `[PublicEndpoint]`. Class-level `[Authorize]` counts. Fail-path fixture included. |
+| `AuthzDispatchCoverageMetaTests`  | Every non-`[PublicEndpoint]` action carries `[RegistryAuthorize]` OR `[ImperativeAuthz]`. Class-level `[Authorize]` alone does NOT satisfy this — the action itself must be classified. Includes a fail-path fixture (proving the scan has teeth) and an imperative-pin assertion (the set of `[ImperativeAuthz]` endpoints must equal `{PublishPackage, DeleteOrg, ClaimScope, DeleteScope}`). Adding or removing an `[ImperativeAuthz]` marker requires updating the pin assertion. |
+| `NoMagicAuthStringsMetaTests`     | No bare string literal reaches an auth sink (`IsInRole`/`FindFirst`/etc.). Sink-targeted scan; includes a self-test and floor guard. New auth sinks must be added to the scanner. |
+| `RegistryAuthzMatrixTests`        | Every (action × principal) row in `AuthzMatrixData` produces the correct HTTP status and `ErrorResponse` body — the primary behavior-preservation gate. |
+| `RegistryAuthzAuditMutationTests` | Authenticated denials on key endpoints (including `CreateOrg`, `AddOrgMember`, `VerifyScope`) write exactly one audit entry. Guards the uniform-audit behavior introduced by the shared filter. |
 
 When adding new features, add corresponding tests in `Stash.Tests/Registry/`. Use `dotnet test --filter "FullyQualifiedName~Registry"` to run registry tests.
 
