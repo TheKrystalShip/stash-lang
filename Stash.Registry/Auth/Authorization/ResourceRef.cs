@@ -18,6 +18,15 @@ public sealed record PackageResource(string Scope, string LocalName) : ResourceR
 {
     /// <summary>Returns the full scoped package name <c>@{Scope}/{LocalName}</c>.</summary>
     public string FullName => $"@{Scope}/{LocalName}";
+
+    /// <summary>
+    /// The specific version being accessed, when the route carries a <c>{version}</c> segment.
+    /// <see langword="null"/> for package-level (non-version) routes.
+    /// Present only for <see cref="RegistryAction.ReadPackageVersion"/> and
+    /// <see cref="RegistryAction.DownloadPackageVersion"/> routes — the filter uses this to
+    /// restore the pre-refactor version-scoped 404 message.
+    /// </summary>
+    public string? Version { get; init; }
 }
 
 /// <summary>A scope resource, used for scope-management actions.</summary>

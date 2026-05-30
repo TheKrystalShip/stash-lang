@@ -220,4 +220,21 @@ public static class AuthzMatrixData
         // After RevokeOwnToken, request with revoked JWT → 401 TokenRevoked even on future-exp token
         yield return new object[] { "jti.revoked_token.any_endpoint.deny", "revoked_jti" };
     }
+
+    // ── Version-deny body-shape conformance rows ──────────────────────────────
+    // Pins the exact Error string AND the absence of Message for GetVersion /
+    // DownloadVersion visibility-hidden denials. Guards F01 (version-scoped message)
+    // and F02 (no extra Message field) together.
+
+    public static IEnumerable<object[]> VersionDenyBodyRows()
+    {
+        // Anonymous caller → private package GetVersion → 404 with version-scoped Error, no Message
+        yield return new object[] {
+            "version_deny.get_version.anon.private",
+            "get_version", "anon", "private", "1.0.0" };
+        // Anonymous caller → private package DownloadVersion → 404 with version-scoped Error, no Message
+        yield return new object[] {
+            "version_deny.download_version.anon.private",
+            "download_version", "anon", "private", "1.0.0" };
+    }
 }

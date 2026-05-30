@@ -46,14 +46,19 @@ public static class AuthzDenyResponse
             _                                => 403
         };
 
-        string errorText = (status == 404 && notFoundMessage != null)
-            ? notFoundMessage
+        bool isPackageNotFound = status == 404 && notFoundMessage != null;
+
+        string errorText = isPackageNotFound
+            ? notFoundMessage!
             : decision.Reason.ToString();
 
+        // Package not-found 404 bodies set Error only — no Message — to match the
+        // pre-refactor wire shape (baseline: new ErrorResponse { Error = "…" }).
+        // All other deny paths retain Message = Detail for uniform deny-audit.
         var body = new ErrorResponse
         {
             Error   = errorText,
-            Message = decision.Detail
+            Message = isPackageNotFound ? null : decision.Detail
         };
 
         return new ObjectResult(body) { StatusCode = status };

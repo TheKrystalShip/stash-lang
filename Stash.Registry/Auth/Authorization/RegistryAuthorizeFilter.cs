@@ -90,12 +90,16 @@ public sealed class RegistryAuthorizeFilter : IAsyncAuthorizationFilter
         }
 
         //    b. Build the 404 not-found message for package resources.
+        //       Version-route denials restore the pre-refactor version-scoped message;
+        //       package-level route denials use the package-scoped message.
         string? notFoundMessage = null;
         if (resource is PackageResource pkg &&
             (decision.Reason == AuthzDenyReason.VisibilityHidden ||
              decision.Reason == AuthzDenyReason.PackageNotFound))
         {
-            notFoundMessage = $"Package '{pkg.FullName}' not found.";
+            notFoundMessage = pkg.Version != null
+                ? $"Version '{pkg.Version}' of package '{pkg.FullName}' not found."
+                : $"Package '{pkg.FullName}' not found.";
         }
 
         //    c. Set the unified deny result.

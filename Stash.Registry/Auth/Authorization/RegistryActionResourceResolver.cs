@@ -39,10 +39,15 @@ public static class RegistryActionResourceResolver
 
         return action switch
         {
-            // ── Package ───────────────────────────────────────────────────────
-            RegistryAction.ReadPackageMetadata or
+            // ── Package (version routes) — carry {version} so the filter can
+            //    emit the pre-refactor version-scoped 404 message on denial. ──
             RegistryAction.ReadPackageVersion or
-            RegistryAction.DownloadPackageVersion or
+            RegistryAction.DownloadPackageVersion
+                => PackageRoute.From(Route(routeValues, "scope"), Route(routeValues, "name")) with
+                   { Version = Route(routeValues, "version") },
+
+            // ── Package (non-version routes) ─────────────────────────────────
+            RegistryAction.ReadPackageMetadata or
             RegistryAction.CreatePackage or
             RegistryAction.PublishVersion or
             RegistryAction.UnpublishVersion or

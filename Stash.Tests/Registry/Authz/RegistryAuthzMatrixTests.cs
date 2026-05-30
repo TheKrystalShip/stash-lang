@@ -999,6 +999,63 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // 14. Version-deny body-shape conformance (F01 + F02 regression guard)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Pins the exact <c>Error</c> string AND the absence of <c>Message</c> on a
+    /// visibility-hidden 404 denial for GetVersion / DownloadVersion.
+    ///
+    /// Guards F01 (version-scoped message lost after refactor) and F02 (extra
+    /// <c>Message</c> field on package 404 paths) together via a full body parse.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AuthzMatrixData.VersionDenyBodyRows), MemberType = typeof(AuthzMatrixData))]
+    public async Task VersionDenyBodyShape_Matrix(
+        string tag, string endpoint, string callerType, string visibility, string version)
+    {
+        _ = tag;
+        _ = callerType; // always "anon" — test always uses an anonymous client
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string ownerUser = U(tag + "-owner");
+        await RegisterAndGetTokenAsync(client, ownerUser);
+        await SeedScopeAsync(factory, ownerUser, ownerUser);
+
+        // Seed the package with the desired visibility; version record is not needed
+        // because the filter denies before the action body accesses the DB.
+        await SeedPackageAsync(factory, $"@{ownerUser}/secret", ownerUser, visibility);
+
+        using var anonClient = factory.CreateClient();
+        // callerType == "anon": no bearer → anonymous request
+
+        HttpResponseMessage resp = endpoint switch
+        {
+            "get_version"      => await anonClient.GetAsync($"/api/v1/packages/{ownerUser}/secret/{version}"),
+            "download_version" => await anonClient.GetAsync($"/api/v1/packages/{ownerUser}/secret/{version}/download"),
+            _ => throw new ArgumentException($"Unknown endpoint: {endpoint}")
+        };
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+
+        string rawBody = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(rawBody);
+        var root = doc.RootElement;
+
+        // F01: Error must be version-scoped, not package-scoped.
+        string expectedError = $"Version '{version}' of package '@{ownerUser}/secret' not found.";
+        Assert.True(root.TryGetProperty("error", out var errorProp),
+            $"Response body missing 'error' field. Body: {rawBody}");
+        Assert.Equal(expectedError, errorProp.GetString());
+
+        // F02: Message must be absent (JsonIgnore WhenWritingNull) — baseline was Error-only.
+        Assert.False(root.TryGetProperty("message", out _),
+            $"Response body must not contain 'message' on a package 404 denial. Body: {rawBody}");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
     // ═══════════════════════════════════════════════════════════════════════════
 
