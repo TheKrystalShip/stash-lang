@@ -26,7 +26,6 @@ scope:
   - Stash.Registry/CLAUDE.md
   - Stash.Tests/Registry/**
   - .kanban/0-backlog/registry/**
-  - .kanban/0-backlog/omission-hardening/**
   - .claude/repo.md
 
 phases:
