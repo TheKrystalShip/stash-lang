@@ -690,6 +690,35 @@ Docs + example + cleanup
 A passing build with controllers still calling `HasPackagePermissionAsync`
 directly is an incomplete phase.
 
+### Bounded-domain auth strings — standing constraint (added 2026-05-30)
+
+Every remaining phase that touches `Stash.Registry/` production code must keep
+the registry free of **unbounded magic strings** for auth domains. The
+single source of truth is `Stash.Registry/Auth/RegistryAuthConstants.cs`:
+`RegistryClaims` (claim names), `TokenScopes` / `UserRoles` / `PackageRoles` /
+`OrgRoles` (wire role values), `PrincipalTypes`, `ScopeOwnerTypes`,
+`ReservedScopes`, and `AuthPolicies` (policy names) — plus `TokenCeilingConverter`,
+the **one** place wire strings are parsed into `TokenCeiling` (at the
+`BuildPrincipal` boundary). Reference these named members; never inline the
+literal at a use site.
+
+Enforcement is `NoMagicAuthStringsMetaTests` (a Roslyn syntax-tree gate): it
+fails the build if a bare string literal reaches an auth sink
+(`IsInRole` / `FindFirstValue` / `FindFirst` / `HasClaim` / `RequireClaim` /
+`RequireRole`). It is wired into the per-phase `verify` of P4, P5, and P7 so a
+reintroduced literal fails *that* phase's commit, not `/done`.
+
+**Coverage boundary (be honest, do not over-apply).** The gate scans
+**production source only**. Test data is exempt by design — per the project-wide
+rule in root `CLAUDE.md`, free-form and fixture/expected-output values are not
+bounded domains. P6's `AuthzMatrixData` legitimately uses literal
+`"owner"`/`"publish"`/`"private"` values: keeping the matrix's expectations
+independent of the very constants under test is a feature, not a violation. Do
+**not** force `RegistryAuthConstants` members into the matrix data. Comparison
+domains a sink-scan cannot catch (e.g. `role == "owner"`) are guarded by
+*centralization* (one `PackageRoles.RankOrder`), with promotion to real enums +
+EF value converters as the future 100% hardening.
+
 ## Acceptance Criteria
 
 End-to-end behaviors that prove the feature works:

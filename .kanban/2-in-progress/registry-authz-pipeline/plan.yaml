@@ -153,7 +153,7 @@ phases:
       - Stash.Tests/Registry/Authz/FailClosedResolverTests.cs
     verify:
       - dotnet build Stash.Registry/Stash.Registry.csproj
-      - dotnet test --filter "FullyQualifiedName~ScopeOwnershipPolicyTests|FullyQualifiedName~ScopeClaimVerifiedFlowTests|FullyQualifiedName~OrgAndAdminAuthzTests|FullyQualifiedName~AtomicClaimRaceTests|FullyQualifiedName~CascadeRefusalTests|FullyQualifiedName~FailClosedResolverTests"
+      - dotnet test --filter "FullyQualifiedName~ScopeOwnershipPolicyTests|FullyQualifiedName~ScopeClaimVerifiedFlowTests|FullyQualifiedName~OrgAndAdminAuthzTests|FullyQualifiedName~AtomicClaimRaceTests|FullyQualifiedName~CascadeRefusalTests|FullyQualifiedName~FailClosedResolverTests|FullyQualifiedName~NoMagicAuthStringsMetaTests"
     done_when:
       - SecurityConfig.ScopeOwnershipPolicy is a ScopeOwnershipPolicyKind enum (Open|Claim|Verified) defaulting to Claim, deserialized from appsettings.json and consumed by IRegistryAuthorizer on CreatePackage.
       - Open happy path — CreatePackage into an unowned scope auto-claims it as a user-scope for the caller; a subsequent GET /api/v1/scopes/{scope} reflects the new owner; package row is created.
@@ -166,6 +166,7 @@ phases:
       - Atomic scope-claim — POST /api/v1/scopes is implemented as insert-then-handle-unique-violation against a DB UNIQUE constraint on scopes.name; AtomicClaimRaceTests issues N concurrent claim POSTs for the same scope name from N distinct principals and asserts exactly one 201 + exactly N-1 409 responses + exactly one scopes row. The same pattern applies to the open-mode auto-claim branch triggered from CreatePackage.
       - Cascade refusal — DELETE /api/v1/scopes/{scope} while the scope owns at least one package returns 409 ScopeNotEmpty and leaves both rows unchanged; DELETE /api/v1/orgs/{org} while the org still owns scopes or packages returns 409 OrgNotEmpty and leaves rows unchanged; after deleting the children, both deletes succeed 204.
       - Fail-closed resolver — FailClosedResolverTests exercises three dangling-reference shapes (role row points at a deleted team; role row points at a deleted org; package row's owning scope row was removed under the cascade refusal) and asserts the PDP decision is DENY with the appropriate typed reason (PackageRoleInsufficient or VisibilityHidden) without throwing. No grant edge through a missing vertex is ever read as ALLOW.
+      - Bounded-domain auth strings — NoMagicAuthStringsMetaTests passes; every bounded auth value this phase reads or writes (policy names, org roles, principal types, scope-owner types, reserved scope names) is referenced through Auth/RegistryAuthConstants.cs (AuthPolicies, OrgRoles, PrincipalTypes, ScopeOwnerTypes, ReservedScopes), never inlined as a literal at a use site.
     notes: |
       Verified-mode resolver is stubbed 501 per Q4; the wire contract is
       locked. SecurityConfig.MaxTokenLifetime is introduced in P5 (the
@@ -189,7 +190,7 @@ phases:
       - Stash.Registry/Startup.cs
     verify:
       - dotnet build Stash.Registry/Stash.Registry.csproj
-      - dotnet test --filter "FullyQualifiedName~LoginReadDefaultTests|FullyQualifiedName~TokenLifetimeCapTests|FullyQualifiedName~AdminNarrowCeilingTests|FullyQualifiedName~JtiRevocationPreservedTests"
+      - dotnet test --filter "FullyQualifiedName~LoginReadDefaultTests|FullyQualifiedName~TokenLifetimeCapTests|FullyQualifiedName~AdminNarrowCeilingTests|FullyQualifiedName~JtiRevocationPreservedTests|FullyQualifiedName~NoMagicAuthStringsMetaTests"
     done_when:
       - Login read-default happy path — POST /api/v1/auth/login mints an access token whose token_scope claim is "read" (verified by decoding the returned JWT); GET /api/v1/packages/public/x succeeds 200 with the token.
       - Login read-default fail path — the same login token receives 403 TokenScopeInsufficient on PUT /api/v1/packages/...; after issuing a publish-ceiling token via POST /api/v1/auth/tokens the same PUT succeeds.
@@ -204,6 +205,7 @@ phases:
       - Expired token fail path — a token whose exp is in the past receives 401 TokenExpired on any endpoint that requires authentication.
       - JTI revocation preserved — the JwtBearer.OnTokenValidated path in Startup.cs still consults the tokens.revoked_at column on every authenticated request; after POST /api/v1/auth/tokens/{id}/revoke (RevokeOwnToken), a subsequent request bearing the revoked JWT is rejected 401 even though the JWT's exp is still in the future; the deny reason surfaces as TokenRevoked. The same revoked token sent to a [PublicEndpoint] is ALSO rejected 401 (the auth-layer gate runs uniformly, before any [PublicEndpoint] classification).
       - JTI revocation precedes PDP — a regression test asserts the revocation check fires BEFORE the PDP (the AuditService records the deny as TokenRevoked at the auth layer, not as a downstream PDP deny reason), so a leaked token cannot be used during its 90-day MaxTokenLifetime window after RevokeOwnToken.
+      - Bounded-domain auth strings — NoMagicAuthStringsMetaTests passes; the token-scope claim name/values and user roles are referenced through Auth/RegistryAuthConstants.cs (RegistryClaims, TokenScopes, UserRoles) and wire strings are parsed into TokenCeiling at the boundary via TokenCeilingConverter — no inline literal claim/scope/role strings reintroduced in AuthController, JwtTokenService, or Startup.
     notes: |
       MaxTokenLifetime lives in SecurityConfig with a TimeSpan default of
       90.00:00:00 and is wired into appsettings.json.
@@ -250,21 +252,25 @@ phases:
       - Stash.Registry/Database/StashRegistryDatabase.cs
     verify:
       - dotnet build
-      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~AuthzCoverageMetaTests"
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests"
     done_when:
       - docs/Registry — Package Registry.md documents the PDP model, the closed RegistryAction enum (including RevokePackageRole and AdminRevokePackageRole), the role→permission matrix, the ScopeOwnershipPolicy enum + per-policy table, the verified-mode challenge/verify wire shapes (resolver stubbed 501), the coarse token ceiling, Security.MaxTokenLifetime, the DELETE /api/v1/packages/{scope}/{name}/roles owner-revoke endpoint and its admin peer, the last-owner 409 invariant, the audit-logging scoping rule (mutations + authenticated denies; anonymous denies excluded), the insert-then-handle-unique-violation atomicity guarantee for scope-claim and CreatePackage, the non-empty scope/org deletion 409, the fail-closed resolver semantics, and the preserved JTI revocation check (rejects revoked tokens at the auth layer, before the PDP, on every endpoint including [PublicEndpoint]). The doc no longer mentions RequireReadScope/RequirePublishScope/RequireAdminScope/RequireAdmin as user-facing policies.
       - docs/Registry — Package Registry.md carries a "Deferred — fine-grained token capabilities" section pointing at the backlog stub; no part of the doc describes a token capabilities[] body or TokenCapabilityScopeMiss.
       - examples/registry/authz-flow.md walks through the canonical happy path on ScopeOwnershipPolicy=claim — register alice, stash pkg org create acme, POST /auth/tokens for a publish-ceiling token on alice, stash pkg publish @acme/widgets — and shows the corresponding DENY when a read-ceiling token is used by mistake.
-      - Cleanup landed — HasPackagePermissionAsync removed from IRegistryDatabase and StashRegistryDatabase; the four legacy policies (RequireReadScope, RequirePublishScope, RequireAdminScope, RequireAdmin) removed from Startup.cs; CanReadPackageAsync gone from PackagesController.
-      - grep "RequirePublishScope\|RequireReadScope\|RequireAdminScope\|RequireAdmin\|HasPackagePermissionAsync\|CanReadPackageAsync\|TokenCapabilities\|TokenCapabilityScopeMiss\|IsUnrestricted" Stash.Registry/ returns zero matches.
-      - dotnet build green; the final_verify gate runs green end-to-end including RegistryAuthzMatrixTests, AuthzCoverageMetaTests, and the meta-test family.
+      - Cleanup landed — HasPackagePermissionAsync removed from IRegistryDatabase and StashRegistryDatabase; the four legacy policies (RequireReadScope, RequirePublishScope, RequireAdminScope, RequireAdmin) removed from Startup.cs; CanReadPackageAsync gone from PackagesController. The legacy-policy cleanup also removes the now-dead AuthPolicies class from Auth/RegistryAuthConstants.cs — once the PDP fully replaces the string-policy mechanism the four policy-name constants have no remaining referent (the per-controller [Authorize(Policy = AuthPolicies.X)] → bare [Authorize] migration is owned by the P3/P4/P5 controller swaps, not this phase).
+      - grep "RequirePublishScope\|RequireReadScope\|RequireAdminScope\|RequireAdmin\|HasPackagePermissionAsync\|CanReadPackageAsync\|TokenCapabilities\|TokenCapabilityScopeMiss\|IsUnrestricted" Stash.Registry/ returns zero matches (this also proves the AuthPolicies constants are gone, since the policy names live only there after the controller swaps).
+      - Bounded-domain auth strings — NoMagicAuthStringsMetaTests passes after the cleanup; deleting the legacy policies and dead helpers must not reintroduce any inline claim/role/scope/policy literal.
+      - dotnet build green; the final_verify gate runs green end-to-end including RegistryAuthzMatrixTests, AuthzCoverageMetaTests, and the meta-test family (NoMagicAuthStringsMetaTests, Wave1ThrowsCoverageTests, CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests).
 
 # Final acceptance — `/done` runs this before promoting to 4-done/.
 # Filter excludes ONLY documented env-flakies (see .claude/repo.md Known Issues)
 # and KEEPS Registry* test classes (this feature's tests live there) AND the
-# meta-test family (AuthzCoverageMetaTests, RegistryAuthzMatrixTests,
-# Wave1ThrowsCoverageTests, CompletionSurfaceSnapshotTests,
-# StandardLibraryReferenceTests). Registry tests need
+# meta-test family (AuthzCoverageMetaTests, NoMagicAuthStringsMetaTests,
+# RegistryAuthzMatrixTests, Wave1ThrowsCoverageTests,
+# CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests). The
+# exclusion-based filter already includes NoMagicAuthStringsMetaTests (it is
+# not in any !~ clause), so the bounded-domain gate runs at /done too. Registry
+# tests need
 # UseSolutionRelativeContentRoot("Stash.Registry") and are not
 # blanket-excludable.
 final_verify:
