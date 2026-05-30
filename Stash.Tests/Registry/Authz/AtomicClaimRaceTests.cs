@@ -17,6 +17,13 @@ namespace Stash.Tests.Registry.Authz;
 /// must produce exactly one 201 and N-1 409 responses with exactly one scope row.
 /// Also covers open-mode auto-claim atomicity on concurrent first-publish.
 /// </summary>
+/// <remarks>
+/// Joins the serial <c>RegistryConcurrency</c> collection for the same reason as
+/// <see cref="RegistryAuthzAtomicCreateTests"/>: N concurrent requests asserting on row
+/// counts / absence of 500s are unreliable under cross-collection SQLite-lock contention.
+/// See <see cref="RegistryConcurrencyCollection"/>.
+/// </remarks>
+[Collection("RegistryConcurrency")]
 public sealed class AtomicClaimRaceTests : RegistryAuthzTestBase
 {
     private const int ParallelCallers = 5;
@@ -26,7 +33,9 @@ public sealed class AtomicClaimRaceTests : RegistryAuthzTestBase
     [Fact]
     public async Task ClaimScope_ConcurrentRequests_ExactlyOneWinsRest409()
     {
-        await using var ctx = RegistryAuthzFactory.Create();
+        // Concurrent test: shared-cache in-memory DB so each request opens its own
+        // connection (see RegistryConcurrencyCollection / CreateConcurrent).
+        await using var ctx = RegistryAuthzFactory.CreateConcurrent();
         var factory = ctx.Factory;
 
         // Create N distinct callers
@@ -77,71 +86,44 @@ public sealed class AtomicClaimRaceTests : RegistryAuthzTestBase
     [Fact]
     public async Task OpenMode_ConcurrentFirstPublish_ExactlyOneScopeRowCreated()
     {
-        var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
-        conn.Open();
-        try
+        // Concurrent test: shared-cache in-memory DB (Open policy) so each request opens
+        // its own connection (see RegistryConcurrencyCollection / CreateConcurrent).
+        await using var ctx = RegistryAuthzFactory.CreateConcurrent(cfg =>
         {
-            using var factory = new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Stash.Registry.Program>()
-                .WithWebHostBuilder(builder =>
-                {
-                    builder.UseSolutionRelativeContentRoot("Stash.Registry");
-                    builder.UseSetting("environment", "Development");
-                    builder.ConfigureTestServices(services =>
-                    {
-                        var descriptor = services.SingleOrDefault(d =>
-                            d.ServiceType == typeof(Microsoft.EntityFrameworkCore.DbContextOptions<Stash.Registry.Database.RegistryDbContext>));
-                        if (descriptor != null) services.Remove(descriptor);
-                        services.AddDbContext<Stash.Registry.Database.RegistryDbContext>(options =>
-                            options.UseSqlite(conn));
+            cfg.Security.ScopeOwnershipPolicy = Stash.Registry.Auth.Authorization.ScopeOwnershipPolicyKind.Open;
+            cfg.Auth.RegistrationEnabled = true;
+        });
+        var factory = ctx.Factory;
 
-                        var configDescriptor = services.SingleOrDefault(d =>
-                            d.ServiceType == typeof(Stash.Registry.Configuration.RegistryConfig));
-                        if (configDescriptor != null) services.Remove(configDescriptor);
-                        var cfg = new Stash.Registry.Configuration.RegistryConfig();
-                        cfg.Security.ScopeOwnershipPolicy = Stash.Registry.Auth.Authorization.ScopeOwnershipPolicyKind.Open;
-                        cfg.Auth.RegistrationEnabled = true;
-                        services.AddSingleton(cfg);
-
-                        var sp = services.BuildServiceProvider();
-                        using var scope = sp.CreateScope();
-                        scope.ServiceProvider.GetRequiredService<IRegistryDatabase>().Initialize();
-                    });
-                });
-
-            // N callers each claiming a distinct username → they'll each try to auto-claim "shared-race-scope"
-            var tokens = new string[ParallelCallers];
-            for (int i = 0; i < ParallelCallers; i++)
-            {
-                using var setup = factory.CreateClient();
-                tokens[i] = await RegisterAndGetTokenAsync(setup, $"open-racer-{i}");
-            }
-
-            var tarballs = Enumerable.Range(0, ParallelCallers)
-                .Select(i => CreateTarball("@shared-race-scope/lib", "1.0.0"))
-                .ToArray();
-
-            var publishTasks = Enumerable.Range(0, ParallelCallers).Select(i =>
-            {
-                var client = factory.CreateClient();
-                SetBearer(client, tokens[i]);
-                return client.PutAsync("/api/v1/packages/shared-race-scope/lib",
-                    TarballContent(tarballs[i]));
-            }).ToArray();
-
-            var responses = await Task.WhenAll(publishTasks);
-
-            // Only one scope row must exist
-            using var verifyScope = factory.Services.CreateScope();
-            var db = verifyScope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
-            Assert.True(await db.ScopeExistsAsync("shared-race-scope"));
-
-            // Responses should be Created (201) for the winner and either 201 (collapse to
-            // PublishVersion on existing package) or 409 for the others — no 500s.
-            Assert.DoesNotContain(responses, r => r.StatusCode == HttpStatusCode.InternalServerError);
-        }
-        finally
+        // N callers each claiming a distinct username → they'll each try to auto-claim "shared-race-scope"
+        var tokens = new string[ParallelCallers];
+        for (int i = 0; i < ParallelCallers; i++)
         {
-            conn.Dispose();
+            using var setup = factory.CreateClient();
+            tokens[i] = await RegisterAndGetTokenAsync(setup, $"open-racer-{i}");
         }
+
+        var tarballs = Enumerable.Range(0, ParallelCallers)
+            .Select(i => CreateTarball("@shared-race-scope/lib", "1.0.0"))
+            .ToArray();
+
+        var publishTasks = Enumerable.Range(0, ParallelCallers).Select(i =>
+        {
+            var client = factory.CreateClient();
+            SetBearer(client, tokens[i]);
+            return client.PutAsync("/api/v1/packages/shared-race-scope/lib",
+                TarballContent(tarballs[i]));
+        }).ToArray();
+
+        var responses = await Task.WhenAll(publishTasks);
+
+        // Only one scope row must exist
+        using var verifyScope = factory.Services.CreateScope();
+        var db = verifyScope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+        Assert.True(await db.ScopeExistsAsync("shared-race-scope"));
+
+        // Responses should be Created (201) for the winner and either 201 (collapse to
+        // PublishVersion on existing package) or 409 for the others — no 500s.
+        Assert.DoesNotContain(responses, r => r.StatusCode == HttpStatusCode.InternalServerError);
     }
 }

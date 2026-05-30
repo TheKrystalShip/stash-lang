@@ -15,6 +15,13 @@ namespace Stash.Tests.Registry.Authz;
 /// <summary>
 /// Tests for atomic package creation using insert-then-handle-unique-violation (D20).
 /// </summary>
+/// <remarks>
+/// Joins the serial <c>RegistryConcurrency</c> collection: this class fires N concurrent
+/// publish requests and asserts zero 500s, which is unreliable when other registry test
+/// classes contend on the shared SQLite lock in parallel. See
+/// <see cref="RegistryConcurrencyCollection"/>.
+/// </remarks>
+[Collection("RegistryConcurrency")]
 public sealed class RegistryAuthzAtomicCreateTests : RegistryAuthzTestBase
 {
     // ── Schema constraint ────────────────────────────────────────────────────
@@ -69,7 +76,9 @@ public sealed class RegistryAuthzAtomicCreateTests : RegistryAuthzTestBase
     {
         const int parallelism = 5;
 
-        await using var ctx = RegistryAuthzFactory.Create();
+        // Concurrent test: shared-cache in-memory DB so each request opens its own
+        // connection (see RegistryConcurrencyCollection / CreateConcurrent).
+        await using var ctx = RegistryAuthzFactory.CreateConcurrent();
         var factory = ctx.Factory;
         using var client = factory.CreateClient();
 

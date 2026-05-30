@@ -79,6 +79,71 @@ public static class RegistryAuthzFactory
 
         return new RegistryTestContext(factory, conn);
     }
+
+    /// <summary>
+    /// Like <see cref="Create"/> but backs the registry with a <b>shared-cache</b> in-memory
+    /// SQLite database (unique per call) instead of a single shared connection. Each request
+    /// opens its OWN connection to the same in-memory DB, so tests that fire many concurrent
+    /// requests do not race on one ADO.NET connection — concurrent command execution on a
+    /// single connection is not supported and surfaces as spurious 500s. <c>Default Timeout</c>
+    /// makes a blocked writer wait for the SQLite write lock (busy-wait) instead of throwing
+    /// <c>SQLITE_BUSY</c> under legitimate multi-connection contention.
+    ///
+    /// A keepalive connection is held open for the context's lifetime because an in-memory
+    /// SQLite database is dropped when its last connection closes. Use this for the concurrency
+    /// suites only; sequential tests should use <see cref="Create"/>.
+    /// </summary>
+    /// <param name="configure">
+    /// Optional hook to replace the registry's <c>RegistryConfig</c> (e.g. to set
+    /// <c>ScopeOwnershipPolicy = Open</c>). When null, the app's appsettings config is used.
+    /// </param>
+    public static RegistryTestContext CreateConcurrent(
+        Action<Stash.Registry.Configuration.RegistryConfig>? configure = null)
+    {
+        string dbName = $"reg-concurrent-{Guid.NewGuid():N}";
+        string connString =
+            $"Data Source=file:{dbName}?mode=memory&cache=shared;Default Timeout=30";
+
+        var keepAlive = new SqliteConnection(connString);
+        keepAlive.Open();
+
+        var factory = new WebApplicationFactory<Stash.Registry.Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSolutionRelativeContentRoot("Stash.Registry");
+                builder.UseSetting("environment", "Development");
+                builder.ConfigureTestServices(services =>
+                {
+                    var descriptor = services.SingleOrDefault(d =>
+                        d.ServiceType == typeof(DbContextOptions<RegistryDbContext>));
+                    if (descriptor != null)
+                        services.Remove(descriptor);
+
+                    // Pass the connection STRING (not a single connection) so every scoped
+                    // DbContext opens its own connection to the shared-cache in-memory DB.
+                    services.AddDbContext<RegistryDbContext>(options =>
+                        options.UseSqlite(connString));
+
+                    if (configure != null)
+                    {
+                        var cfgDescriptor = services.SingleOrDefault(d =>
+                            d.ServiceType == typeof(Stash.Registry.Configuration.RegistryConfig));
+                        if (cfgDescriptor != null)
+                            services.Remove(cfgDescriptor);
+                        var cfg = new Stash.Registry.Configuration.RegistryConfig();
+                        configure(cfg);
+                        services.AddSingleton(cfg);
+                    }
+
+                    var sp = services.BuildServiceProvider();
+                    using var scope = sp.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+                    db.Initialize();
+                });
+            });
+
+        return new RegistryTestContext(factory, keepAlive);
+    }
 }
 
 /// <summary>
