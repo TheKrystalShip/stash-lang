@@ -81,6 +81,7 @@ public class ScopesController : ControllerBase
     /// </remarks>
     /// <returns><c>201</c> with <see cref="ScopeDetailResponse"/> on success, <c>409</c> on collision.</returns>
     [Authorize]
+    [ImperativeAuthz("post-PDP owner-type and org-ownership checks require inline coordination after the PDP decision; folded into PDP in registry-authz-pdp-completion")]
     [HttpPost]
     public async Task<IActionResult> ClaimScope()
     {
@@ -201,6 +202,7 @@ public class ScopesController : ControllerBase
     /// <param name="scope">The bare scope name.</param>
     /// <returns><c>204</c> on success, <c>409</c> if the scope still owns packages, <c>404</c> if not found.</returns>
     [Authorize]
+    [ImperativeAuthz("post-PDP audit targets @{scope} prefix requiring inline coordination after the PDP decision; folded into PDP in registry-authz-pdp-completion")]
     [HttpDelete("{scope}")]
     public async Task<IActionResult> DeleteScope(string scope)
     {
@@ -211,8 +213,7 @@ public class ScopesController : ControllerBase
         {
             if (principal is UserPrincipal up)
                 await _auditService.LogAuthzDenyAsync("DeleteScope", up.Username, $"@{scope}", decision.Reason, ip);
-            int statusCode = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(statusCode, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+            return AuthzDenyResponse.For(decision);
         }
 
         var record = await _db.GetScopeAsync(scope);

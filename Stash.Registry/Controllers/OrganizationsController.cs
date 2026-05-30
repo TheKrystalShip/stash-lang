@@ -138,6 +138,7 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <returns><c>204</c> on success, <c>409</c> if the org still owns resources, <c>404</c> if not found.</returns>
     [Authorize]
+    [ImperativeAuthz("uses AddOrgMember authz action (known wrong-action bug — DeleteOrg should have its own PDP action); corrected in registry-authz-pdp-completion")]
     [HttpDelete("{org}")]
     public async Task<IActionResult> DeleteOrg(string org)
     {
@@ -148,8 +149,7 @@ public class OrganizationsController : ControllerBase
         {
             if (principal is UserPrincipal up)
                 await _auditService.LogAuthzDenyAsync("DeleteOrg", up.Username, org, decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+            return AuthzDenyResponse.For(decision);
         }
 
         var orgRecord = await _db.GetOrgAsync(org);

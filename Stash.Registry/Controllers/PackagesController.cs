@@ -198,6 +198,7 @@ public class PackagesController : ControllerBase
     /// </para>
     /// </remarks>
     [Authorize]
+    [ImperativeAuthz("dynamic action choice (CreatePackage vs PublishVersion) depends on a DB existence check before the PDP call; folded into PDP in registry-authz-pdp-completion")]
     [HttpPut("{scope}/{name}")]
     public async Task<IActionResult> PublishPackage(string scope, string name)
     {
