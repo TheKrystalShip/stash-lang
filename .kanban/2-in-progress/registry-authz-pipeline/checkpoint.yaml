@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T15:59:21Z'
+updated: '2026-05-30T16:43:16Z'
 phases:
   P1:
     status: done
@@ -50,13 +50,15 @@ phases:
     notes: Login read-default, MaxTokenLifetime cap (90d), capabilities rejection, RevokeOwnToken endpoint,
       D22 uniform revocation gate with audit, 25 tests green, NoMagicAuthStrings green
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 9df48b81b328a3974423a76c1ec527764c710c1b
+    verified: true
+    started: '2026-05-30T16:20:53Z'
+    completed: '2026-05-30T16:43:16Z'
+    attempts: 1
+    notes: 72 theory cells (70 in RegistryAuthzMatrixTests + 2 in RegistryAuthzAtomicityConformanceTests);
+      all ceiling/role/visibility/policy axes covered; concurrent cells in RegistryConcurrency collection;
+      stable across two runs
   P7:
     status: pending
     commit: null
