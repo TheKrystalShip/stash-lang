@@ -161,9 +161,13 @@ public static class PrincipalTypes
 
 /// <summary>
 /// Wire values for the <c>owner_type</c> column in <c>ScopeRecord</c>.
-/// Only <see cref="User"/> and <see cref="Org"/> are legal scope owners — teams are never
-/// scope owners (use <see cref="PrincipalTypes"/> for the broader package-role principal set).
+/// Teams are never scope owners (use <see cref="PrincipalTypes"/> for the broader package-role principal set).
 /// </summary>
+/// <remarks>
+/// <see cref="User"/> and <see cref="Org"/> are the only <em>user-claimable</em> owner types.
+/// <see cref="System"/> is reserved for internally provisioned scopes (e.g. <c>@stash</c>, <c>@admin</c>)
+/// and is never selectable through the claim API.
+/// </remarks>
 public static class ScopeOwnerTypes
 {
     /// <summary>The scope is owned by an individual user.</summary>
@@ -171,6 +175,35 @@ public static class ScopeOwnerTypes
 
     /// <summary>The scope is owned by an organization.</summary>
     public const string Org = "org";
+
+    /// <summary>The scope is system-reserved (e.g. <c>@stash</c>, <c>@admin</c>); not user-claimable.</summary>
+    public const string System = "system";
+}
+
+// ── Reserved system scope names ───────────────────────────────────────────────
+
+/// <summary>
+/// Scope names that are reserved for the system and can never be user-claimed
+/// (their scopes carry <see cref="ScopeOwnerTypes.System"/> ownership).
+/// </summary>
+/// <remarks>
+/// This is the single source of truth for the reserved set, which was previously
+/// duplicated as local arrays in <c>ScopesController</c>, <c>OrganizationsController</c>,
+/// <c>RegistryAuthorizer</c>, and <c>StashRegistryDatabase</c>.
+/// </remarks>
+public static class ReservedScopes
+{
+    /// <summary>The <c>@stash</c> reserved scope.</summary>
+    public const string Stash = "stash";
+
+    /// <summary>The <c>@admin</c> reserved scope.</summary>
+    public const string Admin = "admin";
+
+    /// <summary>All reserved scope names.</summary>
+    public static readonly string[] All = [Stash, Admin];
+
+    /// <summary>Returns <c>true</c> if <paramref name="scope"/> is a reserved system scope name.</summary>
+    public static bool IsReserved(string scope) => Array.IndexOf(All, scope) >= 0;
 }
 
 // ── Token ceiling converter ───────────────────────────────────────────────────

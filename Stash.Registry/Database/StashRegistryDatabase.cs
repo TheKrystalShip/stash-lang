@@ -540,8 +540,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     /// <inheritdoc/>
     public async Task SeedSystemScopesAsync()
     {
-        string[] systemScopes = ["stash", "admin"];
-        foreach (string scopeName in systemScopes)
+        foreach (string scopeName in ReservedScopes.All)
         {
             bool exists = await _context.Scopes.AnyAsync(s => s.Name == scopeName);
             if (!exists)
@@ -549,7 +548,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                 _context.Scopes.Add(new ScopeRecord
                 {
                     Name = scopeName,
-                    OwnerType = "system",
+                    OwnerType = ScopeOwnerTypes.System,
                     OwnerUsername = null,
                     OwnerOrgId = null
                 });
@@ -589,7 +588,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         _context.Scopes.Add(new ScopeRecord
         {
             Name = username,
-            OwnerType = "user",
+            OwnerType = ScopeOwnerTypes.User,
             OwnerUsername = username,
             OwnerOrgId = null
         });

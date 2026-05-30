@@ -75,8 +75,7 @@ public class OrganizationsController : ControllerBase
         }
 
         // Reserved system scopes may not be claimed as org names
-        string[] reservedScopes = ["stash", "admin"];
-        if (Array.Exists(reservedScopes, s => s == name))
+        if (ReservedScopes.IsReserved(name))
             return Conflict(new ErrorResponse { Error = $"The name '{name}' is reserved and cannot be used as an organization name." });
 
         try

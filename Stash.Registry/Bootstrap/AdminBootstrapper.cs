@@ -72,7 +72,7 @@ public sealed class AdminBootstrapper
             await _db.CreateScopeAsync(new Database.Models.ScopeRecord
             {
                 Name = username,
-                OwnerType = "user",
+                OwnerType = ScopeOwnerTypes.User,
                 OwnerUsername = username,
                 OwnerOrgId = null
             });

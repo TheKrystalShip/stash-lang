@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Stash.Common;
+using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
 using Stash.Registry.Database;
@@ -351,7 +352,7 @@ public sealed class PackageService
             await _db.CreateScopeAsync(new Database.Models.ScopeRecord
             {
                 Name = scopePart,
-                OwnerType = "user",
+                OwnerType = ScopeOwnerTypes.User,
                 OwnerUsername = username
             });
         }

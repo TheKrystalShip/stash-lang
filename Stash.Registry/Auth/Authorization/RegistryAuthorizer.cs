@@ -21,9 +21,6 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     private static bool HasRole(string? effective, string required) =>
         effective != null && RoleRank(effective) <= RoleRank(required);
 
-    /// <summary>Reserved scope names that no principal may publish into.</summary>
-    private static readonly string[] ReservedScopes = ["stash", "admin"];
-
     /// <summary>
     /// Initialises the authorizer with its dependencies.
     /// </summary>
@@ -317,7 +314,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 
         // Reserved scopes are denied under every policy and for any role including admin.
         string scope = pkg.Scope.ToLowerInvariant();
-        if (Array.IndexOf(ReservedScopes, scope) >= 0)
+        if (ReservedScopes.IsReserved(scope))
             return AuthzDecision.Deny(AuthzDenyReason.ScopeReserved,
                 $"Scope '@{scope}' is reserved and cannot be published into.");
 
@@ -352,7 +349,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             return AuthzDecision.Deny(AuthzDenyReason.PolicyDenied, "Expected ScopeResource.");
 
         string scope = sr.Scope.ToLowerInvariant();
-        if (Array.IndexOf(ReservedScopes, scope) >= 0)
+        if (ReservedScopes.IsReserved(scope))
             return AuthzDecision.Deny(AuthzDenyReason.ScopeReserved,
                 $"Scope '@{scope}' is reserved.");
 

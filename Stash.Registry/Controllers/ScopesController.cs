@@ -86,8 +86,8 @@ public class ScopesController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "scope is required." });
 
         string? ownerType = body?.OwnerType?.Trim().ToLowerInvariant();
-        if (ownerType != "user" && ownerType != "org")
-            return BadRequest(new ErrorResponse { Error = "owner_type must be 'user' or 'org'." });
+        if (ownerType != ScopeOwnerTypes.User && ownerType != ScopeOwnerTypes.Org)
+            return BadRequest(new ErrorResponse { Error = $"owner_type must be '{ScopeOwnerTypes.User}' or '{ScopeOwnerTypes.Org}'." });
 
         string? owner = body?.Owner?.Trim();
         if (string.IsNullOrEmpty(owner))
@@ -103,8 +103,7 @@ public class ScopesController : ControllerBase
         }
 
         // Reserved system scopes cannot be claimed
-        string[] reservedScopes = ["stash", "admin"];
-        if (Array.Exists(reservedScopes, s => s == scopeName))
+        if (ReservedScopes.IsReserved(scopeName))
             return Conflict(new ErrorResponse { Error = $"The scope '@{scopeName}' is a reserved system scope and cannot be claimed." });
 
         // Check for username collision — usernames and scopes share one pool
@@ -120,7 +119,7 @@ public class ScopesController : ControllerBase
             return Conflict(new ErrorResponse { Error = $"Scope '@{scopeName}' already exists." });
 
         ScopeRecord newScope;
-        if (ownerType == "user")
+        if (ownerType == ScopeOwnerTypes.User)
         {
             // The caller can only claim a scope for themselves (not for another user)
             if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole(UserRoles.Admin))
@@ -129,7 +128,7 @@ public class ScopesController : ControllerBase
             newScope = new ScopeRecord
             {
                 Name = scopeName,
-                OwnerType = "user",
+                OwnerType = ScopeOwnerTypes.User,
                 OwnerUsername = owner,
                 OwnerOrgId = null
             };
@@ -149,7 +148,7 @@ public class ScopesController : ControllerBase
             newScope = new ScopeRecord
             {
                 Name = scopeName,
-                OwnerType = "org",
+                OwnerType = ScopeOwnerTypes.Org,
                 OwnerOrgId = orgRecord.Id,
                 OwnerUsername = null
             };
@@ -170,8 +169,8 @@ public class ScopesController : ControllerBase
     {
         string? owner = record.OwnerType switch
         {
-            "user" => record.OwnerUsername,
-            "org" => record.OwnerOrgId,
+            ScopeOwnerTypes.User => record.OwnerUsername,
+            ScopeOwnerTypes.Org => record.OwnerOrgId,
             _ => null
         };
         return new ScopeDetailResponse
