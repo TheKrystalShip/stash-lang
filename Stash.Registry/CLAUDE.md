@@ -70,8 +70,8 @@ Client (stash pkg CLI / HTTP)
     → RegistryAuthorizeFilter (IAsyncAuthorizationFilter, per-request)
         — principal-build → resource-resolve → PDP call → unified deny
         — runs for every [RegistryAuthorize(RegistryAction.X)] endpoint
-        — four [ImperativeAuthz] endpoints bypass this filter and call
-          the PDP inline (see Controller Pattern below)
+        — one [ImperativeAuthz] endpoint (ScopesController.ClaimScope) bypasses
+          this filter and calls the PDP inline (see Controller Pattern below)
     → Controllers (Auth, Packages, Orgs, Scopes, Search, Admin)
         → PackageService / AuditService / IAuthProvider
     → IRegistryDatabase (EF Core: SQLite or PostgreSQL)
@@ -143,23 +143,26 @@ public class PackagesController : ControllerBase
 
 **Audited exemptions (`[ImperativeAuthz]`) — for endpoints with pre/post-PDP dependencies:**
 
-Four endpoints cannot express their authorization as a simple resource-action pair and carry `[ImperativeAuthz("reason")]` instead. They call the PDP inline. The attribute documents the deferred work and satisfies `AuthzDispatchCoverageMetaTests`:
+One endpoint cannot express its authorization as a simple resource-action pair and carries `[ImperativeAuthz("reason")]` instead. It calls the PDP inline. The attribute documents why folding is blocked and satisfies `AuthzDispatchCoverageMetaTests`:
 
 ```csharp
 [Authorize]
-[ImperativeAuthz("dynamic action choice: CreatePackage vs PublishVersion depends on a DB existence check; folded into PDP in registry-authz-pdp-completion")]
-[HttpPut("{scope}/{name}")]
-public async Task<IActionResult> PublishPackage(string scope, string name) { ... }
+[ImperativeAuthz("scope/owner/ownerType fields come from the JSON request body (not route values), so the shared filter's pure-route resolver cannot build a ScopeResource before the PDP call; the bespoke 409 status mapping (ScopeReserved/ScopeNotOwned → 409 instead of 403) also requires inline coordination. Folding requires the body-resolver refactor tracked in .kanban/0-backlog/registry/Body-resolver authz filter.md")]
+[HttpPost]
+public async Task<IActionResult> ClaimScope() { ... }
 ```
 
-The four `[ImperativeAuthz]` endpoints and their planned folds into `registry-authz-pdp-completion`:
+The irreducible `[ImperativeAuthz]` endpoint after `registry-authz-pdp-completion`:
 
 | Endpoint | Reason | Deferred work |
 | -------- | ------ | ------------- |
-| `PackagesController.PublishPackage` | Dynamic `CreatePackage` vs `PublishVersion` action depends on DB existence check | Fold into PDP in `registry-authz-pdp-completion` |
-| `OrganizationsController.DeleteOrg` | Uses `AddOrgMember` authz action (known wrong-action bug) | Fix and fold in `registry-authz-pdp-completion` |
-| `ScopesController.ClaimScope` | Post-PDP owner-type and org-ownership checks require inline logic | Fold in `registry-authz-pdp-completion` |
-| `ScopesController.DeleteScope` | Post-PDP audit targeting `@{scope}` requires inline coordination | Fold in `registry-authz-pdp-completion` |
+| `ScopesController.ClaimScope` | scope/owner/ownerType fields come from the JSON body (not route values); bespoke 409 status mapping for ScopeReserved/ScopeNotOwned | Body-resolver refactor documented in `.kanban/0-backlog/registry/Body-resolver authz filter.md` |
+
+The three formerly-imperative endpoints now folded into the shared filter (via `registry-authz-pdp-completion`):
+
+- `PackagesController.PublishPackage` — folded; PDP delegates internally to `CreatePackage` or `PublishVersion` based on a DB existence check
+- `OrganizationsController.DeleteOrg` — folded; wrong-action bug (`AddOrgMember`) fixed; proper `DeleteOrg` PDP handler added
+- `ScopesController.DeleteScope` — folded; filter's `ResourceIdForAudit(ScopeResource)` emits `@` + scope uniformly
 
 **Key rules:**
 
@@ -168,7 +171,7 @@ The four `[ImperativeAuthz]` endpoints and their planned folds into `registry-au
 - Unauthorized callers on private/internal packages receive `404 Not Found` (not `403`) to avoid leaking package existence — this mapping (`VisibilityHidden`/`PackageNotFound` → 404) lives in `AuthzDenyResponse` and applies uniformly to all endpoints via the filter
 - Publish/unpublish require a token with `publish` or `admin` coarse ceiling; the PDP checks the ceiling first, then the package role
 - Admin endpoints require `admin` ceiling AND `admin` role; the admin short-circuit resolves the resource-side dimension to effective `owner` but does NOT bypass the ceiling check
-- Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. The shared `RegistryAuthorizeFilter` performs this dispatch for the ~33 clean endpoints; the four `[ImperativeAuthz]` endpoints still call the PDP inline.
+- Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. The shared `RegistryAuthorizeFilter` performs this dispatch for the ~36 clean endpoints; one `[ImperativeAuthz]` endpoint (`ScopesController.ClaimScope`) still calls the PDP inline.
 - **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `ReservedScopes`, `Visibilities`) and wire strings are parsed into enums at the boundary (`IRegistryAuthzPrincipalFactory` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
 - Centralized bounded values used as EF column defaults must be `const string`, not `static readonly` — `RegistryDbContext` `.HasDefaultValue(...)` and C# field initializers (e.g. `PackageRecord.Visibility = Visibilities.Public`) both require a compile-time constant
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
@@ -319,7 +322,7 @@ Several meta-tests enforce structural invariants that must stay green when addin
 | Test Class                        | What it guarantees                                                                                                                                 |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `AuthzCoverageMetaTests`          | Every action on a production controller carries `[Authorize]` or `[PublicEndpoint]`. Class-level `[Authorize]` counts. Fail-path fixture included. |
-| `AuthzDispatchCoverageMetaTests`  | Every non-`[PublicEndpoint]` action carries `[RegistryAuthorize]` OR `[ImperativeAuthz]`. Class-level `[Authorize]` alone does NOT satisfy this — the action itself must be classified. Includes a fail-path fixture (proving the scan has teeth) and an imperative-pin assertion (the set of `[ImperativeAuthz]` endpoints must equal `{PublishPackage, DeleteOrg, ClaimScope, DeleteScope}`). Adding or removing an `[ImperativeAuthz]` marker requires updating the pin assertion. |
+| `AuthzDispatchCoverageMetaTests`  | Every non-`[PublicEndpoint]` action carries `[RegistryAuthorize]` OR `[ImperativeAuthz]`. Class-level `[Authorize]` alone does NOT satisfy this — the action itself must be classified. Includes a fail-path fixture (proving the scan has teeth) and an imperative-pin assertion (the set of `[ImperativeAuthz]` endpoints must equal `{ScopesController.ClaimScope}` — the irreducible end-state after `registry-authz-pdp-completion`). Adding or removing an `[ImperativeAuthz]` marker requires updating the pin assertion. |
 | `NoMagicAuthStringsMetaTests`     | No bare string literal reaches an auth sink (`IsInRole`/`FindFirst`/etc.). Sink-targeted scan; includes a self-test and floor guard. New auth sinks must be added to the scanner. |
 | `RegistryAuthzMatrixTests`        | Every (action × principal) row in `AuthzMatrixData` produces the correct HTTP status and `ErrorResponse` body — the primary behavior-preservation gate. |
 | `RegistryAuthzAuditMutationTests` | Authenticated denials on key endpoints (including `CreateOrg`, `AddOrgMember`, `VerifyScope`) write exactly one audit entry. Guards the uniform-audit behavior introduced by the shared filter. |

@@ -62,10 +62,15 @@ public static class RegistryActionResourceResolver
                 => PackageRoute.From(Route(routeValues, "scope"), Route(routeValues, "name")),
 
             // ── Scope ─────────────────────────────────────────────────────────
+            // ClaimScope is intentionally absent: it is [ImperativeAuthz] and the filter
+            // never invokes the resolver for it. Its scope/owner/ownerType fields come from
+            // the JSON request body (not route values). Reaching the default arm here would
+            // mean the [RegistryAuthorize] attribute was mistakenly placed on ClaimScope;
+            // that configuration error should throw at request time, not silently produce
+            // ScopeResource(""). See .kanban/0-backlog/registry/Body-resolver authz filter.md.
             RegistryAction.ResolveScope or
             RegistryAction.VerifyScope or
-            RegistryAction.DeleteScope or
-            RegistryAction.ClaimScope
+            RegistryAction.DeleteScope
                 => new ScopeResource(Route(routeValues, "scope")),
 
             // ── Org ───────────────────────────────────────────────────────────

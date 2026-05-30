@@ -78,7 +78,7 @@ public class ScopesController : ControllerBase
     /// </remarks>
     /// <returns><c>201</c> with <see cref="ScopeDetailResponse"/> on success, <c>409</c> on collision.</returns>
     [Authorize]
-    [ImperativeAuthz("post-PDP owner-type and org-ownership checks require inline coordination after the PDP decision; folded into PDP in registry-authz-pdp-completion")]
+    [ImperativeAuthz("scope/owner/ownerType fields come from the JSON request body (not route values), so the shared filter's pure-route resolver cannot build a ScopeResource before the PDP call; the bespoke 409 status mapping (ScopeReserved/ScopeNotOwned → 409 instead of 403) also requires inline coordination. Folding requires the body-resolver refactor tracked in .kanban/0-backlog/registry/Body-resolver authz filter.md")]
     [HttpPost]
     public async Task<IActionResult> ClaimScope()
     {
