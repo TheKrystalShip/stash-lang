@@ -1,4 +1,5 @@
 using System;
+using Stash.Registry.Auth.Authorization;
 
 namespace Stash.Registry.Configuration;
 
@@ -8,6 +9,12 @@ public sealed class SecurityConfig
     public string RequiredIntegrity { get; set; } = "sha256";
     public string UnpublishWindow { get; set; } = "72h";
     public string? JwtSigningKey { get; set; }
+
+    /// <summary>
+    /// Deploy-time scope ownership policy for the unclaimed-scope branch of CreatePackage.
+    /// Values: Open, Claim (default), Verified. Deserialized from appsettings.json "ScopeOwnershipPolicy".
+    /// </summary>
+    public ScopeOwnershipPolicyKind ScopeOwnershipPolicy { get; set; } = ScopeOwnershipPolicyKind.Claim;
 
     public long MaxPackageSizeBytes
     {

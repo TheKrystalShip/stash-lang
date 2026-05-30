@@ -314,6 +314,25 @@ public interface IRegistryDatabase
     Task<ScopeRecord?> GetScopeAsync(string name);
 
     /// <summary>
+    /// Attempts to insert a new scope record.  Returns <c>true</c> on success or
+    /// <c>false</c> when a unique-constraint violation indicates the name is already taken
+    /// (insert-then-handle-unique-violation pattern for atomic scope-claim).
+    /// The underlying <see cref="DbContext"/> is left in a clean state after a collision.
+    /// </summary>
+    Task<bool> TryCreateScopeAsync(ScopeRecord scope);
+
+    /// <summary>
+    /// Deletes a scope record by name. Throws <see cref="InvalidOperationException"/> if
+    /// any packages still have a name that starts with <c>@{name}/</c> (cascade refusal).
+    /// </summary>
+    Task DeleteScopeAsync(string name);
+
+    /// <summary>
+    /// Returns the number of packages whose name starts with <c>@{scope}/</c>.
+    /// </summary>
+    Task<int> CountPackagesByScopeAsync(string scope);
+
+    /// <summary>
     /// Seeds the reserved system scopes (<c>@stash</c> and <c>@admin</c>) if they do not
     /// already exist. Safe to call on every startup — idempotent.
     /// </summary>
@@ -429,6 +448,18 @@ public interface IRegistryDatabase
     /// <param name="orgId">The organization identifier.</param>
     /// <param name="username">The username to check.</param>
     Task<bool> IsOrgOwnerAsync(string orgId, string username);
+
+    /// <summary>
+    /// Deletes an organization and its associated scope/members. Throws <see cref="InvalidOperationException"/>
+    /// if the org still owns any scopes (beyond the auto-provisioned one) or packages.
+    /// </summary>
+    /// <param name="name">The org name.</param>
+    Task DeleteOrgAsync(string name);
+
+    /// <summary>
+    /// Returns the number of scopes owned by the given org ID.
+    /// </summary>
+    Task<int> CountScopesByOrgAsync(string orgId);
 
     // Team operations (P5)
 

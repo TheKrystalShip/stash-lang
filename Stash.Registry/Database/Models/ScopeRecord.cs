@@ -1,6 +1,18 @@
 namespace Stash.Registry.Database.Models;
 
 /// <summary>
+/// Lifecycle states for a <see cref="ScopeRecord"/> when <c>ScopeOwnershipPolicy=Verified</c>.
+/// </summary>
+public static class ScopeStates
+{
+    /// <summary>Scope has been claimed and (in Verified mode) verified. Default state.</summary>
+    public const string Claimed = "claimed";
+
+    /// <summary>Scope has been claimed but not yet verified. Only reachable under Verified policy.</summary>
+    public const string Pending = "pending";
+}
+
+/// <summary>
 /// Database entity representing a package scope in the registry.
 /// </summary>
 /// <remarks>
@@ -38,4 +50,10 @@ public sealed class ScopeRecord
     /// null otherwise.
     /// </summary>
     public string? OwnerOrgId { get; set; }
+
+    /// <summary>
+    /// Lifecycle state: <c>claimed</c> (default) or <c>pending</c> (awaiting verification under Verified policy).
+    /// See <see cref="ScopeStates"/>.
+    /// </summary>
+    public string State { get; set; } = ScopeStates.Claimed;
 }

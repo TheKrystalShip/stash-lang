@@ -6,9 +6,11 @@ using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
+using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
 
@@ -27,14 +29,35 @@ namespace Stash.Registry.Controllers;
 public class ScopesController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
+    private readonly IRegistryAuthorizer _authorizer;
+    private readonly ScopeChallengeService _scopeChallenge;
 
     /// <summary>
-    /// Initialises the controller with the registry database.
+    /// Initialises the controller with its required services.
     /// </summary>
-    /// <param name="db">Registry database for scope queries.</param>
-    public ScopesController(IRegistryDatabase db)
+    public ScopesController(
+        IRegistryDatabase db,
+        IRegistryAuthorizer authorizer,
+        ScopeChallengeService scopeChallenge)
     {
         _db = db;
+        _authorizer = authorizer;
+        _scopeChallenge = scopeChallenge;
+    }
+
+    // ── Helper: build Principal ───────────────────────────────────────────────
+
+    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return new AnonymousPrincipal();
+
+        string username = user.Identity!.Name!;
+        bool isAdmin = user.IsInRole(UserRoles.Admin);
+        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
+        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
+        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
+        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
@@ -49,6 +72,14 @@ public class ScopesController : ControllerBase
     [HttpGet("{scope}")]
     public async Task<IActionResult> GetScope(string scope)
     {
+        var principal = BuildPrincipal(User);
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ResolveScope, new ScopeResource(scope));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
         var record = await _db.GetScopeAsync(scope);
         if (record == null)
             return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
@@ -58,10 +89,12 @@ public class ScopesController : ControllerBase
 
     /// <summary>
     /// Claims a new scope for a user or an organization owned by the caller.
+    /// Under <c>ScopeOwnershipPolicy=Verified</c>, returns a DNS-TXT challenge body.
     /// </summary>
     /// <remarks>
     /// Rejects collisions with existing scopes, usernames, org names, and reserved system scopes
     /// (<c>@stash</c>, <c>@admin</c>). Requires a JWT with the <c>publish</c> or <c>admin</c> scope.
+    /// The insert is atomic via insert-then-handle-unique-violation (UNIQUE constraint on scopes.name).
     /// </remarks>
     /// <returns><c>201</c> with <see cref="ScopeDetailResponse"/> on success, <c>409</c> on collision.</returns>
     [Authorize(Policy = AuthPolicies.RequirePublishScope)]
@@ -69,6 +102,7 @@ public class ScopesController : ControllerBase
     public async Task<IActionResult> ClaimScope()
     {
         string callerUsername = User.Identity!.Name!;
+        var principal = BuildPrincipal(User);
 
         ClaimScopeRequest? body;
         try
@@ -102,40 +136,33 @@ public class ScopesController : ControllerBase
             });
         }
 
-        // Reserved system scopes cannot be claimed
-        if (ReservedScopes.IsReserved(scopeName))
-            return Conflict(new ErrorResponse { Error = $"The scope '@{scopeName}' is a reserved system scope and cannot be claimed." });
+        // Run PDP for ClaimScope
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ClaimScope, new ScopeResource(scopeName));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason switch
+            {
+                AuthzDenyReason.ScopeReserved => 409,
+                AuthzDenyReason.ScopeNotOwned => 409,
+                AuthzDenyReason.NotAuthenticated => 401,
+                _ => 403
+            };
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
 
-        // Check for username collision — usernames and scopes share one pool
-        if (await _db.GetUserAsync(scopeName) is not null)
-            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by a user account." });
-
-        // Check for org-name collision — org names and scopes share one pool
-        if (await _db.GetOrgAsync(scopeName) is not null)
-            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by an organization." });
-
-        // Check for existing scope collision
-        if (await _db.ScopeExistsAsync(scopeName))
-            return Conflict(new ErrorResponse { Error = $"Scope '@{scopeName}' already exists." });
-
-        ScopeRecord newScope;
+        // Owner-type-specific validation (user: caller matches owner; org: caller is org owner)
+        string ownerId;
+        string ownerDisplayName;
         if (ownerType == ScopeOwnerTypes.User)
         {
-            // The caller can only claim a scope for themselves (not for another user)
             if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole(UserRoles.Admin))
                 return StatusCode(403, new ErrorResponse { Error = "You may only claim a user scope for your own account." });
 
-            newScope = new ScopeRecord
-            {
-                Name = scopeName,
-                OwnerType = ScopeOwnerTypes.User,
-                OwnerUsername = owner,
-                OwnerOrgId = null
-            };
+            ownerId = owner;
+            ownerDisplayName = owner;
         }
         else // ownerType == "org"
         {
-            // Verify the org exists and the caller is an owner of it
             var orgRecord = await _db.GetOrgAsync(owner);
             if (orgRecord == null)
                 return NotFound(new ErrorResponse { Error = $"Organization '{owner}' not found." });
@@ -145,23 +172,100 @@ public class ScopesController : ControllerBase
             if (!isOrgOwner && !isAdmin)
                 return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{owner}'." });
 
-            newScope = new ScopeRecord
-            {
-                Name = scopeName,
-                OwnerType = ScopeOwnerTypes.Org,
-                OwnerOrgId = orgRecord.Id,
-                OwnerUsername = null
-            };
+            ownerId = orgRecord.Id;
+            ownerDisplayName = orgRecord.Name;
         }
+
+        // Namespace-pool collision checks (username, org-name)
+        if (await _db.GetUserAsync(scopeName) is not null)
+            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by a user account." });
+
+        if (await _db.GetOrgAsync(scopeName) is not null)
+            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by an organization." });
+
+        // Atomic claim via insert-then-handle-unique-violation
+        var (succeeded, response) = await _scopeChallenge.TryClaimAsync(
+            scopeName, ownerType, ownerId, ownerDisplayName);
+
+        if (!succeeded)
+            return Conflict(new ErrorResponse { Error = $"Scope '@{scopeName}' already exists." });
+
+        return StatusCode(201, response);
+    }
+
+    /// <summary>
+    /// Submits a scope for verification (501 stub — DNS resolver deferred to Q4).
+    /// </summary>
+    /// <param name="scope">The bare scope name.</param>
+    /// <returns><c>501 NotImplemented</c> with documented body shape.</returns>
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [HttpPost("{scope}/verify")]
+    public async Task<IActionResult> VerifyScope(string scope)
+    {
+        var principal = BuildPrincipal(User);
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.VerifyScope, new ScopeResource(scope));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
+        // Resolver is stubbed 501 this phase (Q4 deferred).
+        return StatusCode(501, new ScopeVerifyResponse
+        {
+            Scope = scope,
+            Method = "dns-txt",
+            Message = "DNS-TXT verification resolver is not yet implemented. Check back in a future release."
+        });
+    }
+
+    /// <summary>
+    /// Deletes a scope. Returns 409 if any packages still belong to the scope.
+    /// </summary>
+    /// <param name="scope">The bare scope name.</param>
+    /// <returns><c>204</c> on success, <c>409</c> if the scope still owns packages, <c>404</c> if not found.</returns>
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [HttpDelete("{scope}")]
+    public async Task<IActionResult> DeleteScope(string scope)
+    {
+        var principal = BuildPrincipal(User);
+        // Reuse ClaimScope authorization logic: caller must own the scope or be admin
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ClaimScope, new ScopeResource(scope));
+
+        // For deletion specifically: the scope must exist and be owned by the caller.
+        // We interpret ClaimScope DENY(ScopeNotOwned "already claimed by another") as a 403.
+        if (!decision.Allowed && decision.Reason != AuthzDenyReason.ScopeNotOwned)
+        {
+            // ScopeReserved → 403, NotAuthenticated → 401
+            int statusCode = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(statusCode, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
+        // Verify the scope actually exists and is owned by the caller
+        var record = await _db.GetScopeAsync(scope);
+        if (record == null)
+            return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
+
+        // Check ownership (admin may delete any non-reserved scope)
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
+        string callerUsername = User.Identity!.Name!;
+        bool callerOwns = (record.OwnerType == ScopeOwnerTypes.User && record.OwnerUsername == callerUsername)
+            || isAdmin;
+        if (!callerOwns)
+            return StatusCode(403, new ErrorResponse { Error = $"Scope '@{scope}' is not owned by this account." });
+
+        // Reserved scopes cannot be deleted
+        if (ReservedScopes.IsReserved(scope))
+            return StatusCode(403, new ErrorResponse { Error = $"Scope '@{scope}' is a reserved system scope and cannot be deleted." });
 
         try
         {
-            await _db.CreateScopeAsync(newScope);
-            return StatusCode(201, BuildScopeDetailResponse(newScope));
+            await _db.DeleteScopeAsync(scope);
+            return StatusCode(204);
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return Conflict(new ErrorResponse { Error = "ScopeNotEmpty", Message = ex.Message });
         }
     }
 
@@ -177,7 +281,8 @@ public class ScopesController : ControllerBase
         {
             Scope = record.Name,
             OwnerType = record.OwnerType,
-            Owner = owner
+            Owner = owner,
+            State = record.State == ScopeStates.Pending ? ScopeStates.Pending : null
         };
     }
 }

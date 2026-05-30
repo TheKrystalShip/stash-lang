@@ -5,10 +5,13 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
+using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
 
@@ -20,6 +23,10 @@ namespace Stash.Registry.Controllers;
 /// All search endpoints are public and require no authentication.
 /// Queries are matched against package names and descriptions using a SQL
 /// <c>LIKE</c> pattern. Results are paginated; the maximum page size is 100.
+/// Visibility filtering is enforced through the PDP-backed predicate in
+/// <see cref="IRegistryDatabase.SearchPackagesAsync"/>: anonymous callers see only
+/// public packages; authenticated callers also see packages they have at least reader
+/// access to via their role, team, or org membership.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -27,14 +34,30 @@ namespace Stash.Registry.Controllers;
 public sealed class SearchController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
+    private readonly IRegistryAuthorizer _authorizer;
 
     /// <summary>
     /// Initialises the controller with its required services.
     /// </summary>
-    /// <param name="db">Registry database used to execute search queries.</param>
-    public SearchController(IRegistryDatabase db)
+    public SearchController(IRegistryDatabase db, IRegistryAuthorizer authorizer)
     {
         _db = db;
+        _authorizer = authorizer;
+    }
+
+    // ── Helper: build Principal ───────────────────────────────────────────────
+
+    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return new AnonymousPrincipal();
+
+        string username = user.Identity!.Name!;
+        bool isAdmin = user.IsInRole(UserRoles.Admin);
+        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
+        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
+        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
+        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
@@ -47,7 +70,7 @@ public sealed class SearchController : ControllerBase
     ///   <item><term>page</term><description>1-based page number (default: 1).</description></item>
     ///   <item><term>pageSize</term><description>Results per page, 1–100 (default: 20).</description></item>
     /// </list>
-    /// No authentication required.
+    /// No authentication required. Private packages are omitted for unauthenticated callers.
     /// </remarks>
     /// <returns>
     /// <c>200</c> with a <see cref="SearchResponse"/> containing a list of
@@ -58,6 +81,16 @@ public sealed class SearchController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Search()
     {
+        // PDP check for the Search action (public — always Allow, but runs the ceiling check
+        // so a revoked token cannot reach even this endpoint cleanly).
+        var principal = BuildPrincipal(User);
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.Search, new SearchResource());
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
         string query = Request.Query.TryGetValue("q", out var q) ? q.ToString() : "";
 
         int page = 1;
@@ -75,7 +108,7 @@ public sealed class SearchController : ControllerBase
 
         // Pass the caller's username so that visibility filtering can include private/internal
         // packages the caller has permission to read. Unauthenticated callers get null and see
-        // only public packages.
+        // only public packages. The PDP-backed predicate lives in SearchPackagesAsync.
         string? callerUsername = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
         SearchResult result = await _db.SearchPackagesAsync(query, page, pageSize, callerUsername);
 

@@ -253,6 +253,8 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.OwnerType).HasColumnName("owner_type").IsRequired();
             entity.Property(e => e.OwnerUsername).HasColumnName("owner_username");
             entity.Property(e => e.OwnerOrgId).HasColumnName("owner_org_id");
+            entity.Property(e => e.State).HasColumnName("state").IsRequired()
+                .HasDefaultValue(Stash.Registry.Database.Models.ScopeStates.Claimed);
             entity.ToTable("scopes", t =>
             {
                 t.HasCheckConstraint(
@@ -265,6 +267,9 @@ public sealed class RegistryDbContext : DbContext
                     "(owner_type = 'system' AND owner_username IS NULL AND owner_org_id IS NULL) OR " +
                     "(owner_type = 'user' AND owner_username IS NOT NULL AND owner_org_id IS NULL) OR " +
                     "(owner_type = 'org' AND owner_org_id IS NOT NULL AND owner_username IS NULL)");
+                t.HasCheckConstraint(
+                    "CK_scopes_state",
+                    "state IN ('claimed', 'pending')");
             });
         });
 

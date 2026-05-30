@@ -31,7 +31,9 @@ public sealed class RegistryAuthorizerTests : IDisposable
         _db = new StashRegistryDatabase(_ctx);
         _db.Initialize();
         var resolver = new PermissionResolver(_ctx);
-        _authorizer = new RegistryAuthorizer(resolver, _ctx);
+        var config = new Stash.Registry.Configuration.RegistryConfig();
+        var scopeChallenge = new Stash.Registry.Auth.Authorization.ScopeChallengeService(_db, config);
+        _authorizer = new RegistryAuthorizer(resolver, _ctx, scopeChallenge, config);
     }
 
     public void Dispose()

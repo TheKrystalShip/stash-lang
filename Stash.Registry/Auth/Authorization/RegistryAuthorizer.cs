@@ -2,7 +2,9 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Stash.Registry.Auth;
+using Stash.Registry.Configuration;
 using Stash.Registry.Database;
+using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Auth.Authorization;
 
@@ -14,6 +16,8 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 {
     private readonly IPermissionResolver _resolver;
     private readonly RegistryDbContext _ctx;
+    private readonly ScopeChallengeService _scopeChallenge;
+    private readonly ScopeOwnershipPolicyKind _scopePolicy;
 
     private static int RoleRank(string role) => PackageRoles.Rank(role);
 
@@ -24,10 +28,16 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     /// <summary>
     /// Initialises the authorizer with its dependencies.
     /// </summary>
-    public RegistryAuthorizer(IPermissionResolver resolver, RegistryDbContext ctx)
+    public RegistryAuthorizer(
+        IPermissionResolver resolver,
+        RegistryDbContext ctx,
+        ScopeChallengeService scopeChallenge,
+        RegistryConfig config)
     {
         _resolver = resolver;
         _ctx = ctx;
+        _scopeChallenge = scopeChallenge;
+        _scopePolicy = config.Security.ScopeOwnershipPolicy;
     }
 
     /// <inheritdoc/>
@@ -322,11 +332,29 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         var scopeRecord = await _ctx.Scopes.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Name == scope);
 
+        // ── Unowned scope: branch by policy ──────────────────────────────────────
         if (scopeRecord == null)
-            return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
-                $"Scope '@{scope}' is not claimed — run `stash pkg scope claim @{scope}` first.");
+        {
+            return _scopePolicy switch
+            {
+                ScopeOwnershipPolicyKind.Open => await AutoClaimScopeAsync(username, scope),
+                ScopeOwnershipPolicyKind.Verified => AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
+                    $"Scope '@{scope}' requires verification — run `stash pkg scope claim @{scope}` then `verify`."),
+                _ => AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
+                    $"Scope '@{scope}' is not claimed — run `stash pkg scope claim @{scope}` first.")
+            };
+        }
 
-        // Someone else owns it
+        // ── Verified mode: pending scope is treated as unowned ────────────────────
+        if (_scopePolicy == ScopeOwnershipPolicyKind.Verified
+            && scopeRecord.State == ScopeStates.Pending)
+        {
+            // Treat pending as unowned — same message as the "scope does not exist" branch
+            return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
+                $"Scope '@{scope}' requires verification — run `stash pkg scope claim @{scope}` then `verify`.");
+        }
+
+        // ── Someone else owns it ──────────────────────────────────────────────────
         bool callerOwnsScope = (scopeRecord.OwnerType == ScopeOwnerTypes.User && scopeRecord.OwnerUsername == username)
             || (scopeRecord.OwnerType == ScopeOwnerTypes.Org && scopeRecord.OwnerOrgId != null
                 && await _resolver.IsOrgMemberAsync(username, scopeRecord.OwnerOrgId)
@@ -337,6 +365,36 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
                 $"Scope '@{scope}' is not owned by this account.");
 
         return AuthzDecision.Allow();
+    }
+
+    /// <summary>
+    /// Atomically claims a user-scope for the caller under Open policy (auto-claim on first publish).
+    /// Returns ALLOW on success (or if scope was already claimed by the caller in a race);
+    /// returns DENY(ScopeNotOwned) if a concurrent request claimed it for a different user.
+    /// </summary>
+    private async Task<AuthzDecision> AutoClaimScopeAsync(string username, string scope)
+    {
+        var (succeeded, _) = await _scopeChallenge.TryClaimAsync(
+            scope, ScopeOwnerTypes.User, username, username);
+
+        if (succeeded)
+            return AuthzDecision.Allow();
+
+        // Collision: re-read to see who won the race
+        var existing = await _ctx.Scopes.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Name == scope);
+
+        if (existing != null)
+        {
+            // The caller themselves won a parallel race (e.g. they retried immediately)
+            bool callerOwns = existing.OwnerType == ScopeOwnerTypes.User
+                              && existing.OwnerUsername == username;
+            if (callerOwns)
+                return AuthzDecision.Allow();
+        }
+
+        return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
+            $"Scope '@{scope}' was claimed by another account during this request.");
     }
 
     private async Task<AuthzDecision> AuthorizeClaimScopeAsync(

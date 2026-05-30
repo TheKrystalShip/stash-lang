@@ -532,6 +532,48 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
+    public async Task<bool> TryCreateScopeAsync(ScopeRecord scope)
+    {
+        _context.Scopes.Add(scope);
+        try
+        {
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 }
+                  || (ex.InnerException?.Message?.Contains("UNIQUE constraint failed") ?? false)
+                  || (ex.InnerException?.Message?.Contains("unique constraint") ?? false))
+        {
+            // Unique-constraint violation: another concurrent insert won the race.
+            _context.Entry(scope).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteScopeAsync(string name)
+    {
+        int pkgCount = await CountPackagesByScopeAsync(name);
+        if (pkgCount > 0)
+            throw new InvalidOperationException($"Scope '@{name}' still owns {pkgCount} package(s); delete them first.");
+
+        var record = await _context.Scopes.FindAsync(name);
+        if (record != null)
+        {
+            _context.Scopes.Remove(record);
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CountPackagesByScopeAsync(string scope)
+    {
+        string prefix = $"@{scope}/";
+        return await _context.Packages.CountAsync(p => p.Name.StartsWith(prefix));
+    }
+
+    /// <inheritdoc/>
     public async Task<ScopeRecord?> GetScopeAsync(string name)
     {
         return await _context.Scopes.AsNoTracking().FirstOrDefaultAsync(s => s.Name == name);
@@ -859,6 +901,41 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     {
         return await _context.OrgMembers.AnyAsync(m =>
             m.OrgId == orgId && m.Username == username && m.OrgRole == OrgRoles.Owner);
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteOrgAsync(string name)
+    {
+        var org = await _context.Organizations.FirstOrDefaultAsync(o => o.Name == name);
+        if (org == null)
+            return;
+
+        // Cascade refusal: deny if the org still owns scopes or packages.
+        int scopeCount = await CountScopesByOrgAsync(org.Id);
+        if (scopeCount > 0)
+            throw new InvalidOperationException($"Organization '{name}' still owns {scopeCount} scope(s); delete them first.");
+
+        // Also check packages in org-owned scopes (belt-and-suspenders; scopes should catch it first)
+        var orgScopeNames = await _context.Scopes
+            .AsNoTracking()
+            .Where(s => s.OwnerOrgId == org.Id)
+            .Select(s => s.Name)
+            .ToListAsync();
+        foreach (string scopeName in orgScopeNames)
+        {
+            int pkgCount = await CountPackagesByScopeAsync(scopeName);
+            if (pkgCount > 0)
+                throw new InvalidOperationException($"Organization '{name}' still owns packages under '@{scopeName}'; delete them first.");
+        }
+
+        _context.Organizations.Remove(org);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CountScopesByOrgAsync(string orgId)
+    {
+        return await _context.Scopes.CountAsync(s => s.OwnerOrgId == orgId);
     }
 
     // ── Team operations ───────────────────────────────────────────────────────

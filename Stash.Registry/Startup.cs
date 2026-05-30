@@ -175,6 +175,7 @@ public sealed class Startup
 
         // P1: PDP core — register as scoped so they share the per-request DbContext.
         services.AddScoped<IPermissionResolver, PermissionResolver>();
+        services.AddScoped<ScopeChallengeService>();
         services.AddScoped<IRegistryAuthorizer, RegistryAuthorizer>();
 
         services.AddOpenApi();

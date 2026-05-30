@@ -6,8 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
+using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
+using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
 
@@ -18,7 +20,8 @@ namespace Stash.Registry.Controllers;
 /// <para>
 /// Creating an organization requires a JWT with the <c>publish</c> or <c>admin</c> scope.
 /// The creator is automatically added as the org owner and the org's scope is provisioned.
-/// Member and team management operations require the caller to be an org owner.
+/// Member and team management operations require the caller to be an org owner, enforced via
+/// the PDP (<see cref="IRegistryAuthorizer"/>).
 /// </para>
 /// </remarks>
 [ApiController]
@@ -26,14 +29,30 @@ namespace Stash.Registry.Controllers;
 public class OrganizationsController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
+    private readonly IRegistryAuthorizer _authorizer;
 
     /// <summary>
-    /// Initialises the controller with the registry database.
+    /// Initialises the controller with the registry database and authorizer.
     /// </summary>
-    /// <param name="db">Registry database for org and member queries.</param>
-    public OrganizationsController(IRegistryDatabase db)
+    public OrganizationsController(IRegistryDatabase db, IRegistryAuthorizer authorizer)
     {
         _db = db;
+        _authorizer = authorizer;
+    }
+
+    // ── Helper: build Principal ───────────────────────────────────────────────
+
+    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return new AnonymousPrincipal();
+
+        string username = user.Identity!.Name!;
+        bool isAdmin = user.IsInRole(UserRoles.Admin);
+        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
+        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
+        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
+        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
@@ -49,6 +68,7 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> CreateOrg()
     {
         string username = User.Identity!.Name!;
+        var principal = BuildPrincipal(User);
 
         CreateOrgRequest? body;
         try
@@ -78,6 +98,13 @@ public class OrganizationsController : ControllerBase
         if (ReservedScopes.IsReserved(name))
             return Conflict(new ErrorResponse { Error = $"The name '{name}' is reserved and cannot be used as an organization name." });
 
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.CreateOrg, new OrgResource(name));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
         try
         {
             var org = await _db.CreateOrgAsync(name, body?.DisplayName, username);
@@ -105,6 +132,14 @@ public class OrganizationsController : ControllerBase
     [HttpGet("{org}")]
     public async Task<IActionResult> GetOrg(string org)
     {
+        var principal = BuildPrincipal(User);
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ReadOrg, new OrgResource(org));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
@@ -120,6 +155,46 @@ public class OrganizationsController : ControllerBase
     }
 
     /// <summary>
+    /// Deletes an organization. Returns 409 if the org still owns scopes or packages.
+    /// </summary>
+    /// <param name="org">The org name.</param>
+    /// <returns><c>204</c> on success, <c>409</c> if the org still owns resources, <c>404</c> if not found.</returns>
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [HttpDelete("{org}")]
+    public async Task<IActionResult> DeleteOrg(string org)
+    {
+        var principal = BuildPrincipal(User);
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AddOrgMember, new OrgResource(org));
+        if (!decision.Allowed && decision.Reason != AuthzDenyReason.OrgMembershipRequired
+            && decision.Reason != AuthzDenyReason.PolicyDenied)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
+        var orgRecord = await _db.GetOrgAsync(org);
+        if (orgRecord == null)
+            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+
+        // Ownership check: only org owners or admins may delete
+        string callerUsername = User.Identity!.Name!;
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
+        bool isOrgOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
+        if (!isOrgOwner && !isAdmin)
+            return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{org}'." });
+
+        try
+        {
+            await _db.DeleteOrgAsync(org);
+            return StatusCode(204);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new ErrorResponse { Error = "OrgNotEmpty", Message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Adds a member to an organization. Only org owners may invoke this endpoint.
     /// </summary>
     /// <param name="org">The org name.</param>
@@ -129,15 +204,18 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> AddMember(string org)
     {
         string username = User.Identity!.Name!;
+        var principal = BuildPrincipal(User);
 
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, username);
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        if (!isOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of organization '{org}'." });
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AddOrgMember, new OrgResource(org));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
 
         AddOrgMemberRequest? body;
         try
@@ -155,8 +233,8 @@ public class OrganizationsController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "Username is required." });
 
         string orgRole = string.IsNullOrEmpty(body?.OrgRole) ? OrgRoles.Member : body.OrgRole;
-        if (orgRole != "owner" && orgRole != "member")
-            return BadRequest(new ErrorResponse { Error = "org_role must be 'owner' or 'member'." });
+        if (orgRole != OrgRoles.Owner && orgRole != OrgRoles.Member)
+            return BadRequest(new ErrorResponse { Error = $"org_role must be '{OrgRoles.Owner}' or '{OrgRoles.Member}'." });
 
         // Verify the target user exists
         var targetUser = await _db.GetUserAsync(newMember);
@@ -185,15 +263,18 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> RemoveMember(string org, string username)
     {
         string callerUsername = User.Identity!.Name!;
+        var principal = BuildPrincipal(User);
 
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        if (!isOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{org}'." });
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RemoveOrgMember, new OrgResource(org));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
 
         await _db.RemoveOrgMemberAsync(orgRecord.Id, username);
         return Ok(new SuccessResponse());
@@ -209,15 +290,18 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> CreateTeam(string org)
     {
         string username = User.Identity!.Name!;
+        var principal = BuildPrincipal(User);
 
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, username);
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        if (!isOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of organization '{org}'." });
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.CreateTeam, new OrgResource(org));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
 
         CreateTeamRequest? body;
         try
@@ -262,15 +346,18 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> AddTeamMember(string org, string team)
     {
         string username = User.Identity!.Name!;
+        var principal = BuildPrincipal(User);
 
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, username);
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        if (!isOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of organization '{org}'." });
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AddTeamMember, new OrgResource(org));
+        if (!decision.Allowed)
+        {
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
 
         var teamRecord = await _db.GetTeamByNameAsync(orgRecord.Id, team);
         if (teamRecord == null)
