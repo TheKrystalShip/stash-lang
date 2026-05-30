@@ -155,7 +155,7 @@ public class OrganizationsController : ControllerBase
         if (string.IsNullOrEmpty(newMember))
             return BadRequest(new ErrorResponse { Error = "Username is required." });
 
-        string orgRole = string.IsNullOrEmpty(body?.OrgRole) ? "member" : body.OrgRole;
+        string orgRole = string.IsNullOrEmpty(body?.OrgRole) ? OrgRoles.Member : body.OrgRole;
         if (orgRole != "owner" && orgRole != "member")
             return BadRequest(new ErrorResponse { Error = "org_role must be 'owner' or 'member'." });
 

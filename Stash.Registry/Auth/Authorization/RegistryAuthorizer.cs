@@ -271,14 +271,14 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
                 var scope = await _ctx.Scopes.AsNoTracking()
                     .FirstOrDefaultAsync(s => s.Name == scopeName);
 
-                if (scope?.OwnerType == "org" && scope.OwnerOrgId != null)
+                if (scope?.OwnerType == ScopeOwnerTypes.Org && scope.OwnerOrgId != null)
                 {
                     if (await _resolver.IsOrgMemberAsync(username, scope.OwnerOrgId))
                         return AuthzDecision.Allow();
                 }
 
                 // User-owned scope: the scope owner can read internal packages
-                if (scope?.OwnerType == "user" && scope.OwnerUsername == username)
+                if (scope?.OwnerType == ScopeOwnerTypes.User && scope.OwnerUsername == username)
                     return AuthzDecision.Allow();
             }
         }
@@ -330,8 +330,8 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
                 $"Scope '@{scope}' is not claimed — run `stash pkg scope claim @{scope}` first.");
 
         // Someone else owns it
-        bool callerOwnsScope = (scopeRecord.OwnerType == "user" && scopeRecord.OwnerUsername == username)
-            || (scopeRecord.OwnerType == "org" && scopeRecord.OwnerOrgId != null
+        bool callerOwnsScope = (scopeRecord.OwnerType == ScopeOwnerTypes.User && scopeRecord.OwnerUsername == username)
+            || (scopeRecord.OwnerType == ScopeOwnerTypes.Org && scopeRecord.OwnerOrgId != null
                 && await _resolver.IsOrgMemberAsync(username, scopeRecord.OwnerOrgId)
                 && await IsOrgOwnerAsync(username, scopeRecord.OwnerOrgId));
 
@@ -362,7 +362,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         if (existing != null)
         {
             // Already claimed by someone else → deny
-            bool ownedByCaller = existing.OwnerType == "user" && existing.OwnerUsername == username;
+            bool ownedByCaller = existing.OwnerType == ScopeOwnerTypes.User && existing.OwnerUsername == username;
             if (!ownedByCaller && !isAdmin)
                 return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
                     $"Scope '@{scope}' is already claimed by another account.");
@@ -387,7 +387,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         if (existing == null)
             return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned, $"Scope '@{scope}' does not exist.");
 
-        bool ownedByCaller = existing.OwnerType == "user" && existing.OwnerUsername == username;
+        bool ownedByCaller = existing.OwnerType == ScopeOwnerTypes.User && existing.OwnerUsername == username;
         if (!ownedByCaller && !isAdmin)
             return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
                 $"Only the scope owner may verify '@{scope}'.");
@@ -441,7 +441,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     private async Task<bool> IsOrgOwnerAsync(string username, string orgId)
     {
         return await _ctx.OrgMembers.AsNoTracking()
-            .AnyAsync(m => m.OrgId == orgId && m.Username == username && m.OrgRole == "owner");
+            .AnyAsync(m => m.OrgId == orgId && m.Username == username && m.OrgRole == OrgRoles.Owner);
     }
 
     private static string? ExtractScope(string packageName)

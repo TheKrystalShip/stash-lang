@@ -60,7 +60,7 @@ public sealed class PermissionResolver : IPermissionResolver
             .AsNoTracking()
             .FirstOrDefaultAsync(r =>
                 r.PackageName == packageName &&
-                r.PrincipalType == "user" &&
+                r.PrincipalType == PrincipalTypes.User &&
                 r.PrincipalId == username);
         if (directEntry != null)
             bestRole = BestRole(bestRole, directEntry.Role);
@@ -87,7 +87,7 @@ public sealed class PermissionResolver : IPermissionResolver
                     .AsNoTracking()
                     .Where(r =>
                         r.PackageName == packageName &&
-                        r.PrincipalType == "team" &&
+                        r.PrincipalType == PrincipalTypes.Team &&
                         existingTeamIds.Contains(r.PrincipalId))
                     .ToListAsync();
 
@@ -104,7 +104,7 @@ public sealed class PermissionResolver : IPermissionResolver
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Name == scopeName);
 
-            if (scope?.OwnerType == "org" && scope.OwnerOrgId != null)
+            if (scope?.OwnerType == ScopeOwnerTypes.Org && scope.OwnerOrgId != null)
             {
                 // Existence guard: the org row must still exist.
                 bool orgExists = await _ctx.Organizations
@@ -122,7 +122,7 @@ public sealed class PermissionResolver : IPermissionResolver
                     if (orgMember != null)
                     {
                         // Org owners inherit package owner; org members inherit reader.
-                        string inheritedRole = orgMember.OrgRole == "owner" ? PackageRoles.Owner : PackageRoles.Reader;
+                        string inheritedRole = orgMember.OrgRole == OrgRoles.Owner ? PackageRoles.Owner : PackageRoles.Reader;
                         bestRole = BestRole(bestRole, inheritedRole);
                     }
 
@@ -131,7 +131,7 @@ public sealed class PermissionResolver : IPermissionResolver
                         .AsNoTracking()
                         .FirstOrDefaultAsync(r =>
                             r.PackageName == packageName &&
-                            r.PrincipalType == "org" &&
+                            r.PrincipalType == PrincipalTypes.Org &&
                             r.PrincipalId == scope.OwnerOrgId);
                     if (orgRoleEntry != null)
                         bestRole = BestRole(bestRole, orgRoleEntry.Role);

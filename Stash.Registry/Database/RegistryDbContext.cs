@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Stash.Registry.Auth;
 using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Database;
@@ -202,7 +203,7 @@ public sealed class RegistryDbContext : DbContext
             entity.HasKey(e => new { e.OrgId, e.Username });
             entity.Property(e => e.OrgId).HasColumnName("org_id");
             entity.Property(e => e.Username).HasColumnName("username");
-            entity.Property(e => e.OrgRole).HasColumnName("org_role").IsRequired().HasDefaultValue("member");
+            entity.Property(e => e.OrgRole).HasColumnName("org_role").IsRequired().HasDefaultValue(OrgRoles.Member);
             entity.Property(e => e.JoinedAt).HasColumnName("joined_at");
             entity.ToTable("org_members", t => t.HasCheckConstraint(
                 "CK_org_members_org_role",

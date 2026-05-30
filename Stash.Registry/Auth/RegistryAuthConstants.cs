@@ -121,6 +121,58 @@ public static class AuthPolicies
     public const string RequireAdmin = "RequireAdmin";
 }
 
+// ── Org role wire values ──────────────────────────────────────────────────────
+
+/// <summary>
+/// Wire values for organization member roles stored in <c>OrgMemberEntry.OrgRole</c>.
+/// The set is closed: only <see cref="Owner"/> and <see cref="Member"/> are valid.
+/// </summary>
+public static class OrgRoles
+{
+    /// <summary>Organization owner: full control over the org, its members, and its scopes.</summary>
+    public const string Owner = "owner";
+
+    /// <summary>Organization member: read access to org-owned packages; no administrative rights.</summary>
+    public const string Member = "member";
+}
+
+// ── Principal type wire values ────────────────────────────────────────────────
+
+/// <summary>
+/// Wire values for the <c>principal_type</c> column in <c>PackageRoleEntry</c>.
+/// The set is closed: <see cref="User"/>, <see cref="Team"/>, and <see cref="Org"/>.
+/// </summary>
+public static class PrincipalTypes
+{
+    /// <summary>A single user principal.</summary>
+    public const string User = "user";
+
+    /// <summary>A team principal (a named group of users within an org).</summary>
+    public const string Team = "team";
+
+    /// <summary>An organization principal.</summary>
+    public const string Org = "org";
+
+    /// <summary>All valid principal types, ordered: user, team, org.</summary>
+    public static readonly string[] All = [User, Team, Org];
+}
+
+// ── Scope owner type wire values ──────────────────────────────────────────────
+
+/// <summary>
+/// Wire values for the <c>owner_type</c> column in <c>ScopeRecord</c>.
+/// Only <see cref="User"/> and <see cref="Org"/> are legal scope owners — teams are never
+/// scope owners (use <see cref="PrincipalTypes"/> for the broader package-role principal set).
+/// </summary>
+public static class ScopeOwnerTypes
+{
+    /// <summary>The scope is owned by an individual user.</summary>
+    public const string User = "user";
+
+    /// <summary>The scope is owned by an organization.</summary>
+    public const string Org = "org";
+}
+
 // ── Token ceiling converter ───────────────────────────────────────────────────
 
 /// <summary>

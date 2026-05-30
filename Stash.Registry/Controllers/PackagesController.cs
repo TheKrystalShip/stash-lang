@@ -135,7 +135,7 @@ public class PackagesController : ControllerBase
 
         List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
         List<string> owners = roles
-            .Where(r => r.PrincipalType == "user" && r.Role == "owner")
+            .Where(r => r.PrincipalType == PrincipalTypes.User && r.Role == PackageRoles.Owner)
             .Select(r => r.PrincipalId)
             .OrderBy(u => u)
             .ToList();
@@ -570,9 +570,8 @@ public class PackagesController : ControllerBase
                 new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
-        string[] validPrincipalTypes = ["user", "team", "org"];
-        if (!Array.Exists(validPrincipalTypes, p => p == request.PrincipalType))
-            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: user, team, org." });
+        if (!Array.Exists(PrincipalTypes.All, p => p == request.PrincipalType))
+            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
 
         if (!Array.Exists(PackageRoles.RankOrder, r => r == request.Role))
             return BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });

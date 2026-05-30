@@ -166,18 +166,18 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                 // Branch 1: direct user role
                 _context.PackageRoles.Any(r =>
                     r.PackageName == p.Name &&
-                    r.PrincipalType == "user" &&
+                    r.PrincipalType == PrincipalTypes.User &&
                     r.PrincipalId == callerUsername) ||
                 // Branch 2: team-mediated role
                 _context.PackageRoles.Any(r =>
                     r.PackageName == p.Name &&
-                    r.PrincipalType == "team" &&
+                    r.PrincipalType == PrincipalTypes.Team &&
                     _context.TeamMembers.Any(tm =>
                         tm.TeamId == r.PrincipalId &&
                         tm.Username == callerUsername)) ||
                 // Branch 3: org-mediated (scope is org-owned; caller is org member OR explicit org role)
                 _context.Scopes.Any(s =>
-                    s.OwnerType == "org" &&
+                    s.OwnerType == ScopeOwnerTypes.Org &&
                     s.OwnerOrgId != null &&
                     p.Name.StartsWith("@" + s.Name + "/") &&
                     (_context.OrgMembers.Any(m =>
@@ -185,12 +185,12 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                         m.Username == callerUsername) ||
                      _context.PackageRoles.Any(r =>
                         r.PackageName == p.Name &&
-                        r.PrincipalType == "org" &&
+                        r.PrincipalType == PrincipalTypes.Org &&
                         r.PrincipalId == s.OwnerOrgId))) ||
                 // Branch 4: internal + user-owned scope: caller is the scope owner (brief branch (b))
                 (p.Visibility == "internal" &&
                     _context.Scopes.Any(s =>
-                        s.OwnerType == "user" &&
+                        s.OwnerType == ScopeOwnerTypes.User &&
                         s.OwnerUsername == callerUsername &&
                         p.Name.StartsWith("@" + s.Name + "/"))));
         }
@@ -361,7 +361,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         // Remove user's direct package role entries (no FK to users).
         // Tokens cascade via FK, so EF handles those automatically.
         var roleEntries = await _context.PackageRoles
-            .Where(r => r.PrincipalType == "user" && r.PrincipalId == username)
+            .Where(r => r.PrincipalType == PrincipalTypes.User && r.PrincipalId == username)
             .ToListAsync();
         _context.PackageRoles.RemoveRange(roleEntries);
 
@@ -659,7 +659,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .AsNoTracking()
             .FirstOrDefaultAsync(r =>
                 r.PackageName == packageName &&
-                r.PrincipalType == "user" &&
+                r.PrincipalType == PrincipalTypes.User &&
                 r.PrincipalId == username);
         if (directEntry != null)
             bestRole = BestRole(bestRole, directEntry.Role);
@@ -675,7 +675,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         {
             var teamRoles = await _context.PackageRoles
                 .AsNoTracking()
-                .Where(r => r.PackageName == packageName && r.PrincipalType == "team" && teamIds.Contains(r.PrincipalId))
+                .Where(r => r.PackageName == packageName && r.PrincipalType == PrincipalTypes.Team && teamIds.Contains(r.PrincipalId))
                 .ToListAsync();
             foreach (var tr in teamRoles)
                 bestRole = BestRole(bestRole, tr.Role);
@@ -687,7 +687,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         if (scopeName != null)
         {
             var scope = await _context.Scopes.AsNoTracking().FirstOrDefaultAsync(s => s.Name == scopeName);
-            if (scope?.OwnerType == "org" && scope.OwnerOrgId != null)
+            if (scope?.OwnerType == ScopeOwnerTypes.Org && scope.OwnerOrgId != null)
             {
                 var orgMember = await _context.OrgMembers
                     .AsNoTracking()
@@ -695,7 +695,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                 if (orgMember != null)
                 {
                     // Org owners inherit package owner; org members inherit reader on private/internal packages
-                    string inheritedRole = orgMember.OrgRole == "owner" ? PackageRoles.Owner : PackageRoles.Reader;
+                    string inheritedRole = orgMember.OrgRole == OrgRoles.Owner ? PackageRoles.Owner : PackageRoles.Reader;
                     bestRole = BestRole(bestRole, inheritedRole);
                 }
 
@@ -704,7 +704,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                     .AsNoTracking()
                     .FirstOrDefaultAsync(r =>
                         r.PackageName == packageName &&
-                        r.PrincipalType == "org" &&
+                        r.PrincipalType == PrincipalTypes.Org &&
                         r.PrincipalId == scope.OwnerOrgId);
                 if (orgRoleEntry != null)
                     bestRole = BestRole(bestRole, orgRoleEntry.Role);
@@ -796,7 +796,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         _context.Scopes.Add(new ScopeRecord
         {
             Name = name,
-            OwnerType = "org",
+            OwnerType = ScopeOwnerTypes.Org,
             OwnerOrgId = org.Id,
             OwnerUsername = null
         });
@@ -806,7 +806,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         {
             OrgId = org.Id,
             Username = createdBy,
-            OrgRole = "owner",
+            OrgRole = OrgRoles.Owner,
             JoinedAt = DateTime.UtcNow
         });
 
@@ -859,7 +859,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     public async Task<bool> IsOrgOwnerAsync(string orgId, string username)
     {
         return await _context.OrgMembers.AnyAsync(m =>
-            m.OrgId == orgId && m.Username == username && m.OrgRole == "owner");
+            m.OrgId == orgId && m.Username == username && m.OrgRole == OrgRoles.Owner);
     }
 
     // ── Team operations ───────────────────────────────────────────────────────

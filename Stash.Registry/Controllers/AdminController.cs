@@ -175,9 +175,8 @@ public class AdminController : ControllerBase
         if (body == null)
             return BadRequest(new ErrorResponse { Error = "Request body is required." });
 
-        string[] validPrincipalTypes = ["user", "team", "org"];
-        if (!Array.Exists(validPrincipalTypes, p => p == body.PrincipalType))
-            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: user, team, org." });
+        if (!Array.Exists(PrincipalTypes.All, p => p == body.PrincipalType))
+            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
 
         if (!Array.Exists(PackageRoles.RankOrder, r => r == body.Role))
             return BadRequest(new ErrorResponse { Error = $"Invalid role '{body.Role}'. Must be one of: owner, maintainer, publisher, reader." });

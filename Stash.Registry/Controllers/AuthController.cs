@@ -117,14 +117,14 @@ public class AuthController : ControllerBase
         // Create short-lived access token
         string accessTokenId = Guid.NewGuid().ToString();
         DateTime accessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
-        string accessJwt = _jwtService.CreateToken(username, role, "publish", accessExpiresAt, accessTokenId, machineId);
+        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Publish, accessExpiresAt, accessTokenId, machineId);
 
         await _db.CreateTokenAsync(new TokenRecord
         {
             Id = accessTokenId,
             Username = username,
             TokenHash = "",
-            Scope = "publish",
+            Scope = TokenScopes.Publish,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = accessExpiresAt
         });
@@ -146,7 +146,7 @@ public class AuthController : ControllerBase
                 AccessTokenId = accessTokenId,
                 FamilyId = accessTokenId,
                 MachineId = machineId,
-                Scope = "publish",
+                Scope = TokenScopes.Publish,
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = refreshExpiresAt.Value
             });
@@ -217,7 +217,7 @@ public class AuthController : ControllerBase
         try
         {
             string role = await _authProvider.CreateUserWithScopeAsync(username, password);
-            if (role == "admin")
+            if (role == UserRoles.Admin)
             {
                 _logger.LogInformation(
                     "User '{User}' is the first registered user and was created as admin.",
@@ -319,17 +319,17 @@ public class AuthController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
-        string scope = string.IsNullOrEmpty(body?.Scope) ? "publish" : body.Scope;
+        string scope = string.IsNullOrEmpty(body?.Scope) ? TokenScopes.Publish : body.Scope;
 
-        if (!string.Equals(scope, "read", StringComparison.Ordinal)
-            && !string.Equals(scope, "publish", StringComparison.Ordinal)
-            && !string.Equals(scope, "admin", StringComparison.Ordinal))
+        if (!string.Equals(scope, TokenScopes.Read, StringComparison.Ordinal)
+            && !string.Equals(scope, TokenScopes.Publish, StringComparison.Ordinal)
+            && !string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal))
         {
             return BadRequest(new ErrorResponse { Error = "Scope must be 'read', 'publish', or 'admin'." });
         }
 
-        if (string.Equals(scope, "admin", StringComparison.Ordinal)
-            && !string.Equals(role, "admin", StringComparison.Ordinal))
+        if (string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal)
+            && !string.Equals(role, UserRoles.Admin, StringComparison.Ordinal))
         {
             return StatusCode(403, new ErrorResponse { Error = "Only admin users can create admin-scoped tokens." });
         }
@@ -414,7 +414,7 @@ public class AuthController : ControllerBase
         }
 
         bool isOwner = string.Equals(record.Username, username, StringComparison.Ordinal);
-        bool isAdmin = string.Equals(role, "admin", StringComparison.Ordinal);
+        bool isAdmin = string.Equals(role, UserRoles.Admin, StringComparison.Ordinal);
 
         if (!isOwner && !isAdmin)
         {
