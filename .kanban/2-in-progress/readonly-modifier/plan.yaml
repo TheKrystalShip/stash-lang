@@ -1,0 +1,211 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py readonly-modifier
+
+schema_version: 1
+
+feature: readonly-modifier
+title: readonly modifier — deep value immutability
+brief: ./brief.md
+
+created: 2026-05-30
+architect_session: 2026-05-30-readonly-modifier-spec
+
+# Cheap default verify — every phase. Heavier feature-wide checks live in per-phase verify
+# and especially in final_verify.
+default_verify:
+  - dotnet build
+
+# Broad scope safety rail. Implementers may make small documented corrections (renamed
+# file, moved helper, wrong verify filter) inside the current phase's intent.
+scope:
+  - Stash.Core/**
+  - Stash.Bytecode/**
+  - Stash.Analysis/**
+  - Stash.Stdlib/**
+  - Stash.Lsp/**
+  - Stash.Playground/**
+  - Stash.Docs/**
+  - Stash.Tests/**
+  - .vscode/extensions/stash-lang/**
+  - docs/**
+  - examples/**
+
+phases:
+  # ---------------------------------------------------------------------------
+  - id: P1
+    title: Lexer + parser surface for `readonly` modifier
+    deps: []
+    files:
+      - Stash.Core/Lexing/TokenType.cs
+      - Stash.Core/Lexing/Lexer.cs
+      - Stash.Core/Parsing/Parser.cs
+      - Stash.Core/Parsing/AST/VarDeclStmt.cs
+      - Stash.Core/Parsing/AST/ConstDeclStmt.cs
+      - Stash.Tests/Lexing/**
+      - Stash.Tests/Parsing/**
+    verify:
+      - dotnet build Stash.Core
+      - dotnet test --filter "FullyQualifiedName~LexerTests|FullyQualifiedName~ParserTests"
+    done_when:
+      - "`readonly` lexes as a dedicated keyword TokenType (not as a free identifier)."
+      - "`readonly let x = 1;` and `readonly const y = 2;` parse into `VarDeclStmt`/`ConstDeclStmt` nodes carrying an `IsReadonly = true` flag."
+      - "Parser rejects `readonly` placed anywhere other than immediately before `let`/`const` with a clear diagnostic (e.g. before `fn`, struct member, expression position)."
+      - "Lexing `readonly` as an identifier in pre-feature scripts now fails — confirmed there is no existing identifier use in the codebase or examples (verified during P1 discovery)."
+    notes: |
+      Confirmed during architect discovery: `readonly` is NOT currently a Stash
+      keyword and is NOT used as an identifier in examples or tests. Adding it
+      as a reserved word is safe.
+
+      The carrier AST nodes already exist (`VarDeclStmt`, `ConstDeclStmt`); this
+      phase only adds an `IsReadonly` flag and the parser-side modifier slot.
+
+  # ---------------------------------------------------------------------------
+  - id: P2
+    title: All six AST visitors + formatter round-trip the new flag
+    deps: [P1]
+    files:
+      - Stash.Core/Resolution/SemanticResolver.cs
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Analysis/Visitors/SymbolCollector.cs
+      - Stash.Analysis/Visitors/SemanticTokenWalker.cs
+      - Stash.Analysis/Visitors/StashFormatter.cs
+      - Stash.Bytecode/Compilation/Compiler.Declarations.cs
+      - Stash.Tests/Analysis/**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~FormatterTests|FullyQualifiedName~SymbolCollectorTests|FullyQualifiedName~SemanticTokenTests"
+    done_when:
+      - "All six visitors (Compiler, SemanticResolver, SemanticValidator, SymbolCollector, SemanticTokenWalker, StashFormatter) compile and execute against the new `IsReadonly` flag without `NotImplementedException` or warnings."
+      - "`StashFormatter` round-trips `readonly let X = …;` and `readonly const X = …;` declarations byte-for-byte (after canonical whitespace)."
+      - "`SymbolCollector` records readonly-ness on the binding's symbol entry so later phases (P6 analyzer) can query it."
+      - "`SemanticTokenWalker` emits a `keyword`-class semantic token for the `readonly` lexeme."
+
+  # ---------------------------------------------------------------------------
+  - id: P3
+    title: Uniform runtime deep-freeze primitive across all reference types
+    deps: [P2]
+    files:
+      - Stash.Core/Runtime/Types/StashDictionary.cs
+      - Stash.Core/Runtime/Types/StashFrozenArray.cs
+      - Stash.Core/Runtime/Types/StashInstance.cs
+      - Stash.Core/Runtime/Types/StashError.cs
+      - Stash.Core/Runtime/RuntimeValues.cs
+      - Stash.Core/Runtime/StashValue.cs
+      - Stash.Bytecode/VM/VirtualMachine.*.cs
+      - Stash.Tests/Runtime/**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~RuntimeValuesTests|FullyQualifiedName~StashDictionaryTests|FullyQualifiedName~FreezeTests"
+    done_when:
+      - "Every reference-typed runtime value reachable from Stash code (dict, plain array carrier, struct/`StashInstance`, `StashError`) exposes an `IsFrozen` bit and a `Freeze()` entry."
+      - "A cycle-safe `DeepFreeze(StashValue)` helper exists in a single source-of-truth location and is the only caller path that flips the flag on nested values."
+      - "Every write path on those types (field set, index set, in-place mutators like `push`/`pop`/`set`/`del`/`clear`) throws `ReadOnlyError` when the carrier is frozen — verified by direct C# unit tests, not via Stash-source-level tests."
+      - "An in-process attempt to mutate a deeply-nested frozen value through a fresh alias throws `ReadOnlyError` at runtime (the flag is on the value, not the binding)."
+      - "Primitives passed to `DeepFreeze` are accepted as no-ops (no exception, no flag change)."
+      - "The existing `StashFrozenArray` wrapper is either deleted or reduced to a thin shim over the in-place flag; `cli.argv`-style boundary callers now flag the underlying value in place and value identity is preserved (`freeze(arr) is arr`)."
+    notes: |
+      This phase resolves Q1 (single carrier type for plain arrays). The
+      implementer must explicitly record which option was chosen — extend an
+      existing carrier vs introduce a minimal wrapper — and update brief.md's
+      Open Questions section accordingly.
+
+  # ---------------------------------------------------------------------------
+  - id: P4
+    title: Compiler wires the `readonly` flag to runtime deep-freeze on init + rebind
+    deps: [P3]
+    files:
+      - Stash.Bytecode/Compilation/Compiler.Declarations.cs
+      - Stash.Bytecode/Compilation/Compiler.Assignments.cs
+      - Stash.Bytecode/VM/VirtualMachine.*.cs
+      - Stash.Tests/Bytecode/**
+      - Stash.Tests/VM/**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~CompilerTests|FullyQualifiedName~VMTests|FullyQualifiedName~ReadonlyTests"
+    done_when:
+      - "`readonly const D = { ports: [80] };` followed by `D.ports.push(22);` raises `ReadOnlyError` when executed by the CLI (end-to-end through parse → compile → VM)."
+      - "`readonly const D = {...}; let a = D; a.x = 2;` raises `ReadOnlyError` (aliasing through `let` is caught by the value-side flag)."
+      - "`readonly let S = makeSnapshot(); S = makeSnapshot(); S.x = 1;` raises `ReadOnlyError` (rebind re-freezes)."
+      - "`readonly let n = 42; n = 99;` executes without error (primitive no-op; binding remains rebindable)."
+      - "A `readonly const` binding still cannot be reassigned (existing `const` binding-axis behavior is preserved unchanged)."
+
+  # ---------------------------------------------------------------------------
+  - id: P5
+    title: Stdlib `freeze()` function — second front-end onto the P3 primitive
+    deps: [P3]
+    files:
+      - Stash.Stdlib/BuiltIns/**
+      - Stash.Tests/Stdlib/**
+      - Stash.Tests/**Wave1Throws**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~FreezeBuiltInTests|FullyQualifiedName~Wave1ThrowsCoverageTests"
+      - dotnet run --project Stash.Docs/
+    done_when:
+      - "Stash source `freeze(d)` where `d` is a dict / array / struct / error deep-freezes the value in place and returns the same value (identity preserved)."
+      - "Subsequent `d.a = 1` after `freeze(d)` raises `ReadOnlyError` at runtime."
+      - "`freeze(42)` (primitive) returns `42` and does not throw."
+      - "`freeze` carries `[StashFn]`, throws metadata, and XML docs sufficient for `Wave1ThrowsCoverageTests` to pass without an allow-list entry."
+      - "`Stash.Docs/` regen produces the updated standard library reference with the `freeze` entry, and `StandardLibraryReferenceTests` passes."
+
+  # ---------------------------------------------------------------------------
+  - id: P6
+    title: Analyzer best-effort static diagnostics for `readonly` mutations
+    deps: [P2, P3]
+    files:
+      - Stash.Analysis/Visitors/SemanticValidator.cs
+      - Stash.Analysis/Rules/**
+      - Stash.Tests/Analysis/**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~SemanticValidatorTests|FullyQualifiedName~AnalyzerTests"
+    done_when:
+      - "A statically-visible direct mutation of a `readonly` binding — `D.x = …` or `D[i] = …` where `D` is declared `readonly let` / `readonly const` in the visible scope — produces a diagnostic at analysis time (before runtime)."
+      - "Known in-place stdlib mutators called on a known-`readonly` argument (e.g. `arr.push(D, …)`) produce a diagnostic."
+      - "Aliasing through `let a = D; a.x = …` does **not** produce a false-positive diagnostic on `a` (the analyzer's job is best-effort direct-mutation detection; aliasing is left to runtime)."
+      - "Mutation of a non-`readonly` binding produces no diagnostic (no regression of existing behavior)."
+
+  # ---------------------------------------------------------------------------
+  - id: P7
+    title: LSP / playground / TextMate / spec / examples — full toolchain surface
+    deps: [P2, P4, P5]
+    files:
+      - Stash.Lsp/Handlers/SemanticTokensHandler.cs
+      - Stash.Lsp/Handlers/CompletionHandler.cs
+      - Stash.Lsp/Handlers/HoverHandler.cs
+      - Stash.Playground/wwwroot/js/stash-language.js
+      - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
+      - docs/Stash — Language Specification.md
+      - examples/readonly.stash
+      - Stash.Tests/Lsp/**
+      - Stash.Tests/**CompletionSurfaceSnapshotTests**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~SemanticTokenTests|FullyQualifiedName~CompletionHandlerTests|FullyQualifiedName~HoverHandlerTests|FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~StandardLibraryReferenceTests"
+      - dotnet run --project Stash.Cli/ -- examples/readonly.stash
+    done_when:
+      - "LSP completion at statement-start in a `.stash` file offers `readonly` as a keyword completion."
+      - "LSP semantic tokens classify `readonly` as `keyword` (or the project's modifier class) at every occurrence."
+      - "LSP hover on `readonly` shows a description that includes the deep/transitive semantics."
+      - "The playground Monarch tokenizer highlights `readonly` consistently with `let`/`const`."
+      - "The VS Code TextMate grammar matches `readonly` and assigns it a `storage.modifier`-class scope."
+      - "`docs/Stash — Language Specification.md` contains a `readonly` section reachable from the ToC, documenting the modifier, the deep/transitive semantics, the C# divergence callout, and the `freeze()` sibling."
+      - "`examples/readonly.stash` runs under the CLI end-to-end, exercises deep-freeze, aliasing-throws, rebind-refreezes, primitive no-op, `freeze()`, and a `ReadOnlyError` catch, and is referenced from the examples README/index if one exists."
+      - "`CompletionSurfaceSnapshotTests` either passes against the existing baseline, or is re-baselined in this phase with `STASH_SNAPSHOT_REGEN=1` and the regenerated snapshot is committed."
+
+# Final acceptance — run by `/done` before promoting to 4-done/.
+# Filter shape borrowed from .kanban/4-done/stdlib-namespace-members/plan.yaml:
+# excludes documented flaky / environment-dependent classes (per .claude/repo.md
+# "Known Issues") but DELIBERATELY INCLUDES StandardLibraryReferenceTests,
+# CompletionSurfaceSnapshotTests, and Wave1ThrowsCoverageTests — those guard the
+# .claude/language-changes.md checklist for new language/stdlib features and a
+# narrower filter would mask omissions.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&FullyQualifiedName!~NamespaceExpansion_CliNamespace_ShowsMembersWithMemberType"
+  - dotnet run --project Stash.Docs/
+  - dotnet run --project Stash.Cli/ -- examples/readonly.stash
+  - python3 scripts/checkpoint/validate-spec.py readonly-modifier
