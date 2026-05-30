@@ -50,6 +50,7 @@ public static class RegistryActionResourceResolver
             RegistryAction.ReadPackageMetadata or
             RegistryAction.CreatePackage or
             RegistryAction.PublishVersion or
+            RegistryAction.PublishPackage or
             RegistryAction.UnpublishVersion or
             RegistryAction.DeprecatePackage or
             RegistryAction.DeprecateVersion or

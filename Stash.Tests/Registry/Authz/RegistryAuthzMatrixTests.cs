@@ -1180,6 +1180,69 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // 17. PublishPackage deny-label conformance (registry-authz-pdp-completion P3)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Pins that a read-ceiling PUT /api/v1/packages/{scope}/{name} returns
+    /// 403 TokenScopeInsufficient AND writes exactly one deny audit entry whose
+    /// action is 'PublishPackage' — the public dispatch action, not the internal
+    /// delegation target (CreatePackage or PublishVersion).
+    ///
+    /// The deny fires at ceiling check (Step 1), so the DB existence state of the
+    /// package is irrelevant; the action label is always 'PublishPackage'.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AuthzMatrixData.PublishDenyLabelRows), MemberType = typeof(AuthzMatrixData))]
+    public async Task PublishDenyLabel_Matrix(string tag, string scenario)
+    {
+        _ = tag;
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string scopeName = U(tag + "-scope");
+        string callerUser = U(tag + "-caller");
+
+        switch (scenario)
+        {
+            case "read_ceiling_publish_deny":
+            {
+                // Register and get only the read-ceiling login token (not the publish-ceiling token).
+                await client.PostAsync("/api/v1/auth/register",
+                    Json(new { username = callerUser, password = "Password123!" }));
+                var loginResp = await client.PostAsync("/api/v1/auth/login",
+                    Json(new { username = callerUser, password = "Password123!" }));
+                loginResp.EnsureSuccessStatusCode();
+                var loginBody = await loginResp.Content.ReadAsStringAsync();
+                using var loginDoc = JsonDocument.Parse(loginBody);
+                string readToken = loginDoc.RootElement.GetProperty("accessToken").GetString()!;
+
+                // Scope and package do NOT exist — ceiling fires before resource check.
+                SetBearer(client, readToken);
+                byte[] tarball = CreateTarball($"@{scopeName}/lib", "1.0.0");
+                var resp = await client.PutAsync($"/api/v1/packages/{scopeName}/lib", TarballContent(tarball));
+                Assert.Equal(System.Net.HttpStatusCode.Forbidden, resp.StatusCode);
+                string respBody = await resp.Content.ReadAsStringAsync();
+                Assert.Contains("TokenScopeInsufficient", respBody);
+
+                // Exactly one deny audit entry, action='PublishPackage'.
+                var entries = await GetAuditEntriesAsync(factory);
+                var denyEntries = entries
+                    .Where(e =>
+                        e.Action == "PublishPackage" &&
+                        e.Decision == "deny" &&
+                        e.User == callerUser)
+                    .ToList();
+                Assert.Single(denyEntries);
+                return;
+            }
+            default:
+                throw new ArgumentException($"Unknown PublishDenyLabel scenario: {scenario}");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
     // ═══════════════════════════════════════════════════════════════════════════
 

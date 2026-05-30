@@ -23,6 +23,9 @@ public enum RegistryAction
     /// <summary>PUT /api/v1/packages/{scope}/{name} — when the package DOES exist.</summary>
     PublishVersion,
 
+    /// <summary>PUT /api/v1/packages/{scope}/{name} — public dispatch action for the publish endpoint; the PDP delegates to <see cref="CreatePackage"/> or <see cref="PublishVersion"/> based on a DB existence check.</summary>
+    PublishPackage,
+
     /// <summary>DELETE /api/v1/packages/{scope}/{name}/{version}</summary>
     UnpublishVersion,
 

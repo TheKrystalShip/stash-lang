@@ -247,6 +247,19 @@ public static class AuthzMatrixData
         yield return new object[] { "delete_scope.deny.audit_id", "non_owner_deny_audit_id" };
     }
 
+    // ── PublishPackage deny-label conformance rows ────────────────────────────
+    // Pins that the deny-path audit action label is uniformly 'PublishPackage'
+    // regardless of DB state (whether the package already exists or not).
+    // The allow-path labels (package.create / package.publish) remain unchanged
+    // as they come from PackageService.PublishAsync's isNewPackage return.
+
+    public static IEnumerable<object[]> PublishDenyLabelRows()
+    {
+        // Read-ceiling token denied on PUT /packages/{scope}/{name}
+        // Confirms the filter writes action='PublishPackage' (not CreatePackage or PublishVersion).
+        yield return new object[] { "publish.deny.label", "read_ceiling_publish_deny" };
+    }
+
     // ── Version-deny body-shape conformance rows ──────────────────────────────
     // Pins the exact Error string AND the absence of Message for GetVersion /
     // DownloadVersion visibility-hidden denials. Guards F01 (version-scoped message)

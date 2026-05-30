@@ -438,6 +438,45 @@ public sealed class RegistryAuthorizerTests : IDisposable
         Assert.True(result.Allowed);
     }
 
+    // ── PublishPackage: delegates to PublishVersion when package exists ───────
+
+    [Fact]
+    public async Task AuthorizeAsync_PublishPackage_PackageExists_DelegatesTo_PublishVersion_Allow()
+    {
+        await SeedUserScopeAsync("alice");
+        await SeedPackageAsync("@alice/existing-lib");
+        await _ctx.PackageRoles.AddAsync(new PackageRoleEntry
+        {
+            PackageName = "@alice/existing-lib",
+            PrincipalType = "user",
+            PrincipalId = "alice",
+            Role = "publisher"
+        });
+        await _ctx.SaveChangesAsync();
+
+        // Package exists → PDP should delegate to PublishVersion resource-side (publisher role required)
+        var result = await _authorizer.AuthorizeAsync(
+            MakeUser("alice", ceiling: TokenCeiling.Publish),
+            RegistryAction.PublishPackage,
+            PkgRes("alice", "existing-lib"));
+
+        Assert.True(result.Allowed);
+    }
+
+    [Fact]
+    public async Task AuthorizeAsync_PublishPackage_PackageDoesNotExist_DelegatesTo_CreatePackage_Allow()
+    {
+        await SeedUserScopeAsync("alice");
+
+        // Package does NOT exist → PDP should delegate to CreatePackage resource-side (scope ownership required)
+        var result = await _authorizer.AuthorizeAsync(
+            MakeUser("alice", ceiling: TokenCeiling.Publish),
+            RegistryAction.PublishPackage,
+            PkgRes("alice", "brand-new-lib"));
+
+        Assert.True(result.Allowed);
+    }
+
     // ── Search: anyone → ALLOW ────────────────────────────────────────────────
 
     [Fact]

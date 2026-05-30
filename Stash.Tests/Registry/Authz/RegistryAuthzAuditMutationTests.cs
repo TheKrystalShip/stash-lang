@@ -315,4 +315,92 @@ public sealed class RegistryAuthzAuditMutationTests : RegistryAuthzTestBase
         // resource_id == '@' + scope (matches prior inline audit and uniform filter convention).
         Assert.Equal("@alice-am10", denyEntries[0].Package);
     }
+
+    // ── P3 uniform deny-audit: PublishPackage folded into PDP ─────────────────
+
+    /// <summary>
+    /// PublishPackage was folded into [RegistryAuthorize] in registry-authz-pdp-completion P3.
+    /// A read-ceiling token denied on PUT /packages/{scope}/{name} where the package does NOT
+    /// yet exist must write exactly one deny audit entry with action='PublishPackage'.
+    /// The deny fires at ceiling check (Step 1); the existence check never runs.
+    /// This proves the deny label is uniformly 'PublishPackage' regardless of DB state.
+    /// </summary>
+    [Fact]
+    public async Task Audit_PublishPackage_ReadCeiling_NotExistingPackage_EmitsExactlyOneDenyEntry()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Register and capture only the read-ceiling login token (not the publish upgrade).
+        await client.PostAsync("/api/v1/auth/register",
+            Json(new { username = "alice-am11", password = "Password123!" }));
+        var loginResp = await client.PostAsync("/api/v1/auth/login",
+            Json(new { username = "alice-am11", password = "Password123!" }));
+        loginResp.EnsureSuccessStatusCode();
+        var loginBody = await loginResp.Content.ReadAsStringAsync();
+        using var loginDoc1 = JsonDocument.Parse(loginBody);
+        string readToken = loginDoc1.RootElement.GetProperty("accessToken").GetString()!;
+
+        // Package does NOT exist in DB (no seed). Ceiling fires before DB check.
+        SetBearer(client, readToken);
+        byte[] tarball = CreateTarball("@alice-am11/newpkg", "1.0.0");
+        var resp = await client.PutAsync("/api/v1/packages/alice-am11/newpkg", TarballContent(tarball));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("TokenScopeInsufficient", body);
+
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Action == "PublishPackage" && e.Decision == "deny" && e.User == "alice-am11")
+            .ToList();
+
+        // Exactly one deny entry with action='PublishPackage' (not 'CreatePackage').
+        Assert.Single(denyEntries);
+    }
+
+    /// <summary>
+    /// PublishPackage was folded into [RegistryAuthorize] in registry-authz-pdp-completion P3.
+    /// A read-ceiling token denied on PUT /packages/{scope}/{name} where the package DOES
+    /// already exist must also write exactly one deny audit entry with action='PublishPackage'.
+    /// The deny fires at ceiling check (Step 1); the delegation branch (PublishVersion) never runs.
+    /// Together with the not-existing case, this proves the deny label is uniformly 'PublishPackage'.
+    /// </summary>
+    [Fact]
+    public async Task Audit_PublishPackage_ReadCeiling_ExistingPackage_EmitsExactlyOneDenyEntry()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Register and capture only the read-ceiling login token (not the publish upgrade).
+        await client.PostAsync("/api/v1/auth/register",
+            Json(new { username = "alice-am12", password = "Password123!" }));
+        var loginResp = await client.PostAsync("/api/v1/auth/login",
+            Json(new { username = "alice-am12", password = "Password123!" }));
+        loginResp.EnsureSuccessStatusCode();
+        var loginBody = await loginResp.Content.ReadAsStringAsync();
+        using var loginDoc2 = JsonDocument.Parse(loginBody);
+        string readToken = loginDoc2.RootElement.GetProperty("accessToken").GetString()!;
+
+        // Seed the package so it already exists in DB.
+        await SeedScopeAsync(factory, "alice-am12", "alice-am12");
+        await SeedPackageAsync(factory, "@alice-am12/existpkg", "alice-am12");
+
+        // Ceiling fires before DB check; action label is still 'PublishPackage'.
+        SetBearer(client, readToken);
+        byte[] tarball = CreateTarball("@alice-am12/existpkg", "2.0.0");
+        var resp = await client.PutAsync("/api/v1/packages/alice-am12/existpkg", TarballContent(tarball));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("TokenScopeInsufficient", body);
+
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Action == "PublishPackage" && e.Decision == "deny" && e.User == "alice-am12")
+            .ToList();
+
+        // Exactly one deny entry with action='PublishPackage' (not 'PublishVersion').
+        Assert.Single(denyEntries);
+    }
 }

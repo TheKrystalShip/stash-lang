@@ -109,6 +109,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         // Publish-ceiling actions
         RegistryAction.CreatePackage => TokenCeiling.Publish,
         RegistryAction.PublishVersion => TokenCeiling.Publish,
+        RegistryAction.PublishPackage => TokenCeiling.Publish,
         RegistryAction.UnpublishVersion => TokenCeiling.Publish,
         RegistryAction.DeprecatePackage => TokenCeiling.Publish,
         RegistryAction.DeprecateVersion => TokenCeiling.Publish,
@@ -175,6 +176,11 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             // ── CreatePackage — gated on scope ownership ─────────────────────
             RegistryAction.CreatePackage =>
                 await AuthorizeCreatePackageAsync(username, isAdmin, resource),
+
+            // ── PublishPackage — public dispatch: delegates to CreatePackage or PublishVersion
+            //    resource-side handler based on DB existence check ──────────────
+            RegistryAction.PublishPackage =>
+                await AuthorizePublishPackageAsync(username, isAdmin, resource),
 
             // ── Admin-only package role overrides ────────────────────────────
             RegistryAction.AdminAssignPackageRole or
@@ -403,6 +409,23 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 
         return AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
             $"Scope '@{scope}' was claimed by another account during this request.");
+    }
+
+    private async Task<AuthzDecision> AuthorizePublishPackageAsync(
+        string? username, bool isAdmin, ResourceRef resource)
+    {
+        if (resource is not PackageResource pkg)
+            return AuthzDecision.Deny(AuthzDenyReason.PolicyDenied, "Expected PackageResource.");
+
+        if (username == null)
+            return AuthzDecision.Deny(AuthzDenyReason.NotAuthenticated);
+
+        bool exists = await _ctx.Packages.AsNoTracking()
+            .AnyAsync(p => p.Name == pkg.FullName);
+
+        return exists
+            ? await AuthorizePackageRoleAsync(username, isAdmin, resource, PackageRoles.Publisher)
+            : await AuthorizeCreatePackageAsync(username, isAdmin, resource);
     }
 
     private async Task<AuthzDecision> AuthorizeClaimScopeAsync(

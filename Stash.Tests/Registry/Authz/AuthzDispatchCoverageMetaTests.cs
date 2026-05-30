@@ -60,12 +60,13 @@ public sealed class AuthzDispatchCoverageMetaTests
 
     /// <summary>
     /// The exact set of production actions allowed to carry <see cref="ImperativeAuthzAttribute"/>.
-    /// Formatted as <c>ControllerName.MethodName</c>. Append-only; shrinking requires its own
-    /// PDP-completion work (tracked in <c>registry-authz-pdp-completion</c>).
+    /// Formatted as <c>ControllerName.MethodName</c>. This is the irreducible end-state after
+    /// <c>registry-authz-pdp-completion</c> folded <c>PublishPackage</c>, <c>DeleteOrg</c>, and
+    /// <c>DeleteScope</c> into the shared filter. <c>ClaimScope</c> cannot be folded until the
+    /// body-resolver refactor (see <c>.kanban/0-backlog/registry/Body-resolver authz filter.md</c>).
     /// </summary>
     private static readonly IReadOnlySet<string> PinnedImperativeActions = new HashSet<string>(StringComparer.Ordinal)
     {
-        "PackagesController.PublishPackage",
         "ScopesController.ClaimScope",
     };
 

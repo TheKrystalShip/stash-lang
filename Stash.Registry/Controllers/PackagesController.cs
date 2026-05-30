@@ -198,7 +198,7 @@ public class PackagesController : ControllerBase
     /// </para>
     /// </remarks>
     [Authorize]
-    [ImperativeAuthz("dynamic action choice (CreatePackage vs PublishVersion) depends on a DB existence check before the PDP call; folded into PDP in registry-authz-pdp-completion")]
+    [RegistryAuthorize(RegistryAction.PublishPackage)]
     [HttpPut("{scope}/{name}")]
     public async Task<IActionResult> PublishPackage(string scope, string name)
     {
@@ -207,20 +207,6 @@ public class PackagesController : ControllerBase
 
         var principal = _principalFactory.Build(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        // Determine action: CreatePackage or PublishVersion
-        bool packageExists = await _db.PackageExistsAsync(packageName);
-        var action = packageExists ? RegistryAction.PublishVersion : RegistryAction.CreatePackage;
-
-        var decision = await _authorizer.AuthorizeAsync(principal, action, resource);
-        if (!decision.Allowed)
-        {
-            // Audit authenticated denials only
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync(action.ToString(), up.Username, packageName, decision.Reason, ip);
-
-            return AuthzDenyResponse.For(decision, $"Package '{packageName}' not found.");
-        }
 
         string? clientIntegrity = Request.Headers["X-Integrity"];
         string? expectedVersion = Request.Headers["X-Package-Version"].Count > 0
