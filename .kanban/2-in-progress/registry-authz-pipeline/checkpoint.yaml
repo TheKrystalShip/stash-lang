@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T17:21:17Z'
+updated: '2026-05-30T17:48:01Z'
 phases:
   P1:
     status: done
@@ -60,16 +60,14 @@ phases:
       all ceiling/role/visibility/policy axes covered; concurrent cells in RegistryConcurrency collection;
       stable across two runs
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: 'Admin PDP-migration phase inserted 2026-05-30 after the docs/cleanup dispatch found AuthPolicies
-      still load-bearing on AdminController (5 endpoints gated only by [Authorize(Policy=RequireAdmin)];
-      stripping it = privilege escalation). Wires GetStats/CreateUser/DeleteUser/AdminAssignRole/GetAuditLog
-      to the PDP, adds non-admin 403 regression guards, strips the 10 residual policy attributes. See plan.yaml P7.'
+    status: done
+    commit: c703a40d58d40cda522c16cdd8a599ea4696b230
+    verified: true
+    started: '2026-05-30T17:38:07Z'
+    completed: '2026-05-30T17:48:01Z'
+    attempts: 1
+    notes: Wired 5 admin endpoints to PDP; stripped AuthPolicies attributes; 12 regression tests added;
+      grep clean
   P8:
     status: pending
     commit: null
@@ -77,9 +75,9 @@ phases:
     started: null
     completed: null
     attempts: 0
-    notes: 'Docs + example + cleanup (was P7); deps [P7]. Blocked until P7 completes the AdminController
+    notes: Docs + example + cleanup (was P7); deps [P7]. Blocked until P7 completes the AdminController
       PDP migration so AuthPolicies has no remaining referent and can be deleted. Original P7 dispatch
-      correctly refused and surfaced the AdminController gap (see P7 note).'
+      correctly refused and surfaced the AdminController gap (see P7 note).
 review:
   status: not_started
   started: null
