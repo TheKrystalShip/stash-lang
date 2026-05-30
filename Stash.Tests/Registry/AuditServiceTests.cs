@@ -55,14 +55,14 @@ public sealed class AuditServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LogOwnerAdd_CreatesEntry()
+    public async Task LogRoleAssign_CreatesEntry()
     {
-        await _audit.LogOwnerAddAsync("my-pkg", "alice", "bob", "127.0.0.1");
+        await _audit.LogRoleAssignAsync("my-pkg", "alice", "bob", "127.0.0.1");
 
-        SearchResult<AuditEntry> log = await _db.GetAuditLogAsync(1, 10, null, "owner.add");
+        SearchResult<AuditEntry> log = await _db.GetAuditLogAsync(1, 10, null, "role.assign");
 
         Assert.Equal(1, log.TotalCount);
-        Assert.Equal("owner.add", log.Items[0].Action);
+        Assert.Equal("role.assign", log.Items[0].Action);
         Assert.Equal("bob", log.Items[0].Target);
     }
 

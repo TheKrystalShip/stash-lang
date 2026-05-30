@@ -217,7 +217,7 @@ public class AdminController : ControllerBase
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _db.AssignPackageRoleAsync(packageName, body.PrincipalType, body.PrincipalId, body.Role);
-        await _auditService.LogOwnerAddAsync(packageName, username, body.PrincipalId, ip);
+        await _auditService.LogRoleAssignAsync(packageName, username, body.PrincipalId, ip);
 
         return Ok(new SuccessResponse());
     }

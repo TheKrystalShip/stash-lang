@@ -9,8 +9,12 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Stash.Cli.PackageManager;
 using Stash.Common;
 using Stash.Registry.Configuration;
@@ -269,5 +273,130 @@ public sealed class RegistryRoutesTests : IDisposable
         string path = handler.LastRequestUri!.AbsolutePath;
         Assert.Contains("/packages/alice/widget/deprecate", path);
         Assert.DoesNotContain("%2F", path);
+    }
+}
+
+/// <summary>
+/// End-to-end round-trip tests: boots a live <see cref="WebApplicationFactory{TEntryPoint}"/>
+/// and drives <see cref="RegistryClient"/> over real HTTP to verify that the scoped
+/// publish + retrieve path satisfies P6 done_when #3.
+/// </summary>
+public sealed class RegistryRoundTripTests : IDisposable
+{
+    private readonly SqliteConnection _conn;
+
+    public RegistryRoundTripTests()
+    {
+        _conn = new SqliteConnection("Data Source=:memory:");
+        _conn.Open();
+    }
+
+    public void Dispose() => _conn.Dispose();
+
+    private WebApplicationFactory<Stash.Registry.Program> CreateFactory()
+    {
+        var conn = _conn;
+        return new WebApplicationFactory<Stash.Registry.Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("environment", "Development");
+                builder.ConfigureTestServices(services =>
+                {
+                    var descriptor = services.SingleOrDefault(d =>
+                        d.ServiceType == typeof(DbContextOptions<RegistryDbContext>));
+                    if (descriptor != null)
+                        services.Remove(descriptor);
+
+                    services.AddDbContext<RegistryDbContext>(options =>
+                        options.UseSqlite(conn));
+
+                    var sp = services.BuildServiceProvider();
+                    using var scope = sp.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+                    db.Initialize();
+                });
+            });
+    }
+
+    private static StringContent Json(object body) =>
+        new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+    /// <summary>
+    /// Registers a user over HTTP and returns the publish-scoped access token.
+    /// The first registered user automatically becomes admin (and gets a publish-scoped
+    /// JWT on login).
+    /// </summary>
+    private static async Task<string> RegisterAndLoginAsync(HttpClient http, string username, string password = "Password123!")
+    {
+        await http.PostAsync("/api/v1/auth/register", Json(new { username, password }));
+        var resp = await http.PostAsync("/api/v1/auth/login", Json(new { username, password }));
+        resp.EnsureSuccessStatusCode();
+        string json = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("accessToken").GetString()!;
+    }
+
+    /// <summary>
+    /// Builds a minimal gzip tarball containing a <c>stash.json</c> manifest and one
+    /// <c>.stash</c> source file so the registry publish endpoint accepts it.
+    /// </summary>
+    private static byte[] CreateTarball(string packageName, string version)
+    {
+        using var ms = new MemoryStream();
+        using (var gz = new GZipStream(ms, CompressionLevel.Optimal, leaveOpen: true))
+        using (var tar = new TarWriter(gz, TarEntryFormat.Pax, leaveOpen: true))
+        {
+            byte[] manifest = Encoding.UTF8.GetBytes(
+                JsonSerializer.Serialize(new { name = packageName, version, description = "Widget", license = "MIT" }));
+            tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "stash.json")
+            {
+                DataStream = new MemoryStream(manifest)
+            });
+            byte[] code = Encoding.UTF8.GetBytes("// widget");
+            tar.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "index.stash")
+            {
+                DataStream = new MemoryStream(code)
+            });
+        }
+        return ms.ToArray();
+    }
+
+    /// <summary>
+    /// Publishes <c>@alice/widget@1.0.0</c> via <see cref="RegistryClient.Publish"/> against a
+    /// live <see cref="WebApplicationFactory{TEntryPoint}"/>, then retrieves version metadata via
+    /// <see cref="RegistryClient.GetAvailableVersions"/> and downloads the tarball URL via
+    /// <see cref="RegistryClient.GetResolvedUrl"/>, asserting the full scoped route round-trip.
+    /// </summary>
+    [Fact]
+    public async Task EndToEnd_PublishAndRetrieve_AtScopedRoute_RoundTrips()
+    {
+        await using var factory = CreateFactory();
+
+        // The factory's HttpClient handles routing internally; its BaseAddress is
+        // http://localhost/. RegistryClient builds "{_baseUrl}/packages/..." so we
+        // must include /api/v1 in the base URL.
+        using var httpClient = factory.CreateClient();
+        string baseUrl = httpClient.BaseAddress!.ToString().TrimEnd('/') + "/api/v1";
+
+        // Step 1: register alice (first user → becomes admin) and obtain a token.
+        string token = await RegisterAndLoginAsync(httpClient, "alice");
+
+        // Step 2: publish @alice/widget 1.0.0 via RegistryClient over HTTP.
+        byte[] tarball = CreateTarball("@alice/widget", "1.0.0");
+        var registryClient = new RegistryClient(baseUrl, httpClient, token: token);
+        bool published = registryClient.Publish(new MemoryStream(tarball));
+        Assert.True(published);
+
+        // Step 3: retrieve version list via the same scoped route.
+        List<SemVer> versions = registryClient.GetAvailableVersions("@alice/widget");
+        Assert.Single(versions);
+        Assert.Equal("1.0.0", versions[0].ToString());
+
+        // Step 4: confirm the download URL uses the two-segment scoped path.
+        string downloadUrl = registryClient.GetResolvedUrl("@alice/widget", versions[0]);
+        Assert.Contains("/packages/alice/widget/", downloadUrl);
+        Assert.Contains("/download", downloadUrl);
+        Assert.DoesNotContain("%2F", downloadUrl);
+        Assert.DoesNotContain("%40", downloadUrl);
     }
 }

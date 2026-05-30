@@ -1112,8 +1112,8 @@ All state-changing operations write a single immutable row. Read-only requests a
 | `unpublish`            | Package version unpublished.                                      |
 | `user.create`          | User account created.                                             |
 | `user.disable`         | User account disabled.                                            |
-| `owner.add`            | Package role assigned (principal added or role changed).          |
-| `owner.remove`         | Package role revoked.                                             |
+| `role.assign`          | Package role assigned to a principal (added or role changed).     |
+| `role.revoke`          | Package role revoked from a principal.                            |
 | `token.create`         | API token created.                                                |
 | `token.revoke`         | API token revoked.                                                |
 | `token.refresh`        | Access token refreshed using a refresh token.                     |
