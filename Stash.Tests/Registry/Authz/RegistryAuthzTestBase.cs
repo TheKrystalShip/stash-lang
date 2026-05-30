@@ -181,16 +181,14 @@ public abstract class RegistryAuthzTestBase
             Json(new { ceiling = "publish", expiresIn = "1d" }));
         client.DefaultRequestHeaders.Authorization = savedAuth;
 
-        if (tokenResp.IsSuccessStatusCode)
-        {
-            var tokenBody = await tokenResp.Content.ReadAsStringAsync();
-            using var tokenDoc = JsonDocument.Parse(tokenBody);
-            if (tokenDoc.RootElement.TryGetProperty("token", out var tok) && tok.GetString() != null)
-                return tok.GetString()!;
-        }
-
-        // Fallback: return the login (read-ceiling) token — only for tests that do not write.
-        return loginToken;
+        // Fail loud, no silent fallback. A fallback to the read-ceiling login token
+        // would make write tests flake confusingly under load — exactly the OpenMode
+        // regression: a single dropped upgrade → publishes 403 → "exactly one row"
+        // assertions fail far from the real cause. The upgrade must succeed here.
+        tokenResp.EnsureSuccessStatusCode();
+        var tokenBody = await tokenResp.Content.ReadAsStringAsync();
+        using var tokenDoc = JsonDocument.Parse(tokenBody);
+        return tokenDoc.RootElement.GetProperty("token").GetString()!;
     }
 
     /// <summary>
