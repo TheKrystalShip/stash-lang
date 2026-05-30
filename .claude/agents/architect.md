@@ -30,6 +30,7 @@ Required sections:
 - Surface
 - Semantics
 - Implementation Path
+- Cross-Cutting Concerns
 - Acceptance Criteria
 - Phases
 - Open Questions
@@ -82,6 +83,31 @@ Do not hand-create the feature directory.
 
 7. Tell the user the feature is ready for `/next-phase <slug>`.
 
+## Designing Out Cross-Cutting Omission
+
+The most dangerous defect in multi-phase work is **omission**: a participant that silently fails to take part in a concern shared across phases. Unlike a wrong line of code, a *missing* call is invisible — there is nothing in the diff to point at, so neither review nor a passing test reliably catches it. Each phase did its narrow job correctly; the sum left a hole that no phase owned.
+
+Concrete example (a real failure this section exists to prevent): a registry redesign built **one** authorizer as the single decision point and wired the Packages / Scopes / Orgs / Admin controllers to it phase by phase. It still shipped an `AuthController` whose token endpoints never called the authorizer — no phase's instructions named that controller, and the coverage meta-test asserted "every endpoint is *classified*" instead of "every endpoint *reaches the authorizer*," so it passed green. A human reading the code, not a test, finally caught it.
+
+You cannot fix this by writing more thorough instructions. The blind spot you have while enumerating participants in the plan is the *same* blind spot that misses the gap at review. So when a concern is **shared across phases** — one decision point, one validator, one dispatch path, one bounded vocabulary — pick the strongest prevention the concern allows, preferring earlier levels:
+
+1. **Construct — make omission impossible or fail-closed (strongly preferred).** Shape the architecture so there is no code path that skips the single source of truth. A forgotten participant should fail to **compile**, or fail **closed** at runtime (deny / throw), never silently pass. The guard *is* the architecture; there is nothing separate to maintain or keep in sync. Precedents already in this codebase:
+   - Adding an AST node forces every visitor to implement it — omission is a **compile error** (the type system carries the invariant). This is why the language layer rarely has this problem.
+   - The bounded-domain rule prefers a real `enum` (an illegal value won't compile) over a centralized string constant — see root `CLAUDE.md`: *"types are the 100%; centralized string constants are the cheap 80%."*
+   - For request authorization, a globally-registered **fail-closed default policy** denies any endpoint that declares no decision, so a forgotten endpoint breaks loudly and safely instead of shipping an open door.
+
+   When you choose this, the plan's job is to **build the chokepoint in an early phase** and have later phases route through it.
+
+2. **Detect — enumerate participants and assert the invariant (fallback only).** When no construction can make omission impossible (a property the type system can't express), have one phase own a meta-test that **programmatically enumerates every participant** and asserts the property for all of them. This is a fallback, not a default — it can drift from the code. If you use it, it MUST:
+   - assert the **load-bearing** property, never a weaker proxy. Assert "routes through the decision point," not "has some attribute" — the proxy is exactly what let the real gap above pass green.
+   - ship a **fail-path self-test** proving the scan has teeth (a fixture that *should* trip it, and does) — the pattern in `NoMagicAuthStringsMetaTests` and `AuthzDispatchCoverageMetaTests`.
+   - **pin its exemption list** so adding an exemption forces a test edit; a silent new exemption is the omission re-entering through the back door.
+   - go up **RED with an exemption list when the shared component is built**, and shrink to empty as phases migrate. Never schedule it as a final phase — then every prior phase merges with the invariant unenforced (which is how reactive cleanup phases get born).
+
+3. **Instruct — tell each phase to do the right thing (necessary, never sufficient alone).** Prose in the brief and `plan.yaml`. Every plan already does this. It is the level at which omission *silently happens*, so it must never be the **only** mechanism guarding a cross-cutting invariant.
+
+Record the outcome in the brief's **Cross-Cutting Concerns** section: each shared concern, its single source of truth, and how omission is prevented (which level, and where). A single-subsystem or one-file feature has none — write "None."
+
 ## Quality Bar
 
 Do not declare the brief ready until:
@@ -91,6 +117,7 @@ Do not declare the brief ready until:
 - The implementation path connects every major layer that must participate.
 - Acceptance criteria include at least one end-to-end behavior.
 - Every phase has a concrete `done_when`.
+- Every concern shared across phases has a named single source of truth and a recorded prevention mechanism in `Cross-Cutting Concerns` — preferring **Construct** (compile error / fail-closed default) over a **Detect** meta-test, and never relying on **Instruct** (prose) alone. (Single-subsystem features: "None.")
 - `python3 scripts/checkpoint/validate-spec.py <slug>` passes.
 
 ## Reference
