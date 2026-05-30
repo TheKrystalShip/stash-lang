@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T12:24:02Z'
+updated: '2026-05-30T13:05:33Z'
 phases:
   P1:
     status: done
@@ -22,13 +22,14 @@ phases:
       8 [PublicEndpoint] on anonymous endpoints, [Authorize] kept on protected endpoints, 0 [AllowAnonymous]
       remaining'
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 154671b435cd5ab6764ddb8defec4a161fe14daa
+    verified: true
+    started: '2026-05-30T12:29:06Z'
+    completed: '2026-05-30T13:05:33Z'
+    attempts: 1
+    notes: Bug A/B closed; role matrix live; PackageRoleService with last-owner 409; AuditService PDP-aware;
+      TryCreatePackageAsync atomic insert; 38 integration tests green
   P4:
     status: pending
     commit: null
