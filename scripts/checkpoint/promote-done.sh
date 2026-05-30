@@ -30,9 +30,9 @@ cd "$repo_root"
 
 # Refuse to promote if any phase is not done or any review finding open.
 python3 - <<PY
-import sys
+import re, sys
 sys.path.insert(0, "$script_dir")
-from _common import load_checkpoint, load_plan  # type: ignore
+from _common import load_checkpoint, load_plan, feature_dir  # type: ignore
 cp = load_checkpoint("$slug")
 plan = load_plan("$slug")
 bad = []
@@ -43,8 +43,23 @@ for ph in plan.get("phases") or []:
 if bad:
     print("refusing to promote: incomplete phases: " + ", ".join(bad), file=sys.stderr)
     sys.exit(1)
+# Review gate: derive the authoritative open-finding count from review.md itself
+# (the source of truth), NOT the checkpoint's `findings_open` counter. That counter
+# is not auto-maintained by the workflow scripts and silently drifts; review.md's
+# per-finding `**Status:** open|fixed` headers are always current.
 rv = cp.get("review") or {}
-if rv.get("findings_open"):
+review_md = feature_dir("$slug") / "review.md"
+if review_md.is_file():
+    open_findings = re.findall(r"^\*\*Status:\*\*\s*open\b",
+                               review_md.read_text(encoding="utf-8"), re.MULTILINE)
+    if open_findings:
+        stored = rv.get("findings_open")
+        drift = "" if stored == len(open_findings) else f" [checkpoint counter says {stored} — drift, ignored]"
+        print(f"refusing to promote: {len(open_findings)} open review finding(s) in review.md{drift}",
+              file=sys.stderr)
+        sys.exit(1)
+elif rv.get("findings_open"):
+    # No review.md on disk — fall back to the stored counter.
     print(f"refusing to promote: {rv['findings_open']} open review findings", file=sys.stderr)
     sys.exit(1)
 PY
