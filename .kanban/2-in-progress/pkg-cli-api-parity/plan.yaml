@@ -1,0 +1,196 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose
+# in brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py pkg-cli-api-parity
+
+schema_version: 1
+
+feature: pkg-cli-api-parity
+title: Stash pkg CLI parity with scoped registry API
+brief: ./brief.md
+
+created: 2026-05-30
+architect_session: pkg-cli-api-parity-architect-2026-05-30
+
+# Cheap default that every phase runs after its own verify.
+default_verify:
+  - dotnet build
+
+# Broad scope rail. Implementers may stray slightly when discovery is stale,
+# but should keep changes to these areas.
+scope:
+  - Stash.Cli/PackageManager/**
+  - Stash.Cli/Completion/**
+  - Stash.Registry/Controllers/**
+  - Stash.Registry/Contracts/**
+  - Stash.Registry/Services/**
+  - Stash.Tests/**
+  - docs/PKG — Package Manager CLI.md
+  - docs/Registry — Package Registry.md
+  - examples/package_roles.stash
+  - .kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md
+
+phases:
+  - id: P1
+    title: Server-side revoke-role endpoint
+    deps: []
+    files:
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Contracts/PackageContracts.cs
+      - Stash.Registry/Services/AuditService.cs
+      - Stash.Tests/Registry/AdminRolesEndpointTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~AdminRolesEndpointTests"
+    done_when:
+      - DELETE /api/v1/admin/packages/{scope}/{name}/roles with body {principal_type, principal_id} returns 204 and the package_roles row is removed from the DB.
+      - A revoke against a missing package or missing role returns 404 (not 500, not 204).
+      - Each successful revoke emits exactly one role.revoke audit event via AuditService.LogRoleRevokeAsync.
+    notes: |
+      Mirror the existing PUT /admin/.../roles route shape. Add the
+      RevokeRoleRequest DTO and JSON-serializer registration so AOT consumers
+      can use it. Use the RequireAdmin policy.
+
+  - id: P2
+    title: Drop owners field from PackageDetailResponse
+    deps: [P1]
+    files:
+      - Stash.Registry/Contracts/PackageContracts.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Cli/PackageManager/RegistryClient.cs
+      - Stash.Cli/PackageManager/Commands/InfoCommand.cs
+      - Stash.Tests/Registry/PackageDetailResponseTests.cs
+      - Stash.Tests/Cli/PackageInfoCommandTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~PackageDetailResponseTests|FullyQualifiedName~PackageInfoCommandTests"
+    done_when:
+      - GET /api/v1/packages/{scope}/{name} JSON response no longer contains an "owners" key.
+      - stash pkg info no longer prints an owners section and no compile-time references to the removed property remain in the solution.
+    notes: |
+      Do NOT rewire `stash pkg info` to call `GetRoles`. The roles endpoint
+      requires admin scope (Stash.Registry/CLAUDE.md line 146) while `info`
+      is anonymous. `info` simply stops showing owners; `stash pkg role list`
+      becomes the canonical reader (added in P4). This phase therefore has
+      no dependency on the P3 RegistryClient additions.
+
+  - id: P3
+    title: RegistryClient parity additions + AOT serializer registration
+    deps: [P1, P2]
+    files:
+      - Stash.Cli/PackageManager/RegistryClient.cs
+      - Stash.Cli/PackageManager/CliJsonContext.cs
+      - Stash.Tests/Cli/RegistryClientParityTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet test --filter "FullyQualifiedName~RegistryClientParityTests"
+      - dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-p3
+    done_when:
+      - RegistryClient exposes SetVisibility, GetVisibility, GetRoles, AssignRole, RevokeRole, ClaimScope, GetScope, CreateOrg, GetOrg, AddOrgMember, RemoveOrgMember, CreateTeam, AddTeamMember methods backed by the documented HTTP routes.
+      - The legacy AddOwner, RemoveOwner, GetOwners methods are removed from RegistryClient with no remaining callers in the solution.
+      - Every new request and response DTO has a [JsonSerializable] entry in CliJsonContext; dotnet publish for Stash.Cli completes without new AOT trim warnings.
+      - Fake-HttpMessageHandler unit tests confirm each new method targets the correct URL, HTTP verb, and request body shape.
+
+  - id: P4
+    title: stash pkg role command replaces stash pkg owner
+    deps: [P3]
+    files:
+      - Stash.Cli/PackageManager/Commands/RoleCommand.cs
+      - Stash.Cli/PackageManager/Commands/PackageCommands.cs
+      - Stash.Cli/PackageManager/Commands/OwnerCommand.cs
+      - Stash.Tests/Cli/PackageRoleCommandTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet test --filter "FullyQualifiedName~PackageRoleCommandTests"
+    done_when:
+      - OwnerCommand.cs is deleted and the "owner" verb is removed from PackageCommands dispatch and help text.
+      - stash pkg role list, role assign, and role revoke complete a full assign-list-revoke round-trip against a WebApplicationFactory<Program> registry (with UseSolutionRelativeContentRoot("Stash.Registry")).
+      - role assign rejects missing or unknown principal-type or role arguments with a non-zero exit code and a clear error message.
+    notes: |
+      Scope asymmetry: `role assign` uses the publish-scoped route
+      (PUT /packages/{scope}/{name}/roles), but `role list`
+      (GET /packages/{scope}/{name}/roles) and `role revoke`
+      (DELETE /admin/packages/{scope}/{name}/roles) both require **admin
+      scope**. The integration test must hold an admin token for the
+      assign-list-revoke round-trip to succeed end to end; using a
+      publish-only token will 403 on list and revoke.
+
+  - id: P5
+    title: stash pkg visibility command
+    deps: [P3]
+    files:
+      - Stash.Cli/PackageManager/Commands/VisibilityCommand.cs
+      - Stash.Cli/PackageManager/Commands/PackageCommands.cs
+      - Stash.Tests/Cli/PackageVisibilityCommandTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet test --filter "FullyQualifiedName~PackageVisibilityCommandTests"
+    done_when:
+      - stash pkg visibility set <pkg> private flips the package's visibility on the registry; a subsequent stash pkg visibility get <pkg> returns "private".
+      - After flipping to private, an unauthenticated GET /packages/{scope}/{name} is rejected by the visibility policy in the integration test.
+      - visibility set rejects an unknown tier with a non-zero exit code and a clear error message.
+
+  - id: P6
+    title: stash pkg scope command
+    deps: [P3]
+    files:
+      - Stash.Cli/PackageManager/Commands/ScopeCommand.cs
+      - Stash.Cli/PackageManager/Commands/PackageCommands.cs
+      - Stash.Tests/Cli/PackageScopeCommandTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet test --filter "FullyQualifiedName~PackageScopeCommandTests"
+    done_when:
+      - stash pkg scope claim <scope> creates the scope ownership row; stash pkg scope info <scope> reads it back showing the claiming user.
+      - A second claim of the same scope by a different user fails with a non-zero exit code and a clear error message.
+
+  - id: P7
+    title: stash pkg org command (orgs + teams)
+    deps: [P3]
+    files:
+      - Stash.Cli/PackageManager/Commands/OrgCommand.cs
+      - Stash.Cli/PackageManager/Commands/PackageCommands.cs
+      - Stash.Tests/Cli/PackageOrgCommandTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet test --filter "FullyQualifiedName~PackageOrgCommandTests"
+    done_when:
+      - stash pkg org create <org>, org member add/remove, org team add, and org team member add each succeed against a WebApplicationFactory<Program> registry and their effects are visible in a subsequent stash pkg org info <org>.
+      - Each subverb rejects missing required arguments with a non-zero exit code and a clear error message.
+
+  - id: P8
+    title: Docs, example, cleanup
+    deps: [P4, P5, P6, P7]
+    files:
+      - docs/PKG — Package Manager CLI.md
+      - docs/Registry — Package Registry.md
+      - Stash.Cli/PackageManager/Commands/PackageCommands.cs
+      - examples/package_roles.stash
+      - .kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~CliPackageCommandsTests"
+      - dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-p8
+    done_when:
+      - docs/PKG — Package Manager CLI.md documents the new role, visibility, scope, and org commands and the owner section is removed.
+      - docs/Registry — Package Registry.md documents the new DELETE /admin/packages/{scope}/{name}/roles endpoint.
+      - The `stash pkg` help text printed by PackageCommands no longer lists "owner" and lists "role", "visibility", "scope", and "org".
+      - examples/package_roles.stash exists and demonstrates the new role grammar (assign, list, revoke) end to end.
+      - .kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md is deleted (or moved to a resolved location) and no remaining file references it.
+    notes: |
+      There is no `stash pkg` tab-completion subsystem to update — verified by
+      listing Stash.Cli/Completion/. The subcommand surface is reflected only
+      in `PackageCommands.cs` help text. If a CompletionSurfaceSnapshotTests
+      baseline references `pkg` subcommands, rebaseline with
+      `STASH_SNAPSHOT_REGEN=1 dotnet test --filter FullyQualifiedName~CompletionSurfaceSnapshotTests`.
+
+# Final acceptance — run by `/done` before promoting to 4-done/.
+# Mirrors the registry-scope-foundation precedent filter; keeps the three
+# checklist-enforcement classes intact (CompletionSurfaceSnapshotTests,
+# Wave1ThrowsCoverageTests, StandardLibraryReferenceTests).
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount"
+  - dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-final
+  - python3 scripts/checkpoint/validate-spec.py pkg-cli-api-parity
