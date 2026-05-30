@@ -1,16 +1,17 @@
 schema_version: 1
 feature: registry-authz-filter
 current: null
-updated: '2026-05-30T19:55:01Z'
+updated: '2026-05-30T20:08:13Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c2ffa61ca66d712c1c1cb2c779143472d212f6d0
+    verified: true
+    started: '2026-05-30T19:57:53Z'
+    completed: '2026-05-30T20:08:13Z'
+    attempts: 1
+    notes: 'Filter infra + pilot pair: RegistryAuthorizeAttribute/Filter/PrincipalFactory/DenyResponse/ResourceResolver,
+      Whoami+CreateOrg converted, 107 matrix+meta tests green'
   P2:
     status: pending
     commit: null
