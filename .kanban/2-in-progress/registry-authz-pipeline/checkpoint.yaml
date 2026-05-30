@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T18:12:07Z'
+updated: '2026-05-30T18:46:49Z'
 phases:
   P1:
     status: done
@@ -79,8 +79,8 @@ phases:
       rewrote stale comments in JwtTokenService/AuthzDenyReason/CLAUDE.md; added registry PDP docs + authz-flow
       example; registry suite 587/587 green
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: '2026-05-30T18:46:49Z'
   resolved: null
   findings_open: 0
   findings_fixed: 0
