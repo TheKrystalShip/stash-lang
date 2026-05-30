@@ -241,8 +241,53 @@ phases:
       being done so the matrix exercises the real PDP, not a fake.
 
   - id: P7
-    title: Docs + example + cleanup (delete dead permission helpers and string policies)
+    title: Complete AdminController PDP migration — wire stranded admin endpoints + strip residual policy attributes + admin-deny regression tests
     deps: [P6]
+    files:
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Tests/Registry/Authz/OrgAndAdminAuthzTests.cs
+    verify:
+      - dotnet build Stash.Registry/Stash.Registry.csproj
+      # Full registry gate: this phase strips [Authorize(Policy=...)] across three controllers and
+      # rewires AdminController authorization — a cross-cutting change a narrow filter cannot prove
+      # safe. The ~Registry filter subsumes OrgAndAdminAuthzTests, AuthzCoverageMetaTests,
+      # NoMagicAuthStringsMetaTests, and the conformance matrix. BasePathIntegrationTests excluded as
+      # documented env-flaky; SqliteConcurrencyStress excluded as documented flaky.
+      - dotnet test --filter "FullyQualifiedName~Registry&FullyQualifiedName!~BasePathIntegrationTests&Category!=SqliteConcurrencyStress"
+    done_when:
+      - All five AdminController endpoints currently gated only by the class-level [Authorize(Policy=AuthPolicies.RequireAdmin)] now call IRegistryAuthorizer.AuthorizeAsync before acting — GetStats→ReadAdminStats, CreateUser→ManageUser, DeleteUser→ManageUser, AdminAssignRole→AdminAssignPackageRole, GetAuditLog→ReadAuditLog — mirroring the existing AdminRevokeRole pattern (BuildPrincipal → AuthorizeAsync → on deny return 401 for NotAuthenticated else 403 with the typed AuthzDenyReason). The three global-admin actions pass new AdminResource(); AdminAssignRole passes the package resource (PackageRoute.From) like AdminRevokeRole.
+      - Admin-deny regression guards (the durable fix) — an authenticated NON-admin principal (user role; read OR publish ceiling) receives 403 from POST /api/v1/admin/users, DELETE /api/v1/admin/users/{username}, PUT /api/v1/admin/packages/{scope}/{name}/roles, and GET /api/v1/admin/audit-log; the existing GetStats publish-token 403 test stays green. Each endpoint also has an admin-token (admin role + admin ceiling) happy-path test returning its documented 2xx, proving the wiring did not over-restrict.
+      - Ceiling-first preserved on the admin plane — an admin-ROLE principal holding only a read or publish ceiling is denied the admin endpoints with TokenScopeInsufficient (the ceiling table already maps the four admin actions to TokenCeiling.Admin); admin role does NOT bypass the ceiling.
+      - Residual policy attributes stripped — the class-level [Authorize(Policy = AuthPolicies.RequireAdmin)] on AdminController and the [Authorize(Policy = AuthPolicies.RequirePublishScope)] attributes on the three ScopesController and six OrganizationsController endpoints are all replaced with bare [Authorize]. This is behavior-preserving for Scopes/Orgs (every one of those endpoints already calls AuthorizeAsync with its action, so the PDP enforces the publish ceiling) and behavior-preserving for AdminController only because the preceding criterion wired the PDP first.
+      - grep "AuthPolicies\." Stash.Registry/Controllers/ returns zero matches — no controller references any policy constant; the only remaining AuthPolicies references are the four Startup.cs registrations and the class definition itself (both deleted in P8).
+      - Default-deny intact — AuthzCoverageMetaTests stays green — every endpoint is still classified (bare [Authorize] counts) and none regressed to unclassified.
+      - Bounded-domain auth strings — NoMagicAuthStringsMetaTests passes; the new AuthorizeAsync wiring introduces no inline claim/role/scope literal (actions come from the RegistryAction enum, resources from ResourceRef records, deny reasons from AuthzDenyReason).
+      - Full registry suite green — the cross-controller attribute strip broke no sibling endpoint or test.
+    notes: |
+      Why this phase exists: the P3/P4/P5 controller-swap phases finished
+      Packages/Scopes/Orgs but left five AdminController endpoints
+      (GetStats, CreateUser, DeleteUser, AdminAssignRole, GetAuditLog) gated
+      ONLY by the legacy [Authorize(Policy=RequireAdmin)] class attribute —
+      they never reach the PDP. P4's done_when stated "every AdminController
+      endpoint is authorized through IRegistryAuthorizer" but its check only
+      grepped for HasPackagePermissionAsync, so the gap passed green. The
+      docs+cleanup phase (now P8) cannot delete AuthPolicies/RequireAdmin
+      without first wiring those endpoints, or it would silently drop the
+      compound admin gate (privilege escalation): /admin/users,
+      /admin/.../roles, and /admin/audit-log have no non-admin regression
+      guard today, so the strip would not even redden the suite. The PDP
+      already fully handles all four admin actions (RegistryAuthorizer ceiling
+      table maps them to TokenCeiling.Admin; the admin branch checks
+      role==admin); AdminResource() and the AdminRevokeRole code path are the
+      templates. Audit-log authenticated admin-plane denies by mirroring
+      AdminRevokeRole's LogAuthzDenyAsync call. Discovered during the first
+      docs+cleanup dispatch (checkpoint failed note, 2026-05-30).
+
+  - id: P8
+    title: Docs + example + cleanup (delete dead permission helpers and string policies)
+    deps: [P7]
     files:
       - docs/Registry — Package Registry.md
       - examples/registry/authz-flow.md
@@ -250,6 +295,9 @@ phases:
       - Stash.Registry/Controllers/PackagesController.cs
       - Stash.Registry/Database/IRegistryDatabase.cs
       - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Auth/RegistryAuthConstants.cs
+      - Stash.Registry/Auth/JwtTokenService.cs
+      - Stash.Registry/CLAUDE.md
     verify:
       - dotnet build
       # Full registry suite (not a narrow filter): P7 deletes production code paths
@@ -263,7 +311,7 @@ phases:
       - docs/Registry — Package Registry.md documents the PDP model, the closed RegistryAction enum (including RevokePackageRole and AdminRevokePackageRole), the role→permission matrix, the ScopeOwnershipPolicy enum + per-policy table, the verified-mode challenge/verify wire shapes (resolver stubbed 501), the coarse token ceiling, Security.MaxTokenLifetime, the DELETE /api/v1/packages/{scope}/{name}/roles owner-revoke endpoint and its admin peer, the last-owner 409 invariant, the audit-logging scoping rule (mutations + authenticated denies; anonymous denies excluded), the insert-then-handle-unique-violation atomicity guarantee for scope-claim and CreatePackage, the non-empty scope/org deletion 409, the fail-closed resolver semantics, and the preserved JTI revocation check (rejects revoked tokens at the auth layer, before the PDP, on every endpoint including [PublicEndpoint]). The doc no longer mentions RequireReadScope/RequirePublishScope/RequireAdminScope/RequireAdmin as user-facing policies.
       - docs/Registry — Package Registry.md carries a "Deferred — fine-grained token capabilities" section pointing at the backlog stub; no part of the doc describes a token capabilities[] body or TokenCapabilityScopeMiss.
       - examples/registry/authz-flow.md walks through the canonical happy path on ScopeOwnershipPolicy=claim — register alice, stash pkg org create acme, POST /auth/tokens for a publish-ceiling token on alice, stash pkg publish @acme/widgets — and shows the corresponding DENY when a read-ceiling token is used by mistake.
-      - Cleanup landed — HasPackagePermissionAsync removed from IRegistryDatabase and StashRegistryDatabase; the four legacy policies (RequireReadScope, RequirePublishScope, RequireAdminScope, RequireAdmin) removed from Startup.cs; CanReadPackageAsync gone from PackagesController. The legacy-policy cleanup also removes the now-dead AuthPolicies class from Auth/RegistryAuthConstants.cs — once the PDP fully replaces the string-policy mechanism the four policy-name constants have no remaining referent (the per-controller [Authorize(Policy = AuthPolicies.X)] → bare [Authorize] migration is owned by the P3/P4/P5 controller swaps, not this phase).
+      - Cleanup landed — HasPackagePermissionAsync removed from IRegistryDatabase and StashRegistryDatabase; the four legacy policies (RequireReadScope, RequirePublishScope, RequireAdminScope, RequireAdmin) removed from Startup.cs; CanReadPackageAsync gone from PackagesController. The legacy-policy cleanup also removes the now-dead AuthPolicies class from Auth/RegistryAuthConstants.cs — once the PDP fully replaces the string-policy mechanism the four policy-name constants have no remaining referent (the per-controller [Authorize(Policy = AuthPolicies.X)] → bare [Authorize] migration is completed in P7, not this phase; P3/P4/P5 left AdminController's [Authorize(Policy=RequireAdmin)] in place, which P7 wires + strips). This phase also clears the residual policy-name mentions in Stash.Registry/Auth/JwtTokenService.cs (comment) and Stash.Registry/CLAUDE.md (the four-policy prose) so the grep-clean done_when holds across all of Stash.Registry/.
       - grep "RequirePublishScope\|RequireReadScope\|RequireAdminScope\|RequireAdmin\|HasPackagePermissionAsync\|CanReadPackageAsync\|TokenCapabilities\|TokenCapabilityScopeMiss\|IsUnrestricted" Stash.Registry/ returns zero matches (this also proves the AuthPolicies constants are gone, since the policy names live only there after the controller swaps).
       - Bounded-domain auth strings — NoMagicAuthStringsMetaTests passes after the cleanup; deleting the legacy policies and dead helpers must not reintroduce any inline claim/role/scope/policy literal.
       - dotnet build green; the final_verify gate runs green end-to-end including RegistryAuthzMatrixTests, AuthzCoverageMetaTests, and the meta-test family (NoMagicAuthStringsMetaTests, Wave1ThrowsCoverageTests, CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests).

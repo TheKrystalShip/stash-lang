@@ -883,8 +883,28 @@ has a concrete `done_when` list there. Summary:
   deletion refused), audit-emission assertions (mutation success +
   authenticated deny emit one entry; anonymous-deny emits zero), and
   the JTI-revocation `401` regression.
-- **P7** Docs + example + cleanup (delete `HasPackagePermissionAsync` /
-  `CanReadPackageAsync` and the four string policies).
+- **P7** **Complete the AdminController PDP migration** (inserted
+  2026-05-30). The P3/P4/P5 controller swaps finished Packages/Scopes/Orgs
+  — every endpoint there calls `AuthorizeAsync`, so their
+  `[Authorize(Policy=…)]` attributes became redundant — but left **five
+  AdminController endpoints** (`GetStats`, `CreateUser`, `DeleteUser`,
+  `AdminAssignRole`, `GetAuditLog`) gated *only* by the class-level
+  `[Authorize(Policy=RequireAdmin)]`; they never reach the PDP. P4's
+  `done_when` claimed full admin migration but its check only grepped for
+  `HasPackagePermissionAsync`, so the gap passed green. This phase wires
+  those five endpoints to `IRegistryAuthorizer` (actions `ReadAdminStats`,
+  `ManageUser`, `AdminAssignPackageRole`, `ReadAuditLog` — already fully
+  handled by the resolver; `AdminResource()` for the global ones), **adds
+  the missing non-admin → `403` regression guards** (only `/admin/stats`
+  had one — so a naive attribute strip would have *silently* opened
+  `/admin/users`, `/admin/.../roles`, `/admin/audit-log` to any
+  authenticated user), and strips the 10 residual redundant policy
+  attributes (1 Admin class + 3 Scopes + 6 Orgs) to bare `[Authorize]`.
+  This unblocks the cleanup phase: only after it does `AuthPolicies` have
+  no remaining referent.
+- **P8** Docs + example + cleanup (delete `HasPackagePermissionAsync` /
+  `CanReadPackageAsync`, the four string policies, and the now-dead
+  `AuthPolicies` class). Was P7; renumbered when P7 was inserted.
 
 ## Open Questions
 

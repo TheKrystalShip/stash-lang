@@ -1,6 +1,6 @@
 schema_version: 1
 feature: registry-authz-pipeline
-current: P7
+current: null
 updated: '2026-05-30T17:21:17Z'
 phases:
   P1:
@@ -60,22 +60,26 @@ phases:
       all ceiling/role/visibility/policy axes covered; concurrent cells in RegistryConcurrency collection;
       stable across two runs
   P7:
-    status: failed
+    status: pending
     commit: null
     verified: false
-    started: '2026-05-30T17:15:20Z'
+    started: null
     completed: null
-    attempts: 1
-    notes: "AuthPolicies not dead. Org/Scopes controllers (9 sites) are PDP-backed per-endpoint \u2014\
-      \ attribute strip there may be behavior-preserving if the PDP enforces the publish ceiling for those\
-      \ actions. But AdminController is NOT fully migrated: class-level [Authorize(Policy=RequireAdmin)]\
-      \ (line 29) gates 5 endpoints, only AdminRevokeRole (line 201/215) has a PDP call. Stripping RequireAdmin\
-      \ drops the compound admin-role+admin-ceiling gate on GetStats/CreateUser/DeleteUser/AdminAssignRole/GetAuditLog\
-      \ \u2014 privilege-escalation regression. Cannot delete AuthPolicies/Startup policies without first\
-      \ migrating the unmigrated AdminController endpoints to PDP calls \u2014 out of P7 file scope and\
-      \ explicitly assigned to the controller-swap phases. Architect must add/reopen an AdminController\
-      \ PDP migration phase before P7. Note: Org/Scopes attribute strips are unblocked once AdminController\
-      \ is done. Docs+example sub-task is unblocked but should wait for final shipped surface."
+    attempts: 0
+    notes: 'Admin PDP-migration phase inserted 2026-05-30 after the docs/cleanup dispatch found AuthPolicies
+      still load-bearing on AdminController (5 endpoints gated only by [Authorize(Policy=RequireAdmin)];
+      stripping it = privilege escalation). Wires GetStats/CreateUser/DeleteUser/AdminAssignRole/GetAuditLog
+      to the PDP, adds non-admin 403 regression guards, strips the 10 residual policy attributes. See plan.yaml P7.'
+  P8:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: 'Docs + example + cleanup (was P7); deps [P7]. Blocked until P7 completes the AdminController
+      PDP migration so AuthPolicies has no remaining referent and can be deleted. Original P7 dispatch
+      correctly refused and surfaced the AdminController gap (see P7 note).'
 review:
   status: not_started
   started: null
