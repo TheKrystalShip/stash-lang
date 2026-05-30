@@ -6,11 +6,9 @@ using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
-using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Services;
-using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
 
@@ -32,30 +30,21 @@ public class OrganizationsController : ControllerBase
     private readonly IRegistryDatabase _db;
     private readonly IRegistryAuthorizer _authorizer;
     private readonly AuditService _auditService;
+    private readonly IRegistryAuthzPrincipalFactory _principalFactory;
 
     /// <summary>
     /// Initialises the controller with the registry database, authorizer, and audit service.
     /// </summary>
-    public OrganizationsController(IRegistryDatabase db, IRegistryAuthorizer authorizer, AuditService auditService)
+    public OrganizationsController(
+        IRegistryDatabase db,
+        IRegistryAuthorizer authorizer,
+        AuditService auditService,
+        IRegistryAuthzPrincipalFactory principalFactory)
     {
         _db = db;
         _authorizer = authorizer;
         _auditService = auditService;
-    }
-
-    // ── Helper: build Principal ───────────────────────────────────────────────
-
-    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
-    {
-        if (user?.Identity?.IsAuthenticated != true)
-            return new AnonymousPrincipal();
-
-        string username = user.Identity!.Name!;
-        bool isAdmin = user.IsInRole(UserRoles.Admin);
-        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
-        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
-        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
-        return new UserPrincipal(username, role, ceiling, tokenId);
+        _principalFactory = principalFactory;
     }
 
     /// <summary>
@@ -125,17 +114,10 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name (without the leading <c>@</c>).</param>
     /// <returns><c>200</c> with <see cref="OrgDetailResponse"/>, or <c>404</c> if not found.</returns>
     [PublicEndpoint("org public metadata is available without authentication")]
+    [RegistryAuthorize(RegistryAction.ReadOrg)]
     [HttpGet("{org}")]
     public async Task<IActionResult> GetOrg(string org)
     {
-        var principal = BuildPrincipal(User);
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ReadOrg, new OrgResource(org));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
@@ -159,7 +141,7 @@ public class OrganizationsController : ControllerBase
     [HttpDelete("{org}")]
     public async Task<IActionResult> DeleteOrg(string org)
     {
-        var principal = BuildPrincipal(User);
+        var principal = _principalFactory.Build(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeleteOrg, new OrgResource(org));
         if (!decision.Allowed)
@@ -191,22 +173,15 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org not found.</returns>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.AddOrgMember)]
     [HttpPost("{org}/members")]
     public async Task<IActionResult> AddMember(string org)
     {
         string username = User.Identity!.Name!;
-        var principal = BuildPrincipal(User);
 
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AddOrgMember, new OrgResource(org));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         AddOrgMemberRequest? body;
         try
@@ -250,22 +225,13 @@ public class OrganizationsController : ControllerBase
     /// <param name="username">The username to remove.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org or user not found.</returns>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.RemoveOrgMember)]
     [HttpDelete("{org}/members/{username}")]
     public async Task<IActionResult> RemoveMember(string org, string username)
     {
-        string callerUsername = User.Identity!.Name!;
-        var principal = BuildPrincipal(User);
-
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RemoveOrgMember, new OrgResource(org));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         await _db.RemoveOrgMemberAsync(orgRecord.Id, username);
         return Ok(new SuccessResponse());
@@ -277,22 +243,13 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <returns><c>201</c> with <see cref="CreateTeamResponse"/> on success.</returns>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.CreateTeam)]
     [HttpPost("{org}/teams")]
     public async Task<IActionResult> CreateTeam(string org)
     {
-        string username = User.Identity!.Name!;
-        var principal = BuildPrincipal(User);
-
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.CreateTeam, new OrgResource(org));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         CreateTeamRequest? body;
         try
@@ -333,22 +290,13 @@ public class OrganizationsController : ControllerBase
     /// <param name="team">The team name.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org/team not found.</returns>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.AddTeamMember)]
     [HttpPost("{org}/teams/{team}/members")]
     public async Task<IActionResult> AddTeamMember(string org, string team)
     {
-        string username = User.Identity!.Name!;
-        var principal = BuildPrincipal(User);
-
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AddTeamMember, new OrgResource(org));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         var teamRecord = await _db.GetTeamByNameAsync(orgRecord.Id, team);
         if (teamRecord == null)

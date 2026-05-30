@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -170,5 +171,111 @@ public sealed class RegistryAuthzAuditMutationTests : RegistryAuthzTestBase
             .ToList();
 
         Assert.Empty(pkgEntries);
+    }
+
+    // ── P2 uniform deny-audit: previously-unaudited endpoints now write one audit entry ──
+
+    /// <summary>
+    /// CreateOrg was previously not audited on denial (Orgs controller omission).
+    /// The filter now audits every authenticated denial. Ceiling-insufficient callers
+    /// (read-only token) get a 403 and one deny audit row.
+    /// </summary>
+    [Fact]
+    public async Task Audit_CreateOrg_AuthenticatedDeny_EmitsExactlyOneDenyEntry()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Register alice and get her initial read-ceiling login token (lowest privilege)
+        await client.PostAsync("/api/v1/auth/register",
+            new StringContent(JsonSerializer.Serialize(new { username = "alice-am7", password = "Password123!" }),
+                Encoding.UTF8, "application/json"));
+        var loginResp = await client.PostAsync("/api/v1/auth/login",
+            new StringContent(JsonSerializer.Serialize(new { username = "alice-am7", password = "Password123!" }),
+                Encoding.UTF8, "application/json"));
+        loginResp.EnsureSuccessStatusCode();
+        var loginBody = await loginResp.Content.ReadAsStringAsync();
+        using var loginDoc = JsonDocument.Parse(loginBody);
+        string readToken = loginDoc.RootElement.GetProperty("accessToken").GetString()!;
+
+        // Use the read-ceiling token — CreateOrg requires publish ceiling, so PDP denies.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", readToken);
+        var resp = await client.PostAsync("/api/v1/orgs",
+            new StringContent(JsonSerializer.Serialize(new { name = "testorg-am7" }),
+                Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Action == "CreateOrg" && e.Decision == "deny" && e.User == "alice-am7")
+            .ToList();
+
+        Assert.Single(denyEntries);
+    }
+
+    /// <summary>
+    /// AddOrgMember was previously not audited on denial (Orgs controller omission).
+    /// Bob (non-owner) gets a 403 and one deny audit row.
+    /// </summary>
+    [Fact]
+    public async Task Audit_AddOrgMember_AuthenticatedDeny_EmitsExactlyOneDenyEntry()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string aliceToken = await RegisterAndGetTokenAsync(client, "alice-am8");
+        string bobToken = await RegisterAndGetTokenAsync(client, "bob-am8");
+
+        // Alice creates the org
+        SetBearer(client, aliceToken);
+        var createResp = await client.PostAsync("/api/v1/orgs",
+            new StringContent(JsonSerializer.Serialize(new { name = "test-org-am8" }),
+                Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+
+        // Bob (non-owner) tries to add alice as member — PDP denies
+        SetBearer(client, bobToken);
+        var addResp = await client.PostAsync("/api/v1/orgs/test-org-am8/members",
+            new StringContent(JsonSerializer.Serialize(new { username = "alice-am8", org_role = "member" }),
+                Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Forbidden, addResp.StatusCode);
+
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Action == "AddOrgMember" && e.Decision == "deny" && e.User == "bob-am8")
+            .ToList();
+
+        Assert.Single(denyEntries);
+    }
+
+    /// <summary>
+    /// VerifyScope was previously not audited on denial (Scopes controller omission).
+    /// Bob trying to verify a scope owned by alice gets a 403 and one deny audit row.
+    /// </summary>
+    [Fact]
+    public async Task Audit_VerifyScope_AuthenticatedDeny_EmitsExactlyOneDenyEntry()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        await RegisterAndGetTokenAsync(client, "alice-am9");
+        string bobToken = await RegisterAndGetTokenAsync(client, "bob-am9");
+        await SeedScopeAsync(factory, "alice-am9", "alice-am9");
+
+        // Bob tries to verify alice's scope — PDP denies
+        SetBearer(client, bobToken);
+        var resp = await client.PostAsync("/api/v1/scopes/alice-am9/verify",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Action == "VerifyScope" && e.Decision == "deny" && e.User == "bob-am9")
+            .ToList();
+
+        Assert.Single(denyEntries);
     }
 }

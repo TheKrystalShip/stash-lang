@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Claims;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -44,6 +43,7 @@ public class PackagesController : ControllerBase
     private readonly AuditService _auditService;
     private readonly DeprecationService _deprecationService;
     private readonly IRegistryAuthorizer _authorizer;
+    private readonly IRegistryAuthzPrincipalFactory _principalFactory;
     private readonly RegistryConfig _config;
 
     /// <summary>
@@ -57,6 +57,7 @@ public class PackagesController : ControllerBase
         AuditService auditService,
         DeprecationService deprecationService,
         IRegistryAuthorizer authorizer,
+        IRegistryAuthzPrincipalFactory principalFactory,
         RegistryConfig config)
     {
         _db = db;
@@ -66,38 +67,9 @@ public class PackagesController : ControllerBase
         _auditService = auditService;
         _deprecationService = deprecationService;
         _authorizer = authorizer;
+        _principalFactory = principalFactory;
         _config = config;
     }
-
-    // ── Helper: build Principal from the current HttpContext ─────────────────
-
-    private Principal BuildPrincipal()
-    {
-        if (User?.Identity?.IsAuthenticated != true)
-            return new AnonymousPrincipal();
-
-        string username = User.Identity!.Name!;
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        TokenCeiling ceiling = TokenCeilingConverter.FromClaimValue(User.FindFirstValue(RegistryClaims.TokenScope));
-        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
-        string tokenId = User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti) ?? "";
-        return new UserPrincipal(username, role, ceiling, tokenId);
-    }
-
-    /// <summary>
-    /// Maps an <see cref="AuthzDenyReason"/> to an HTTP status code.
-    /// <see cref="AuthzDenyReason.VisibilityHidden"/> and
-    /// <see cref="AuthzDenyReason.PackageNotFound"/> map to 404;
-    /// <see cref="AuthzDenyReason.NotAuthenticated"/> maps to 401;
-    /// all others map to 403.
-    /// </summary>
-    private static int DenyReasonToStatus(AuthzDenyReason reason) => reason switch
-    {
-        AuthzDenyReason.VisibilityHidden => 404,
-        AuthzDenyReason.PackageNotFound => 404,
-        AuthzDenyReason.NotAuthenticated => 401,
-        _ => 403
-    };
 
     // ── Read endpoints ────────────────────────────────────────────────────────
 
@@ -105,6 +77,7 @@ public class PackagesController : ControllerBase
     /// Gets package metadata including all published versions.
     /// </summary>
     [PublicEndpoint("package metadata is public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]
     [HttpGet("{scope}/{name}")]
     public async Task<IActionResult> GetPackage(string scope, string name)
     {
@@ -114,15 +87,6 @@ public class PackagesController : ControllerBase
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
-
-        var principal = BuildPrincipal();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ReadPackageMetadata, resource);
-        if (!decision.Allowed)
-        {
-            // Anonymous denial on private packages: 404 (do not leak existence)
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = $"Package '{packageName}' not found." });
-        }
 
         List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
         var versionsDict = new Dictionary<string, VersionDetailResponse>();
@@ -169,6 +133,7 @@ public class PackagesController : ControllerBase
     /// Gets metadata for a specific version of a package.
     /// </summary>
     [PublicEndpoint("version metadata is public for public packages; visibility gated by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageVersion)]
     [HttpGet("{scope}/{name}/{version}")]
     public async Task<IActionResult> GetVersion(string scope, string name, string version)
     {
@@ -178,14 +143,6 @@ public class PackagesController : ControllerBase
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
-
-        var principal = BuildPrincipal();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ReadPackageVersion, resource);
-        if (!decision.Allowed)
-        {
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
-        }
 
         VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, version);
         if (vr == null)
@@ -198,6 +155,7 @@ public class PackagesController : ControllerBase
     /// Downloads the tarball for a specific package version.
     /// </summary>
     [PublicEndpoint("tarball download is public for public packages; visibility gated by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.DownloadPackageVersion)]
     [HttpGet("{scope}/{name}/{version}/download")]
     public async Task<IActionResult> DownloadVersion(string scope, string name, string version)
     {
@@ -207,14 +165,6 @@ public class PackagesController : ControllerBase
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
-
-        var principal = BuildPrincipal();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DownloadPackageVersion, resource);
-        if (!decision.Allowed)
-        {
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
-        }
 
         VersionRecord? versionRecord = await _db.GetPackageVersionAsync(packageName, version);
         if (versionRecord == null)
@@ -254,7 +204,7 @@ public class PackagesController : ControllerBase
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
-        var principal = BuildPrincipal();
+        var principal = _principalFactory.Build(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         // Determine action: CreatePackage or PublishVersion
@@ -268,12 +218,7 @@ public class PackagesController : ControllerBase
             if (principal is UserPrincipal up)
                 await _auditService.LogAuthzDenyAsync(action.ToString(), up.Username, packageName, decision.Reason, ip);
 
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse
-                {
-                    Error = decision.Reason.ToString(),
-                    Message = decision.Detail
-                });
+            return AuthzDenyResponse.For(decision, $"Package '{packageName}' not found.");
         }
 
         string? clientIntegrity = Request.Headers["X-Integrity"];
@@ -320,25 +265,15 @@ public class PackagesController : ControllerBase
     /// Removes a specific version of a package from the registry.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.UnpublishVersion)]
     [HttpDelete("{scope}/{name}/{version}")]
     public async Task<IActionResult> UnpublishVersion(string scope, string name, string version)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.UnpublishVersion, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("UnpublishVersion", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         try
         {
             await _packageService.UnpublishAsync(packageName, version, username);
@@ -357,28 +292,19 @@ public class PackagesController : ControllerBase
     /// Marks an entire package as deprecated.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.DeprecatePackage)]
     [HttpPatch("{scope}/{name}/deprecate")]
     public async Task<IActionResult> DeprecatePackage(string scope, string name, [FromBody] DeprecatePackageRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeprecatePackage, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("DeprecatePackage", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.DeprecatePackageAsync(packageName, request.Message, request.Alternative, username);
@@ -395,28 +321,19 @@ public class PackagesController : ControllerBase
     /// Removes the deprecation status from a package.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.DeprecatePackage)]
     [HttpDelete("{scope}/{name}/deprecate")]
     public async Task<IActionResult> UndeprecatePackage(string scope, string name)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeprecatePackage, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("UndeprecatePackage", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.UndeprecatePackageAsync(packageName);
@@ -433,28 +350,19 @@ public class PackagesController : ControllerBase
     /// Marks a specific version of a package as deprecated.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.DeprecateVersion)]
     [HttpPatch("{scope}/{name}/{version}/deprecate")]
     public async Task<IActionResult> DeprecateVersion(string scope, string name, string version, [FromBody] DeprecateVersionRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.VersionExistsAsync(packageName, version))
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeprecateVersion, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("DeprecateVersion", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.DeprecateVersionAsync(packageName, version, request.Message, username);
@@ -471,28 +379,19 @@ public class PackagesController : ControllerBase
     /// Removes the deprecation status from a specific version.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.DeprecateVersion)]
     [HttpDelete("{scope}/{name}/{version}/deprecate")]
     public async Task<IActionResult> UndeprecateVersion(string scope, string name, string version)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.VersionExistsAsync(packageName, version))
             return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeprecateVersion, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("UndeprecateVersion", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.UndeprecateVersionAsync(packageName, version);
@@ -511,6 +410,7 @@ public class PackagesController : ControllerBase
     /// Lists all role entries for a package.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.ListPackageRoles)]
     [HttpGet("{scope}/{name}/roles")]
     public async Task<IActionResult> GetRoles(string scope, string name)
     {
@@ -519,18 +419,6 @@ public class PackagesController : ControllerBase
 
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
-
-        var principal = BuildPrincipal();
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ListPackageRoles, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ListPackageRoles", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
         return Ok(new PackageRolesListResponse
@@ -549,6 +437,7 @@ public class PackagesController : ControllerBase
     /// Assigns a role to a principal on a package.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.AssignPackageRole)]
     [HttpPut("{scope}/{name}/roles")]
     public async Task<IActionResult> AssignRole(string scope, string name, [FromBody] AssignRoleRequest request)
     {
@@ -558,17 +447,7 @@ public class PackagesController : ControllerBase
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AssignPackageRole, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("AssignPackageRole", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         if (!Array.Exists(PrincipalTypes.All, p => p == request.PrincipalType))
             return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
@@ -576,7 +455,7 @@ public class PackagesController : ControllerBase
         if (!Array.Exists(PackageRoles.RankOrder, r => r == request.Role))
             return BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
 
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         await _db.AssignPackageRoleAsync(packageName, request.PrincipalType, request.PrincipalId, request.Role);
         await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, request.PrincipalId, ip);
         return Ok(new SuccessResponse());
@@ -590,6 +469,7 @@ public class PackagesController : ControllerBase
     /// 409 if the revoke would drop the owner count to zero.
     /// </remarks>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.RevokePackageRole)]
     [HttpDelete("{scope}/{name}/roles")]
     public async Task<IActionResult> RevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
     {
@@ -599,19 +479,8 @@ public class PackagesController : ControllerBase
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RevokePackageRole, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("RevokePackageRole", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         try
         {
             await _roleService.RevokeRoleAsync(packageName, request.PrincipalType, request.PrincipalId);
@@ -634,6 +503,7 @@ public class PackagesController : ControllerBase
     /// Changes the visibility of a package.
     /// </summary>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.ChangePackageVisibility)]
     [HttpPatch("{scope}/{name}/visibility")]
     public async Task<IActionResult> SetVisibility(string scope, string name, [FromBody] SetVisibilityRequest request)
     {
@@ -643,24 +513,14 @@ public class PackagesController : ControllerBase
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        var principal = BuildPrincipal();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ChangePackageVisibility, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ChangePackageVisibility", up.Username, packageName, decision.Reason, ip);
-            return StatusCode(DenyReasonToStatus(decision.Reason),
-                new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         if (string.IsNullOrEmpty(request.Visibility) || !Visibilities.IsValid(request.Visibility))
         {
             return BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
         }
 
-        string username = ((UserPrincipal)principal).Username;
+        string username = User.Identity!.Name!;
         await _db.SetPackageVisibilityAsync(packageName, request.Visibility);
         await _auditService.LogMutationAllowAsync("package.visibility_change", username, packageName, ip);
         return Ok(new SetVisibilityResponse { Package = packageName, Visibility = request.Visibility });

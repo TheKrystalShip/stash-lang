@@ -3,15 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
-using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
-using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
 
@@ -34,30 +30,13 @@ namespace Stash.Registry.Controllers;
 public sealed class SearchController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
-    private readonly IRegistryAuthorizer _authorizer;
 
     /// <summary>
     /// Initialises the controller with its required services.
     /// </summary>
-    public SearchController(IRegistryDatabase db, IRegistryAuthorizer authorizer)
+    public SearchController(IRegistryDatabase db)
     {
         _db = db;
-        _authorizer = authorizer;
-    }
-
-    // ── Helper: build Principal ───────────────────────────────────────────────
-
-    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
-    {
-        if (user?.Identity?.IsAuthenticated != true)
-            return new AnonymousPrincipal();
-
-        string username = user.Identity!.Name!;
-        bool isAdmin = user.IsInRole(UserRoles.Admin);
-        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
-        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
-        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
-        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
@@ -78,19 +57,10 @@ public sealed class SearchController : ControllerBase
     /// result count.
     /// </returns>
     [PublicEndpoint("package search is a public discovery endpoint — unauthenticated callers see only public packages")]
+    [RegistryAuthorize(RegistryAction.Search)]
     [HttpGet]
     public async Task<IActionResult> Search()
     {
-        // PDP check for the Search action (public — always Allow, but runs the ceiling check
-        // so a revoked token cannot reach even this endpoint cleanly).
-        var principal = BuildPrincipal(User);
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.Search, new SearchResource());
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         string query = Request.Query.TryGetValue("q", out var q) ? q.ToString() : "";
 
         int page = 1;

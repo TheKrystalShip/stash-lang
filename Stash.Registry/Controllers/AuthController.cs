@@ -14,7 +14,6 @@ using Microsoft.IdentityModel.Tokens;
 using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
-using static Stash.Registry.Auth.TokenCeilingConverter;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -47,7 +46,6 @@ public class AuthController : ControllerBase
     private readonly AuditService _auditService;
     private readonly RegistryConfig _config;
     private readonly ILogger<AuthController> _logger;
-    private readonly IRegistryAuthorizer _authorizer;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -57,15 +55,13 @@ public class AuthController : ControllerBase
     /// <param name="authProvider">Provider that validates credentials and creates user accounts.</param>
     /// <param name="auditService">Service that records security-relevant events.</param>
     /// <param name="config">Registry-wide configuration, including token expiry settings.</param>
-    /// <param name="authorizer">Policy Decision Point for all authorization decisions.</param>
     public AuthController(
         IRegistryDatabase db,
         JwtTokenService jwtService,
         IAuthProvider authProvider,
         AuditService auditService,
         RegistryConfig config,
-        ILogger<AuthController> logger,
-        IRegistryAuthorizer authorizer)
+        ILogger<AuthController> logger)
     {
         _db = db;
         _jwtService = jwtService;
@@ -73,22 +69,6 @@ public class AuthController : ControllerBase
         _auditService = auditService;
         _config = config;
         _logger = logger;
-        _authorizer = authorizer;
-    }
-
-    // ── Helper: build Principal ───────────────────────────────────────────────
-
-    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
-    {
-        if (user?.Identity?.IsAuthenticated != true)
-            return new AnonymousPrincipal();
-
-        string username = user.Identity!.Name!;
-        bool isAdmin = user.IsInRole(UserRoles.Admin);
-        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
-        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
-        string tokenId = user.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ?? "";
-        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
@@ -288,19 +268,9 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpGet("tokens")]
     [Authorize]
+    [RegistryAuthorize(RegistryAction.ListOwnTokens)]
     public async Task<IActionResult> ListTokens()
     {
-        var principal = BuildPrincipal(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ListOwnTokens, new PrincipalSelfResource());
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ListOwnTokens", up.Username, "", decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         string username = User.Identity!.Name!;
 
         List<TokenRecord> tokens = await _db.GetUserTokensAsync(username);
@@ -343,21 +313,12 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpPost("tokens")]
     [Authorize]
+    [RegistryAuthorize(RegistryAction.IssueToken)]
     public async Task<IActionResult> CreateToken()
     {
-        var principal = BuildPrincipal(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var pdpDecision = await _authorizer.AuthorizeAsync(principal, RegistryAction.IssueToken, new PrincipalSelfResource());
-        if (!pdpDecision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("IssueToken", up.Username, "", pdpDecision.Reason, ip);
-            int pdpStatus = pdpDecision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(pdpStatus, new ErrorResponse { Error = pdpDecision.Reason.ToString(), Message = pdpDecision.Detail });
-        }
-
         string username = User.Identity!.Name!;
         string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenCreateRequest? body;
         try
@@ -488,24 +449,15 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpPost("tokens/{id}/revoke")]
     [Authorize]
+    [RegistryAuthorize(RegistryAction.RevokeOwnToken)]
     public async Task<IActionResult> RevokeToken(string id)
     {
-        var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
         if (record == null)
         {
             return NotFound(new ErrorResponse { Error = "Token not found." });
-        }
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RevokeOwnToken, new TokenResource(id));
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("RevokeOwnToken", up.Username, id, decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
         string username = User.Identity!.Name!;
@@ -532,24 +484,15 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpDelete("tokens/{id}")]
     [Authorize]
+    [RegistryAuthorize(RegistryAction.RevokeOwnToken)]
     public async Task<IActionResult> DeleteToken(string id)
     {
-        var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
         if (record == null)
         {
             return NotFound(new ErrorResponse { Error = "Token not found." });
-        }
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RevokeOwnToken, new TokenResource(id));
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("RevokeOwnToken", up.Username, id, decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
         string username = User.Identity!.Name!;

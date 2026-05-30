@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
-using static Stash.Registry.Auth.TokenCeilingConverter;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -37,7 +36,6 @@ public class AdminController : ControllerBase
     private readonly IAuthProvider _authProvider;
     private readonly AuditService _auditService;
     private readonly PackageRoleService _roleService;
-    private readonly IRegistryAuthorizer _authorizer;
     private readonly RegistryConfig _config;
 
     /// <summary>
@@ -48,49 +46,22 @@ public class AdminController : ControllerBase
         IAuthProvider authProvider,
         AuditService auditService,
         PackageRoleService roleService,
-        IRegistryAuthorizer authorizer,
         RegistryConfig config)
     {
         _db = db;
         _authProvider = authProvider;
         _auditService = auditService;
         _roleService = roleService;
-        _authorizer = authorizer;
         _config = config;
-    }
-
-    // ── Helper: build Principal ───────────────────────────────────────────────
-
-    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
-    {
-        if (user?.Identity?.IsAuthenticated != true)
-            return new AnonymousPrincipal();
-
-        string username = user.Identity!.Name!;
-        bool isAdmin = user.IsInRole(UserRoles.Admin);
-        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
-        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
-        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
-        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
     /// Returns high-level registry statistics.
     /// </summary>
+    [RegistryAuthorize(RegistryAction.ReadAdminStats)]
     [HttpGet("stats")]
     public async Task<IActionResult> GetStats()
     {
-        var principal = BuildPrincipal(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ReadAdminStats, new AdminResource());
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ReadAdminStats", up.Username, "", decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         int users = (await _db.ListUsersAsync()).Count;
         return Ok(new StatsResponse { Users = users });
     }
@@ -98,19 +69,11 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Creates a new user account as an administrator.
     /// </summary>
+    [RegistryAuthorize(RegistryAction.ManageUser)]
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser()
     {
-        var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ManageUser, new AdminResource());
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ManageUser", up.Username, "", decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         CreateUserRequest? body;
         try
@@ -155,19 +118,11 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Deletes a user account and its associated data.
     /// </summary>
+    [RegistryAuthorize(RegistryAction.ManageUser)]
     [HttpDelete("users/{username}")]
     public async Task<IActionResult> DeleteUser(string username)
     {
-        var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ManageUser, new AdminResource());
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ManageUser", up.Username, "", decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         string decodedUsername = Uri.UnescapeDataString(username);
         UserRecord? user = await _db.GetUserAsync(decodedUsername);
@@ -185,6 +140,7 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Assigns a role to a principal on a package (admin override).
     /// </summary>
+    [RegistryAuthorize(RegistryAction.AdminAssignPackageRole)]
     [HttpPut("packages/{scope}/{name}/roles")]
     public async Task<IActionResult> AdminAssignRole(string scope, string name)
     {
@@ -195,16 +151,7 @@ public class AdminController : ControllerBase
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AdminAssignPackageRole, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("AdminAssignPackageRole", up.Username, packageName, decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         AssignRoleRequest? body;
         try
@@ -241,6 +188,7 @@ public class AdminController : ControllerBase
     /// Unlike the owner-gated endpoint this uses <c>AdminRevokePackageRole</c> action
     /// so the PDP applies the admin short-circuit.
     /// </remarks>
+    [RegistryAuthorize(RegistryAction.AdminRevokePackageRole)]
     [HttpDelete("packages/{scope}/{name}/roles")]
     public async Task<IActionResult> AdminRevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
     {
@@ -250,20 +198,8 @@ public class AdminController : ControllerBase
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        // The PDP enforces the admin ceiling-first check and produces a typed deny reason;
-        // the class-level [Authorize] only requires authentication.
-        var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         string username = User.Identity!.Name!;
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AdminRevokePackageRole, resource);
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("AdminRevokePackageRole", up.Username, packageName, decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         try
         {
@@ -284,20 +220,10 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Returns a paginated list of audit log entries.
     /// </summary>
+    [RegistryAuthorize(RegistryAction.ReadAuditLog)]
     [HttpGet("audit-log")]
     public async Task<IActionResult> GetAuditLog()
     {
-        var principal = BuildPrincipal(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ReadAuditLog, new AdminResource());
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("ReadAuditLog", up.Username, "", decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         int page = 1;
         int pageSize = 50;
         string? packageFilter = null;

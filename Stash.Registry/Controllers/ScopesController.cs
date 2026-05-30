@@ -6,12 +6,10 @@ using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
-using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
-using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
 
@@ -33,6 +31,7 @@ public class ScopesController : ControllerBase
     private readonly IRegistryAuthorizer _authorizer;
     private readonly ScopeChallengeService _scopeChallenge;
     private readonly AuditService _auditService;
+    private readonly IRegistryAuthzPrincipalFactory _principalFactory;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -41,27 +40,14 @@ public class ScopesController : ControllerBase
         IRegistryDatabase db,
         IRegistryAuthorizer authorizer,
         ScopeChallengeService scopeChallenge,
-        AuditService auditService)
+        AuditService auditService,
+        IRegistryAuthzPrincipalFactory principalFactory)
     {
         _db = db;
         _authorizer = authorizer;
         _scopeChallenge = scopeChallenge;
         _auditService = auditService;
-    }
-
-    // ── Helper: build Principal ───────────────────────────────────────────────
-
-    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
-    {
-        if (user?.Identity?.IsAuthenticated != true)
-            return new AnonymousPrincipal();
-
-        string username = user.Identity!.Name!;
-        bool isAdmin = user.IsInRole(UserRoles.Admin);
-        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
-        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
-        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
-        return new UserPrincipal(username, role, ceiling, tokenId);
+        _principalFactory = principalFactory;
     }
 
     /// <summary>
@@ -73,17 +59,10 @@ public class ScopesController : ControllerBase
     /// owner type, and owner identifier, or <c>404</c> if the scope does not exist.
     /// </returns>
     [PublicEndpoint("scope ownership metadata is public — used to discover who owns @scope before publishing")]
+    [RegistryAuthorize(RegistryAction.ResolveScope)]
     [HttpGet("{scope}")]
     public async Task<IActionResult> GetScope(string scope)
     {
-        var principal = BuildPrincipal(User);
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ResolveScope, new ScopeResource(scope));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         var record = await _db.GetScopeAsync(scope);
         if (record == null)
             return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
@@ -106,7 +85,7 @@ public class ScopesController : ControllerBase
     public async Task<IActionResult> ClaimScope()
     {
         string callerUsername = User.Identity!.Name!;
-        var principal = BuildPrincipal(User);
+        var principal = _principalFactory.Build(User);
 
         ClaimScopeRequest? body;
         try
@@ -203,17 +182,10 @@ public class ScopesController : ControllerBase
     /// <param name="scope">The bare scope name.</param>
     /// <returns><c>501 NotImplemented</c> with documented body shape.</returns>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.VerifyScope)]
     [HttpPost("{scope}/verify")]
     public async Task<IActionResult> VerifyScope(string scope)
     {
-        var principal = BuildPrincipal(User);
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.VerifyScope, new ScopeResource(scope));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         // Resolver is stubbed 501 this phase (Q4 deferred).
         return StatusCode(501, new ScopeVerifyResponse
         {
@@ -232,7 +204,7 @@ public class ScopesController : ControllerBase
     [HttpDelete("{scope}")]
     public async Task<IActionResult> DeleteScope(string scope)
     {
-        var principal = BuildPrincipal(User);
+        var principal = _principalFactory.Build(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeleteScope, new ScopeResource(scope));
         if (!decision.Allowed)
