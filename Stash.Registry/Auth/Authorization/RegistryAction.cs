@@ -58,6 +58,9 @@ public enum RegistryAction
     /// <summary>POST /api/v1/scopes/{scope}/verify</summary>
     VerifyScope,
 
+    /// <summary>DELETE /api/v1/scopes/{scope}</summary>
+    DeleteScope,
+
     // ── Org ───────────────────────────────────────────────────────────────────
 
     /// <summary>POST /api/v1/orgs</summary>
@@ -77,6 +80,9 @@ public enum RegistryAction
 
     /// <summary>POST /api/v1/orgs/{org}/teams/{team}/members</summary>
     AddTeamMember,
+
+    /// <summary>DELETE /api/v1/orgs/{org}</summary>
+    DeleteOrg,
 
     // ── Auth / Tokens ─────────────────────────────────────────────────────────
 

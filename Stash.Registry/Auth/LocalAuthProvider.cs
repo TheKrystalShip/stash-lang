@@ -86,7 +86,7 @@ public sealed class LocalAuthProvider : IAuthProvider
         }
 
         string hash = HashPassword(password);
-        await _db.CreateUserAsync(username, hash, "user");
+        await _db.CreateUserAsync(username, hash, UserRoles.User);
     }
 
     /// <summary>

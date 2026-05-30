@@ -119,11 +119,13 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         RegistryAction.DeletePackage => TokenCeiling.Publish,
         RegistryAction.ClaimScope => TokenCeiling.Publish,
         RegistryAction.VerifyScope => TokenCeiling.Publish,
+        RegistryAction.DeleteScope => TokenCeiling.Publish,
         RegistryAction.CreateOrg => TokenCeiling.Publish,
         RegistryAction.AddOrgMember => TokenCeiling.Publish,
         RegistryAction.RemoveOrgMember => TokenCeiling.Publish,
         RegistryAction.CreateTeam => TokenCeiling.Publish,
         RegistryAction.AddTeamMember => TokenCeiling.Publish,
+        RegistryAction.DeleteOrg => TokenCeiling.Publish,
         RegistryAction.IssueToken => TokenCeiling.Read,
 
         // Admin-ceiling actions
@@ -191,6 +193,9 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             RegistryAction.VerifyScope =>
                 await AuthorizeVerifyScopeAsync(username, isAdmin, resource),
 
+            RegistryAction.DeleteScope =>
+                await AuthorizeDeleteScopeAsync(username, isAdmin, resource),
+
             // ── Org actions ──────────────────────────────────────────────────
             RegistryAction.ReadOrg =>
                 AuthzDecision.Allow(), // public
@@ -204,6 +209,9 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             RegistryAction.CreateTeam or
             RegistryAction.AddTeamMember =>
                 await AuthorizeOrgOwnerAsync(username, isAdmin, resource),
+
+            RegistryAction.DeleteOrg =>
+                await AuthorizeDeleteOrgAsync(username, isAdmin, resource),
 
             // ── Auth / self-service ──────────────────────────────────────────
             RegistryAction.Login or
@@ -253,7 +261,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 
         string visibility = packageRecord.Visibility;
 
-        if (visibility == "public")
+        if (visibility == Visibilities.Public)
             return AuthzDecision.Allow();
 
         // private or internal: caller must be authenticated
@@ -270,7 +278,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             return AuthzDecision.Allow();
 
         // Internal packages: org members of the owning org can read
-        if (visibility == "internal")
+        if (visibility == Visibilities.Internal)
         {
             string? scopeName = ExtractScope(pkg.FullName);
             if (scopeName != null)
@@ -495,6 +503,66 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             return AuthzDecision.Deny(AuthzDenyReason.PolicyDenied, "Token not found or not owned by caller.");
 
         return AuthzDecision.Allow();
+    }
+
+    private async Task<AuthzDecision> AuthorizeDeleteScopeAsync(
+        string? username, bool isAdmin, ResourceRef resource)
+    {
+        if (username == null)
+            return AuthzDecision.Deny(AuthzDenyReason.NotAuthenticated);
+
+        if (resource is not ScopeResource sr)
+            return AuthzDecision.Deny(AuthzDenyReason.PolicyDenied, "Expected ScopeResource.");
+
+        string scope = sr.Scope.ToLowerInvariant();
+
+        // Reserved scopes cannot be deleted by anyone.
+        if (ReservedScopes.IsReserved(scope))
+            return AuthzDecision.Deny(AuthzDenyReason.ScopeReserved,
+                $"Scope '@{scope}' is a reserved system scope and cannot be deleted.");
+
+        var existing = await _ctx.Scopes.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Name == scope);
+
+        // Scope does not exist — allow through so the controller returns 404.
+        if (existing == null)
+            return AuthzDecision.Allow();
+
+        // Admin may delete any non-reserved scope.
+        if (isAdmin)
+            return AuthzDecision.Allow();
+
+        bool callerOwns = existing.OwnerType == ScopeOwnerTypes.User && existing.OwnerUsername == username;
+        return callerOwns
+            ? AuthzDecision.Allow()
+            : AuthzDecision.Deny(AuthzDenyReason.ScopeNotOwned,
+                $"Scope '@{scope}' is not owned by this account.");
+    }
+
+    private async Task<AuthzDecision> AuthorizeDeleteOrgAsync(
+        string? username, bool isAdmin, ResourceRef resource)
+    {
+        if (username == null)
+            return AuthzDecision.Deny(AuthzDenyReason.NotAuthenticated);
+
+        if (resource is not OrgResource orgRes)
+            return AuthzDecision.Deny(AuthzDenyReason.PolicyDenied, "Expected OrgResource.");
+
+        var org = await _ctx.Organizations.AsNoTracking()
+            .FirstOrDefaultAsync(o => o.Name == orgRes.OrgName);
+
+        // Org does not exist — allow through so the controller returns 404.
+        if (org == null)
+            return AuthzDecision.Allow();
+
+        if (isAdmin)
+            return AuthzDecision.Allow();
+
+        bool isOrgOwner = await IsOrgOwnerAsync(username, org.Id);
+        return isOrgOwner
+            ? AuthzDecision.Allow()
+            : AuthzDecision.Deny(AuthzDenyReason.OrgMembershipRequired,
+                $"User '{username}' is not an owner of organization '{orgRes.OrgName}'.");
     }
 
     private async Task<bool> IsOrgOwnerAsync(string username, string orgId)

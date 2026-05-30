@@ -185,6 +185,35 @@ public static class ReservedScopes
     public static bool IsReserved(string scope) => Array.IndexOf(All, scope) >= 0;
 }
 
+// ── Package visibility wire values ────────────────────────────────────────────
+
+/// <summary>
+/// Wire values for the <c>visibility</c> column in <c>PackageRecord</c>.
+/// The set is closed: <see cref="Public"/>, <see cref="Private"/>, <see cref="Internal"/>.
+/// </summary>
+/// <remarks>
+/// This is the single source of truth for package visibility values, replacing inline
+/// literals that previously appeared in <c>PackageRecord</c>, <c>RegistryDbContext</c>,
+/// <c>RegistryAuthorizer</c>, <c>StashRegistryDatabase</c>, and <c>PackagesController</c>.
+/// </remarks>
+public static class Visibilities
+{
+    /// <summary>Package is publicly readable by anyone, including anonymous callers.</summary>
+    public const string Public = "public";
+
+    /// <summary>Package is readable only by authenticated users with an explicit role.</summary>
+    public const string Private = "private";
+
+    /// <summary>Package is readable by authenticated org members of the owning scope's org, and users with an explicit role.</summary>
+    public const string Internal = "internal";
+
+    /// <summary>All valid visibility values, ordered: public, private, internal.</summary>
+    public static readonly string[] All = [Public, Private, Internal];
+
+    /// <summary>Returns <c>true</c> if <paramref name="visibility"/> is a valid visibility value.</summary>
+    public static bool IsValid(string visibility) => Array.IndexOf(All, visibility) >= 0;
+}
+
 // ── Token ceiling converter ───────────────────────────────────────────────────
 
 /// <summary>

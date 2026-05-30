@@ -149,7 +149,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         // authenticated callers also see private/internal packages they have at least reader on.
         if (callerUsername == null)
         {
-            queryable = queryable.Where(p => p.Visibility == "public");
+            queryable = queryable.Where(p => p.Visibility == Visibilities.Public);
         }
         else
         {

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -180,6 +181,44 @@ public sealed class OrgAndAdminAuthzTests : RegistryAuthzTestBase
 
         var deleteResp = await client.DeleteAsync("/api/v1/scopes/alice-scope-perm");
         Assert.Equal(HttpStatusCode.Forbidden, deleteResp.StatusCode);
+
+        // D19: authenticated deny must emit exactly one audit entry
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Decision == "deny" && e.User == "bob-delperm" && e.Action == "DeleteScope")
+            .ToList();
+        Assert.Single(denyEntries);
+        Assert.Equal("ScopeNotOwned", denyEntries[0].DenyReason);
+    }
+
+    [Fact]
+    public async Task DeleteOrg_NonOwner_Returns403()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string aliceToken = await RegisterAndGetTokenAsync(client, "alice-delorgnon");
+        string bobToken = await RegisterAndGetTokenAsync(client, "bob-delorgnon");
+
+        // Alice creates the org; auto-provisions a scope, so we must remove it before deleting.
+        SetBearer(client, aliceToken);
+        var createResp = await client.PostAsync("/api/v1/orgs",
+            Json(new { name = "org-for-deltest" }));
+        Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+
+        // Bob (not an org owner) attempts to delete the org — must get 403
+        SetBearer(client, bobToken);
+        var deleteResp = await client.DeleteAsync("/api/v1/orgs/org-for-deltest");
+        Assert.Equal(HttpStatusCode.Forbidden, deleteResp.StatusCode);
+
+        // D19: authenticated deny must emit exactly one audit entry
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Decision == "deny" && e.User == "bob-delorgnon" && e.Action == "DeleteOrg")
+            .ToList();
+        Assert.Single(denyEntries);
+        Assert.Equal("OrgMembershipRequired", denyEntries[0].DenyReason);
     }
 
     // ── AdminController: admin endpoint requires admin ceiling ───────────────

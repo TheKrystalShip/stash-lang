@@ -1,4 +1,5 @@
 using System;
+using Stash.Registry.Auth;
 
 namespace Stash.Registry.Database.Models;
 
@@ -60,5 +61,5 @@ public sealed class PackageRecord
     /// The visibility of the package: <c>public</c>, <c>private</c>, or <c>internal</c>.
     /// Defaults to <c>public</c>. Enforced by a CHECK constraint in the database.
     /// </summary>
-    public string Visibility { get; set; } = "public";
+    public string Visibility { get; set; } = Visibilities.Public;
 }

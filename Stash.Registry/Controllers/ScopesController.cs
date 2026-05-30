@@ -10,6 +10,7 @@ using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using Stash.Registry.Services;
 using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
@@ -31,6 +32,7 @@ public class ScopesController : ControllerBase
     private readonly IRegistryDatabase _db;
     private readonly IRegistryAuthorizer _authorizer;
     private readonly ScopeChallengeService _scopeChallenge;
+    private readonly AuditService _auditService;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -38,11 +40,13 @@ public class ScopesController : ControllerBase
     public ScopesController(
         IRegistryDatabase db,
         IRegistryAuthorizer authorizer,
-        ScopeChallengeService scopeChallenge)
+        ScopeChallengeService scopeChallenge,
+        AuditService auditService)
     {
         _db = db;
         _authorizer = authorizer;
         _scopeChallenge = scopeChallenge;
+        _auditService = auditService;
     }
 
     // ── Helper: build Principal ───────────────────────────────────────────────
@@ -229,34 +233,19 @@ public class ScopesController : ControllerBase
     public async Task<IActionResult> DeleteScope(string scope)
     {
         var principal = BuildPrincipal(User);
-        // Reuse ClaimScope authorization logic: caller must own the scope or be admin
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ClaimScope, new ScopeResource(scope));
-
-        // For deletion specifically: the scope must exist and be owned by the caller.
-        // We interpret ClaimScope DENY(ScopeNotOwned "already claimed by another") as a 403.
-        if (!decision.Allowed && decision.Reason != AuthzDenyReason.ScopeNotOwned)
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeleteScope, new ScopeResource(scope));
+        if (!decision.Allowed)
         {
-            // ScopeReserved → 403, NotAuthenticated → 401
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("DeleteScope", up.Username, $"@{scope}", decision.Reason, ip);
             int statusCode = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
             return StatusCode(statusCode, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
-        // Verify the scope actually exists and is owned by the caller
         var record = await _db.GetScopeAsync(scope);
         if (record == null)
             return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
-
-        // Check ownership (admin may delete any non-reserved scope)
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        string callerUsername = User.Identity!.Name!;
-        bool callerOwns = (record.OwnerType == ScopeOwnerTypes.User && record.OwnerUsername == callerUsername)
-            || isAdmin;
-        if (!callerOwns)
-            return StatusCode(403, new ErrorResponse { Error = $"Scope '@{scope}' is not owned by this account." });
-
-        // Reserved scopes cannot be deleted
-        if (ReservedScopes.IsReserved(scope))
-            return StatusCode(403, new ErrorResponse { Error = $"Scope '@{scope}' is a reserved system scope and cannot be deleted." });
 
         try
         {

@@ -1182,8 +1182,8 @@ Every authorization decision in the registry is keyed by a `RegistryAction` valu
 | Category | Actions |
 | -------- | ------- |
 | Package  | `ReadPackageMetadata`, `ReadPackageVersion`, `DownloadPackageVersion`, `CreatePackage`, `PublishVersion`, `UnpublishVersion`, `DeprecatePackage`, `DeprecateVersion`, `ChangePackageVisibility`, `ListPackageRoles`, `AssignPackageRole`, `RevokePackageRole`, `DeletePackage` |
-| Scope    | `ResolveScope`, `ClaimScope`, `VerifyScope` |
-| Org      | `CreateOrg`, `ReadOrg`, `AddOrgMember`, `RemoveOrgMember`, `CreateTeam`, `AddTeamMember` |
+| Scope    | `ResolveScope`, `ClaimScope`, `VerifyScope`, `DeleteScope` |
+| Org      | `CreateOrg`, `ReadOrg`, `AddOrgMember`, `RemoveOrgMember`, `CreateTeam`, `AddTeamMember`, `DeleteOrg` |
 | Auth     | `Login`, `Register`, `Whoami`, `IssueToken`, `ListOwnTokens`, `RevokeOwnToken` |
 | Admin    | `ReadAdminStats`, `ManageUser`, `AdminAssignPackageRole`, `AdminRevokePackageRole`, `ReadAuditLog` |
 | Search   | `Search` |

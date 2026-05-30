@@ -9,6 +9,7 @@ using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
+using Stash.Registry.Services;
 using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Controllers;
@@ -30,14 +31,16 @@ public class OrganizationsController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
     private readonly IRegistryAuthorizer _authorizer;
+    private readonly AuditService _auditService;
 
     /// <summary>
-    /// Initialises the controller with the registry database and authorizer.
+    /// Initialises the controller with the registry database, authorizer, and audit service.
     /// </summary>
-    public OrganizationsController(IRegistryDatabase db, IRegistryAuthorizer authorizer)
+    public OrganizationsController(IRegistryDatabase db, IRegistryAuthorizer authorizer, AuditService auditService)
     {
         _db = db;
         _authorizer = authorizer;
+        _auditService = auditService;
     }
 
     // ── Helper: build Principal ───────────────────────────────────────────────
@@ -164,10 +167,12 @@ public class OrganizationsController : ControllerBase
     public async Task<IActionResult> DeleteOrg(string org)
     {
         var principal = BuildPrincipal(User);
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AddOrgMember, new OrgResource(org));
-        if (!decision.Allowed && decision.Reason != AuthzDenyReason.OrgMembershipRequired
-            && decision.Reason != AuthzDenyReason.PolicyDenied)
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeleteOrg, new OrgResource(org));
+        if (!decision.Allowed)
         {
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("DeleteOrg", up.Username, org, decision.Reason, ip);
             int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
             return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
@@ -175,13 +180,6 @@ public class OrganizationsController : ControllerBase
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
-
-        // Ownership check: only org owners or admins may delete
-        string callerUsername = User.Identity!.Name!;
-        bool isAdmin = User.IsInRole(UserRoles.Admin);
-        bool isOrgOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
-        if (!isOrgOwner && !isAdmin)
-            return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{org}'." });
 
         try
         {

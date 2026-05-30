@@ -655,8 +655,7 @@ public class PackagesController : ControllerBase
                 new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
-        string[] validVisibilities = ["public", "private", "internal"];
-        if (string.IsNullOrEmpty(request.Visibility) || !Array.Exists(validVisibilities, v => v == request.Visibility))
+        if (string.IsNullOrEmpty(request.Visibility) || !Visibilities.IsValid(request.Visibility))
         {
             return BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
         }

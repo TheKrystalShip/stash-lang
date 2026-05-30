@@ -89,7 +89,7 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.Visibility)
                 .HasColumnName("visibility")
                 .IsRequired()
-                .HasDefaultValue("public");
+                .HasDefaultValue(Visibilities.Public);
             entity.ToTable("packages", t => t.HasCheckConstraint(
                 "CK_packages_visibility",
                 "visibility IN ('public', 'private', 'internal')"));
@@ -122,7 +122,7 @@ public sealed class RegistryDbContext : DbContext
             entity.HasKey(e => e.Username);
             entity.Property(e => e.Username).HasColumnName("username");
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired();
-            entity.Property(e => e.Role).HasColumnName("role").IsRequired().HasDefaultValue("user");
+            entity.Property(e => e.Role).HasColumnName("role").IsRequired().HasDefaultValue(UserRoles.User);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
         });
 
