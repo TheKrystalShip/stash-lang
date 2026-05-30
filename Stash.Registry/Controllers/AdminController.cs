@@ -21,9 +21,11 @@ namespace Stash.Registry.Controllers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// All endpoints in this controller require a JWT with the <c>admin</c> role,
-/// enforced by the <c>RequireAdmin</c> authorization policy or, for the package-role
-/// endpoints, by <see cref="IRegistryAuthorizer"/> with the admin-ceiling-first check.
+/// All endpoints in this controller require a JWT with the <c>admin</c> role
+/// and an admin token ceiling, enforced per-endpoint by
+/// <see cref="IRegistryAuthorizer"/> with the admin-ceiling-first check. The
+/// class-level <c>[Authorize]</c> only requires authentication; the PDP makes
+/// the authorization decision.
 /// </para>
 /// </remarks>
 [Authorize]
@@ -248,8 +250,8 @@ public class AdminController : ControllerBase
         if (!await _db.PackageExistsAsync(packageName))
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
-        // The [Authorize(Policy = "RequireAdmin")] on the class already gates the caller.
-        // We additionally run the PDP to enforce the ceiling-first check and produce a typed deny reason.
+        // The PDP enforces the admin ceiling-first check and produces a typed deny reason;
+        // the class-level [Authorize] only requires authentication.
         var principal = BuildPrincipal(User);
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         string username = User.Identity!.Name!;
