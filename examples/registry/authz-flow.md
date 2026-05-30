@@ -7,7 +7,7 @@ the DENY that occurs when a token with an insufficient ceiling is used.
 ## Scenario
 
 - Registry is configured with `ScopeOwnershipPolicy = claim` (default)
-- `alice` registers, claims the `@acme` scope, and publishes `@acme/widgets`
+- `alice` registers, creates the `acme` org (which claims the `@acme` scope), and publishes `@acme/widgets`
 - `alice` creates a `publish`-ceiling API token for CI use
 - A separate `read`-ceiling token is denied when it tries to publish
 
@@ -54,41 +54,15 @@ Response `200 OK`:
 }
 ```
 
-The login token has `token_scope = "read"` — it cannot publish.
+The login token has `token_scope = "read"` — it is suitable for read operations but
+cannot publish or manage scopes.
 
 ---
 
-## Step 2 — Claim the `@acme` scope
+## Step 2 — Issue a publish-ceiling API token
 
-Under `ScopeOwnershipPolicy = claim`, a scope must be claimed before publishing into it.
-
-```
-POST /api/v1/scopes
-Authorization: Bearer <login-token>
-Content-Type: application/json
-
-{
-  "scope": "acme",
-  "owner_type": "user",
-  "owner": "alice"
-}
-```
-
-Response `201 Created`:
-
-```json
-{ "ok": true, "scope": "acme", "owner_type": "user", "owner": "alice" }
-```
-
-`@acme` is now owned by `alice`. Any attempt by another user to publish into `@acme` will
-be denied with `403 ScopeNotOwned`.
-
----
-
-## Step 3 — Issue a publish-ceiling API token
-
-The login token is `read`-ceiling. Publishing requires a `publish`-ceiling token. Issue one
-via `POST /auth/tokens`:
+Creating an org and claiming a scope both require a `publish`-ceiling token. The login token
+is `read`-ceiling, so we issue a publish token first.
 
 ```
 POST /api/v1/auth/tokens
@@ -98,7 +72,7 @@ Content-Type: application/json
 {
   "name": "ci-publish-acme",
   "ceiling": "publish",
-  "expires_in": "30d"
+  "expiresIn": "30d"
 }
 ```
 
@@ -117,6 +91,41 @@ Response `201 Created`:
 This token carries `token_scope = "publish"`. The PDP ceiling check will pass for
 `CreatePackage` and `PublishVersion` actions.
 
+**Token lifetime cap.** If `expiresIn` exceeds `Security.MaxTokenLifetime` (default `90d`),
+the registry rejects the request `400 TokenLifetimeExceeded`.
+
+---
+
+## Step 3 — Create the `acme` org (claims the `@acme` scope automatically)
+
+Under `ScopeOwnershipPolicy = claim`, a scope must be owned before publishing into it.
+Creating an org provisions its scope atomically in the same transaction.
+
+```
+POST /api/v1/orgs
+Authorization: Bearer <publish-token>
+Content-Type: application/json
+
+{
+  "name": "acme",
+  "display_name": "Acme Corp"
+}
+```
+
+**PDP evaluation for `CreateOrg`:**
+
+1. **Ceiling check:** `publish >= publish` → PASS
+2. **Resource-side check:** caller is authenticated, org name is valid and not taken → PASS
+
+Response `201 Created`:
+
+```json
+{ "ok": true, "name": "acme" }
+```
+
+The `@acme` scope is now owned by the `acme` org, and `alice` (as the org creator) is the
+org `owner`. Any attempt by another user to publish into `@acme` will be denied `403 ScopeNotOwned`.
+
 ---
 
 ## Step 4 — Publish `@acme/widgets`
@@ -130,10 +139,11 @@ X-Version: 1.0.0
 <tarball bytes>
 ```
 
-**PDP evaluation (two steps):**
+**PDP evaluation (two steps) — `CreatePackage` (first publish):**
 
 1. **Ceiling check:** `publish >= publish` → PASS
-2. **Resource-side check (CreatePackage):** Is `@acme` owned by `alice`? Yes (`ScopeOwnershipPolicy = claim`, scope row exists with `owner_type = user`, `owner_username = alice`) → PASS
+2. **Resource-side check (CreatePackage):** Is `@acme` owned by a principal `alice` controls?
+   Yes — `acme` org is owned by `alice` as org `owner`, and `@acme` scope is org-owned by `acme` → PASS
 
 Response `201 Created`:
 
@@ -146,7 +156,9 @@ Response `201 Created`:
 }
 ```
 
-`alice` is automatically assigned the `owner` role on `@acme/widgets`.
+`alice` (as org owner) is automatically assigned the `owner` role on `@acme/widgets`.
+Subsequent publishes to `@acme/widgets` use the `PublishVersion` PDP action, gated on
+the `publisher` (or higher) package role.
 
 ---
 
@@ -185,15 +197,18 @@ Even if `alice` is the package owner, the `read`-ceiling token cannot publish.
 
 | Step | Token ceiling | Action | PDP result |
 |------|--------------|--------|------------|
-| Login | `read` (default) | `IssueToken` | ALLOW (ceiling sufficient, self-resource) |
-| Claim scope | `read` | `ClaimScope` | ALLOW (ceiling sufficient for scope claim, `alice` is owner) |
-| Issue publish token | `read` | `IssueToken` | ALLOW |
-| Publish 1.0.0 | `publish` | `CreatePackage` | ALLOW (ceiling + scope owned) |
+| Login | `read` (default) | `Login` | Access token issued (`read` ceiling) |
+| Issue publish token | `read` | `IssueToken` | ALLOW (ceiling sufficient, self-resource) |
+| Create org | `publish` | `CreateOrg` | ALLOW (ceiling sufficient) |
+| Publish 1.0.0 | `publish` | `CreatePackage` | ALLOW (ceiling + scope owned via org) |
 | Publish 1.1.0 | `read` | `PublishVersion` | DENY `TokenScopeInsufficient` |
 
 **Key takeaways:**
 
 - Login always issues a `read`-ceiling token (least-privilege default, Decision D6).
 - Publishing requires an explicit `publish`-ceiling API token from `POST /auth/tokens`.
+- Scope/org management also requires `publish` ceiling — obtain the publish token first.
 - The PDP checks the ceiling first; admin role does NOT bypass the ceiling check.
-- Under `ScopeOwnershipPolicy = claim` (default), the scope must exist before publishing.
+- Under `ScopeOwnershipPolicy = claim` (default), the scope must be owned before publishing.
+- Atomic guarantee: two concurrent `POST /api/v1/orgs` (or `POST /api/v1/scopes`) requests
+  for the same name result in exactly one `201` and one `409`.

@@ -325,11 +325,11 @@ Request:
 {
   "name": "ci-publish-acme",
   "ceiling": "publish",
-  "expires_in": "30d"
+  "expiresIn": "30d"
 }
 ```
 
-`expires_in` accepts duration strings (`Xd`, `Xh`, `Xm`). The value must not exceed `Security.MaxTokenLifetime` (default `90d`); values over the cap are rejected `400 TokenLifetimeExceeded` with the configured cap echoed in the response.
+`expiresIn` accepts duration strings (`Xd`, `Xh`, `Xm`). The value is mandatory; absent or invalid values are rejected `400`. Values exceeding `Security.MaxTokenLifetime` (default `90d`) are rejected `400 TokenLifetimeExceeded` with the configured cap echoed in the response. The `scope` field is accepted as a backwards-compatible alias for `ceiling` when `ceiling` is absent.
 
 Response `201 Created`:
 
@@ -824,7 +824,7 @@ Query the audit log. Entries are returned in descending chronological order.
   "entries": [
     {
       "id": 42,
-      "action": "publish",
+      "action": "package.publish",
       "package": "@stash/http",
       "version": "1.2.0",
       "user": "alice",
@@ -1260,24 +1260,25 @@ The audit log covers two categories of events:
 to unauthenticated callers). These are excluded to avoid flooding the table without a security
 signal; public-read 404s appear in the HTTP access log.
 
-| Action                 | Trigger                                                           |
-| ---------------------- | ----------------------------------------------------------------- |
-| `package.create`       | New package created (first publish).                              |
-| `package.publish`      | Package version published.                                        |
-| `package.unpublish`    | Package version unpublished.                                      |
-| `package.deprecate`    | Package or version deprecated / undeprecated.                     |
-| `package.visibility_change` | Package visibility changed.                                  |
-| `user.create`          | User account created.                                             |
-| `user.disable`         | User account disabled.                                            |
-| `role.assign`          | Package role assigned to a principal (added or role changed).     |
-| `role.revoke`          | Package role revoked from a principal.                            |
-| `scope.claim`          | Scope claimed.                                                    |
-| `scope.verify`         | Scope verification completed.                                     |
-| `token.issue`          | API token issued.                                                 |
-| `token.revoke`         | API token revoked.                                                |
-| `token.refresh`        | Access token refreshed using a refresh token.                     |
-| `token_theft_detected` | Consumed refresh token replayed; entire token family was revoked. |
-| `authz.deny`           | Authenticated authorization denial (includes `AuthzDenyReason`).  |
+| Action                    | Trigger                                                                           |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `package.create`          | New package created (first publish).                                              |
+| `package.publish`         | New version published on an existing package.                                     |
+| `package.unpublish`       | Package version unpublished.                                                      |
+| `package.deprecate`       | Package deprecated.                                                               |
+| `package.undeprecate`     | Package deprecation cleared.                                                      |
+| `version.deprecate`       | Version deprecated.                                                               |
+| `version.undeprecate`     | Version deprecation cleared.                                                      |
+| `package.visibility_change` | Package visibility changed.                                                     |
+| `user.create`             | User account created.                                                             |
+| `user.disable`            | User account disabled.                                                            |
+| `role.assign`             | Package role assigned to a principal (added or role changed).                     |
+| `role.revoke`             | Package role revoked from a principal.                                            |
+| `token.create`            | API token issued.                                                                 |
+| `token.revoke`            | API token revoked.                                                                |
+| `token.refresh`           | Access token refreshed using a refresh token.                                     |
+| `token_theft_detected`    | Consumed refresh token replayed; entire token family was revoked.                 |
+| _(action name from PDP)_  | Authenticated authorization denial — action is the `RegistryAction` name, entry includes `AuthzDenyReason`. |
 
 ## 14. Publishing Workflow
 
