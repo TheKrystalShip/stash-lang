@@ -391,7 +391,8 @@ dotnet test --filter "FullyQualifiedName~RegistryVisibilityTests"
 
 ## F05 — [MEDIUM] `POST /api/v1/scopes` does not reject collisions against usernames or org names
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 5a01911 — collision checks added (GetUserAsync/GetOrgAsync → 409) before existing ScopeExistsAsync check
 **Files:** `Stash.Registry/Controllers/ScopesController.cs:95-145`
 **Phase:** P5
 **Commit:** 74ea0f7
@@ -464,7 +465,8 @@ dotnet test --filter "FullyQualifiedName~RegistryScopeAndOrgTests"
 
 ## F06 — [MEDIUM] No grammar validation on `scopes.name` at the DB layer — invalid scopes can be inserted
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 5a01911 — scope grammar enforced via shared IsValidScopeName at register/orgs/scopes (option 1, breaking username change documented)
 **Files:** `Stash.Registry/Database/RegistryDbContext.cs:245-266`, `Stash.Registry/Database/StashRegistryDatabase.cs:507-544`, `Stash.Registry/Controllers/AuthController.cs:205-208`
 **Phase:** P2 / P3
 **Commit:** f228537 (schema), 3a5b0fd (auto-provision)
