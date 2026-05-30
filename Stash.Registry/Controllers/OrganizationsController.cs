@@ -67,11 +67,11 @@ public class OrganizationsController : ControllerBase
     /// </remarks>
     /// <returns><c>201</c> with <see cref="CreateOrgResponse"/> on success.</returns>
     [Authorize]
+    [RegistryAuthorize(RegistryAction.CreateOrg)]
     [HttpPost]
     public async Task<IActionResult> CreateOrg()
     {
         string username = User.Identity!.Name!;
-        var principal = BuildPrincipal(User);
 
         CreateOrgRequest? body;
         try
@@ -100,13 +100,6 @@ public class OrganizationsController : ControllerBase
         // Reserved system scopes may not be claimed as org names
         if (ReservedScopes.IsReserved(name))
             return Conflict(new ErrorResponse { Error = $"The name '{name}' is reserved and cannot be used as an organization name." });
-
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.CreateOrg, new OrgResource(name));
-        if (!decision.Allowed)
-        {
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
 
         try
         {

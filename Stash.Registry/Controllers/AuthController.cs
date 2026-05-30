@@ -270,19 +270,9 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpGet("whoami")]
     [Authorize]
-    public async Task<IActionResult> Whoami()
+    [RegistryAuthorize(RegistryAction.Whoami)]
+    public IActionResult Whoami()
     {
-        var principal = BuildPrincipal(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.Whoami, new PrincipalSelfResource());
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("Whoami", up.Username, "", decision.Reason, ip);
-            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
-        }
-
         string username = User.Identity!.Name!;
         string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
 

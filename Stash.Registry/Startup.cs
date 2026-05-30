@@ -177,6 +177,9 @@ public sealed class Startup
         services.AddScoped<ScopeChallengeService>();
         services.AddScoped<IRegistryAuthorizer, RegistryAuthorizer>();
 
+        // Shared principal factory — Singleton (pure function, no scoped state).
+        services.AddSingleton<IRegistryAuthzPrincipalFactory, RegistryAuthzPrincipalFactory>();
+
         services.AddOpenApi();
     }
 
