@@ -1,0 +1,157 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py registry-authz-pdp-completion
+
+schema_version: 1
+
+feature: registry-authz-pdp-completion
+title: Registry Authorization PDP Completion
+
+brief: ./brief.md
+
+created: 2026-05-31
+architect_session: opus-4-7-2026-05-31
+
+# Default verify after every phase. Per-phase verify already runs targeted
+# dotnet test invocations; this keeps the build green between phases.
+default_verify:
+  - dotnet build
+
+# Registry-only refactor. Mirrors the predecessor registry-authz-filter scope.
+scope:
+  - Stash.Registry/Auth/Authorization/**
+  - Stash.Registry/Controllers/**
+  - Stash.Registry/CLAUDE.md
+  - Stash.Tests/Registry/**
+  - .kanban/0-backlog/registry/**
+  - .claude/repo.md
+
+phases:
+  - id: P1
+    title: Fold DeleteOrg (mechanical) + pin shrink
+    deps: []
+    files:
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Tests/Registry/Authz/AuthzMatrixData.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzMatrixTests.cs
+      - Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~RegistryAuthzAuditMutationTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~OrgAndAdminAuthzTests|FullyQualifiedName~RegistryAuthorizerTests"
+    done_when:
+      - "OrganizationsController.DeleteOrg carries [Authorize] + [RegistryAuthorize(RegistryAction.DeleteOrg)]; its body contains no _authorizer.AuthorizeAsync call and no LogAuthzDenyAsync call. The [ImperativeAuthz] attribute on this method is removed."
+      - "AuthzDispatchCoverageMetaTests.PinnedImperativeActions equals exactly {'PackagesController.PublishPackage', 'ScopesController.ClaimScope', 'ScopesController.DeleteScope'} — DeleteOrg is removed from the pin in the SAME phase as the attribute swap (per Decision Log 2026-05-31 'pin shrinks in same phase as fold'). AuthzDispatchCoverageMetaTests passes."
+      - "AuthzMatrixData has a new row tagged 'delete_org.deny.audit_id' that pins the bare {org} audit resource_id on a non-owner non-admin DeleteOrg deny. RegistryAuthzMatrixTests passes including the new row."
+      - "An end-to-end HTTP test (via WebApplicationFactory) asserts: non-owner authenticated DELETE /api/v1/orgs/{org} returns 403 OrgMembershipRequired AND writes exactly one deny audit entry with action='DeleteOrg' and resource_id=='{org}' (bare). Allow path produces the same status code and body as before the fold."
+      - "RegistryAuthzMatrixTests, RegistryAuthzAuditMutationTests, AuthzDispatchCoverageMetaTests, AuthzCoverageMetaTests, NoMagicAuthStringsMetaTests, OrgAndAdminAuthzTests, RegistryAuthorizerTests all green."
+    notes: |
+      Lowest-risk fold; validates the attribute-swap + pin-shrink-in-same-phase mechanics.
+      Stale [ImperativeAuthz] reason ('uses AddOrgMember authz action') is FALSE — the
+      controller already calls AuthorizeAsync with RegistryAction.DeleteOrg (fixed by
+      registry-authz-pipeline F03). Filter audit-id ResourceIdForAudit(OrgResource) ==
+      org.OrgName already matches the controller's bare {org} string, so this is a
+      zero-behavior-delta mechanical fold.
+
+  - id: P2
+    title: Filter audit-id uniform '@' prefix + fold DeleteScope
+    deps: [P1]
+    files:
+      - Stash.Registry/Auth/Authorization/RegistryAuthorizeFilter.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Tests/Registry/Authz/AuthzMatrixData.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzMatrixTests.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzAuditMutationTests.cs
+      - Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~RegistryAuthzAuditMutationTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~ScopeOwnershipPolicyTests|FullyQualifiedName~ScopeClaimVerifiedFlowTests|FullyQualifiedName~RegistryAuthorizerTests"
+    done_when:
+      - "RegistryAuthorizeFilter.ResourceIdForAudit(ScopeResource) returns '@' + scope.Scope (was bare scope.Scope). The change applies uniformly to ResolveScope, VerifyScope, and DeleteScope via the shared helper — there is no per-action branching."
+      - "ScopesController.DeleteScope carries [Authorize] + [RegistryAuthorize(RegistryAction.DeleteScope)]; its body contains no _authorizer.AuthorizeAsync and no LogAuthzDenyAsync. The [ImperativeAuthz] attribute on this method is removed."
+      - "AuthzDispatchCoverageMetaTests.PinnedImperativeActions equals exactly {'PackagesController.PublishPackage', 'ScopesController.ClaimScope'} — DeleteScope is removed from the pin in the SAME phase as the fold. AuthzDispatchCoverageMetaTests passes."
+      - "AuthzMatrixData has a new row tagged 'delete_scope.deny.audit_id' that pins resource_id == '@' + scope on a non-owner non-admin DeleteScope deny. RegistryAuthzMatrixTests passes including the new row."
+      - "RegistryAuthzAuditMutationTests has TWO new rows: one for DeleteScope deny (action='DeleteScope', resource_id=='@'+scope, exactly one entry); one for VerifyScope deny by an unauthorized authenticated caller (resource_id=='@'+scope, exactly one entry). The VerifyScope row is the structural proof that the filter helper change applies uniformly across all ScopeResource actions, not just the folded DeleteScope."
+      - "End-to-end HTTP test (via WebApplicationFactory): non-owner authenticated DELETE /api/v1/scopes/{scope} returns 403 ScopeNotOwned AND writes exactly one deny audit entry with action='DeleteScope' and resource_id=='@'+scope. Allow path returns the same status code and body as before the fold."
+      - "All meta-tests + sibling suites listed in the verify filter pass."
+    notes: |
+      The audit-id uniform prefix change is a deliberate decision-change (see Decision Log
+      2026-05-31 'change ResourceIdForAudit(ScopeResource) to prefix @'). It is bundled
+      with the DeleteScope fold so the matrix moves with the decision. The VerifyScope
+      audit-mutation row is load-bearing — it proves the change is filter-level
+      (uniform), not controller-level (targeted); without it, a future refactor that
+      removes the prefix from the filter and adds it inline to DeleteScope would still
+      pass this phase's tests.
+
+  - id: P3
+    title: RegistryAction.PublishPackage + PDP handler + fold PublishPackage
+    deps: [P2]
+    files:
+      - Stash.Registry/Auth/Authorization/RegistryAction.cs
+      - Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs
+      - Stash.Registry/Auth/Authorization/RegistryActionResourceResolver.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Tests/Registry/Authz/AuthzMatrixData.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzMatrixTests.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzAuditMutationTests.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthorizerTests.cs
+      - Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~RegistryAuthzAuditMutationTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RegistryAuthorizerTests|FullyQualifiedName~RegistryAuthzBugATests|FullyQualifiedName~RegistryAuthzBugBTests|FullyQualifiedName~RegistryAuthzRoleMatrixWriteTests|FullyQualifiedName~ScopeOwnershipPolicyTests|FullyQualifiedName~RegistryAuthzAtomicCreateTests"
+    done_when:
+      - "RegistryAction enum carries a new PublishPackage member with an XML doc comment naming it as the action attached to PUT /api/v1/packages/{scope}/{name}. CreatePackage and PublishVersion members are NOT removed (they remain as internal PDP delegation targets and test fixture inputs)."
+      - "RegistryAuthorizer's token-ceiling map has an entry PublishPackage => TokenCeiling.Publish. RegistryAuthorizer's per-action resource-side switch has a new arm for PublishPackage that (a) returns Deny(PolicyDenied) if resource is not PackageResource, (b) returns Deny(NotAuthenticated) if username is null, (c) runs `await _ctx.Packages.AsNoTracking().AnyAsync(p => p.Name == pkg.FullName)` and delegates to the existing CreatePackage or PublishVersion resource-side handler accordingly."
+      - "RegistryActionResourceResolver.Resolve has a new arm mapping PublishPackage to PackageRoute.From(scope, name) (same shape as CreatePackage/PublishVersion arms)."
+      - "PackagesController.PublishPackage carries [Authorize] + [RegistryAuthorize(RegistryAction.PublishPackage)]; its body contains no _authorizer.AuthorizeAsync call and no inline action-choice (the `bool packageExists = await _db.PackageExistsAsync(...)` line and the `var action = packageExists ? PublishVersion : CreatePackage` line are removed; allow-path mutation audit still emits package.create vs package.publish via the existing isNewPackage return from PackageService.PublishAsync). The [ImperativeAuthz] attribute on this method is removed."
+      - "AuthzDispatchCoverageMetaTests.PinnedImperativeActions equals exactly {'ScopesController.ClaimScope'} — PublishPackage is removed from the pin in the SAME phase as the fold. AuthzDispatchCoverageMetaTests passes."
+      - "AuthzMatrixData has a new row tagged 'publish.deny.label' that pins deny-side audit action='PublishPackage' on a read-ceiling PUT attempt. RegistryAuthzMatrixTests passes including the new row."
+      - "RegistryAuthzAuditMutationTests has TWO new deny rows for the publish path: one for a read-ceiling token denied on a package that does NOT yet exist (action='PublishPackage', exactly one entry), one for a read-ceiling token denied on a package that DOES exist (action='PublishPackage', exactly one entry). Together they prove the deny label is uniformly 'PublishPackage' regardless of which delegation branch the PDP took."
+      - "RegistryAuthorizerTests carries a new unit case covering the PublishPackage handler: when package exists the delegation reaches the PublishVersion resource-side path; when package does not exist it reaches the CreatePackage resource-side path. Existing CreatePackage and PublishVersion rows in RegistryAuthorizerTests are unchanged."
+      - "End-to-end HTTP test (via WebApplicationFactory): PUT /api/v1/packages/{scope}/{name} with a read-ceiling token returns 403 TokenScopeInsufficient AND writes one deny audit entry with action='PublishPackage'. Successful publish with publish-ceiling token returns 201 AND writes one allow audit entry with action='package.create' (first publish) or 'package.publish' (subsequent publish) — unchanged from today."
+      - "Sibling suites RegistryAuthzBugATests, RegistryAuthzBugBTests, RegistryAuthzRoleMatrixWriteTests, ScopeOwnershipPolicyTests, RegistryAuthzAtomicCreateTests pass with no test edits beyond the new rows."
+    notes: |
+      This is the only non-mechanical fold. The DB-existence check moves from the
+      controller into the PDP handler; the controller body becomes pure work. The
+      allow-path mutation audit labels (package.create / package.publish) are NOT
+      affected — they come from PackageService.PublishAsync's isNewPackage return,
+      not from the authz action. The single decision-changing wire shift is the
+      deny-side audit action label.
+
+  - id: P4
+    title: ClaimScope reason correction + resolver hardening + backlog stub + docs
+    deps: [P3]
+    files:
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Registry/Auth/Authorization/RegistryActionResourceResolver.cs
+      - Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs
+      - Stash.Tests/Registry/RegistryActionResourceResolverTests.cs
+      - .kanban/0-backlog/registry/Body-resolver authz filter.md
+      - Stash.Registry/CLAUDE.md
+      - .claude/repo.md
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&Category!=SqliteConcurrencyStress"
+    done_when:
+      - "ScopesController.ClaimScope's [ImperativeAuthz] reason string is rewritten to name (a) the body-derived scope/owner/ownerType fields and (b) the bespoke 409 status mapping for ScopeReserved/ScopeNotOwned, AND links to the backlog stub at .kanban/0-backlog/registry/Body-resolver authz filter.md. The old reason 'post-PDP owner-type and org-ownership checks require inline coordination' is replaced."
+      - "RegistryActionResourceResolver.Resolve no longer has ClaimScope listed in any switch arm. A direct unit test in RegistryActionResourceResolverTests asserts that Resolve(RegistryAction.ClaimScope, new RouteValueDictionary(), context) throws InvalidOperationException with a message containing 'ClaimScope' or matching the default arm's 'Add an entry to RegistryActionResourceResolver.Resolve.' text."
+      - ".kanban/0-backlog/registry/Body-resolver authz filter.md exists (started from .kanban/_templates/bug-template.md or the optimization shape; documents the body-buffering refactor that would unlock the final ClaimScope fold)."
+      - "Stash.Registry/CLAUDE.md 'Controller Pattern' table of [ImperativeAuthz] endpoints contains exactly one row (ScopesController.ClaimScope) with the corrected reason. The three formerly-imperative endpoints (PublishPackage, DeleteOrg, DeleteScope) are removed from that table. The Tests section's AuthzDispatchCoverageMetaTests row mentions the {ClaimScope}-only pin."
+      - ".claude/repo.md has a completed-features history entry for registry-authz-pdp-completion (matching the format of the registry-authz-filter entry, naming the four phases, the three folds, the audit-id and label decision-changes, and the {ClaimScope} end-state pin). The Active Multi-Phase Work pointer for this feature is removed."
+      - "AuthzDispatchCoverageMetaTests still passes with PinnedImperativeActions == {'ScopesController.ClaimScope'}. The full filtered registry suite + meta-test family (matching final_verify below) is green."
+    notes: |
+      No production code changes beyond reason-string + resolver-arm deletion + doc edits.
+      The resolver arm deletion is a Construct-level cross-cutting concern enforcement:
+      future attempts to mark ClaimScope [RegistryAuthorize] will throw at request time
+      rather than silently produce ScopeResource("").
+
+# Final acceptance — `/done` runs this before promoting to 4-done/.
+# Mirrors the registry-authz-filter precedent filter shape: excludes ONLY documented
+# env-flakies per .claude/repo.md Known Issues; keeps the full Registry* class family
+# AND the meta-test family (AuthzCoverageMetaTests, NoMagicAuthStringsMetaTests,
+# RegistryAuthzMatrixTests, AuthzDispatchCoverageMetaTests, Wave1ThrowsCoverageTests,
+# CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests).
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&Category!=SqliteConcurrencyStress"

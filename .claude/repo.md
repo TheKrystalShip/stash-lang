@@ -29,6 +29,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 
 - pkg-cli-api-parity — Stash pkg CLI parity with scoped registry API | .kanban/2-in-progress/pkg-cli-api-parity/ | 8 phases | started 2026-05-30
 - readonly-modifier — readonly modifier — deep value immutability | .kanban/2-in-progress/readonly-modifier/ | 7 phases | started 2026-05-30
+- registry-authz-pdp-completion — Registry Authorization PDP Completion | .kanban/2-in-progress/registry-authz-pdp-completion/ | 4 phases | specced, not started — serialize behind pkg-cli-api-parity (controller-file overlap; run check-parallel-safety.py before /next-phase)
 
 ---
 
