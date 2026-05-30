@@ -1,0 +1,131 @@
+schema_version: 1
+
+feature: registry-authz-filter
+title: Registry Authorization Filter
+
+brief: ./brief.md
+
+created: 2026-05-30
+architect_session: opus-4-7-2026-05-30
+
+# Default verify after every phase. Per-phase verify already runs targeted
+# dotnet test invocations; this keeps the build green between phases.
+default_verify:
+  - dotnet build
+
+# Broad safety rail. This is a registry-only refactor.
+scope:
+  - Stash.Registry/Auth/Authorization/**
+  - Stash.Registry/Controllers/**
+  - Stash.Registry/Startup.cs
+  - Stash.Registry/CLAUDE.md
+  - Stash.Tests/Registry/**
+
+phases:
+  - id: P1
+    title: Filter infrastructure + pilot pair
+    deps: []
+    files:
+      - Stash.Registry/Auth/Authorization/RegistryAuthorizeAttribute.cs
+      - Stash.Registry/Auth/Authorization/RegistryAuthorizeFilter.cs
+      - Stash.Registry/Auth/Authorization/RegistryAuthzPrincipalFactory.cs
+      - Stash.Registry/Auth/Authorization/AuthzDenyResponse.cs
+      - Stash.Registry/Auth/Authorization/RegistryActionResourceResolver.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Registry/Controllers/OrganizationsController.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~RegistryAuthorizerTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~JtiRevocationPreservedTests"
+    done_when:
+      - "[RegistryAuthorize(action)] attribute exists in Stash.Registry/Auth/Authorization/ and compiles as an IFilterFactory that constructs RegistryAuthorizeFilter per request via ActivatorUtilities."
+      - "RegistryAuthorizeFilter resolves IRegistryAuthorizer and AuditService from HttpContext.RequestServices (not constructor injection on the attribute), proven by the existing Scoped registrations in Startup.cs remaining unchanged."
+      - "Shared RegistryAuthzPrincipalFactory is registered (Singleton) and exposes Build(ClaimsPrincipal) returning the same UserPrincipal/AnonymousPrincipal that today's six per-controller helpers produce."
+      - "AuthzDenyResponse helper maps VisibilityHidden|PackageNotFound -> 404, NotAuthenticated -> 401, otherwise 403, and returns new ErrorResponse{Error=Reason.ToString(), Message=Detail}."
+      - "Pilot pair converted: one clean endpoint in AuthController (e.g. Whoami) and one in OrganizationsController (e.g. CreateOrg) carry [RegistryAuthorize(action)] with their inline PDP block deleted; their wire behavior is identical under RegistryAuthzMatrixTests."
+      - "RegistryAuthzMatrixTests passes with zero modifications to AuthzMatrixData; NoMagicAuthStringsMetaTests passes (filter source uses RegistryClaims/UserRoles/TokenCeilingConverter, no bare auth literals); AuthzCoverageMetaTests still passes; JtiRevocationPreservedTests passes."
+    notes: |
+      Lifetime trap: do NOT constructor-inject IRegistryAuthorizer or AuditService into
+      the attribute, and do NOT use [ServiceFilter] in a way that captures scoped services
+      in a singleton. Both services are Scoped (share RegistryDbContext). The IFilterFactory
+      path constructs the filter inside the request's DI scope; the filter then resolves
+      scoped services from context.HttpContext.RequestServices. Confirm by running the
+      matrix tests under WebApplicationFactory — a cross-request DbContext capture surfaces
+      as test pollution there.
+
+  - id: P2
+    title: Convert remaining clean endpoints; delete per-controller BuildPrincipal helpers
+    deps: [P1]
+    files:
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Registry/Controllers/SearchController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~Registry&FullyQualifiedName!~BasePathIntegrationTests&Category!=SqliteConcurrencyStress"
+    done_when:
+      - "Every clean controller action (every action EXCEPT PublishPackage, DeleteOrg, ClaimScope, DeleteScope) carries [RegistryAuthorize(RegistryAction.X)] and its body contains no _authorizer.AuthorizeAsync or LogAuthzDenyAsync call. Grep on Stash.Registry/Controllers/ for those two methods returns matches ONLY inside the four soon-to-be-imperative endpoints."
+      - "Every per-controller `private (static)? Principal BuildPrincipal(...)` helper is deleted from all six controllers; controllers that still need a Principal inject and call RegistryAuthzPrincipalFactory."
+      - "RegistryAuthzMatrixTests passes with zero changes to AuthzMatrixData; the full registry suite (excluding documented env-flakies) passes — proving sibling tests (OrgAndAdminAuthzTests, ScopeOwnershipPolicyTests, RegistryAuthzRoleMatrixWriteTests, RegistryAuthzRoleRevokeTests, etc.) still see identical status codes and bodies."
+      - "PackagesController's now-redundant DenyReasonToStatus method is deleted (its mapping moved into AuthzDenyResponse). The 404 body shape ('Package '{packageName}' not found.') for VisibilityHidden/PackageNotFound on package endpoints is preserved via a notFoundMessage parameter on the shared helper."
+    notes: |
+      Convert one controller at a time; commit-per-controller is acceptable but a single
+      P2 commit is also fine — the verify gate is the full registry suite either way.
+      The 4 imperative endpoints (PublishPackage, DeleteOrg, ClaimScope, DeleteScope) stay
+      UNTOUCHED in this phase; they get their [ImperativeAuthz] marker in P3.
+
+  - id: P3
+    title: Imperative exemption marker + dispatch-coverage meta-test
+    deps: [P2]
+    files:
+      - Stash.Registry/Auth/Authorization/ImperativeAuthzAttribute.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Tests/Registry/AuthzDispatchCoverageMetaTests.cs
+      - Stash.Tests/Registry/Fixtures/UnclassifiedDispatchFixtureController.cs
+      - Stash.Tests/Registry/Fixtures/ClassifiedDispatchFixtureController.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~NoMagicAuthStringsMetaTests"
+    done_when:
+      - "[ImperativeAuthz(\"reason\")] attribute exists and is applied to exactly PackagesController.PublishPackage, OrganizationsController.DeleteOrg, ScopesController.ClaimScope, ScopesController.DeleteScope. Each reason string names the deferred work (referencing registry-authz-pdp-completion)."
+      - "AuthzDispatchCoverageMetaTests has a production assertion that fails the build if any non-[PublicEndpoint] action on the six production controllers carries neither [RegistryAuthorize] nor [ImperativeAuthz] — class-level [Authorize] does NOT satisfy dispatch coverage."
+      - "AuthzDispatchCoverageMetaTests has a fail-path assertion: UnclassifiedDispatchFixtureController (test-only) has an action with neither attribute and the scanner reports it, proving the meta-test has teeth; ClassifiedDispatchFixtureController passes."
+      - "AuthzDispatchCoverageMetaTests has an imperative-pin assertion: the set of [ImperativeAuthz]-bearing actions equals exactly {PublishPackage, DeleteOrg, ClaimScope, DeleteScope}, so adding or removing an exemption requires updating the test."
+      - "Where it does not change behavior, the deny responses inside PublishPackage / DeleteOrg / DeleteScope are routed through AuthzDenyResponse for body-shape consistency. ClaimScope's bespoke 409 mapping for ScopeReserved/ScopeNotOwned is preserved verbatim inline."
+      - "RegistryAuthzMatrixTests passes; AuthzCoverageMetaTests still passes; NoMagicAuthStringsMetaTests passes."
+    notes: |
+      The imperative-pin assertion is the auditability hinge — without it, anyone could
+      add [ImperativeAuthz] to bypass the dispatch-coverage gate. Pinning the exact set
+      forces reviewer attention on every future exemption.
+
+  - id: P4
+    title: Documentation
+    deps: [P3]
+    files:
+      - Stash.Registry/CLAUDE.md
+      - .claude/repo.md
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~Registry&FullyQualifiedName!~BasePathIntegrationTests&Category!=SqliteConcurrencyStress"
+    done_when:
+      - "Stash.Registry/CLAUDE.md 'Controller Pattern' section documents [RegistryAuthorize(RegistryAction.X)] as the canonical declaration for authenticated endpoints, and [ImperativeAuthz(\"reason\")] as the audited exemption for endpoints that need pre/post-PDP work."
+      - "Stash.Registry/CLAUDE.md 'Request Flow' diagram (or adjacent prose) names the RegistryAuthorizeFilter step between [Authorize] and the controller body, and notes that the JTI revocation middleware still runs first (between UseAuthentication and UseAuthorization)."
+      - "Stash.Registry/CLAUDE.md mentions AuthzDispatchCoverageMetaTests under 'Tests' (or near the bounded-domain rule region) so future contributors learn the dispatch-coverage guard exists."
+      - "Stash.Registry/CLAUDE.md cross-links to the deferred work in registry-authz-pdp-completion (or names the four [ImperativeAuthz] cases as planned PDP-folds)."
+      - "The full registry suite remains green (no doc-edit-invalidated sample/snippet)."
+
+# Final acceptance — `/done` runs this before promoting to 4-done/.
+# Mirrors the registry-authz-pipeline precedent filter shape: excludes ONLY
+# documented env-flakies per .claude/repo.md Known Issues; keeps the full
+# Registry* class family AND the meta-test family (AuthzCoverageMetaTests,
+# NoMagicAuthStringsMetaTests, RegistryAuthzMatrixTests, the new
+# AuthzDispatchCoverageMetaTests, Wave1ThrowsCoverageTests,
+# CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests).
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&Category!=SqliteConcurrencyStress"
