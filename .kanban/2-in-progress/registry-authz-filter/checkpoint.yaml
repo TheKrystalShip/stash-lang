@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-filter
 current: null
-updated: '2026-05-30T20:56:00Z'
+updated: '2026-05-30T21:09:58Z'
 phases:
   P1:
     status: done
@@ -41,8 +41,8 @@ phases:
       Flow names RegistryAuthorizeFilter + JTI gate, Tests table adds auth meta-tests; repo.md pointer
       updated'
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: '2026-05-30T21:09:58Z'
   resolved: null
-  findings_open: 0
+  findings_open: 4
   findings_fixed: 0
