@@ -103,12 +103,12 @@ public sealed class JwtTokenService
     /// </param>
     /// <param name="role">
     /// The user's role (e.g. <c>"user"</c> or <c>"admin"</c>); written to the <c>role</c> claim
-    /// and used by <c>RequireAdmin</c> authorization policy.
+    /// and consumed by the PDP to determine the admin short-circuit on resource-side checks.
     /// </param>
     /// <param name="scope">
-    /// The token's permission scope (<c>"read"</c>, <c>"publish"</c>, or <c>"admin"</c>);
-    /// written to the <c>token_scope</c> claim and evaluated by authorization policies
-    /// <c>RequirePublishScope</c> and <c>RequireAdminScope</c>.
+    /// The token's coarse ceiling (<c>"read"</c>, <c>"publish"</c>, or <c>"admin"</c>);
+    /// written to the <c>token_scope</c> claim. The PDP intersects this ceiling with the
+    /// resource-side permission before allowing any action.
     /// </param>
     /// <param name="expiresAt">
     /// The absolute UTC expiry time; written to the <c>exp</c> claim. Tokens presented after

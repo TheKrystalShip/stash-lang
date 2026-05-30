@@ -154,7 +154,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         else
         {
             // Include public packages + private/internal packages the caller can read.
-            // "Can read" mirrors HasPackagePermissionAsync's three branches:
+            // Access is determined by the PDP permission resolver's three branches:
             //   1. Direct user-principal role
             //   2. Team-mediated role (caller is a member of a team with a role on the package)
             //   3. Org-mediated: the package's scope is org-owned AND the caller is an org member
@@ -642,8 +642,6 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
 
     // ── Package role operations ───────────────────────────────────────────────
 
-    private static int RoleRank(string role) => PackageRoles.Rank(role);
-
     /// <inheritdoc/>
     public async Task AssignPackageRoleAsync(
         string packageName, string principalType, string principalId, string role)
@@ -685,90 +683,6 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .AsNoTracking()
             .Where(r => r.PackageName == packageName)
             .ToListAsync();
-    }
-
-    /// <inheritdoc/>
-    public async Task<bool> HasPackagePermissionAsync(string packageName, string username, string role)
-    {
-        // Collect all effective roles for the user on the package and pick the highest.
-        // P5: union of direct user role + team-mediated + org-mediated (scope owner) roles.
-
-        string? bestRole = null;
-
-        // 1. Direct user-principal role
-        var directEntry = await _context.PackageRoles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(r =>
-                r.PackageName == packageName &&
-                r.PrincipalType == PrincipalTypes.User &&
-                r.PrincipalId == username);
-        if (directEntry != null)
-            bestRole = BestRole(bestRole, directEntry.Role);
-
-        // 2. Team-mediated roles: find all teams the user belongs to that have a role on the package
-        var teamIds = await _context.TeamMembers
-            .AsNoTracking()
-            .Where(tm => tm.Username == username)
-            .Select(tm => tm.TeamId)
-            .ToListAsync();
-
-        if (teamIds.Count > 0)
-        {
-            var teamRoles = await _context.PackageRoles
-                .AsNoTracking()
-                .Where(r => r.PackageName == packageName && r.PrincipalType == PrincipalTypes.Team && teamIds.Contains(r.PrincipalId))
-                .ToListAsync();
-            foreach (var tr in teamRoles)
-                bestRole = BestRole(bestRole, tr.Role);
-        }
-
-        // 3. Org-mediated roles: extract scope from package name (@scope/name), find org owner of that scope,
-        //    check if user is an org member, and apply org_member -> reader / org_owner -> owner inheritance.
-        string? scopeName = ExtractScopeName(packageName);
-        if (scopeName != null)
-        {
-            var scope = await _context.Scopes.AsNoTracking().FirstOrDefaultAsync(s => s.Name == scopeName);
-            if (scope?.OwnerType == ScopeOwnerTypes.Org && scope.OwnerOrgId != null)
-            {
-                var orgMember = await _context.OrgMembers
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(m => m.OrgId == scope.OwnerOrgId && m.Username == username);
-                if (orgMember != null)
-                {
-                    // Org owners inherit package owner; org members inherit reader on private/internal packages
-                    string inheritedRole = orgMember.OrgRole == OrgRoles.Owner ? PackageRoles.Owner : PackageRoles.Reader;
-                    bestRole = BestRole(bestRole, inheritedRole);
-                }
-
-                // Also check explicit org-principal role
-                var orgRoleEntry = await _context.PackageRoles
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(r =>
-                        r.PackageName == packageName &&
-                        r.PrincipalType == PrincipalTypes.Org &&
-                        r.PrincipalId == scope.OwnerOrgId);
-                if (orgRoleEntry != null)
-                    bestRole = BestRole(bestRole, orgRoleEntry.Role);
-            }
-        }
-
-        if (bestRole == null) return false;
-        return RoleRank(bestRole) <= RoleRank(role);
-    }
-
-    /// <summary>Returns the role with the lower rank (higher permission) of the two, or <paramref name="b"/> if <paramref name="a"/> is null.</summary>
-    private static string BestRole(string? a, string b) =>
-        a == null ? b : (RoleRank(a) <= RoleRank(b) ? a : b);
-
-    /// <summary>Extracts the bare scope name from a scoped package name like <c>@scope/name</c>.</summary>
-    private static string? ExtractScopeName(string packageName)
-    {
-        if (!packageName.StartsWith('@'))
-            return null;
-        int slash = packageName.IndexOf('/');
-        if (slash < 2)
-            return null;
-        return packageName[1..slash];
     }
 
     // ── Audit operations ──────────────────────────────────────────────────────

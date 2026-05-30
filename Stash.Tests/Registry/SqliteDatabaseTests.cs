@@ -453,40 +453,6 @@ public sealed class SqliteDatabaseTests
         Assert.Equal("alice", roles[0].PrincipalId);
     }
 
-    [Fact]
-    public async Task HasPackagePermission_OwnerCanDoEverything()
-    {
-        var db = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("@alice/perm-pkg"));
-        await db.AssignPackageRoleAsync("@alice/perm-pkg", "user", "alice", "owner");
-
-        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "owner"));
-        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "maintainer"));
-        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "publisher"));
-        Assert.True(await db.HasPackagePermissionAsync("@alice/perm-pkg", "alice", "reader"));
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_ReaderCannotPublish()
-    {
-        var db = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("@alice/guarded"));
-        await db.AssignPackageRoleAsync("@alice/guarded", "user", "bob", "reader");
-
-        Assert.True(await db.HasPackagePermissionAsync("@alice/guarded", "bob", "reader"));
-        Assert.False(await db.HasPackagePermissionAsync("@alice/guarded", "bob", "publisher"));
-        Assert.False(await db.HasPackagePermissionAsync("@alice/guarded", "bob", "owner"));
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_NoRole_ReturnsFalse()
-    {
-        var db = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("@alice/no-role-pkg"));
-
-        Assert.False(await db.HasPackagePermissionAsync("@alice/no-role-pkg", "alice", "reader"));
-    }
-
     // ── Audit operations ────────────────────────────────────────────────
 
     [Fact]

@@ -100,27 +100,6 @@ public static class PackageRoles
     }
 }
 
-// ── Authorization policy names ────────────────────────────────────────────────
-
-/// <summary>
-/// Authorization policy names registered in <c>Startup.ConfigureServices</c>.
-/// These are compile-time constants so they can be used in <c>[Authorize(Policy = ...)]</c> attributes.
-/// </summary>
-public static class AuthPolicies
-{
-    /// <summary>Token scope must be <c>read</c>, <c>publish</c>, or <c>admin</c>.</summary>
-    public const string RequireReadScope = "RequireReadScope";
-
-    /// <summary>Token scope must be <c>publish</c> or <c>admin</c>.</summary>
-    public const string RequirePublishScope = "RequirePublishScope";
-
-    /// <summary>Token scope must be <c>admin</c>.</summary>
-    public const string RequireAdminScope = "RequireAdminScope";
-
-    /// <summary>Token scope must be <c>admin</c> AND user role must be <c>admin</c>.</summary>
-    public const string RequireAdmin = "RequireAdmin";
-}
-
 // ── Org role wire values ──────────────────────────────────────────────────────
 
 /// <summary>

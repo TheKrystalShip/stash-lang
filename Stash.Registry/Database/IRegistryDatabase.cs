@@ -380,17 +380,6 @@ public interface IRegistryDatabase
     Task<List<PackageRoleEntry>> GetPackageRolesAsync(string packageName);
 
     /// <summary>
-    /// Checks whether a user (directly or via a matching principal entry) has at least
-    /// the specified role on the package. In P2 only direct user-principal role entries
-    /// are checked; team and org inheritance is added in P5.
-    /// </summary>
-    /// <param name="packageName">The package name.</param>
-    /// <param name="username">The username to test.</param>
-    /// <param name="role">The minimum role required: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
-    /// <returns><c>true</c> if the user has the specified or higher role; otherwise <c>false</c>.</returns>
-    Task<bool> HasPackagePermissionAsync(string packageName, string username, string role);
-
-    /// <summary>
     /// Sets the visibility of a package to the specified value.
     /// </summary>
     /// <param name="name">The package name.</param>

@@ -116,18 +116,7 @@ public sealed class Startup
                 };
             });
 
-        services.AddAuthorizationBuilder()
-            .AddPolicy(AuthPolicies.RequireReadScope, policy =>
-                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Read, TokenScopes.Publish, TokenScopes.Admin))
-            .AddPolicy(AuthPolicies.RequirePublishScope, policy =>
-                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Publish, TokenScopes.Admin))
-            .AddPolicy(AuthPolicies.RequireAdminScope, policy =>
-                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Admin))
-            .AddPolicy(AuthPolicies.RequireAdmin, policy =>
-            {
-                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Admin);
-                policy.RequireRole(UserRoles.Admin);
-            });
+        services.AddAuthorization();
 
         services.AddSingleton(_config);
 

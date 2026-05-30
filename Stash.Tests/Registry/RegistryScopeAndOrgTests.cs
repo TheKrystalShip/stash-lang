@@ -679,110 +679,6 @@ public sealed class RegistryScopeAndOrgTests
         Assert.Equal("engineering", team.Name);
     }
 
-    // ── P5: Permission resolution — direct + team + org ───────────────────────
-
-    [Fact]
-    public async Task HasPackagePermission_DirectUserRole_ReturnsTrue()
-    {
-        var (db, _) = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-        await db.AssignPackageRoleAsync("@acme/widget", "user", "alice", "publisher");
-
-        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "alice", "publisher");
-        Assert.True(hasPermission);
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_DirectUserRole_HigherRequired_ReturnsFalse()
-    {
-        var (db, _) = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-        await db.AssignPackageRoleAsync("@acme/widget", "user", "alice", "reader");
-
-        // reader cannot publish
-        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "alice", "publisher");
-        Assert.False(hasPermission);
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_TeamMediated_ReturnsTrue()
-    {
-        var (db, _) = CreateTestDb();
-        await db.CreateUserWithScopeAsync("alice", "hash");
-        await db.CreateUserWithScopeAsync("bob", "hash");
-        var org = await db.CreateOrgAsync("acme", null, "alice");
-        var team = await db.CreateTeamAsync(org.Id, "engineering");
-        await db.AddTeamMemberAsync(team.Id, "bob");
-
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-        // Assign team a publisher role
-        await db.AssignPackageRoleAsync("@acme/widget", "team", team.Id, "publisher");
-
-        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "bob", "publisher");
-        Assert.True(hasPermission);
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_OrgOwnerInheritsPackageOwner()
-    {
-        var (db, _) = CreateTestDb();
-        await db.CreateUserWithScopeAsync("alice", "hash");
-        var org = await db.CreateOrgAsync("acme", null, "alice");
-
-        // Create a package in the acme scope — alice is org owner
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-
-        // alice should have owner permission via org ownership
-        bool hasOwner = await db.HasPackagePermissionAsync("@acme/widget", "alice", "owner");
-        Assert.True(hasOwner);
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_OrgMemberInheritsReader()
-    {
-        var (db, _) = CreateTestDb();
-        await db.CreateUserWithScopeAsync("alice", "hash");
-        await db.CreateUserWithScopeAsync("bob", "hash");
-        var org = await db.CreateOrgAsync("acme", null, "alice");
-        await db.AddOrgMemberAsync(org.Id, "bob", "member");
-
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-
-        // bob is a regular member — should have reader (not publisher)
-        bool hasReader = await db.HasPackagePermissionAsync("@acme/widget", "bob", "reader");
-        bool hasPublisher = await db.HasPackagePermissionAsync("@acme/widget", "bob", "publisher");
-        Assert.True(hasReader);
-        Assert.False(hasPublisher);
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_NoRole_ReturnsFalse()
-    {
-        var (db, _) = CreateTestDb();
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-
-        bool hasPermission = await db.HasPackagePermissionAsync("@acme/widget", "charlie", "reader");
-        Assert.False(hasPermission);
-    }
-
-    [Fact]
-    public async Task HasPackagePermission_ExplicitRoleBeatsOrgInheritance()
-    {
-        // Bob is org member (reader by inheritance) but also has explicit maintainer role.
-        // The higher role (maintainer) should win.
-        var (db, _) = CreateTestDb();
-        await db.CreateUserWithScopeAsync("alice", "hash");
-        await db.CreateUserWithScopeAsync("bob", "hash");
-        var org = await db.CreateOrgAsync("acme", null, "alice");
-        await db.AddOrgMemberAsync(org.Id, "bob", "member");
-
-        await db.CreatePackageAsync(MakePackage("@acme/widget"));
-        await db.AssignPackageRoleAsync("@acme/widget", "user", "bob", "maintainer");
-
-        bool hasMaintainer = await db.HasPackagePermissionAsync("@acme/widget", "bob", "maintainer");
-        Assert.True(hasMaintainer);
-    }
-
     // ── F03: Search visibility — org-mediated and team-mediated readers ───────
 
     [Fact]
@@ -808,8 +704,7 @@ public sealed class RegistryScopeAndOrgTests
     [Fact]
     public async Task Search_TeamMediatedReader_CanFindPrivatePackage()
     {
-        // Anti-drift test: search must grant access via team-mediated branch,
-        // matching HasPackagePermissionAsync("reader") exactly.
+        // Anti-drift test: search must grant access via team-mediated branch.
         var (db, _) = CreateTestDb();
         await db.CreateUserWithScopeAsync("alice", "hash");
         await db.CreateUserWithScopeAsync("bob", "hash");
@@ -825,10 +720,8 @@ public sealed class RegistryScopeAndOrgTests
 
         SearchResult result = await db.SearchPackagesAsync("lib", 1, 20, "bob");
 
-        // Both the read gate and search must agree: bob can read via team role
-        bool canRead = await db.HasPackagePermissionAsync("@acme/lib", "bob", "reader");
-        Assert.True(canRead);
-        Assert.Equal(canRead, result.Packages.Any(p => p.Name == "@acme/lib"));
+        // Bob can read via team role — search must surface the private package
+        Assert.Contains(result.Packages, p => p.Name == "@acme/lib");
     }
 
     [Fact]
@@ -848,9 +741,8 @@ public sealed class RegistryScopeAndOrgTests
 
         SearchResult result = await db.SearchPackagesAsync("internal-pkg", 1, 20, "bob");
 
-        bool canRead = await db.HasPackagePermissionAsync("@acme/internal-pkg", "bob", "reader");
-        Assert.True(canRead); // sanity: org member has reader floor
-        Assert.Equal(canRead, result.Packages.Any(p => p.Name == "@acme/internal-pkg"));
+        // Org member inherits reader floor — search must surface the private package
+        Assert.Contains(result.Packages, p => p.Name == "@acme/internal-pkg");
     }
 
     [Fact]

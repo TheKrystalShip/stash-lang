@@ -64,7 +64,7 @@ Stash.Registry/
 Client (stash pkg CLI / HTTP)
     → RateLimitingMiddleware (IP/user-based throttling)
     → JWT Authentication (Bearer token + JTI revocation check)
-    → Authorization Policies (RequirePublishScope, RequireAdmin)
+    → Authorization (bare [Authorize] + IRegistryAuthorizer PDP)
     → Controllers (Auth, Packages, Search, Admin)
         → PackageService / AuditService / IAuthProvider
     → IRegistryDatabase (EF Core: SQLite or PostgreSQL)
@@ -108,19 +108,19 @@ public class PackagesController : ControllerBase
     public IActionResult GetPackage(string scope, string name) { ... }
 
     [HttpPut("{scope}/{name}")]
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]   // never the literal "RequirePublishScope"
+    [Authorize]   // authentication only — the PDP (IRegistryAuthorizer) makes the authorization decision
     public async Task<IActionResult> Publish(string scope, string name) { ... }
 }
 ```
 
 **Key rules:**
 
-- Public read endpoints (GET packages, search, download, health) require **no authentication** for `public` packages; `private`/`internal` packages require a `read`-scoped (or higher) JWT and caller permission
+- Public read endpoints (GET packages, search, download, health) carry `[PublicEndpoint("reason")]` instead of `[Authorize]`; the JTI revocation check still fires on every authenticated request including public endpoints
 - Unauthorized callers on private/internal packages receive `404 Not Found` (not `403`) to avoid leaking package existence
-- Publish/unpublish require a token with `publish` or `admin` scope
-- Admin endpoints require `admin` scope AND `admin` role
-- Four authorization policies: `RequireReadScope` (`token_scope ∈ {read, publish, admin}`), `RequirePublishScope` (`token_scope ∈ {publish, admin}`), `RequireAdminScope` (`token_scope == admin`), `RequireAdmin` (`token_scope == admin` AND `role == admin`)
-- **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, policy names, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `AuthPolicies`, `ReservedScopes`) and wire strings are parsed into enums at the boundary (`BuildPrincipal` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
+- Publish/unpublish require a token with `publish` or `admin` coarse ceiling; the PDP checks the ceiling first, then the package role
+- Admin endpoints require `admin` ceiling AND `admin` role; the admin short-circuit resolves the resource-side dimension to effective `owner` but does NOT bypass the ceiling check
+- Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. Named string authorization policies have been removed; endpoints carry bare `[Authorize]` (authentication) and the PDP carries the authorization logic.
+- **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `ReservedScopes`) and wire strings are parsed into enums at the boundary (`BuildPrincipal` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
 - Success responses use `SuccessResponse` or typed DTOs
 

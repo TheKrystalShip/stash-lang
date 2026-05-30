@@ -56,6 +56,7 @@ All package routes use the two-segment form `/packages/{scope}/{name}` where `{s
 | DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope         | Undeprecate version                      |
 | GET    | `/api/v1/packages/{scope}/{name}/roles`                | admin                 | List package roles                       |
 | PUT    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | Assign a role to a principal             |
+| DELETE | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | Revoke a role from a principal           |
 | PATCH  | `/api/v1/packages/{scope}/{name}/visibility`           | publish scope (owner) | Change package visibility                |
 
 Read endpoints (`GET`) for private or internal packages require a `read`-scoped (or higher) token AND the caller must have at least `reader` permission. Unauthorized callers receive `404 Not Found`, not `403`, to avoid leaking package existence.
@@ -101,8 +102,9 @@ Search results are filtered by visibility. Unauthenticated callers see only `pub
 | GET    | `/api/v1/admin/stats`                          | admin | Registry statistics            |
 | POST   | `/api/v1/admin/users`                          | admin | Create user                    |
 | DELETE | `/api/v1/admin/users/{username}`               | admin | Delete user                    |
-| PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`  | admin | Assign package role (admin override) |
-| GET    | `/api/v1/admin/audit-log`                      | admin | Query audit log                |
+| PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin | Assign package role (admin override)  |
+| DELETE | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin | Revoke package role (admin override)  |
+| GET    | `/api/v1/admin/audit-log`                              | admin | Query audit log                       |
 
 ## 4. Authentication
 
@@ -127,22 +129,58 @@ The registry uses three token kinds:
 | Refresh token | `POST /auth/login` (with `X-Machine-Id`) | `90d`            | Rotating renewal of access tokens                     |
 | API token     | `POST /auth/tokens`                      | `90d`            | Long-lived tokens for CI/automation, named and scoped |
 
-### 4.2 Scopes and Policies
+### 4.2 Token Ceiling and the Policy Decision Point
 
-| Scope     | Grants                                                                           |
-| --------- | -------------------------------------------------------------------------------- |
-| `read`    | Read-gated endpoints on private/internal packages (in addition to publish, admin). |
-| `publish` | Publish, unpublish, deprecate / undeprecate, org management, scope claims.       |
-| `admin`   | All endpoints, including `/api/v1/admin/*`.                                      |
+Every protected endpoint is guarded by a two-step **Policy Decision Point (PDP)** keyed on
+`(Action, Resource, Principal)`:
 
-| Policy                | Required claims                                |
-| --------------------- | ---------------------------------------------- |
-| `RequireReadScope`    | `token_scope ∈ { read, publish, admin }`       |
-| `RequirePublishScope` | `token_scope ∈ { publish, admin }`             |
-| `RequireAdminScope`   | `token_scope == admin`                         |
-| `RequireAdmin`        | `token_scope == admin` AND `role == admin`     |
+1. **Ceiling check.** The token's `token_scope` claim is the coarse ceiling. It must be
+   sufficient for the requested action before any resource-side check runs. The admin role
+   does NOT bypass this step — an `admin`-role user holding a `read`-ceiling token is denied
+   any write with `TokenScopeInsufficient`.
 
-### 4.3 Refresh Token Rotation
+2. **Resource-side check.** Depending on the action: package role (with an admin short-circuit
+   to effective `owner`), scope ownership, org membership, or visibility resolution.
+
+If both steps pass: ALLOW. Otherwise DENY with a typed `AuthzDenyReason`.
+
+| Token ceiling | Grants                                                                           |
+| ------------- | -------------------------------------------------------------------------------- |
+| `read`        | Read operations on private/internal packages (where the caller has `reader`+).   |
+| `publish`     | Publish, unpublish, deprecate / undeprecate, org management, scope claims.       |
+| `admin`       | All operations, including `/api/v1/admin/*`. Still subject to the ceiling check. |
+
+**Default login ceiling is `read`.** Callers who need to publish must issue an explicit
+`publish`-ceiling API token via `POST /auth/tokens` (see [Section 5.5](#55-post-apiv1authtokens)).
+
+**Token lifetime cap.** `POST /auth/tokens` rejects `expires_in` values exceeding
+`Security.MaxTokenLifetime` (default `90d`) with `400 TokenLifetimeExceeded`, echoing the
+configured cap in the error body.
+
+**JTI revocation is uniform.** The `jti` database lookup runs on every request, including
+those marked with `[PublicEndpoint]`. A revoked token is rejected `401` before the PDP runs.
+
+### 4.3 Scope Ownership Policy
+
+`Security.ScopeOwnershipPolicy` (default `claim`) governs the unclaimed-scope branch of the
+`CreatePackage` action. Reserved scopes (`@stash`, `@admin`) and scopes owned by someone else are
+always denied regardless of this setting.
+
+| Policy value | Unclaimed scope behavior                                                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `open`       | Auto-claim: the scope is automatically provisioned as a user-owned scope for the caller, then `CreatePackage` proceeds. |
+| `claim`      | DENY `ScopeNotOwned`. Message: "Scope '@x' is not claimed — run `stash pkg scope claim @x` first."              |
+| `verified`   | DENY `ScopeNotOwned`. Message: "Scope '@x' requires verification — run `stash pkg scope claim @x` then `verify`." |
+
+Under `verified`, a scope in `state = pending` (challenge issued but not yet verified) is also treated
+as unowned (same DENY). The DNS-TXT / HTTP-well-known resolver that finalizes verification is stubbed
+`501 NotImplemented` in this release.
+
+Atomicity: concurrent scope claims use **insert-then-handle-unique-violation** at the database layer
+(the `scopes` table has a `UNIQUE` constraint on `name`). Exactly one concurrent claimer wins `201`;
+all others receive `409`.
+
+### 4.4 Refresh Token Rotation
 
 Refresh tokens implement OAuth2-style rotation. Clients that supply `X-Machine-Id` on login receive a refresh-token pair; subsequent calls to `POST /auth/tokens/refresh` exchange a (refresh token, expired access token, machine ID) tuple for a new pair.
 
@@ -150,11 +188,11 @@ Each refresh consumes the prior refresh token. All refresh tokens issued from th
 
 Refresh tokens are bound to the machine fingerprint, which is a SHA-256 hash of `hostname:username:platform` supplied by the client. Requests from a different fingerprint are rejected.
 
-### 4.4 Revocation
+### 4.5 Revocation
 
 Token revocation is database-driven. Every JWT carries a `jti` that matches the primary key of the `tokens` (or `refresh_tokens`) row. Deleting the row revokes the token at the next request, because the JWT bearer middleware performs a `jti` lookup during `OnTokenValidated`. There is no separate revocation list.
 
-### 4.5 Auth Provider Backends
+### 4.6 Auth Provider Backends
 
 | Provider | Status        | Description                                                                          |
 | -------- | ------------- | ------------------------------------------------------------------------------------ |
@@ -279,19 +317,19 @@ Returns the authenticated user's username and role.
 
 ### 5.5 POST /api/v1/auth/tokens
 
-Create a named, scoped API token. Scope must be `"read"`, `"publish"`, or `"admin"`; only an `admin` role may create `admin` tokens.
+Create a named, coarse-ceiling API token. `ceiling` must be `"read"`, `"publish"`, or `"admin"`; only an `admin`-role user may create `admin`-ceiling tokens. `expires_in` is mandatory; absent or invalid values are rejected `400`.
 
 Request:
 
 ```json
 {
-  "scope": "publish",
-  "description": "CI deploy token",
-  "expiresIn": "30d"
+  "name": "ci-publish-acme",
+  "ceiling": "publish",
+  "expires_in": "30d"
 }
 ```
 
-`expiresIn` accepts duration strings (`Xd`, `Xh`, `Xm`). Minimum `1h`, maximum `365d`. When omitted, `Auth.ApiTokenExpiry` is used (default `90d`).
+`expires_in` accepts duration strings (`Xd`, `Xh`, `Xm`). The value must not exceed `Security.MaxTokenLifetime` (default `90d`); values over the cap are rejected `400 TokenLifetimeExceeded` with the configured cap echoed in the response.
 
 Response `201 Created`:
 
@@ -405,9 +443,19 @@ Returns the raw `.tar.gz` tarball. Visibility rules identical to [Section 6.1](#
 
 ### 6.4 PUT /api/v1/packages/{scope}/{name}
 
-Publish a new version. The request body is the raw tarball. Requires a token with `publish` or `admin` scope. The caller must be an owner of an existing package, or the first publisher of a new package name (in which case they become the `owner`).
+Publish a new version. The request body is the raw tarball. Requires a `publish`-ceiling (or higher) token.
 
-The scope owner (the user or org backing the scope) is automatically assigned the `owner` role on package creation.
+The PDP distinguishes two cases based on whether the package already exists:
+
+- **`CreatePackage`** (first publish of a new package name): the caller must own the `@{scope}` scope
+  (user-owned or org-owned where the caller is the org owner). The scope is never auto-claimed under
+  `ScopeOwnershipPolicy = claim` (default); callers must run `POST /api/v1/scopes` first. On success,
+  the scope owner is automatically assigned the `owner` role on the new package.
+- **`PublishVersion`** (subsequent version of an existing package): the caller must hold at least
+  the `publisher` package role.
+
+The URL path is authoritative: the manifest `name` and `version` fields are verified against the route;
+a mismatch is rejected `400 ManifestRouteMismatch`.
 
 Headers:
 
@@ -517,7 +565,32 @@ Request:
 | 403    | Caller is not an owner of the package.        |
 | 404    | Package not found.                            |
 
-### 6.9 PATCH /api/v1/packages/{scope}/{name}/visibility
+### 6.9 DELETE /api/v1/packages/{scope}/{name}/roles
+
+Revoke a role assignment from a principal on a package. Requires `publish` scope and `owner` permission on the package (or use the admin endpoint below for an admin override).
+
+Request body:
+
+```json
+{
+  "principal_type": "user",
+  "principal_id": "bob"
+}
+```
+
+Response `204 No Content` on success.
+
+**Last-owner protection.** A revoke that would drop the package's `owner` count to zero is refused
+`409 Conflict` with detail `"cannot remove the last owner of a package"`. A package must retain at
+least one principal directly holding `owner`.
+
+| Status | Meaning                                                                     |
+| ------ | --------------------------------------------------------------------------- |
+| 403    | Caller does not hold `owner` permission on the package.                     |
+| 404    | Package not found, or no matching role assignment exists.                   |
+| 409    | Revoke would remove the last owner.                                         |
+
+### 6.10 PATCH /api/v1/packages/{scope}/{name}/visibility
 
 Change the visibility of a package. Requires `publish` scope and `owner` permission.
 
@@ -659,7 +732,9 @@ Response:
 
 ### 8.8 POST /api/v1/scopes
 
-Claim a new scope. Requires a `publish`-scoped (or higher) token. The `owner_type` must match a resource the caller controls: `user` (the caller's own username) or `org` (an org the caller owns).
+Claim a new scope. Requires a `publish`-ceiling (or higher) token. The `owner_type` must match a resource the caller controls: `user` (the caller's own username) or `org` (an org the caller owns).
+
+The request is validated through the scope gauntlet in order: grammar → reserved scopes (`@stash`, `@admin` always denied) → namespace-pool collision → ownership → `ScopeOwnershipPolicy` branch (see [Section 4.3](#43-scope-ownership-policy)).
 
 Request:
 
@@ -667,15 +742,33 @@ Request:
 { "scope": "my-tools", "owner_type": "user", "owner": "alice" }
 ```
 
+Under `ScopeOwnershipPolicy = verified`, the response carries a challenge body:
+
+```json
+{
+  "scope": "acme", "owner_type": "user", "owner": "alice",
+  "state": "pending",
+  "challenge": {
+    "method": "dns-txt",
+    "record_name": "_stash-challenge.acme",
+    "record_value": "stash-verify=01HXY...",
+    "expires_at": "2026-06-06T12:00:00Z"
+  }
+}
+```
+
+The DNS-TXT / HTTP-well-known verification resolver is stubbed `501 NotImplemented` in this release.
+
 | Status | Meaning                                                                             |
 | ------ | ----------------------------------------------------------------------------------- |
-| 400    | Invalid scope name format, or `owner_type`/`owner` combination is invalid.         |
-| 403    | Caller does not control the requested owner.                                        |
-| 409    | Scope name collides with a username, org name, existing scope, or reserved system scope. |
+| 400    | Invalid scope name format, or `owner_type`/`owner` combination is invalid.          |
+| 403    | Caller does not control the requested owner, or the scope is reserved.              |
+| 409    | Scope name collides with a username, org name, existing scope.                      |
 
 ## 9. Admin Endpoints
 
-All admin endpoints require `RequireAdmin` (scope `admin` AND role `admin`).
+All admin endpoints require an `admin`-ceiling token AND `role = admin`. The PDP evaluates both
+the ceiling check (step 1) and the resource-side admin short-circuit (step 2) for each request.
 
 ### 9.1 GET /api/v1/admin/stats
 
@@ -711,7 +804,11 @@ Delete a user. Their tokens are cascade-deleted from the `tokens` and `refresh_t
 
 Assign a role to a principal on a package (admin override). Body is identical to [Section 6.8](#68-put-apiv1packagesscopenameroles).
 
-### 9.5 GET /api/v1/admin/audit-log
+### 9.5 DELETE /api/v1/admin/packages/{scope}/{name}/roles
+
+Revoke a role from a principal on a package (admin override). Body is identical to [Section 6.9](#69-delete-apiv1packagesscopenameroles). The last-owner protection invariant applies: `409 Conflict` if the revoke would drop the package's owner count to zero.
+
+### 9.6 GET /api/v1/admin/audit-log
 
 Query the audit log. Entries are returned in descending chronological order.
 
@@ -784,7 +881,9 @@ The registry reads configuration from `appsettings.json` in the working director
     "MaxPackageSize": "10MB",
     "RequiredIntegrity": "sha256",
     "UnpublishWindow": "72h",
-    "JwtSigningKey": null
+    "JwtSigningKey": null,
+    "MaxTokenLifetime": "90.00:00:00",
+    "ScopeOwnershipPolicy": "claim"
   },
   "RateLimiting": {
     "Enabled": true,
@@ -874,12 +973,14 @@ Duration strings accept the suffixes `m`, `h`, `d`.
 
 ### 10.6 Security
 
-| Property            | Type   | Default    | Description                                                                                                                                          |
-| ------------------- | ------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `MaxPackageSize`    | string | `"10MB"`   | Maximum tarball upload size. Suffixes `MB`, `GB`.                                                                                                    |
-| `RequiredIntegrity` | string | `"sha256"` | Integrity algorithm. Only `"sha256"` is currently supported.                                                                                         |
-| `UnpublishWindow`   | string | `"72h"`    | Window during which a freshly published version may be unpublished.                                                                                  |
-| `JwtSigningKey`     | string | `null`     | HMAC-SHA256 signing key. Must be at least 32 characters. If `null`, the server generates a random key at startup; tokens will not survive a restart. |
+| Property                | Type   | Default          | Description                                                                                                                                          |
+| ----------------------- | ------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MaxPackageSize`        | string | `"10MB"`         | Maximum tarball upload size. Suffixes `MB`, `GB`.                                                                                                    |
+| `RequiredIntegrity`     | string | `"sha256"`       | Integrity algorithm. Only `"sha256"` is currently supported.                                                                                         |
+| `UnpublishWindow`       | string | `"72h"`          | Window during which a freshly published version may be unpublished.                                                                                  |
+| `JwtSigningKey`         | string | `null`           | HMAC-SHA256 signing key. Must be at least 32 characters. If `null`, the server generates a random key at startup; tokens will not survive a restart. |
+| `MaxTokenLifetime`      | string | `"90.00:00:00"`  | Maximum `expires_in` accepted by `POST /auth/tokens`. Requests exceeding this cap are rejected `400 TokenLifetimeExceeded`.                          |
+| `ScopeOwnershipPolicy`  | string | `"claim"`        | Governs unclaimed-scope behavior in `CreatePackage`. Values: `open`, `claim`, `verified`. See [Section 4.3](#43-scope-ownership-policy).              |
 
 ### 10.7 RateLimiting
 
@@ -1074,7 +1175,34 @@ Immutable record of all state-changing operations. Auto-incrementing primary key
 
 ## 12. Package Role Model
 
-### 12.1 Role → Permission Matrix
+### 12.1 Closed `RegistryAction` Enum
+
+Every authorization decision in the registry is keyed by a `RegistryAction` value. The full closed set:
+
+| Category | Actions |
+| -------- | ------- |
+| Package  | `ReadPackageMetadata`, `ReadPackageVersion`, `DownloadPackageVersion`, `CreatePackage`, `PublishVersion`, `UnpublishVersion`, `DeprecatePackage`, `DeprecateVersion`, `ChangePackageVisibility`, `ListPackageRoles`, `AssignPackageRole`, `RevokePackageRole`, `DeletePackage` |
+| Scope    | `ResolveScope`, `ClaimScope`, `VerifyScope` |
+| Org      | `CreateOrg`, `ReadOrg`, `AddOrgMember`, `RemoveOrgMember`, `CreateTeam`, `AddTeamMember` |
+| Auth     | `Login`, `Register`, `Whoami`, `IssueToken`, `ListOwnTokens`, `RevokeOwnToken` |
+| Admin    | `ReadAdminStats`, `ManageUser`, `AdminAssignPackageRole`, `AdminRevokePackageRole`, `ReadAuditLog` |
+| Search   | `Search` |
+
+### 12.2 Role → Permission Matrix
+
+The PDP resolves a per-action minimum package role requirement:
+
+| Action                                                           | Minimum package role           |
+| ---------------------------------------------------------------- | ------------------------------ |
+| `ReadPackageMetadata`, `ReadPackageVersion`, `DownloadPackageVersion` (private/internal) | `reader` |
+| `PublishVersion` (existing package)                              | `publisher`                    |
+| `UnpublishVersion`                                               | `maintainer`                   |
+| `DeprecatePackage`, `DeprecateVersion`                           | `maintainer`                   |
+| `ChangePackageVisibility`                                        | `owner`                        |
+| `ListPackageRoles`, `AssignPackageRole`, `RevokePackageRole`     | `owner`                        |
+| `DeletePackage`                                                  | `owner`                        |
+| `CreatePackage` (new package)                                    | n/a — gated on scope ownership |
+| `AdminAssignPackageRole`, `AdminRevokePackageRole`               | n/a — admin short-circuit only |
 
 | Permission                                             | reader | publisher | maintainer | owner |
 | ------------------------------------------------------ | :----: | :-------: | :--------: | :---: |
@@ -1086,9 +1214,11 @@ Immutable record of all state-changing operations. Auto-incrementing primary key
 | Assign / revoke package roles                          | no     | no        | no         | yes   |
 | Delete package                                         | no     | no        | no         | yes   |
 
-`admin`-role users carry every permission implicitly.
+**Admin short-circuit:** `role == admin` resolves the resource-side dimension to effective `owner`
+on any package, scope, or org. The ceiling check still runs first — an admin holding a `read`-ceiling
+token is denied any write with `TokenScopeInsufficient`.
 
-### 12.2 Permission Resolution
+### 12.3 Permission Resolution
 
 The effective permission for a `(package, username)` pair is the union of:
 
@@ -1102,26 +1232,52 @@ The highest-permission rule wins across all sources. The scope owner (user or or
 - Org `owner` members inherit `owner` on every package in any scope owned by that org.
 - Org `member` members inherit `reader` on private/internal packages in org-owned scopes. Explicit higher package roles override this default.
 
+**Fail-closed on dangling references.** If a referenced scope, org, or team has been deleted (dangling
+role edge), the grant yields no access. The PDP treats missing references as absent grants rather than
+throwing or granting. Deleting a scope or org that still owns packages or sub-resources is refused
+`409 ScopeNotEmpty` / `409 OrgNotEmpty`, so dangling references are rare in practice.
+
+### 12.4 Atomicity Guarantee (Namespace Allocation)
+
+Two namespace operations use **insert-then-handle-unique-violation** at the DB layer to prevent TOCTOU races:
+
+- `POST /api/v1/scopes` — scope-claim concurrent collision → exactly one `201`, all others `409`.
+- `PUT /api/v1/packages/{scope}/{name}` (first publish, `CreatePackage`) — concurrent first-publish
+  race → one `CreatePackage` winner, the concurrent loser collapses to `PublishVersion` on the
+  already-created row (or rejects on version collision). Never a second `packages` row, never a `500`.
+
 ## 13. Audit Log
 
-All state-changing operations write a single immutable row. Read-only requests are not logged.
+The audit log covers two categories of events:
+
+1. **Every state-mutating authorized action** emits a success audit entry. The entry carries the
+   principal id, action, resource, decision (`allow`), and timestamp.
+2. **Every authenticated authorization denial** emits a deny audit entry carrying the
+   `AuthzDenyReason` enum value verbatim. This feeds intrusion detection on abnormal deny rates
+   per principal.
+
+**Deliberately excluded:** anonymous public-read denials (typical 404 traffic on private packages
+to unauthenticated callers). These are excluded to avoid flooding the table without a security
+signal; public-read 404s appear in the HTTP access log.
 
 | Action                 | Trigger                                                           |
 | ---------------------- | ----------------------------------------------------------------- |
-| `publish`              | Package version published.                                        |
-| `unpublish`            | Package version unpublished.                                      |
+| `package.create`       | New package created (first publish).                              |
+| `package.publish`      | Package version published.                                        |
+| `package.unpublish`    | Package version unpublished.                                      |
+| `package.deprecate`    | Package or version deprecated / undeprecated.                     |
+| `package.visibility_change` | Package visibility changed.                                  |
 | `user.create`          | User account created.                                             |
 | `user.disable`         | User account disabled.                                            |
 | `role.assign`          | Package role assigned to a principal (added or role changed).     |
 | `role.revoke`          | Package role revoked from a principal.                            |
-| `token.create`         | API token created.                                                |
+| `scope.claim`          | Scope claimed.                                                    |
+| `scope.verify`         | Scope verification completed.                                     |
+| `token.issue`          | API token issued.                                                 |
 | `token.revoke`         | API token revoked.                                                |
 | `token.refresh`        | Access token refreshed using a refresh token.                     |
 | `token_theft_detected` | Consumed refresh token replayed; entire token family was revoked. |
-| `package.deprecate`    | Package deprecated.                                               |
-| `package.undeprecate`  | Package deprecation cleared.                                      |
-| `version.deprecate`    | Version deprecated.                                               |
-| `version.undeprecate`  | Version deprecation cleared.                                      |
+| `authz.deny`           | Authenticated authorization denial (includes `AuthzDenyReason`).  |
 
 ## 14. Publishing Workflow
 
@@ -1261,7 +1417,20 @@ Full CLI semantics are documented in [PKG - Package Manager CLI](PKG%20—%20Pac
 | Unpublish window    | After `Security.UnpublishWindow` expires, the only path to discourage a version is deprecation. |
 | Scope deletion      | Scopes are not deletable in this release. Org deletion cascades only when no packages depend on the scope. |
 
-## 20. Change Rules
+## 20. Deferred — Fine-Grained Token Capabilities
+
+Fine-grained per-package / per-action token capability rules (selectors, capability allow-lists;
+npm-granular-token style) are **deferred** to a follow-up feature:
+
+> `.kanban/0-backlog/registry/Fine-grained token capabilities (deferred from authz-pipeline).md`
+
+The coarse ceiling shipped in this release (`read` / `publish` / `admin`) already satisfies the
+least-privilege guarantee — callers must explicitly opt into `publish`-ceiling tokens. Fine-grained
+rules are purely additive; they introduce no breaking changes to the current wire format and reopen
+no security bug. The `POST /auth/tokens` request body does **not** accept a `capabilities` array
+in this release; any such field is rejected.
+
+## 21. Change Rules
 
 Changes to the registry must preserve these rules:
 

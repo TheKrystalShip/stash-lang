@@ -4,8 +4,9 @@ namespace Stash.Registry.Auth.Authorization;
 /// Typed reason for an authorization denial from the registry Policy Decision Point (PDP).
 /// </summary>
 /// <remarks>
-/// <c>TokenCapabilityScopeMiss</c> is deliberately absent — it ships with the deferred
-/// fine-grained capability feature.
+/// The fine-grained token-capability deny reason from the prior revision is deliberately absent;
+/// it would ship with the deferred capability feature (see backlog:
+/// <c>.kanban/0-backlog/registry/Fine-grained token capabilities (deferred from authz-pipeline).md</c>).
 /// </remarks>
 public enum AuthzDenyReason
 {
