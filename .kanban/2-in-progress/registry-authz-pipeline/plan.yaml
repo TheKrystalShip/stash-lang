@@ -297,6 +297,7 @@ phases:
       - Stash.Registry/Database/StashRegistryDatabase.cs
       - Stash.Registry/Auth/RegistryAuthConstants.cs
       - Stash.Registry/Auth/JwtTokenService.cs
+      - Stash.Registry/Auth/Authorization/AuthzDenyReason.cs
       - Stash.Registry/CLAUDE.md
     verify:
       - dotnet build
