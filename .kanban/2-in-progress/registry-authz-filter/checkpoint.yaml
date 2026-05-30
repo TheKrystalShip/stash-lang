@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-filter
 current: null
-updated: '2026-05-30T20:35:37Z'
+updated: '2026-05-30T20:48:11Z'
 phases:
   P1:
     status: done
@@ -22,13 +22,14 @@ phases:
     notes: Converted 28 clean endpoints across 6 controllers to [RegistryAuthorize]; deleted all per-controller
       BuildPrincipal helpers; deleted DenyReasonToStatus; added 3 audit mutation test rows for CreateOrg/AddOrgMember/VerifyScope
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: efa5f11b5a4df169a7a5212d679592a72ce1f1c1
+    verified: true
+    started: '2026-05-30T20:38:44Z'
+    completed: '2026-05-30T20:48:11Z'
+    attempts: 1
+    notes: 'ImperativeAuthz attribute + 4 endpoints marked + AuthzDispatchCoverageMetaTests (3 assertions:
+      production, fail-path, imperative-pin); DeleteOrg/DeleteScope deny routed through AuthzDenyResponse'
   P4:
     status: pending
     commit: null
