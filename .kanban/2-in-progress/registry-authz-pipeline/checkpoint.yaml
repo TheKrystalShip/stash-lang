@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T12:14:35Z'
+updated: '2026-05-30T12:24:02Z'
 phases:
   P1:
     status: done
@@ -12,13 +12,15 @@ phases:
     attempts: 1
     notes: PDP engine + PermissionResolver with fail-closed dangling-reference guards; 38 unit tests green
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 846ded6e3664d9773eeaf0826e97f1322fcd807e
+    verified: true
+    started: '2026-05-30T12:19:59Z'
+    completed: '2026-05-30T12:24:02Z'
+    attempts: 1
+    notes: 'PublicEndpointAttribute + AuthzCoverageMetaTests (3 tests) + all 6 controllers annotated:
+      8 [PublicEndpoint] on anonymous endpoints, [Authorize] kept on protected endpoints, 0 [AllowAnonymous]
+      remaining'
   P3:
     status: pending
     commit: null
