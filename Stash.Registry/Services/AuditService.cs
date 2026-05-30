@@ -54,10 +54,9 @@ public sealed class AuditService
     }
 
     /// <remarks>
-    /// Currently uncalled — the role revocation HTTP endpoint is deferred (see
+    /// Currently uncalled — the role-revocation HTTP endpoint is deferred (see
     /// .kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md).
-    /// Renamed from <c>LogOwnerRemoveAsync</c> in the D3 clean break; ready for use
-    /// once the endpoint is implemented.
+    /// Ready for use once that endpoint is implemented.
     /// </remarks>
     public async Task LogRoleRevokeAsync(string package, string user, string target, string? ip)
     {
