@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pdp-completion
 current: null
-updated: '2026-05-30T23:13:18Z'
+updated: '2026-05-30T23:24:54Z'
 phases:
   P1:
     status: done
@@ -43,8 +43,8 @@ phases:
       link); ClaimScope arm removed from resolver (throws at request time if misused); RegistryActionResourceResolverTests
       pins the throw; backlog stub + CLAUDE.md + repo.md updated; pin stays {ClaimScope}
 review:
-  status: not_started
+  status: resolved
   started: null
-  resolved: null
+  resolved: '2026-05-30T23:24:54Z'
   findings_open: 0
   findings_fixed: 0
