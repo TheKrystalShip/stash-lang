@@ -115,7 +115,7 @@ public sealed class RegistryAuthorizeFilter : IAsyncAuthorizationFilter
     private static string ResourceIdForAudit(ResourceRef resource) => resource switch
     {
         PackageResource pkg   => pkg.FullName,
-        ScopeResource   scope => scope.Scope,
+        ScopeResource   scope => "@" + scope.Scope,
         OrgResource     org   => org.OrgName,
         TokenResource   tok   => tok.TokenId,
         _                     => string.Empty

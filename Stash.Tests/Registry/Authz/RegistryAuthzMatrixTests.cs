@@ -1120,6 +1120,66 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // 16. DeleteScope deny audit-id conformance (registry-authz-pdp-completion P2)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Pins that a non-owner authenticated DELETE /api/v1/scopes/{scope} returns
+    /// 403 ScopeNotOwned AND writes exactly one deny audit entry whose
+    /// resource_id (stored in <c>Package</c>) equals '@' + scope.
+    ///
+    /// This row proves the mechanical fold of DeleteScope into [RegistryAuthorize]
+    /// conforms to the '@' prefix convention used by the prior inline audit in the
+    /// controller — the filter's ResourceIdForAudit(ScopeResource) now emits '@' + scope.Scope,
+    /// matching the string the controller previously wrote inline ($"@{scope}").
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AuthzMatrixData.DeleteScopeDenyAuditIdRows), MemberType = typeof(AuthzMatrixData))]
+    public async Task DeleteScopeDenyAuditId_Matrix(string tag, string scenario)
+    {
+        _ = tag;
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string aliceUser = U(tag + "-alice");
+        string bobUser = U(tag + "-bob");
+
+        switch (scenario)
+        {
+            case "non_owner_deny_audit_id":
+            {
+                string aliceToken = await RegisterAndGetTokenAsync(client, aliceUser);
+                string bobToken = await RegisterAndGetTokenAsync(client, bobUser);
+
+                // Alice seeds the scope so it is owned by her.
+                await SeedScopeAsync(factory, aliceUser, aliceUser);
+
+                // Bob (non-owner) attempts to delete alice's scope — must receive 403 ScopeNotOwned.
+                SetBearer(client, bobToken);
+                var deleteResp = await client.DeleteAsync($"/api/v1/scopes/{aliceUser}");
+                Assert.Equal(System.Net.HttpStatusCode.Forbidden, deleteResp.StatusCode);
+                string body = await deleteResp.Content.ReadAsStringAsync();
+                Assert.Contains("ScopeNotOwned", body);
+
+                // Exactly one deny audit entry, action="DeleteScope", resource_id=='@'+scope.
+                var entries = await GetAuditEntriesAsync(factory);
+                var denyEntries = entries
+                    .Where(e =>
+                        e.Action == "DeleteScope" &&
+                        e.Decision == "deny" &&
+                        e.User == bobUser)
+                    .ToList();
+                Assert.Single(denyEntries);
+                Assert.Equal("@" + aliceUser, denyEntries[0].Package);
+                return;
+            }
+            default:
+                throw new ArgumentException($"Unknown DeleteScope audit-id scenario: {scenario}");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
     // ═══════════════════════════════════════════════════════════════════════════
 

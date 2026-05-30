@@ -234,6 +234,19 @@ public static class AuthzMatrixData
         yield return new object[] { "delete_org.deny.audit_id", "non_owner_deny_audit_id" };
     }
 
+    // ── DeleteScope deny audit-id conformance rows ────────────────────────────
+    // Pins that the filter writes '@' + scope as resource_id when an authenticated
+    // non-owner attempts DELETE /api/v1/scopes/{scope}.
+    // This row locks in that the mechanical fold of DeleteScope conforms to the
+    // '@' prefix convention used by the prior inline audit in the controller.
+
+    public static IEnumerable<object[]> DeleteScopeDenyAuditIdRows()
+    {
+        // Non-owner authenticated DELETE /scopes/{scope} → 403 ScopeNotOwned,
+        // one deny audit entry with resource_id == '@' + scope.
+        yield return new object[] { "delete_scope.deny.audit_id", "non_owner_deny_audit_id" };
+    }
+
     // ── Version-deny body-shape conformance rows ──────────────────────────────
     // Pins the exact Error string AND the absence of Message for GetVersion /
     // DownloadVersion visibility-hidden denials. Guards F01 (version-scoped message)

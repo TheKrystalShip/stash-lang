@@ -253,6 +253,10 @@ public sealed class RegistryAuthzAuditMutationTests : RegistryAuthzTestBase
     /// <summary>
     /// VerifyScope was previously not audited on denial (Scopes controller omission).
     /// Bob trying to verify a scope owned by alice gets a 403 and one deny audit row.
+    /// The resource_id must equal '@' + scope, proving the filter-level helper change
+    /// (ResourceIdForAudit(ScopeResource) → '@' + scope.Scope) is uniform — it applies
+    /// to VerifyScope (and every other ScopeResource action) via the shared helper, not
+    /// just the newly-folded DeleteScope endpoint.
     /// </summary>
     [Fact]
     public async Task Audit_VerifyScope_AuthenticatedDeny_EmitsExactlyOneDenyEntry()
@@ -277,5 +281,38 @@ public sealed class RegistryAuthzAuditMutationTests : RegistryAuthzTestBase
             .ToList();
 
         Assert.Single(denyEntries);
+        // Structural proof: resource_id == '@' + scope (filter-level uniform '@' prefix).
+        Assert.Equal("@alice-am9", denyEntries[0].Package);
+    }
+
+    /// <summary>
+    /// DeleteScope was folded into [RegistryAuthorize] in registry-authz-pdp-completion P2.
+    /// Bob (non-owner) attempting to delete alice's scope must receive 403 ScopeNotOwned
+    /// AND write exactly one deny audit entry with action=DeleteScope and resource_id='@'+scope.
+    /// </summary>
+    [Fact]
+    public async Task Audit_DeleteScope_AuthenticatedDeny_EmitsExactlyOneDenyEntry()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        await RegisterAndGetTokenAsync(client, "alice-am10");
+        string bobToken = await RegisterAndGetTokenAsync(client, "bob-am10");
+        await SeedScopeAsync(factory, "alice-am10", "alice-am10");
+
+        // Bob (non-owner) tries to delete alice's scope — PDP denies
+        SetBearer(client, bobToken);
+        var resp = await client.DeleteAsync("/api/v1/scopes/alice-am10");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+
+        var entries = await GetAuditEntriesAsync(factory);
+        var denyEntries = entries
+            .Where(e => e.Action == "DeleteScope" && e.Decision == "deny" && e.User == "bob-am10")
+            .ToList();
+
+        Assert.Single(denyEntries);
+        // resource_id == '@' + scope (matches prior inline audit and uniform filter convention).
+        Assert.Equal("@alice-am10", denyEntries[0].Package);
     }
 }

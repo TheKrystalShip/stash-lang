@@ -30,7 +30,6 @@ public class ScopesController : ControllerBase
     private readonly IRegistryDatabase _db;
     private readonly IRegistryAuthorizer _authorizer;
     private readonly ScopeChallengeService _scopeChallenge;
-    private readonly AuditService _auditService;
     private readonly IRegistryAuthzPrincipalFactory _principalFactory;
 
     /// <summary>
@@ -40,13 +39,11 @@ public class ScopesController : ControllerBase
         IRegistryDatabase db,
         IRegistryAuthorizer authorizer,
         ScopeChallengeService scopeChallenge,
-        AuditService auditService,
         IRegistryAuthzPrincipalFactory principalFactory)
     {
         _db = db;
         _authorizer = authorizer;
         _scopeChallenge = scopeChallenge;
-        _auditService = auditService;
         _principalFactory = principalFactory;
     }
 
@@ -202,20 +199,10 @@ public class ScopesController : ControllerBase
     /// <param name="scope">The bare scope name.</param>
     /// <returns><c>204</c> on success, <c>409</c> if the scope still owns packages, <c>404</c> if not found.</returns>
     [Authorize]
-    [ImperativeAuthz("post-PDP audit targets @{scope} prefix requiring inline coordination after the PDP decision; folded into PDP in registry-authz-pdp-completion")]
+    [RegistryAuthorize(RegistryAction.DeleteScope)]
     [HttpDelete("{scope}")]
     public async Task<IActionResult> DeleteScope(string scope)
     {
-        var principal = _principalFactory.Build(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeleteScope, new ScopeResource(scope));
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("DeleteScope", up.Username, $"@{scope}", decision.Reason, ip);
-            return AuthzDenyResponse.For(decision);
-        }
-
         var record = await _db.GetScopeAsync(scope);
         if (record == null)
             return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
