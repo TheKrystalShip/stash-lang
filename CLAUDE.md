@@ -86,6 +86,10 @@ The `implementer`, `resolver`, and `architect` agents occasionally return their 
 
 Default: **one feature on `main` at a time.** Never run two agents against the same working tree — the clean-tree invariant means feature A's in-progress edits block feature B's workflow commands, and same-file edits silently overwrite with no git conflict to flag the loss. When two features must progress concurrently, give each its own git worktree + `feature/<slug>` branch, run the whole lifecycle (including `/spec`) on the branch, and integrate with `git merge --no-ff`. Parallelize only across **disjoint subsystems** (e.g. language + registry); serialize features that share hot files (two language features both touch `TokenType.cs`, `Parser.cs`, and all six visitors). Re-run `final_verify` on `main` after every merge — green-on-branch does not imply green-on-merged-`main`. Full procedure: `.claude/WORKFLOW.md` → "Running Features in Parallel".
 
+### `/feature-review` diff range on a shared `main`
+
+The skill's `git merge-base HEAD origin/main` base is misleading when `origin/main` is stale and local `main` carries interleaved sibling-feature commits — it pollutes the review diff with unrelated work. Prefer `<parent-of-first-feature-commit>..HEAD` intersected with the plan's `scope` globs as the feature boundary, and don't rely on `--grep="feat(<slug>)"` alone to enumerate the diff: feature-related commits are sometimes tagged `test(<area>)`/`docs(...)`. Hand the reviewer the scope-glob'd diff, not the raw `BASE..HEAD`.
+
 ## Specialized agents
 
 This project's agents live in `.claude/agents/`. Under the checkpoint workflow, you typically never invoke an agent directly — the slash commands do it for you.
