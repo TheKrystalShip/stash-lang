@@ -95,17 +95,42 @@ public sealed class WhoamiResponse
 /// </summary>
 public sealed class TokenCreateRequest
 {
-    /// <summary>The permission scope for the new token (e.g. <c>"publish"</c>, <c>"readonly"</c>).</summary>
+    /// <summary>
+    /// The coarse capability ceiling for the new token: <c>"read"</c>, <c>"publish"</c>, or <c>"admin"</c>.
+    /// Canonical field. <c>scope</c> is accepted as a backwards-compatible alias when <c>ceiling</c> is absent.
+    /// </summary>
+    [JsonPropertyName("ceiling")]
+    public string? Ceiling { get; set; }
+
+    /// <summary>
+    /// Backwards-compatible alias for <c>ceiling</c>. Accepted when <c>ceiling</c> is absent.
+    /// The permission scope for the new token (e.g. <c>"publish"</c>, <c>"read"</c>).
+    /// </summary>
     [JsonPropertyName("scope")]
     public string? Scope { get; set; }
+
+    /// <summary>An optional human-readable name or description to identify the token's intended use.</summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
 
     /// <summary>An optional human-readable description to identify the token's intended use.</summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
 
-    /// <summary>Optional custom expiry for the token, e.g. "30d", "12h". Defaults to the global <c>auth.apiTokenExpiry</c> when omitted.</summary>
+    /// <summary>
+    /// Required token lifetime, e.g. "30d", "12h", "90m". Must be present; absent or invalid
+    /// values are rejected 400. Must not exceed <c>Security.MaxTokenLifetime</c>.
+    /// </summary>
     [JsonPropertyName("expiresIn")]
     public string? ExpiresIn { get; set; }
+
+    /// <summary>
+    /// Fine-grained capability rules (deferred to a follow-up feature). If this field is
+    /// present with any non-null value in the request body, <c>POST /auth/tokens</c> returns
+    /// <c>400</c> to prevent the deferred shape from silently leaking in.
+    /// </summary>
+    [JsonPropertyName("capabilities")]
+    public object? Capabilities { get; set; }
 }
 
 /// <summary>

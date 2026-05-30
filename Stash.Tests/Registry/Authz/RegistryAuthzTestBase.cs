@@ -170,7 +170,27 @@ public abstract class RegistryAuthzTestBase
         loginResp.EnsureSuccessStatusCode();
         var loginBody = await loginResp.Content.ReadAsStringAsync();
         using var loginDoc = JsonDocument.Parse(loginBody);
-        return loginDoc.RootElement.GetProperty("accessToken").GetString()!;
+        string loginToken = loginDoc.RootElement.GetProperty("accessToken").GetString()!;
+
+        // Login now issues a read-ceiling token (least-privilege default, P5).
+        // Callers that need to publish (all P3/P4 write tests) need a publish-ceiling token.
+        // Issue one explicitly so existing tests continue to work unchanged.
+        var savedAuth = client.DefaultRequestHeaders.Authorization;
+        SetBearer(client, loginToken);
+        var tokenResp = await client.PostAsync("/api/v1/auth/tokens",
+            Json(new { ceiling = "publish", expiresIn = "1d" }));
+        client.DefaultRequestHeaders.Authorization = savedAuth;
+
+        if (tokenResp.IsSuccessStatusCode)
+        {
+            var tokenBody = await tokenResp.Content.ReadAsStringAsync();
+            using var tokenDoc = JsonDocument.Parse(tokenBody);
+            if (tokenDoc.RootElement.TryGetProperty("token", out var tok) && tok.GetString() != null)
+                return tok.GetString()!;
+        }
+
+        // Fallback: return the login (read-ceiling) token — only for tests that do not write.
+        return loginToken;
     }
 
     /// <summary>

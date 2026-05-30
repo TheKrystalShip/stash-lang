@@ -30,9 +30,10 @@ namespace Stash.Registry.Controllers;
 /// <para>
 /// Handles user login, self-service registration, and JWT token lifecycle. The
 /// <c>login</c> and <c>register</c> endpoints are anonymous; all token management
-/// endpoints require a valid JWT. On login a <c>publish</c>-scoped token is issued
-/// automatically; additional tokens with <c>read</c>, <c>publish</c>, or <c>admin</c>
-/// scope can be created via <c>POST /api/v1/auth/tokens</c>.
+/// endpoints require a valid JWT. On login a <c>read</c>-ceiling token is issued
+/// by default (least-privilege); callers who need to publish must explicitly issue
+/// a <c>publish</c> or <c>admin</c>-ceiling token via <c>POST /api/v1/auth/tokens</c>.
+/// Token lifetimes are capped server-side by <c>Security.MaxTokenLifetime</c>.
 /// </para>
 /// </remarks>
 [ApiController]
@@ -74,7 +75,7 @@ public class AuthController : ControllerBase
     /// Authenticates a user with username and password and returns a JWT.
     /// </summary>
     /// <remarks>
-    /// Reads a <see cref="LoginRequest"/> JSON body. On success a <c>publish</c>-scoped
+    /// Reads a <see cref="LoginRequest"/> JSON body. On success a <c>read</c>-ceiling
     /// JWT is issued and persisted as a <see cref="TokenRecord"/>. No authentication
     /// is required to call this endpoint.
     /// </remarks>
@@ -114,17 +115,18 @@ public class AuthController : ControllerBase
         string role = user?.Role ?? UserRoles.User;
         string? machineId = Request.Headers["X-Machine-Id"].FirstOrDefault();
 
-        // Create short-lived access token
+        // Create short-lived access token — read-ceiling by default (least privilege).
+        // Callers who need publish must issue a separate token via POST /auth/tokens.
         string accessTokenId = Guid.NewGuid().ToString();
         DateTime accessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
-        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Publish, accessExpiresAt, accessTokenId, machineId);
+        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Read, accessExpiresAt, accessTokenId, machineId);
 
         await _db.CreateTokenAsync(new TokenRecord
         {
             Id = accessTokenId,
             Username = username,
             TokenHash = "",
-            Scope = TokenScopes.Publish,
+            Scope = TokenScopes.Read,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = accessExpiresAt
         });
@@ -146,7 +148,7 @@ public class AuthController : ControllerBase
                 AccessTokenId = accessTokenId,
                 FamilyId = accessTokenId,
                 MachineId = machineId,
-                Scope = TokenScopes.Publish,
+                Scope = TokenScopes.Read,
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = refreshExpiresAt.Value
             });
@@ -291,16 +293,21 @@ public class AuthController : ControllerBase
     /// Creates a new API token for the authenticated user.
     /// </summary>
     /// <remarks>
-    /// Reads a <see cref="TokenCreateRequest"/> JSON body. The <c>scope</c> field must be
-    /// <c>read</c>, <c>publish</c>, or <c>admin</c>; only users with the <c>admin</c> role
-    /// may request an admin-scoped token. The resulting JWT is persisted as a
-    /// <see cref="TokenRecord"/> and returned once — it cannot be retrieved again.
+    /// Reads a <see cref="TokenCreateRequest"/> JSON body. The <c>ceiling</c> field (or its
+    /// backwards-compatible alias <c>scope</c>) must be <c>read</c>, <c>publish</c>, or
+    /// <c>admin</c>; only users with the <c>admin</c> role may request an admin-ceiling token.
+    /// The <c>expires_in</c> field is mandatory and capped by <c>Security.MaxTokenLifetime</c>.
+    /// The resulting JWT is persisted as a <see cref="TokenRecord"/> and returned once — it
+    /// cannot be retrieved again. Supplying a <c>capabilities</c> field is rejected 400
+    /// (fine-grained capability rules are deferred to a future feature).
     /// </remarks>
     /// <returns>
     /// <c>201</c> with a <see cref="TokenCreateResponse"/> containing the JWT and token ID,
-    /// <c>400</c> if the body is invalid or the scope is unrecognised,
+    /// <c>400</c> if the body is invalid, the ceiling is unrecognised, <c>expires_in</c> is
+    /// absent/invalid, <c>expires_in</c> exceeds <c>MaxTokenLifetime</c>, or a <c>capabilities</c>
+    /// field is supplied,
     /// <c>401</c> if unauthenticated,
-    /// or <c>403</c> if a non-admin requests an admin-scoped token.
+    /// or <c>403</c> if a non-admin requests an admin-ceiling token.
     /// </returns>
     [HttpPost("tokens")]
     [Authorize]
@@ -319,48 +326,73 @@ public class AuthController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
-        string scope = string.IsNullOrEmpty(body?.Scope) ? TokenScopes.Publish : body.Scope;
+        // Guard against the deferred fine-grained token capability shape leaking in.
+        if (body?.Capabilities != null)
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "capabilities_not_supported",
+                Message = "Fine-grained token capabilities are not supported in this version. Remove the 'capabilities' field from your request."
+            });
+        }
+
+        // Resolve ceiling: canonical field is 'ceiling'; 'scope' is a backwards-compatible alias.
+        string? rawCeiling = body?.Ceiling ?? body?.Scope;
+        string scope = string.IsNullOrEmpty(rawCeiling) ? TokenScopes.Publish : rawCeiling;
 
         if (!string.Equals(scope, TokenScopes.Read, StringComparison.Ordinal)
             && !string.Equals(scope, TokenScopes.Publish, StringComparison.Ordinal)
             && !string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal))
         {
-            return BadRequest(new ErrorResponse { Error = "Scope must be 'read', 'publish', or 'admin'." });
+            return BadRequest(new ErrorResponse { Error = "ceiling must be 'read', 'publish', or 'admin'." });
         }
 
         if (string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal)
             && !string.Equals(role, UserRoles.Admin, StringComparison.Ordinal))
         {
-            return StatusCode(403, new ErrorResponse { Error = "Only admin users can create admin-scoped tokens." });
+            return StatusCode(403, new ErrorResponse { Error = "Only admin users can create admin-ceiling tokens." });
         }
 
-        string expirySpec = string.IsNullOrEmpty(body?.ExpiresIn) ? _config.Auth.ApiTokenExpiry : body!.ExpiresIn!;
+        // expires_in is mandatory — absent or blank is a 400.
+        if (string.IsNullOrWhiteSpace(body?.ExpiresIn))
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "expires_in_required",
+                Message = "expires_in is required. Use formats like '30d', '12h', or '90m'."
+            });
+        }
+
         DateTime expiresAt;
         try
         {
-            expiresAt = AuthHelper.ParseTokenExpiry(expirySpec);
+            expiresAt = AuthHelper.ParseTokenExpiry(body.ExpiresIn);
         }
-        catch (Exception) when (expirySpec != _config.Auth.ApiTokenExpiry)
+        catch (Exception)
         {
-            return BadRequest(new ErrorResponse { Error = $"Invalid expiresIn format: '{body?.ExpiresIn}'. Use formats like '30d', '12h', or '90m'." });
+            return BadRequest(new ErrorResponse { Error = $"Invalid expires_in format: '{body.ExpiresIn}'. Use formats like '30d', '12h', or '90m'." });
         }
 
         TimeSpan duration = expiresAt - DateTime.UtcNow;
 
-        if (!string.IsNullOrEmpty(body?.ExpiresIn))
+        if (duration < TimeSpan.FromHours(1))
         {
-            if (duration < TimeSpan.FromHours(1))
-            {
-                return BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour" });
-            }
+            return BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour." });
+        }
 
-            if (duration > TimeSpan.FromDays(365))
+        TimeSpan maxLifetime = _config.Security.MaxTokenLifetime;
+        if (duration > maxLifetime)
+        {
+            string capDisplay = $"{(int)maxLifetime.TotalDays}d";
+            return BadRequest(new ErrorResponse
             {
-                return BadRequest(new ErrorResponse { Error = "Token expiry must not exceed 365 days" });
-            }
+                Error = "TokenLifetimeExceeded",
+                Message = $"Requested lifetime exceeds the server's maximum token lifetime of {capDisplay}."
+            });
         }
 
         string tokenId = Guid.NewGuid().ToString();
+        string description = body.Name ?? body.Description ?? "";
         string jwt = _jwtService.CreateToken(username, role, scope, expiresAt, tokenId);
 
         await _db.CreateTokenAsync(new TokenRecord
@@ -371,13 +403,66 @@ public class AuthController : ControllerBase
             Scope = scope,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = expiresAt,
-            Description = body?.Description
+            Description = string.IsNullOrEmpty(description) ? null : description
         });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogTokenCreateAsync(username, ip);
 
-        return StatusCode(201, new TokenCreateResponse { Token = jwt, TokenId = tokenId, Scope = scope, ExpiresAt = expiresAt, Description = body?.Description });
+        return StatusCode(201, new TokenCreateResponse
+        {
+            Token = jwt,
+            TokenId = tokenId,
+            Scope = scope,
+            ExpiresAt = expiresAt,
+            Description = string.IsNullOrEmpty(description) ? null : description
+        });
+    }
+
+    /// <summary>
+    /// Revokes an API token by ID (soft-revocation via deletion from the token store).
+    /// </summary>
+    /// <param name="id">The token ID to revoke.</param>
+    /// <remarks>
+    /// A user may revoke their own tokens. Admin users may revoke any token. After revocation,
+    /// JWTs bearing the revoked JTI are rejected 401 at the authentication layer (before the PDP)
+    /// on every endpoint, including <c>[PublicEndpoint]</c> ones. The revocation is recorded in
+    /// the audit log.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="SuccessResponse"/> on success,
+    /// <c>401</c> if unauthenticated,
+    /// <c>403</c> if the caller does not own the token and is not an admin,
+    /// or <c>404</c> if the token does not exist.
+    /// </returns>
+    [HttpPost("tokens/{id}/revoke")]
+    [Authorize]
+    public async Task<IActionResult> RevokeToken(string id)
+    {
+        string username = User.Identity!.Name!;
+        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+
+        TokenRecord? record = await _db.GetTokenByIdAsync(id);
+
+        if (record == null)
+        {
+            return NotFound(new ErrorResponse { Error = "Token not found." });
+        }
+
+        bool isOwner = string.Equals(record.Username, username, StringComparison.Ordinal);
+        bool isAdmin = string.Equals(role, UserRoles.Admin, StringComparison.Ordinal);
+
+        if (!isOwner && !isAdmin)
+        {
+            return StatusCode(403, new ErrorResponse { Error = "You do not have permission to revoke this token." });
+        }
+
+        await _db.DeleteTokenAsync(record.Id);
+
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _auditService.LogTokenRevokeAsync(username, record.Id, ip);
+
+        return Ok(new SuccessResponse());
     }
 
     /// <summary>

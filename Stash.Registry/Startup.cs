@@ -91,6 +91,7 @@ public sealed class Startup
                         string? jti = context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Jti);
                         if (string.IsNullOrEmpty(jti))
                         {
+                            context.HttpContext.Items["TokenRevoked"] = true;
                             context.Fail("Token is missing jti claim.");
                             return;
                         }
@@ -99,6 +100,15 @@ public sealed class Startup
                         var token = await db.GetTokenByIdAsync(jti);
                         if (token == null)
                         {
+                            // Mark the request as carrying a revoked token so the uniform gate
+                            // (middleware between UseAuthentication and UseAuthorization) can
+                            // reject it with 401 even on [PublicEndpoint] routes.
+                            context.HttpContext.Items["TokenRevoked"] = true;
+                            // Stash the principal's name for the audit entry — context.User
+                            // is not yet set when OnTokenValidated fires.
+                            string? revokedPrincipal = context.Principal?.FindFirstValue(ClaimTypes.Name)
+                                ?? context.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sub);
+                            context.HttpContext.Items["TokenRevokedPrincipal"] = revokedPrincipal;
                             context.Fail("Token has been revoked.");
                             return;
                         }
@@ -260,6 +270,48 @@ public sealed class Startup
 
         app.UseRouting();
         app.UseAuthentication();
+
+        // Uniform revocation gate (D22): if OnTokenValidated set the "TokenRevoked" flag,
+        // reject the request with 401 before it reaches any endpoint — including [PublicEndpoint]
+        // routes. This ensures a presented-but-revoked token is always denied at the auth layer
+        // (before the PDP), surfacing as TokenRevoked in the audit log.
+        app.Use(async (context, next) =>
+        {
+            if (context.Items.ContainsKey("TokenRevoked"))
+            {
+                // Audit the revoked-token presentation before terminating.
+                // Use the principal name stashed during OnTokenValidated (context.User is not
+                // yet populated when the JWT bearer event fires and calls context.Fail()).
+                string? principalId = context.Items.TryGetValue("TokenRevokedPrincipal", out var p)
+                    ? p as string
+                    : context.User?.Identity?.Name;
+                if (!string.IsNullOrEmpty(principalId))
+                {
+                    try
+                    {
+                        var auditService = context.RequestServices.GetRequiredService<AuditService>();
+                        string ip = context.Connection.RemoteIpAddress?.ToString() ?? "";
+                        await auditService.LogAuthzDenyAsync(
+                            "token.revoked",
+                            principalId,
+                            context.Request.Path.Value ?? "",
+                            Auth.Authorization.AuthzDenyReason.TokenRevoked,
+                            ip);
+                    }
+                    catch
+                    {
+                        // Best-effort audit — never let audit failure block the 401.
+                    }
+                }
+
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+                await context.Response.WriteAsync("{\"error\":\"TokenRevoked\",\"message\":\"The presented token has been revoked.\"}");
+                return;
+            }
+            await next();
+        });
+
         app.UseAuthorization();
 
         app.MapGet("/", () => Results.Json(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }));

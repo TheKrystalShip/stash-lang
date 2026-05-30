@@ -16,6 +16,14 @@ public sealed class SecurityConfig
     /// </summary>
     public ScopeOwnershipPolicyKind ScopeOwnershipPolicy { get; set; } = ScopeOwnershipPolicyKind.Claim;
 
+    /// <summary>
+    /// Server-enforced upper bound on how long an API token may live.
+    /// <c>POST /api/v1/auth/tokens</c> rejects any <c>expires_in</c> that exceeds this value.
+    /// Defaults to 90 days. Corresponds to <c>"MaxTokenLifetime": "90.00:00:00"</c> in
+    /// appsettings.json (ISO 8601 duration or .NET TimeSpan format).
+    /// </summary>
+    public TimeSpan MaxTokenLifetime { get; set; } = new TimeSpan(90, 0, 0, 0);
+
     public long MaxPackageSizeBytes
     {
         get
