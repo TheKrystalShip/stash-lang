@@ -36,7 +36,7 @@ namespace Stash.Tests.Registry.Authz;
 ///     controller carries <c>[Authorize]</c> but no dispatch attribute, directly proving the
 ///     scanner catches the gap that <c>AuthzCoverageMetaTests</c> does not.</item>
 ///   <item><b>Imperative-pin</b> — the exact set of <c>[ImperativeAuthz]</c>-bearing
-///     production actions equals <c>{PublishPackage, DeleteOrg, ClaimScope, DeleteScope}</c>.
+///     production actions equals <c>{PublishPackage, ClaimScope, DeleteScope}</c>.
 ///     Adding or removing the marker requires updating this assertion, forcing reviewer
 ///     attention on every future exemption.</item>
 /// </list>
@@ -66,7 +66,6 @@ public sealed class AuthzDispatchCoverageMetaTests
     private static readonly IReadOnlySet<string> PinnedImperativeActions = new HashSet<string>(StringComparer.Ordinal)
     {
         "PackagesController.PublishPackage",
-        "OrganizationsController.DeleteOrg",
         "ScopesController.ClaimScope",
         "ScopesController.DeleteScope",
     };

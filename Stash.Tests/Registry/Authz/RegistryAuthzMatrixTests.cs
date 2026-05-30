@@ -1056,6 +1056,70 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // 15. DeleteOrg deny audit-id conformance (registry-authz-pdp-completion P1)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Pins that a non-owner authenticated DELETE /api/v1/orgs/{org} returns
+    /// 403 OrgMembershipRequired AND writes exactly one deny audit entry whose
+    /// resource_id (stored in <c>Package</c>) equals the bare org name — no prefix.
+    ///
+    /// This row proves the mechanical fold of DeleteOrg into [RegistryAuthorize] was
+    /// a zero-behavior-delta change: the filter's ResourceIdForAudit(OrgResource)
+    /// emits org.OrgName, which matches the string the controller previously wrote inline.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(AuthzMatrixData.DeleteOrgDenyAuditIdRows), MemberType = typeof(AuthzMatrixData))]
+    public async Task DeleteOrgDenyAuditId_Matrix(string tag, string scenario)
+    {
+        _ = tag;
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string aliceUser = U(tag + "-alice");
+        string bobUser = U(tag + "-bob");
+
+        switch (scenario)
+        {
+            case "non_owner_deny_audit_id":
+            {
+                string aliceToken = await RegisterAndGetTokenAsync(client, aliceUser);
+                string bobToken = await RegisterAndGetTokenAsync(client, bobUser);
+
+                // Alice creates the org.
+                SetBearer(client, aliceToken);
+                string orgName = U(tag + "-org");
+                var createResp = await client.PostAsync("/api/v1/orgs",
+                    Json(new { name = orgName }));
+                Assert.True(createResp.IsSuccessStatusCode,
+                    $"Org create failed: {await createResp.Content.ReadAsStringAsync()}");
+
+                // Bob (non-owner) attempts to delete — must receive 403 OrgMembershipRequired.
+                SetBearer(client, bobToken);
+                var deleteResp = await client.DeleteAsync($"/api/v1/orgs/{orgName}");
+                Assert.Equal(System.Net.HttpStatusCode.Forbidden, deleteResp.StatusCode);
+                string body = await deleteResp.Content.ReadAsStringAsync();
+                Assert.Contains("OrgMembershipRequired", body);
+
+                // Exactly one deny audit entry, action="DeleteOrg", resource_id==orgName (bare).
+                var entries = await GetAuditEntriesAsync(factory);
+                var denyEntries = entries
+                    .Where(e =>
+                        e.Action == "DeleteOrg" &&
+                        e.Decision == "deny" &&
+                        e.User == bobUser)
+                    .ToList();
+                Assert.Single(denyEntries);
+                Assert.Equal(orgName, denyEntries[0].Package);
+                return;
+            }
+            default:
+                throw new ArgumentException($"Unknown DeleteOrg audit-id scenario: {scenario}");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Private helpers
     // ═══════════════════════════════════════════════════════════════════════════
 

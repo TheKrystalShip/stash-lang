@@ -221,6 +221,19 @@ public static class AuthzMatrixData
         yield return new object[] { "jti.revoked_token.any_endpoint.deny", "revoked_jti" };
     }
 
+    // ── DeleteOrg deny audit-id conformance rows ──────────────────────────────
+    // Pins that the filter writes the bare {org} string (no prefix) as resource_id
+    // when an authenticated non-owner attempts DELETE /api/v1/orgs/{org}.
+    // This row locks in that the mechanical fold of DeleteOrg did NOT change the
+    // audit resource_id shape (zero-behavior-delta confirmation).
+
+    public static IEnumerable<object[]> DeleteOrgDenyAuditIdRows()
+    {
+        // Non-owner authenticated DELETE /orgs/{org} → 403 OrgMembershipRequired,
+        // one deny audit entry with resource_id == orgName (bare, no @ prefix).
+        yield return new object[] { "delete_org.deny.audit_id", "non_owner_deny_audit_id" };
+    }
+
     // ── Version-deny body-shape conformance rows ──────────────────────────────
     // Pins the exact Error string AND the absence of Message for GetVersion /
     // DownloadVersion visibility-hidden denials. Guards F01 (version-scoped message)

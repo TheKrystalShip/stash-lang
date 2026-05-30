@@ -8,7 +8,6 @@ using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
-using Stash.Registry.Services;
 
 namespace Stash.Registry.Controllers;
 
@@ -28,23 +27,13 @@ namespace Stash.Registry.Controllers;
 public class OrganizationsController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
-    private readonly IRegistryAuthorizer _authorizer;
-    private readonly AuditService _auditService;
-    private readonly IRegistryAuthzPrincipalFactory _principalFactory;
 
     /// <summary>
-    /// Initialises the controller with the registry database, authorizer, and audit service.
+    /// Initialises the controller with the registry database.
     /// </summary>
-    public OrganizationsController(
-        IRegistryDatabase db,
-        IRegistryAuthorizer authorizer,
-        AuditService auditService,
-        IRegistryAuthzPrincipalFactory principalFactory)
+    public OrganizationsController(IRegistryDatabase db)
     {
         _db = db;
-        _authorizer = authorizer;
-        _auditService = auditService;
-        _principalFactory = principalFactory;
     }
 
     /// <summary>
@@ -138,20 +127,10 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <returns><c>204</c> on success, <c>409</c> if the org still owns resources, <c>404</c> if not found.</returns>
     [Authorize]
-    [ImperativeAuthz("uses AddOrgMember authz action (known wrong-action bug — DeleteOrg should have its own PDP action); corrected in registry-authz-pdp-completion")]
+    [RegistryAuthorize(RegistryAction.DeleteOrg)]
     [HttpDelete("{org}")]
     public async Task<IActionResult> DeleteOrg(string org)
     {
-        var principal = _principalFactory.Build(User);
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
-        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.DeleteOrg, new OrgResource(org));
-        if (!decision.Allowed)
-        {
-            if (principal is UserPrincipal up)
-                await _auditService.LogAuthzDenyAsync("DeleteOrg", up.Username, org, decision.Reason, ip);
-            return AuthzDenyResponse.For(decision);
-        }
-
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
