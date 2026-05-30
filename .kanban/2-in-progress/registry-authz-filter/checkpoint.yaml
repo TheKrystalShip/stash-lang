@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-filter
 current: null
-updated: '2026-05-30T20:08:13Z'
+updated: '2026-05-30T20:35:37Z'
 phases:
   P1:
     status: done
@@ -13,13 +13,14 @@ phases:
     notes: 'Filter infra + pilot pair: RegistryAuthorizeAttribute/Filter/PrincipalFactory/DenyResponse/ResourceResolver,
       Whoami+CreateOrg converted, 107 matrix+meta tests green'
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: f6d4debc8550791c09b7f152311d0ecd9bed1e8c
+    verified: true
+    started: '2026-05-30T20:16:01Z'
+    completed: '2026-05-30T20:35:37Z'
+    attempts: 1
+    notes: Converted 28 clean endpoints across 6 controllers to [RegistryAuthorize]; deleted all per-controller
+      BuildPrincipal helpers; deleted DenyReasonToStatus; added 3 audit mutation test rows for CreateOrg/AddOrgMember/VerifyScope
   P3:
     status: pending
     commit: null
