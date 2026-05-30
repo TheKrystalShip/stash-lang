@@ -18,7 +18,8 @@ The findings below are real gaps against the brief, not stylistic complaints. F0
 
 ## F01 — [HIGH] AuthController never calls the PDP — entire token surface bypasses `IRegistryAuthorizer`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** dcf590a
 **Files:** `Stash.Registry/Controllers/AuthController.cs:251` (Whoami), `Stash.Registry/Controllers/AuthController.cs:268` (ListTokens), `Stash.Registry/Controllers/AuthController.cs:312` (CreateToken), `Stash.Registry/Controllers/AuthController.cs:438` (RevokeToken), `Stash.Registry/Controllers/AuthController.cs:482` (DeleteToken); cross-reference dead ceiling rows at `Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs:105-107,127`
 **Phase:** P5 (cross-cutting against D1)
 **Commit:** 5e7ec13
@@ -59,7 +60,8 @@ dotnet test --filter "FullyQualifiedName~LoginReadDefaultTests|FullyQualifiedNam
 
 ## F02 — [MEDIUM] `POST /auth/tokens` accepts `scope` as a backwards-compat alias for `ceiling` — direct violation of D11
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** dcf590a
 **Files:** `Stash.Registry/Controllers/AuthController.cs:340`, `Stash.Registry/Contracts/AuthContracts.cs` (the `Scope` field on `TokenCreateRequest`), `docs/Registry — Package Registry.md:332`
 **Phase:** P5
 **Commit:** 5e7ec13
