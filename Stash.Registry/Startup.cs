@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Stash.Registry.Auth;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Bootstrap;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
@@ -170,6 +171,10 @@ public sealed class Startup
         services.AddScoped<PackageService>();
         services.AddScoped<AuditService>();
         services.AddScoped<DeprecationService>();
+
+        // P1: PDP core — register as scoped so they share the per-request DbContext.
+        services.AddScoped<IPermissionResolver, PermissionResolver>();
+        services.AddScoped<IRegistryAuthorizer, RegistryAuthorizer>();
 
         services.AddOpenApi();
     }
