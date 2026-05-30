@@ -217,7 +217,7 @@ public abstract class RegistryAuthzTestBase
         var savedAuth = client.DefaultRequestHeaders.Authorization;
         SetBearer(client, publishToken);
         var issueResp = await client.PostAsync("/api/v1/auth/tokens",
-            Json(new { scope = "admin", expiresIn = "1d" }));
+            Json(new { ceiling = "admin", expiresIn = "1d" }));
 
         if (issueResp.IsSuccessStatusCode)
         {

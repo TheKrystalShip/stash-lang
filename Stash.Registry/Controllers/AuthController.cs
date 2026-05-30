@@ -13,11 +13,12 @@ using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Stash.Common;
 using Stash.Registry.Auth;
+using Stash.Registry.Auth.Authorization;
+using static Stash.Registry.Auth.TokenCeilingConverter;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
-using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Endpoints;
 using Stash.Registry.Services;
 
@@ -46,6 +47,7 @@ public class AuthController : ControllerBase
     private readonly AuditService _auditService;
     private readonly RegistryConfig _config;
     private readonly ILogger<AuthController> _logger;
+    private readonly IRegistryAuthorizer _authorizer;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -55,13 +57,15 @@ public class AuthController : ControllerBase
     /// <param name="authProvider">Provider that validates credentials and creates user accounts.</param>
     /// <param name="auditService">Service that records security-relevant events.</param>
     /// <param name="config">Registry-wide configuration, including token expiry settings.</param>
+    /// <param name="authorizer">Policy Decision Point for all authorization decisions.</param>
     public AuthController(
         IRegistryDatabase db,
         JwtTokenService jwtService,
         IAuthProvider authProvider,
         AuditService auditService,
         RegistryConfig config,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        IRegistryAuthorizer authorizer)
     {
         _db = db;
         _jwtService = jwtService;
@@ -69,6 +73,22 @@ public class AuthController : ControllerBase
         _auditService = auditService;
         _config = config;
         _logger = logger;
+        _authorizer = authorizer;
+    }
+
+    // ── Helper: build Principal ───────────────────────────────────────────────
+
+    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return new AnonymousPrincipal();
+
+        string username = user.Identity!.Name!;
+        bool isAdmin = user.IsInRole(UserRoles.Admin);
+        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
+        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
+        string tokenId = user.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ?? "";
+        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
@@ -252,6 +272,17 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> Whoami()
     {
+        var principal = BuildPrincipal(User);
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.Whoami, new PrincipalSelfResource());
+        if (!decision.Allowed)
+        {
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("Whoami", up.Username, "", decision.Reason, ip);
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
         string username = User.Identity!.Name!;
         string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
 
@@ -269,6 +300,17 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> ListTokens()
     {
+        var principal = BuildPrincipal(User);
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ListOwnTokens, new PrincipalSelfResource());
+        if (!decision.Allowed)
+        {
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("ListOwnTokens", up.Username, "", decision.Reason, ip);
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
         string username = User.Identity!.Name!;
 
         List<TokenRecord> tokens = await _db.GetUserTokensAsync(username);
@@ -293,19 +335,19 @@ public class AuthController : ControllerBase
     /// Creates a new API token for the authenticated user.
     /// </summary>
     /// <remarks>
-    /// Reads a <see cref="TokenCreateRequest"/> JSON body. The <c>ceiling</c> field (or its
-    /// backwards-compatible alias <c>scope</c>) must be <c>read</c>, <c>publish</c>, or
-    /// <c>admin</c>; only users with the <c>admin</c> role may request an admin-ceiling token.
-    /// The <c>expires_in</c> field is mandatory and capped by <c>Security.MaxTokenLifetime</c>.
-    /// The resulting JWT is persisted as a <see cref="TokenRecord"/> and returned once — it
-    /// cannot be retrieved again. Supplying a <c>capabilities</c> field is rejected 400
-    /// (fine-grained capability rules are deferred to a future feature).
+    /// Reads a <see cref="TokenCreateRequest"/> JSON body. The <c>ceiling</c> field must be
+    /// <c>read</c>, <c>publish</c>, or <c>admin</c>; only users with the <c>admin</c> role may
+    /// request an admin-ceiling token. The <c>expires_in</c> field is mandatory and capped by
+    /// <c>Security.MaxTokenLifetime</c>. The resulting JWT is persisted as a
+    /// <see cref="TokenRecord"/> and returned once — it cannot be retrieved again. Supplying a
+    /// <c>capabilities</c> field is rejected 400 (fine-grained capability rules are deferred to
+    /// a future feature).
     /// </remarks>
     /// <returns>
     /// <c>201</c> with a <see cref="TokenCreateResponse"/> containing the JWT and token ID,
-    /// <c>400</c> if the body is invalid, the ceiling is unrecognised, <c>expires_in</c> is
-    /// absent/invalid, <c>expires_in</c> exceeds <c>MaxTokenLifetime</c>, or a <c>capabilities</c>
-    /// field is supplied,
+    /// <c>400</c> if the body is invalid, the ceiling is absent/unrecognised, <c>expires_in</c>
+    /// is absent/invalid, <c>expires_in</c> exceeds <c>MaxTokenLifetime</c>, or a
+    /// <c>capabilities</c> field is supplied,
     /// <c>401</c> if unauthenticated,
     /// or <c>403</c> if a non-admin requests an admin-ceiling token.
     /// </returns>
@@ -313,6 +355,17 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> CreateToken()
     {
+        var principal = BuildPrincipal(User);
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        var pdpDecision = await _authorizer.AuthorizeAsync(principal, RegistryAction.IssueToken, new PrincipalSelfResource());
+        if (!pdpDecision.Allowed)
+        {
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("IssueToken", up.Username, "", pdpDecision.Reason, ip);
+            int pdpStatus = pdpDecision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(pdpStatus, new ErrorResponse { Error = pdpDecision.Reason.ToString(), Message = pdpDecision.Detail });
+        }
+
         string username = User.Identity!.Name!;
         string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
 
@@ -336,9 +389,18 @@ public class AuthController : ControllerBase
             });
         }
 
-        // Resolve ceiling: canonical field is 'ceiling'; 'scope' is a backwards-compatible alias.
-        string? rawCeiling = body?.Ceiling ?? body?.Scope;
-        string scope = string.IsNullOrEmpty(rawCeiling) ? TokenScopes.Publish : rawCeiling;
+        // ceiling is the canonical, mandatory field (no alias, no default — D11 hard clean break).
+        string? rawCeiling = body?.Ceiling;
+        if (string.IsNullOrEmpty(rawCeiling))
+        {
+            return BadRequest(new ErrorResponse
+            {
+                Error = "ceiling_required",
+                Message = "ceiling is required. Set it to 'read', 'publish', or 'admin'."
+            });
+        }
+
+        string scope = rawCeiling;
 
         if (!string.Equals(scope, TokenScopes.Read, StringComparison.Ordinal)
             && !string.Equals(scope, TokenScopes.Publish, StringComparison.Ordinal)
@@ -406,7 +468,6 @@ public class AuthController : ControllerBase
             Description = string.IsNullOrEmpty(description) ? null : description
         });
 
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogTokenCreateAsync(username, ip);
 
         return StatusCode(201, new TokenCreateResponse
@@ -439,27 +500,27 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> RevokeToken(string id)
     {
-        string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        var principal = BuildPrincipal(User);
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
-
         if (record == null)
         {
             return NotFound(new ErrorResponse { Error = "Token not found." });
         }
 
-        bool isOwner = string.Equals(record.Username, username, StringComparison.Ordinal);
-        bool isAdmin = string.Equals(role, UserRoles.Admin, StringComparison.Ordinal);
-
-        if (!isOwner && !isAdmin)
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RevokeOwnToken, new TokenResource(id));
+        if (!decision.Allowed)
         {
-            return StatusCode(403, new ErrorResponse { Error = "You do not have permission to revoke this token." });
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("RevokeOwnToken", up.Username, id, decision.Reason, ip);
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
+        string username = User.Identity!.Name!;
         await _db.DeleteTokenAsync(record.Id);
 
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogTokenRevokeAsync(username, record.Id, ip);
 
         return Ok(new SuccessResponse());
@@ -483,32 +544,27 @@ public class AuthController : ControllerBase
     [Authorize]
     public async Task<IActionResult> DeleteToken(string id)
     {
-        string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        var principal = BuildPrincipal(User);
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
-        if (record == null)
-        {
-            var userTokens = await _db.GetUserTokensAsync(username);
-            record = userTokens.Find(t => string.Equals(t.Id, id, StringComparison.Ordinal));
-        }
-
         if (record == null)
         {
             return NotFound(new ErrorResponse { Error = "Token not found." });
         }
 
-        bool isOwner = string.Equals(record.Username, username, StringComparison.Ordinal);
-        bool isAdmin = string.Equals(role, UserRoles.Admin, StringComparison.Ordinal);
-
-        if (!isOwner && !isAdmin)
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.RevokeOwnToken, new TokenResource(id));
+        if (!decision.Allowed)
         {
-            return StatusCode(403, new ErrorResponse { Error = "You do not have permission to delete this token." });
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("RevokeOwnToken", up.Username, id, decision.Reason, ip);
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
+        string username = User.Identity!.Name!;
         await _db.DeleteTokenAsync(record.Id);
 
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogTokenRevokeAsync(username, record.Id, ip);
 
         return Ok(new SuccessResponse());

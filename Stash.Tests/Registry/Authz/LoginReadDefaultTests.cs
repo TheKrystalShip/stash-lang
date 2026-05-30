@@ -168,7 +168,7 @@ public sealed class LoginReadDefaultTests : RegistryAuthzTestBase
         Assert.Contains("capabilities", body);
     }
 
-    // ── POST /auth/tokens accepts ceiling alias as well as scope alias ────────
+    // ── POST /auth/tokens with ceiling field issues token ────────────────────
 
     [Fact]
     public async Task CreateToken_WithCeilingField_IssuesToken()
@@ -176,7 +176,7 @@ public sealed class LoginReadDefaultTests : RegistryAuthzTestBase
         await using var ctx = RegistryAuthzFactory.Create();
         using var client = ctx.Factory.CreateClient();
 
-        // Get a raw read-ceiling login token for the authenticated call.
+        // Get a raw read-ceiling login token for the authenticated call (D6 default).
         await client.PostAsync("/api/v1/auth/register",
             Json(new { username = "alice-lrd6", password = "Password123!" }));
         var loginResp = await client.PostAsync("/api/v1/auth/login",
@@ -199,5 +199,26 @@ public sealed class LoginReadDefaultTests : RegistryAuthzTestBase
         var jwtToken = handler.ReadJwtToken(publishJwt);
         string? scope = jwtToken.Claims.FirstOrDefault(c => c.Type == "token_scope")?.Value;
         Assert.Equal("publish", scope);
+    }
+
+    // ── POST /auth/tokens with scope field (no ceiling) is rejected 400 ──────
+    // Regression for D11: the old backwards-compat alias has been removed.
+
+    [Fact]
+    public async Task CreateToken_WithScopeFieldOnly_Returns400CeilingRequired()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client = ctx.Factory.CreateClient();
+
+        string token = await RegisterAndGetTokenAsync(client, "alice-lrd7");
+        SetBearer(client, token);
+
+        // Send 'scope' only (no 'ceiling') — must be rejected 400.
+        var resp = await client.PostAsync("/api/v1/auth/tokens",
+            Json(new { scope = "publish", expiresIn = "30d" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("ceiling", body);
     }
 }

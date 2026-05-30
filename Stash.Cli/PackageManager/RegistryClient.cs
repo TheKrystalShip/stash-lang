@@ -855,7 +855,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(new TokenCreateRequest
         {
-            Scope = scope,
+            Ceiling = scope,
             Description = description,
             ExpiresIn = expiresIn
         }, CliJsonContext.Default.TokenCreateRequest);

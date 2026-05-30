@@ -97,17 +97,10 @@ public sealed class TokenCreateRequest
 {
     /// <summary>
     /// The coarse capability ceiling for the new token: <c>"read"</c>, <c>"publish"</c>, or <c>"admin"</c>.
-    /// Canonical field. <c>scope</c> is accepted as a backwards-compatible alias when <c>ceiling</c> is absent.
+    /// Mandatory — absent or unrecognised values are rejected 400.
     /// </summary>
     [JsonPropertyName("ceiling")]
     public string? Ceiling { get; set; }
-
-    /// <summary>
-    /// Backwards-compatible alias for <c>ceiling</c>. Accepted when <c>ceiling</c> is absent.
-    /// The permission scope for the new token (e.g. <c>"publish"</c>, <c>"read"</c>).
-    /// </summary>
-    [JsonPropertyName("scope")]
-    public string? Scope { get; set; }
 
     /// <summary>An optional human-readable name or description to identify the token's intended use.</summary>
     [JsonPropertyName("name")]

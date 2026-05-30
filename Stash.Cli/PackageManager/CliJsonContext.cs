@@ -126,8 +126,8 @@ internal sealed class DeprecateVersionCliRequest
 /// </summary>
 internal sealed class TokenCreateRequest
 {
-    [JsonPropertyName("scope")]
-    public string? Scope { get; set; }
+    [JsonPropertyName("ceiling")]
+    public string? Ceiling { get; set; }
 
     [JsonPropertyName("description")]
     public string? Description { get; set; }

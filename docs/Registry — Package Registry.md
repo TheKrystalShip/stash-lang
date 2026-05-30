@@ -329,7 +329,7 @@ Request:
 }
 ```
 
-`expiresIn` accepts duration strings (`Xd`, `Xh`, `Xm`). The value is mandatory; absent or invalid values are rejected `400`. Values exceeding `Security.MaxTokenLifetime` (default `90d`) are rejected `400 TokenLifetimeExceeded` with the configured cap echoed in the response. The `scope` field is accepted as a backwards-compatible alias for `ceiling` when `ceiling` is absent.
+`expiresIn` accepts duration strings (`Xd`, `Xh`, `Xm`). The value is mandatory; absent or invalid values are rejected `400`. Values exceeding `Security.MaxTokenLifetime` (default `90d`) are rejected `400 TokenLifetimeExceeded` with the configured cap echoed in the response. The `ceiling` field is mandatory; absent or unrecognised values are rejected `400 ceiling_required`.
 
 Response `201 Created`:
 

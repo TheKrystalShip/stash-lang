@@ -124,7 +124,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         RegistryAction.RemoveOrgMember => TokenCeiling.Publish,
         RegistryAction.CreateTeam => TokenCeiling.Publish,
         RegistryAction.AddTeamMember => TokenCeiling.Publish,
-        RegistryAction.IssueToken => TokenCeiling.Publish,
+        RegistryAction.IssueToken => TokenCeiling.Read,
 
         // Admin-ceiling actions
         RegistryAction.ReadAdminStats => TokenCeiling.Admin,
@@ -217,7 +217,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
                                  : AuthzDecision.Deny(AuthzDenyReason.NotAuthenticated),
 
             RegistryAction.RevokeOwnToken =>
-                await AuthorizeRevokeOwnTokenAsync(username, resource),
+                await AuthorizeRevokeOwnTokenAsync(username, isAdmin, resource),
 
             // ── Admin plane ──────────────────────────────────────────────────
             RegistryAction.ReadAdminStats or
@@ -475,13 +475,17 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     }
 
     private async Task<AuthzDecision> AuthorizeRevokeOwnTokenAsync(
-        string? username, ResourceRef resource)
+        string? username, bool isAdmin, ResourceRef resource)
     {
         if (username == null)
             return AuthzDecision.Deny(AuthzDenyReason.NotAuthenticated);
 
         if (resource is not TokenResource tr)
             return AuthzDecision.Allow(); // generic self-service context
+
+        // Admin short-circuit: admin role may revoke any token.
+        if (isAdmin)
+            return AuthzDecision.Allow();
 
         // Can only revoke own tokens
         var token = await _ctx.Tokens.AsNoTracking()

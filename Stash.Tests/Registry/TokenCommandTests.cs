@@ -10,7 +10,7 @@ public sealed class TokenCommandTests
     {
         var request = new TokenCreateRequest
         {
-            Scope = "publish",
+            Ceiling = "publish",
             Description = "CI token",
             ExpiresIn = "30d"
         };
@@ -19,7 +19,7 @@ public sealed class TokenCommandTests
         var deserialized = JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenCreateRequest);
 
         Assert.NotNull(deserialized);
-        Assert.Equal("publish", deserialized.Scope);
+        Assert.Equal("publish", deserialized.Ceiling);
         Assert.Equal("CI token", deserialized.Description);
         Assert.Equal("30d", deserialized.ExpiresIn);
     }
@@ -55,7 +55,7 @@ public sealed class TokenCommandTests
     [Fact]
     public void TokenCreateRequest_NullFields_OmittedInSerialization()
     {
-        var request = new TokenCreateRequest { Scope = "publish" };
+        var request = new TokenCreateRequest { Ceiling = "publish" };
 
         string json = JsonSerializer.Serialize(request, CliJsonContext.Default.TokenCreateRequest);
 
