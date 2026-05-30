@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pdp-completion
 current: null
-updated: '2026-05-30T22:45:07Z'
+updated: '2026-05-30T23:07:59Z'
 phases:
   P1:
     status: done
@@ -23,13 +23,15 @@ phases:
     notes: "Filter ResourceIdForAudit(ScopeResource) \u2192 '@'+scope; DeleteScope folded to [RegistryAuthorize];\
       \ pin shrunk to {PublishPackage,ClaimScope}; matrix+audit rows pin '@' prefix uniformly"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4d6fbc0bdcd9acba37198d60319638378312836e
+    verified: true
+    started: '2026-05-30T22:56:25Z'
+    completed: '2026-05-30T23:07:59Z'
+    attempts: 1
+    notes: "PublishPackage enum member + PDP delegation handler (exists\u2192PublishVersion, !exists\u2192\
+      CreatePackage); controller folded to [RegistryAuthorize]; pin shrunk to {ClaimScope}; matrix+audit+unit\
+      \ rows prove deny label is uniformly 'PublishPackage'"
   P4:
     status: pending
     commit: null
