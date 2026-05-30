@@ -212,6 +212,218 @@ public sealed class OrgAndAdminAuthzTests : RegistryAuthzTestBase
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
+    // ── AdminController: CreateUser (POST /api/v1/admin/users) ───────────────
+
+    [Fact]
+    public async Task CreateUser_WithAdminToken_Returns201()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-cu-happy");
+        SetBearer(client, adminToken);
+
+        var resp = await client.PostAsync("/api/v1/admin/users",
+            Json(new { username = "new-user-cu", password = "Password123!" }));
+        Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateUser_WithNonAdminToken_Returns403()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Register admin first to consume the admin slot
+        await RegisterAndGetAdminTokenAsync(client, "admin-cu-deny");
+        // Second user gets user role
+        string userToken = await RegisterAndGetTokenAsync(client, "user-cu-deny");
+        SetBearer(client, userToken);
+
+        var resp = await client.PostAsync("/api/v1/admin/users",
+            Json(new { username = "shouldnotexist", password = "Password123!" }));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateUser_WithAdminRolePublishCeiling_Returns403TokenScopeInsufficient()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // First user is admin role; publish token (not admin ceiling) → TokenScopeInsufficient
+        string publishToken = await RegisterAndGetTokenAsync(client, "admin-cu-ceil");
+        SetBearer(client, publishToken);
+
+        var resp = await client.PostAsync("/api/v1/admin/users",
+            Json(new { username = "shouldnotexist2", password = "Password123!" }));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("TokenScopeInsufficient", body);
+    }
+
+    // ── AdminController: DeleteUser (DELETE /api/v1/admin/users/{username}) ──
+
+    [Fact]
+    public async Task DeleteUser_WithAdminToken_Returns200()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-du-happy");
+        // Register a user to delete
+        await RegisterAndGetTokenAsync(client, "user-to-delete");
+        SetBearer(client, adminToken);
+
+        var resp = await client.DeleteAsync("/api/v1/admin/users/user-to-delete");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteUser_WithNonAdminToken_Returns403()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Admin first (admin slot), then non-admin
+        await RegisterAndGetAdminTokenAsync(client, "admin-du-deny");
+        string userToken = await RegisterAndGetTokenAsync(client, "user-du-deny");
+        SetBearer(client, userToken);
+
+        var resp = await client.DeleteAsync("/api/v1/admin/users/admin-du-deny");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteUser_WithAdminRolePublishCeiling_Returns403TokenScopeInsufficient()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // First user is admin role with publish-ceiling token
+        string publishToken = await RegisterAndGetTokenAsync(client, "admin-du-ceil");
+        SetBearer(client, publishToken);
+
+        var resp = await client.DeleteAsync("/api/v1/admin/users/admin-du-ceil");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("TokenScopeInsufficient", body);
+    }
+
+    // ── AdminController: AdminAssignRole (PUT /api/v1/admin/packages/{scope}/{name}/roles) ──
+
+    [Fact]
+    public async Task AdminAssignRole_WithAdminToken_Returns200()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-ar-happy");
+        await SeedScopeAsync(factory, "admin-ar-scope", "admin-ar-happy");
+        await SeedPackageAsync(factory, "@admin-ar-scope/lib", "admin-ar-happy");
+        await RegisterAndGetTokenAsync(client, "target-ar-user");
+        SetBearer(client, adminToken);
+
+        var resp = await client.PutAsync("/api/v1/admin/packages/admin-ar-scope/lib/roles",
+            Json(new { principal_type = "user", principal_id = "target-ar-user", role = "reader" }));
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminAssignRole_WithNonAdminToken_Returns403()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Admin first (admin slot)
+        await RegisterAndGetAdminTokenAsync(client, "admin-ar-deny");
+        string userToken = await RegisterAndGetTokenAsync(client, "user-ar-deny");
+        await SeedScopeAsync(factory, "admin-ar-deny-scope", "admin-ar-deny");
+        await SeedPackageAsync(factory, "@admin-ar-deny-scope/lib", "admin-ar-deny");
+        SetBearer(client, userToken);
+
+        var resp = await client.PutAsync("/api/v1/admin/packages/admin-ar-deny-scope/lib/roles",
+            Json(new { principal_type = "user", principal_id = "user-ar-deny", role = "reader" }));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminAssignRole_WithAdminRolePublishCeiling_Returns403TokenScopeInsufficient()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // First user is admin role with publish-ceiling token
+        string publishToken = await RegisterAndGetTokenAsync(client, "admin-ar-ceil");
+        await SeedScopeAsync(factory, "admin-ar-ceil-scope", "admin-ar-ceil");
+        await SeedPackageAsync(factory, "@admin-ar-ceil-scope/lib", "admin-ar-ceil");
+        SetBearer(client, publishToken);
+
+        var resp = await client.PutAsync("/api/v1/admin/packages/admin-ar-ceil-scope/lib/roles",
+            Json(new { principal_type = "user", principal_id = "admin-ar-ceil", role = "reader" }));
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("TokenScopeInsufficient", body);
+    }
+
+    // ── AdminController: GetAuditLog (GET /api/v1/admin/audit-log) ───────────
+
+    [Fact]
+    public async Task GetAuditLog_WithAdminToken_Returns200()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-al-happy");
+        SetBearer(client, adminToken);
+
+        var resp = await client.GetAsync("/api/v1/admin/audit-log");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAuditLog_WithNonAdminToken_Returns403()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // Admin first (admin slot), then non-admin
+        await RegisterAndGetAdminTokenAsync(client, "admin-al-deny");
+        string userToken = await RegisterAndGetTokenAsync(client, "user-al-deny");
+        SetBearer(client, userToken);
+
+        var resp = await client.GetAsync("/api/v1/admin/audit-log");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetAuditLog_WithAdminRolePublishCeiling_Returns403TokenScopeInsufficient()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // First user is admin role with publish-ceiling token → TokenScopeInsufficient
+        string publishToken = await RegisterAndGetTokenAsync(client, "admin-al-ceil");
+        SetBearer(client, publishToken);
+
+        var resp = await client.GetAsync("/api/v1/admin/audit-log");
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        string body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("TokenScopeInsufficient", body);
+    }
+
     // ── Search: private packages hidden for anonymous callers ────────────────
 
     [Fact]

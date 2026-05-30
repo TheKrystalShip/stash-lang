@@ -97,7 +97,7 @@ public class ScopesController : ControllerBase
     /// The insert is atomic via insert-then-handle-unique-violation (UNIQUE constraint on scopes.name).
     /// </remarks>
     /// <returns><c>201</c> with <see cref="ScopeDetailResponse"/> on success, <c>409</c> on collision.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> ClaimScope()
     {
@@ -198,7 +198,7 @@ public class ScopesController : ControllerBase
     /// </summary>
     /// <param name="scope">The bare scope name.</param>
     /// <returns><c>501 NotImplemented</c> with documented body shape.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpPost("{scope}/verify")]
     public async Task<IActionResult> VerifyScope(string scope)
     {
@@ -224,7 +224,7 @@ public class ScopesController : ControllerBase
     /// </summary>
     /// <param name="scope">The bare scope name.</param>
     /// <returns><c>204</c> on success, <c>409</c> if the scope still owns packages, <c>404</c> if not found.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpDelete("{scope}")]
     public async Task<IActionResult> DeleteScope(string scope)
     {

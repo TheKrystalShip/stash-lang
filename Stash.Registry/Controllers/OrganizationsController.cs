@@ -63,7 +63,7 @@ public class OrganizationsController : ControllerBase
     /// Returns <c>409</c> if an org or scope with the same name already exists.
     /// </remarks>
     /// <returns><c>201</c> with <see cref="CreateOrgResponse"/> on success.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> CreateOrg()
     {
@@ -159,7 +159,7 @@ public class OrganizationsController : ControllerBase
     /// </summary>
     /// <param name="org">The org name.</param>
     /// <returns><c>204</c> on success, <c>409</c> if the org still owns resources, <c>404</c> if not found.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpDelete("{org}")]
     public async Task<IActionResult> DeleteOrg(string org)
     {
@@ -199,7 +199,7 @@ public class OrganizationsController : ControllerBase
     /// </summary>
     /// <param name="org">The org name.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org not found.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpPost("{org}/members")]
     public async Task<IActionResult> AddMember(string org)
     {
@@ -258,7 +258,7 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <param name="username">The username to remove.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org or user not found.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpDelete("{org}/members/{username}")]
     public async Task<IActionResult> RemoveMember(string org, string username)
     {
@@ -285,7 +285,7 @@ public class OrganizationsController : ControllerBase
     /// </summary>
     /// <param name="org">The org name.</param>
     /// <returns><c>201</c> with <see cref="CreateTeamResponse"/> on success.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpPost("{org}/teams")]
     public async Task<IActionResult> CreateTeam(string org)
     {
@@ -341,7 +341,7 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <param name="team">The team name.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org/team not found.</returns>
-    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
+    [Authorize]
     [HttpPost("{org}/teams/{team}/members")]
     public async Task<IActionResult> AddTeamMember(string org, string team)
     {
