@@ -31,6 +31,7 @@ phases:
       - Stash.Registry/Auth/Authorization/IRegistryAuthorizer.cs
       - Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs
       - Stash.Registry/Auth/Authorization/RegistryAction.cs
+      - Stash.Registry/Auth/Authorization/AuthzDenyReason.cs
       - Stash.Registry/Auth/Authorization/ResourceRef.cs
       - Stash.Registry/Auth/Authorization/Principal.cs
       - Stash.Registry/Auth/Authorization/AuthzDecision.cs
@@ -55,6 +56,8 @@ phases:
       - Visibility happy/fail — public package read ALLOWS anonymous; private package read DENIES anonymous and a no-role authenticated principal with VisibilityHidden; internal package ALLOWS an org member of the org-owned scope and DENIES a non-member.
       - Principal has UserPrincipal(Username, UserRole, TokenCeiling, TokenId) only — no TokenCapabilities, no TokenCapabilityRule, no IsUnrestricted appear anywhere under Stash.Registry/Auth/Authorization/.
       - AuthzDenyReason does NOT include TokenCapabilityScopeMiss (that reason ships with the deferred fine-grained capability feature).
+      - RegistryAction enum includes RevokePackageRole (owner-gated peer of AssignPackageRole) and AdminRevokePackageRole (admin-gated peer of AdminAssignPackageRole); PermissionResolver returns ALLOW for owner on RevokePackageRole and ALLOW for admin on AdminRevokePackageRole, with the same fail paths as their assign peers.
+      - PermissionResolver fails closed on dangling references — a unit test deletes a referenced team/org row, then asks the resolver for the user's effective role on a package whose grant flowed through that team; the resolver returns "no access" (never throws, never grants); the corresponding PDP decision is DENY with PackageRoleInsufficient or VisibilityHidden.
       - No controller or service references the new IRegistryAuthorizer yet (wiring lands in P2/P3); registry builds green.
     notes: |
       This phase introduces the engine and unit-tests it. The fine-grained
@@ -95,12 +98,19 @@ phases:
       - Stash.Registry/Controllers/PackagesController.cs
       - Stash.Registry/Services/PackageService.cs
       - Stash.Registry/Auth/Authorization/PackageRoute.cs
+      - Stash.Registry/Services/PackageRoleService.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Auth/Audit/AuditService.cs
+      - Stash.Registry/Database/Migrations/AddPackagesUniqueConstraint.cs
       - Stash.Tests/Registry/Authz/RegistryAuthzBugATests.cs
       - Stash.Tests/Registry/Authz/RegistryAuthzBugBTests.cs
       - Stash.Tests/Registry/Authz/RegistryAuthzRoleMatrixWriteTests.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzRoleRevokeTests.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzAtomicCreateTests.cs
+      - Stash.Tests/Registry/Authz/RegistryAuthzAuditMutationTests.cs
     verify:
       - dotnet build Stash.Registry/Stash.Registry.csproj
-      - dotnet test --filter "FullyQualifiedName~RegistryAuthzBugATests|FullyQualifiedName~RegistryAuthzBugBTests|FullyQualifiedName~RegistryAuthzRoleMatrixWriteTests"
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzBugATests|FullyQualifiedName~RegistryAuthzBugBTests|FullyQualifiedName~RegistryAuthzRoleMatrixWriteTests|FullyQualifiedName~RegistryAuthzRoleRevokeTests|FullyQualifiedName~RegistryAuthzAtomicCreateTests|FullyQualifiedName~RegistryAuthzAuditMutationTests"
     done_when:
       - PackagesController.PublishPackage calls IRegistryAuthorizer with CreatePackage when the route resource does not yet exist and PublishVersion when it does; both decisions are gated solely on the PDP.
       - PackageService.PublishAsync accepts an authoritative PackageResource (from PackageRoute.From(scope, name)) and rejects with 400 ManifestRouteMismatch when manifest.Name disagrees with that resource (Bug B name-mismatch).
@@ -111,6 +121,12 @@ phases:
       - Role-matrix fail path — bob assigned publisher receives 403 PackageRoleInsufficient on PATCH .../visibility (owner-only); dan assigned reader receives 403 PackageRoleInsufficient on any write; an unrelated user eve receives 404 (not 403) on the private package.
       - No PackagesController write endpoint hard-codes "owner" anymore; grep "HasPackagePermissionAsync(.*\"owner\"" Stash.Registry/Controllers/PackagesController.cs returns zero matches.
       - PackagesController.CanReadPackageAsync is deleted and the three read endpoints delegate to IRegistryAuthorizer; private packages still return 404 (not 403) to unauthorized callers.
+      - Role revoke — owner happy/fail — DELETE /api/v1/packages/{scope}/{name}/roles by an owner returns 204 and removes the role row; a subsequent attempt by the revoked principal to perform the role's action is denied; the same call by a non-owner principal returns 403 PackageRoleInsufficient; DELETE against a missing package returns 404, and DELETE for a principal who holds no role on the package returns 404.
+      - Role revoke — last-owner protection — DELETE /api/v1/packages/{scope}/{name}/roles that would drop the package's direct owner count to zero returns 409 with detail "cannot remove the last owner of a package"; the role row is unchanged. After granting a second owner, the same revoke succeeds 204. The invariant is enforced inside PackageRoleService (not the PDP) so it also covers admin-revoke and any future reassign-owner path.
+      - Role revoke — admin override — DELETE /api/v1/admin/packages/{scope}/{name}/roles by an admin principal succeeds 204 even with no direct role; the same call by a non-admin returns 403 PackageRoleInsufficient; the last-owner 409 invariant still applies under admin override.
+      - CreatePackage is implemented as insert-then-handle-unique-violation against a DB UNIQUE constraint on packages(scope, name); a concurrent-publish stress test issues N parallel PUTs to /api/v1/packages/{scope}/{name} (caller owns @scope) and asserts exactly one packages row exists at the end AND zero requests return 500 (losers either collapse to PublishVersion semantics on the now-existing row or, on version collision, return the documented version-conflict error). The unique constraint exists in the EF model and is asserted in a schema test.
+      - Audit — every authorized mutation through PackagesController (CreatePackage, PublishVersion, UnpublishVersion, DeprecatePackage, DeprecateVersion, ChangePackageVisibility, AssignPackageRole, RevokePackageRole, AdminAssignPackageRole, AdminRevokePackageRole, DeletePackage) appends exactly one AuditService entry tagged with the action name, principal id, resource, and decision "allow".
+      - Audit — every authenticated authorization deny on a PackagesController write appends exactly one AuditService entry carrying the AuthzDenyReason; an anonymous deny on a private-package read (mapped to 404 VisibilityHidden) appends ZERO audit entries.
     notes: |
       This is the highest-risk phase. Integration tests run end-to-end
       against WebApplicationFactory using
@@ -132,9 +148,12 @@ phases:
       - Stash.Tests/Registry/Authz/ScopeOwnershipPolicyTests.cs
       - Stash.Tests/Registry/Authz/ScopeClaimVerifiedFlowTests.cs
       - Stash.Tests/Registry/Authz/OrgAndAdminAuthzTests.cs
+      - Stash.Tests/Registry/Authz/AtomicClaimRaceTests.cs
+      - Stash.Tests/Registry/Authz/CascadeRefusalTests.cs
+      - Stash.Tests/Registry/Authz/FailClosedResolverTests.cs
     verify:
       - dotnet build Stash.Registry/Stash.Registry.csproj
-      - dotnet test --filter "FullyQualifiedName~ScopeOwnershipPolicyTests|FullyQualifiedName~ScopeClaimVerifiedFlowTests|FullyQualifiedName~OrgAndAdminAuthzTests"
+      - dotnet test --filter "FullyQualifiedName~ScopeOwnershipPolicyTests|FullyQualifiedName~ScopeClaimVerifiedFlowTests|FullyQualifiedName~OrgAndAdminAuthzTests|FullyQualifiedName~AtomicClaimRaceTests|FullyQualifiedName~CascadeRefusalTests|FullyQualifiedName~FailClosedResolverTests"
     done_when:
       - SecurityConfig.ScopeOwnershipPolicy is a ScopeOwnershipPolicyKind enum (Open|Claim|Verified) defaulting to Claim, deserialized from appsettings.json and consumed by IRegistryAuthorizer on CreatePackage.
       - Open happy path — CreatePackage into an unowned scope auto-claims it as a user-scope for the caller; a subsequent GET /api/v1/scopes/{scope} reflects the new owner; package row is created.
@@ -144,6 +163,9 @@ phases:
       - Pending-as-unowned (Verified) — under ScopeOwnershipPolicy=Verified, CreatePackage into a scope whose state=pending is denied with the verification message (same branch as "scope does not exist"); a successful claim WITHOUT subsequent verification does not unlock CreatePackage.
       - Every endpoint in OrganizationsController, ScopesController, SearchController, AdminController is authorized through IRegistryAuthorizer; grep "HasPackagePermissionAsync" across those four controllers returns zero matches.
       - Search filter — search results omit private/internal packages the caller cannot see via the PDP-backed predicate; a public package is returned for anonymous; a private package is returned only to a principal whose PDP role on it is at least reader.
+      - Atomic scope-claim — POST /api/v1/scopes is implemented as insert-then-handle-unique-violation against a DB UNIQUE constraint on scopes.name; AtomicClaimRaceTests issues N concurrent claim POSTs for the same scope name from N distinct principals and asserts exactly one 201 + exactly N-1 409 responses + exactly one scopes row. The same pattern applies to the open-mode auto-claim branch triggered from CreatePackage.
+      - Cascade refusal — DELETE /api/v1/scopes/{scope} while the scope owns at least one package returns 409 ScopeNotEmpty and leaves both rows unchanged; DELETE /api/v1/orgs/{org} while the org still owns scopes or packages returns 409 OrgNotEmpty and leaves rows unchanged; after deleting the children, both deletes succeed 204.
+      - Fail-closed resolver — FailClosedResolverTests exercises three dangling-reference shapes (role row points at a deleted team; role row points at a deleted org; package row's owning scope row was removed under the cascade refusal) and asserts the PDP decision is DENY with the appropriate typed reason (PackageRoleInsufficient or VisibilityHidden) without throwing. No grant edge through a missing vertex is ever read as ALLOW.
     notes: |
       Verified-mode resolver is stubbed 501 per Q4; the wire contract is
       locked. SecurityConfig.MaxTokenLifetime is introduced in P5 (the
@@ -163,9 +185,11 @@ phases:
       - Stash.Tests/Registry/Authz/LoginReadDefaultTests.cs
       - Stash.Tests/Registry/Authz/TokenLifetimeCapTests.cs
       - Stash.Tests/Registry/Authz/AdminNarrowCeilingTests.cs
+      - Stash.Tests/Registry/Authz/JtiRevocationPreservedTests.cs
+      - Stash.Registry/Startup.cs
     verify:
       - dotnet build Stash.Registry/Stash.Registry.csproj
-      - dotnet test --filter "FullyQualifiedName~LoginReadDefaultTests|FullyQualifiedName~TokenLifetimeCapTests|FullyQualifiedName~AdminNarrowCeilingTests"
+      - dotnet test --filter "FullyQualifiedName~LoginReadDefaultTests|FullyQualifiedName~TokenLifetimeCapTests|FullyQualifiedName~AdminNarrowCeilingTests|FullyQualifiedName~JtiRevocationPreservedTests"
     done_when:
       - Login read-default happy path — POST /api/v1/auth/login mints an access token whose token_scope claim is "read" (verified by decoding the returned JWT); GET /api/v1/packages/public/x succeeds 200 with the token.
       - Login read-default fail path — the same login token receives 403 TokenScopeInsufficient on PUT /api/v1/packages/...; after issuing a publish-ceiling token via POST /api/v1/auth/tokens the same PUT succeeds.
@@ -178,6 +202,8 @@ phases:
       - Admin-narrow happy path — admin alice with a publish-ceiling token PUTs /api/v1/packages/foo/bar (a package she holds no direct role on) and succeeds 201 (admin resolves resource-side to owner).
       - Admin-narrow fail path — admin alice with a read-ceiling token PUTting /api/v1/packages/foo/bar receives 403 TokenScopeInsufficient (ceiling check runs first; admin does NOT bypass it).
       - Expired token fail path — a token whose exp is in the past receives 401 TokenExpired on any endpoint that requires authentication.
+      - JTI revocation preserved — the JwtBearer.OnTokenValidated path in Startup.cs still consults the tokens.revoked_at column on every authenticated request; after POST /api/v1/auth/tokens/{id}/revoke (RevokeOwnToken), a subsequent request bearing the revoked JWT is rejected 401 even though the JWT's exp is still in the future; the deny reason surfaces as TokenRevoked. The same revoked token sent to a [PublicEndpoint] is ALSO rejected 401 (the auth-layer gate runs uniformly, before any [PublicEndpoint] classification).
+      - JTI revocation precedes PDP — a regression test asserts the revocation check fires BEFORE the PDP (the AuditService records the deny as TokenRevoked at the auth layer, not as a downstream PDP deny reason), so a leaked token cannot be used during its 90-day MaxTokenLifetime window after RevokeOwnToken.
     notes: |
       MaxTokenLifetime lives in SecurityConfig with a TimeSpan default of
       90.00:00:00 and is wired into appsettings.json.
@@ -202,6 +228,11 @@ phases:
       - Bug B regression cells — manifest/route NAME mismatch is rejected 400 ManifestRouteMismatch; manifest/route VERSION mismatch is rejected 400 ManifestRouteMismatch.
       - Token cells — the default-login token (read ceiling) is denied PublishVersion until a publish token is explicitly issued; an expired token is denied with TokenExpired; a POST /auth/tokens request with expires_in exceeding Security.MaxTokenLifetime is rejected with TokenLifetimeExceeded.
       - The suite runs end-to-end through IRegistryAuthorizer (not by re-implementing the matrix in the test), and uses WebApplicationFactory with UseSolutionRelativeContentRoot("Stash.Registry") for HTTP-level cells.
+      - Role-revoke conformance cells — happy path (owner revokes a non-owner role → 204), non-owner deny (publisher attempts revoke → 403 PackageRoleInsufficient), last-owner refusal (sole owner attempts to revoke own owner role → 409 with the documented message), admin override (admin without direct role calls /admin/.../roles → 204), and admin still blocked by last-owner invariant.
+      - Atomicity conformance cells — N concurrent claim POSTs for the same scope resolve to exactly one 201 + N-1 409 + one scopes row; N concurrent first-publish PUTs to the same package resolve to exactly one packages row with zero 500s (winner CreatePackage, losers PublishVersion or version-conflict — never duplicate row).
+      - Fail-closed cascade conformance cells — a role grant via a deleted team yields no access (DENY PackageRoleInsufficient); DELETE on a non-empty scope returns 409 ScopeNotEmpty; DELETE on a non-empty org returns 409 OrgNotEmpty; after children removed both deletes succeed.
+      - Audit conformance cells — a successful PublishVersion appends exactly one audit entry tagged package.publish; a successful AssignPackageRole appends exactly one role.assign; a successful RevokePackageRole appends exactly one role.revoke; an authenticated PUT denied 403 appends exactly one deny entry with the matching AuthzDenyReason; an anonymous GET denied 404 on a private package appends ZERO audit entries.
+      - JTI revocation conformance cell — after RevokeOwnToken, a request bearing the revoked JWT to any endpoint (including [PublicEndpoint] reads) is rejected 401 mapped to TokenRevoked even though the JWT's exp is in the future; the matrix row is asserted via the real auth pipeline, not a mock.
     notes: |
       This phase owns NO production code; it is the dedicated Q7
       conformance suite. It depends on every enforcement phase (P1–P5)
@@ -221,7 +252,7 @@ phases:
       - dotnet build
       - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~AuthzCoverageMetaTests"
     done_when:
-      - docs/Registry — Package Registry.md documents the PDP model, the closed RegistryAction enum, the role→permission matrix, the ScopeOwnershipPolicy enum + per-policy table, the verified-mode challenge/verify wire shapes (resolver stubbed 501), the coarse token ceiling, and Security.MaxTokenLifetime. The doc no longer mentions RequireReadScope/RequirePublishScope/RequireAdminScope/RequireAdmin as user-facing policies.
+      - docs/Registry — Package Registry.md documents the PDP model, the closed RegistryAction enum (including RevokePackageRole and AdminRevokePackageRole), the role→permission matrix, the ScopeOwnershipPolicy enum + per-policy table, the verified-mode challenge/verify wire shapes (resolver stubbed 501), the coarse token ceiling, Security.MaxTokenLifetime, the DELETE /api/v1/packages/{scope}/{name}/roles owner-revoke endpoint and its admin peer, the last-owner 409 invariant, the audit-logging scoping rule (mutations + authenticated denies; anonymous denies excluded), the insert-then-handle-unique-violation atomicity guarantee for scope-claim and CreatePackage, the non-empty scope/org deletion 409, the fail-closed resolver semantics, and the preserved JTI revocation check (rejects revoked tokens at the auth layer, before the PDP, on every endpoint including [PublicEndpoint]). The doc no longer mentions RequireReadScope/RequirePublishScope/RequireAdminScope/RequireAdmin as user-facing policies.
       - docs/Registry — Package Registry.md carries a "Deferred — fine-grained token capabilities" section pointing at the backlog stub; no part of the doc describes a token capabilities[] body or TokenCapabilityScopeMiss.
       - examples/registry/authz-flow.md walks through the canonical happy path on ScopeOwnershipPolicy=claim — register alice, stash pkg org create acme, POST /auth/tokens for a publish-ceiling token on alice, stash pkg publish @acme/widgets — and shows the corresponding DENY when a read-ceiling token is used by mistake.
       - Cleanup landed — HasPackagePermissionAsync removed from IRegistryDatabase and StashRegistryDatabase; the four legacy policies (RequireReadScope, RequirePublishScope, RequireAdminScope, RequireAdmin) removed from Startup.cs; CanReadPackageAsync gone from PackagesController.

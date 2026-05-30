@@ -211,7 +211,7 @@ public enum RegistryAction
     DeprecatePackage,            // PATCH .../deprecate (and undeprecate)
     DeprecateVersion,            // PATCH .../{version}/deprecate (and undeprecate)
     ChangePackageVisibility,     // PATCH .../visibility
-    ListPackageRoles, AssignPackageRole, DeletePackage,
+    ListPackageRoles, AssignPackageRole, RevokePackageRole, DeletePackage,
     // scope
     ResolveScope, ClaimScope, VerifyScope,
     // org
@@ -219,7 +219,7 @@ public enum RegistryAction
     // auth / tokens
     Login, Register, Whoami, IssueToken, ListOwnTokens, RevokeOwnToken,
     // admin
-    ReadAdminStats, ManageUser, AdminAssignPackageRole, ReadAuditLog,
+    ReadAdminStats, ManageUser, AdminAssignPackageRole, AdminRevokePackageRole, ReadAuditLog,
     // search
     Search
 }
@@ -423,7 +423,8 @@ The PDP resolves a per-action minimum role from this matrix (lifted from
 | `UnpublishVersion`                                                  | `maintainer`                             |
 | `DeprecatePackage`, `DeprecateVersion`                              | `maintainer`                             |
 | `ChangePackageVisibility`                                           | `owner`                                  |
-| `ListPackageRoles`, `AssignPackageRole`                             | `owner`                                  |
+| `ListPackageRoles`, `AssignPackageRole`, `RevokePackageRole`        | `owner`                                  |
+| `AdminAssignPackageRole`, `AdminRevokePackageRole`                  | n/a — admin-role short-circuit only      |
 | `DeletePackage`                                                     | `owner`                                  |
 | `CreatePackage` (new package)                                       | n/a — gated on **scope ownership**       |
 
@@ -437,6 +438,138 @@ scope / org. This **does NOT bypass the ceiling check** — an admin holding
 a `read`-ceiling token attempting any write receives
 `403 TokenScopeInsufficient` before the role dimension is even consulted.
 This deliberately narrows the shipped blanket `IsInRole("admin")` bypass.
+
+#### Package role revocation + last-owner protection
+
+`AssignPackageRole` has a peer `RevokePackageRole` (owner-gated, same dimension)
+and an admin peer `AdminRevokePackageRole` (admin-role short-circuit, mirrors
+`AdminAssignPackageRole`). Endpoints:
+
+- `DELETE /api/v1/packages/{scope}/{name}/roles` — owner self-service revoke,
+  body `{ principal_type, principal_id }`, `204` on success.
+- `DELETE /api/v1/admin/packages/{scope}/{name}/roles` — admin override, same
+  body, `204` on success.
+
+Both return `404` for missing package or missing role assignment. Both enforce
+the **last-owner / orphan-protection invariant**:
+
+> A package MUST retain at least one principal directly holding `owner`. A
+> revoke (or reassign-away) that would drop the package's owner count to zero
+> is refused `409 Conflict` with detail "cannot remove the last owner of a
+> package."
+
+This follows industry standard: GitHub refuses to remove the last admin from
+a repository; npm requires `>=1` owner. It is a **hard invariant** enforced
+inside the role-mutation service, not the PDP, because the PDP only decides
+whether the caller MAY mutate — the orphan check is a downstream integrity
+gate that runs regardless of caller. It applies to any role mutation: direct
+revoke, admin revoke, and a future "reassign owner" path.
+
+Every successful role mutation (assign and revoke, owner-path and admin-path)
+emits a `role.assign` or `role.revoke` audit entry (see "Audit logging" below).
+
+> **Sourcing note:** server-side role revocation was previously claimed by
+> `pkg-cli-api-parity` (its P1). That feature is being de-prioritized and the
+> CLI `pkg role rm` work is now downstream of this feature; ownership of the
+> revoke endpoint, the orphan invariant, and the admin-revoke peer moved
+> here. See Decision Log D18.
+
+#### Audit logging of authorization decisions
+
+Two categories of events are appended to `AuditService` (the existing append
+log table; no schema change beyond the discriminator):
+
+1. **Every state-mutating authorized action emits a success audit entry.**
+   That includes: `role.assign`, `role.revoke`, `scope.claim`, `scope.verify`,
+   `token.issue`, `token.revoke`, `package.create`, `package.publish`,
+   `package.unpublish`, `package.deprecate`, `package.visibility_change`. The
+   entry carries the principal id, action, resource, decision (`allow`), and
+   timestamp.
+2. **Every authenticated authorization denial emits a deny audit entry**
+   carrying the `AuthzDenyReason` enum value verbatim. This exists to feed
+   intrusion-detection on abnormal deny rates per principal.
+
+**Deliberately excluded from the audit log:** anonymous public-read denials
+(typical 404 traffic on private packages to unauthenticated callers). This is
+the dominant traffic shape and would flood the table without a security
+signal — public-read 404s already render in the HTTP access log. The scope is
+explicit: **mutations and authenticated denials only**. Stating this as a
+conscious decision rather than an omission means a future "audit the
+anonymous-deny stream" follow-up reopens it deliberately.
+
+`AuditService.AppendAsync` is called from the PDP wrapper at the controller
+seam (a single helper threaded through `IRegistryAuthorizer` consumers), so
+no production code that wants to record an authz event can bypass it.
+
+#### Concurrency / atomicity of namespace allocation
+
+Two endpoints race under concurrent traffic and MUST be atomic at the
+database layer, not the application layer:
+
+- **`POST /api/v1/scopes`** (scope claim, including `open`-mode auto-claim
+  inside `CreatePackage`).
+- **`PUT /api/v1/packages/{scope}/{name}`** with `CreatePackage` semantics
+  (first publish creates the package row).
+
+The implementation pattern is **insert-then-handle-unique-violation**, never
+check-then-act. Each table carries a DB-level `UNIQUE` constraint on its
+namespace key (`scopes.name`, `packages.(scope, name)`), the service issues
+the `INSERT`, and on `UniqueConstraintViolation` (EF `DbUpdateException`
+inspecting the inner exception's sqlite error code 19 / PG 23505) it
+translates to either `409` (claim) or the existing-package code path
+(`CreatePackage` collapses into `PublishVersion`).
+
+This closes the TOCTOU race where two concurrent claim requests both observe
+"scope unowned" and both proceed; under check-then-act the loser would
+overwrite the winner's row or produce a duplicate-row error surfaced as
+`500`. Most operationally relevant under `ScopeOwnershipPolicy=open` where
+auto-claim happens implicitly on first publish, and at the
+`CreatePackage`/`PublishVersion` split where the first publisher's atomic
+insert is the package-creation event.
+
+#### Fail-closed permission resolver + lifecycle cascades
+
+The permission resolver MUST **fail closed** on dangling references. If a
+package's owning scope no longer resolves (referential integrity broken by
+a since-deleted scope row), or a `PackageRoleEntry` references an
+org/team/user that has been deleted, the grant path **yields no access** —
+treated as absent rather than throwing or granting. The user-visible result
+is the same as if the role had never been assigned. This is the only safe
+default: a grant edge that points to a missing vertex must not be readable
+as a permissive null.
+
+Carrying forward the `registry-scope-foundation` invariant: **refusing to
+delete a scope or org while it still owns packages or sub-resources** is a
+hard `409`. Industry parallel: GitHub blocks org deletion while the org
+still holds repositories.
+
+- `DELETE /api/v1/scopes/{scope}` while the scope owns ≥1 package → `409
+  ScopeNotEmpty`.
+- `DELETE /api/v1/orgs/{org}` while the org owns ≥1 scope or package → `409
+  OrgNotEmpty`.
+
+Together these two rules mean dangling references are rare in practice
+(deletion is refused upstream) AND uniformly handled if they do appear
+(grant treated as absent).
+
+#### JTI / token revocation preserved at the auth layer
+
+The currently-shipped JTI revocation check (the DB lookup that drives the
+`context.Fail("Token has been revoked")` branch in `Startup.cs`'s
+`JwtBearer.OnTokenValidated`) is **preserved verbatim** in the new auth
+pipeline. A revoked token MUST be rejected at the **authentication layer**,
+before the PDP runs, mapping to `AuthzDenyReason.TokenRevoked` (already
+present in the enum) when surfaced. The check still consults the
+`tokens.revoked_at` column on every authenticated request.
+
+Rationale: with `MaxTokenLifetime=90d` (D17), the JTI revocation list is
+the **only** mechanism that can kill a leaked or rotated token before its
+natural expiry. Removing or weakening the check would re-open a 90-day
+window where compromised credentials cannot be invalidated. It MUST stay
+at the auth-layer, not the PDP, so it gates every endpoint including those
+classified `[PublicEndpoint]` (an attacker should not be able to reach
+public reads with a known-revoked token either, to keep the audit signal
+clean).
 
 #### Visibility folded into the PDP
 
@@ -477,6 +610,26 @@ This deliberately narrows the shipped blanket `IsInRole("admin")` bypass.
 - **Manifest version mismatch** (Q5): publish whose `manifest.Version`
   disagrees with the route-intended version is rejected
   `400 ManifestRouteMismatch`. Route stays unversioned this phase.
+- **Role revocation**: `DELETE /api/v1/packages/{scope}/{name}/roles`
+  (owner-gated) and `DELETE /api/v1/admin/packages/{scope}/{name}/roles`
+  (admin-gated) return `204` on success; `404` for missing package/role;
+  `409` if the revoke would drop the package's owner count to zero
+  ("cannot remove the last owner of a package").
+- **Atomic namespace allocation**: scope-claim and first-publish
+  package-create are insert-then-handle-unique-violation. A duplicate
+  concurrent claim resolves to exactly one winner; the loser receives
+  `409`. A duplicate concurrent first-publish resolves to exactly one
+  `CreatePackage` and the second collapses to `PublishVersion` semantics
+  against the now-existing package row.
+- **Audit logging**: every state-mutating allow and every authenticated
+  deny emits exactly one audit entry; anonymous public-read denials are
+  deliberately excluded.
+- **Fail-closed cascades**: dangling role/scope/org references yield no
+  access. Deleting a scope or org that still owns packages/sub-resources
+  is refused `409 ScopeNotEmpty` / `409 OrgNotEmpty`.
+- **JTI revocation preserved**: a token whose row carries `revoked_at`
+  is rejected at the authentication layer (`401`) before the PDP runs,
+  on every endpoint including `[PublicEndpoint]`.
 
 ### Implementation Path
 
@@ -496,20 +649,30 @@ Package-write endpoint migration — route-authoritative, split actions
     (PackagesController writes go through IRegistryAuthorizer with
      PackageRoute.From(scope, name); PackageService.PublishAsync takes a
      PackageResource and rejects manifest/route mismatch for BOTH name and
-     version; role-matrix conformance wired for write endpoints)
+     version; role-matrix conformance wired for write endpoints;
+     DELETE .../roles owner-revoke + DELETE /admin/.../roles admin-revoke
+     land with last-owner 409 invariant; CreatePackage uses
+     insert-then-handle-unique-violation atop the packages UNIQUE
+     constraint; AuditService entries on every mutation and authenticated
+     deny)
         ↓
 Org / Scope / Team / Admin migration + ScopeOwnershipPolicy + verified-stub
     (Organizations/Scopes/Admin controllers swap policies for PDP calls;
      ScopeOwnershipPolicyKind added to SecurityConfig + appsettings.json;
      claim gauntlet under PDP ClaimScope; verified-mode challenge/verify
-     endpoints return documented shapes with 501 resolver stub)
+     endpoints return documented shapes with 501 resolver stub;
+     scope-claim uses insert-then-handle-unique-violation; non-empty
+     scope/org deletion refused 409; permission resolver fails closed on
+     dangling org/team/scope references)
         ↓
 Token issuance — least-privilege default + MaxTokenLifetime cap
     (AuthController.Login mints a read-only token by default;
      POST /api/v1/auth/tokens accepts {name, ceiling, expires_in} —
      NO capabilities array; Security.MaxTokenLifetime caps expires_in;
      JwtTokenService emits the new claim shape;
-     coarse ceiling stored in existing TokenRecord.Scope column)
+     coarse ceiling stored in existing TokenRecord.Scope column;
+     JTI revocation check preserved verbatim in JwtBearer.OnTokenValidated
+     — revoked tokens rejected 401 at the auth layer before the PDP runs)
         ↓
 Dedicated authorization-conformance test phase (Q7)
     (RegistryAuthzMatrixTests — table-driven cross-product of
@@ -569,6 +732,53 @@ End-to-end behaviors that prove the feature works:
 - **Token lifetime cap (Q8)**: `POST /api/v1/auth/tokens` with
   `expires_in: "365d"` and `MaxTokenLifetime=90d` returns `400
   TokenLifetimeExceeded`; with `expires_in: "30d"` succeeds.
+- **Role revoke — owner happy/fail**: `alice` (owner) DELETEs `bob`'s
+  `publisher` role on `@alice/widgets` → `204`; the role row is gone and a
+  subsequent `PublishVersion` by `bob` denies `403
+  PackageRoleInsufficient`. `mallory` (no role) DELETEing any role on
+  `@alice/widgets` → `403 PackageRoleInsufficient`.
+- **Role revoke — last-owner protection**: `alice` (sole owner) DELETEs
+  her OWN `owner` role on `@alice/widgets` → `409` "cannot remove the
+  last owner of a package"; the role row is unchanged. After granting
+  `bob` `owner`, the same revoke succeeds `204`.
+- **Role revoke — admin override**: admin `root` calls `DELETE
+  /api/v1/admin/packages/alice/widgets/roles` removing `bob` → `204`
+  even when `root` holds no direct role on the package; the same
+  last-owner invariant applies (admin cannot delete the last owner).
+- **Audit — mutation success**: a successful role assign emits exactly
+  one audit entry with action `role.assign`, principal id, and resource;
+  a successful role revoke emits exactly one `role.revoke`; a successful
+  publish emits exactly one `package.publish`.
+- **Audit — authenticated deny**: an authenticated `bob` (no role)
+  PUTting `/api/v1/packages/alice/widgets` produces exactly one audit
+  entry with decision `deny` and reason `PackageRoleInsufficient`.
+- **Audit — anonymous deny excluded**: an anonymous GET on a private
+  package returning `404 VisibilityHidden` produces **zero** audit
+  entries.
+- **Atomic claim race**: two concurrent `POST /api/v1/scopes
+  {name: "acme"}` requests from different principals — exactly one
+  receives `201` and owns `@acme`; the loser receives `409`. Verified by
+  a parallel-execution test issuing N concurrent requests and asserting
+  exactly one DB row + exactly N-1 `409` responses.
+- **Atomic first-publish race**: two concurrent first-publish requests
+  to `/api/v1/packages/acme/widgets` (with caller owning `@acme`)
+  resolve to exactly one `packages` row; one publish is the
+  `CreatePackage` winner, the other becomes a `PublishVersion` on the
+  already-created row (or rejects on version collision) — never a
+  second `packages` row, never a `500`.
+- **Fail-closed cascade — dangling role**: after manually deleting the
+  team referenced by an inherited grant, the user's effective role on
+  the package resolves to "no access"; PDP returns the appropriate
+  `PackageRoleInsufficient` / `VisibilityHidden`, never throws.
+- **Cascade refusal — non-empty scope/org**: `DELETE
+  /api/v1/scopes/acme` while `@acme/widgets` exists → `409
+  ScopeNotEmpty`; `DELETE /api/v1/orgs/acme` while `@acme` exists →
+  `409 OrgNotEmpty`. After deleting the children, both deletes succeed.
+- **JTI revocation preserved (P5)**: after `RevokeOwnToken` on token
+  `T`, a subsequent request bearing `T` is rejected `401` even though
+  `T`'s `exp` is still in the future; the response reason maps to
+  `TokenRevoked`. A request bearing `T` to a `[PublicEndpoint]` is also
+  rejected `401` (auth-layer gate is uniform).
 - **`verified` claim flow scaffolds (Q4)**: `POST /api/v1/scopes` with
   `verification_method: "dns-txt"` returns 201 with the documented
   `challenge` body; `POST /api/v1/scopes/{scope}/verify` exists and
@@ -585,7 +795,16 @@ End-to-end behaviors that prove the feature works:
 - **Authorization conformance suite (Q7)**: `RegistryAuthzMatrixTests`
   exercises the FULL cross-product `ceiling × role × visibility × policy`
   as a single table-driven suite. Every cell asserts BOTH the allow path
-  and the corresponding deny path with the typed `AuthzDenyReason`.
+  and the corresponding deny path with the typed `AuthzDenyReason`. The
+  suite also covers: role-revoke happy path, non-owner revoke denied,
+  last-owner revoke `409`, admin-revoke override, duplicate-concurrent
+  claim resolves to one winner with `409` for the loser, duplicate
+  concurrent first-publish collapses to one create, dangling-role grant
+  yields no access (fail closed), non-empty scope/org deletion refused
+  `409`, audit entry emitted on every authorized mutation, audit deny
+  entry emitted on every authenticated deny (and NOT on anonymous
+  public-read 404), and a revoked-JTI token is rejected `401` before the
+  PDP runs even though the token has not expired.
 - **Build green + meta-test family green**: `dotnet build` clean;
   `final_verify` (env-flakies excluded only) green, including
   `AuthzCoverageMetaTests`, `RegistryAuthzMatrixTests`,
@@ -610,17 +829,31 @@ has a concrete `done_when` list there. Summary:
 - **P3** Package-write endpoint migration: route-authoritative
   `PackageService.PublishAsync` (rejects name AND version mismatch);
   `CreatePackage`/`PublishVersion` split; role matrix wired for write
-  endpoints; closes Bug A and Bug B.
+  endpoints; closes Bug A and Bug B. **Also**: role-revoke endpoints
+  (owner + admin) with last-owner `409` invariant;
+  insert-then-handle-unique-violation for `CreatePackage`;
+  `AuditService` entries on every mutation and authenticated deny.
 - **P4** Org / Scope / Admin endpoint migration + `ScopeOwnershipPolicy`
   enum + claim gauntlet under PDP + `verified` challenge/verify endpoints
-  scaffolded (resolver stubbed `501`).
+  scaffolded (resolver stubbed `501`). **Also**:
+  insert-then-handle-unique-violation for scope-claim; non-empty
+  scope/org deletion refused `409`; permission resolver fails closed on
+  dangling references.
 - **P5** Token issuance: login emits `read`-only by default; coarse
   ceiling stored in existing `TokenRecord.Scope` column; `MaxTokenLifetime`
-  cap enforced; admin-narrow ceiling-first intersection.
+  cap enforced; admin-narrow ceiling-first intersection. **Also**: JTI
+  revocation check preserved verbatim — revoked tokens rejected `401` at
+  the auth layer before the PDP runs.
 - **P6** **Dedicated authorization conformance phase (Q7)**:
   `RegistryAuthzMatrixTests` — table-driven cross-product of `ceiling ×
   role × visibility × policy`, every cell ALLOW + DENY, including
-  Bug A/B regression cells and admin-narrow intersection cells.
+  Bug A/B regression cells, admin-narrow intersection cells,
+  role-revoke (happy, non-owner deny, last-owner `409`, admin override),
+  duplicate-concurrent claim and first-publish races, fail-closed
+  cascade cells (dangling role grants nothing; non-empty scope/org
+  deletion refused), audit-emission assertions (mutation success +
+  authenticated deny emit one entry; anonymous-deny emits zero), and
+  the JTI-revocation `401` regression.
 - **P7** Docs + example + cleanup (delete `HasPackagePermissionAsync` /
   `CanReadPackageAsync` and the four string policies).
 
@@ -660,3 +893,8 @@ dedicated conformance phase; Q8 `MaxTokenLifetime=90d`.)
 | 2026-05-30 | D15 — `verified` mode ships the normative challenge/verify wire shapes; the DNS-TXT / HTTP-well-known **resolver is stubbed `501 NotImplemented`** this phase. | Q4 resolution. Wire contract is what unblocks the CLI and clients; the resolver is additive and can land without re-opening any earlier decision. |
 | 2026-05-30 | D16 — Dedicated authorization-conformance test phase owns the full cross-product `ceiling × role × visibility × policy` in a single table-driven suite. | Q7 resolution. Folding into P3 hid the matrix's intersections (especially the admin-narrow cells); a dedicated phase makes coverage observable. |
 | 2026-05-30 | D17 — `Security.MaxTokenLifetime` (default `90d`) enforced server-side at `auth/tokens`. | Q8 resolution. Prevents long-lived tokens from undoing the least-privilege guarantee in D6.       |
+| 2026-05-30 | D18 — Package role REVOCATION (owner-path `DELETE /api/v1/packages/{scope}/{name}/roles` and admin-path `DELETE /api/v1/admin/packages/{scope}/{name}/roles`) is owned by **this feature**, not `pkg-cli-api-parity`. Both endpoints enforce a hard last-owner invariant: a revoke that would drop the package's owner count to zero is refused `409`. | Gap #1. `pkg-cli-api-parity` is being de-prioritized and its P1 (server-side role revoke) is absorbed here so the registry server ships role mutation symmetrically. Last-owner protection follows GitHub (last-admin block) and npm (≥1 owner required). |
+| 2026-05-30 | D19 — Audit logging covers two categories: every state-mutating authorized action AND every authenticated authorization deny (`AuthzDenyReason` recorded verbatim). Anonymous public-read denials are **explicitly excluded** so the audit table doesn't drown in 404 traffic. | Gap #2. Stated as a conscious scoping decision rather than an omission — reopening "audit anonymous denies" is a future follow-up, not a bug. Mutation entries enable forensic replay; authenticated-deny entries feed intrusion detection on abnormal deny rates per principal. |
+| 2026-05-30 | D20 — Namespace uniqueness (scopes, packages) is arbitrated by DB `UNIQUE` constraints with **insert-then-handle-unique-violation**, never check-then-act. A duplicate concurrent claim or first-publish resolves to exactly one winner; the loser receives `409` (claim) or collapses to `PublishVersion` (publish). | Gap #3. Closes the TOCTOU race that existed under `ScopeOwnershipPolicy=open` auto-claim and at the `CreatePackage`/`PublishVersion` split. Application-level "is this unowned?" checks cannot be racy-safe; only the DB unique constraint can. |
+| 2026-05-30 | D21 — Permission resolver **fails closed** on dangling references (role/team/org/scope pointing at a deleted vertex grants no access). Concurrently, deleting a scope or org that still owns packages/sub-resources is refused `409 ScopeNotEmpty` / `409 OrgNotEmpty`. | Gap #4. Two-sided invariant: cascading deletes are refused so dangling references should not arise; if they do (manual DB intervention, race), the resolver treats them as absent grants rather than throwing or accidentally granting. Carries forward the `registry-scope-foundation` non-empty deletion invariant. |
+| 2026-05-30 | D22 — The currently-shipped JTI / `tokens.revoked_at` revocation check is **preserved verbatim** in the new auth pipeline, at the authentication layer (`JwtBearer.OnTokenValidated`), running **before** the PDP on every endpoint including `[PublicEndpoint]`. Surfaces as `AuthzDenyReason.TokenRevoked`. | Gap #5. With `MaxTokenLifetime=90d` (D17) the JTI revocation list is the only mechanism that can kill a leaked or rotated token before its natural expiry; removing it would re-open a 90-day uninvalidatable window. Gating uniformly at the auth layer keeps revoked tokens from reaching even public reads, preserving a clean intrusion-detection signal. |
