@@ -54,10 +54,11 @@ Revisable sketch (layer-up from the foundation, per `AGENTS.md` layering), **not
 analyzing one project may split, merge, or surface units we didn't know existed. Treatment
 scales to size: full specs for the big projects, a single batched pass for the tiny tooling ones.
 
-- **Next up:** `stdlib-omission-hardening` — `Stash.Stdlib` is branded "single source of truth
-  for all namespaces"; candidate findings seeded in `stdlib-candidate-findings.md`. Verify the
-  scope-sizer first (registration looks already-Construct via source-gen — if true, the project
-  is small).
+- **Next up:** `stdlib-omission-hardening` — **specced & in-flight** in worktree
+  `feature/stdlib-omission-hardening` (4 phases; scope-sizer confirmed — registration is already
+  Construct, so the unit is small). **⏸ Milestone paused 2026-05-31** after proving the protocol
+  end-to-end through spec. Resume by implementing P1: from the worktree run
+  `/resume stdlib-omission-hardening`, or check state with `/milestone omission-hardening`.
 - Later (rough): `Stash.Core` (confirmation pass — cited as reference but never actually
   classified; don't give it a free pass) · `Stash.Analysis` · `Stash.Tpl` · `Stash.Scheduler` ·
   `Stash.Bytecode` (101 opcodes — is handler/disassembly/verify coverage compiler-forced?) ·
@@ -72,6 +73,9 @@ scales to size: full specs for the big projects, a single batched pass for the t
 | Date | Decision / learning | Why it changed the plan |
 | --- | --- | --- |
 | 2026-05-31 | Milestone created; ordering is layer-up, treatment scales to project size. | Codebase too large for one pass; rolling-wave per project. |
+| 2026-05-31 | Unit 1 (`stdlib`) specced in an isolated worktree. Scope-sizer **confirmed**: registration is already Construct (source-gen), so the unit is small (4 phases). | Worktree chosen because `readonly-modifier` is concurrently active; `check-parallel-safety` flagged a coarse `Stash.Stdlib` overlap but file-level dirs are disjoint (BuiltIns/ vs Models/+Registry/+Generators/) → low risk. |
+| 2026-05-31 | Phase-1 verification found `Stability` is **one concern with two participants** (runtime `NamespaceMemberPayload.Invoke` + generator `BuildMember`); seed findings named only one. | The doctrine caught a gap in its own audit — exactly the omission shape the milestone exists to prevent. |
+| 2026-05-31 | `milestone-status.py` now scans all git worktrees (deduped by slug). | Found by trying it out: a unit built in a worktree was invisible to `/milestone` run from main until merge. |
 
 ### Open questions
 
