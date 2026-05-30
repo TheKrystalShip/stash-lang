@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T13:05:33Z'
+updated: '2026-05-30T15:19:30Z'
 phases:
   P1:
     status: done
@@ -31,13 +31,15 @@ phases:
     notes: Bug A/B closed; role matrix live; PackageRoleService with last-owner 409; AuditService PDP-aware;
       TryCreatePackageAsync atomic insert; 38 integration tests green
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 635c7bc358cadab6a35744ca890b6065f9b72aa9
+    verified: true
+    started: '2026-05-30T14:54:08Z'
+    completed: '2026-05-30T15:19:30Z'
+    attempts: 1
+    notes: ScopeOwnershipPolicy wired (Open/Claim/Verified); 4 controllers migrated to PDP; verified-mode
+      501 stub; atomic scope-claim (TryCreateScopeAsync); cascade refusal (DELETE scope/org 409 if non-empty);
+      fail-closed resolver; 37 tests green; NoMagicAuthStringsMetaTests green
   P5:
     status: pending
     commit: null
