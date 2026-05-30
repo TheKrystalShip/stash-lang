@@ -28,18 +28,31 @@ namespace Stash.Tests.Registry.Authz;
 public sealed class RegistryTestContext : IAsyncDisposable
 {
     public WebApplicationFactory<Stash.Registry.Program> Factory { get; }
-    private readonly SqliteConnection _conn;
+    private readonly SqliteConnection? _conn;
+    private readonly string? _tempDbFile;
 
-    public RegistryTestContext(WebApplicationFactory<Stash.Registry.Program> factory, SqliteConnection conn)
+    public RegistryTestContext(
+        WebApplicationFactory<Stash.Registry.Program> factory,
+        SqliteConnection? conn,
+        string? tempDbFile = null)
     {
         Factory = factory;
         _conn = conn;
+        _tempDbFile = tempDbFile;
     }
 
     public async ValueTask DisposeAsync()
     {
         await Factory.DisposeAsync();
-        _conn.Dispose();
+        _conn?.Dispose();
+        if (_tempDbFile != null)
+        {
+            // SQLite may leave -wal/-shm sidecars next to a file DB; remove all, best-effort.
+            foreach (var suffix in new[] { "", "-wal", "-shm" })
+            {
+                try { System.IO.File.Delete(_tempDbFile + suffix); } catch { /* best-effort cleanup */ }
+            }
+        }
     }
 }
 
@@ -81,17 +94,17 @@ public static class RegistryAuthzFactory
     }
 
     /// <summary>
-    /// Like <see cref="Create"/> but backs the registry with a <b>shared-cache</b> in-memory
-    /// SQLite database (unique per call) instead of a single shared connection. Each request
-    /// opens its OWN connection to the same in-memory DB, so tests that fire many concurrent
-    /// requests do not race on one ADO.NET connection — concurrent command execution on a
-    /// single connection is not supported and surfaces as spurious 500s. <c>Default Timeout</c>
-    /// makes a blocked writer wait for the SQLite write lock (busy-wait) instead of throwing
-    /// <c>SQLITE_BUSY</c> under legitimate multi-connection contention.
+    /// Like <see cref="Create"/> but backs the registry with a real temp <b>file</b> SQLite
+    /// database (unique per call) instead of a single shared in-memory connection. Each request
+    /// opens its OWN connection to the file, so tests that fire many concurrent requests do not
+    /// race on one ADO.NET connection (unsupported, surfaces as spurious 500s). <c>Default Timeout</c>
+    /// makes a blocked writer wait on <c>SQLITE_BUSY</c> (busy-wait) instead of erroring.
     ///
-    /// A keepalive connection is held open for the context's lifetime because an in-memory
-    /// SQLite database is dropped when its last connection closes. Use this for the concurrency
-    /// suites only; sequential tests should use <see cref="Create"/>.
+    /// A file DB is used deliberately over shared-cache in-memory: shared-cache raises
+    /// <c>SQLITE_LOCKED_SHAREDCACHE</c> under write contention, which the busy handler does NOT
+    /// service (the OpenMode flake). A file honors the busy-wait and also matches the production
+    /// SQLite backend. The file is deleted on dispose. Use this for the concurrency suites only;
+    /// sequential tests should use <see cref="Create"/>.
     /// </summary>
     /// <param name="configure">
     /// Optional hook to replace the registry's <c>RegistryConfig</c> (e.g. to set
@@ -100,12 +113,9 @@ public static class RegistryAuthzFactory
     public static RegistryTestContext CreateConcurrent(
         Action<Stash.Registry.Configuration.RegistryConfig>? configure = null)
     {
-        string dbName = $"reg-concurrent-{Guid.NewGuid():N}";
-        string connString =
-            $"Data Source=file:{dbName}?mode=memory&cache=shared;Default Timeout=30";
-
-        var keepAlive = new SqliteConnection(connString);
-        keepAlive.Open();
+        string tempDbFile = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), $"reg-concurrent-{Guid.NewGuid():N}.db");
+        string connString = $"Data Source={tempDbFile};Default Timeout=30";
 
         var factory = new WebApplicationFactory<Stash.Registry.Program>()
             .WithWebHostBuilder(builder =>
@@ -119,8 +129,8 @@ public static class RegistryAuthzFactory
                     if (descriptor != null)
                         services.Remove(descriptor);
 
-                    // Pass the connection STRING (not a single connection) so every scoped
-                    // DbContext opens its own connection to the shared-cache in-memory DB.
+                    // Pass the connection STRING so every scoped DbContext opens its own
+                    // connection to the file DB (no single shared connection to race on).
                     services.AddDbContext<RegistryDbContext>(options =>
                         options.UseSqlite(connString));
 
@@ -142,7 +152,7 @@ public static class RegistryAuthzFactory
                 });
             });
 
-        return new RegistryTestContext(factory, keepAlive);
+        return new RegistryTestContext(factory, conn: null, tempDbFile: tempDbFile);
     }
 }
 
