@@ -93,7 +93,8 @@ dotnet test --filter "FullyQualifiedName~TokenLifetimeCapTests|FullyQualifiedNam
 
 ## F03 — [MEDIUM] `DELETE /scopes/{scope}` and `DELETE /orgs/{org}` route the PDP call through the wrong action and then re-decide locally; missing audit-deny
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** c769333
 **Files:** `Stash.Registry/Controllers/ScopesController.cs:228-269` (`DeleteScope`), `Stash.Registry/Controllers/OrganizationsController.cs:163-195` (`DeleteOrg`)
 **Phase:** P4
 **Commit:** 635c7bc
@@ -131,7 +132,8 @@ dotnet test --filter "FullyQualifiedName~OrgAndAdminAuthzTests|FullyQualifiedNam
 
 ## F04 — [LOW] Production bounded-domain literals outside `RegistryAuthConstants` — sink-scoped meta-test does not catch them
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** c769333
 **Files:** `Stash.Registry/Services/PackageService.cs:185` (`"user"`, `"owner"`), `Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs:256` (`visibility == "public"`), `Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs:273` (`visibility == "internal"`), `Stash.Registry/Database/StashRegistryDatabase.cs:152` (`p.Visibility == "public"`), `Stash.Registry/Database/Models/PackageRecord.cs:63` (`Visibility = "public"` default), `Stash.Registry/Database/RegistryDbContext.cs:92` (`.HasDefaultValue("public")`), `Stash.Registry/Database/RegistryDbContext.cs:125` (`.HasDefaultValue("user")`), `Stash.Registry/Auth/LocalAuthProvider.cs:89` (`CreateUserAsync(..., "user")`), `Stash.Registry/Controllers/PackagesController.cs:658` (duplicated `validVisibilities` literal array)
 **Phase:** P1 (visibility literals); P3 (PackageService write); cross-cutting
 **Commit:** e8e69ad / 154671b
