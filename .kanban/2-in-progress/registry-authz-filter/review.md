@@ -149,7 +149,8 @@ dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests"
 
 ## F03 — [MINOR] `CreateOrg` PDP now runs before body validation, flipping 400→403 on bad payloads from insufficient-ceiling callers
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0cfb2fb
 **Files:** `Stash.Registry/Controllers/OrganizationsController.cs:58-109`
 **Phase:** P2
 **Commit:** f6d4deb
@@ -211,7 +212,8 @@ dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualified
 
 ## F04 — [MINOR] Resource resolver carries unreachable entries for `Login` / `Register`; minor dead-code risk
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0cfb2fb
 **Files:** `Stash.Registry/Auth/Authorization/RegistryActionResourceResolver.cs:79-84`
 **Phase:** P1
 **Commit:** c2ffa61
