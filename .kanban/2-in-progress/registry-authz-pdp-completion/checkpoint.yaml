@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pdp-completion
 current: null
-updated: '2026-05-30T23:07:59Z'
+updated: '2026-05-30T23:13:18Z'
 phases:
   P1:
     status: done
@@ -33,13 +33,15 @@ phases:
       CreatePackage); controller folded to [RegistryAuthorize]; pin shrunk to {ClaimScope}; matrix+audit+unit\
       \ rows prove deny label is uniformly 'PublishPackage'"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d78db58f64f67c7f1deec608f3b13c2f150fc76d
+    verified: true
+    started: '2026-05-30T23:08:10Z'
+    completed: '2026-05-30T23:13:18Z'
+    attempts: 1
+    notes: ClaimScope [ImperativeAuthz] reason corrected (body-derived fields + 409 mapping + backlog
+      link); ClaimScope arm removed from resolver (throws at request time if misused); RegistryActionResourceResolverTests
+      pins the throw; backlog stub + CLAUDE.md + repo.md updated; pin stays {ClaimScope}
 review:
   status: not_started
   started: null
