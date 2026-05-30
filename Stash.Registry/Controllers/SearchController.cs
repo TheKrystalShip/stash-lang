@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
@@ -53,7 +54,7 @@ public sealed class SearchController : ControllerBase
     /// <see cref="PackageSummaryResponse"/> objects, pagination metadata, and the total
     /// result count.
     /// </returns>
-    [AllowAnonymous]
+    [PublicEndpoint("package search is a public discovery endpoint — unauthenticated callers see only public packages")]
     [HttpGet]
     public async Task<IActionResult> Search()
     {

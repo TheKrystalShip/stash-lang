@@ -11,6 +11,7 @@ using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Services;
 using Stash.Registry.Storage;
 
@@ -82,7 +83,7 @@ public class PackagesController : ControllerBase
     /// <c>200</c> with a <see cref="PackageDetailResponse"/> containing package info,
     /// owner list, and a version map, or <c>404</c> if the package does not exist or is not visible.
     /// </returns>
-    [AllowAnonymous]
+    [PublicEndpoint("package metadata is public for public packages; private/internal visibility is enforced inside CanReadPackageAsync")]
     [HttpGet("{scope}/{name}")]
     public async Task<IActionResult> GetPackage(string scope, string name)
     {
@@ -153,7 +154,7 @@ public class PackagesController : ControllerBase
     /// <c>200</c> with a <see cref="VersionDetailResponse"/>,
     /// or <c>404</c> if the package or version does not exist.
     /// </returns>
-    [AllowAnonymous]
+    [PublicEndpoint("version metadata is public for public packages; visibility gated inside CanReadPackageAsync")]
     [HttpGet("{scope}/{name}/{version}")]
     public async Task<IActionResult> GetVersion(string scope, string name, string version)
     {
@@ -191,7 +192,7 @@ public class PackagesController : ControllerBase
     /// <c>200</c> file stream on success,
     /// or <c>404</c> if the version record or its tarball cannot be found.
     /// </returns>
-    [AllowAnonymous]
+    [PublicEndpoint("tarball download is public for public packages; visibility gated inside CanReadPackageAsync")]
     [HttpGet("{scope}/{name}/{version}/download")]
     public async Task<IActionResult> DownloadVersion(string scope, string name, string version)
     {

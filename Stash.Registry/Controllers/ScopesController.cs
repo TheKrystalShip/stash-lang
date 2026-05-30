@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
@@ -43,7 +44,7 @@ public class ScopesController : ControllerBase
     /// <c>200</c> with a <see cref="ScopeDetailResponse"/> containing the scope name,
     /// owner type, and owner identifier, or <c>404</c> if the scope does not exist.
     /// </returns>
-    [AllowAnonymous]
+    [PublicEndpoint("scope ownership metadata is public — used to discover who owns @scope before publishing")]
     [HttpGet("{scope}")]
     public async Task<IActionResult> GetScope(string scope)
     {

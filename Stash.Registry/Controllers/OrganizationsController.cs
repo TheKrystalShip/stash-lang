@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 
@@ -100,7 +101,7 @@ public class OrganizationsController : ControllerBase
     /// </summary>
     /// <param name="org">The org name (without the leading <c>@</c>).</param>
     /// <returns><c>200</c> with <see cref="OrgDetailResponse"/>, or <c>404</c> if not found.</returns>
-    [AllowAnonymous]
+    [PublicEndpoint("org public metadata is available without authentication")]
     [HttpGet("{org}")]
     public async Task<IActionResult> GetOrg(string org)
     {

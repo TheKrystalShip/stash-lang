@@ -17,6 +17,7 @@ using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Endpoints;
 using Stash.Registry.Services;
 
@@ -83,7 +84,7 @@ public class AuthController : ControllerBase
     /// or <c>401</c> if the credentials are invalid.
     /// </returns>
     [HttpPost("login")]
-    [AllowAnonymous]
+    [PublicEndpoint("login does not require a prior session — credentials are the authenticator")]
     public async Task<IActionResult> Login()
     {
         LoginRequest? body;
@@ -177,7 +178,7 @@ public class AuthController : ControllerBase
     /// or <c>409</c> if the username is already taken.
     /// </returns>
     [HttpPost("register")]
-    [AllowAnonymous]
+    [PublicEndpoint("self-service registration requires no prior account")]
     public async Task<IActionResult> Register()
     {
         if (!_config.Auth.RegistrationEnabled)
@@ -438,7 +439,7 @@ public class AuthController : ControllerBase
     /// in the family are revoked as a security measure.
     /// </remarks>
     [HttpPost("tokens/refresh")]
-    [AllowAnonymous]
+    [PublicEndpoint("token refresh validates the refresh-token credential itself — no bearer session required")]
     public async Task<IActionResult> RefreshToken()
     {
         RefreshTokenRequest? body;
