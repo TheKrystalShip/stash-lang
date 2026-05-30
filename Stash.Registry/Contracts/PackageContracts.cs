@@ -195,6 +195,21 @@ public sealed class SetVisibilityResponse
 }
 
 /// <summary>
+/// Request body for the <c>DELETE /api/v1/packages/{scope}/{name}/roles</c> and
+/// <c>DELETE /api/v1/admin/packages/{scope}/{name}/roles</c> endpoints.
+/// </summary>
+public sealed class RevokeRoleRequest
+{
+    /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
+    [JsonPropertyName("principal_type")]
+    public required string PrincipalType { get; set; }
+
+    /// <summary>The principal identifier — username, team ID, or org ID.</summary>
+    [JsonPropertyName("principal_id")]
+    public required string PrincipalId { get; set; }
+}
+
+/// <summary>
 /// Request body for the <c>PUT /api/v1/packages/{scope}/{name}/roles</c> endpoint.
 /// </summary>
 public sealed class AssignRoleRequest

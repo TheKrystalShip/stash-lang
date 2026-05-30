@@ -97,6 +97,27 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
+    public async Task<bool> TryCreatePackageAsync(PackageRecord package)
+    {
+        _context.Packages.Add(package);
+        try
+        {
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException ex)
+            when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException { SqliteErrorCode: 19 }
+                  || (ex.InnerException?.Message?.Contains("UNIQUE constraint failed") ?? false)
+                  || (ex.InnerException?.Message?.Contains("unique constraint") ?? false))
+        {
+            // Unique constraint violation: another concurrent insert won the race.
+            // Detach the failed entity to leave the context in a clean state.
+            _context.Entry(package).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
     public async Task AddVersionAsync(string packageName, VersionRecord version)
     {
         version.PackageName = packageName;

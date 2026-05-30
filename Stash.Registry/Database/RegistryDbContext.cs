@@ -178,6 +178,8 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.Target).HasColumnName("target");
             entity.Property(e => e.Ip).HasColumnName("ip");
             entity.Property(e => e.Timestamp).HasColumnName("timestamp");
+            entity.Property(e => e.Decision).HasColumnName("decision");
+            entity.Property(e => e.DenyReason).HasColumnName("deny_reason");
         });
 
         // ── New P2 tables ──────────────────────────────────────────────────────

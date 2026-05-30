@@ -39,4 +39,17 @@ public sealed class AuditEntry
 
     /// <summary>The UTC timestamp at which this audit event occurred.</summary>
     public DateTime Timestamp { get; set; }
+
+    /// <summary>
+    /// The authorization decision: <c>"allow"</c> for successful mutations or
+    /// <c>"deny"</c> for authenticated-deny entries. <c>null</c> for legacy entries
+    /// written before the PDP seam was introduced.
+    /// </summary>
+    public string? Decision { get; set; }
+
+    /// <summary>
+    /// The typed deny reason when <see cref="Decision"/> is <c>"deny"</c>,
+    /// e.g. <c>"PackageRoleInsufficient"</c>. <c>null</c> for allow entries.
+    /// </summary>
+    public string? DenyReason { get; set; }
 }

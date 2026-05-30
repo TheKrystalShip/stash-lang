@@ -169,6 +169,7 @@ public sealed class Startup
         });
 
         services.AddScoped<PackageService>();
+        services.AddScoped<PackageRoleService>();
         services.AddScoped<AuditService>();
         services.AddScoped<DeprecationService>();
 

@@ -67,6 +67,14 @@ public interface IRegistryDatabase
     Task CreatePackageAsync(PackageRecord package);
 
     /// <summary>
+    /// Attempts to insert a new package record.  Returns <c>true</c> on success or
+    /// <c>false</c> when a unique-constraint violation indicates the row already exists
+    /// (insert-then-handle-unique-violation pattern per D20).
+    /// The underlying <see cref="DbContext"/> is left in a clean state after a collision.
+    /// </summary>
+    Task<bool> TryCreatePackageAsync(PackageRecord package);
+
+    /// <summary>
     /// Appends a new version record to an existing package.
     /// </summary>
     /// <param name="packageName">The name of the owning package.</param>

@@ -272,16 +272,19 @@ public sealed class PackageServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Unpublish_NotOwner_Throws()
+    public async Task Unpublish_AnyUser_Succeeds_ServiceLayerNoLongerChecksOwner()
     {
+        // P3: The owner check moved to the PDP / controller layer.
+        // PackageService.UnpublishAsync no longer throws UnauthorizedAccessException.
         byte[] tarball = CreateTestTarball("@test/own-pkg", "1.0.0");
         using (var s = new MemoryStream(tarball))
         {
             await _service.Publish(s, "alice", null);
         }
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(
-            async () => await _service.UnpublishAsync("@test/own-pkg", "1.0.0", "bob"));
+        // bob can call UnpublishAsync directly at the service layer (controller handles authz)
+        bool result = await _service.UnpublishAsync("@test/own-pkg", "1.0.0", "bob");
+        Assert.True(result);
     }
 
     [Fact]

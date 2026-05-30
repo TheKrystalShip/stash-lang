@@ -6,11 +6,12 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth;
+using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
-using Stash.Registry.Contracts;
 
 namespace Stash.Registry.Controllers;
 
@@ -20,9 +21,8 @@ namespace Stash.Registry.Controllers;
 /// <remarks>
 /// <para>
 /// All endpoints in this controller require a JWT with the <c>admin</c> role,
-/// enforced by the <c>RequireAdmin</c> authorization policy. Operations include
-/// registry statistics, user management, package ownership adjustments, and
-/// paginated audit log access.
+/// enforced by the <c>RequireAdmin</c> authorization policy or, for the package-role
+/// endpoints, by <see cref="IRegistryAuthorizer"/> with the admin-ceiling-first check.
 /// </para>
 /// </remarks>
 [Authorize(Policy = "RequireAdmin")]
@@ -33,35 +33,53 @@ public class AdminController : ControllerBase
     private readonly IRegistryDatabase _db;
     private readonly IAuthProvider _authProvider;
     private readonly AuditService _auditService;
+    private readonly PackageRoleService _roleService;
+    private readonly IRegistryAuthorizer _authorizer;
     private readonly RegistryConfig _config;
 
     /// <summary>
     /// Initialises the controller with its required services.
     /// </summary>
-    /// <param name="db">Registry database for user, package, and ownership queries.</param>
-    /// <param name="authProvider">Provider used when creating new user accounts.</param>
-    /// <param name="auditService">Service that records administrative audit events.</param>
-    /// <param name="config">Registry-wide configuration.</param>
     public AdminController(
         IRegistryDatabase db,
         IAuthProvider authProvider,
         AuditService auditService,
+        PackageRoleService roleService,
+        IRegistryAuthorizer authorizer,
         RegistryConfig config)
     {
         _db = db;
         _authProvider = authProvider;
         _auditService = auditService;
+        _roleService = roleService;
+        _authorizer = authorizer;
         _config = config;
+    }
+
+    // ── Helper: build Principal ───────────────────────────────────────────────
+
+    private static Principal BuildPrincipal(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return new AnonymousPrincipal();
+
+        string username = user.Identity!.Name!;
+        bool isAdmin = user.IsInRole("admin");
+        string tokenScopeStr = user.FindFirst("token_scope")?.Value ?? "read";
+        TokenCeiling ceiling = tokenScopeStr switch
+        {
+            "admin" => TokenCeiling.Admin,
+            "publish" => TokenCeiling.Publish,
+            _ => TokenCeiling.Read
+        };
+        UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
+        string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
+        return new UserPrincipal(username, role, ceiling, tokenId);
     }
 
     /// <summary>
     /// Returns high-level registry statistics.
     /// </summary>
-    /// <remarks>Requires an admin JWT.</remarks>
-    /// <returns>
-    /// <c>200</c> with a <see cref="StatsResponse"/> containing the total registered
-    /// user count.
-    /// </returns>
     [HttpGet("stats")]
     public async Task<IActionResult> GetStats()
     {
@@ -72,17 +90,6 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Creates a new user account as an administrator.
     /// </summary>
-    /// <remarks>
-    /// Reads a <see cref="CreateUserRequest"/> JSON body. If the <c>role</c> field is
-    /// <c>admin</c>, the user's role is promoted immediately after creation via
-    /// <see cref="IRegistryDatabase.UpdateUserRoleAsync"/>. The creation is recorded in
-    /// the audit log. Requires an admin JWT.
-    /// </remarks>
-    /// <returns>
-    /// <c>201</c> with a <see cref="CreateUserResponse"/> containing the new username and
-    /// assigned role, <c>400</c> if validation fails, or <c>409</c> if the username is
-    /// already taken.
-    /// </returns>
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser()
     {
@@ -101,19 +108,13 @@ public class AdminController : ControllerBase
         string newRole = string.IsNullOrEmpty(body?.Role) ? "user" : body.Role;
 
         if (string.IsNullOrEmpty(newUsername) || string.IsNullOrEmpty(password))
-        {
             return BadRequest(new ErrorResponse { Error = "Username and password are required." });
-        }
 
         if (newUsername.Length > 64 || !System.Text.RegularExpressions.Regex.IsMatch(newUsername, @"^[a-zA-Z0-9_-]+$"))
-        {
             return BadRequest(new ErrorResponse { Error = "Username must be 1-64 characters and contain only letters, digits, hyphens, or underscores." });
-        }
 
         if (password.Length < 8)
-        {
             return BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
-        }
 
         try
         {
@@ -125,9 +126,7 @@ public class AdminController : ControllerBase
         }
 
         if (string.Equals(newRole, "admin", StringComparison.Ordinal))
-        {
             await _db.UpdateUserRoleAsync(newUsername, "admin");
-        }
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogUserCreateAsync(newUsername, ip);
@@ -138,25 +137,13 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Deletes a user account and its associated data.
     /// </summary>
-    /// <param name="username">The URL-encoded username to delete.</param>
-    /// <remarks>
-    /// Cascading behaviour: tokens are removed automatically via the foreign-key
-    /// constraint; ownership entries are removed manually before the user row is
-    /// deleted. The action is recorded in the audit log. Requires an admin JWT.
-    /// </remarks>
-    /// <returns>
-    /// <c>200</c> with a <see cref="SuccessResponse"/> on success,
-    /// or <c>404</c> if the user does not exist.
-    /// </returns>
     [HttpDelete("users/{username}")]
     public async Task<IActionResult> DeleteUser(string username)
     {
         string decodedUsername = Uri.UnescapeDataString(username);
         UserRecord? user = await _db.GetUserAsync(decodedUsername);
         if (user == null)
-        {
             return NotFound(new ErrorResponse { Error = $"User '{decodedUsername}' not found." });
-        }
 
         await _db.DeleteUserAsync(decodedUsername);
 
@@ -170,18 +157,6 @@ public class AdminController : ControllerBase
     /// <summary>
     /// Assigns a role to a principal on a package (admin override).
     /// </summary>
-    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
-    /// <param name="name">The package's local name within the scope.</param>
-    /// <remarks>
-    /// Reads an <see cref="AssignRoleRequest"/> JSON body specifying the principal type,
-    /// principal identifier, and role to assign. Requires an admin JWT.
-    /// This replaces the legacy <c>PUT /admin/packages/{name}/owners</c> endpoint.
-    /// </remarks>
-    /// <returns>
-    /// <c>200</c> on success,
-    /// <c>400</c> if the request body is malformed or the role/principal type is invalid,
-    /// or <c>404</c> if the package does not exist.
-    /// </returns>
     [HttpPut("packages/{scope}/{name}/roles")]
     public async Task<IActionResult> AdminAssignRole(string scope, string name)
     {
@@ -189,9 +164,7 @@ public class AdminController : ControllerBase
         string username = User.Identity!.Name!;
 
         if (!await _db.PackageExistsAsync(packageName))
-        {
             return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
-        }
 
         AssignRoleRequest? body;
         try
@@ -217,28 +190,63 @@ public class AdminController : ControllerBase
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _db.AssignPackageRoleAsync(packageName, body.PrincipalType, body.PrincipalId, body.Role);
-        await _auditService.LogRoleAssignAsync(packageName, username, body.PrincipalId, ip);
+        await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, body.PrincipalId, ip);
 
         return Ok(new SuccessResponse());
     }
 
     /// <summary>
-    /// Returns a paginated list of audit log entries.
+    /// Revokes the role of a principal on a package (admin override).
     /// </summary>
     /// <remarks>
-    /// Accepts the following optional query-string parameters:
-    /// <list type="bullet">
-    ///   <item><term>page</term><description>1-based page number (default: 1).</description></item>
-    ///   <item><term>pageSize</term><description>Results per page, 1–200 (default: 50).</description></item>
-    ///   <item><term>package</term><description>Filter to entries for a specific package name.</description></item>
-    ///   <item><term>action</term><description>Filter to entries with a specific action string.</description></item>
-    /// </list>
-    /// Requires an admin JWT.
+    /// Returns 204 on success, 404 for missing package or missing role,
+    /// 409 if the revoke would drop the owner count to zero.
+    /// Unlike the owner-gated endpoint this uses <c>AdminRevokePackageRole</c> action
+    /// so the PDP applies the admin short-circuit.
     /// </remarks>
-    /// <returns>
-    /// <c>200</c> with an <see cref="AuditLogResponse"/> containing the matching
-    /// <see cref="AuditEntry"/> items and pagination metadata.
-    /// </returns>
+    [HttpDelete("packages/{scope}/{name}/roles")]
+    public async Task<IActionResult> AdminRevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        if (!await _db.PackageExistsAsync(packageName))
+            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+
+        // The [Authorize(Policy = "RequireAdmin")] on the class already gates the caller.
+        // We additionally run the PDP to enforce the ceiling-first check and produce a typed deny reason.
+        var principal = BuildPrincipal(User);
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        string username = User.Identity!.Name!;
+
+        var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.AdminRevokePackageRole, resource);
+        if (!decision.Allowed)
+        {
+            if (principal is UserPrincipal up)
+                await _auditService.LogAuthzDenyAsync("AdminRevokePackageRole", up.Username, packageName, decision.Reason, ip);
+            int status = decision.Reason == AuthzDenyReason.NotAuthenticated ? 401 : 403;
+            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+        }
+
+        try
+        {
+            await _roleService.RevokeRoleAsync(packageName, request.PrincipalType, request.PrincipalId);
+            await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
+            return StatusCode(204);
+        }
+        catch (RoleNotFoundException)
+        {
+            return NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
+        }
+        catch (LastOwnerException ex)
+        {
+            return Conflict(new ErrorResponse { Error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Returns a paginated list of audit log entries.
+    /// </summary>
     [HttpGet("audit-log")]
     public async Task<IActionResult> GetAuditLog()
     {
@@ -248,24 +256,16 @@ public class AdminController : ControllerBase
         string? actionFilter = null;
 
         if (Request.Query.TryGetValue("page", out var pageStr) && int.TryParse(pageStr, out int parsedPage) && parsedPage > 0)
-        {
             page = parsedPage;
-        }
 
         if (Request.Query.TryGetValue("pageSize", out var pageSizeStr) && int.TryParse(pageSizeStr, out int parsedPageSize) && parsedPageSize > 0)
-        {
             pageSize = Math.Min(parsedPageSize, 200);
-        }
 
         if (Request.Query.TryGetValue("package", out var pkgFilter) && !string.IsNullOrEmpty(pkgFilter))
-        {
             packageFilter = pkgFilter.ToString();
-        }
 
         if (Request.Query.TryGetValue("action", out var actFilter) && !string.IsNullOrEmpty(actFilter))
-        {
             actionFilter = actFilter.ToString();
-        }
 
         var result = await _auditService.GetAuditLogAsync(page, pageSize, packageFilter, actionFilter);
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)pageSize);
