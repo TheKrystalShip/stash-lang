@@ -13,6 +13,12 @@ feature: feature-slug
 # Human-readable title (used in commit messages and review docs).
 title: Feature Title
 
+# Optional. If this feature is one unit of a long-term milestone, name the
+# milestone slug here (matches .kanban/milestones/<slug>/). This is the tag
+# `milestone-status.py` reads to derive the milestone's ledger — omit it for
+# standalone features.
+# milestone: milestone-slug
+
 # Relative path from this file's directory. This is the human source of truth.
 brief: ./brief.md
 

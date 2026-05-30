@@ -47,6 +47,7 @@ The plan should be trusted, but it is not sacred. Implementers may make small, d
 | `/resolve [slug] <Fxx> [Fyy...]` | Fix exactly the selected review finding(s). |
 | `/done [slug]` | Run final verification and move the feature to `.kanban/4-done/`. |
 | `/resume [slug]` | Print current state and recommend the next command. |
+| `/milestone [slug]` | Print a long-term milestone's derived ledger + the next unit to spec. (See "Milestones" below.) |
 
 `[slug]` is optional only when exactly one feature is active.
 
@@ -239,6 +240,37 @@ Run:
 ```
 
 This runs `final_verify`, refuses open findings, promotes the directory to `.kanban/4-done/`, and leaves the feature archived.
+
+---
+
+## Milestones — long-term work
+
+Some work is too large for one `/spec`→`/done`: a whole-codebase refactor, a multi-project initiative, a sequenced roadmap. That's a **milestone** — a *living charter* spanning many feature cycles, where you build the road as you go (rolling-wave: spec the next unit, sketch the rest, learn, spec the next).
+
+A milestone is a **container, not a work item** — it executes nothing. The work still flows through the normal per-unit `/spec`→`/next-phase`→`/feature-review`→`/done` lifecycle. The milestone only *sequences and aggregates* those units. So there are no milestone agents, no milestone phases, no milestone review — just a doc and a derived view.
+
+### Two layers, two rules
+
+A milestone at `.kanban/milestones/<slug>/MILESTONE.md` (from `_templates/milestone-template.md`) has:
+
+- A **Charter** — hand-maintained, evolves freely, the authority on the *future*: vision, a *finite & checkable* Definition of Done, the next unit or two, and an append-only log of decisions/learnings. The route is emergent; the destination is fixed.
+- A **Ledger** — *derived, never hand-written*, the authority on the *past*: which units are done. A living doc drifts, and the first thing to rot is a hand-kept progress claim — so completion is **computed**, not asserted. The doc literally leaves that section empty.
+
+This is the workflow eating its own dog food: per the Construct-over-Detect philosophy (`.claude/agents/architect.md`), "is unit N done" must be a fact that can't drift, so it's read from `4-done/`, not typed into a table.
+
+### How a unit joins a milestone
+
+When you `/spec` a unit of a milestone, give its `plan.yaml` a top-level `milestone: <slug>` tag (and its `brief.md` header a `Milestone: <slug>` line). That tag is the only wiring — the status script groups every tagged feature in `2-in-progress/` and `4-done/` under the milestone.
+
+### Seeing where you are
+
+```text
+/milestone [slug]
+```
+
+Prints the derived ledger (done / in-flight units) and points at the charter's "Next up". It reports *facts*; the charter holds *intent*. If the two ever disagree, the ledger wins.
+
+A milestone is **done** when its charter's Definition of Done is met and the ledger shows the work landed — then mark the charter `Status: complete`.
 
 ---
 

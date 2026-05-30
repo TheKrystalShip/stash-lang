@@ -4,6 +4,7 @@
 > **Owner:** {{user}}
 > **Created:** {{YYYY-MM-DD}}
 > **Slug:** {{feature-slug}}
+> **Milestone:** {{milestone-slug or "—"}}  <!-- if this feature is one unit of a long-term milestone; see .kanban/milestones/ -->
 
 ## Summary
 

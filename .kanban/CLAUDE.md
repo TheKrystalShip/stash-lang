@@ -10,7 +10,8 @@ The `.kanban/` directory holds Stash's design and implementation lifecycle for m
 | `1-todo/`        | Approved specs ready to start. User moves a backlog item here when they want it picked up.    |
 | `2-in-progress/` | Active features. Each has `brief.md` + `plan.yaml` + `checkpoint.yaml`, `review.md` post-review. |
 | `4-done/`        | Completed features. Historical record. Reference-only — never re-edit.                        |
-| `_templates/`    | `brief-template.md`, `plan-template.yaml`, `checkpoint-template.yaml`, `review-template.md`.  |
+| `milestones/`    | Long-term programs spanning many feature cycles. Each has `<slug>/MILESTONE.md` (a living charter; completion is *derived* from `4-done/`, never asserted). See `/milestone` and `.claude/WORKFLOW.md`. |
+| `_templates/`    | `brief-template.md`, `plan-template.yaml`, `checkpoint-template.yaml`, `review-template.md`, `milestone-template.md`. |
 
 `3-review/` exists for legacy specs from the prior workflow. New features do **not** move there — review happens in-place at `2-in-progress/<slug>/review.md` and `/done` promotes directly to `4-done/`.
 

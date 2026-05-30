@@ -18,6 +18,7 @@ REPO_ROOT = _pl.Path(__file__).resolve().parents[2]
 INPROGRESS_DIR = REPO_ROOT / ".kanban" / "2-in-progress"
 TEMPLATES_DIR = REPO_ROOT / ".kanban" / "_templates"
 DONE_DIR = REPO_ROOT / ".kanban" / "4-done"
+MILESTONES_DIR = REPO_ROOT / ".kanban" / "milestones"
 
 
 def now_iso() -> str:
