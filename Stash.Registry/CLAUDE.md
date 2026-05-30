@@ -108,7 +108,7 @@ public class PackagesController : ControllerBase
     public IActionResult GetPackage(string scope, string name) { ... }
 
     [HttpPut("{scope}/{name}")]
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]   // never the literal "RequirePublishScope"
     public async Task<IActionResult> Publish(string scope, string name) { ... }
 }
 ```
@@ -120,6 +120,7 @@ public class PackagesController : ControllerBase
 - Publish/unpublish require a token with `publish` or `admin` scope
 - Admin endpoints require `admin` scope AND `admin` role
 - Four authorization policies: `RequireReadScope` (`token_scope ∈ {read, publish, admin}`), `RequirePublishScope` (`token_scope ∈ {publish, admin}`), `RequireAdminScope` (`token_scope == admin`), `RequireAdmin` (`token_scope == admin` AND `role == admin`)
+- **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, policy names, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `AuthPolicies`, `ReservedScopes`) and wire strings are parsed into enums at the boundary (`BuildPrincipal` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
 - Success responses use `SuccessResponse` or typed DTOs
 
