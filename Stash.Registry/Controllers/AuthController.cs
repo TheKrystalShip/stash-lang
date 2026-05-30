@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
+using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
@@ -202,9 +203,9 @@ public class AuthController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "Username and password are required." });
         }
 
-        if (username.Length > 64 || !System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-zA-Z0-9_-]+$"))
+        if (!PackageManifest.IsValidScopeName(username))
         {
-            return BadRequest(new ErrorResponse { Error = "Username must be 1-64 characters and contain only letters, digits, hyphens, or underscores." });
+            return BadRequest(new ErrorResponse { Error = "Username must match the scope grammar: a lowercase letter followed by up to 38 lowercase letters, digits, or hyphens (max 39 characters)." });
         }
 
         if (password.Length < 8)

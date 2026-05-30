@@ -21,6 +21,15 @@ public static partial class PackagingRegexes
     /// <returns>A <see cref="System.Text.RegularExpressions.Regex"/> matching <c>^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$</c>.</returns>
     [GeneratedRegex(@"^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$", RegexOptions.Compiled)]
     public static partial Regex NamespacedPackageName();
+
+    /// <summary>
+    /// Returns a compiled <see cref="System.Text.RegularExpressions.Regex"/> that matches a
+    /// single scope or segment name: a lowercase letter followed by up to 38 lowercase letters,
+    /// digits, or hyphens (max 39 characters total).
+    /// </summary>
+    /// <returns>A <see cref="System.Text.RegularExpressions.Regex"/> matching <c>^[a-z][a-z0-9-]{0,38}$</c>.</returns>
+    [GeneratedRegex(@"^[a-z][a-z0-9-]{0,38}$", RegexOptions.Compiled)]
+    public static partial Regex ScopeSegment();
 }
 
 /// <summary>
@@ -178,6 +187,19 @@ public class PackageManifest
         }
 
         return PackagingRegexes.NamespacedPackageName().IsMatch(name);
+    }
+
+    /// <summary>
+    /// Validates whether <paramref name="name"/> is a legal Stash scope or segment name.
+    /// A valid scope name starts with a lowercase letter, contains only lowercase letters,
+    /// digits, or hyphens, and is between 1 and 39 characters. This grammar applies to
+    /// usernames, organization names, and any explicitly claimed scope.
+    /// </summary>
+    /// <param name="name">The scope name string to validate.</param>
+    /// <returns><c>true</c> if <paramref name="name"/> is a valid scope name; otherwise <c>false</c>.</returns>
+    public static bool IsValidScopeName(string name)
+    {
+        return name is not null && PackagingRegexes.ScopeSegment().IsMatch(name);
     }
 
     /// <summary>

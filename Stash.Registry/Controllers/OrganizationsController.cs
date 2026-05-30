@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stash.Common;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 
@@ -63,7 +64,7 @@ public class OrganizationsController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "Organization name is required." });
 
         // Validate org name: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
-        if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[a-z][a-z0-9-]{0,38}$"))
+        if (!PackageManifest.IsValidScopeName(name))
         {
             return BadRequest(new ErrorResponse
             {

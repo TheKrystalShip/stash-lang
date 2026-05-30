@@ -1207,7 +1207,7 @@ Storage backends are selected by `Storage.Type` and bound at startup; switching 
 | Password hashing       | Argon2id with OWASP parameters, stored in PHC string format.                                                                            |
 | Integrity verification | Every published tarball stores a `sha256-<base64>` hash; downloads return it as `X-Integrity`. Optional client verification on publish. |
 | Path traversal         | `FileSystemStorage` canonicalizes every path before reading or writing and rejects paths that escape `Storage.Path`.                    |
-| Input validation       | Username `1-64` chars from `[a-zA-Z0-9_-]`. Password minimum 8 chars. Package name validated against `^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$`. |
+| Input validation       | Username must match scope grammar: `^[a-z][a-z0-9-]{0,38}$` (max 39 chars, leading lowercase letter). Password minimum 8 chars. Package name validated against `^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$`. |
 | Machine binding        | Refresh tokens are bound to a SHA-256 machine fingerprint of `hostname:username:platform`; mismatched fingerprints are rejected.        |
 | Token revocation       | Database-driven via `jti` lookup on every authenticated request.                                                                        |
 | Visibility enforcement | Private/internal packages return `404 Not Found` (not `403`) for unauthorized callers to avoid leaking package existence.               |

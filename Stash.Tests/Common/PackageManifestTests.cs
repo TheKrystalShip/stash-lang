@@ -312,6 +312,34 @@ public class PackageManifestTests
         Assert.False(PackageManifest.IsValidPackageName(name));
     }
 
+    [Theory]
+    [InlineData("alice")]
+    [InlineData("multi-tok")]
+    [InlineData("a")]
+    [InlineData("abcdefghijklmnopqrstuvwxyz0123456789-ab")] // exactly 39 chars
+    public void IsValidScopeName_ValidNames_ReturnsTrue(string name)
+    {
+        Assert.True(PackageManifest.IsValidScopeName(name));
+    }
+
+    [Theory]
+    [InlineData("Alice")]       // uppercase letter
+    [InlineData("a_b")]         // underscore
+    [InlineData("9foo")]        // leading digit
+    [InlineData("-x")]          // leading hyphen
+    [InlineData("abcdefghijklmnopqrstuvwxyz0123456789-abc")] // 40 chars — too long
+    [InlineData("")]            // empty string
+    public void IsValidScopeName_InvalidNames_ReturnsFalse(string name)
+    {
+        Assert.False(PackageManifest.IsValidScopeName(name));
+    }
+
+    [Fact]
+    public void IsValidScopeName_NullInput_ReturnsFalse()
+    {
+        Assert.False(PackageManifest.IsValidScopeName(null!));
+    }
+
     [Fact]
     public void Validate_ValidManifest_ReturnsEmptyErrors()
     {

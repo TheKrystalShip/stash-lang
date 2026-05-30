@@ -228,7 +228,7 @@ public interface IPackageStorage
 ## Security Requirements
 
 - **Path traversal:** `FileSystemStorage` resolves canonical paths and verifies they start with the root directory
-- **Input validation:** Usernames `[a-zA-Z0-9_-]{1,64}`, passwords min 8 chars
+- **Input validation:** Usernames `^[a-z][a-z0-9-]{0,38}$` (scope grammar: max 39 chars, leading lowercase letter, hyphens/digits only — no uppercase, no underscore), passwords min 8 chars
 - **Integrity:** SHA-256 hash on all tarballs, verified on publish if client sends `X-Integrity` header
 - **Rate limiting:** Per-category (Auth, Publish, Download, Search) with sliding-window buckets
 - **JWT signing key:** Must be ≥32 chars for HMAC-SHA256; auto-generated if missing (with warning)

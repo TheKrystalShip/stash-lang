@@ -1,8 +1,16 @@
 using System;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 
@@ -861,5 +869,186 @@ public sealed class RegistryScopeAndOrgTests
         SearchResult result = await db.SearchPackagesAsync("secret", 1, 20, "charlie");
 
         Assert.Empty(result.Packages);
+    }
+}
+
+/// <summary>
+/// HTTP-level integration tests for F05 (scope collision with usernames/orgs)
+/// and F06 (grammar enforcement at register/orgs/scopes endpoints).
+/// </summary>
+public sealed class RegistryScopeAndOrgHttpTests : IDisposable
+{
+    private SqliteConnection? _connection;
+
+    public void Dispose() => _connection?.Dispose();
+
+    private WebApplicationFactory<Stash.Registry.Program> CreateDevFactory()
+    {
+        _connection?.Dispose();
+        _connection = new SqliteConnection("Data Source=:memory:");
+        _connection.Open();
+        var conn = _connection;
+
+        return new WebApplicationFactory<Stash.Registry.Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSetting("environment", "Development");
+                builder.ConfigureTestServices(services =>
+                {
+                    var descriptor = services.SingleOrDefault(d =>
+                        d.ServiceType == typeof(DbContextOptions<RegistryDbContext>));
+                    if (descriptor != null)
+                        services.Remove(descriptor);
+
+                    services.AddDbContext<RegistryDbContext>(options =>
+                        options.UseSqlite(conn));
+
+                    var sp = services.BuildServiceProvider();
+                    using var scope = sp.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+                    db.Initialize();
+                });
+            });
+    }
+
+    private static StringContent Json(object body) =>
+        new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+
+    /// <summary>Registers a user, logs in, and returns the Bearer token.</summary>
+    private static async Task<string> RegisterAndLoginAsync(HttpClient client, string username, string password = "Password123!")
+    {
+        await client.PostAsync("/api/v1/auth/register", Json(new { username, password }));
+        var resp = await client.PostAsync("/api/v1/auth/login", Json(new { username, password }));
+        resp.EnsureSuccessStatusCode();
+        string json = await resp.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("accessToken").GetString()!;
+    }
+
+    // ── F06: Grammar enforcement at POST /auth/register ─────────────────────────
+
+    [Fact]
+    public async Task Register_UppercaseUsername_Returns400()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync("/api/v1/auth/register",
+            Json(new { username = "Alice_42", password = "Password123!" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_LeadingDigitUsername_Returns400()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync("/api/v1/auth/register",
+            Json(new { username = "9foo", password = "Password123!" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_40CharUsername_Returns400()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        string tooLong = new string('a', 40); // 40 chars — one over the 39-char limit
+        var response = await client.PostAsync("/api/v1/auth/register",
+            Json(new { username = tooLong, password = "Password123!" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Register_UnderscoreUsername_Returns400()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.PostAsync("/api/v1/auth/register",
+            Json(new { username = "user_name", password = "Password123!" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── F06: Grammar enforcement at POST /api/v1/orgs ───────────────────────────
+
+    [Fact]
+    public async Task CreateOrg_InvalidGrammarName_Returns400()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        string token = await RegisterAndLoginAsync(client, "alice");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsync("/api/v1/orgs",
+            Json(new { name = "My_Org" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── F06: Grammar enforcement at POST /api/v1/scopes ─────────────────────────
+
+    [Fact]
+    public async Task ClaimScope_InvalidGrammarName_Returns400()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        string token = await RegisterAndLoginAsync(client, "alice");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var response = await client.PostAsync("/api/v1/scopes",
+            Json(new { scope = "9invalid", owner_type = "user", owner = "alice" }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    // ── F05: Collision checks at POST /api/v1/scopes ────────────────────────────
+
+    [Fact]
+    public async Task ClaimScope_CollisionWithExistingUsername_Returns409()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        // Register alice — this auto-provisions the 'alice' scope
+        string token = await RegisterAndLoginAsync(client, "alice");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        // Now try to claim the scope 'alice' explicitly — must collide with the user
+        var response = await client.PostAsync("/api/v1/scopes",
+            Json(new { scope = "alice", owner_type = "user", owner = "alice" }));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ClaimScope_CollisionWithExistingOrgName_Returns409()
+    {
+        await using var factory = CreateDevFactory();
+        using var client = factory.CreateClient();
+
+        string token = await RegisterAndLoginAsync(client, "alice");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        // Create the org 'acme' — auto-provisions the 'acme' scope
+        await client.PostAsync("/api/v1/orgs", Json(new { name = "acme" }));
+
+        // Now try to claim the scope 'acme' for alice — must collide with the org
+        var response = await client.PostAsync("/api/v1/scopes",
+            Json(new { scope = "acme", owner_type = "user", owner = "alice" }));
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
     }
 }

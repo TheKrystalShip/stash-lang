@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Stash.Common;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
@@ -91,7 +92,7 @@ public class ScopesController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "owner is required." });
 
         // Validate scope name grammar: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
-        if (!System.Text.RegularExpressions.Regex.IsMatch(scopeName, @"^[a-z][a-z0-9-]{0,38}$"))
+        if (!PackageManifest.IsValidScopeName(scopeName))
         {
             return BadRequest(new ErrorResponse
             {
@@ -103,6 +104,14 @@ public class ScopesController : ControllerBase
         string[] reservedScopes = ["stash", "admin"];
         if (Array.Exists(reservedScopes, s => s == scopeName))
             return Conflict(new ErrorResponse { Error = $"The scope '@{scopeName}' is a reserved system scope and cannot be claimed." });
+
+        // Check for username collision — usernames and scopes share one pool
+        if (await _db.GetUserAsync(scopeName) is not null)
+            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by a user account." });
+
+        // Check for org-name collision — org names and scopes share one pool
+        if (await _db.GetOrgAsync(scopeName) is not null)
+            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by an organization." });
 
         // Check for existing scope collision
         if (await _db.ScopeExistsAsync(scopeName))
