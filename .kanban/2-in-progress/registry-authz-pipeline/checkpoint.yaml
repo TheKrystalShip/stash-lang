@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T11:37:38Z'
+updated: '2026-05-30T12:14:35Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e8e69ad8eede6e7b6bbba6fc01783de94cb4de9c
+    verified: true
+    started: '2026-05-30T12:03:22Z'
+    completed: '2026-05-30T12:14:35Z'
+    attempts: 1
+    notes: PDP engine + PermissionResolver with fail-closed dangling-reference guards; 38 unit tests green
   P2:
     status: pending
     commit: null
