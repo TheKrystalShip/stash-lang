@@ -46,6 +46,9 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 | `advance-checkpoint.py` | Atomic state transitions in `checkpoint.yaml` |
 | `status.py` | Compact text status for `/resume` |
 | `promote-done.sh` | Final acceptance + move to `4-done/` |
+| `worktree-start.sh` | Create `../stash-<slug>` on a fresh `feature/<slug>` branch (parallel work) |
+| `check-parallel-safety.py` | Warn on subsystem overlap with an in-flight sibling worktree |
+| `worktree-finish.sh` | Merge `--no-ff`, re-verify on `main`, remove worktree if green |
 
 ### `final_verify` must filter documented flakies
 
@@ -78,6 +81,10 @@ git commit -m "chore(<slug>): record <Fxx> fixed"
 ### Subagents can return interrupted mid-edit reports
 
 The `implementer`, `resolver`, and `architect` agents occasionally return their final message mid-action — the tree is partially edited, no commit landed, no verify ran. After every subagent turn, check `git status --porcelain` and `git log -1 --oneline` to confirm the expected commit landed. If the tree is dirty with in-scope files but no commit appears, the orchestrator must finish the work: run the union of the agent's verify commands, commit using the agent's intended message format, write the corresponding `review.md` / `checkpoint.yaml` updates, and chore-commit those.
+
+### Running features in parallel
+
+Default: **one feature on `main` at a time.** Never run two agents against the same working tree — the clean-tree invariant means feature A's in-progress edits block feature B's workflow commands, and same-file edits silently overwrite with no git conflict to flag the loss. When two features must progress concurrently, give each its own git worktree + `feature/<slug>` branch, run the whole lifecycle (including `/spec`) on the branch, and integrate with `git merge --no-ff`. Parallelize only across **disjoint subsystems** (e.g. language + registry); serialize features that share hot files (two language features both touch `TokenType.cs`, `Parser.cs`, and all six visitors). Re-run `final_verify` on `main` after every merge — green-on-branch does not imply green-on-merged-`main`. Full procedure: `.claude/WORKFLOW.md` → "Running Features in Parallel".
 
 ## Specialized agents
 

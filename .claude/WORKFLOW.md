@@ -155,8 +155,11 @@ All deterministic workflow operations live in `scripts/checkpoint/`:
 | `next-phase.py [slug] [count]` | Prints the next ready phase or ready phase batch as YAML. |
 | `verify-phase.sh <slug> <phase-id>` | Prints `done_when`, checks the current plan's scope, and runs verify commands. |
 | `advance-checkpoint.py <slug> <phase-id> <status>` | Performs legal state transitions. |
-| `status.py [slug]` | Prints a compact status report. |
+| `status.py [slug]` | Prints a compact status report (incl. sibling feature worktrees). |
 | `promote-done.sh <slug>` | Runs final verification and moves the feature to done. |
+| `worktree-start.sh <slug> [base]` | Creates `../stash-<slug>` on a fresh `feature/<slug>` branch (parallel work). |
+| `check-parallel-safety.py [slug]` | Warns when a feature shares a subsystem with an in-flight sibling worktree. |
+| `worktree-finish.sh <slug>` | Merges the branch `--no-ff`, re-verifies on `main`, removes the worktree if green. |
 
 The scripts should answer deterministic questions: what phase is next, what files are allowed, what commands prove it, and whether state is legal. They should not become a second planning language.
 
@@ -236,6 +239,65 @@ Run:
 ```
 
 This runs `final_verify`, refuses open findings, promotes the directory to `.kanban/4-done/`, and leaves the feature archived.
+
+---
+
+## Running Features in Parallel
+
+The default model is **one feature on `main` at a time**. When two features genuinely need to progress concurrently, isolate each in its own git worktree on its own branch — do **not** run two agents against the same working tree.
+
+### Why a shared tree can't hold two features
+
+Every workflow command (`/next-phase`, `/feature-review`, `/resolve`) refuses to run on a dirty tree — that refusal is how a turn knows the previous turn finished cleanly. On a shared tree, feature A's in-progress edits *are* a dirty tree to feature B, so B's command refuses through no fault of its own. The two features cannot both be mid-turn. Separately, two agents editing the same file in the same window produce no git conflict at all — one set of edits silently wins and the other is lost, with nothing in history to show it happened. Worktrees convert that invisible loss into a visible, resolvable merge conflict.
+
+### What may run in parallel
+
+Parallelize **across disjoint subsystems**; serialize **within one**.
+
+| Pair | Verdict | Reason |
+| --- | --- | --- |
+| language feature + registry feature | parallel-safe | near-zero file overlap |
+| language feature + stdlib addition | usually parallel-safe | overlap only if the stdlib change adds syntax |
+| two language features | serialize | both touch `TokenType.cs`, `Parser.cs`, and all six visitors — guaranteed integration conflict |
+| two registry features | serialize | shared registry surface churns the same files |
+
+A language feature is cross-cutting by construction (the six-visitor rule), so two of them in flight will collide on the same fixed set of hot files. The integration tax then eats the parallelism gain.
+
+### Setup — worktree per feature
+
+Deterministic steps are scripted so no agent has to reconstruct them. From the main checkout:
+
+```bash
+bash scripts/checkpoint/worktree-start.sh <slug>
+```
+
+This creates the worktree at `../stash-<slug>` on a fresh `feature/<slug>` branch (based on the committed `main` ref, so a dirty primary tree doesn't leak in), refusing on any naming collision. Then run the **entire** lifecycle inside that worktree — including `/spec`. Creating the worktree *first* means the feature's `.kanban/2-in-progress/<slug>/` directory, every phase commit, and `/done`'s promotion to `.kanban/4-done/` all live on the branch and arrive on `main` as one coherent unit. The review range stays clean by construction:
+
+```bash
+git log main..feature/<slug>   # exactly this feature's commits, no cross-feature noise
+```
+
+Once `/spec` has written `plan.yaml`, check the feature won't collide with anything already in flight:
+
+```bash
+python3 scripts/checkpoint/check-parallel-safety.py <slug>
+```
+
+It reduces every feature's file-globs to top-level subsystems and warns (non-blocking, exit 3) when this feature shares one with an in-flight sibling worktree — the signal that the two branches will fight over the same hot files. `status.py` (and so `/resume`) also lists sibling feature worktrees so you always know what else is open.
+
+### Integration — `merge --no-ff` per feature
+
+When a feature is green on its branch and `/done` has promoted it, integrate from the main checkout:
+
+```bash
+bash scripts/checkpoint/worktree-finish.sh <slug>
+```
+
+The script merges `feature/<slug>` with `--no-ff` (one labeled boundary commit, `chore(<slug>): …` commits intact), **re-runs `final_verify` against the merged `main`**, and removes the worktree + branch **only if that verify is green**. It refuses unless run from `main` on a clean tree with the feature already promoted. The three rules it encodes, stated plainly:
+
+1. **Last to merge pays the conflict cost** — merge the less cross-cutting feature first. On a merge conflict the script stops and leaves the tree for you to resolve, then re-run.
+2. **Green-on-branch ≠ green-on-merged-`main`.** Two features can each pass `final_verify` in isolation yet break `main` once both land (a semantic conflict with no textual conflict). On a post-merge verify failure the script preserves the merge and tells you to fix forward — it does **not** abort and does **not** clean up.
+3. **`.claude/repo.md` "Active Multi-Phase Work" is the one guaranteed collision** — both features append a pointer line. Resolve the trivial conflict, or only update `repo.md` at merge time.
 
 ---
 

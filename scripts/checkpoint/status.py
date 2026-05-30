@@ -63,6 +63,29 @@ def main(argv: list[str]) -> int:
     except subprocess.CalledProcessError:
         print("git: not a repo or error")
 
+    # Worktree context (parallel-features workflow). Shows where you are and
+    # which sibling feature worktrees are in flight.
+    try:
+        raw = git("worktree", "list", "--porcelain")
+        entries: list[tuple[str, str]] = []
+        path = ""
+        for line in raw.splitlines():
+            if line.startswith("worktree "):
+                path = line[len("worktree "):]
+            elif line.startswith("branch "):
+                entries.append((path, line[len("branch "):].replace("refs/heads/", "")))
+            elif line.startswith("detached"):
+                entries.append((path, "(detached)"))
+        if len(entries) > 1:
+            here = str(INPROGRESS_DIR.parent.parent)  # repo root of this checkout
+            print()
+            print("worktrees:")
+            for wt_path, wt_branch in entries:
+                mark = " <- here" if wt_path == here else ""
+                print(f"  {wt_branch:<32} {wt_path}{mark}")
+    except subprocess.CalledProcessError:
+        pass
+
     # Review state
     rv = cp.get("review") or {}
     if rv.get("status") and rv["status"] != "not_started":
