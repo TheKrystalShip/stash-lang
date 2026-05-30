@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
+using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -43,7 +44,7 @@ public class OrganizationsController : ControllerBase
     /// Returns <c>409</c> if an org or scope with the same name already exists.
     /// </remarks>
     /// <returns><c>201</c> with <see cref="CreateOrgResponse"/> on success.</returns>
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
     [HttpPost]
     public async Task<IActionResult> CreateOrg()
     {
@@ -124,7 +125,7 @@ public class OrganizationsController : ControllerBase
     /// </summary>
     /// <param name="org">The org name.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org not found.</returns>
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
     [HttpPost("{org}/members")]
     public async Task<IActionResult> AddMember(string org)
     {
@@ -135,7 +136,7 @@ public class OrganizationsController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, username);
-        bool isAdmin = User.IsInRole("admin");
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
         if (!isOwner && !isAdmin)
             return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of organization '{org}'." });
 
@@ -180,7 +181,7 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <param name="username">The username to remove.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org or user not found.</returns>
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
     [HttpDelete("{org}/members/{username}")]
     public async Task<IActionResult> RemoveMember(string org, string username)
     {
@@ -191,7 +192,7 @@ public class OrganizationsController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
-        bool isAdmin = User.IsInRole("admin");
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
         if (!isOwner && !isAdmin)
             return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{org}'." });
 
@@ -204,7 +205,7 @@ public class OrganizationsController : ControllerBase
     /// </summary>
     /// <param name="org">The org name.</param>
     /// <returns><c>201</c> with <see cref="CreateTeamResponse"/> on success.</returns>
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
     [HttpPost("{org}/teams")]
     public async Task<IActionResult> CreateTeam(string org)
     {
@@ -215,7 +216,7 @@ public class OrganizationsController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, username);
-        bool isAdmin = User.IsInRole("admin");
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
         if (!isOwner && !isAdmin)
             return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of organization '{org}'." });
 
@@ -257,7 +258,7 @@ public class OrganizationsController : ControllerBase
     /// <param name="org">The org name.</param>
     /// <param name="team">The team name.</param>
     /// <returns><c>200</c> on success, <c>403</c> if not an owner, <c>404</c> if org/team not found.</returns>
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
     [HttpPost("{org}/teams/{team}/members")]
     public async Task<IActionResult> AddTeamMember(string org, string team)
     {
@@ -268,7 +269,7 @@ public class OrganizationsController : ControllerBase
             return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         bool isOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, username);
-        bool isAdmin = User.IsInRole("admin");
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
         if (!isOwner && !isAdmin)
             return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of organization '{org}'." });
 

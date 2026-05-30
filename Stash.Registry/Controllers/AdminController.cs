@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
+using static Stash.Registry.Auth.TokenCeilingConverter;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -25,7 +26,7 @@ namespace Stash.Registry.Controllers;
 /// endpoints, by <see cref="IRegistryAuthorizer"/> with the admin-ceiling-first check.
 /// </para>
 /// </remarks>
-[Authorize(Policy = "RequireAdmin")]
+[Authorize(Policy = AuthPolicies.RequireAdmin)]
 [ApiController]
 [Route("api/v1/admin")]
 public class AdminController : ControllerBase
@@ -64,14 +65,8 @@ public class AdminController : ControllerBase
             return new AnonymousPrincipal();
 
         string username = user.Identity!.Name!;
-        bool isAdmin = user.IsInRole("admin");
-        string tokenScopeStr = user.FindFirst("token_scope")?.Value ?? "read";
-        TokenCeiling ceiling = tokenScopeStr switch
-        {
-            "admin" => TokenCeiling.Admin,
-            "publish" => TokenCeiling.Publish,
-            _ => TokenCeiling.Read
-        };
+        bool isAdmin = user.IsInRole(UserRoles.Admin);
+        TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
         UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
         string tokenId = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value ?? "";
         return new UserPrincipal(username, role, ceiling, tokenId);
@@ -105,7 +100,7 @@ public class AdminController : ControllerBase
 
         string? newUsername = body?.Username?.Trim();
         string? password = body?.Password;
-        string newRole = string.IsNullOrEmpty(body?.Role) ? "user" : body.Role;
+        string newRole = string.IsNullOrEmpty(body?.Role) ? UserRoles.User : body.Role;
 
         if (string.IsNullOrEmpty(newUsername) || string.IsNullOrEmpty(password))
             return BadRequest(new ErrorResponse { Error = "Username and password are required." });
@@ -125,8 +120,8 @@ public class AdminController : ControllerBase
             return Conflict(new ErrorResponse { Error = ex.Message });
         }
 
-        if (string.Equals(newRole, "admin", StringComparison.Ordinal))
-            await _db.UpdateUserRoleAsync(newUsername, "admin");
+        if (string.Equals(newRole, UserRoles.Admin, StringComparison.Ordinal))
+            await _db.UpdateUserRoleAsync(newUsername, UserRoles.Admin);
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogUserCreateAsync(newUsername, ip);
@@ -184,8 +179,7 @@ public class AdminController : ControllerBase
         if (!Array.Exists(validPrincipalTypes, p => p == body.PrincipalType))
             return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: user, team, org." });
 
-        string[] validRoles = ["owner", "maintainer", "publisher", "reader"];
-        if (!Array.Exists(validRoles, r => r == body.Role))
+        if (!Array.Exists(PackageRoles.RankOrder, r => r == body.Role))
             return BadRequest(new ErrorResponse { Error = $"Invalid role '{body.Role}'. Must be one of: owner, maintainer, publisher, reader." });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();

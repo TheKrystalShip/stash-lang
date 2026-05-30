@@ -132,11 +132,11 @@ public sealed class JwtTokenService
             new Claim(JwtRegisteredClaimNames.Jti, tokenId),
             new Claim(ClaimTypes.Name, username),
             new Claim(ClaimTypes.Role, role),
-            new Claim("token_scope", scope)
+            new Claim(RegistryClaims.TokenScope, scope)
         };
         if (!string.IsNullOrEmpty(machineId))
         {
-            claimsList.Add(new Claim("machine_id", machineId));
+            claimsList.Add(new Claim(RegistryClaims.MachineId, machineId));
         }
 
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.HmacSha256);

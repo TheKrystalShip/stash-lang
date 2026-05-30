@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Stash.Registry.Auth;
 using Stash.Registry.Database;
 
 namespace Stash.Registry.Auth.Authorization;
@@ -27,14 +28,7 @@ public sealed class PermissionResolver : IPermissionResolver
 {
     private readonly RegistryDbContext _ctx;
 
-    /// <summary>Role ordering: lower index = higher privilege.</summary>
-    private static readonly string[] RoleOrder = ["owner", "maintainer", "publisher", "reader"];
-
-    private static int RoleRank(string role)
-    {
-        int idx = System.Array.IndexOf(RoleOrder, role);
-        return idx < 0 ? int.MaxValue : idx;
-    }
+    private static int RoleRank(string role) => PackageRoles.Rank(role);
 
     /// <summary>Returns the role with the higher privilege (lower rank), or <paramref name="b"/> when <paramref name="a"/> is null.</summary>
     private static string BestRole(string? a, string b) =>
@@ -128,7 +122,7 @@ public sealed class PermissionResolver : IPermissionResolver
                     if (orgMember != null)
                     {
                         // Org owners inherit package owner; org members inherit reader.
-                        string inheritedRole = orgMember.OrgRole == "owner" ? "owner" : "reader";
+                        string inheritedRole = orgMember.OrgRole == "owner" ? PackageRoles.Owner : PackageRoles.Reader;
                         bestRole = BestRole(bestRole, inheritedRole);
                     }
 

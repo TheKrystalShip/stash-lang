@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Stash.Registry.Auth;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 
@@ -60,9 +61,9 @@ public sealed class PackageRoleService
 
         // Last-owner protection: count direct owner entries (principal_type == user, role == owner).
         // The invariant covers any principal type: if the target is the last owner, refuse.
-        if (target.Role == "owner")
+        if (target.Role == PackageRoles.Owner)
         {
-            int ownerCount = roles.Count(r => r.Role == "owner");
+            int ownerCount = roles.Count(r => r.Role == PackageRoles.Owner);
             if (ownerCount <= 1)
                 throw new LastOwnerException(packageName);
         }

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
+using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
@@ -76,14 +77,8 @@ public class PackagesController : ControllerBase
             return new AnonymousPrincipal();
 
         string username = User.Identity!.Name!;
-        bool isAdmin = User.IsInRole("admin");
-        string tokenScopeStr = User.FindFirstValue("token_scope") ?? "read";
-        TokenCeiling ceiling = tokenScopeStr switch
-        {
-            "admin" => TokenCeiling.Admin,
-            "publish" => TokenCeiling.Publish,
-            _ => TokenCeiling.Read
-        };
+        bool isAdmin = User.IsInRole(UserRoles.Admin);
+        TokenCeiling ceiling = TokenCeilingConverter.FromClaimValue(User.FindFirstValue(RegistryClaims.TokenScope));
         UserRole role = isAdmin ? UserRole.Admin : UserRole.User;
         string tokenId = User.FindFirstValue(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti) ?? "";
         return new UserPrincipal(username, role, ceiling, tokenId);
@@ -579,8 +574,7 @@ public class PackagesController : ControllerBase
         if (!Array.Exists(validPrincipalTypes, p => p == request.PrincipalType))
             return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: user, team, org." });
 
-        string[] validRoles = ["owner", "maintainer", "publisher", "reader"];
-        if (!Array.Exists(validRoles, r => r == request.Role))
+        if (!Array.Exists(PackageRoles.RankOrder, r => r == request.Role))
             return BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
 
         string username = ((UserPrincipal)principal).Username;

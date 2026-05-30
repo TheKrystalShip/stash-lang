@@ -111,7 +111,7 @@ public class AuthController : ControllerBase
         }
 
         var user = await _db.GetUserAsync(username);
-        string role = user?.Role ?? "user";
+        string role = user?.Role ?? UserRoles.User;
         string? machineId = Request.Headers["X-Machine-Id"].FirstOrDefault();
 
         // Create short-lived access token
@@ -251,7 +251,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Whoami()
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? "user";
+        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
 
         return Ok(new WhoamiResponse { Username = username, Role = role });
     }
@@ -307,7 +307,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> CreateToken()
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? "user";
+        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
 
         TokenCreateRequest? body;
         try
@@ -399,7 +399,7 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> DeleteToken(string id)
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? "user";
+        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
         if (record == null)
@@ -477,7 +477,7 @@ public class AuthController : ControllerBase
         }
 
         // Cross-validate machine_id claim from the JWT against the request body
-        string? tokenMachineId = principal.FindFirstValue("machine_id");
+        string? tokenMachineId = principal.FindFirstValue(RegistryClaims.MachineId);
         if (!string.Equals(tokenMachineId, body.MachineId, StringComparison.Ordinal))
         {
             return Unauthorized(new ErrorResponse { Error = "Machine fingerprint mismatch." });
@@ -532,7 +532,7 @@ public class AuthController : ControllerBase
 
         // Look up the user to get current role
         var user = await _db.GetUserAsync(tokenUsername);
-        string role = user?.Role ?? "user";
+        string role = user?.Role ?? UserRoles.User;
 
         // Delete the old access token record
         await _db.DeleteTokenAsync(tokenJti);

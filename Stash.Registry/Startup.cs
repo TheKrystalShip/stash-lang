@@ -107,16 +107,16 @@ public sealed class Startup
             });
 
         services.AddAuthorizationBuilder()
-            .AddPolicy("RequireReadScope", policy =>
-                policy.RequireClaim("token_scope", "read", "publish", "admin"))
-            .AddPolicy("RequirePublishScope", policy =>
-                policy.RequireClaim("token_scope", "publish", "admin"))
-            .AddPolicy("RequireAdminScope", policy =>
-                policy.RequireClaim("token_scope", "admin"))
-            .AddPolicy("RequireAdmin", policy =>
+            .AddPolicy(AuthPolicies.RequireReadScope, policy =>
+                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Read, TokenScopes.Publish, TokenScopes.Admin))
+            .AddPolicy(AuthPolicies.RequirePublishScope, policy =>
+                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Publish, TokenScopes.Admin))
+            .AddPolicy(AuthPolicies.RequireAdminScope, policy =>
+                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Admin))
+            .AddPolicy(AuthPolicies.RequireAdmin, policy =>
             {
-                policy.RequireClaim("token_scope", "admin");
-                policy.RequireRole("admin");
+                policy.RequireClaim(RegistryClaims.TokenScope, TokenScopes.Admin);
+                policy.RequireRole(UserRoles.Admin);
             });
 
         services.AddSingleton(_config);

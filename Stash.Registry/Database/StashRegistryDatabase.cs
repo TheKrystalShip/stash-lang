@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Stash.Registry.Auth;
 using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Database;
@@ -600,14 +601,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
 
     // ── Package role operations ───────────────────────────────────────────────
 
-    // Role ordering for HasPackagePermissionAsync (P2 direct-only; inheritance added in P5).
-    private static readonly string[] RoleOrder = ["owner", "maintainer", "publisher", "reader"];
-
-    private static int RoleRank(string role)
-    {
-        int idx = Array.IndexOf(RoleOrder, role);
-        return idx < 0 ? int.MaxValue : idx;
-    }
+    private static int RoleRank(string role) => PackageRoles.Rank(role);
 
     /// <inheritdoc/>
     public async Task AssignPackageRoleAsync(
@@ -701,7 +695,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                 if (orgMember != null)
                 {
                     // Org owners inherit package owner; org members inherit reader on private/internal packages
-                    string inheritedRole = orgMember.OrgRole == "owner" ? "owner" : "reader";
+                    string inheritedRole = orgMember.OrgRole == "owner" ? PackageRoles.Owner : PackageRoles.Reader;
                     bestRole = BestRole(bestRole, inheritedRole);
                 }
 

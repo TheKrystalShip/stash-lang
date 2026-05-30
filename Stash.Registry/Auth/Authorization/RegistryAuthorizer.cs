@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Stash.Registry.Auth;
 using Stash.Registry.Database;
 
 namespace Stash.Registry.Auth.Authorization;
@@ -14,14 +15,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     private readonly IPermissionResolver _resolver;
     private readonly RegistryDbContext _ctx;
 
-    /// <summary>Role rank helper: lower index = higher privilege.</summary>
-    private static readonly string[] RoleOrder = ["owner", "maintainer", "publisher", "reader"];
-
-    private static int RoleRank(string role)
-    {
-        int idx = Array.IndexOf(RoleOrder, role);
-        return idx < 0 ? int.MaxValue : idx;
-    }
+    private static int RoleRank(string role) => PackageRoles.Rank(role);
 
     /// <summary>Returns true when <paramref name="effective"/> satisfies <paramref name="required"/>.</summary>
     private static bool HasRole(string? effective, string required) =>
@@ -155,19 +149,19 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 
             // ── Package write actions — require package role ─────────────────
             RegistryAction.PublishVersion =>
-                await AuthorizePackageRoleAsync(username, isAdmin, resource, requiredRole: "publisher"),
+                await AuthorizePackageRoleAsync(username, isAdmin, resource, requiredRole: PackageRoles.Publisher),
 
             RegistryAction.UnpublishVersion or
             RegistryAction.DeprecatePackage or
             RegistryAction.DeprecateVersion =>
-                await AuthorizePackageRoleAsync(username, isAdmin, resource, requiredRole: "maintainer"),
+                await AuthorizePackageRoleAsync(username, isAdmin, resource, requiredRole: PackageRoles.Maintainer),
 
             RegistryAction.ChangePackageVisibility or
             RegistryAction.ListPackageRoles or
             RegistryAction.AssignPackageRole or
             RegistryAction.RevokePackageRole or
             RegistryAction.DeletePackage =>
-                await AuthorizePackageRoleAsync(username, isAdmin, resource, requiredRole: "owner"),
+                await AuthorizePackageRoleAsync(username, isAdmin, resource, requiredRole: PackageRoles.Owner),
 
             // ── CreatePackage — gated on scope ownership ─────────────────────
             RegistryAction.CreatePackage =>
@@ -265,7 +259,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 
         // Check effective role
         string? effectiveRole = await _resolver.GetEffectiveRoleAsync(username, pkg.FullName);
-        if (effectiveRole != null && HasRole(effectiveRole, "reader"))
+        if (effectiveRole != null && HasRole(effectiveRole, PackageRoles.Reader))
             return AuthzDecision.Allow();
 
         // Internal packages: org members of the owning org can read

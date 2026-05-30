@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
+using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
@@ -63,7 +64,7 @@ public class ScopesController : ControllerBase
     /// (<c>@stash</c>, <c>@admin</c>). Requires a JWT with the <c>publish</c> or <c>admin</c> scope.
     /// </remarks>
     /// <returns><c>201</c> with <see cref="ScopeDetailResponse"/> on success, <c>409</c> on collision.</returns>
-    [Authorize(Policy = "RequirePublishScope")]
+    [Authorize(Policy = AuthPolicies.RequirePublishScope)]
     [HttpPost]
     public async Task<IActionResult> ClaimScope()
     {
@@ -122,7 +123,7 @@ public class ScopesController : ControllerBase
         if (ownerType == "user")
         {
             // The caller can only claim a scope for themselves (not for another user)
-            if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole("admin"))
+            if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole(UserRoles.Admin))
                 return StatusCode(403, new ErrorResponse { Error = "You may only claim a user scope for your own account." });
 
             newScope = new ScopeRecord
@@ -141,7 +142,7 @@ public class ScopesController : ControllerBase
                 return NotFound(new ErrorResponse { Error = $"Organization '{owner}' not found." });
 
             bool isOrgOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
-            bool isAdmin = User.IsInRole("admin");
+            bool isAdmin = User.IsInRole(UserRoles.Admin);
             if (!isOrgOwner && !isAdmin)
                 return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{owner}'." });
 
