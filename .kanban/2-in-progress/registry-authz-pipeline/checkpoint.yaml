@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
-current: null
-updated: '2026-05-30T16:43:16Z'
+current: P7
+updated: '2026-05-30T17:21:17Z'
 phases:
   P1:
     status: done
@@ -60,13 +60,22 @@ phases:
       all ceiling/role/visibility/policy axes covered; concurrent cells in RegistryConcurrency collection;
       stable across two runs
   P7:
-    status: pending
+    status: failed
     commit: null
     verified: false
-    started: null
+    started: '2026-05-30T17:15:20Z'
     completed: null
-    attempts: 0
-    notes: ''
+    attempts: 1
+    notes: "AuthPolicies not dead. Org/Scopes controllers (9 sites) are PDP-backed per-endpoint \u2014\
+      \ attribute strip there may be behavior-preserving if the PDP enforces the publish ceiling for those\
+      \ actions. But AdminController is NOT fully migrated: class-level [Authorize(Policy=RequireAdmin)]\
+      \ (line 29) gates 5 endpoints, only AdminRevokeRole (line 201/215) has a PDP call. Stripping RequireAdmin\
+      \ drops the compound admin-role+admin-ceiling gate on GetStats/CreateUser/DeleteUser/AdminAssignRole/GetAuditLog\
+      \ \u2014 privilege-escalation regression. Cannot delete AuthPolicies/Startup policies without first\
+      \ migrating the unmigrated AdminController endpoints to PDP calls \u2014 out of P7 file scope and\
+      \ explicitly assigned to the controller-swap phases. Architect must add/reopen an AdminController\
+      \ PDP migration phase before P7. Note: Org/Scopes attribute strips are unblocked once AdminController\
+      \ is done. Docs+example sub-task is unblocked but should wait for final shipped surface."
 review:
   status: not_started
   started: null
