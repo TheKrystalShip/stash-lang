@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-filter
 current: null
-updated: '2026-05-30T20:48:11Z'
+updated: '2026-05-30T20:56:00Z'
 phases:
   P1:
     status: done
@@ -31,13 +31,15 @@ phases:
     notes: 'ImperativeAuthz attribute + 4 endpoints marked + AuthzDispatchCoverageMetaTests (3 assertions:
       production, fail-path, imperative-pin); DeleteOrg/DeleteScope deny routed through AuthzDenyResponse'
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c70be2ad6619811c28b960251f991af136f52463
+    verified: true
+    started: '2026-05-30T20:50:07Z'
+    completed: '2026-05-30T20:56:00Z'
+    attempts: 1
+    notes: 'CLAUDE.md: Controller Pattern updated with [RegistryAuthorize]/[ImperativeAuthz], Request
+      Flow names RegistryAuthorizeFilter + JTI gate, Tests table adds auth meta-tests; repo.md pointer
+      updated'
 review:
   status: not_started
   started: null
