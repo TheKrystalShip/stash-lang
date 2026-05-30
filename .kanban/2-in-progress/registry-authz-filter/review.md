@@ -25,7 +25,8 @@ two minor maintainability notes follow.
 
 ## F01 — [IMPORTANT] PDP-deny body shape regressed on GetVersion / DownloadVersion (no longer "Version 'v' of package 'pkg' not found.")
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 4a84bb4
 **Files:** `Stash.Registry/Controllers/PackagesController.cs:132-181`, `Stash.Registry/Auth/Authorization/RegistryAuthorizeFilter.cs:92-99`
 **Phase:** P2
 **Commit:** f6d4deb
@@ -99,7 +100,8 @@ dotnet test --filter "FullyQualifiedName~Registry&FullyQualifiedName!~BasePathIn
 
 ## F02 — [MINOR] PDP-deny body now carries a `Message` field on package 404 paths that previously omitted it
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 4a84bb4
 **Files:** `Stash.Registry/Auth/Authorization/AuthzDenyResponse.cs:39-60`, `Stash.Registry/Controllers/PackagesController.cs:80-130, 132-152, 154-181`
 **Phase:** P2
 **Commit:** f6d4deb
