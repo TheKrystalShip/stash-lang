@@ -1,16 +1,18 @@
 schema_version: 1
 feature: registry-authz-pdp-completion
 current: null
-updated: '2026-05-30T22:06:40Z'
+updated: '2026-05-30T22:21:22Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: ee5f2ac04ca40494d80c24a22f60990048e0edae
+    verified: true
+    started: '2026-05-30T22:13:48Z'
+    completed: '2026-05-30T22:21:22Z'
+    attempts: 1
+    notes: Folded DeleteOrg inline PDP block into [RegistryAuthorize(DeleteOrg)]; removed unused _authorizer/_auditService/_principalFactory
+      fields; shrunk pin to {PublishPackage, ClaimScope, DeleteScope}; added delete_org.deny.audit_id
+      matrix row + e2e test
   P2:
     status: pending
     commit: null
