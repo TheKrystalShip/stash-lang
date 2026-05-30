@@ -78,7 +78,7 @@ public sealed class NoMagicAuthStringsMetaTests
 
     // ── Scanner ───────────────────────────────────────────────────────────────
 
-    private static List<string> ScanDirectory(string sourceDir)
+    private static (List<string> Violations, int ScannedFiles) ScanDirectory(string sourceDir)
     {
         var violations = new List<string>();
 
@@ -96,7 +96,8 @@ public sealed class NoMagicAuthStringsMetaTests
                 if (string.Equals(relForwardSlash, WhitelistedFileForwardSlash, StringComparison.OrdinalIgnoreCase))
                     return false;
                 return true;
-            });
+            })
+            .ToList();
 
         foreach (string filePath in csFiles)
         {
@@ -105,8 +106,15 @@ public sealed class NoMagicAuthStringsMetaTests
             ScanSource(source, relativePath, violations);
         }
 
-        return violations;
+        return (violations, csFiles.Count);
     }
+
+    /// <summary>
+    /// The six registry controllers are the irreducible auth surface; the scan must always
+    /// reach at least this many files. A lower count means repo-root/path discovery regressed
+    /// and the compliance test would otherwise pass <em>vacuously</em> against an empty tree.
+    /// </summary>
+    private const int MinScannedFiles = 6;
 
     /// <summary>
     /// Scans a single C# source snippet (parsed with Roslyn) for bare string-literal
@@ -153,7 +161,14 @@ public sealed class NoMagicAuthStringsMetaTests
     public void NoProductionAuthSink_ReceivesBareLiteral()
     {
         string sourceDir = FindRegistrySourceDir();
-        List<string> violations = ScanDirectory(sourceDir);
+        (List<string> violations, int scannedFiles) = ScanDirectory(sourceDir);
+
+        // Guard against a vacuous pass: if path discovery regresses and scans zero/too-few
+        // files, the test would report "no violations" while enforcing nothing.
+        Assert.True(
+            scannedFiles >= MinScannedFiles,
+            $"Only {scannedFiles} file(s) scanned under '{sourceDir}' (expected >= {MinScannedFiles}). " +
+            "Repo-root/path discovery likely regressed — the compliance scan is not reaching the source tree.");
 
         Assert.True(
             violations.Count == 0,
