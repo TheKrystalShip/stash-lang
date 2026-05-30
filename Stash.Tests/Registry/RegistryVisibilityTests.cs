@@ -314,6 +314,10 @@ public sealed class RegistryInternalVisibilityEndpointTests : IDisposable
         return new WebApplicationFactory<Stash.Registry.Program>()
             .WithWebHostBuilder(builder =>
             {
+                // Pin the content root to the registry project relative to the solution
+                // so WebApplicationFactory does not guess it from the current working
+                // directory (which throws DirectoryNotFoundException in full-suite runs).
+                builder.UseSolutionRelativeContentRoot("Stash.Registry");
                 builder.UseSetting("environment", "Development");
                 builder.ConfigureTestServices(services =>
                 {
