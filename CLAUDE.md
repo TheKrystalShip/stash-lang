@@ -4,6 +4,18 @@ Read `AGENTS.md` first for shared Stash project architecture, build/test command
 
 This file contains only Claude-specific workflow instructions.
 
+## Code Conventions — Bounded Domains (No Magic Strings)
+
+Applies to **every** Stash project, not just the registry. The goal is a self-documenting codebase: a reader — or the compiler — can always see the full set of legal values for a field.
+
+**Rule.** A value drawn from a closed/bounded set (a fixed list of valid values) must be referenced through a named definition — an `enum`, or a `const` / `static readonly` set in a single source-of-truth class — and never inlined as a literal at a use site. Parse external/wire strings into typed values **at the boundary**; downstream code works in enums/constants, not raw strings.
+
+- **Bounded (must be named):** claim names, roles, scopes, policy names, opcode/instruction names, diagnostic codes (`SA0201`…), mode/state flags, namespace names, reserved identifiers, enum-like DB column values.
+- **Not bounded — exempt, do NOT over-apply:** free-form text with no closed set — log/exception messages, user-facing prose, format strings, route templates, regex patterns, file paths, test fixtures / expected-output snapshots.
+- **Single source of truth.** Define each domain once. A closed set duplicated across files (e.g. the same `["a","b"]` array copied into three places) is the same defect as an inline literal — collapse it.
+- **Enforce in the test/CI gate, not just convention.** Agents get no IDE squiggle, so the enforcement that actually bites lives in a meta-test. Prefer **sink-targeted** scans (a Roslyn syntax scan flagging string literals that reach known sinks) over broad literal scans — `Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs` is the canonical pattern (it ships a self-test proving the scan has teeth and a floor guard against a vacuous pass). The sink list is append-only: when a new bounded domain gets a named home, add its accessor.
+- **When a domain can't be sink-guarded** (bare `==` comparisons), the durable fix is a real `enum` (with an EF value converter for DB columns) so illegal values fail to compile. Centralized string constants are the cheap 80%; types are the 100%.
+
 ## Checkpoint Workflow — multi-phase features
 
 Multi-phase work (new language features, large refactors, anything beyond a one-shot fix) goes through the **checkpoint workflow**: a flat, file-mediated pipeline where each user turn does one bounded job and state lives on disk between turns. This fits Claude Code's token-budget / rate-limit model — interruption is safe at any point.
