@@ -340,15 +340,32 @@ public sealed class RegistryInternalVisibilityEndpointTests : IDisposable
     private static StringContent Json(object body) =>
         new StringContent(System.Text.Json.JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json");
 
-    /// <summary>Registers a user, logs in, and returns the Bearer token.</summary>
+    /// <summary>
+    /// Registers a user, logs in, and returns a publish-ceiling Bearer token.
+    /// Login now issues a read-ceiling token (P5 least-privilege default); tests that
+    /// create orgs, add members, or publish need an explicit publish-ceiling upgrade.
+    /// </summary>
     private static async Task<string> RegisterAndLoginAsync(HttpClient client, string username, string password = "Password123!")
     {
         await client.PostAsync("/api/v1/auth/register", Json(new { username, password }));
-        var resp = await client.PostAsync("/api/v1/auth/login", Json(new { username, password }));
-        resp.EnsureSuccessStatusCode();
-        string json = await resp.Content.ReadAsStringAsync();
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("accessToken").GetString()!;
+        var loginResp = await client.PostAsync("/api/v1/auth/login", Json(new { username, password }));
+        loginResp.EnsureSuccessStatusCode();
+        string loginJson = await loginResp.Content.ReadAsStringAsync();
+        using var loginDoc = System.Text.Json.JsonDocument.Parse(loginJson);
+        string loginToken = loginDoc.RootElement.GetProperty("accessToken").GetString()!;
+
+        // Login issues a read-ceiling token; upgrade to publish-ceiling for write tests.
+        var savedAuth = client.DefaultRequestHeaders.Authorization;
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginToken);
+        var tokenResp = await client.PostAsync("/api/v1/auth/tokens",
+            Json(new { ceiling = "publish", expiresIn = "1d" }));
+        client.DefaultRequestHeaders.Authorization = savedAuth;
+
+        tokenResp.EnsureSuccessStatusCode();
+        string tokenJson = await tokenResp.Content.ReadAsStringAsync();
+        using var tokenDoc = System.Text.Json.JsonDocument.Parse(tokenJson);
+        return tokenDoc.RootElement.GetProperty("token").GetString()!;
     }
 
     private static PackageRecord MakePackage(string name, string visibility) => new()

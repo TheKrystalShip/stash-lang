@@ -326,18 +326,31 @@ public sealed class RegistryRoundTripTests : IDisposable
         new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
 
     /// <summary>
-    /// Registers a user over HTTP and returns the publish-scoped access token.
-    /// The first registered user automatically becomes admin (and gets a publish-scoped
-    /// JWT on login).
+    /// Registers a user over HTTP and returns a publish-ceiling access token.
+    /// Login now issues a read-ceiling token (P5 least-privilege default); tests that
+    /// publish/claim/create-org need an explicit publish-ceiling upgrade.
     /// </summary>
     private static async Task<string> RegisterAndLoginAsync(HttpClient http, string username, string password = "Password123!")
     {
         await http.PostAsync("/api/v1/auth/register", Json(new { username, password }));
-        var resp = await http.PostAsync("/api/v1/auth/login", Json(new { username, password }));
-        resp.EnsureSuccessStatusCode();
-        string json = await resp.Content.ReadAsStringAsync();
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("accessToken").GetString()!;
+        var loginResp = await http.PostAsync("/api/v1/auth/login", Json(new { username, password }));
+        loginResp.EnsureSuccessStatusCode();
+        string loginJson = await loginResp.Content.ReadAsStringAsync();
+        using var loginDoc = JsonDocument.Parse(loginJson);
+        string loginToken = loginDoc.RootElement.GetProperty("accessToken").GetString()!;
+
+        // Login issues a read-ceiling token; upgrade to publish-ceiling for write tests.
+        var savedAuth = http.DefaultRequestHeaders.Authorization;
+        http.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", loginToken);
+        var tokenResp = await http.PostAsync("/api/v1/auth/tokens",
+            Json(new { ceiling = "publish", expiresIn = "1d" }));
+        http.DefaultRequestHeaders.Authorization = savedAuth;
+
+        tokenResp.EnsureSuccessStatusCode();
+        string tokenJson = await tokenResp.Content.ReadAsStringAsync();
+        using var tokenDoc = JsonDocument.Parse(tokenJson);
+        return tokenDoc.RootElement.GetProperty("token").GetString()!;
     }
 
     /// <summary>
