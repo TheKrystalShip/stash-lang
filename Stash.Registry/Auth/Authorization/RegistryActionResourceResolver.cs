@@ -83,9 +83,7 @@ public static class RegistryActionResourceResolver
 
             RegistryAction.Whoami or
             RegistryAction.ListOwnTokens or
-            RegistryAction.IssueToken or
-            RegistryAction.Login or
-            RegistryAction.Register
+            RegistryAction.IssueToken
                 => new PrincipalSelfResource(),
 
             // ── Search ────────────────────────────────────────────────────────
