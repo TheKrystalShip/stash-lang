@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pipeline
 current: null
-updated: '2026-05-30T17:48:01Z'
+updated: '2026-05-30T18:12:07Z'
 phases:
   P1:
     status: done
@@ -69,15 +69,15 @@ phases:
     notes: Wired 5 admin endpoints to PDP; stripped AuthPolicies attributes; 12 regression tests added;
       grep clean
   P8:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: Docs + example + cleanup (was P7); deps [P7]. Blocked until P7 completes the AdminController
-      PDP migration so AuthPolicies has no remaining referent and can be deleted. Original P7 dispatch
-      correctly refused and surfaced the AdminController gap (see P7 note).
+    status: done
+    commit: 73070c075b4e6638e5fabfafd241464ceaba7cee
+    verified: true
+    started: '2026-05-30T17:56:29Z'
+    completed: '2026-05-30T18:12:07Z'
+    attempts: 1
+    notes: Deleted HasPackagePermissionAsync, AuthPolicies class, 4 legacy string policies from Startup.cs;
+      rewrote stale comments in JwtTokenService/AuthzDenyReason/CLAUDE.md; added registry PDP docs + authz-flow
+      example; registry suite 587/587 green
 review:
   status: not_started
   started: null
