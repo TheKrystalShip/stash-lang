@@ -530,7 +530,8 @@ dotnet test --filter "FullyQualifiedName~RegistryScopeAndOrgTests|FullyQualified
 
 ## F07 — [LOW] P6 done_when #3 satisfied at DB layer, not over HTTP
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 04a947f
 **Files:** `Stash.Tests/Registry/RegistryRoutesTests.cs`, `Stash.Tests/Interpreting/PackageInstallerTests.cs` (blocked — F01)
 **Phase:** P6
 **Commit:** 6c9b005
@@ -586,7 +587,8 @@ dotnet test --filter "FullyQualifiedName~PackageInstallerTests&FullyQualifiedNam
 
 ## F08 — [LOW] Audit action strings `owner.add` / `owner.remove` retained after role model rename
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 04a947f
 **Files:** `Stash.Registry/Services/AuditService.cs:47,60`, `docs/Registry — Package Registry.md:1115-1116`
 **Phase:** P5 (model rename), P7 (docs)
 **Commit:** 74ea0f7, effe750
