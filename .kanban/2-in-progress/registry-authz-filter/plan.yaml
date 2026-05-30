@@ -71,6 +71,7 @@ phases:
       - "Every per-controller `private (static)? Principal BuildPrincipal(...)` helper is deleted from all six controllers; controllers that still need a Principal inject and call RegistryAuthzPrincipalFactory."
       - "RegistryAuthzMatrixTests passes with zero changes to AuthzMatrixData; the full registry suite (excluding documented env-flakies) passes — proving sibling tests (OrgAndAdminAuthzTests, ScopeOwnershipPolicyTests, RegistryAuthzRoleMatrixWriteTests, RegistryAuthzRoleRevokeTests, etc.) still see identical status codes and bodies."
       - "PackagesController's now-redundant DenyReasonToStatus method is deleted (its mapping moved into AuthzDenyResponse). The 404 body shape ('Package '{packageName}' not found.') for VisibilityHidden/PackageNotFound on package endpoints is preserved via a notFoundMessage parameter on the shared helper."
+      - "RegistryAuthzAuditMutationTests gains rows asserting that an authenticated denial on the previously-unaudited clean endpoints converted in this phase (at minimum CreateOrg, one Orgs member/team endpoint, and VerifyScope) now writes exactly ONE audit entry. This locks in the sanctioned uniform deny-audit behavior (see brief Decision Log 2026-05-30 'uniform deny-audit'), which RegistryAuthzMatrixTests (status/body only) cannot see. Without these rows the new audit behavior ships ungated."
     notes: |
       Convert one controller at a time; commit-per-controller is acceptable but a single
       P2 commit is also fine — the verify gate is the full registry suite either way.
