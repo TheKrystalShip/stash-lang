@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-authz-pdp-completion
 current: null
-updated: '2026-05-30T22:21:22Z'
+updated: '2026-05-30T22:45:07Z'
 phases:
   P1:
     status: done
@@ -14,13 +14,14 @@ phases:
       fields; shrunk pin to {PublishPackage, ClaimScope, DeleteScope}; added delete_org.deny.audit_id
       matrix row + e2e test
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e278bf8f98ec6daed2cbe31ed60141385bbc0fb7
+    verified: true
+    started: '2026-05-30T22:36:08Z'
+    completed: '2026-05-30T22:45:07Z'
+    attempts: 1
+    notes: "Filter ResourceIdForAudit(ScopeResource) \u2192 '@'+scope; DeleteScope folded to [RegistryAuthorize];\
+      \ pin shrunk to {PublishPackage,ClaimScope}; matrix+audit rows pin '@' prefix uniformly"
   P3:
     status: pending
     commit: null
