@@ -4283,7 +4283,7 @@ Members: `Created`, `Modified`, `Deleted`, `Renamed`
 | `fs.listDir` | `array` | `IOError` | Returns an array of file and directory paths directly inside the given directory. |
 | `fs.appendFile` | `null` | `IOError` | Appends content to a file, creating it if it doesn't exist. |
 | `fs.readLines` | `array` | `IOError` | Reads a file and returns an array of lines. |
-| `fs.glob` | `array` | `IOError` | Returns an array of file paths matching the glob pattern. |
+| `fs.glob` | `array` | `IOError` | Returns the file paths matching a glob pattern, expanded against the real filesystem. |
 | `fs.isFile` | `bool` | — | Returns true if the path points to a regular file. |
 | `fs.isDir` | `bool` | — | Returns true if the path points to a directory. |
 | `fs.isSymlink` | `bool` | — | Returns true if the path points to a symbolic link. |
@@ -4493,13 +4493,13 @@ Reads a file and returns an array of lines.
 
 #### `fs.glob(pattern: string) -> array`
 
-Returns an array of file paths matching the glob pattern.
+Returns the file paths matching a glob pattern, expanded against the real filesystem. Uses conventional glob semantics: `*` matches within a single path segment, `**` matches across segments (recursive), `?` matches one character, and `[...]` is a character class. A wildcard may appear in any path segment (e.g. "src/*/index.cs"), not only the filename. Results are sorted; only files are returned, not directories. For matching a string against a pattern without touching disk, use `path.match`.
 
 **Parameters:**
 
 - `pattern`: `string` — The glob pattern (e.g. "src/**/*.cs").
 
-**Returns:** `array` — An array of matching file path strings.
+**Returns:** `array` — An array of matching file path strings, sorted.
 
 **Throws:**
 

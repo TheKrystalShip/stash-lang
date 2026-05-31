@@ -692,4 +692,100 @@ public class FsBuiltInsTests : TempDirectoryFixture
         var result = Run($"let result = fs.chown(\"{path}\", -1, -1);");
         Assert.Null(result);
     }
+
+    // ── fs.glob ─────────────────────────────────────────────────────────────
+    // Conventional glob semantics: '*' stays within a path segment, '**' crosses
+    // segments, '?' matches one char, '[...]' is a class. A wildcard may appear in
+    // ANY segment, not just the filename (regression: a mid-path '*' used to throw).
+
+    /// <summary>Builds a small fixture tree under TestDir for the glob tests.</summary>
+    private void SeedGlobTree()
+    {
+        Directory.CreateDirectory(Path.Combine(TestDir, "a", "deep"));
+        Directory.CreateDirectory(Path.Combine(TestDir, "b"));
+        Directory.CreateDirectory(Path.Combine(TestDir, "c"));
+        File.WriteAllText(Path.Combine(TestDir, "a", "plan.yaml"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "b", "plan.yaml"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "a", "deep", "plan.yaml"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "c", "notplan.txt"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "top.txt"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "a", "inner.txt"), "x");
+    }
+
+    [Fact]
+    public void Glob_MidPathWildcard_MatchesOneLevel()
+    {
+        SeedGlobTree();
+        // The regression case: wildcard in a directory segment (was an IOError).
+        // '*' does not cross '/', so only the two one-level files match — NOT a/deep/plan.yaml.
+        var result = Run($"let result = len(fs.glob(\"{TestDir}/*/plan.yaml\"));");
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void Glob_Globstar_CrossesDirectories()
+    {
+        SeedGlobTree();
+        // '**' recurses: a/plan.yaml, b/plan.yaml, a/deep/plan.yaml.
+        var result = Run($"let result = len(fs.glob(\"{TestDir}/**/plan.yaml\"));");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Glob_SingleStar_DoesNotCrossSlash()
+    {
+        SeedGlobTree();
+        // '*.txt' at the root matches only top.txt, not a/inner.txt.
+        var result = Run($"let result = len(fs.glob(\"{TestDir}/*.txt\"));");
+        Assert.Equal(1L, result);
+    }
+
+    [Fact]
+    public void Glob_QuestionMark_MatchesExactlyOneChar()
+    {
+        File.WriteAllText(Path.Combine(TestDir, "x1.log"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "x2.log"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "xx.log"), "x");
+        File.WriteAllText(Path.Combine(TestDir, "x12.log"), "x"); // two chars — must NOT match
+        var result = Run($"let result = len(fs.glob(\"{TestDir}/x?.log\"));");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Glob_CharClass_InPathSegment()
+    {
+        SeedGlobTree();
+        // '[ab]' matches the a and b directories, not c.
+        var result = Run($"let result = len(fs.glob(\"{TestDir}/[ab]/plan.yaml\"));");
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void Glob_NoWildcard_ReturnsExistingFileOnly()
+    {
+        SeedGlobTree();
+        var hit = Run($"let result = len(fs.glob(\"{TestDir}/top.txt\"));");
+        Assert.Equal(1L, hit);
+        var miss = Run($"let result = len(fs.glob(\"{TestDir}/nope.txt\"));");
+        Assert.Equal(0L, miss);
+    }
+
+    [Fact]
+    public void Glob_NoMatch_ReturnsEmpty()
+    {
+        SeedGlobTree();
+        var result = Run($"let result = len(fs.glob(\"{TestDir}/*/nonexistent.yaml\"));");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void Glob_ResultsAreSorted()
+    {
+        SeedGlobTree();
+        // Deterministic ordinal ordering: a/plan.yaml sorts before b/plan.yaml.
+        var result = Run(
+            $"let g = fs.glob(\"{TestDir}/*/plan.yaml\");" +
+            "let result = str.contains(g[0], \"/a/\") && str.contains(g[1], \"/b/\");");
+        Assert.Equal(true, result);
+    }
 }

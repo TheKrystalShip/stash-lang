@@ -396,35 +396,30 @@ public static partial class FsBuiltIns
         catch (System.IO.IOException e) { throw new IOError($"Cannot read file '{path}': {e.Message}"); }
     }
 
-    /// <summary>Returns an array of file paths matching the glob pattern.</summary>
+    /// <summary>Returns the file paths matching a glob pattern, expanded against the real
+    /// filesystem. Uses conventional glob semantics: `*` matches within a single path
+    /// segment, `**` matches across segments (recursive), `?` matches one character, and
+    /// `[...]` is a character class. A wildcard may appear in any path segment
+    /// (e.g. "src/*/index.cs"), not only the filename. Results are sorted; only files are
+    /// returned, not directories. For matching a string against a pattern without touching
+    /// disk, use `path.match`.</summary>
     /// <param name="pattern">The glob pattern (e.g. "src/**/*.cs").</param>
     /// <exception cref="IOError">if the base directory does not exist or cannot be read</exception>
-    /// <returns>An array of matching file path strings.</returns>
+    /// <returns>An array of matching file path strings, sorted.</returns>
     [StashFn]
     private static List<StashValue> Glob(IInterpreterContext ctx, string pattern)
     {
         pattern = ctx.ExpandTilde(pattern);
         try
         {
-            string dir = System.IO.Path.GetDirectoryName(pattern) ?? ".";
-            string filePattern = System.IO.Path.GetFileName(pattern);
-            if (string.IsNullOrEmpty(dir))
-            {
-                dir = ".";
-            }
-
-            if (string.IsNullOrEmpty(filePattern))
-            {
-                filePattern = "*";
-            }
-
-            var files = System.IO.Directory.GetFiles(dir, filePattern, System.IO.SearchOption.AllDirectories);
-            var result = new List<StashValue>(files.Length);
+            var files = FsGlobImpl.Expand(pattern);
+            var result = new List<StashValue>(files.Count);
             foreach (var f in files)
                 result.Add(StashValue.FromObj(f));
             return result;
         }
         catch (System.IO.IOException e) { throw new IOError($"fs.glob failed: {e.Message}"); }
+        catch (System.UnauthorizedAccessException e) { throw new IOError($"fs.glob failed: {e.Message}"); }
     }
 
     /// <summary>Returns true if the path points to a regular file.</summary>
