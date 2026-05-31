@@ -1,0 +1,132 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: python3 scripts/checkpoint/validate-spec.py stash-script-readiness
+
+schema_version: 1
+
+feature: stash-script-readiness
+title: Stash Script Readiness — path.match glob predicate
+brief: ./brief.md
+
+created: 2026-05-31
+architect_session: spec-2026-05-31
+
+# Default verify runs after every phase in addition to phase-specific verify.
+default_verify:
+  - dotnet build
+
+# Broad safety-rail scope. The implementer should trust each phase's files: list.
+scope:
+  - Stash.Stdlib/**
+  - Stash.Tests/**
+  - docs/Stash — Standard Library Reference.md
+  - examples/**
+  - scripts/**
+
+phases:
+  - id: P1
+    title: Bash-decision parity fixture + harness + failing test skeleton
+    deps: []
+    files:
+      - scripts/path-match/gen-bash-parity-fixture.sh
+      - Stash.Tests/Stdlib/Fixtures/path-match-bash-parity.tsv
+      - Stash.Tests/Stdlib/PathMatchBashParityTests.cs
+      - Stash.Tests/Stash.Tests.csproj
+    verify:
+      - bash scripts/path-match/gen-bash-parity-fixture.sh --check
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~PathMatchBashParityTests"
+    done_when:
+      - "scripts/path-match/gen-bash-parity-fixture.sh harvests every `files:`/`scope:` pattern from `.kanban/4-done/*/plan.yaml` and parked `.kanban/2-in-progress/*/plan.yaml`, computes the bash-`[[ ]]`-OR-FS-expansion verdict under `shopt -s globstar nullglob extglob`, and writes TSV rows `pattern\\tpath\\texpected_bool` to `Stash.Tests/Stdlib/Fixtures/path-match-bash-parity.tsv`."
+      - "Running the harness with `--check` produces zero diff against the committed fixture (idempotent regeneration); CI can detect drift."
+      - "`Stash.Tests/Stdlib/Fixtures/path-match-bash-parity.tsv` is included as an EmbeddedResource in `Stash.Tests.csproj`."
+      - "`PathMatchBashParityTests` exists with a `[Theory]` reading the fixture; in this phase the test is `Skip='implementation lands in P2'` so the build is green AND the skeleton is a tripwire — P2 must un-skip it."
+      - "The fixture contains > 50 rows AND covers at least one row exercising each construct present in the real corpus: `**`, `*` (crossing `/`), `?`, character class, literal-only — verified by a sentinel xUnit fact `PathMatchBashParityFixture_HasShapeCoverage` that greps the TSV and asserts each construct appears."
+    notes: |
+      The harness is committed because parity is the load-bearing acceptance
+      criterion and must be reproducible from the bash oracle on any machine.
+      Place the fixture under Stash.Tests/Stdlib/Fixtures/ per Stash.Tests
+      EmbeddedResource convention.
+
+  - id: P2
+    title: path.match implementation + stdlib checklist (docs, LSP, throws, tests)
+    deps: [P1]
+    files:
+      - Stash.Stdlib/BuiltIns/PathBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/PathGlobImpl.cs
+      - docs/Stash — Standard Library Reference.md
+      - Stash.Tests/Interpreting/PathBuiltInsTests.cs
+      - Stash.Tests/Stdlib/PathMatchBashParityTests.cs
+      - Stash.Tests/Stdlib/SourceGenerator/Wave1ThrowsCoverageTests.cs
+      - Stash.Tests/Stdlib/SourceGenerator/PathDocSnapshotTests.cs
+      - Stash.Tests/Lsp/Snapshots/path-member-access.txt
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~PathBuiltInsTests|FullyQualifiedName~PathMatchBashParityTests|FullyQualifiedName~PathDocSnapshotTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~StandardLibraryReferenceTests"
+    done_when:
+      - "`PathBuiltIns.Match(string path, string pattern) -> bool` exists with `[StashFn]` attribute and XML `<summary>`/`<param>`/`<returns>` docs, delegating to `PathGlobImpl.Matches`."
+      - "`PathGlobImpl` translates glob → regex with bash-`[[ ]]` semantics: `*` and `**` → `.*`, `?` → `.`, `[…]`/`[!…]`/`[^…]` → character class, `\\x` escape, every other regex metacharacter escaped, anchored `^…$`, case-sensitive."
+      - "Extglob constructs `@(`/`!(`/`+(`/`?(`/`*(` raise `RuntimeError(\"path.match: extglob is not supported (got '<construct>')\")` — exercised by a unit test."
+      - "Malformed patterns (unclosed `[`, trailing `\\`) match as literal strings (mirrors bash); exercised by a unit test."
+      - "`PathMatchBashParityTests` is un-skipped and green over every row in `path-match-bash-parity.tsv`."
+      - "`PathBuiltInsTests` adds `Match_*` cases covering `**`, `*`-crossing-`/`, `?`, character classes (positive + negated), escapes, empty path / empty pattern, extglob rejection, and malformed-pattern literal fallback."
+      - "`docs/Stash — Standard Library Reference.md` lists `path.match(path: string, pattern: string) -> bool` under the `path` namespace, regenerated via `dotnet run --project Stash.Docs/`; `StandardLibraryReferenceTests` green."
+      - "`CompletionSurfaceSnapshotTests` is green: the `path.` completion snapshot under `Stash.Tests/Lsp/Snapshots/` now contains `match`. The snapshot was re-baselined intentionally via `STASH_SNAPSHOT_REGEN=1`; the diff is in this commit."
+      - "`Wave1ThrowsCoverageTests` is green: `match` added to the `path` namespace's allow-list (path is an infallible read for legal inputs; extglob rejection is documented as out-of-scope, not a normal-path throw)."
+      - "`stash -c 'io.println(path.match(\"a/b.cs\",\"a/**\"))'` run from the in-tree build (`dotnet run --project Stash.Cli/`) prints exactly `true\\n` — proves the runtime path works before P4 installs the binary."
+    notes: |
+      If `PathBuiltIns.cs` requires no Path-namespace entry in
+      Wave1ThrowsCoverageTests.NoThrowAllowList today (the dictionary currently
+      lacks "path"), add the key with `{ "match" }` plus the other ungated
+      path.* readers (abs, dir, base, ext, join, name, normalize, isAbsolute,
+      relative, separator) — they are equally infallible. Document the
+      additions in the commit message so reviewers see the allow-list growth.
+
+  - id: P3
+    title: Example script demonstrating path.match
+    deps: [P2]
+    files:
+      - examples/path_match.stash
+    verify:
+      - dotnet run --project Stash.Cli/ -c Release -- examples/path_match.stash
+    done_when:
+      - "`examples/path_match.stash` exists and runs successfully against the in-tree build (`dotnet run --project Stash.Cli/`), demonstrating realistic scope-matching: a list of fabricated changed-file paths matched against representative `files:`/`scope:` patterns from a plan.yaml, with `io.println` showing in-scope vs out-of-scope decisions."
+      - "The example follows existing examples/*.stash style — leading comment block describing the feature, `io.println` results, no I/O capability use."
+
+  - id: P4
+    title: Install gate — rebuild and install stash to ~/.local/bin, smoke-test path.match
+    deps: [P3]
+    files:
+      - .kanban/2-in-progress/stash-script-readiness/checkpoint.yaml
+    verify:
+      - bash -c 'dotnet run --project Stash.Cli/ -c Release -- build.stash'
+      - bash -c 'test -x "$HOME/.local/bin/stash" && "$HOME/.local/bin/stash" --version'
+      - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"a/b.cs\",\"a/**\"))"); test "$out" = "true"'
+      - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"Stash.Analysis/Visitors/Sub/Foo.cs\",\"Stash.Analysis/Visitors/*.cs\"))"); test "$out" = "true"'
+    done_when:
+      - "`build.stash` (run via the in-tree CLI) completes successfully and overwrites `~/.local/bin/stash` with a binary newer than the pre-P4 mtime."
+      - "The installed `~/.local/bin/stash` is the newly-built binary, proven FUNCTIONALLY by the two smoke commands below: the stale 0.5.0 binary lacks `path.match` and errors on the call, so a `true` result is unforgeable proof the new binary is installed. The `Version` const (`Stash.Cli/Program.cs`) is intentionally NOT bumped — a release-version change is out of scope for this stdlib feature, and the functional smoke is a strictly stronger proof than a version-string comparison (which is also unsatisfiable here: `--version` is a hardcoded literal with no sha/timestamp component)."
+      - "`~/.local/bin/stash -c 'io.println(path.match(\"a/b.cs\",\"a/**\"))'` prints exactly the four characters `true` followed by a newline, exit code 0."
+      - "`~/.local/bin/stash -c 'io.println(path.match(\"Stash.Analysis/Visitors/Sub/Foo.cs\",\"Stash.Analysis/Visitors/*.cs\"))'` prints `true` — confirms the bash-divergent edge case (`*` crosses `/`) is reproduced by the installed binary, not just the in-tree build."
+      - "The phase explicitly touches only `checkpoint.yaml` because the install gate is a runtime/CI observation, not a code change — the verify commands ARE the gate."
+    notes: |
+      Terminal phase. This is the hard ordering boundary for feature 2 (the
+      checkpoint-script rewrite). Until this is green and /done has promoted
+      this feature to 4-done/, feature 2 cannot be specced — any rewritten
+      .stash script that calls path.match would fail on the stale 0.5.0
+      binary.
+
+# Final acceptance — run by /done before promoting to 4-done/.
+#
+# Filter shape: copied from .kanban/4-done/stdlib-omission-hardening/plan.yaml.
+# Documented flaky / environment-dependent classes are excluded; the three
+# language/stdlib gate tests (Wave1ThrowsCoverageTests,
+# CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests) are kept
+# INCLUDED — they enforce this feature's stdlib-checklist contract.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&FullyQualifiedName!~NamespaceMembersDapTests&FullyQualifiedName!~AtomicClaimRaceTests&FullyQualifiedName!~RegistryAuthzAtomicityConformanceTests"
+  - python3 scripts/checkpoint/validate-spec.py stash-script-readiness
+  - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"a/b.cs\",\"a/**\"))"); test "$out" = "true"'
