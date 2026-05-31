@@ -59,14 +59,19 @@ scales to size: full specs for the big projects, a single batched pass for the t
   Construct, so the unit is small). **⏸ Milestone paused 2026-05-31** after proving the protocol
   end-to-end through spec. Resume by implementing P1: from the worktree run
   `/resume stdlib-omission-hardening`, or check state with `/milestone omission-hardening`.
-- Later (rough): `Stash.Core` (confirmation pass — cited as reference but never actually
-  classified; don't give it a free pass) · `Stash.Analysis` · `Stash.Tpl` · `Stash.Scheduler` ·
-  `Stash.Bytecode` (101 opcodes — is handler/disassembly/verify coverage compiler-forced?) ·
-  `Stash.Lsp`+`Stash.Dap` (paired) · `Stash.Cli` · small-tooling batch
-  (`Check`+`Format`+`Docs`+`Playground`+`Tap`).
-- **Excluded:** `Stash.Registry` is in-flight via `registry-authz-filter` (its
-  `AuthzDispatchCoverageMetaTests` + imperative-exemption pin *is* this pass for the authz
-  surface — don't double-spec). `Stash.Tests` is out of scope — it *is* the Detect layer.
+- Later (survey-driven — see `survey.md`, 2026-05-31): **`bytecode`** (Tier A — verifier has no
+  throwing default; silent opcode-verification bypass) → **`analysis`** (Tier A — hand-list
+  `RuleRegistry`; a new rule silently never fires) → **`keyword-vocabulary-sync`** (cross-project:
+  Core Lexer ↔ Playground Monarch ↔ VSCode TextMate; confirmed desync) → **`lsp`+`dap`** (Tier B,
+  mostly Detect-meta-test ceiling due to DI/reflection) → `cli` / `registry-nonauthz` / `scheduler`
+  / `tpl` (Tier C). Core / Format / Docs / Tap are **mostly already Construct** (Tier D) —
+  confirmation only, likely no unit.
+- **Cross-project concerns** (surfaced by surveying holistically; a per-project spec would miss
+  them): keyword vocabulary (3 grammars), symbol/value-kind→presentation (Lsp+Dap), rule registry
+  (Analysis+Check). See `survey.md`.
+- **Excluded:** `Stash.Registry` AUTHZ is already hardened (PDP + `AuthzDispatchCoverageMetaTests`,
+  shipped via `registry-authz-filter`/`-pdp-completion`); only *non-authz* registry concerns remain
+  (Tier C). `Stash.Tests` is out of scope — it *is* the Detect layer.
 
 ### Decisions & learnings (append as you go)
 
@@ -76,6 +81,7 @@ scales to size: full specs for the big projects, a single batched pass for the t
 | 2026-05-31 | Unit 1 (`stdlib`) specced in an isolated worktree. Scope-sizer **confirmed**: registration is already Construct (source-gen), so the unit is small (4 phases). | Worktree chosen because `readonly-modifier` is concurrently active; `check-parallel-safety` flagged a coarse `Stash.Stdlib` overlap but file-level dirs are disjoint (BuiltIns/ vs Models/+Registry/+Generators/) → low risk. |
 | 2026-05-31 | Phase-1 verification found `Stability` is **one concern with two participants** (runtime `NamespaceMemberPayload.Invoke` + generator `BuildMember`); seed findings named only one. | The doctrine caught a gap in its own audit — exactly the omission shape the milestone exists to prevent. |
 | 2026-05-31 | `milestone-status.py` now scans all git worktrees (deduped by slug). | Found by trying it out: a unit built in a worktree was invisible to `/milestone` run from main until merge. |
+| 2026-05-31 | Step-1 survey done (10 parallel explorers) → `survey.md`. Order is now survey-driven, not layer-up: `bytecode` and `analysis` lead. Architects deliberately NOT parallelized. | Specs are not independent (rolling-wave): cross-project concerns (keyword vocab, kind→presentation, rule registry) only surfaced by surveying holistically; a per-project architect would miss them. All findings are unverified hypotheses — each spec's phase-1 verifies. |
 
 ### Open questions
 
