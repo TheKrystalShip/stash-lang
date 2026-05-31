@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stdlib-omission-hardening
 current: null
-updated: '2026-05-31T01:20:40Z'
+updated: '2026-05-31T01:26:06Z'
 phases:
   P1:
     status: done
@@ -30,13 +30,14 @@ phases:
     notes: Exhaustive switch on Stability at both sites; MapStabilityLiteral helper; ValidateUfcsTargets
       internal method; 6 new tests (191 total passing)
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 8222af3
+    verified: true
+    started: '2026-05-31T01:26:06Z'
+    completed: '2026-05-31T01:26:06Z'
+    attempts: 1
+    notes: Added NamespaceMembers_RegistryEntries_HaveRuntimePayload and NamespaceMembers_RuntimePayloads_HaveRegistryMetadata;
+      17 tests pass
 review:
   status: not_started
   started: null
