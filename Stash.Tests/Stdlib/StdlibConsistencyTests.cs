@@ -305,14 +305,23 @@ public class StdlibConsistencyTests
             }
         }
 
+        int checkedCount = 0;
         foreach (var nsName in StdlibRegistry.NamespaceNames)
         {
             foreach (var member in StdlibRegistry.GetNamespaceDataMembers(nsName))
             {
+                checkedCount++;
                 Assert.True(runtimePayloadNames.Contains(member.QualifiedName),
                     $"StdlibRegistry has data member '{member.QualifiedName}' but no matching NamespaceMemberPayload slot exists in the runtime namespace");
             }
         }
+
+        // Non-vacuity floor: the stdlib ships real [StashMember]s, so this fact must actually
+        // enumerate members. Without this, a future refactor that emptied the registry would
+        // make the per-member assertions above pass on an empty set — the silent omission this
+        // milestone exists to prevent.
+        Assert.True(checkedCount > 0,
+            "Expected at least one registered [StashMember] data member; found none — the consistency check would otherwise pass vacuously");
     }
 
     [Fact]
@@ -320,6 +329,7 @@ public class StdlibConsistencyTests
     {
         var globals = CreateGlobals();
 
+        int checkedCount = 0;
         foreach (var binding in globals)
         {
             if (binding.Value is not StashNamespace ns)
@@ -334,11 +344,17 @@ public class StdlibConsistencyTests
                     continue;
                 }
 
+                checkedCount++;
                 string qualifiedName = $"{ns.Name}.{memberKey}";
                 Assert.True(StdlibRegistry.TryGetNamespaceDataMember(qualifiedName, out _),
                     $"Runtime namespace '{ns.Name}' has a NamespaceMemberPayload slot '{memberKey}' but StdlibRegistry has no data member metadata for '{qualifiedName}'");
             }
         }
+
+        // Non-vacuity floor: guard against zero runtime payload slots making the per-slot
+        // assertions above pass vacuously (see the registry-side fact for rationale).
+        Assert.True(checkedCount > 0,
+            "Expected at least one runtime NamespaceMemberPayload slot; found none — the consistency check would otherwise pass vacuously");
     }
 
     // ── Stability exhaustiveness ──
