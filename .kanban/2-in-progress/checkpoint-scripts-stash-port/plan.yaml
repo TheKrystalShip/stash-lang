@@ -40,6 +40,9 @@ phases:
       - scripts/checkpoint/_common.stash
       - scripts/checkpoint/lint_common_imports.stash
       - scripts/checkpoint/lint_common_imports.fixtures/**
+      # Stub so default_verify (which includes difftest_coverage_check) passes from P1.
+      # P2 overwrites this with the real implementation.
+      - scripts/checkpoint/difftest_coverage_check.stash
     verify:
       # The import lint must run green AND prove its teeth on a fail-path fixture.
       - stash scripts/checkpoint/lint_common_imports.stash

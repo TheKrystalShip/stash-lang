@@ -1,0 +1,15 @@
+// Tampered fixture for lint_common_imports.stash --self-test.
+// This file does NOT import from _common.stash, and it re-defines (shadows)
+// the exported helper `now_iso` inline — exactly the two omissions the lint
+// is designed to catch.
+//
+// DO NOT use this file in production. It is only for proving the lint has teeth.
+
+// Inlined helper (shadows _common.stash export) — lint must flag both:
+//   1. zero imports from _common.stash
+//   2. function name "now_iso" shadows a _common.stash export
+fn now_iso() {
+    return time.format(time.now(), "yyyy-MM-dd'T'HH:mm:ss'Z'");
+}
+
+io.println("intentionally bad fixture: no imports from common module");

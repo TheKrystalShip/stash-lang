@@ -1,0 +1,130 @@
+// _common.stash — shared helpers for checkpoint scripts.
+//
+// This is a MODULE — import from it, do not run it directly.
+//
+// Usage:
+//   import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
+//            load_plan, load_checkpoint, save_checkpoint, phase_by_id,
+//            expand_globs } from "_common.stash";
+//
+// CWD convention: all path resolution is relative to the current working
+// directory, which the checkpoint workflow always sets to the repo root.
+// This matches the pilot (advance-checkpoint.stash) and diverges from the
+// Python original (_common.py) which resolves from __file__.
+
+// ── Directory constants (CWD-relative, matching pilot convention) ──────────
+const INPROGRESS_DIR = ".kanban/2-in-progress";
+const DONE_DIR       = ".kanban/4-done";
+
+/// UTC ISO-8601 second-precision timestamp, e.g. "2026-05-31T20:07:01Z".
+/// Matches Python's datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ").
+export fn now_iso() {
+    return time.format(time.now(), "yyyy-MM-dd'T'HH:mm:ss'Z'");
+}
+
+/// Print an error to stderr and exit with the given code (default 1).
+export fn die(msg, code) {
+    if (code == null) {
+        code = 1;
+    }
+    io.eprintln("error: " + msg);
+    env.exit(code);
+}
+
+/// Resolve a feature's directory: prefer 2-in-progress/, fall back to 4-done/
+/// (so callers that re-run after /done still resolve the same slug). Dies if
+/// neither exists.
+export fn feature_dir(slug) {
+    let inprog = INPROGRESS_DIR + "/" + slug;
+    if (fs.dirExists(inprog)) {
+        return inprog;
+    }
+    let done = DONE_DIR + "/" + slug;
+    if (fs.dirExists(done)) {
+        return done;
+    }
+    die("feature directory not found in 2-in-progress/ or 4-done/: " + slug, 1);
+}
+
+/// If slug is given, validate it and return it. Otherwise infer the single
+/// active feature from .kanban/2-in-progress/. Dies if zero or multiple.
+export fn resolve_feature(slug) {
+    if (slug != null && slug != "") {
+        feature_dir(slug);   // dies if not found
+        return slug;
+    }
+    // Infer from active features directory
+    if (!fs.dirExists(INPROGRESS_DIR)) {
+        die("no active feature in .kanban/2-in-progress/; pass a slug explicitly", 1);
+    }
+    let entries = fs.listDir(INPROGRESS_DIR);
+    // Filter to directories only (fs.listDir returns full paths)
+    let dirs = arr.filter(entries, (e) => fs.isDir(e));
+    let names = arr.map(dirs, (e) => path.base(e));
+    if (names.length == 0) {
+        die("no active feature in .kanban/2-in-progress/; pass a slug explicitly", 1);
+    }
+    if (names.length > 1) {
+        die("multiple active features (" + arr.join(names, ", ") + "); pass a slug explicitly", 1);
+    }
+    return names[0];
+}
+
+/// Load a YAML file as a mapping, dying on a missing file or non-mapping content.
+export fn load_yaml(fpath) {
+    if (!fs.exists(fpath)) {
+        die("file not found: " + fpath, 1);
+    }
+    let data = yaml.parse(fs.readFile(fpath));
+    if (typeof(data) != "dict") {
+        die(fpath + " did not parse to a mapping", 1);
+    }
+    return data;
+}
+
+/// Atomic write: serialize to a sibling .tmp file, then move it into place.
+export fn save_yaml(fpath, data) {
+    let tmp = fpath + ".tmp";
+    fs.writeFile(tmp, yaml.stringify(data));
+    fs.move(tmp, fpath, true);
+}
+
+/// Load plan.yaml for the given slug.
+export fn load_plan(slug) {
+    return load_yaml(feature_dir(slug) + "/plan.yaml");
+}
+
+/// Load checkpoint.yaml for the given slug.
+export fn load_checkpoint(slug) {
+    return load_yaml(feature_dir(slug) + "/checkpoint.yaml");
+}
+
+/// Stamp `updated` and persist the checkpoint.
+export fn save_checkpoint(slug, data) {
+    data.updated = now_iso();
+    save_yaml(feature_dir(slug) + "/checkpoint.yaml", data);
+}
+
+/// Find and return the phase dict with the given id in the plan.
+/// Dies if not found (behaviour-equivalent to _common.py's phase_by_id).
+export fn phase_by_id(plan, pid) {
+    let phases = dict.get(plan, "phases") ?? [];
+    let found = arr.find(phases, (ph) => dict.get(ph, "id") == pid);
+    if (found == null) {
+        die("phase " + pid + " not found in plan.yaml", 1);
+    }
+    return found;
+}
+
+/// Expand a list of glob patterns relative to CWD and return all matching paths.
+/// Mirrors Python _common.expand_globs(patterns) -> list[Path].
+export fn expand_globs(patterns) {
+    let out = [];
+    for (let pat in patterns) {
+        let hits = fs.glob(pat);
+        for (let h in hits) {
+            arr.push(out, h);
+        }
+    }
+    return out;
+}

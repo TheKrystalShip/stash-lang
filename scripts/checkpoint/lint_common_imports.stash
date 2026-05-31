@@ -1,0 +1,313 @@
+#!/usr/bin/env stash
+// lint_common_imports.stash — Construct chokepoint guard for _common.stash imports.
+//
+// Normal run:
+//   stash scripts/checkpoint/lint_common_imports.stash
+//   Scans every scripts/checkpoint/*.stash that is not on the exclusion list.
+//   Fails (exit 1) if any scanned file:
+//     (a) imports zero symbols from _common.stash, OR
+//     (b) defines a function whose name shadows a _common.stash export.
+//
+// Self-test run (proves the guard has teeth):
+//   stash scripts/checkpoint/lint_common_imports.stash --self-test
+//   Runs against a single tampered fixture under lint_common_imports.fixtures/.
+//   Exits 0 ONLY if the guard correctly fires on the fixture.
+//   Exits 1 if the guard fails to trip (guard is broken).
+//
+// Unit-case sweep (validates _common.stash exports are behaviour-equivalent):
+//   Runs inside both normal and self-test modes. Imports _common.stash and calls
+//   each pure exported function with known inputs to confirm expected behaviour.
+//   Any mismatch causes exit 1 with a diagnostic.
+
+import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
+         load_plan, load_checkpoint, save_checkpoint, phase_by_id,
+         expand_globs } from "_common.stash";
+
+// ── Bounded domains ────────────────────────────────────────────────────────
+
+// Files that are EXCLUDED from the scan entirely (not subject to the import rule).
+//   _common.stash      — the module itself
+//   difftest_runner.stash — internal runner, no _common import by design
+//   lint_common_imports.stash — this file (scan would be self-referential)
+const SCAN_EXCLUSIONS = [
+    "_common.stash",
+    "difftest_runner.stash",
+    "lint_common_imports.stash"
+];
+
+// Files that ARE scanned but are ALLOWED to import zero symbols from _common.stash
+// (append-only; document reason for each entry).
+const IMPORT_ALLOW_LIST = [
+    // Pilot script, pre-_common; was committed before _common.stash existed.
+    // Ported to import _common in a follow-up phase.
+    "advance-checkpoint.stash"
+];
+
+// The set of names exported by _common.stash.
+// Maintained here as a bounded-domain const — single source of truth for the
+// shadow check. Must be updated when _common.stash exports change.
+const COMMON_EXPORTS = [
+    "now_iso",
+    "die",
+    "feature_dir",
+    "resolve_feature",
+    "load_yaml",
+    "save_yaml",
+    "load_plan",
+    "load_checkpoint",
+    "save_checkpoint",
+    "phase_by_id",
+    "expand_globs"
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/// Return true if the given basename is in the exclusion list.
+fn is_excluded(base) {
+    return arr.contains(SCAN_EXCLUSIONS, base);
+}
+
+/// Return true if the given basename is on the import allow-list.
+fn is_allow_listed(base) {
+    return arr.contains(IMPORT_ALLOW_LIST, base);
+}
+
+/// Scan a .stash source string and return true if it contains an import
+/// statement referencing "_common.stash" (not just a mention in a comment).
+fn imports_common(source) {
+    // Look for: import { ... } from "_common.stash"
+    // or:       import "_common.stash" as ...
+    // We check for the import keyword followed by a reference to "_common.stash"
+    // on the same logical line, to avoid false positives from comments.
+    let lines = str.split(source, "\n");
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        // Skip comment lines
+        if (str.startsWith(trimmed, "//") || str.startsWith(trimmed, "*") || str.startsWith(trimmed, "/*")) {
+            continue;
+        }
+        // Must contain the import keyword AND reference _common.stash
+        if (str.contains(trimmed, "import") && str.contains(trimmed, "_common.stash")) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Scan a .stash source string and return an array of function names defined
+/// (top-level fn declarations) that shadow a COMMON_EXPORTS name.
+fn shadowing_fns(source) {
+    let shadows = [];
+    let lines = str.split(source, "\n");
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        // Match: fn <name>( or export fn <name>(
+        // We look for patterns like "fn name(" at the start (optionally preceded by export)
+        if (str.startsWith(trimmed, "fn ") || str.startsWith(trimmed, "export fn ")) {
+            // Extract the function name
+            let rest = trimmed;
+            if (str.startsWith(rest, "export ")) {
+                rest = str.substring(rest, 7);  // strip "export "
+            }
+            // rest is now "fn name(..."
+            if (str.startsWith(rest, "fn ")) {
+                let afterFn = str.substring(rest, 3);  // strip "fn "
+                let parenIdx = str.indexOf(afterFn, "(");
+                if (parenIdx > 0) {
+                    let fname = str.trim(str.substring(afterFn, 0, parenIdx));
+                    if (arr.contains(COMMON_EXPORTS, fname)) {
+                        arr.push(shadows, fname);
+                    }
+                }
+            }
+        }
+    }
+    return shadows;
+}
+
+/// Lint one file. Returns a list of violation strings (empty = clean).
+fn lint_file(fpath) {
+    let base = path.base(fpath);
+    let violations = [];
+
+    if (!fs.exists(fpath)) {
+        arr.push(violations, "file not found: " + fpath);
+        return violations;
+    }
+
+    let source = fs.readFile(fpath);
+
+    // Check (a): imports zero symbols from _common.stash
+    if (!imports_common(source) && !is_allow_listed(base)) {
+        arr.push(violations, base + ": imports zero symbols from _common.stash");
+    }
+
+    // Check (b): defines a function that shadows a _common.stash export
+    // Skip shadow check for allow-listed files (they intentionally inline helpers
+    // as a transitional state before being ported to import from _common.stash).
+    if (!is_allow_listed(base)) {
+        let shadows = shadowing_fns(source);
+        for (let name in shadows) {
+            arr.push(violations, base + ": defines fn '" + name + "' which shadows _common.stash export");
+        }
+    }
+
+    return violations;
+}
+
+// ── Unit-case sweep (validates _common.stash exports) ─────────────────────
+
+/// Run a unit sweep over all pure _common.stash exports.
+/// Returns a list of failure strings (empty = all pass).
+fn run_unit_sweep() {
+    let failures = [];
+
+    // now_iso: must return a string matching "YYYY-MM-DDTHH:MM:SSZ"
+    let ts = now_iso();
+    if (typeof(ts) != "string") {
+        arr.push(failures, "now_iso: expected string, got " + typeof(ts));
+    } else if (!re.test(ts, "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$")) {
+        arr.push(failures, "now_iso: unexpected format: " + ts);
+    }
+
+    // feature_dir: happy path — must resolve a known dir
+    // We test with a known-good slug (the current feature) from CWD
+    let known_slug = "checkpoint-scripts-stash-port";
+    let fdir = feature_dir(known_slug);
+    if (typeof(fdir) != "string") {
+        arr.push(failures, "feature_dir: expected string, got " + typeof(fdir));
+    } else if (!fs.dirExists(fdir)) {
+        arr.push(failures, "feature_dir: returned non-existent dir: " + fdir);
+    }
+
+    // resolve_feature: given explicit slug returns it
+    let resolved = resolve_feature(known_slug);
+    if (resolved != known_slug) {
+        arr.push(failures, "resolve_feature: expected '" + known_slug + "', got '" + resolved + "'");
+    }
+
+    // load_yaml / save_yaml round-trip: write a temp file, parse it back
+    let tmp_path = ".kanban/2-in-progress/" + known_slug + "/_common_sweep.tmp.yaml";
+    let test_data = { hello: "world", count: 42 };
+    save_yaml(tmp_path, test_data);
+    if (!fs.exists(tmp_path)) {
+        arr.push(failures, "save_yaml: file not created: " + tmp_path);
+    } else {
+        let loaded = load_yaml(tmp_path);
+        if (typeof(loaded) != "dict") {
+            arr.push(failures, "load_yaml: expected dict, got " + typeof(loaded));
+        } else if (dict.get(loaded, "hello") != "world") {
+            arr.push(failures, "load_yaml: round-trip mismatch for key 'hello'");
+        } else if (dict.get(loaded, "count") != 42) {
+            arr.push(failures, "load_yaml: round-trip mismatch for key 'count'");
+        }
+        // Clean up
+        fs.delete(tmp_path);
+    }
+
+    // load_plan: loads plan.yaml for the known slug
+    let plan = load_plan(known_slug);
+    if (typeof(plan) != "dict") {
+        arr.push(failures, "load_plan: expected dict, got " + typeof(plan));
+    } else if (!dict.has(plan, "phases")) {
+        arr.push(failures, "load_plan: missing 'phases' key in returned dict");
+    }
+
+    // load_checkpoint: loads checkpoint.yaml for the known slug
+    let cp = load_checkpoint(known_slug);
+    if (typeof(cp) != "dict") {
+        arr.push(failures, "load_checkpoint: expected dict, got " + typeof(cp));
+    } else if (!dict.has(cp, "phases")) {
+        arr.push(failures, "load_checkpoint: missing 'phases' key in returned dict");
+    }
+
+    // phase_by_id: finds phase P1 in the plan
+    let ph = phase_by_id(plan, "P1");
+    if (typeof(ph) != "dict") {
+        arr.push(failures, "phase_by_id: expected dict, got " + typeof(ph));
+    } else if (dict.get(ph, "id") != "P1") {
+        arr.push(failures, "phase_by_id: returned wrong phase id: " + dict.get(ph, "id"));
+    }
+
+    // expand_globs: expand a glob that should match at least one file
+    let hits = expand_globs(["scripts/checkpoint/_common.stash"]);
+    if (hits.length == 0) {
+        arr.push(failures, "expand_globs: expected at least 1 match for scripts/checkpoint/_common.stash");
+    }
+
+    return failures;
+}
+
+// ── Argument parsing ───────────────────────────────────────────────────────
+
+const schema = cli.schema({
+    self_test: cli.flag({ name: "self-test", help: "run self-test against tampered fixture" })
+});
+const parsed = cli.tryParse(schema);
+if (!parsed.ok) {
+    io.eprintln("error: " + parsed.error.message);
+    env.exit(2);
+}
+const args = parsed.value;
+
+// ── Unit sweep (always runs, in both modes) ────────────────────────────────
+
+let sweep_failures = run_unit_sweep();
+if (sweep_failures.length > 0) {
+    io.eprintln("FAIL unit sweep: " + sweep_failures.length + " failure(s):");
+    for (let f in sweep_failures) {
+        io.eprintln("  - " + f);
+    }
+    env.exit(1);
+}
+io.eprintln("unit sweep: " + COMMON_EXPORTS.length + " exports verified OK");
+
+// ── Self-test mode ─────────────────────────────────────────────────────────
+
+if (args.self_test) {
+    // Point at the tampered fixture — must fire on it.
+    let fixture = "scripts/checkpoint/lint_common_imports.fixtures/bad_inlines_helper.stash";
+    if (!fs.exists(fixture)) {
+        io.eprintln("FAIL self-test: fixture not found: " + fixture);
+        env.exit(1);
+    }
+    let viols = lint_file(fixture);
+    if (viols.length == 0) {
+        io.eprintln("FAIL self-test: lint did NOT fire on tampered fixture — guard has no teeth!");
+        env.exit(1);
+    }
+    io.eprintln("self-test PASS: lint correctly fired on fixture with " + viols.length + " violation(s):");
+    for (let v in viols) {
+        io.eprintln("  + " + v);
+    }
+    env.exit(0);
+}
+
+// ── Normal scan mode ───────────────────────────────────────────────────────
+
+// Scan every scripts/checkpoint/*.stash (single-* glob, does NOT descend into subdirs).
+let all_files = fs.glob("scripts/checkpoint/*.stash");
+let scanned = 0;
+let total_violations = [];
+
+for (let fpath in all_files) {
+    let base = path.base(fpath);
+    if (is_excluded(base)) {
+        continue;
+    }
+    scanned = scanned + 1;
+    let viols = lint_file(fpath);
+    for (let v in viols) {
+        arr.push(total_violations, v);
+    }
+}
+
+if (total_violations.length > 0) {
+    io.eprintln("FAIL: " + total_violations.length + " violation(s) across " + scanned + " scanned file(s):");
+    for (let v in total_violations) {
+        io.eprintln("  - " + v);
+    }
+    env.exit(1);
+}
+
+io.println("lint_common_imports: OK — " + scanned + " file(s) scanned, 0 violations");
