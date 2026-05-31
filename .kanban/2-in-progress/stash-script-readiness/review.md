@@ -16,7 +16,7 @@
 
 ## F01 — [IMPORTANT] Glob→regex translation misses single-line mode: `*`, `**`, `?` do not match `\n` (bash does)
 
-**Status:** open
+**Status:** fixed
 **Files:** `Stash.Stdlib/BuiltIns/PathGlobImpl.cs:28`, `Stash.Stdlib/BuiltIns/PathGlobImpl.cs:55-71`
 **Phase:** P2
 **Commit:** 2becf79
@@ -59,7 +59,7 @@ dotnet test --filter "FullyQualifiedName~PathBuiltInsTests.Match"
 
 ## F02 — [IMPORTANT] Malformed patterns can throw `RuntimeError` instead of falling back to literal-match (Decision Log violation)
 
-**Status:** open
+**Status:** fixed
 **Files:** `Stash.Stdlib/BuiltIns/PathGlobImpl.cs:25-29`
 **Phase:** P2
 **Commit:** 2becf79
@@ -104,7 +104,7 @@ dotnet test --filter "FullyQualifiedName~PathBuiltInsTests.Match_Malformed"
 
 ## F03 — [IMPORTANT] `EscapeClassContents` is a no-op: `\x` inside `[...]` reaches .NET regex unescaped, silently activating `\d`/`\s`/`\w`/etc.
 
-**Status:** open
+**Status:** fixed
 **Files:** `Stash.Stdlib/BuiltIns/PathGlobImpl.cs:164-171`, `Stash.Stdlib/BuiltIns/PathGlobImpl.cs:88-98`
 **Phase:** P2
 **Commit:** 2becf79
@@ -218,7 +218,7 @@ dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests"
 
 ## F06 — [MINOR] Parity fixture's coverage breadth understated: no `\` escape rows, no `]` first-class-member rows, no character-class-with-meta rows
 
-**Status:** open
+**Status:** fixed
 **Files:** `scripts/path-match/gen-bash-parity-fixture.sh:188-242`, `Stash.Tests/Stdlib/Fixtures/path-match-bash-parity.tsv`
 **Phase:** P1
 **Commit:** 4169d9d
