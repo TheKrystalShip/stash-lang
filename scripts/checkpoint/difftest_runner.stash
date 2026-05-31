@@ -31,7 +31,7 @@
 const CASES_PREFIX = "difftest_";
 const CASES_SUFFIX = "_cases.stash";
 
-const TIGHT_AXES       = ["exit", "stdout_exact", "stderr_must_contain", "file_mutation"];
+const TIGHT_AXES       = ["exit", "stdout_exact", "stdout_yaml_equal", "stderr_must_contain", "file_mutation"];
 const SOFT_AXES        = ["stderr"];
 const TS_ROOT_FIELDS   = ["updated"];
 const TS_PHASE_FIELDS  = ["started", "completed"];
@@ -338,6 +338,49 @@ fn run_case(case_obj, entry, repo_root) {
         }
         if (st_out != case_obj.stdout_exact) {
             arr.push(problems, "stdout_exact: stash stdout does not match expected");
+        }
+    }
+
+    // ── HARD: stdout_yaml_equal (if configured) ─────────────────────────────
+    // Parse both stdout sides as YAML and deep_equal the parsed structures.
+    // This is the TIGHT contract for scripts whose stdout is a YAML document
+    // (like next-phase) — formatting may differ between py and stash, but the
+    // parsed structure must be identical.
+    //
+    // Python's yaml.safe_dump may produce YAML anchors/aliases (&id001 / *id001)
+    // when the same list/dict objects appear in multiple places. Stash's yaml.parse
+    // does not support anchors. To normalize, we re-serialize Python's output through
+    // Python itself (round-trip), which expands aliases into their full values.
+    if (dict.get(case_obj, "stdout_yaml_equal") == true) {
+        // Normalize Python's output through a Python round-trip to expand anchors.
+        // The normalization script: read from a temp file, parse, then dump with
+        // default_flow_style=False. We write py stdout to a temp file first because
+        // ExecOptions does not have a 'stdin' field.
+        let py_norm_tmp = base + "/py_stdout_norm.yaml";
+        fs.writeFile(py_norm_tmp, py_res.stdout);
+        let py_norm_r = process.exec("python3", [
+            "-c",
+            "import sys,yaml,json; d=yaml.safe_load(open(sys.argv[1]).read()); d2=json.loads(json.dumps(d)); yaml.safe_dump(d2,sys.stdout,default_flow_style=False,sort_keys=False)",
+            py_norm_tmp
+        ], ExecOptions { cwd: py_root, strict: false });
+
+        let py_normalized = (py_norm_r.exitCode == 0) ? py_norm_r.stdout : py_res.stdout;
+        let py_yaml_ok  = yaml.valid(py_normalized);
+        let st_yaml_ok  = yaml.valid(st_res.stdout);
+        if (!py_yaml_ok) {
+            arr.push(problems, "stdout_yaml_equal: py stdout is not valid YAML (even after anchor normalization)");
+        }
+        if (!st_yaml_ok) {
+            arr.push(problems, "stdout_yaml_equal: stash stdout is not valid YAML");
+        }
+        if (py_yaml_ok && st_yaml_ok) {
+            let py_parsed = yaml.parse(py_normalized);
+            let st_parsed = yaml.parse(st_res.stdout);
+            if (!deep_equal(py_parsed, st_parsed)) {
+                arr.push(problems, "stdout_yaml_equal: parsed YAML structures differ:");
+                arr.push(problems, "   py   = " + json.stringify(py_parsed));
+                arr.push(problems, "   stash= " + json.stringify(st_parsed));
+            }
         }
     }
 

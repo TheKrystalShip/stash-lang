@@ -1,0 +1,274 @@
+#!/usr/bin/env stash
+// next-phase.stash <slug?> <count?>
+//
+// Stash port of next-phase.py.
+// Prints the next pending phase(s) whose dependencies are all done or included
+// earlier in the selected batch. With no count, output is the legacy single phase
+// YAML document. With count > 1, output is a batch document with `phases:`.
+//
+// Exit codes:
+//   0 — printed phase(s)
+//   2 — no phase is ready (all done, in_progress, or blocked)
+//   1 — usage error
+
+import { resolve_feature, load_plan, load_checkpoint } from "_common.stash";
+
+// ── Bounded domains (no magic strings — all closed sets named here, once) ───
+
+// Valid phase status values
+const VALID_STATUSES = ["pending", "in_progress", "done", "failed"];
+
+// Count bounds (matching Python exactly)
+const COUNT_MIN = 1;
+const COUNT_MAX = 5;
+
+// Emitted key names for TIGHT contract (listed for audit; used via string literals
+// in dict assignments as Stash requires for property access on built dicts)
+const KEY_BATCH            = "batch";
+const KEY_REQUESTED_COUNT  = "requested_count";
+const KEY_SELECTED_COUNT   = "selected_count";
+const KEY_PHASE_IDS        = "phase_ids";
+const KEY_PHASES           = "phases";
+const KEY_BRIEF            = "_brief";
+
+// INPROGRESS_DIR constant: emitted paths come from here DIRECTLY — no 4-done/ fallback
+// (matches Python line 113: feature_path = INPROGRESS_DIR / slug).
+// This is NOT the same as _common.feature_dir() which has a 4-done fallback.
+const INPROGRESS_DIR = ".kanban/2-in-progress";
+
+// Stderr discriminator phrases — byte-equal to the Python originals (TIGHT contract).
+const PHRASE_ALL_DONE   = "# all phases done";
+const PHRASE_BLOCKED    = "# no phase ready (all remaining are blocked on failed/pending deps)";
+// Note: the in_progress phrase includes the phase id dynamically — built inline below.
+// Template: "# phase <id> is in_progress (use /resume to inspect)"
+
+// ── Argv parsing (bespoke — cli.schema positionals don't capture the isdigit ambiguity) ──
+
+/// Parse the script's raw argv and return { slug: string|null, count: int }.
+/// Argv ambiguity (matching Python exactly):
+///   0 args   → slug=null (infer), count=1
+///   1 arg    → if all-digits: count=that, slug=null; else: slug=that, count=1
+///   2+ args  → slug=argv[0], count=parseInt(argv[1]) (must be digit)
+/// Exits 1 on usage errors.
+fn parse_args() {
+    // cli.argv is a frozen array of just the user args (script name NOT included).
+    // Copy to a mutable array so we can use .length and index freely.
+    let raw = [];
+    for (let x in cli.argv) {
+        arr.push(raw, x);
+    }
+    let slug = null;
+    let count = COUNT_MIN;
+
+    if (raw.length == 1) {
+        if (str.isDigit(raw[0])) {
+            count = conv.toInt(raw[0]);
+        } else {
+            slug = raw[0];
+        }
+    } else if (raw.length >= 2) {
+        slug = raw[0];
+        if (!str.isDigit(raw[1])) {
+            io.eprintln("error: count must be an integer, got " + json.stringify(raw[1]));
+            env.exit(1);
+        }
+        count = conv.toInt(raw[1]);
+    }
+    // 0 args: slug=null, count=1 (defaults already set)
+
+    if (count < COUNT_MIN) {
+        io.eprintln("error: count must be >= 1");
+        env.exit(1);
+    }
+    if (count > COUNT_MAX) {
+        io.eprintln("error: refusing phase batch > 5; split it into smaller batches");
+        env.exit(1);
+    }
+
+    let resolved_slug = resolve_feature(slug);
+    return { slug: resolved_slug, count: count };
+}
+
+/// Build the shared brief dict (8 keys) from the plan and feature path.
+/// Matches Python's shared_brief() exactly.
+/// IMPORTANT: emitted paths come from INPROGRESS_DIR directly — NOT feature_dir()
+/// which has a 4-done fallback. This matches Python line 113.
+fn build_shared_brief(slug, plan) {
+    let feature_path = INPROGRESS_DIR + "/" + slug;
+
+    // brief/spec path: prefer "brief" key, then "spec", then default "brief.md"
+    let brief_rel = dict.get(plan, "brief");
+    if (brief_rel == null || brief_rel == "") {
+        brief_rel = dict.get(plan, "spec");
+    }
+    if (brief_rel == null || brief_rel == "") {
+        brief_rel = "brief.md";
+    }
+
+    // Build brief_path: join feature_path + brief_rel, stripping any "./" prefix.
+    // Python resolves to absolute then makes relative to CWD — since feature_path
+    // is already CWD-relative, we just need to join and strip leading "./".
+    let brief_rel_clean = str.startsWith(brief_rel, "./") ? str.substring(brief_rel, 2) : brief_rel;
+    let brief_path = feature_path + "/" + brief_rel_clean;
+
+    // context_path: only set if the file actually exists
+    let ctx_rel = dict.get(plan, "context");
+    if (ctx_rel == null || ctx_rel == "") {
+        ctx_rel = "context.md";
+    }
+    let ctx_rel_clean = str.startsWith(ctx_rel, "./") ? str.substring(ctx_rel, 2) : ctx_rel;
+    let ctx_path_raw = feature_path + "/" + ctx_rel_clean;
+    let context_path = null;
+    if (fs.exists(ctx_path_raw)) {
+        context_path = ctx_path_raw;
+    }
+
+    let default_verify = dict.get(plan, "default_verify");
+    if (default_verify == null) {
+        default_verify = [];
+    }
+    let scope = dict.get(plan, "scope");
+    if (scope == null) {
+        scope = [];
+    }
+
+    return {
+        feature:        slug,
+        title:          dict.get(plan, "title"),
+        feature_dir:    feature_path,
+        brief_path:     brief_path,
+        spec_path:      brief_path,
+        context_path:   context_path,
+        default_verify: default_verify,
+        scope:          scope
+    };
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+
+let parsed_args = parse_args();
+let slug  = parsed_args.slug;
+let count = parsed_args.count;
+
+let plan = load_plan(slug);
+let cp   = load_checkpoint(slug);
+
+let phases    = dict.get(plan, "phases") ?? [];
+let cp_phases = dict.get(cp,   "phases") ?? {};
+
+// Selection algorithm (matching Python exactly):
+// A phase is dispatchable if status==pending AND all deps are done OR were
+// selected earlier in this batch.
+let chosen     = [];
+let chosen_ids = {};
+
+for (let ph in phases) {
+    if (chosen.length >= count) {
+        break;
+    }
+    let pid   = dict.get(ph, "id");
+    let state = dict.get(cp_phases, pid) ?? {};
+    if (dict.get(state, "status") != "pending") {
+        continue;
+    }
+    let deps = dict.get(ph, "deps") ?? [];
+    let deps_ok = true;
+    for (let d in deps) {
+        let d_status = dict.get(dict.get(cp_phases, d) ?? {}, "status");
+        if (d_status != "done" && !dict.has(chosen_ids, d)) {
+            deps_ok = false;
+            break;
+        }
+    }
+    if (!deps_ok) {
+        continue;
+    }
+    arr.push(chosen, ph);
+    chosen_ids[pid] = true;
+}
+
+if (chosen.length == 0) {
+    // Distinguish "all done" from "blocked / in_progress" for clearer UX.
+    // Check if all phases are done.
+    let all_done = true;
+    for (let p in phases) {
+        let pid = dict.get(p, "id");
+        let st = dict.get(dict.get(cp_phases, pid) ?? {}, "status");
+        if (st != "done") {
+            all_done = false;
+            break;
+        }
+    }
+    if (all_done) {
+        io.eprintln(PHRASE_ALL_DONE);
+    } else {
+        // Check for in_progress phase
+        let in_progress_id = null;
+        for (let p in phases) {
+            let pid = dict.get(p, "id");
+            let st = dict.get(dict.get(cp_phases, pid) ?? {}, "status");
+            if (st == "in_progress") {
+                in_progress_id = pid;
+                break;
+            }
+        }
+        if (in_progress_id != null) {
+            io.eprintln("# phase " + in_progress_id + " is in_progress (use /resume to inspect)");
+        } else {
+            io.eprintln(PHRASE_BLOCKED);
+        }
+    }
+    env.exit(2);
+}
+
+// Build shared brief (8 keys) — will be used for batch top-level _brief
+let shared_brief = build_shared_brief(slug, plan);
+
+// Annotate each chosen phase with its _brief (10 keys = shared + attempts + previous_summary)
+// IMPORTANT: Do NOT mutate the shared_brief dict — build a fresh dict for each phase.
+// (Stash dicts are references; mutating shared would corrupt the batch top-level _brief.)
+for (let i = 0; i < chosen.length; i = i + 1) {
+    let ph = chosen[i];
+    let pid = dict.get(ph, "id");
+    let phase_state = dict.get(cp_phases, pid) ?? {};
+    let attempts = dict.get(phase_state, "attempts") ?? 0;
+    let previous_summary = dict.get(phase_state, "notes") ?? "";
+
+    // Build fresh 10-key _brief for this phase
+    ph["_brief"] = {
+        feature:         shared_brief.feature,
+        title:           shared_brief.title,
+        feature_dir:     shared_brief.feature_dir,
+        brief_path:      shared_brief.brief_path,
+        spec_path:       shared_brief.spec_path,
+        context_path:    shared_brief.context_path,
+        default_verify:  shared_brief.default_verify,
+        scope:           shared_brief.scope,
+        attempts:        attempts,
+        previous_summary: previous_summary
+    };
+}
+
+// Emit the document
+let out = null;
+if (count == 1) {
+    // Single-phase document: the whole phase dict (with _brief already set)
+    out = chosen[0];
+} else {
+    // Batch document: batch-level keys + phases array + top-level _brief (8 keys, no attempts/previous_summary)
+    let phase_ids = [];
+    for (let ph in chosen) {
+        arr.push(phase_ids, dict.get(ph, "id"));
+    }
+    out = {
+        batch:           true,
+        requested_count: count,
+        selected_count:  chosen.length,
+        phase_ids:       phase_ids,
+        phases:          chosen,
+        _brief:          shared_brief
+    };
+}
+
+io.print(yaml.stringify(out));
+env.exit(0);

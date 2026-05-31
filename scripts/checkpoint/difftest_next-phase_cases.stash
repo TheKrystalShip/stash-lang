@@ -1,0 +1,320 @@
+// difftest_next-phase_cases.stash
+//
+// Case table for the next-phase differential oracle.
+// Mirrors the behaviour of next-phase.py.
+//
+// This file is a MODULE — imported by difftest_runner.stash. Not run directly.
+//
+// Exports:
+//   SLUG  — the feature slug used as the fixture kanban dir name
+//   PLAN  — the clean (valid) fixture plan.yaml dict seeded for baseline cases
+//   CASES — array of case dicts
+//
+// Case schema:
+//   name                    — human label for pass/fail reporting
+//   seed_cp                 — the checkpoint.yaml dict to seed BEFORE the run
+//   argv                    — array of strings passed after the script name
+//   plan (optional)         — per-case plan.yaml override (if absent, uses entry.plan)
+//   stdout_yaml_equal (opt) — TIGHT: parse both stdout as YAML and deep_equal them
+//   stderr_must_contain     — TIGHT stderr substrings to assert (default: none)
+//   file_mutation (opt)     — set false to skip checkpoint.yaml comparison (default: true)
+
+// ── Fixture slug ─────────────────────────────────────────────────────────────
+
+export const SLUG = "difftest-np";
+
+// ── Clean fixture plan ────────────────────────────────────────────────────────
+// Three phases: P1 and P2 are independent; P3 depends on P1.
+// Has brief, default_verify, scope — matches a real feature plan shape.
+
+export const PLAN = {
+    schema_version: 1,
+    feature:        SLUG,
+    title:          "Diff Test Next Phase",
+    brief:          "./brief.md",
+    default_verify: ["true"],
+    scope:          ["scripts/**"],
+    phases: [
+        {
+            id:        "P1",
+            title:     "First Phase",
+            deps:      [],
+            files:     ["a.txt"],
+            verify:    ["true"],
+            done_when: ["phase P1 complete"]
+        },
+        {
+            id:        "P2",
+            title:     "Second Phase",
+            deps:      [],
+            files:     ["b.txt"],
+            verify:    ["true"],
+            done_when: ["phase P2 complete"]
+        },
+        {
+            id:        "P3",
+            title:     "Third Phase (dep on P1)",
+            deps:      ["P1"],
+            files:     ["c.txt"],
+            verify:    ["true"],
+            done_when: ["phase P3 complete"]
+        }
+    ]
+};
+
+// ── Helper: default per-phase state ─────────────────────────────────────────
+
+fn phase_default() {
+    return {
+        status:    "pending",
+        commit:    null,
+        verified:  false,
+        started:   null,
+        completed: null,
+        attempts:  0,
+        notes:     ""
+    };
+}
+
+fn phase_done() {
+    return {
+        status:    "done",
+        commit:    "abc123",
+        verified:  true,
+        started:   "2026-01-01T00:00:00Z",
+        completed: "2026-01-01T01:00:00Z",
+        attempts:  1,
+        notes:     "done"
+    };
+}
+
+fn phase_in_progress() {
+    return {
+        status:    "in_progress",
+        commit:    null,
+        verified:  false,
+        started:   "2026-01-01T00:00:00Z",
+        completed: null,
+        attempts:  1,
+        notes:     ""
+    };
+}
+
+fn phase_failed() {
+    return {
+        status:    "failed",
+        commit:    null,
+        verified:  false,
+        started:   "2026-01-01T00:00:00Z",
+        completed: null,
+        attempts:  1,
+        notes:     "failed attempt"
+    };
+}
+
+// ── Helper: build a clean checkpoint seed dict ───────────────────────────────
+
+fn cp_seed(phases) {
+    return {
+        schema_version: 1,
+        feature:        SLUG,
+        current:        null,
+        updated:        "2026-01-01T00:00:00Z",
+        phases:         phases
+    };
+}
+
+// ── Stderr phrase constants (byte-equal to Python original) ─────────────────
+
+const PHRASE_ALL_DONE   = "# all phases done";
+const PHRASE_BLOCKED    = "# no phase ready (all remaining are blocked on failed/pending deps)";
+const PHRASE_INPROGRESS_P1 = "# phase P1 is in_progress (use /resume to inspect)";
+const PHRASE_INPROGRESS_P2 = "# phase P2 is in_progress (use /resume to inspect)";
+
+// ── Case list ─────────────────────────────────────────────────────────────────
+
+export const CASES = [
+
+    // ── 1. count=1 happy: single-phase document ──────────────────────────────
+    // All phases pending; request count=1 → selects P1 (first pending).
+    // stdout TIGHT: parsed YAML equal between py and stash.
+    // exit 0; no file mutation (next-phase doesn't write checkpoint).
+    {
+        name:             "count=1 happy: single-phase doc",
+        seed_cp:          cp_seed({ P1: phase_default(), P2: phase_default(), P3: phase_default() }),
+        argv:             [SLUG],
+        stdout_yaml_equal: true,
+        file_mutation:    false
+    },
+
+    // ── 2. count=3 batch happy: batch document ───────────────────────────────
+    // All phases pending; request count=3 → selects P1, P2 (independent),
+    // then P3 is eligible because P1 was chosen earlier in the batch.
+    // selected_count == requested_count == 3.
+    {
+        name:             "count=3 batch: all three selected",
+        seed_cp:          cp_seed({ P1: phase_default(), P2: phase_default(), P3: phase_default() }),
+        argv:             [SLUG, "3"],
+        stdout_yaml_equal: true,
+        file_mutation:    false
+    },
+
+    // ── 3. digit-only arg: count from single digit arg ───────────────────────
+    // Single arg that is all-digits → treated as count (slug inferred).
+    // With count=2 and all phases pending → selects P1 + P2.
+    // (Tests the isdigit argv ambiguity path.)
+    {
+        name:             "digit arg: count from single digit",
+        seed_cp:          cp_seed({ P1: phase_default(), P2: phase_default(), P3: phase_default() }),
+        argv:             ["2"],
+        stdout_yaml_equal: true,
+        file_mutation:    false
+    },
+
+    // ── 4. all-done state: empty selection, exit 2 ───────────────────────────
+    // All phases done → no pending → "all phases done" to stderr, exit 2.
+    {
+        name:              "all-done: exit 2 + phrase",
+        seed_cp:           cp_seed({ P1: phase_done(), P2: phase_done(), P3: phase_done() }),
+        argv:              [SLUG],
+        stderr_must_contain: [PHRASE_ALL_DONE],
+        file_mutation:     false
+    },
+
+    // ── 5. in_progress state: empty selection, exit 2 ────────────────────────
+    // P1 is in_progress; P2 and P3 both depend on P1 → none are selectable
+    // (P1 is not "done" yet, so deps not satisfied) → in_progress phrase, exit 2.
+    // Plan override: P2 deps [P1], P3 deps [P1] — all blocked on in-progress P1.
+    {
+        name:              "in_progress: exit 2 + phrase",
+        seed_cp:           cp_seed({ P1: phase_in_progress(), P2: phase_default(), P3: phase_default() }),
+        argv:              [SLUG],
+        plan: {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Next Phase",
+            brief:          "./brief.md",
+            default_verify: ["true"],
+            scope:          ["scripts/**"],
+            phases: [
+                {
+                    id:        "P1",
+                    title:     "First Phase",
+                    deps:      [],
+                    files:     ["a.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P1 complete"]
+                },
+                {
+                    id:        "P2",
+                    title:     "Second Phase (dep on P1)",
+                    deps:      ["P1"],
+                    files:     ["b.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P2 complete"]
+                },
+                {
+                    id:        "P3",
+                    title:     "Third Phase (dep on P1)",
+                    deps:      ["P1"],
+                    files:     ["c.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P3 complete"]
+                }
+            ]
+        },
+        stderr_must_contain: [PHRASE_INPROGRESS_P1],
+        file_mutation:     false
+    },
+
+    // ── 6. blocked state: empty selection, exit 2 ────────────────────────────
+    // P1 failed, P2 pending (independent), P3 pending but deps [P1] failed.
+    // All remaining that are pending (P2 is independent, so it should be selectable).
+    // Let's use a plan where ALL remaining are blocked: one phase with failed dep.
+    // Plan override: only one phase (P3) that depends on P1 which failed.
+    {
+        name:              "blocked: exit 2 + phrase",
+        seed_cp:           cp_seed({ P1: phase_failed(), P3: phase_default() }),
+        argv:              [SLUG],
+        plan: {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Next Phase",
+            brief:          "./brief.md",
+            default_verify: ["true"],
+            scope:          ["scripts/**"],
+            phases: [
+                {
+                    id:        "P1",
+                    title:     "First Phase",
+                    deps:      [],
+                    files:     ["a.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P1 complete"]
+                },
+                {
+                    id:        "P3",
+                    title:     "Third Phase (dep on P1)",
+                    deps:      ["P1"],
+                    files:     ["c.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P3 complete"]
+                }
+            ]
+        },
+        stderr_must_contain: [PHRASE_BLOCKED],
+        file_mutation:     false
+    },
+
+    // ── 7. batch where selected_count < requested_count ──────────────────────
+    // Only P1 and P2 are pending (P3's dep P1 not done).
+    // Request count=5 → only 2 can be selected (P1 and P2 before P3).
+    // Wait - P3 deps on P1 which is selected earlier in batch...
+    // Let's use a plan where only 2 are selectable (P2 depends on P3 which depends on P1):
+    // P1(pending), P2(deps:P3), P3(deps:P1) — only P1 selectable first, then P3, not P2.
+    // With count=5, selects 3 (all), selected_count=3 < requested_count=5.
+    {
+        name:             "batch selected_count < requested_count",
+        seed_cp:          cp_seed({ P1: phase_default(), P2: phase_default(), P3: phase_default() }),
+        argv:             [SLUG, "5"],
+        stdout_yaml_equal: true,
+        file_mutation:    false
+    },
+
+    // ── 8. deps-resolved-by-prior-in-batch ───────────────────────────────────
+    // P1 and P3 both pending; P3 deps on P1. With count=2, P3 can be selected
+    // because P1 is chosen earlier in the same batch.
+    {
+        name:             "deps-resolved-by-prior-in-batch",
+        seed_cp:          cp_seed({ P1: phase_default(), P3: phase_default() }),
+        argv:             [SLUG, "2"],
+        plan: {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Next Phase",
+            brief:          "./brief.md",
+            default_verify: ["true"],
+            scope:          ["scripts/**"],
+            phases: [
+                {
+                    id:        "P1",
+                    title:     "First Phase",
+                    deps:      [],
+                    files:     ["a.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P1 complete"]
+                },
+                {
+                    id:        "P3",
+                    title:     "Third Phase (dep on P1)",
+                    deps:      ["P1"],
+                    files:     ["c.txt"],
+                    verify:    ["true"],
+                    done_when: ["phase P3 complete"]
+                }
+            ]
+        },
+        stdout_yaml_equal: true,
+        file_mutation:    false
+    }
+];
