@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stash-script-readiness
 current: null
-updated: '2026-05-31T13:05:01Z'
+updated: '2026-05-31T13:18:46Z'
 phases:
   P1:
     status: done
@@ -12,12 +12,12 @@ phases:
     attempts: 1
     notes: ''
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
+    status: done
+    commit: 2becf79615364168799a59c2d9bac296c8a2b520
+    verified: true
+    started: '2026-05-31T13:05:15Z'
+    completed: '2026-05-31T13:18:46Z'
+    attempts: 1
     notes: ''
   P3:
     status: pending
