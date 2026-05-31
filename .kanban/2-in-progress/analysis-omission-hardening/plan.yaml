@@ -1,0 +1,155 @@
+# plan.yaml — Analysis Omission Hardening
+#
+# Authored by the architect, consumed by checkpoint scripts. Design prose lives
+# in brief.md; this file is script input only.
+# Validate with: python3 scripts/checkpoint/validate-spec.py analysis-omission-hardening
+
+schema_version: 1
+
+feature: analysis-omission-hardening
+
+title: Analysis Omission Hardening
+
+# Second child unit of the omission-hardening milestone. milestone-status.py
+# reads this tag to derive the milestone's ledger.
+milestone: omission-hardening
+
+brief: ./brief.md
+
+created: 2026-05-31
+architect_session: analysis-omission-hardening-spec-2026-05-31
+
+# Default verify after every phase. Cheap; heavier checks live in per-phase verify.
+default_verify:
+  - dotnet build
+
+# Safety rail. P1 is read-only (audit) and only touches brief.md. P2 also
+# touches Stash.Core (the visitor interface fix) — verified pre-spec to be a
+# zero-impact change because every visitor already overrides the 4 methods.
+scope:
+  - Stash.Analysis/**
+  - Stash.Check/**
+  - Stash.Core/Parsing/AST/IStmtVisitor.cs
+  - Stash.Core/Parsing/AST/IExprVisitor.cs
+  - Stash.Tests/Analysis/**
+  - .kanban/2-in-progress/analysis-omission-hardening/**
+
+phases:
+  - id: P1
+    title: Verify & classify — audit is the first deliverable
+    deps: []
+    files:
+      - .kanban/2-in-progress/analysis-omission-hardening/brief.md
+    verify:
+      - dotnet build Stash.Analysis
+      - dotnet build Stash.Check
+    done_when:
+      - Every row of brief.md's "Cross-Cutting Concerns" table is reproduced against the code; rows that did not reproduce as written are revised in-place with a Decision Log entry naming the delta.
+      - The table commits with each row carrying its single source of truth (file + line or test class), its current Construct/Detect/Instruct level, and its disposition (Keep / Promote / Justify / No-op / Drop).
+      - The audit table covers BOTH already-Construct mechanisms (Accept-dispatch, single RuleRegistry consumer, RuleContext aggregation) AND the gaps — not just defects.
+      - The P3 RuleRegistry fork is decided (Construct via new generator project OR Detect via reflection coverage test) and the verdict is recorded in the Decision Log with the order-sensitivity rationale.
+      - The two TBD rows (IConfigurableRule.ApplyOptions wiring; enum exhaustive-switch survey on DiagnosticLevel/Category/ScopeKind/BranchKind/NullState) are resolved with concrete dispositions; any throwing-default additions surfaced are scoped into P3.
+    notes: |
+      This phase writes no production code. It commits the verified audit table
+      as the source-of-truth deliverable. Treat every prior survey finding
+      (.kanban/milestones/omission-hardening/survey.md) as an unverified
+      hypothesis; verify each by reading the named file and lines.
+
+      Pre-P1 spot-checks already in the brief's Decision Log: all 6 visitor
+      impls override all 4 export methods; all 65 IAnalysisRule impls are
+      already in RuleRegistry; Stash.Check is AOT. P1 must re-verify these
+      AND the rows still marked TBD.
+
+  - id: P2
+    title: "Construct + Detect — visitor escape-hatch removal + re-introduction guard"
+    deps: [P1]
+    files:
+      - Stash.Core/Parsing/AST/IStmtVisitor.cs
+      - Stash.Tests/Analysis/VisitorEscapeHatchMetaTests.cs
+    verify:
+      - dotnet build
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~VisitorEscapeHatchMetaTests"
+    done_when:
+      - "`IStmtVisitor<T>.VisitExportDeclStmt`, `VisitExportBlockStmt`, `VisitExportModuleAsStmt`, `VisitExportFromStmt` are abstract members (no `=> throw new System.NotImplementedException(...)` default body). `IExprVisitor<T>` is re-verified to have no default-throw methods (pre-P1 finding: it has none today)."
+      - "`dotnet build` of the entire solution is green, proving every existing visitor implementation already overrides all 4 methods."
+      - "`VisitorEscapeHatchMetaTests` ships: a Roslyn syntax walk over `IStmtVisitor.cs` and `IExprVisitor.cs` that asserts no method declaration body contains `throw new NotImplementedException` or `throw new NotSupportedException`."
+      - "The meta-test ships a fail-path self-test (a synthetic offending-fixture snippet the test recognises trips the scan) — the canonical pattern from `NoMagicAuthStringsMetaTests` / `AuthzDispatchCoverageMetaTests`."
+      - "The meta-test goes GREEN immediately on the P2-fixed interfaces."
+    notes: |
+      Two concerns, two participants, one phase:
+        1. Construct: remove the 4 existing defaults (current state).
+        2. Detect: a guard against re-introduction (future transition).
+      They are distinct failure shapes — do NOT collapse them.
+
+      The Stash.Core edit is one file. Pre-P1 verification confirmed all six
+      concrete visitors (Compiler in Stash.Bytecode/Compilation/
+      Compiler.Declarations.cs; SemanticResolver in Stash.Core/Resolution/;
+      SemanticValidator, SymbolCollector, SemanticTokenWalker, StashFormatter
+      in Stash.Analysis/Visitors/) already implement all 4 methods. If
+      `dotnet build` fails after the edit, the implementer must NOT add a
+      runtime-throwing default back — find and fix the missing override.
+
+  - id: P3
+    title: "RuleRegistry hardening — Construct via source-gen OR Detect via coverage test (per P1's verdict)"
+    deps: [P1]
+    files:
+      - Stash.Analysis/Rules/RuleRegistry.cs
+      - Stash.Tests/Analysis/RuleRegistryCoverageTests.cs
+      - Stash.Analysis.Generators/**
+    verify:
+      - dotnet build
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~RuleRegistry|FullyQualifiedName~AnalysisEngineTests|FullyQualifiedName~SemanticValidatorTests"
+    done_when:
+      - "A new IAnalysisRule implementation that is NOT mentioned in either the RuleRegistry hand-list (Detect branch) or picked up by the source generator (Construct branch) FAILS LOUDLY — by xUnit assertion (Detect) or by being automatically registered (Construct). Today both branches are green because every IAnalysisRule impl is already covered; the test/generator MUST be wired so adding a `class FooRule : IAnalysisRule {…}` to Stash.Analysis with no other change either auto-registers it or fails the test."
+      - "If Detect branch: `RuleRegistryCoverageTests` reflects over `typeof(SemanticValidator).Assembly` to enumerate every concrete `IAnalysisRule` implementation; asserts each is present in the registry; ships an empty `KnownExemptions` HashSet and a fail-path self-test (a fixture `IAnalysisRule` that the test deliberately tags as exempt and verifies the scan would have caught absent the tag); is GREEN on current code."
+      - "If Construct branch: `Stash.Analysis.Generators` (netstandard2.0 Roslyn analyzer, IIncrementalGenerator, same project shape as `Stash.Stdlib.Generators`) emits the rule list at compile time; the hand-list in `RuleRegistry.cs` is replaced by a call into the generated registration; existing rule-engine tests (AnalysisEngineTests / SemanticValidatorTests) stay green; dispatch order is preserved (proven by a snapshot test OR by the generator emitting rules in a deterministic order that matches the prior list — verified empirically)."
+      - "Any throwing-default-additions surfaced by P1's enum-exhaustiveness survey (DiagnosticLevel / Category / ScopeKind / BranchKind / NullState) land here with a unit test demonstrating the throw."
+    notes: |
+      P1 records the fork verdict — the implementer reads brief.md's Decision
+      Log entry and implements the chosen branch.
+
+      Files list covers BOTH branches; the implementer touches only the files
+      that apply to the chosen branch (the other branch's globs are inert).
+      `Stash.Analysis.Generators/**` is empty today; under Construct it is
+      created as a new project with `.csproj`, `RuleRegistryGenerator.cs`,
+      `AnalyzerReleases.Shipped.md`, `AnalyzerReleases.Unshipped.md`.
+
+      Order preservation under Construct: SemanticValidator iterates the list
+      to build _rulesByNodeType. Dispatch within a node type is per registration
+      order. The generator must NOT reorder rules in a way that changes the
+      observed sequence — if uncertain, emit a snapshot test that pins the
+      order against the current hand-list before the swap.
+
+  - id: P4
+    title: "Detect — DiagnosticDescriptors AllByCode coverage test"
+    deps: [P1]
+    files:
+      - Stash.Tests/Analysis/DiagnosticDescriptorsCoverageTests.cs
+    verify:
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~DiagnosticDescriptorsCoverageTests"
+    done_when:
+      - "`DiagnosticDescriptorsCoverageTests` reflects over `typeof(DiagnosticDescriptors).GetFields(BindingFlags.Public | BindingFlags.Static)`, filters to fields of type `DiagnosticDescriptor`, and asserts each is keyed in `AllByCode` with the matching `Code`."
+      - "The test ships a non-vacuity floor (`Assert.NotEmpty` on the discovered field list) — guards against the reflection returning zero, the lesson from `stdlib-omission-hardening` F02."
+      - "The test ships a fail-path self-test or an inline comment-documented fixture demonstrating that removing a `dict[SAxxxx.Code] = SAxxxx;` line in `BuildCodeLookup` makes the test fail. This proves the scan has teeth — the canonical pattern."
+      - "The test is GREEN on the current `DiagnosticDescriptors.cs` — pre-P1 spot-check did not find any descriptor missing from `BuildCodeLookup`, but if P4's reflection enumeration surfaces a real omission today, the descriptor list in `BuildCodeLookup` is corrected in the same commit."
+    notes: |
+      Detect (not Construct via source-gen) because the surface is small,
+      infrequently changed, and a generator is over-engineering for the
+      cardinality. The Decision Log records this trade-off.
+
+      Deliberately split from P3 so the RuleRegistry fork doesn't bottleneck
+      this independent gap.
+
+# Final acceptance — run by /done before promoting to 4-done/.
+# Filter shape: inherited from .kanban/4-done/stdlib-omission-hardening/plan.yaml.
+# Keeps documented flakies excluded (DiffPackageTests, AuthEndpointTests, etc.,
+# plus the three parallel-execution flakies appended during stdlib's /done) and
+# keeps the language/stdlib gate tests required by .claude/language-changes.md
+# (Wave1ThrowsCoverageTests, CompletionSurfaceSnapshotTests,
+# StandardLibraryReferenceTests are NOT excluded — they must remain in the
+# suite). validate-spec.py is safe to include now that stdlib-omission-hardening
+# is in 4-done/.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&FullyQualifiedName!~NamespaceMembersDapTests&FullyQualifiedName!~AtomicClaimRaceTests&FullyQualifiedName!~RegistryAuthzAtomicityConformanceTests"
+  - python3 scripts/checkpoint/validate-spec.py analysis-omission-hardening
