@@ -1,7 +1,7 @@
 schema_version: 1
 feature: analysis-omission-hardening
 current: null
-updated: '2026-05-31T12:55:30Z'
+updated: '2026-05-31T12:59:34Z'
 phases:
   P1:
     status: done
@@ -24,13 +24,14 @@ phases:
     notes: 4 export methods made abstract (no default-throw body); dotnet build green on first try; VisitorEscapeHatchMetaTests
       ships with fail-path self-test, all 3 tests pass
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 204999809eeb81c210ea24c9567285d073ea6447
+    verified: true
+    started: '2026-05-31T12:57:02Z'
+    completed: '2026-05-31T12:59:34Z'
+    attempts: 1
+    notes: 'RuleRegistryCoverageTests: 3 tests (floor, production compliance, fail-path self-test); reflects
+      typeof(SemanticValidator).Assembly; 65 rule types discovered; all 126 filtered tests pass'
   P4:
     status: pending
     commit: null
