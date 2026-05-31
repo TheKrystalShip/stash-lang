@@ -1,0 +1,88 @@
+#!/usr/bin/env stash
+
+// examples/path_match.stash
+// path.match — Glob-based path matching for scope filtering
+//
+// path.match(path: string, pattern: string) -> bool
+//
+// Tests whether a file path matches a glob pattern using bash [[ ]] semantics:
+//   *     matches any sequence of characters, including across directory separators
+//   **    also matches across directory separators (same as * in this implementation)
+//   ?     matches exactly one character (not a slash in most glob tools, but here
+//         it matches any single character)
+//   [ac]  matches one of the listed characters
+//   [a-z] matches a character in the given range
+//   [!c]  or [^c]  negated character class
+//
+// A typical use case: deciding which CI jobs or reviewers to trigger based on
+// which files changed in a pull request.
+
+io.println("=" * 60);
+io.println("  path.match — Glob Scope Filtering");
+io.println("=" * 60);
+
+// ─── Patterns ────────────────────────────────────────────────────────────────
+//
+// Represent the "files:" or "scope:" entries a CI system might declare per job.
+
+let patterns = [["stdlib", "Stash.Stdlib/**"], ["analysis", "Stash.Analysis/Visitors/*.cs"], ["docs", "docs/*.md"], ["examples", "examples/**"], ["tests", "Stash.Tests/**"], ["cli", "Stash.Cli/*.cs"]];
+
+// ─── Changed Files ───────────────────────────────────────────────────────────
+//
+// Fabricated list of paths that changed in a hypothetical pull request.
+
+let changed = [
+    "Stash.Stdlib/BuiltIns/PathBuiltIns.cs",
+    "Stash.Stdlib/BuiltIns/MathBuiltIns.cs",
+    "Stash.Analysis/Visitors/TypeInferenceVisitor.cs",
+    "Stash.Analysis/Visitors/ResolverVisitor.cs",
+    "Stash.Analysis/Diagnostics/DiagnosticCode.cs",
+    "docs/changelog.md",
+    "docs/roadmap.md",
+    "examples/path_match.stash",
+    "Stash.Tests/Interpreting/PathBuiltInsTests.cs",
+    "Stash.Cli/Program.cs",
+    "Stash.Core/Interpreter/Interpreter.cs"
+];
+
+// ─── Match Each Pattern Against the Changed Files ────────────────────────────
+
+io.println("\n-- Scope Detection (which CI jobs are triggered?) --\n");
+
+for (let entry in patterns) {
+    let job     = entry[0];
+    let pattern = entry[1];
+
+    // Collect every changed file that matches this pattern.
+    let hits = [];
+    for (let p in changed) {
+        if (path.match(p, pattern)) {
+            arr.push(hits, p);
+        }
+    }
+
+    let triggered = len(hits) > 0;
+    let status    = triggered ? "TRIGGERED" : "skipped  ";
+    io.println($"  [{status}]  job={job}  pattern={pattern}");
+    for (let h in hits) {
+        io.println($"              + {h}");
+    }
+}
+
+// ─── Single-Call Examples ────────────────────────────────────────────────────
+
+io.println("\n-- Individual path.match calls --\n");
+
+let cases = [["Stash.Stdlib/BuiltIns/PathBuiltIns.cs", "Stash.Stdlib/**", "** crosses directory separators"], ["Stash.Analysis/Visitors/Foo.cs", "Stash.Analysis/Visitors/*.cs", "* matches within a directory"], ["Stash.Analysis/Diagnostics/Foo.cs", "Stash.Analysis/Visitors/*.cs", "* does not cross into sibling dir (no match)"], ["docs/changelog.md", "docs/*.md", "simple *.md glob"], ["docs/archive/old.md", "docs/*.md", "* crosses / so nested file also matches"], ["Stash.Cli/Program.cs", "Stash.Cli/?.cs", "? does not match multi-char name (no match)"], ["Stash.Cli/A.cs", "Stash.Cli/?.cs", "? matches exactly one character"], ["Stash.Core/Foo.cs", "Stash.[CA]ore/Foo.cs", "character class [CA] matches C"], ["Stash.Bore/Foo.cs", "Stash.[CA]ore/Foo.cs", "character class [CA] does not match B (no match)"], ["Stash.Core/Foo.cs", "Stash.[!T]ore/Foo.cs", "negated class [!T] matches C"], ["Stash.Tore/Foo.cs", "Stash.[!T]ore/Foo.cs", "negated class [!T] excludes T (no match)"]];
+
+for (let c in cases) {
+    let p    = c[0];
+    let pat  = c[1];
+    let desc = c[2];
+    let hit  = path.match(p, pat);
+    let mark = hit ? "match  " : "no match";
+    io.println($"  {mark}  path.match(\"{p}\", \"{pat}\")");
+    io.println($"           // {desc}");
+}
+
+io.println("\n" + "=" * 60);
