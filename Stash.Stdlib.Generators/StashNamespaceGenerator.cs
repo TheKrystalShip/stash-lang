@@ -57,6 +57,52 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             string src = CodeEmitter.EmitRegistry(pair.Right, models);
             spc.AddSource("GeneratedStdlibRegistry.g.cs", SourceText.From(src, Encoding.UTF8));
         });
+
+        // STSG014: Inverted scan — find [StashFn]/[StashMember]/[StashConst] on types that
+        // are NOT [StashNamespace]-attributed. Without this scan those annotations are silently
+        // invisible because the main provider above only walks [StashNamespace] classes.
+        RegisterStrayAnnotationDiagnostic(context, FnAttr,     "StashFn");
+        RegisterStrayAnnotationDiagnostic(context, MemberAttr, "StashMember");
+        RegisterStrayAnnotationDiagnostic(context, ConstAttr,  "StashConst");
+    }
+
+    /// <summary>
+    /// Registers a <see cref="IncrementalGeneratorInitializationContext.SyntaxProvider"/> that
+    /// scans for symbols carrying <paramref name="memberAttrFullName"/> whose declaring type
+    /// does NOT have <see cref="NamespaceAttr"/>. Emits <see cref="Diagnostics.StrayStdlibAnnotation"/>
+    /// (STSG014) for each such symbol.
+    /// </summary>
+    private static void RegisterStrayAnnotationDiagnostic(
+        IncrementalGeneratorInitializationContext context,
+        string memberAttrFullName,
+        string shortAttrName)
+    {
+        var strayDiags = context.SyntaxProvider.ForAttributeWithMetadataName(
+            memberAttrFullName,
+            predicate: static (_, _) => true,
+            transform: (ctx, _) =>
+            {
+                var symbol = ctx.TargetSymbol;
+                var declaringType = symbol.ContainingType;
+                if (declaringType is null) return null;
+
+                // If the declaring type already has [StashNamespace], this is a legitimate use —
+                // the main provider will handle it. Report nothing.
+                if (HasAttr(declaringType, NamespaceAttr)) return null;
+
+                // The declaring type lacks [StashNamespace]; this annotation will be ignored by
+                // the main generator pass. Promote that silent skip to a build error.
+                var loc = symbol.Locations.FirstOrDefault() ?? Location.None;
+                return Diagnostic.Create(
+                    Diagnostics.StrayStdlibAnnotation,
+                    loc,
+                    symbol.Name,
+                    shortAttrName,
+                    declaringType.Name);
+            })
+            .Where(static d => d is not null);
+
+        context.RegisterSourceOutput(strayDiags, static (spc, diag) => spc.ReportDiagnostic(diag!));
     }
 
     private readonly struct BuildResult

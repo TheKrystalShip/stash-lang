@@ -27,3 +27,4 @@ STASH_MEM002 | StashStdlibGenerator | Error    | [StashMember] and [StashConst] 
 STASH_MEM003 | StashStdlibGenerator | Error    | [StashMember] method has wrong parameter shape.
 STASH_MEM004 | StashStdlibGenerator | Error    | [StashMember] missing XML summary doc comment.
 STASH_MEM005 | StashStdlibGenerator | Error    | [StashMember(Throws=...)] type not [StashError]-attributed.
+STSG014    | StashStdlibGenerator   | Error    | [StashFn]/[StashMember]/[StashConst] on a non-[StashNamespace] class.
