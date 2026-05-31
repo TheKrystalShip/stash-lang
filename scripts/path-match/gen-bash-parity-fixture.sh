@@ -241,6 +241,35 @@ record_pair ".claude/repo.md"            ".claude/repo.yaml"
 record_pair "Stash.Registry/Startup.cs"  "Stash.Registry/Startup.cs"
 record_pair "Stash.Registry/Startup.cs"  "Stash.Registry/Startup.cs.bak"
 
+# B6: backslash escape outside class (F01/F03 coverage)
+# \* in pattern matches a literal '*', not a wildcard.
+record_pair 'a\*'                        'a*'
+record_pair 'a\*'                        'ab'
+record_pair 'a\*'                        'a'
+# \? matches literal '?'
+record_pair 'a\?b'                       'a?b'
+record_pair 'a\?b'                       'axb'
+
+# B7: ']' as first character class member (bash POSIX bracket rule)
+# []abc] matches ], a, b, or c.
+record_pair '[]abc]'                     ']'
+record_pair '[]abc]'                     'a'
+record_pair '[]abc]'                     'x'
+# [!]abc] matches anything except ], a, b, c.
+record_pair '[!]abc]'                    'x'
+record_pair '[!]abc]'                    ']'
+
+# B8: character class with regex-meta members (F03 coverage)
+# [\d] in bash is a class containing '\' and 'd' — NOT a digit shorthand.
+record_pair '[\d]'                       'd'
+record_pair '[\d]'                       '1'
+# [.] in bash matches a literal dot only (not regex-meta '.')
+record_pair '[.]'                        '.'
+record_pair '[.]'                        'x'
+# [\\] in bash matches a literal backslash
+record_pair '[\\]'                       '\'
+record_pair '[\\]'                       'x'
+
 # ---------------------------------------------------------------------------
 # Step 3: Emit sorted TSV rows.
 # ---------------------------------------------------------------------------

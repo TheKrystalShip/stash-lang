@@ -25,7 +25,15 @@ internal static class PathGlobImpl
     internal static bool Matches(string path, string pattern)
     {
         string regex = GlobToRegex(pattern);
-        return Regex.IsMatch(path, regex);
+        try
+        {
+            return Regex.IsMatch(path, regex, RegexOptions.Singleline | RegexOptions.CultureInvariant);
+        }
+        catch (RegexParseException)
+        {
+            // Malformed patterns fall back to literal equality (Decision Log: never throw).
+            return path == pattern;
+        }
     }
 
     /// <summary>
@@ -124,7 +132,7 @@ internal static class PathGlobImpl
             }
         }
 
-        sb.Append('$');
+        sb.Append(@"\z");
         return sb.ToString();
     }
 
@@ -157,16 +165,35 @@ internal static class PathGlobImpl
     }
 
     /// <summary>
-    /// Escapes regex metacharacters inside a character class, preserving the class
-    /// syntax characters <c>-</c>, <c>^</c>, <c>]</c>, and <c>\</c> as-is because
-    /// .NET's regex engine interprets them correctly inside <c>[…]</c>.
+    /// Escapes characters inside a bash glob character class so that the result
+    /// is safe to embed in a .NET regex <c>[…]</c> while preserving bash semantics.
+    ///
+    /// Bash treats <c>\x</c> inside a class as the two literal characters <c>\</c>
+    /// and <c>x</c>; .NET regex would interpret <c>\d</c>, <c>\s</c>, <c>\w</c> etc.
+    /// as shorthand character classes.  We therefore escape every <c>\</c> as
+    /// <c>\\</c> (a regex-literal backslash).
+    ///
+    /// A leading <c>]</c> in the class content is a literal member in bash but
+    /// would close the class early in .NET regex; we escape it as <c>\]</c>.
+    ///
+    /// <c>^</c> and <c>-</c> are left as-is because the caller has already
+    /// validated their positions (leading <c>!</c>→<c>^</c> rewrite happened
+    /// before this call; ranges like <c>A-Z</c> need the bare <c>-</c>).
     /// </summary>
     private static string EscapeClassContents(string classContent)
     {
-        // Inside a character class the only truly special chars are ] ^ - \.
-        // . * + ? ( ) { } | are NOT special inside a class, so no escaping needed.
-        // We pass the content through verbatim — the caller has already validated
-        // the class has a closing ']', so the only risk is a stray backslash.
-        return classContent;
+        // Order matters: escape backslashes first so we don't double-escape
+        // the backslashes we introduce when escaping ']'.
+        string result = classContent.Replace("\\", "\\\\");
+
+        // If the content starts with ']' (or '^]' for negated classes), that ']'
+        // is a literal member in bash but would close the .NET class immediately.
+        // Escape it to '\]'.
+        if (result.Length > 0 && result[0] == ']')
+            result = @"\]" + result.Substring(1);
+        else if (result.Length > 1 && result[0] == '^' && result[1] == ']')
+            result = @"^\]" + result.Substring(2);
+
+        return result;
     }
 }

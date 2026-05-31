@@ -182,6 +182,93 @@ public class PathBuiltInsTests : StashTestBase
         Assert.Equal(false, result);
     }
 
+    // ── F01: newline in path ───────────────────────────────────────────────
+
+    [Fact]
+    public void Match_NewlineInPath_StarMatchesNewline()
+    {
+        // bash: [[ $'a\nb' == a*b ]] → true
+        // .NET Singleline mode makes '.' match '\n', so '.*' matches embedded newlines.
+        var result = Run("let result = path.match(\"a\nb\", \"a*b\");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_NewlineInPath_QuestionMatchesNewline()
+    {
+        // bash: [[ $'a\nb' == a?b ]] → true
+        var result = Run("let result = path.match(\"a\nb\", \"a?b\");");
+        Assert.Equal(true, result);
+    }
+
+    // ── F02: malformed patterns fall back to literal match ─────────────────
+
+    [Fact]
+    public void Match_Malformed_ReverseRange_ReturnsFalseWhenPathDiffers()
+    {
+        // [z-a] is an invalid .NET regex range; bash returns false for non-matching path.
+        var result = Run(@"let result = path.match(""b"", ""[z-a]"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_Malformed_ReverseRange_ReturnsTrueWhenPathEqualsPattern()
+    {
+        // Decision Log: malformed patterns fall back to literal equality.
+        // path "[z-a]" == pattern "[z-a]" → true
+        var result = Run(@"let result = path.match(""[z-a]"", ""[z-a]"");");
+        Assert.Equal(true, result);
+    }
+
+    // ── F03: backslash inside character class ──────────────────────────────
+
+    [Fact]
+    public void Match_BackslashInClass_BackslashD_MatchesLiteralBackslashAndD()
+    {
+        // bash: [[ d == [\d] ]] → true  (class is { \, d })
+        // bash: [[ 1 == [\d] ]] → false  (\d is NOT a digit class in bash)
+        var result = Run("let result = path.match(\"d\", \"[\\\\d]\");");
+        Assert.Equal(true, result);
+
+        var result2 = Run("let result = path.match(\"1\", \"[\\\\d]\");");
+        Assert.Equal(false, result2);
+    }
+
+    [Fact]
+    public void Match_BackslashInClass_LiteralBackslash_MatchesBackslash()
+    {
+        // bash: [[ \\ == [\\] ]] → true  (class is { \ })
+        var result = Run("let result = path.match(\"\\\\\", \"[\\\\\\\\]\");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_ClosingBracketAsFirstClassMember_MatchesBracket()
+    {
+        // bash: [[ ] == []abc] ]] → true  (] is a literal first member)
+        var result = Run(@"let result = path.match(""]"", ""[]abc]"");");
+        Assert.Equal(true, result);
+
+        // bash: [[ a == []abc] ]] → true
+        var result2 = Run(@"let result = path.match(""a"", ""[]abc]"");");
+        Assert.Equal(true, result2);
+
+        // bash: [[ x == []abc] ]] → false
+        var result3 = Run(@"let result = path.match(""x"", ""[]abc]"");");
+        Assert.Equal(false, result3);
+    }
+
+    [Fact]
+    public void Match_NegatedClassWithClosingBracketFirst_ExcludesBracket()
+    {
+        // bash: [[ ] == [!]abc] ]] → false  (] is excluded by negated class)
+        var result = Run(@"let result = path.match(""]"", ""[!]abc]"");");
+        Assert.Equal(false, result);
+
+        // bash: [[ x == [!]abc] ]] → true
+        var result2 = Run(@"let result = path.match(""x"", ""[!]abc]"");");
+        Assert.Equal(true, result2);
+    }
 
     // ── path.normalize ────────────────────────────────────────────────────
 
