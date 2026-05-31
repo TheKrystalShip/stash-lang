@@ -45,7 +45,7 @@ Findings below are observations / minor consistency items only; none blocks `/do
 
 ## F01 — [LOW] P3 generator test exercises the mapper directly rather than the metadata path
 
-**Status:** open
+**Status:** accepted (won't-fix, justified). The done_when is mechanically satisfied — a fake int IS fed to the mapping (`MapStabilityLiteral(2)`) and the throw asserted — and the throwing default is reachable from `BuildMember` via its single call site (`StashNamespaceGenerator.cs:509`), while the runtime side already has an end-to-end test on `Invoke`. An invalid-enum generator fixture (`[StashMember(Stability = 99)]`) is real added complexity for marginal value (guards only a hypothetical future change to how `BuildMember` reads the arg). Recorded per the milestone's "record a justification for not-promoting" discipline.
 **Files:** `Stash.Tests/Stdlib/SourceGenerator/StashMemberGeneratorTests.cs:386-411`
 **Phase:** P3
 **Commit:** `2040216`
@@ -82,7 +82,7 @@ audit pass.
 
 ## F02 — [LOW] P4 DataMembers facts have no non-vacuity floor guard
 
-**Status:** open
+**Status:** fixed — commit `0e1c47c`. Added a `checkedCount > 0` floor to both `NamespaceMembers_*` facts; 17 StdlibConsistencyTests green. Chose the in-scope two-fact fix over also retrofitting the existing Functions/Constants pairs (out of scope; tracked as a possible future hygiene unit).
 **Files:** `Stash.Tests/Stdlib/StdlibConsistencyTests.cs:286-340`
 **Phase:** P4
 **Commit:** `8222af3`
@@ -122,7 +122,7 @@ file is consistently non-vacuous.
 
 ## F03 — [NIT] Spec/code naming drift: `BuildMember` vs `Build`
 
-**Status:** open
+**Status:** refuted on verification — NOT a defect. The `MapStabilityLiteral(stab)` call site at `StashNamespaceGenerator.cs:509` is inside `private static MemberModel? BuildMember(...)` (declared at line 457), NOT the top-level `Build` (line 117). `plan.yaml` correctly names `BuildMember`; the finding misattributed line 509 to `Build`. Changing the plan to "Build" would have made it wrong. No change made.
 **Files:** `.kanban/2-in-progress/stdlib-omission-hardening/plan.yaml:91`, `Stash.Stdlib.Generators/StashNamespaceGenerator.cs:508-509`
 **Phase:** P3
 **Commit:** `2040216`
@@ -153,7 +153,7 @@ call site at `:509` inside `Build`.
 
 ## F04 — [NIT] `AnalyzerReleases.Unshipped.md` column alignment
 
-**Status:** open
+**Status:** refuted on verification — NOT an inconsistency. The STSG014 row (line 30) matches its own family `STSG010`/`STSG011`/`STSG013` (lines 18-20) byte-for-byte in spacing. The finding compared it against the `STASH_MEM*` family (which uses different spacing because its ids are longer). "Aligning" STSG014 to the MEM family would make it inconsistent with its actual STSG siblings. No change made.
 **Files:** `Stash.Stdlib.Generators/AnalyzerReleases.Unshipped.md:30`
 **Phase:** P2
 **Commit:** `5b4dd76`
@@ -203,3 +203,16 @@ Visual diff of the file.
 - MEDIUM: 0
 - LOW: 2 (F01, F02)
 - NIT: 2 (F03, F04)
+
+## Resolution (post-review)
+
+All findings dispositioned — no open items.
+
+| ID | Disposition | Note |
+| --- | --- | --- |
+| F02 | **fixed** (`0e1c47c`) | Non-vacuity floor added to both DataMembers facts. |
+| F01 | **accepted** (justified) | Direct mapper test is adequate; throw reachable from `BuildMember`; runtime path has e2e test. |
+| F03 | **refuted on verification** | `plan.yaml` correctly names `BuildMember` (call site at `:509` is inside `BuildMember`, not `Build`). |
+| F04 | **refuted on verification** | STSG014 row matches its `STSG010/011/013` family; finding compared against the wrong (`STASH_MEM`) family. |
+
+Two of four findings were false on verification against the code — applying the milestone's own find-then-refute discipline to the review itself.
