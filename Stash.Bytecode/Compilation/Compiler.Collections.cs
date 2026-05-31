@@ -111,22 +111,34 @@ public sealed partial class Compiler
         byte baseReg = _scope.ReserveRegs(1 + 2 * count);
         for (int i = 0; i < count; i++)
         {
-            (Token? key, Expr value) = expr.Entries[i];
+            DictEntry entry = expr.Entries[i];
             byte keySlot = (byte)(baseReg + 1 + 2 * i);
             byte valSlot = (byte)(baseReg + 2 + 2 * i);
 
-            if (key != null)
+            switch (entry.Kind)
             {
-                ushort keyIdx = _builder.AddConstant(key.Lexeme);
-                _builder.EmitABx(OpCode.LoadK, keySlot, keyIdx);
-            }
-            else
-            {
-                // Spread entry: null key signals to the VM that the value is a spread source.
-                _builder.EmitA(OpCode.LoadNull, keySlot);
+                case DictKeyKind.Constant:
+                {
+                    // identifier or string-literal key — use the resolved string value
+                    ushort keyIdx = _builder.AddConstant(entry.KeyString);
+                    _builder.EmitABx(OpCode.LoadK, keySlot, keyIdx);
+                    break;
+                }
+                case DictKeyKind.Computed:
+                {
+                    // computed key: evaluate the key expression into the key slot
+                    CompileExprTo(entry.KeyExpr!, keySlot);
+                    break;
+                }
+                case DictKeyKind.Spread:
+                {
+                    // spread entry: null key signals to the VM that the value is a spread source
+                    _builder.EmitA(OpCode.LoadNull, keySlot);
+                    break;
+                }
             }
 
-            CompileExprTo(value, valSlot);
+            CompileExprTo(entry.Value, valSlot);
         }
 
         _builder.EmitABC(OpCode.NewDict, baseReg, (byte)count, 0);

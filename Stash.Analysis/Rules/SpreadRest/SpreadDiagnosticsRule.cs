@@ -39,9 +39,9 @@ public sealed class SpreadDiagnosticsRule : IAnalysisRule
                 break;
 
             case DictLiteralExpr dict:
-                foreach (var (key, value) in dict.Entries)
+                foreach (var entry in dict.Entries)
                 {
-                    if (key == null && value is SpreadExpr spread)
+                    if (entry.Kind == DictKeyKind.Spread && entry.Value is SpreadExpr spread)
                     {
                         CheckSpreadDiagnostics(spread, isArrayContext: false, context);
                     }

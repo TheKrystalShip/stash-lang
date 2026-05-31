@@ -992,13 +992,25 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        foreach (var (key, value) in expr.Entries)
+        foreach (var entry in expr.Entries)
         {
-            if (key is not null)
+            switch (entry.Kind)
             {
-                EmitFromToken(key, TokenTypeProperty, 0);
+                case DictKeyKind.Constant:
+                    // Identifier keys are highlighted as properties; string-literal keys get
+                    // no override (they are already tokenized as strings by the lexer layer).
+                    if (entry.KeyToken!.Type != TokenType.StringLiteral)
+                        EmitFromToken(entry.KeyToken, TokenTypeProperty, 0);
+                    break;
+                case DictKeyKind.Computed:
+                    // Walk the key expression so its identifiers get classified.
+                    entry.KeyExpr!.Accept(this);
+                    break;
+                case DictKeyKind.Spread:
+                    // No key token to classify for spread entries.
+                    break;
             }
-            value.Accept(this);
+            entry.Value.Accept(this);
         }
         return 0;
     }

@@ -238,13 +238,13 @@ public static class LiteralSchemaBuilder
     /// </summary>
     private static bool IsLiteralSchemaDict(DictLiteralExpr dict)
     {
-        foreach (var (key, value) in dict.Entries)
+        foreach (var entry in dict.Entries)
         {
             // Spread entries are non-literal.
-            if (key is null)
+            if (entry.Kind == DictKeyKind.Spread)
                 return false;
 
-            if (!IsLiteralBuilderCallExpr(value))
+            if (!IsLiteralBuilderCallExpr(entry.Value))
                 return false;
         }
         return true;
@@ -312,12 +312,12 @@ public static class LiteralSchemaBuilder
                 return true;
 
             case DictLiteralExpr dict:
-                foreach (var (key, value) in dict.Entries)
+                foreach (var entry in dict.Entries)
                 {
-                    // Spread entries (key == null) are non-literal.
-                    if (key == null)
+                    // Spread entries are non-literal.
+                    if (entry.Kind == DictKeyKind.Spread)
                         return false;
-                    if (!IsLiteralExpr(value))
+                    if (!IsLiteralExpr(entry.Value))
                         return false;
                 }
                 return true;
@@ -346,13 +346,12 @@ public static class LiteralSchemaBuilder
     private static StashDictionary EvalDictLiteral(DictLiteralExpr dict)
     {
         var result = new StashDictionary();
-        foreach (var (keyToken, valueExpr) in dict.Entries)
+        foreach (var entry in dict.Entries)
         {
-            if (keyToken is null) continue; // skip spreads
-            string key = keyToken.Type == TokenType.StringLiteral && keyToken.Literal is string strKey
-                ? strKey
-                : keyToken.Lexeme;
-            StashValue val = EvalLiteralExpr(valueExpr);
+            if (entry.Kind == DictKeyKind.Spread) continue; // skip spreads
+            if (entry.Kind == DictKeyKind.Computed) continue; // computed keys are not literal
+            string key = entry.KeyString;
+            StashValue val = EvalLiteralExpr(entry.Value);
             result.Set(key, val);
         }
         return result;
@@ -408,14 +407,12 @@ public static class LiteralSchemaBuilder
     private static StashDictionary BuildSchemaDictFromAST(DictLiteralExpr dict)
     {
         var result = new StashDictionary();
-        foreach (var (keyToken, valueExpr) in dict.Entries)
+        foreach (var entry in dict.Entries)
         {
-            if (keyToken is null) continue;
-            string propName = keyToken.Type == TokenType.StringLiteral && keyToken.Literal is string sk
-                ? sk
-                : keyToken.Lexeme;
+            if (entry.Kind != DictKeyKind.Constant) continue;
+            string propName = entry.KeyString;
 
-            StashValue specValue = EvalBuilderCall((CallExpr)valueExpr, propName);
+            StashValue specValue = EvalBuilderCall((CallExpr)entry.Value, propName);
             result.Set(propName, specValue);
         }
         return result;

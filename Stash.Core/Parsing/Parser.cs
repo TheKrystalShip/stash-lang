@@ -2460,10 +2460,14 @@ public class Parser
             if (Check(TokenType.RightBrace))
             {
                 Token close = Advance();
-                return new DictLiteralExpr(new List<(Token?, Expr)>(), MakeSpan(open.Span, close.Span));
+                return new DictLiteralExpr(new List<DictEntry>(), MakeSpan(open.Span, close.Span));
             }
 
-            // Check for dict patterns: spread entry or Identifier ':' (key-value pair)
+            // Determine whether the brace opens a dict literal or a block statement.
+            // Three dict-entry forms to detect:
+            //   1. spread:        ...
+            //   2. identifier/string-literal key:  ident/string ':'
+            //   3. computed key:  '[' ... matching ']' ':'
             bool isDict = false;
             if (Check(TokenType.DotDotDot))
             {
@@ -2471,6 +2475,7 @@ public class Parser
             }
             else if (IsDictKeyToken(Peek().Type))
             {
+                // identifier or soft-keyword key: look one more token for ':'
                 int peekAhead = _current;
                 if (peekAhead + 1 < _tokens.Count &&
                     _tokens[peekAhead + 1].Type == TokenType.Colon)
@@ -2478,26 +2483,83 @@ public class Parser
                     isDict = true;
                 }
             }
+            else if (Check(TokenType.StringLiteral))
+            {
+                // string-literal key: same 2-token lookahead shape as identifier
+                int peekAhead = _current;
+                if (peekAhead + 1 < _tokens.Count &&
+                    _tokens[peekAhead + 1].Type == TokenType.Colon)
+                {
+                    isDict = true;
+                }
+            }
+            else if (Check(TokenType.LeftBracket))
+            {
+                // computed key: scan forward past the matching ']' and check for ':'
+                int depth = 0;
+                int scan = _current;
+                while (scan < _tokens.Count && !(_tokens[scan].Type == TokenType.Eof))
+                {
+                    if (_tokens[scan].Type == TokenType.LeftBracket) depth++;
+                    else if (_tokens[scan].Type == TokenType.RightBracket)
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            // token after the matching ']'
+                            int next = scan + 1;
+                            if (next < _tokens.Count && _tokens[next].Type == TokenType.Colon)
+                                isDict = true;
+                            break;
+                        }
+                    }
+                    else if (_tokens[scan].Type == TokenType.RightBrace && depth == 0)
+                    {
+                        // ran into the enclosing } without finding a matching ] — not a dict
+                        break;
+                    }
+                    scan++;
+                }
+            }
 
             if (isDict)
             {
-                var entries = new List<(Token? Key, Expr Value)>();
+                var entries = new List<DictEntry>();
                 do
                 {
                     if (Match(TokenType.DotDotDot))
                     {
                         Token spread = Previous();
                         Expr inner = Expression();
-                        entries.Add((null, new SpreadExpr(spread, inner, MakeSpan(spread.Span, inner.Span))));
+                        entries.Add(DictEntry.Spread(new SpreadExpr(spread, inner, MakeSpan(spread.Span, inner.Span))));
                     }
-                    else
+                    else if (Check(TokenType.LeftBracket))
                     {
-                        if (!IsDictKeyToken(Peek().Type))
-                            throw Error(Peek(), "Expected identifier key in dict literal.");
+                        // computed key: [ expr ] : value
+                        Advance(); // consume '['
+                        Expr keyExpr = Expression();
+                        Consume(TokenType.RightBracket, "Expected ']' after computed dict key expression.");
+                        Consume(TokenType.Colon, "Expected ':' after computed dict key.");
+                        Expr value = Expression();
+                        entries.Add(DictEntry.Computed(keyExpr, value));
+                    }
+                    else if (Check(TokenType.StringLiteral))
+                    {
+                        // string-literal key
                         Token key = Advance();
                         Consume(TokenType.Colon, "Expected ':' after dict key.");
                         Expr value = Expression();
-                        entries.Add((key, value));
+                        entries.Add(DictEntry.Constant(key, value));
+                    }
+                    else
+                    {
+                        // identifier or soft-keyword key
+                        if (!IsDictKeyToken(Peek().Type))
+                            throw Error(Peek(), "Expected identifier, string literal, or '[expr]' as dict key.");
+                        Token key = Advance();
+                        Consume(TokenType.Colon, "Expected ':' after dict key.");
+                        Expr value = Expression();
+                        entries.Add(DictEntry.Constant(key, value));
                     }
                 } while (Match(TokenType.Comma));
 

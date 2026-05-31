@@ -173,12 +173,14 @@ public static class CliSchemaAnalyzer
         // Track seen short values for duplicate detection: shortChar -> first span of the value expr
         var seenShorts = new Dictionary<string, SourceSpan>(System.StringComparer.Ordinal);
 
-        foreach (var (keyToken, valueExpr) in dict.Entries)
+        foreach (var entry in dict.Entries)
         {
-            // Null key = spread entry — skip
-            if (keyToken == null)
+            // Non-constant key = spread or computed — skip
+            if (entry.Kind != DictKeyKind.Constant)
                 continue;
 
+            var keyToken = entry.KeyToken!;
+            var valueExpr = entry.Value;
             string fieldName = GetTokenText(keyToken);
 
             // Determine field type from the builder call
@@ -302,14 +304,14 @@ public static class CliSchemaAnalyzer
         if (optsArg is not DictLiteralExpr optsDict)
             return (null, null);
 
-        foreach (var (key, val) in optsDict.Entries)
+        foreach (var entry in optsDict.Entries)
         {
-            if (key == null)
+            if (entry.Kind != DictKeyKind.Constant)
                 continue;
-            string keyText = GetTokenText(key);
+            string keyText = GetTokenText(entry.KeyToken!);
             if (keyText != "short")
                 continue;
-            if (val is LiteralExpr litVal && litVal.Value is string shortStr)
+            if (entry.Value is LiteralExpr litVal && litVal.Value is string shortStr)
                 return (shortStr, litVal.Span);
             // Non-literal short value — skip diagnostic for this entry
             break;

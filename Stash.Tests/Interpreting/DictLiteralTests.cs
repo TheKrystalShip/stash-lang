@@ -47,7 +47,8 @@ public class DictLiteralTests : StashTestBase
         var result = ParseExpr("{ name: \"hello\" }");
         var dict = Assert.IsType<DictLiteralExpr>(result);
         Assert.Single(dict.Entries);
-        Assert.Equal("name", dict.Entries[0].Key?.Lexeme);
+        Assert.Equal(DictKeyKind.Constant, dict.Entries[0].Kind);
+        Assert.Equal("name", dict.Entries[0].KeyToken?.Lexeme);
     }
 
     [Fact]
@@ -309,6 +310,154 @@ public class DictLiteralTests : StashTestBase
             let result = 0;
             for (let key in d) {
                 result = result + 1;
+            }
+        """));
+    }
+
+    // ── Category 9: String-Literal Keys ──────────────────────────────────────
+
+    [Fact]
+    public void StringKey_ParseProducesConstantEntry()
+    {
+        var result = ParseExpr("""{ "hello": 1 }""");
+        var dict = Assert.IsType<DictLiteralExpr>(result);
+        Assert.Single(dict.Entries);
+        Assert.Equal(DictKeyKind.Constant, dict.Entries[0].Kind);
+        Assert.Equal("hello", dict.Entries[0].KeyString);
+    }
+
+    [Fact]
+    public void StringKey_NonIdentifierCharacters_ParsesAndEvals()
+    {
+        // "a-b" is not a valid identifier — only string-literal keys can represent it
+        Assert.Equal(1L, Run("""let d = { "a-b": 1 }; let result = d["a-b"];"""));
+    }
+
+    [Fact]
+    public void StringKey_WithSpace_ParsesAndEvals()
+    {
+        Assert.Equal(42L, Run("""let d = { "with space": 42 }; let result = d["with space"];"""));
+    }
+
+    [Fact]
+    public void StringKey_AsFirstEntry_Disambiguated()
+    {
+        // The very first token after '{' is a string literal — must be detected as a dict
+        Assert.Equal(1L, Run("""let d = { "a": 1 }; let result = d["a"];"""));
+    }
+
+    [Fact]
+    public void MixedKeys_IdentifierAndString_AllAccessible()
+    {
+        Assert.Equal(1L, Run("""let d = { a: 1, "b-c": 2 }; let result = d.a;"""));
+    }
+
+    [Fact]
+    public void MixedKeys_StringAndIdentifier_StringAccessible()
+    {
+        Assert.Equal(2L, Run("""let d = { a: 1, "b-c": 2 }; let result = d["b-c"];"""));
+    }
+
+    // ── Category 10: Computed Keys ────────────────────────────────────────────
+
+    [Fact]
+    public void ComputedKey_ParseProducesComputedEntry()
+    {
+        var result = ParseExpr("""{ ["k"]: 1 }""");
+        var dict = Assert.IsType<DictLiteralExpr>(result);
+        Assert.Single(dict.Entries);
+        Assert.Equal(DictKeyKind.Computed, dict.Entries[0].Kind);
+        Assert.NotNull(dict.Entries[0].KeyExpr);
+    }
+
+    [Fact]
+    public void ComputedKey_LiteralString_Evals()
+    {
+        Assert.Equal(1L, Run("""let d = { ["k"]: 1 }; let result = d["k"];"""));
+    }
+
+    [Fact]
+    public void ComputedKey_Variable_Evals()
+    {
+        Assert.Equal(1L, Run("""let k = "x"; let d = { [k]: 1 }; let result = d["x"];"""));
+    }
+
+    [Fact]
+    public void ComputedKey_Expression_Evals()
+    {
+        // Concatenation produces key "ab"
+        Assert.Equal(2L, Run("""let d = { ["a" + "b"]: 2 }; let result = d["ab"];"""));
+    }
+
+    [Fact]
+    public void ComputedKey_SameAsIndexAssign_ConsistentKey()
+    {
+        // { [k]: v } should produce the same key as d[k] = v
+        Assert.Equal(99L, Run("""
+            let k = "myKey";
+            let d1 = { [k]: 99 };
+            let d2 = {};
+            d2[k] = 99;
+            let result = d1["myKey"] == d2["myKey"] ? d1["myKey"] : 0;
+        """));
+    }
+
+    [Fact]
+    public void MixedKeys_IdentifierStringComputed_AllAccessible()
+    {
+        Assert.Equal(6L, Run("""
+            let key = "c";
+            let d = { a: 1, "b-b": 2, [key]: 3 };
+            let result = d.a + d["b-b"] + d["c"];
+        """));
+    }
+
+    [Fact]
+    public void ComputedKey_WithSpread_AllAccessible()
+    {
+        Assert.Equal(3L, Run("""
+            let key = "z";
+            let base = { x: 1 };
+            let d = { ...base, [key]: 2 };
+            let result = d.x + d.z;
+        """));
+    }
+
+    // ── Category 11: Regression — Blocks Must Not Be Misdetected as Dicts ────
+
+    [Fact]
+    public void Block_WithFunctionCall_IsBlock()
+    {
+        // { expr(); } is a block, not a dict
+        Assert.Equal(1L, Run("""
+            let result = 0;
+            {
+                result = 1;
+            }
+        """));
+    }
+
+    [Fact]
+    public void Block_WithLetDecl_IsBlock()
+    {
+        Assert.Equal(10L, Run("""
+            let result = 0;
+            {
+                let x = 10;
+                result = x;
+            }
+        """));
+    }
+
+    [Fact]
+    public void Block_BracketLed_IsBlock()
+    {
+        // { [1, 2][0]; } — starts with '[' but after the matching ']' comes ';', not ':'
+        Assert.Equal(99L, Run("""
+            let result = 99;
+            {
+                let arr = [1, 2];
+                let _ = arr[0];
             }
         """));
     }

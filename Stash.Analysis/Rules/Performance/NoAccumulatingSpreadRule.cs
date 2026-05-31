@@ -42,7 +42,7 @@ public sealed class NoAccumulatingSpreadRule : IAnalysisRule
         {
             foreach (var entry in dict.Entries)
             {
-                if (entry.Key == null && entry.Value is SpreadExpr spread &&
+                if (entry.Kind == DictKeyKind.Spread && entry.Value is SpreadExpr spread &&
                     spread.Expression is IdentifierExpr id &&
                     id.Name.Lexeme == targetName)
                 {

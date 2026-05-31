@@ -21,13 +21,26 @@ internal static class CollectionPrinter
         ctx.EmitToken(); // {
         CollectionRules.FormatCollection(ctx, expr.Entries.Count, i =>
         {
-            if (expr.Entries[i].Key != null)
+            var entry = expr.Entries[i];
+            switch (entry.Kind)
             {
-                ctx.EmitToken(); // key
-                ctx.EmitToken(); // :
-                ctx.Space();
+                case DictKeyKind.Constant:
+                    ctx.EmitToken(); // identifier or string-literal key token
+                    ctx.EmitToken(); // :
+                    ctx.Space();
+                    break;
+                case DictKeyKind.Computed:
+                    ctx.EmitToken(); // [
+                    formatExpr(entry.KeyExpr!);
+                    ctx.EmitToken(); // ]
+                    ctx.EmitToken(); // :
+                    ctx.Space();
+                    break;
+                case DictKeyKind.Spread:
+                    // spread: no key tokens; the SpreadExpr formatter handles the ... and value
+                    break;
             }
-            formatExpr(expr.Entries[i].Value);
+            formatExpr(entry.Value);
         }, new CollectionStyle(BracketSpacing: ctx.BracketSpacing));
     }
 

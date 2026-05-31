@@ -857,6 +857,27 @@ let server = {
 };
 ```
 
+Three key forms are supported in dict literals (see also Appendix A grammar):
+
+- **Identifier key** — `name: value` — the identifier becomes the string key.
+- **String-literal key** — `"key-string": value` — allows keys that are not valid
+  identifiers (e.g. contain hyphens, spaces, or other special characters).
+- **Computed key** — `[expression]: value` — the expression is evaluated at runtime
+  and its result is used as the key.
+
+```stash
+let field = "dynamic";
+let d = {
+    plain:        1,
+    "with-dash":  2,
+    [field]:      3,
+};
+
+d.plain;           // 1
+d["with-dash"];    // 2
+d["dynamic"];      // 3
+```
+
 Dictionary keys may be written as identifiers for string keys or as bracket access
 for computed keys.
 

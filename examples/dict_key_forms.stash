@@ -1,0 +1,70 @@
+// dict_key_forms.stash
+// Demonstrates the three dict-literal key forms:
+//   1. Identifier keys   — the classic form
+//   2. String-literal keys — for keys that are not valid identifiers
+//   3. Computed keys      — key expression evaluated at runtime
+
+// ── 1. Identifier keys (unchanged classic syntax) ─────────────────────────
+let config = {
+    host: "localhost",
+    port: 8080,
+    debug: true
+};
+
+io.println(config.host);   // localhost
+io.println(config.port);   // 8080
+
+// ── 2. String-literal keys ────────────────────────────────────────────────
+// Useful when the key contains characters that are not allowed in identifiers
+// (hyphens, spaces, dots, etc.).
+let http_headers = {
+    "Content-Type":   "application/json",
+    "Accept-Encoding": "gzip",
+    "X-Request-Id":   "abc-123"
+};
+
+io.println(http_headers["Content-Type"]);    // application/json
+io.println(http_headers["Accept-Encoding"]); // gzip
+io.println(http_headers["X-Request-Id"]);    // abc-123
+
+// Identifer and string-literal keys can be mixed freely.
+let mixed = {
+    id:        1,
+    "display-name": "Alice",
+    active:    true
+};
+
+io.println(mixed.id);                  // 1
+io.println(mixed["display-name"]);     // Alice
+io.println(mixed.active);             // true
+
+// ── 3. Computed keys ──────────────────────────────────────────────────────
+// The expression inside [ ] is evaluated at runtime and its value becomes
+// the key, just like d[expr] = value.
+
+let lang = "stash";
+let version_key = "version";
+
+let info = {
+    [lang]:        "fast and fun",
+    [version_key]: "1.0",
+    ["release-" + lang]: "stable"
+};
+
+io.println(info["stash"]);          // fast and fun
+io.println(info["version"]);        // 1.0
+io.println(info["release-stash"]);  // stable
+
+// ── 4. All three forms together ───────────────────────────────────────────
+let prefix = "meta";
+let doc = {
+    title:               "Stash language",
+    "release-year":      2024,
+    [prefix + "-author"]: "community",
+    ...http_headers
+};
+
+io.println(doc.title);               // Stash language
+io.println(doc["release-year"]);     // 2024
+io.println(doc["meta-author"]);      // community
+io.println(doc["Content-Type"]);     // application/json (from spread)

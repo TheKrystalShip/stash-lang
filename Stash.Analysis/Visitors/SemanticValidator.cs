@@ -514,11 +514,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             // whose string literal value matches a built-in error type name.
             if (stmt.Value is DictLiteralExpr dictLit)
             {
-                foreach (var (key, value) in dictLit.Entries)
+                foreach (var entry in dictLit.Entries)
                 {
-                    if (key is not null
-                        && key.Lexeme == "type"
-                        && value is LiteralExpr literal
+                    if (entry.Kind == DictKeyKind.Constant
+                        && entry.KeyToken!.Lexeme == "type"
+                        && entry.Value is LiteralExpr literal
                         && literal.Value is string typeName
                         && BuiltInErrorRegistry.IsBuiltInName(typeName))
                     {
@@ -849,9 +849,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         DispatchNodeRules(expr);
         var savedParent = _parentBinaryOperator;
         _parentBinaryOperator = null;
-        foreach (var (_, value) in expr.Entries)
+        foreach (var entry in expr.Entries)
         {
-            value.Accept(this);
+            if (entry.Kind == DictKeyKind.Computed)
+                entry.KeyExpr!.Accept(this);
+            entry.Value.Accept(this);
         }
         _parentBinaryOperator = savedParent;
         return null;

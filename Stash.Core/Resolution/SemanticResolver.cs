@@ -529,9 +529,11 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     public object? VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        foreach (var (_, value) in expr.Entries)
+        foreach (var entry in expr.Entries)
         {
-            ResolveExpr(value);
+            if (entry.Kind == DictKeyKind.Computed)
+                ResolveExpr(entry.KeyExpr!);
+            ResolveExpr(entry.Value);
         }
         return null;
     }

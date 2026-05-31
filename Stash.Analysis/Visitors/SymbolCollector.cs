@@ -1196,13 +1196,15 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
-    /// <summary>Recurses into the value expression of each entry in a dict literal.</summary>
+    /// <summary>Recurses into the key expression (for computed keys) and value expression of each entry in a dict literal.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        foreach (var (_, value) in expr.Entries)
+        foreach (var entry in expr.Entries)
         {
-            value.Accept(this);
+            if (entry.Kind == DictKeyKind.Computed)
+                entry.KeyExpr!.Accept(this);
+            entry.Value.Accept(this);
         }
 
         return null;
