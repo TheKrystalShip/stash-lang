@@ -36,8 +36,8 @@ phases:
     attempts: 1
     notes: ''
 review:
-  status: in_progress
+  status: resolved
   started: '2026-05-31T13:35:39Z'
-  resolved: null
+  resolved: '2026-05-31T18:41:02Z'
   findings_open: 0
-  findings_fixed: 0
+  findings_fixed: 7

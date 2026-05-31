@@ -139,7 +139,7 @@ dotnet test --filter "FullyQualifiedName~PathBuiltInsTests.Match_BackslashInClas
 
 ## F04 — [MINOR] No structural assertion that `path.match` is reachable as an LSP member completion under `path.`
 
-**Status:** open
+**Status:** fixed
 **Files:** `Stash.Tests/Lsp/CompletionSurfaceSnapshotTests.cs:96-120`, `plan.yaml:64`
 **Phase:** P2
 **Commit:** 2becf79
@@ -175,7 +175,7 @@ dotnet test --filter "FullyQualifiedName~CompletionSurfaceSnapshotTests"
 
 ## F05 — [MINOR] Standard Library Reference renders summary as "Returns true iff  matches the glob…" (double space — `<paramref>` tags stripped, not substituted)
 
-**Status:** open
+**Status:** fixed
 **Files:** `Stash.Stdlib/BuiltIns/PathBuiltIns.cs:101-106`, `docs/Stash — Standard Library Reference.md:6570`, `docs/Stash — Standard Library Reference.md:6711`
 **Phase:** P2
 **Commit:** 2becf79
@@ -253,7 +253,7 @@ dotnet test --filter "FullyQualifiedName~PathMatchBashParityTests"
 
 ## F07 — [MINOR] `EscapeClassContents` claim ("the only truly special chars are ] ^ - \\") is also incomplete for `[:posix:]` classes and `[=eq=]` collations
 
-**Status:** open
+**Status:** fixed
 **Files:** `Stash.Stdlib/BuiltIns/PathGlobImpl.cs:165-170`
 **Phase:** P2
 **Commit:** 2becf79
