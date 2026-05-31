@@ -97,4 +97,13 @@ public static partial class PathBuiltIns
     /// <returns>The path separator (e.g. '/' on Linux/macOS, '\' on Windows)</returns>
     [StashFn]
     public static string Separator() => System.IO.Path.DirectorySeparatorChar.ToString();
+
+    /// <summary>Returns true iff <paramref name="path"/> matches the glob
+    /// <paramref name="pattern"/> under bash [[ ]] globstar semantics.
+    /// Pure: does not touch the filesystem; the path need not exist on disk.</summary>
+    /// <param name="path">The path string to test (need not exist).</param>
+    /// <param name="pattern">The glob pattern.</param>
+    /// <returns>Whether the path matches the pattern.</returns>
+    [StashFn]
+    public static bool Match(string path, string pattern) => PathGlobImpl.Matches(path, pattern);
 }

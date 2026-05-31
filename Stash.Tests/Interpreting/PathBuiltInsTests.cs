@@ -2,6 +2,187 @@ namespace Stash.Tests.Interpreting;
 
 public class PathBuiltInsTests : StashTestBase
 {
+    // ── path.match ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Match_DoubleStarCrossesSlash_ReturnsTrue()
+    {
+        var result = Run(@"let result = path.match(""a/b.cs"", ""a/**"");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_DoubleStarDoesNotMatchEmptySegment_ReturnsFalse()
+    {
+        // "a" alone should not match "a/**" — ** requires at least one more char.
+        var result = Run(@"let result = path.match(""a"", ""a/**"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_SingleStarCrossesSlash_ReturnsTrue()
+    {
+        // Bash [[ ]] semantics: * crosses /
+        var result = Run(@"let result = path.match(""a/b/file.cs"", ""a/*.cs"");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_SingleStarAtSameLevel_ReturnsTrue()
+    {
+        var result = Run(@"let result = path.match(""a/file.cs"", ""a/*.cs"");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_QuestionMark_MatchesSingleChar()
+    {
+        var result = Run(@"let result = path.match(""a/b.cs"", ""a/?.cs"");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_QuestionMark_DoesNotMatchTwoChars()
+    {
+        var result = Run(@"let result = path.match(""a/bc.cs"", ""a/?.cs"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_CharacterClass_Positive()
+    {
+        var result = Run(@"let result = path.match(""Stash.Core/Foo.cs"", ""Stash.[A-Z]ore/Foo.cs"");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_CharacterClass_Negative()
+    {
+        var result = Run(@"let result = path.match(""Stash.1ore/Foo.cs"", ""Stash.[A-Z]ore/Foo.cs"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_NegatedCharacterClassBang_ExcludesChar()
+    {
+        // [!T] should match anything except T
+        var result = Run(@"let result = path.match(""Stash.Core/Foo.cs"", ""Stash.[!T]ore/Foo.cs"");");
+        Assert.Equal(true, result);
+
+        var result2 = Run(@"let result = path.match(""Stash.Tore/Foo.cs"", ""Stash.[!T]ore/Foo.cs"");");
+        Assert.Equal(false, result2);
+    }
+
+    [Fact]
+    public void Match_NegatedCharacterClassCaret_ExcludesChar()
+    {
+        // [^T] should match anything except T
+        var result = Run(@"let result = path.match(""Stash.Core/Foo.cs"", ""Stash.[^T]ore/Foo.cs"");");
+        Assert.Equal(true, result);
+
+        var result2 = Run(@"let result = path.match(""Stash.Tore/Foo.cs"", ""Stash.[^T]ore/Foo.cs"");");
+        Assert.Equal(false, result2);
+    }
+
+    [Fact]
+    public void Match_BackslashEscape_MatchesLiteralStar()
+    {
+        // \* should match a literal '*', not a wildcard
+        var result = Run(@"let result = path.match(""a/b.cs"", ""a/\*.cs"");");
+        Assert.Equal(false, result);
+
+        var result2 = Run(@"let result = path.match(""a/*.cs"", ""a/\*.cs"");");
+        Assert.Equal(true, result2);
+    }
+
+    [Fact]
+    public void Match_LiteralPath_ExactMatch()
+    {
+        var result = Run(@"let result = path.match(""CHANGELOG.md"", ""CHANGELOG.md"");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_LiteralPath_NoMatch()
+    {
+        var result = Run(@"let result = path.match(""other/CHANGELOG.md"", ""CHANGELOG.md"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_EmptyPathEmptyPattern_ReturnsTrue()
+    {
+        var result = Run(@"let result = path.match("""", """");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Match_EmptyPathNonEmptyPattern_ReturnsFalse()
+    {
+        var result = Run(@"let result = path.match("""", ""a/**"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_CaseSensitive_ReturnsFalse()
+    {
+        // Pattern is case-sensitive
+        var result = Run(@"let result = path.match(""stash.core/foo.cs"", ""Stash.Core/Foo.cs"");");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Match_ExtglobAtSign_ThrowsRuntimeError()
+    {
+        RunExpectingError(@"path.match(""a/b.cs"", ""@(a|b)"");");
+    }
+
+    [Fact]
+    public void Match_ExtglobBang_ThrowsRuntimeError()
+    {
+        RunExpectingError(@"path.match(""a/b.cs"", ""!(a|b)"");");
+    }
+
+    [Fact]
+    public void Match_ExtglobPlus_ThrowsRuntimeError()
+    {
+        RunExpectingError(@"path.match(""a/b.cs"", ""+(a|b)"");");
+    }
+
+    [Fact]
+    public void Match_ExtglobQuestion_ThrowsRuntimeError()
+    {
+        RunExpectingError(@"path.match(""a/b.cs"", ""?(a|b)"");");
+    }
+
+    [Fact]
+    public void Match_ExtglobStar_ThrowsRuntimeError()
+    {
+        RunExpectingError(@"path.match(""a/b.cs"", ""*(a|b)"");");
+    }
+
+    [Fact]
+    public void Match_MalformedUnclosedBracket_FallsBackToLiteral()
+    {
+        // Unclosed '[' — treated as literal match (mirrors bash), does not throw.
+        // Path "a/[b.cs" against pattern "a/[b.cs" should match (literal equality).
+        var result = Run(@"let result = path.match(""a/[b.cs"", ""a/[b.cs"");");
+        Assert.Equal(true, result);
+
+        // A different path should not match.
+        var result2 = Run(@"let result = path.match(""a/xb.cs"", ""a/[b.cs"");");
+        Assert.Equal(false, result2);
+    }
+
+    [Fact]
+    public void Match_DotInPath_EscapedProperly()
+    {
+        // '.' in pattern is literal, not regex '.'
+        var result = Run(@"let result = path.match(""Stash_Core/Foo.cs"", ""Stash.Core/Foo.cs"");");
+        Assert.Equal(false, result);
+    }
+
+
     // ── path.normalize ────────────────────────────────────────────────────
 
     [Fact]

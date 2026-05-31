@@ -101,7 +101,7 @@ public class PathMatchBashParityTests : StashTestBase
     ///
     /// <b>Skip removed in P2</b> — this is the intentional tripwire.
     /// </summary>
-    [Theory(Skip = "implementation lands in P2")]
+    [Theory]
     [MemberData(nameof(BashParityRows))]
     public void BashParity_PathMatchReturnsOracleVerdict(
         string pattern, string path, bool expected)
@@ -110,8 +110,9 @@ public class PathMatchBashParityTests : StashTestBase
         string escapedPattern = pattern.Replace("\\", "\\\\").Replace("\"", "\\\"");
         string escapedPath    = path.Replace("\\", "\\\\").Replace("\"", "\\\"");
 
+        // path.match(path, pattern) — path is arg 1, pattern is arg 2.
         object? result = Run(
-            $"""let result = path.match("{escapedPattern}", "{escapedPath}");""");
+            $"""let result = path.match("{escapedPath}", "{escapedPattern}");""");
 
         Assert.Equal(expected, result);
     }

@@ -40,6 +40,6 @@ public class PathDocSnapshotTests
     [Fact]
     public void Path_HasExpectedFunctionCount()
     {
-        Assert.Equal(10, Path.Functions.Count);
+        Assert.Equal(11, Path.Functions.Count);
     }
 }
