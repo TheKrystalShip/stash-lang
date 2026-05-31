@@ -17,7 +17,7 @@ public class Wave2ThrowsCoverageTests
         ["dict"] = new() { "new", "clear", "keys", "values", "size", "pairs", "forEach", "merge", "map", "filter", "pick", "omit", "defaults", "any", "every", "find" },
         ["math"] = new() { "pow", "sqrt", "random", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "exp", "log10", "log2" },
         ["time"] = new() { "now", "millis", "date", "clock", "iso", "add", "diff", "timezone", "timezones", "seconds", "minutes", "hours", "days", "weeks", "format" },
-        ["path"] = new() { "separator" },
+        ["path"] = new() { "separator", "match" },
         ["re"] = new(),
         ["crypto"] = new() { "md5", "sha1", "sha256", "sha512", "uuid", "md5Bytes", "sha1Bytes", "sha256Bytes", "sha512Bytes" },
         ["encoding"] = new(),
