@@ -183,4 +183,84 @@ public class GeneratorDiagnosticsTests
         Assert.DoesNotContain(diags, d => d.Severity == DiagnosticSeverity.Error);
         Assert.DoesNotContain(diags, d => d.Id.StartsWith("STASH_DOC"));
     }
+
+    // ── STSG014: stray [StashFn]/[StashMember]/[StashConst] on non-[StashNamespace] classes ──
+
+    [Fact]
+    public void STSG014_FiresWhenStashFnIsOnNonNamespaceClass()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            namespace T;
+            // No [StashNamespace] — [StashFn] here is a stray annotation.
+            public static partial class C
+            {
+                /// <summary>Returns n.</summary>
+                /// <param name="n">The number.</param>
+                [StashFn]
+                public static long Identity(long n) => n;
+            }
+            """;
+        var (diags, _) = Run(src);
+        Assert.Contains(diags, d => d.Id == "STSG014");
+    }
+
+    [Fact]
+    public void STSG014_FiresWhenStashMemberIsOnNonNamespaceClass()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            namespace T;
+            // No [StashNamespace] — [StashMember] here is a stray annotation.
+            public static partial class C
+            {
+                /// <summary>Returns value.</summary>
+                [StashMember]
+                public static long Len(IInterpreterContext ctx) => 0;
+            }
+            """;
+        var (diags, _) = Run(src);
+        Assert.Contains(diags, d => d.Id == "STSG014");
+    }
+
+    [Fact]
+    public void STSG014_FiresWhenStashConstIsOnNonNamespaceClass()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            namespace T;
+            // No [StashNamespace] — [StashConst] here is a stray annotation.
+            public static partial class C
+            {
+                [StashConst]
+                public const long Pi = 3;
+            }
+            """;
+        var (diags, _) = Run(src);
+        Assert.Contains(diags, d => d.Id == "STSG014");
+    }
+
+    [Fact]
+    public void STSG014_DoesNotFireWhenAnnotationsAreOnStashNamespaceClass()
+    {
+        const string src = """
+            using Stash.Stdlib.Abstractions;
+            using Stash.Runtime;
+            namespace T;
+            [StashNamespace]
+            public static partial class C
+            {
+                /// <summary>Returns n.</summary>
+                /// <param name="n">The number.</param>
+                [StashFn]
+                public static long Identity(long n) => n;
+
+                [StashConst]
+                public const long Pi = 3;
+            }
+            """;
+        var (diags, _) = Run(src);
+        Assert.DoesNotContain(diags, d => d.Id == "STSG014");
+    }
 }

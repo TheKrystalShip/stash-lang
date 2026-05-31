@@ -1,0 +1,46 @@
+schema_version: 1
+feature: stdlib-omission-hardening
+current: null
+updated: '2026-05-31T01:35:11Z'
+phases:
+  P1:
+    status: done
+    commit: '2392590'
+    verified: true
+    started: '2026-05-31T00:56:00Z'
+    completed: '2026-05-31T00:56:00Z'
+    attempts: 1
+    notes: Audit re-verified vs code; 4 citation drifts + 1 verify-cmd fix; all dispositions hold
+  P2:
+    status: done
+    commit: 5b4dd76
+    verified: true
+    started: '2026-05-31T01:12:56Z'
+    completed: '2026-05-31T01:12:56Z'
+    attempts: 1
+    notes: STSG014 descriptor + inverted scan in StashNamespaceGenerator; 4 new tests in GeneratorDiagnosticsTests;
+      stdlib build stays green
+  P3:
+    status: done
+    commit: 2040216532034d8ba474c8dae1af04ba73b15c5e
+    verified: true
+    started: '2026-05-31T01:19:53Z'
+    completed: '2026-05-31T01:20:40Z'
+    attempts: 1
+    notes: Exhaustive switch on Stability at both sites; MapStabilityLiteral helper; ValidateUfcsTargets
+      internal method; 6 new tests (191 total passing)
+  P4:
+    status: done
+    commit: 8222af3
+    verified: true
+    started: '2026-05-31T01:26:06Z'
+    completed: '2026-05-31T01:26:06Z'
+    attempts: 1
+    notes: Added NamespaceMembers_RegistryEntries_HaveRuntimePayload and NamespaceMembers_RuntimePayloads_HaveRegistryMetadata;
+      17 tests pass
+review:
+  status: resolved
+  started: '2026-05-31T01:31:50Z'
+  resolved: '2026-05-31T01:35:11Z'
+  findings_open: 0
+  findings_fixed: 0

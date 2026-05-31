@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.Generators;
 
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -57,6 +58,52 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             string src = CodeEmitter.EmitRegistry(pair.Right, models);
             spc.AddSource("GeneratedStdlibRegistry.g.cs", SourceText.From(src, Encoding.UTF8));
         });
+
+        // STSG014: Inverted scan — find [StashFn]/[StashMember]/[StashConst] on types that
+        // are NOT [StashNamespace]-attributed. Without this scan those annotations are silently
+        // invisible because the main provider above only walks [StashNamespace] classes.
+        RegisterStrayAnnotationDiagnostic(context, FnAttr,     "StashFn");
+        RegisterStrayAnnotationDiagnostic(context, MemberAttr, "StashMember");
+        RegisterStrayAnnotationDiagnostic(context, ConstAttr,  "StashConst");
+    }
+
+    /// <summary>
+    /// Registers a <see cref="IncrementalGeneratorInitializationContext.SyntaxProvider"/> that
+    /// scans for symbols carrying <paramref name="memberAttrFullName"/> whose declaring type
+    /// does NOT have <see cref="NamespaceAttr"/>. Emits <see cref="Diagnostics.StrayStdlibAnnotation"/>
+    /// (STSG014) for each such symbol.
+    /// </summary>
+    private static void RegisterStrayAnnotationDiagnostic(
+        IncrementalGeneratorInitializationContext context,
+        string memberAttrFullName,
+        string shortAttrName)
+    {
+        var strayDiags = context.SyntaxProvider.ForAttributeWithMetadataName(
+            memberAttrFullName,
+            predicate: static (_, _) => true,
+            transform: (ctx, _) =>
+            {
+                var symbol = ctx.TargetSymbol;
+                var declaringType = symbol.ContainingType;
+                if (declaringType is null) return null;
+
+                // If the declaring type already has [StashNamespace], this is a legitimate use —
+                // the main provider will handle it. Report nothing.
+                if (HasAttr(declaringType, NamespaceAttr)) return null;
+
+                // The declaring type lacks [StashNamespace]; this annotation will be ignored by
+                // the main generator pass. Promote that silent skip to a build error.
+                var loc = symbol.Locations.FirstOrDefault() ?? Location.None;
+                return Diagnostic.Create(
+                    Diagnostics.StrayStdlibAnnotation,
+                    loc,
+                    symbol.Name,
+                    shortAttrName,
+                    declaringType.Name);
+            })
+            .Where(static d => d is not null);
+
+        context.RegisterSourceOutput(strayDiags, static (spc, diag) => spc.ReportDiagnostic(diag!));
     }
 
     private readonly struct BuildResult
@@ -459,9 +506,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "Capability" && na.Value.Value is int capVal)
                     capabilityFull = FormatCapabilityFlags(capVal);
                 if (na.Key == "Stability" && na.Value.Value is int stab)
-                    stabilityFull = stab == 0
-                        ? "global::Stash.Stdlib.Abstractions.Stability.Cached"
-                        : "global::Stash.Stdlib.Abstractions.Stability.Live";
+                    stabilityFull = MapStabilityLiteral(stab);
                 if (na.Key == "Throws" && !na.Value.IsNull && na.Value.Kind == TypedConstantKind.Array)
                 {
                     foreach (var tc in na.Value.Values)
@@ -808,5 +853,25 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             case byte by: return by.ToString(CultureInfo.InvariantCulture);
         }
         return value.ToString() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Maps the integer backing value of a <c>Stability</c> enum read from a named argument
+    /// to the fully-qualified C# literal that the emitter should write into generated code.
+    /// Throws <see cref="InvalidOperationException"/> for any integer value that does not
+    /// correspond to a known <c>Stability</c> variant, so that adding a new variant without
+    /// updating this mapping is a build-time failure rather than a silent wrong emit.
+    /// </summary>
+    internal static string MapStabilityLiteral(int stab)
+    {
+        switch (stab)
+        {
+            case 0: // Stability.Cached
+                return "global::Stash.Stdlib.Abstractions.Stability.Cached";
+            case 1: // Stability.Live
+                return "global::Stash.Stdlib.Abstractions.Stability.Live";
+            default:
+                throw new InvalidOperationException($"unhandled Stability integer value: {stab}");
+        }
     }
 }

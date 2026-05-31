@@ -1,8 +1,12 @@
+using System;
+using System.Collections.Generic;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
+using Stash.Stdlib.Abstractions;
+using Stash.Stdlib.Models;
 
 namespace Stash.Tests.Stdlib;
 
@@ -260,5 +264,145 @@ public class StdlibConsistencyTests
             Assert.True(definedNamespaces.Contains(ns),
                 $"Core namespace '{ns}' should always be defined regardless of capabilities");
         }
+    }
+
+    // ── DataMembers (NamespaceMemberPayload) registry↔runtime consistency ──
+    //
+    // These two facts mirror the NamespaceFunctions pair above and cover GAP C from the
+    // stdlib-omission-hardening audit: [StashMember]-registered slots were previously only
+    // tracked in the registry, with no test asserting the runtime namespace carries a
+    // matching NamespaceMemberPayload slot (or vice-versa).
+    //
+    // Fail-path explanation (matches the existing Functions/Constants pattern):
+    //   • NamespaceMembers_RegistryEntries_HaveRuntimePayload — if a [StashMember] is
+    //     registered in StdlibDefinitions but its builder call (ns.DefineMember / emitted
+    //     code) is removed or the member key is renamed, the qualified-name lookup in
+    //     GetAllMembers() returns nothing → Assert.True fires on the missing member.
+    //   • NamespaceMembers_RuntimePayloads_HaveRegistryMetadata — if a NamespaceMemberPayload
+    //     is added to a namespace builder without a matching [StashMember] attribute (and
+    //     therefore no registry entry), TryGetNamespaceDataMember returns false → Assert.True
+    //     fires on the orphaned runtime slot.
+
+    [Fact]
+    public void NamespaceMembers_RegistryEntries_HaveRuntimePayload()
+    {
+        var globals = CreateGlobals();
+
+        var runtimePayloadNames = new HashSet<string>();
+        foreach (var binding in globals)
+        {
+            if (binding.Value is not StashNamespace ns)
+            {
+                continue;
+            }
+
+            foreach (var (memberKey, memberValue) in ns.GetAllMembers())
+            {
+                if (memberValue is NamespaceMemberPayload)
+                {
+                    runtimePayloadNames.Add($"{ns.Name}.{memberKey}");
+                }
+            }
+        }
+
+        int checkedCount = 0;
+        foreach (var nsName in StdlibRegistry.NamespaceNames)
+        {
+            foreach (var member in StdlibRegistry.GetNamespaceDataMembers(nsName))
+            {
+                checkedCount++;
+                Assert.True(runtimePayloadNames.Contains(member.QualifiedName),
+                    $"StdlibRegistry has data member '{member.QualifiedName}' but no matching NamespaceMemberPayload slot exists in the runtime namespace");
+            }
+        }
+
+        // Non-vacuity floor: the stdlib ships real [StashMember]s, so this fact must actually
+        // enumerate members. Without this, a future refactor that emptied the registry would
+        // make the per-member assertions above pass on an empty set — the silent omission this
+        // milestone exists to prevent.
+        Assert.True(checkedCount > 0,
+            "Expected at least one registered [StashMember] data member; found none — the consistency check would otherwise pass vacuously");
+    }
+
+    [Fact]
+    public void NamespaceMembers_RuntimePayloads_HaveRegistryMetadata()
+    {
+        var globals = CreateGlobals();
+
+        int checkedCount = 0;
+        foreach (var binding in globals)
+        {
+            if (binding.Value is not StashNamespace ns)
+            {
+                continue;
+            }
+
+            foreach (var (memberKey, memberValue) in ns.GetAllMembers())
+            {
+                if (memberValue is not NamespaceMemberPayload)
+                {
+                    continue;
+                }
+
+                checkedCount++;
+                string qualifiedName = $"{ns.Name}.{memberKey}";
+                Assert.True(StdlibRegistry.TryGetNamespaceDataMember(qualifiedName, out _),
+                    $"Runtime namespace '{ns.Name}' has a NamespaceMemberPayload slot '{memberKey}' but StdlibRegistry has no data member metadata for '{qualifiedName}'");
+            }
+        }
+
+        // Non-vacuity floor: guard against zero runtime payload slots making the per-slot
+        // assertions above pass vacuously (see the registry-side fact for rationale).
+        Assert.True(checkedCount > 0,
+            "Expected at least one runtime NamespaceMemberPayload slot; found none — the consistency check would otherwise pass vacuously");
+    }
+
+    // ── Stability exhaustiveness ──
+
+    [Fact]
+    public void NamespaceMemberPayload_UnknownStability_Throws()
+    {
+        // (Stability)99 is not a valid variant. Invoke must throw InvalidOperationException
+        // rather than silently falling through to the Cached or Live branch.
+        var payload = new NamespaceMemberPayload(
+            getter: _ => default,
+            stability: (Stability)99,
+            returnType: null);
+
+        Assert.Throws<InvalidOperationException>(() => payload.Invoke(null!));
+    }
+
+    // ── UFCS map validation ──
+
+    [Fact]
+    public void ValidateUfcsTargets_MissingNamespace_Throws()
+    {
+        // A UFCS map entry whose value is not in the namespace list must throw.
+        // We call the internal helper directly so the real StdlibRegistry static ctor
+        // is never triggered with invalid data (TypeInitializationException is process-sticky).
+        var bogusMap = new Dictionary<string, string>
+        {
+            ["string"] = "str",
+            ["widget"] = "nonexistent_ns",
+        };
+        var knownNamespaces = new List<string> { "str", "arr", "math" };
+
+        Assert.Throws<InvalidOperationException>(
+            () => StdlibRegistry.ValidateUfcsTargets(bogusMap, knownNamespaces));
+    }
+
+    [Fact]
+    public void ValidateUfcsTargets_AllTargetsPresent_DoesNotThrow()
+    {
+        // The production map is valid — test the green-path too.
+        var validMap = new Dictionary<string, string>
+        {
+            ["string"] = "str",
+            ["array"] = "arr",
+        };
+        var knownNamespaces = new List<string> { "str", "arr", "math" };
+
+        var ex = Record.Exception(() => StdlibRegistry.ValidateUfcsTargets(validMap, knownNamespaces));
+        Assert.Null(ex);
     }
 }

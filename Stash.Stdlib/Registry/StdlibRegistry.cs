@@ -1,5 +1,6 @@
 namespace Stash.Stdlib;
 
+using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
@@ -132,11 +133,13 @@ public static partial class StdlibRegistry
         _namespaceDataMembersByQualifiedName = allDataMembers
             .ToFrozenDictionary(m => m.QualifiedName);
 
-        _ufcsTypeToNamespace = new Dictionary<string, string>
+        var ufcsMap = new Dictionary<string, string>
         {
             ["string"] = "str",
             ["array"] = "arr",
-        }.ToFrozenDictionary();
+        };
+        ValidateUfcsTargets(ufcsMap, NamespaceNames);
+        _ufcsTypeToNamespace = ufcsMap.ToFrozenDictionary();
 
         // Build the declaration-kind lookup and Live-member name set from all non-global namespaces.
         var kindDict = new Dictionary<string, DeclarationKind>();
@@ -217,4 +220,29 @@ public static partial class StdlibRegistry
     /// </summary>
     public static bool HasUfcsSupport(string typeName)
         => _ufcsTypeToNamespace.ContainsKey(typeName);
+
+    /// <summary>
+    /// Validates that every value (target namespace name) in the UFCS type-to-namespace map
+    /// exists in <paramref name="namespaceNames"/>.  Throws <see cref="InvalidOperationException"/>
+    /// for the first missing target so that a stale map entry fails closed at process start
+    /// rather than silently producing a missing-namespace error at UFCS dispatch time.
+    /// </summary>
+    /// <remarks>
+    /// Extracted as an <c>internal static</c> method so that unit tests can exercise the
+    /// validation with a synthetic map and a synthetic namespace list without triggering the
+    /// real <c>StdlibRegistry</c> static constructor (which would poison the test process via
+    /// a sticky <see cref="TypeInitializationException"/>).
+    /// </remarks>
+    internal static void ValidateUfcsTargets(
+        IReadOnlyDictionary<string, string> map,
+        IReadOnlyList<string> namespaceNames)
+    {
+        var nsSet = new System.Collections.Generic.HashSet<string>(namespaceNames, StringComparer.Ordinal);
+        foreach (var kvp in map)
+        {
+            if (!nsSet.Contains(kvp.Value))
+                throw new InvalidOperationException(
+                    $"UFCS map entry '{kvp.Key}' → '{kvp.Value}': target namespace '{kvp.Value}' is not registered in NamespaceNames.");
+        }
+    }
 }

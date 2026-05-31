@@ -1,0 +1,127 @@
+# plan.yaml — Stdlib Omission Hardening
+#
+# Authored by the architect, consumed by checkpoint scripts. Design prose lives
+# in brief.md; this file is script input only.
+# Validate with: python3 scripts/checkpoint/validate-spec.py stdlib-omission-hardening
+
+schema_version: 1
+
+feature: stdlib-omission-hardening
+
+title: Stdlib Omission Hardening
+
+# First child unit of the omission-hardening milestone. milestone-status.py
+# reads this tag to derive the milestone's ledger.
+milestone: omission-hardening
+
+brief: ./brief.md
+
+created: 2026-05-31
+architect_session: stdlib-omission-hardening-spec-2026-05-31
+
+# Default verify after every phase. Cheap; heavier checks live in per-phase verify.
+default_verify:
+  - dotnet build
+
+# Safety rail. Resolution work is contained to Stdlib and its generator + the
+# Stdlib test directory. Phase 1 is read-only (audit) and only touches brief.md.
+scope:
+  - Stash.Stdlib/**
+  - Stash.Stdlib.Generators/**
+  - Stash.Tests/Stdlib/**
+  - .kanban/2-in-progress/stdlib-omission-hardening/**
+
+phases:
+  - id: P1
+    title: Verify & classify — audit is the first deliverable
+    deps: []
+    files:
+      - .kanban/2-in-progress/stdlib-omission-hardening/brief.md
+    verify:
+      - dotnet build Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib
+    done_when:
+      - Every row of brief.md's "Cross-Cutting Concerns" table is reproduced against the code; rows that did not reproduce as written are revised in-place with a Decision Log entry naming the delta.
+      - The table commits with each row carrying its single source of truth (file + line or test class), its current Construct/Detect/Instruct level, and its disposition (Keep / Promote / Justify / No-op / Drop).
+      - The audit table covers BOTH already-Construct mechanisms (registration, capability gating, dedup, mutual exclusion, summary requirement) AND the gaps — not just defects.
+    notes: |
+      This phase writes no production code. It commits the verified audit table
+      as the source-of-truth deliverable. Treat every prior candidate finding
+      (the seeded `stdlib-candidate-findings.md`) as an unverified hypothesis;
+      verify each by reading the named file and lines.
+
+  - id: P2
+    title: "Construct — STSG014 diagnostic for stray [StashFn]/[StashMember]/[StashConst]"
+    deps: [P1]
+    files:
+      - Stash.Stdlib.Generators/Diagnostics.cs
+      - Stash.Stdlib.Generators/StashNamespaceGenerator.cs
+      - Stash.Stdlib.Generators/AnalyzerReleases.Unshipped.md
+      - Stash.Tests/Stdlib/SourceGenerator/*.cs
+    verify:
+      - dotnet build Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~Stash.Tests.Stdlib.SourceGenerator"
+    done_when:
+      - "A method annotated `[StashFn]` on a class NOT marked `[StashNamespace]` produces build-error STSG014 with a message naming the offending method."
+      - "The same holds for `[StashMember]` and `[StashConst]` on a non-`[StashNamespace]` declaring type."
+      - "A `[StashFn]`/`[StashMember]`/`[StashConst]` on a `[StashNamespace]`-attributed class produces NO STSG014 (proven by the existing stdlib build staying green and an analyzer fixture)."
+      - "`AnalyzerReleases.Unshipped.md` lists STSG014."
+    notes: |
+      The diagnostic's predicate runs over the same syntax provider but inverted —
+      a methods/fields scan that asserts the *containing type* is StashNamespace.
+      Reuse Microsoft.CodeAnalysis.Testing.Verifiers via the existing generator
+      test infrastructure under `Stash.Tests/Stdlib/SourceGenerator/`.
+
+  - id: P3
+    title: Construct — exhaustive Stability switch + UFCS map self-validation
+    deps: [P1]
+    files:
+      - Stash.Stdlib/Models/NamespaceMemberPayload.cs
+      - Stash.Stdlib.Generators/StashNamespaceGenerator.cs
+      - Stash.Stdlib/Registry/StdlibRegistry.cs
+      - Stash.Tests/Stdlib/StdlibConsistencyTests.cs
+      - Stash.Tests/Stdlib/SourceGenerator/*.cs
+    verify:
+      - dotnet build Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~StdlibConsistencyTests|FullyQualifiedName~Stash.Tests.Stdlib.SourceGenerator"
+    done_when:
+      - "`NamespaceMemberPayload.Invoke` is an exhaustive switch on `Stability`; a `(Stability)99` cast throws `InvalidOperationException` rather than executing the Cached branch (unit test asserts the throw)."
+      - "The generator's stability mapping in `StashNamespaceGenerator.BuildMember` is an exhaustive switch with a throwing default for unknown integer values; covered by a generator test that feeds a fake int value through the metadata path."
+      - "`StdlibRegistry`'s static ctor validates every value in the UFCS type->namespace map against `NamespaceNames`; a unit test that injects a bogus target via reflection (or a parallel static fixture) demonstrates `TypeInitializationException` at first load."
+    notes: |
+      Stability is ONE concern with TWO participants — runtime payload and
+      generator mapper. Both must be hardened in this phase; resolving one and
+      leaving the other is the omission shape the milestone exists for.
+
+  - id: P4
+    title: Detect — DataMembers registry<->runtime consistency tests
+    deps: [P1]
+    files:
+      - Stash.Tests/Stdlib/StdlibConsistencyTests.cs
+    verify:
+      - dotnet test Stash.Tests --filter "FullyQualifiedName~StdlibConsistencyTests"
+    done_when:
+      - "`StdlibConsistencyTests` contains `NamespaceMembers_RegistryEntries_HaveRuntimePayload` and `NamespaceMembers_RuntimePayloads_HaveRegistryMetadata` `[Fact]`s, both green on the current stdlib."
+      - "The new facts assert the load-bearing property — that each registered `NamespaceMember` has a matching `NamespaceMemberPayload` slot in the live runtime namespace and vice versa — not a weaker proxy."
+      - "A fail-path self-test (or a fixture demonstration in the test comments) shows that disconnecting a registered `[StashMember]` from its runtime payload makes one of the two facts fail; this matches the existing Functions/Constants pair pattern."
+
+# Final acceptance — run by /done before promoting to 4-done/.
+# Filter shape: copied from .kanban/4-done/lsp-completion-providers/plan.yaml,
+# minus per-feature additions and plus the language/stdlib gate tests required
+# by .claude/language-changes.md (Wave1ThrowsCoverageTests,
+# CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests must remain
+# included since this unit touches stdlib metadata enforcement).
+#
+# Trailing three exclusions added during /done: documented parallel-execution
+# flakies, unrelated to this stdlib-only feature (feature diff touches zero
+# Registry/Dap files). Each fails only under full-suite parallel load and passes
+# in isolation; the failure SET is unstable across runs (the flakiness signature).
+#   - NamespaceMembersDapTests — already excluded in registry-authz-pdp-completion (c3ed705); 7/7 in isolation
+#   - AtomicClaimRaceTests / RegistryAuthzAtomicityConformanceTests — Registry Authz
+#     ConcurrentFirstPublish atomicity races; pass in isolation. See brief.md Decision Log.
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&FullyQualifiedName!~NamespaceMembersDapTests&FullyQualifiedName!~AtomicClaimRaceTests&FullyQualifiedName!~RegistryAuthzAtomicityConformanceTests"
+  - python3 scripts/checkpoint/validate-spec.py stdlib-omission-hardening

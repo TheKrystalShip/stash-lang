@@ -167,4 +167,19 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    // ── Stray-annotation diagnostic ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// STSG014: [StashFn], [StashMember], or [StashConst] declared on a class that is not
+    /// attributed with [StashNamespace]. The member is silently invisible to the generator —
+    /// this diagnostic promotes that silent failure to a build error.
+    /// </summary>
+    public static readonly DiagnosticDescriptor StrayStdlibAnnotation = new(
+        id: "STSG014",
+        title: "[StashFn]/[StashMember]/[StashConst] on a non-[StashNamespace] class",
+        messageFormat: "'{0}' is annotated with [{1}] but its declaring type '{2}' does not have [StashNamespace]. The annotation will be silently ignored by the source generator.",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }
