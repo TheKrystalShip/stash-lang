@@ -32,4 +32,6 @@ Report findings directly as a message. Include:
 - Analogous existing features that serve as implementation templates
 - Clear answers to what was asked, not comprehensive overviews
 
+Frame open-ended "find / assess" findings as **hypotheses, not settled facts**: state your confidence and cite `file:line` so the caller (or a later adversarial refute pass) can verify or refute each claim against the code. Don't inflate — if a concern is already guarded, say so; a clean "no issue here" is a valid and valuable result.
+
 Remember: Your goal is searching efficiently through MAXIMUM PARALLELISM to report concise and clear answers.

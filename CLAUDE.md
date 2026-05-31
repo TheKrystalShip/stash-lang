@@ -107,6 +107,16 @@ This project's agents live in `.claude/agents/`. Under the checkpoint workflow, 
 
 For a small one-off change (bug fix, single test, one-file refactor), skip the checkpoint workflow and dispatch `implementer` directly with file paths.
 
+### Exploration: find then refute
+
+Explorer findings are **hypotheses, not facts**, and an explorer asked to *find* problems or opportunities is biased to find them — a finder sent to find work finds work. When an exploration's result will drive a **consequential decision** (a spec, a refactor, a prioritization) *and* the prompt is open-ended ("find X that could benefit from…"), pair the finder pass with an **adversarial refute pass**:
+
+- **Invert the incentive — don't re-run the prompt.** A blind re-run just reproduces the bias (both passes are finders; their false agreement reads as confirmation). Hand the second pass the first pass's *specific claims* and instruct: default verdict REFUTED; confirm a claim ONLY by quoting the exact code that proves it; call out any guard the finder missed; downgrade or refute freely. Also ask "what did the finder miss?" to catch false negatives.
+- **Scale to the work:** one finder → one skeptic; a batch → a batch.
+- **Skip it** for cheap factual lookups ("where is X defined?", "does this exist?") and one-shot orientation — there the bias is absent and a refute pass is pure waste.
+
+A finding that survives a skeptic *trying* to kill it is robust — lead with those; treat refuted/over-stated ones as the noise they are. This is the same adversarial-verification discipline the Workflow tool ("spawn N skeptics prompted to REFUTE") and the omission-hardening milestone already use; this rule just makes it the default for consequential ad-hoc `explore` dispatches.
+
 ## Project Memory
 
 `.claude/repo.md` contains build state, active multi-phase work pointer (one line per feature), architecture decisions, and known gotchas. Read it when starting any multi-step task.
