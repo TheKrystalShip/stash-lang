@@ -33,7 +33,14 @@ def die(msg: str, code: int = 1) -> None:
 def feature_dir(slug: str) -> _pl.Path:
     d = INPROGRESS_DIR / slug
     if not d.is_dir():
-        die(f"feature directory not found: {d}")
+        # Fall back to 4-done so post-promotion callers resolve the same slug instead
+        # of false-failing — e.g. worktree-finish.sh re-runs final_verify (which may
+        # include validate-spec.py) AFTER /done has moved the feature to 4-done/.
+        # In-progress wins when both exist, so active-feature behavior is unchanged.
+        done = DONE_DIR / slug
+        if done.is_dir():
+            return done
+        die(f"feature directory not found in 2-in-progress/ or 4-done/: {slug}")
     return d
 
 
