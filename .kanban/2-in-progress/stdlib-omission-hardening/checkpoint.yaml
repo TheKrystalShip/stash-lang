@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stdlib-omission-hardening
 current: null
-updated: '2026-05-31T01:12:56Z'
+updated: '2026-05-31T01:20:40Z'
 phases:
   P1:
     status: done
@@ -21,13 +21,14 @@ phases:
     notes: STSG014 descriptor + inverted scan in StashNamespaceGenerator; 4 new tests in GeneratorDiagnosticsTests;
       stdlib build stays green
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 2040216532034d8ba474c8dae1af04ba73b15c5e
+    verified: true
+    started: '2026-05-31T01:19:53Z'
+    completed: '2026-05-31T01:20:40Z'
+    attempts: 1
+    notes: Exhaustive switch on Stability at both sites; MapStabilityLiteral helper; ValidateUfcsTargets
+      internal method; 6 new tests (191 total passing)
   P4:
     status: pending
     commit: null
