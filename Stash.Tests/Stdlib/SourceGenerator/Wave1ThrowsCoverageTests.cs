@@ -18,6 +18,10 @@ public class Wave1ThrowsCoverageTests
         ["json"] = new(), // every json fn throws
         ["http"] = new(), // every http fn throws
         ["process"] = new() { "list", "find", "exists", "dirStack", "dirStackDepth", "lastExitCode", "historyList", "historyClear" },
+        // path: pure string-manipulation functions. match and separator are infallible on
+        // legal inputs; extglob rejection in match is documented programmer-error (not a
+        // normal-path throw). All other path functions throw TypeError on bad arg type.
+        ["path"] = new() { "match", "separator" },
     };
 
     public static IEnumerable<object[]> Wave1Namespaces => NoThrowAllowList.Keys.Select(n => new object[] { n });

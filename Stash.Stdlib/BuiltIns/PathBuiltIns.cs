@@ -97,4 +97,26 @@ public static partial class PathBuiltIns
     /// <returns>The path separator (e.g. '/' on Linux/macOS, '\' on Windows)</returns>
     [StashFn]
     public static string Separator() => System.IO.Path.DirectorySeparatorChar.ToString();
+
+    /// <summary>Returns true iff the path matches the glob pattern under
+    /// bash [[ ]] globstar semantics. Pure: does not touch the filesystem; the
+    /// path need not exist on disk.</summary>
+    /// <param name="path">The path string to test (need not exist).</param>
+    /// <param name="pattern">The glob pattern.</param>
+    /// <returns>Whether the path matches the pattern.</returns>
+    /// <remarks>
+    /// <para>
+    /// Extglob constructs (<c>@(</c>, <c>!(</c>, <c>+(</c>, <c>?(</c>, <c>*(</c>)
+    /// are not supported and will throw a RuntimeError.
+    /// </para>
+    /// <para>
+    /// POSIX bracket classes (e.g. <c>[[:alpha:]]</c>, <c>[[:digit:]]</c>) and
+    /// equivalence classes (e.g. <c>[[=a=]]</c>) are NOT supported. These are bash
+    /// features that .NET regex does not implement. When present, the POSIX-class
+    /// delimiters (<c>[:</c>, <c>:]</c>, <c>[=</c>, <c>=]</c>) are treated as
+    /// literal class-member characters, producing different match results than bash.
+    /// </para>
+    /// </remarks>
+    [StashFn]
+    public static bool Match(string path, string pattern) => PathGlobImpl.Matches(path, pattern);
 }

@@ -6567,6 +6567,7 @@ Returns true if the host is Linux and the kernel version is at least the specifi
 | `path.isAbsolute` | `bool` | `TypeError` | Returns true if the path is absolute, false otherwise. |
 | `path.relative` | `string` | `TypeError` | Returns the relative path from 'from' to 'to'. |
 | `path.separator` | `string` | — | Returns the platform-specific path separator character. |
+| `path.match` | `bool` | — | Returns true iff the path matches the glob pattern under bash [[ ]] globstar semantics. |
 
 ### Function Details
 
@@ -6704,6 +6705,19 @@ Returns the relative path from 'from' to 'to'.
 Returns the platform-specific path separator character.
 
 **Returns:** `string` — The path separator (e.g. '/' on Linux/macOS, '\' on Windows)
+
+#### `path.match(path: string, pattern: string) -> bool`
+
+Returns true iff the path matches the glob pattern under bash [[ ]] globstar semantics. Pure: does not touch the filesystem; the path need not exist on disk.
+
+Extglob constructs (@(, !(, +(, ?(, *() are not supported and will throw a RuntimeError. POSIX bracket classes (e.g. [[:alpha:]], [[:digit:]]) and equivalence classes (e.g. [[=a=]]) are NOT supported. These are bash features that .NET regex does not implement. When present, the POSIX-class delimiters ([:, :], [=, =]) are treated as literal class-member characters, producing different match results than bash.
+
+**Parameters:**
+
+- `path`: `string` — The path string to test (need not exist).
+- `pattern`: `string` — The glob pattern.
+
+**Returns:** `bool` — Whether the path matches the pattern.
 
 ---
 

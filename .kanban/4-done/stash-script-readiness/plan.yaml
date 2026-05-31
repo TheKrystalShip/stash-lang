@@ -101,12 +101,19 @@ phases:
     files:
       - .kanban/2-in-progress/stash-script-readiness/checkpoint.yaml
     verify:
-      - bash -c 'dotnet run --project Stash.Cli/ -c Release -- build.stash'
+      # build.stash's "documented equivalent" (brief Acceptance Criteria) for the CLI only.
+      # Full build.stash is NOT used: its buildExtension() step runs `npx tsc`, which fails
+      # in this env (extension node_modules never installed; npx resolves a foreign `tsc`) —
+      # a failure unrelated to path.match that would fail the gate AFTER deploy() already
+      # installed the binary. The CLI carries path.match via its Stash.Stdlib dependency;
+      # publishing+installing it alone is the gate's true intent and is more conservative
+      # (leaves stash-lsp/dap/registry binaries untouched). See Decision Log.
+      - bash -c 'set -e; dotnet publish Stash.Cli/ -c Release -r linux-x64 --self-contained; install -m755 ./Stash.Cli/bin/Release/net10.0/linux-x64/publish/Stash "$HOME/.local/bin/stash"'
       - bash -c 'test -x "$HOME/.local/bin/stash" && "$HOME/.local/bin/stash" --version'
-      - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"a/b.cs\",\"a/**\"))"); test "$out" = "true"'
-      - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"Stash.Analysis/Visitors/Sub/Foo.cs\",\"Stash.Analysis/Visitors/*.cs\"))"); test "$out" = "true"'
+      - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"a/b.cs\",\"a/**\"));"); test "$out" = "true"'
+      - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"Stash.Analysis/Visitors/Sub/Foo.cs\",\"Stash.Analysis/Visitors/*.cs\"));"); test "$out" = "true"'
     done_when:
-      - "`build.stash` (run via the in-tree CLI) completes successfully and overwrites `~/.local/bin/stash` with a binary newer than the pre-P4 mtime."
+      - "The CLI is rebuilt from worktree source (`dotnet publish Stash.Cli/ -c Release -r linux-x64 --self-contained`, build.stash's documented equivalent) and the AOT binary installed over `~/.local/bin/stash` with a newer mtime than the pre-P4 binary."
       - "The installed `~/.local/bin/stash` is the newly-built binary, proven FUNCTIONALLY by the two smoke commands below: the stale 0.5.0 binary lacks `path.match` and errors on the call, so a `true` result is unforgeable proof the new binary is installed. The `Version` const (`Stash.Cli/Program.cs`) is intentionally NOT bumped — a release-version change is out of scope for this stdlib feature, and the functional smoke is a strictly stronger proof than a version-string comparison (which is also unsatisfiable here: `--version` is a hardcoded literal with no sha/timestamp component)."
       - "`~/.local/bin/stash -c 'io.println(path.match(\"a/b.cs\",\"a/**\"))'` prints exactly the four characters `true` followed by a newline, exit code 0."
       - "`~/.local/bin/stash -c 'io.println(path.match(\"Stash.Analysis/Visitors/Sub/Foo.cs\",\"Stash.Analysis/Visitors/*.cs\"))'` prints `true` — confirms the bash-divergent edge case (`*` crosses `/`) is reproduced by the installed binary, not just the in-tree build."
@@ -129,4 +136,4 @@ final_verify:
   - dotnet build
   - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&FullyQualifiedName!~NamespaceMembersDapTests&FullyQualifiedName!~AtomicClaimRaceTests&FullyQualifiedName!~RegistryAuthzAtomicityConformanceTests"
   - python3 scripts/checkpoint/validate-spec.py stash-script-readiness
-  - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"a/b.cs\",\"a/**\"))"); test "$out" = "true"'
+  - bash -c 'out=$("$HOME/.local/bin/stash" -c "io.println(path.match(\"a/b.cs\",\"a/**\"));"); test "$out" = "true"'

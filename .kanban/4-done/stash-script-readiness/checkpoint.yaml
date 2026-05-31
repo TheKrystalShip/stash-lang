@@ -1,0 +1,43 @@
+schema_version: 1
+feature: stash-script-readiness
+current: null
+updated: '2026-05-31T13:35:39Z'
+phases:
+  P1:
+    status: done
+    commit: 4169d9d0e947e15465500297350e88d51c25f3b3
+    verified: true
+    started: '2026-05-31T12:54:54Z'
+    completed: '2026-05-31T13:05:01Z'
+    attempts: 1
+    notes: ''
+  P2:
+    status: done
+    commit: 2becf79615364168799a59c2d9bac296c8a2b520
+    verified: true
+    started: '2026-05-31T13:05:15Z'
+    completed: '2026-05-31T13:18:46Z'
+    attempts: 1
+    notes: ''
+  P3:
+    status: done
+    commit: 20fdb713e667aa533d651c40c1aa34c0cfc275f3
+    verified: true
+    started: '2026-05-31T13:18:54Z'
+    completed: '2026-05-31T13:22:42Z'
+    attempts: 1
+    notes: ''
+  P4:
+    status: done
+    commit: 6caf690217a8d163b6fcf9b09ac90ac1d61d3764
+    verified: true
+    started: '2026-05-31T13:23:39Z'
+    completed: '2026-05-31T13:28:13Z'
+    attempts: 1
+    notes: ''
+review:
+  status: resolved
+  started: '2026-05-31T13:35:39Z'
+  resolved: '2026-05-31T18:41:02Z'
+  findings_open: 0
+  findings_fixed: 7
