@@ -26,14 +26,21 @@ import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
 // ── Bounded domains ────────────────────────────────────────────────────────
 
 // Files that are EXCLUDED from the scan entirely (not subject to the import rule).
-//   _common.stash      — the module itself
+//   _common.stash        — the module itself
 //   difftest_runner.stash — internal runner, no _common import by design
 //   lint_common_imports.stash — this file (scan would be self-referential)
+//   difftest_coverage_check.stash — coverage guard; imports from _common
 const SCAN_EXCLUSIONS = [
     "_common.stash",
     "difftest_runner.stash",
     "lint_common_imports.stash"
 ];
+
+// Filename patterns excluded from the scan (checked via prefix+suffix matching).
+// Case-table files (difftest_*_cases.stash) are data modules for the differential
+// oracle runner — they don't run helpers, so the _common import rule doesn't apply.
+const SCAN_EXCLUSION_PREFIX = "difftest_";
+const SCAN_EXCLUSION_SUFFIX = "_cases.stash";
 
 // Files that ARE scanned but are ALLOWED to import zero symbols from _common.stash
 // (append-only; document reason for each entry).
@@ -62,9 +69,17 @@ const COMMON_EXPORTS = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/// Return true if the given basename is in the exclusion list.
+/// Return true if the given basename is in the exclusion list or matches an
+/// exclusion pattern (e.g. difftest_*_cases.stash case-table files).
 fn is_excluded(base) {
-    return arr.contains(SCAN_EXCLUSIONS, base);
+    if (arr.contains(SCAN_EXCLUSIONS, base)) {
+        return true;
+    }
+    // Exclude case-table files by prefix+suffix pattern
+    if (str.startsWith(base, SCAN_EXCLUSION_PREFIX) && str.endsWith(base, SCAN_EXCLUSION_SUFFIX)) {
+        return true;
+    }
+    return false;
 }
 
 /// Return true if the given basename is on the import allow-list.

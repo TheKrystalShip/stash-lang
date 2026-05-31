@@ -1,0 +1,12 @@
+// difftest_runner.fixtures/tampered_twin.stash
+//
+// Tampered fixture for difftest_runner.stash --self-test.
+//
+// This file pretends to be advance-checkpoint.stash but ALWAYS exits with
+// code 42 regardless of input — deliberately wrong behaviour. The self-test
+// runs the real Python advance-checkpoint.py on one side and this file on the
+// other, then asserts the runner detects the divergence.
+//
+// DO NOT use this file in production. It is only for proving the guard has teeth.
+
+env.exit(42);

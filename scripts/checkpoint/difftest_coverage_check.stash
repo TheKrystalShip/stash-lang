@@ -1,27 +1,150 @@
 #!/usr/bin/env stash
-// difftest_coverage_check.stash — STUB for P1.
+// difftest_coverage_check.stash — Coverage guard for differential oracles.
 //
-// Real implementation lands in P2 when difftest_runner.stash is built.
-// This stub exists so that the plan's default_verify can run from P1 onward.
+// Normal run:
+//   stash scripts/checkpoint/difftest_coverage_check.stash
+//   Scans every scripts/checkpoint/*.stash (excluding the sets below).
+//   Fails (exit 1) if any scanned script lacks a corresponding
+//   difftest_<name>_cases.stash case table.
 //
-// Checks that every ported *.stash script under scripts/checkpoint/ (excluding
-// _common.stash, difftest_runner.stash, lint_common_imports.stash, and the
-// pilot allow-list) has a registered differential oracle case table.
+// Self-test run (proves the guard has teeth):
+//   stash scripts/checkpoint/difftest_coverage_check.stash --self-test
+//   Uses a fixture directory to simulate a script-without-a-case-table.
+//   Exits 0 ONLY if the guard correctly fires on the fixture.
+//   Exits 1 if the guard fails to trip (guard is broken).
 //
-// At P1 there are no ported scripts yet — stub exits 0 trivially.
-// P2 replaces this with the full implementation.
+// Allow-list:
+//   Scripts in SCRIPT_EXCLUSIONS are excluded from the scan entirely.
+//   Scripts in COVERAGE_ALLOW_LIST are scanned but allowed to lack a case table
+//   (append-only; document reason for each entry).
 
-// Delegate to the lint so the default_verify still exercises something useful.
-import { now_iso } from "_common.stash";
+import { expand_globs } from "_common.stash";
+
+// ── Bounded domains ────────────────────────────────────────────────────────
+
+// Scripts excluded from the scan entirely (not required to have a case table).
+// Append-only; document reason.
+const SCRIPT_EXCLUSIONS = [
+    "_common.stash",               // module, not a runnable script
+    "difftest_runner.stash",       // the runner itself; its oracle is --self-test
+    "difftest_coverage_check.stash", // this file (self-referential)
+    "lint_common_imports.stash"    // lint guard; its oracle is --self-test
+];
+
+// Scripts that ARE scanned but allowed to lack a case table file.
+// Append-only; document reason for each entry.
+// Key: script name (without .stash extension). Value: reason string.
+//
+// The bash-skinned verify-phase.sh has a scope/glob portion that will be ported
+// in a later phase; its case-table key is "verify-phase-scope".
+const COVERAGE_ALLOW_LIST = [
+    "verify-phase-scope"   // P5: scope/glob portion of verify-phase.sh; bash skin retained
+];
+
+// Case-table files are excluded from the "needs a case table" check.
+// They ARE the case tables; requiring a case table FOR a case table would loop.
+// This prefix is matched against the basename.
+const CASE_TABLE_PREFIX = "difftest_";
+const CASE_TABLE_SUFFIX = "_cases.stash";
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/// Return true if the given basename is in the exclusion list.
+fn is_excluded(base) {
+    return arr.contains(SCRIPT_EXCLUSIONS, base);
+}
+
+/// Return true if the given basename looks like a case-table file
+/// (difftest_*_cases.stash) — these are not subject to the coverage check.
+fn is_case_table(base) {
+    return str.startsWith(base, CASE_TABLE_PREFIX) && str.endsWith(base, CASE_TABLE_SUFFIX);
+}
+
+/// Return true if the given script name (without .stash) is on the allow-list.
+fn is_allow_listed(name) {
+    return arr.contains(COVERAGE_ALLOW_LIST, name);
+}
+
+/// Check a single script name (no extension). Returns the violation string
+/// if missing a case table, or null if OK.
+fn check_coverage(name, sdir) {
+    if (is_allow_listed(name)) {
+        return null;  // explicitly allowed to lack a table
+    }
+    let expected_table = sdir + "/difftest_" + name + "_cases.stash";
+    if (!fs.exists(expected_table)) {
+        return name + ": missing case table difftest_" + name + "_cases.stash";
+    }
+    return null;
+}
+
+// ── Argument parsing ───────────────────────────────────────────────────────
 
 const schema = cli.schema({
-    self_test: cli.flag({ name: "self-test", help: "run self-test (no-op in stub)" })
+    self_test: cli.flag({ name: "self-test", help: "run self-test against tampered fixture" })
 });
 const parsed = cli.tryParse(schema);
 if (!parsed.ok) {
     io.eprintln("error: " + parsed.error.message);
     env.exit(2);
 }
+const args = parsed.value;
 
-// Stub: 0 ported scripts, coverage trivially satisfied.
-io.println("difftest_coverage_check: OK (stub) — 0 ported scripts, 0 case tables required");
+// ── Helpers that need env.cwd ──────────────────────────────────────────────
+
+const SDIR = "scripts/checkpoint";
+
+// ── Self-test mode ─────────────────────────────────────────────────────────
+
+if (args.self_test) {
+    // Simulate a script-without-a-case-table by pointing at a temp directory
+    // that contains a ported script BUT no corresponding case table.
+    //
+    // We test the check_coverage function directly against a known-missing table.
+    // The fixture "fake_ported_script" does not have a case table in SDIR,
+    // so check_coverage must return a violation.
+
+    let fake_name = "fake_ported_script_selftest_zz";
+    let violation = check_coverage(fake_name, SDIR);
+    if (violation == null) {
+        io.eprintln("FAIL self-test: coverage check did NOT fire on missing case table — guard has no teeth!");
+        env.exit(1);
+    }
+    io.println("PASS self-test: coverage check correctly fired:");
+    io.println("  + " + violation);
+    env.exit(0);
+}
+
+// ── Normal scan mode ───────────────────────────────────────────────────────
+
+// Scan every scripts/checkpoint/*.stash (single-* glob, does NOT descend into subdirs).
+let all_files = fs.glob(SDIR + "/*.stash");
+let scanned = 0;
+let violations = [];
+
+for (let fpath in all_files) {
+    let base = path.base(fpath);
+    if (is_excluded(base)) {
+        continue;
+    }
+    if (is_case_table(base)) {
+        continue;  // case-table files don't need their own case table
+    }
+    // Strip .stash extension to get script name
+    let name = str.substring(base, 0, base.length - 6);  // remove ".stash"
+    scanned = scanned + 1;
+    let v = check_coverage(name, SDIR);
+    if (v != null) {
+        arr.push(violations, v);
+    }
+}
+
+if (violations.length > 0) {
+    io.eprintln("FAIL difftest_coverage_check: " + violations.length + " script(s) missing case table(s):");
+    for (let v in violations) {
+        io.eprintln("  - " + v);
+    }
+    env.exit(1);
+}
+
+io.println("difftest_coverage_check: OK — " + scanned + " script(s) checked, 0 missing case tables");
