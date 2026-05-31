@@ -1,0 +1,49 @@
+schema_version: 1
+feature: analysis-omission-hardening
+current: null
+updated: '2026-05-31T13:11:31Z'
+phases:
+  P1:
+    status: done
+    commit: 0af8bf6aeb99338a108c7fa91456c7911644fbc4
+    verified: true
+    started: '2026-05-31T12:43:29Z'
+    completed: '2026-05-31T12:51:08Z'
+    attempts: 1
+    notes: 'Audit table verified against code. P3 fork: Detect (RuleRegistryCoverageTests). Two TBD rows
+      resolved: Configure (Keep/Construct), enum survey (No-op/Justify). Zero throwing-default additions
+      for P3. Deltas logged: ''single call site'' nuance, Configure vs ApplyOptions, Category is string
+      not enum, two ScopeKind enums.'
+  P2:
+    status: done
+    commit: e6602024e2be574bb124b67c2dddb750fc6b4436
+    verified: true
+    started: '2026-05-31T12:52:39Z'
+    completed: '2026-05-31T12:55:30Z'
+    attempts: 1
+    notes: 4 export methods made abstract (no default-throw body); dotnet build green on first try; VisitorEscapeHatchMetaTests
+      ships with fail-path self-test, all 3 tests pass
+  P3:
+    status: done
+    commit: 204999809eeb81c210ea24c9567285d073ea6447
+    verified: true
+    started: '2026-05-31T12:57:02Z'
+    completed: '2026-05-31T12:59:34Z'
+    attempts: 1
+    notes: 'RuleRegistryCoverageTests: 3 tests (floor, production compliance, fail-path self-test); reflects
+      typeof(SemanticValidator).Assembly; 65 rule types discovered; all 126 filtered tests pass'
+  P4:
+    status: done
+    commit: 6fd8b6c4ebbbb03b313ef2c1be45784861441cba
+    verified: true
+    started: '2026-05-31T13:00:52Z'
+    completed: '2026-05-31T13:02:42Z'
+    attempts: 1
+    notes: 130 descriptors discovered; all keyed in AllByCode; non-vacuity floor=100; fail-path self-test
+      via fixture code absent from BuildCodeLookup
+review:
+  status: resolved
+  started: '2026-05-31T13:06:34Z'
+  resolved: '2026-05-31T13:11:31Z'
+  findings_open: 0
+  findings_fixed: 0
