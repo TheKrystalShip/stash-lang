@@ -1,16 +1,19 @@
 schema_version: 1
 feature: analysis-omission-hardening
 current: null
-updated: '2026-05-31T12:14:33Z'
+updated: '2026-05-31T12:51:08Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 0af8bf6aeb99338a108c7fa91456c7911644fbc4
+    verified: true
+    started: '2026-05-31T12:43:29Z'
+    completed: '2026-05-31T12:51:08Z'
+    attempts: 1
+    notes: 'Audit table verified against code. P3 fork: Detect (RuleRegistryCoverageTests). Two TBD rows
+      resolved: Configure (Keep/Construct), enum survey (No-op/Justify). Zero throwing-default additions
+      for P3. Deltas logged: ''single call site'' nuance, Configure vs ApplyOptions, Category is string
+      not enum, two ScopeKind enums.'
   P2:
     status: pending
     commit: null
