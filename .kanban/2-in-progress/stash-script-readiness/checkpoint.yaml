@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stash-script-readiness
 current: null
-updated: '2026-05-31T13:28:13Z'
+updated: '2026-05-31T13:35:39Z'
 phases:
   P1:
     status: done
@@ -36,8 +36,8 @@ phases:
     attempts: 1
     notes: ''
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: '2026-05-31T13:35:39Z'
   resolved: null
   findings_open: 0
   findings_fixed: 0
