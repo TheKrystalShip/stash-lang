@@ -1761,9 +1761,9 @@ public static partial class ProcessBuiltIns
         try
         {
             if (redir.Append)
-                System.IO.File.AppendAllText(redir.Target, content);
+                System.IO.File.AppendAllText(redir.Target, content, StashEncodings.Utf8NoBom);
             else
-                System.IO.File.WriteAllText(redir.Target, content);
+                System.IO.File.WriteAllText(redir.Target, content, StashEncodings.Utf8NoBom);
         }
         catch (System.Exception ex)
         {

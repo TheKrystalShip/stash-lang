@@ -128,7 +128,7 @@ public static partial class CsvBuiltIns
             if (!string.IsNullOrEmpty(dir))
                 Directory.CreateDirectory(dir);
 
-            File.WriteAllText(path, csv, new UTF8Encoding(false));
+            File.WriteAllText(path, csv, StashEncodings.Utf8NoBom);
         }
         catch (UnauthorizedAccessException)
         {

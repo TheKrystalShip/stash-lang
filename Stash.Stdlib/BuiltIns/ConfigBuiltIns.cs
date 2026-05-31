@@ -54,7 +54,7 @@ public static partial class ConfigBuiltIns
 
         try
         {
-            File.WriteAllText(path, text);
+            File.WriteAllText(path, text, StashEncodings.Utf8NoBom);
         }
         catch (IOException e)
         {

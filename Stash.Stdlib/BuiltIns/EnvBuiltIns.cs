@@ -231,7 +231,7 @@ public static partial class EnvBuiltIns
 
         try
         {
-            System.IO.File.WriteAllText(filePath, sb.ToString());
+            System.IO.File.WriteAllText(filePath, sb.ToString(), StashEncodings.Utf8NoBom);
         }
         catch (System.IO.IOException e)
         {

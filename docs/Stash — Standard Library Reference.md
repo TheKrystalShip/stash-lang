@@ -4328,7 +4328,7 @@ Reads the entire contents of a file as a string. Throws on I/O error.
 
 #### `fs.writeFile(path: string, content: string, ...encoding: string) -> null`
 
-Writes a string to a file, creating or overwriting it. Returns null.
+Writes a string to a file, creating or overwriting it. UTF-8 output is written without a byte-order mark (BOM). Returns null.
 
 **Parameters:**
 
@@ -4464,7 +4464,7 @@ Returns an array of file and directory paths directly inside the given directory
 
 #### `fs.appendFile(path: string, content: string) -> null`
 
-Appends content to a file, creating it if it doesn't exist. Returns null.
+Appends content to a file, creating it if it doesn't exist. UTF-8 output is written without a byte-order mark (BOM). Returns null.
 
 **Parameters:**
 

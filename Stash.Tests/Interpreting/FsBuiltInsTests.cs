@@ -788,4 +788,57 @@ public class FsBuiltInsTests : TempDirectoryFixture
             "let result = str.contains(g[0], \"/a/\") && str.contains(g[1], \"/b/\");");
         Assert.Equal(true, result);
     }
+
+    // ── UTF-8 BOM regression: fs writes must NOT emit a byte-order mark ──────────
+    // System.Text.Encoding.UTF8 (and the parameterless File.Write/AppendAllText
+    // overloads) prepend EF BB BF, which corrupted the leading bytes of every file
+    // a Stash script wrote. All write paths now route through StashEncodings.Utf8NoBom.
+
+    private static readonly byte[] Bom = { 0xEF, 0xBB, 0xBF };
+
+    [Fact]
+    public void WriteFile_Utf8_NoByteOrderMark()
+    {
+        var filePath = Path.Combine(TestDir, "no_bom_write.txt");
+        RunStatements($"fs.writeFile(\"{filePath}\", \"hello\");");
+
+        var bytes = File.ReadAllBytes(filePath);
+        Assert.False(bytes.Length >= 3 && bytes[0] == Bom[0] && bytes[1] == Bom[1] && bytes[2] == Bom[2],
+            "fs.writeFile must not prepend a UTF-8 BOM.");
+        Assert.Equal("hello", System.Text.Encoding.UTF8.GetString(bytes));
+        Assert.Equal((byte)'h', bytes[0]);
+    }
+
+    [Fact]
+    public void WriteFile_ExplicitUtf8_NoByteOrderMark()
+    {
+        var filePath = Path.Combine(TestDir, "no_bom_write_explicit.txt");
+        RunStatements($"fs.writeFile(\"{filePath}\", \"data\", \"utf-8\");");
+
+        var bytes = File.ReadAllBytes(filePath);
+        Assert.NotEqual((byte)0xEF, bytes[0]);
+    }
+
+    [Fact]
+    public void AppendFile_FreshFile_NoByteOrderMark()
+    {
+        var filePath = Path.Combine(TestDir, "no_bom_append.txt");
+        RunStatements($"fs.appendFile(\"{filePath}\", \"line\");");
+
+        var bytes = File.ReadAllBytes(filePath);
+        Assert.NotEqual((byte)0xEF, bytes[0]);
+        Assert.Equal("line", System.Text.Encoding.UTF8.GetString(bytes));
+    }
+
+    [Fact]
+    public void AppendFile_ExistingFile_DoesNotInjectBom()
+    {
+        var filePath = Path.Combine(TestDir, "no_bom_append2.txt");
+        RunStatements($"fs.writeFile(\"{filePath}\", \"a\"); fs.appendFile(\"{filePath}\", \"b\");");
+
+        var bytes = File.ReadAllBytes(filePath);
+        // Exactly "ab" — no BOM at the start and none injected at the append seam.
+        Assert.Equal("ab", System.Text.Encoding.UTF8.GetString(bytes));
+        Assert.Equal(2, bytes.Length);
+    }
 }

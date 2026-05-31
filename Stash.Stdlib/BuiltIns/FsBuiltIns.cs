@@ -198,7 +198,7 @@ public static partial class FsBuiltIns
         catch (System.IO.IOException e) { throw new IOError($"Cannot read file '{path}': {e.Message}"); }
     }
 
-    /// <summary>Writes a string to a file, creating or overwriting it. Returns null.</summary>
+    /// <summary>Writes a string to a file, creating or overwriting it. UTF-8 output is written without a byte-order mark (BOM). Returns null.</summary>
     /// <param name="path">The file path to write.</param>
     /// <param name="content">The string content to write.</param>
     /// <param name="encoding">Optional encoding name (default "utf-8"). Supported: "utf-8", "ascii", "latin1", "utf-16", "utf-32".</param>
@@ -210,8 +210,8 @@ public static partial class FsBuiltIns
         path = ctx.ExpandTilde(path);
         var enc = encoding switch
         {
-            null      => Encoding.UTF8,
-            "utf-8"   => Encoding.UTF8,
+            null      => StashEncodings.Utf8NoBom,
+            "utf-8"   => StashEncodings.Utf8NoBom,
             "ascii"   => Encoding.ASCII,
             "latin1"  => Encoding.Latin1,
             "utf-16"  => Encoding.Unicode,
@@ -363,7 +363,7 @@ public static partial class FsBuiltIns
         catch (System.IO.IOException e) { throw new IOError($"Cannot list directory '{path}': {e.Message}"); }
     }
 
-    /// <summary>Appends content to a file, creating it if it doesn't exist. Returns null.</summary>
+    /// <summary>Appends content to a file, creating it if it doesn't exist. UTF-8 output is written without a byte-order mark (BOM). Returns null.</summary>
     /// <param name="path">The file path to append to.</param>
     /// <param name="content">The string content to append.</param>
     /// <exception cref="IOError">if the file cannot be opened or written</exception>
@@ -373,7 +373,7 @@ public static partial class FsBuiltIns
     {
         path = ctx.ExpandTilde(path);
 
-        try { System.IO.File.AppendAllText(path, content); }
+        try { System.IO.File.AppendAllText(path, content, StashEncodings.Utf8NoBom); }
         catch (System.IO.IOException e) { throw new IOError($"Cannot append to file '{path}': {e.Message}"); }
     }
 
