@@ -26,6 +26,7 @@
 // ── Case table imports (append-only; each new script-phase adds one line) ──
 // (Imports must appear before any non-import top-level declarations.)
 import "difftest_advance-checkpoint_cases.stash" as _ac_cases;
+import "difftest_validate-spec_cases.stash" as _vs_cases;
 
 // ── Bounded domains (closed sets pinned as named consts, never inlined) ─────
 const TIGHT_AXES       = ["exit", "stdout_exact", "stderr_must_contain", "file_mutation"];
@@ -63,6 +64,11 @@ const REGISTRY = {
     "advance-checkpoint": { cases: _ac_cases.CASES, slug: _ac_cases.SLUG, plan: _ac_cases.PLAN,
                              py_script: "advance-checkpoint.py",
                              st_script: "advance-checkpoint.stash",
+                             py_common: "_common.py",
+                             st_common: "_common.stash" },
+    "validate-spec":      { cases: _vs_cases.CASES, slug: _vs_cases.SLUG, plan: _vs_cases.PLAN,
+                             py_script: "validate-spec.py",
+                             st_script: "validate-spec.stash",
                              py_common: "_common.py",
                              st_common: "_common.stash" }
 };
@@ -243,7 +249,10 @@ fn load_fixture_cp(tree_root, slug) {
 /// Run a single case and return { passed: bool, problems: array, soft: string }.
 fn run_case(case_obj, entry, repo_root) {
     let slug       = entry.slug;
-    let plan       = entry.plan;
+    // Per-case plan override: if the case declares a `plan` key, use it; otherwise
+    // fall back to the entry-level plan. This allows plan-malformation cases to
+    // seed a different plan.yaml for each case without changing entry.plan.
+    let plan       = (dict.has(case_obj, "plan") && case_obj.plan != null) ? case_obj.plan : entry.plan;
     let script_key = str.replace(entry.py_script, ".py", "");  // e.g. "advance-checkpoint"
 
     // Source paths (absolute, from repo root)

@@ -1,0 +1,253 @@
+#!/usr/bin/env stash
+// validate-spec.stash <slug?>
+//
+// Stash port of validate-spec.py.
+// Validates the structure of plan.yaml + checkpoint.yaml for an active feature.
+// Exits 0 on success (prints "plan/checkpoint OK for '<slug>': N phases" to stdout).
+// Exits 1 on any structural problem (problems emitted to stderr).
+//
+// Paths resolved relative to CWD (repo root), matching the _common.stash convention.
+
+import { resolve_feature, load_plan, load_checkpoint, save_checkpoint, feature_dir, die } from "_common.stash";
+
+// ── Bounded domains (closed sets — single source of truth) ───────────────────
+
+// Required top-level keys in plan.yaml
+const REQUIRED_PLAN_KEYS = [
+    "schema_version", "feature", "title", "phases"
+];
+
+// Required keys in each phase dict
+const REQUIRED_PHASE_KEYS = [
+    "id", "title", "deps", "files", "verify"
+];
+
+// est_tokens bounds
+const EST_TOKENS_MIN = 5000;
+const EST_TOKENS_MAX = 80000;
+
+// ── Default per-phase state shape (matches advance-checkpoint.stash exactly) ──
+
+fn default_phase_state() {
+    return {
+        status:    "pending",
+        commit:    null,
+        verified:  false,
+        started:   null,
+        completed: null,
+        attempts:  0,
+        notes:     ""
+    };
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+// Argument parsing: one optional positional slug
+const schema = cli.schema({
+    slug: cli.positional("string", { required: false, help: "feature slug (inferred if omitted)" })
+});
+
+const parsed = cli.tryParse(schema);
+if (!parsed.ok) {
+    io.eprintln("error: " + parsed.error.message);
+    env.exit(2);
+}
+
+const args = parsed.value;
+
+let slug = resolve_feature(args.slug);
+let plan = load_plan(slug);
+let cp   = load_checkpoint(slug);
+let fdir = feature_dir(slug);
+
+let problems = [];
+
+// ── plan.yaml checks ─────────────────────────────────────────────────────────
+
+// Check for missing top-level keys
+let missing_plan = [];
+for (let k in REQUIRED_PLAN_KEYS) {
+    if (!dict.has(plan, k)) {
+        arr.push(missing_plan, k);
+    }
+}
+if (missing_plan.length > 0) {
+    // Sort to match Python's sorted(missing)
+    arr.sort(missing_plan);
+    arr.push(problems, "plan.yaml missing keys: " + json.stringify(missing_plan));
+}
+
+// plan `feature` must match slug
+let plan_feature = dict.get(plan, "feature");
+if (plan_feature != slug) {
+    arr.push(problems, "plan.yaml `feature` (" + json.stringify(plan_feature) + ") does not match directory name (" + json.stringify(slug) + ")");
+}
+
+// plan must declare `brief` or `spec`; file must exist
+let brief_rel = dict.get(plan, "brief");
+if (brief_rel == null || brief_rel == "") {
+    brief_rel = dict.get(plan, "spec");
+}
+if (brief_rel == null || brief_rel == "") {
+    arr.push(problems, "plan.yaml must declare `brief: ./brief.md`");
+    // brief_path defaults, but we continue
+} else {
+    let brief_path = fdir + "/" + brief_rel;
+    if (!fs.exists(brief_path)) {
+        arr.push(problems, "brief file not found: " + brief_path);
+    }
+}
+
+// Phases list
+let phases = dict.get(plan, "phases");
+if (phases == null) {
+    phases = [];
+}
+if (phases.length == 0) {
+    arr.push(problems, "plan.yaml has no phases");
+}
+
+// Per-phase checks
+let seen_ids = {};
+for (let i = 0; i < phases.length; i = i + 1) {
+    let ph = phases[i];
+    if (typeof(ph) != "dict") {
+        arr.push(problems, "phase #" + i + " is not a mapping");
+        continue;
+    }
+    // Check required phase keys
+    let missing_p = [];
+    for (let k in REQUIRED_PHASE_KEYS) {
+        if (!dict.has(ph, k)) {
+            arr.push(missing_p, k);
+        }
+    }
+    let pid = dict.get(ph, "id");
+    let pid_label = pid ?? ("#" + i);
+    if (missing_p.length > 0) {
+        arr.sort(missing_p);
+        arr.push(problems, "phase " + pid_label + " missing keys: " + json.stringify(missing_p));
+    }
+
+    // Duplicate phase id check
+    if (pid != null) {
+        if (dict.has(seen_ids, pid)) {
+            arr.push(problems, "duplicate phase id: " + pid);
+        }
+        seen_ids[pid] = true;
+    }
+
+    // Unknown dep check
+    let deps = dict.get(ph, "deps");
+    if (deps == null) { deps = []; }
+    for (let dep in deps) {
+        // Check dep against all plan phase ids
+        let dep_exists = false;
+        for (let ph2 in phases) {
+            if (typeof(ph2) == "dict" && dict.get(ph2, "id") == dep) {
+                dep_exists = true;
+                break;
+            }
+        }
+        if (!dep_exists) {
+            arr.push(problems, "phase " + pid_label + " deps on unknown phase " + dep);
+        }
+    }
+
+    // Empty files list check
+    let ph_files = dict.get(ph, "files");
+    if (ph_files == null || ph_files.length == 0) {
+        arr.push(problems, "phase " + pid_label + " has empty files list (every phase must declare its scope)");
+    }
+
+    // Empty verify list check
+    let ph_verify = dict.get(ph, "verify");
+    if (ph_verify == null || ph_verify.length == 0) {
+        arr.push(problems, "phase " + pid_label + " has empty verify list (every phase must declare how to verify)");
+    }
+
+    // done_when required when brief is present (not just spec)
+    let has_brief = (dict.get(plan, "brief") != null && dict.get(plan, "brief") != "");
+    if (has_brief) {
+        let ph_done_when = dict.get(ph, "done_when");
+        if (ph_done_when == null || ph_done_when.length == 0) {
+            arr.push(problems, "phase " + pid_label + " has empty done_when list (state the end-to-end behavior that proves the phase)");
+        }
+    }
+
+    // est_tokens bounds check
+    let est = dict.get(ph, "est_tokens");
+    if (est != null) {
+        // Mirror Python exactly: non-int OR too-small fires first message
+        if (typeof(est) != "int" || est < EST_TOKENS_MIN) {
+            arr.push(problems, "phase " + pid_label + " est_tokens looks too small (" + est + ")");
+        }
+        // Too-big fires separately, only when it's actually an int
+        if (typeof(est) == "int" && est > EST_TOKENS_MAX) {
+            arr.push(problems, "phase " + pid_label + " est_tokens=" + est + " exceeds 80k — consider splitting");
+        }
+    }
+}
+
+// ── checkpoint.yaml checks ────────────────────────────────────────────────────
+
+let cp_feature = dict.get(cp, "feature");
+if (cp_feature != slug) {
+    arr.push(problems, "checkpoint.yaml `feature` does not match directory name " + json.stringify(slug));
+}
+
+// Ensure cp has a phases dict
+if (!dict.has(cp, "phases")) {
+    cp.phases = {};
+}
+let cp_phases = cp.phases;
+
+// Collect plan phase ids
+let plan_ids = [];
+for (let ph in phases) {
+    if (typeof(ph) == "dict") {
+        let pid = dict.get(ph, "id");
+        if (pid != null) {
+            arr.push(plan_ids, pid);
+        }
+    }
+}
+
+// Collect checkpoint phase ids
+let cp_ids = dict.keys(cp_phases);
+
+// Auto-heal: add missing checkpoint entries for phases present in plan but not checkpoint
+let healed = [];
+// Sort plan_ids to match Python's sorted(plan_ids - cp_ids)
+let missing_cp_ids = arr.filter(plan_ids, (pid) => !arr.contains(cp_ids, pid));
+arr.sort(missing_cp_ids);
+for (let pid in missing_cp_ids) {
+    cp_phases[pid] = default_phase_state();
+    arr.push(healed, pid);
+}
+
+// Stale checkpoint entries: in checkpoint but not in plan
+let stale_ids = arr.filter(cp_ids, (cid) => !arr.contains(plan_ids, cid));
+if (stale_ids.length > 0) {
+    arr.sort(stale_ids);
+    arr.push(problems, "checkpoint.yaml has entries for unknown phases: " + json.stringify(stale_ids) + " (remove manually if intended)");
+}
+
+// Save if healing occurred (happens BEFORE problems check — mirrors Python)
+if (healed.length > 0) {
+    save_checkpoint(slug, cp);
+    io.eprintln("healed checkpoint: added pending entries for " + json.stringify(healed));
+}
+
+// ── Emit results ──────────────────────────────────────────────────────────────
+
+if (problems.length > 0) {
+    io.eprintln("plan/checkpoint validation FAILED for '" + slug + "':");
+    for (let p in problems) {
+        io.eprintln("  - " + p);
+    }
+    env.exit(1);
+}
+
+io.println("plan/checkpoint OK for '" + slug + "': " + phases.length + " phases");
+env.exit(0);

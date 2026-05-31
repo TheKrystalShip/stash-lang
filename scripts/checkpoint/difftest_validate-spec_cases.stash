@@ -1,0 +1,218 @@
+// difftest_validate-spec_cases.stash
+//
+// Case table for the validate-spec differential oracle.
+// Mirrors the structural checks in validate-spec.py.
+//
+// This file is a MODULE — imported by difftest_runner.stash. Not run directly.
+//
+// Exports:
+//   SLUG  — the feature slug used as the fixture kanban dir name
+//   PLAN  — the clean (valid) fixture plan.yaml dict seeded for baseline cases
+//   CASES — array of case dicts
+//
+// Case schema:
+//   name                 — human label for pass/fail reporting
+//   seed_cp              — the checkpoint.yaml dict to seed BEFORE the run
+//   argv                 — array of strings passed after the script name
+//   plan (optional)      — per-case plan.yaml override (if absent, uses entry.plan)
+//   stdout_exact (opt)   — TIGHT stdout assertion (trimmed)
+//   stderr_must_contain  — TIGHT stderr substrings to assert (default: none)
+//   file_mutation (opt)  — set false to skip checkpoint.yaml comparison (default: true)
+
+// ── Fixture slug ────────────────────────────────────────────────────────────
+
+export const SLUG = "difftest-vs";
+
+// ── Clean fixture plan (used for checkpoint-only cases) ─────────────────────
+// Must have:
+//   - brief: "./brief.md"  (seed_tree writes brief.md)
+//   - done_when on every phase (required when brief is present)
+//   - feature == SLUG
+
+export const PLAN = {
+    schema_version: 1,
+    feature:        SLUG,
+    title:          "Diff Test Validate Spec",
+    brief:          "./brief.md",
+    phases: [
+        {
+            id:        "P1",
+            title:     "First",
+            deps:      [],
+            files:     ["x"],
+            verify:    ["true"],
+            done_when: ["phase P1 complete"]
+        },
+        {
+            id:        "P2",
+            title:     "Second",
+            deps:      ["P1"],
+            files:     ["y"],
+            verify:    ["true"],
+            done_when: ["phase P2 complete"]
+        }
+    ]
+};
+
+// ── Helper: default per-phase state (matches advance-checkpoint + validate-spec) ──
+
+fn phase_default() {
+    return {
+        status:    "pending",
+        commit:    null,
+        verified:  false,
+        started:   null,
+        completed: null,
+        attempts:  0,
+        notes:     ""
+    };
+}
+
+// ── Helper: build a clean checkpoint seed dict ──────────────────────────────
+
+fn cp_clean(phases) {
+    return {
+        schema_version: 1,
+        feature:        SLUG,
+        current:        null,
+        updated:        "2026-01-01T00:00:00Z",
+        phases:         phases
+    };
+}
+
+// ── Case list ────────────────────────────────────────────────────────────────
+
+export const CASES = [
+    // ── 1. Clean spec: valid plan + complete checkpoint ──────────────────────
+    // exit 0 + exact success stdout; no heal
+    {
+        name:         "clean spec",
+        seed_cp:      cp_clean({ P1: phase_default(), P2: phase_default() }),
+        argv:         [SLUG],
+        stdout_exact: "plan/checkpoint OK for 'difftest-vs': 2 phases",
+        file_mutation: true
+    },
+
+    // ── 2. Missing plan key (title) ─────────────────────────────────────────
+    // plan missing 'title'; exit 1
+    {
+        name:    "missing plan key: title",
+        seed_cp: cp_clean({ P1: phase_default(), P2: phase_default() }),
+        argv:    [SLUG],
+        plan:    {
+            schema_version: 1,
+            feature:        SLUG,
+            brief:          "./brief.md",
+            phases: [
+                { id: "P1", title: "First",  deps: [], files: ["x"], verify: ["true"], done_when: ["done"] },
+                { id: "P2", title: "Second", deps: ["P1"], files: ["y"], verify: ["true"], done_when: ["done"] }
+            ]
+        }
+    },
+
+    // ── 3. Missing phase key (verify) ───────────────────────────────────────
+    // phase P1 missing 'verify'; exit 1
+    {
+        name:    "missing phase key: verify",
+        seed_cp: cp_clean({ P1: phase_default(), P2: phase_default() }),
+        argv:    [SLUG],
+        plan:    {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Validate Spec",
+            brief:          "./brief.md",
+            phases: [
+                { id: "P1", title: "First",  deps: [], files: ["x"], done_when: ["done"] },
+                { id: "P2", title: "Second", deps: ["P1"], files: ["y"], verify: ["true"], done_when: ["done"] }
+            ]
+        }
+    },
+
+    // ── 4. Duplicate phase id ────────────────────────────────────────────────
+    // two phases with id "P1"; exit 1
+    {
+        name:    "duplicate phase id",
+        seed_cp: cp_clean({ P1: phase_default() }),
+        argv:    [SLUG],
+        plan:    {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Validate Spec",
+            brief:          "./brief.md",
+            phases: [
+                { id: "P1", title: "First",  deps: [], files: ["x"], verify: ["true"], done_when: ["done"] },
+                { id: "P1", title: "Second", deps: [], files: ["y"], verify: ["true"], done_when: ["done"] }
+            ]
+        }
+    },
+
+    // ── 5. Unknown dep ───────────────────────────────────────────────────────
+    // P2 deps on "P99" which doesn't exist; exit 1
+    {
+        name:    "unknown dep",
+        seed_cp: cp_clean({ P1: phase_default(), P2: phase_default() }),
+        argv:    [SLUG],
+        plan:    {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Validate Spec",
+            brief:          "./brief.md",
+            phases: [
+                { id: "P1", title: "First",  deps: [],      files: ["x"], verify: ["true"], done_when: ["done"] },
+                { id: "P2", title: "Second", deps: ["P99"], files: ["y"], verify: ["true"], done_when: ["done"] }
+            ]
+        }
+    },
+
+    // ── 6. est_tokens too small (< 5000) ────────────────────────────────────
+    // phase P1 has est_tokens: 100; exit 1
+    {
+        name:    "est_tokens too small",
+        seed_cp: cp_clean({ P1: phase_default(), P2: phase_default() }),
+        argv:    [SLUG],
+        plan:    {
+            schema_version: 1,
+            feature:        SLUG,
+            title:          "Diff Test Validate Spec",
+            brief:          "./brief.md",
+            phases: [
+                { id: "P1", title: "First",  deps: [], files: ["x"], verify: ["true"], done_when: ["done"], est_tokens: 100 },
+                { id: "P2", title: "Second", deps: ["P1"], files: ["y"], verify: ["true"], done_when: ["done"] }
+            ]
+        }
+    },
+
+    // ── 7. Auto-heal mutation ────────────────────────────────────────────────
+    // checkpoint missing P2 entry; validate-spec must add it and save checkpoint.
+    // file_mutation: true (default) → oracle diffs the resulting checkpoint.yaml
+    // exit 0 (heal doesn't constitute a problem)
+    {
+        name:         "auto-heal: missing checkpoint entry",
+        seed_cp:      cp_clean({ P1: phase_default() }),   // P2 absent
+        argv:         [SLUG],
+        stdout_exact: "plan/checkpoint OK for 'difftest-vs': 2 phases",
+        file_mutation: true
+    },
+
+    // ── 8. Stale checkpoint entry ────────────────────────────────────────────
+    // checkpoint has "P99" entry that isn't in plan; exit 1
+    {
+        name:    "stale checkpoint entry",
+        seed_cp: cp_clean({ P1: phase_default(), P2: phase_default(), P99: phase_default() }),
+        argv:    [SLUG]
+    },
+
+    // ── 9. Checkpoint feature mismatch ──────────────────────────────────────
+    // checkpoint.feature != slug; exit 1
+    {
+        name:    "checkpoint feature mismatch",
+        seed_cp: {
+            schema_version: 1,
+            feature:        "wrong-feature",
+            current:        null,
+            updated:        "2026-01-01T00:00:00Z",
+            phases:         { P1: phase_default(), P2: phase_default() }
+        },
+        argv:    [SLUG]
+    }
+];
