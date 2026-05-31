@@ -59,19 +59,19 @@ scales to size: full specs for the big projects, a single batched pass for the t
   Construct, so the unit is small). **⏸ Milestone paused 2026-05-31** after proving the protocol
   end-to-end through spec. Resume by implementing P1: from the worktree run
   `/resume stdlib-omission-hardening`, or check state with `/milestone omission-hardening`.
-- Later (survey-driven — see `survey.md`, 2026-05-31): **`bytecode`** (Tier A — verifier has no
-  throwing default; silent opcode-verification bypass) → **`analysis`** (Tier A — hand-list
-  `RuleRegistry`; a new rule silently never fires) → **`keyword-vocabulary-sync`** (cross-project:
-  Core Lexer ↔ Playground Monarch ↔ VSCode TextMate; confirmed desync) → **`lsp`+`dap`** (Tier B,
-  mostly Detect-meta-test ceiling due to DI/reflection) → `cli` / `registry-nonauthz` / `scheduler`
-  / `tpl` (Tier C). Core / Format / Docs / Tap are **mostly already Construct** (Tier D) —
-  confirmation only, likely no unit.
-- **Cross-project concerns** (surfaced by surveying holistically; a per-project spec would miss
-  them): keyword vocabulary (3 grammars), symbol/value-kind→presentation (Lsp+Dap), rule registry
-  (Analysis+Check). See `survey.md`.
-- **Excluded:** `Stash.Registry` AUTHZ is already hardened (PDP + `AuthzDispatchCoverageMetaTests`,
-  shipped via `registry-authz-filter`/`-pdp-completion`); only *non-authz* registry concerns remain
-  (Tier C). `Stash.Tests` is out of scope — it *is* the Detect layer.
+- Later (survey-driven + adversarially verified — see `survey.md`): **`analysis`** (strongest —
+  hand-list `RuleRegistry`, a new rule silently never fires; CONFIRMED) → **`bytecode`** (verifier
+  skips multi-register-range bounds checks; REFINED/real) → **`lsp`+`dap`** (concrete small fixes;
+  ceiling mostly Detect) → `tpl` / `cli` / `scheduler` (Tier C, confirmed-MED) →
+  `keyword-vocabulary-sync` (LOW/cosmetic — small meta-test). Core / Format / Docs / Tap are
+  confirmation-only.
+- **Cross-project concerns** (surveying holistically surfaced these; a per-project spec would miss
+  them): **visitor exhaustiveness** — the 6-visitor pattern has a *default-throw escape hatch* on 4
+  export methods, so the "reference" isn't fully Construct (rides with `analysis`); symbol/value-kind
+  →presentation (Lsp+Dap); keyword vocabulary (3 grammars). See `survey.md`.
+- **Excluded:** `Stash.Registry` AUTHZ is hardened (PDP + `AuthzDispatchCoverageMetaTests`). Registry
+  *non-authz* exception-mapping was a batch-1 finding **refuted** in verification (generic ASP.NET 500,
+  not an omission) — dropped. `Stash.Tests` is out of scope — it *is* the Detect layer.
 
 ### Decisions & learnings (append as you go)
 
@@ -82,6 +82,7 @@ scales to size: full specs for the big projects, a single batched pass for the t
 | 2026-05-31 | Phase-1 verification found `Stability` is **one concern with two participants** (runtime `NamespaceMemberPayload.Invoke` + generator `BuildMember`); seed findings named only one. | The doctrine caught a gap in its own audit — exactly the omission shape the milestone exists to prevent. |
 | 2026-05-31 | `milestone-status.py` now scans all git worktrees (deduped by slug). | Found by trying it out: a unit built in a worktree was invisible to `/milestone` run from main until merge. |
 | 2026-05-31 | Step-1 survey done (10 parallel explorers) → `survey.md`. Order is now survey-driven, not layer-up: `bytecode` and `analysis` lead. Architects deliberately NOT parallelized. | Specs are not independent (rolling-wave): cross-project concerns (keyword vocab, kind→presentation, rule registry) only surfaced by surveying holistically; a per-project architect would miss them. All findings are unverified hypotheses — each spec's phase-1 verifies. |
+| 2026-05-31 | Batch-2 ADVERSARIAL pass (skeptics tasked to refute) reconciled the survey. Net: 2 refutations (registry-nonauthz, OpcodeOperands), Dap overstated 8→3, keyword downgraded to cosmetic, +1 new finding (visitor default-throw escape hatch). Order re-led by `analysis`. | A real false-positive rate confirms "finders find work"; the adversarial inversion (default-refute, confirm-with-code) is the cheap antidote. Lead with the finding that survived a skeptic trying to kill it. |
 
 ### Open questions
 

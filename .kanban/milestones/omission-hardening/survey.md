@@ -45,12 +45,38 @@ why the survey ran before any spec:
    Shared `SymbolKind` exhaustiveness; pairs naturally with the Lsp+Dap units.
 3. **Rule registry** — `Stash.Analysis` `RuleRegistry` is also consumed by `Stash.Check`; harden once.
 
-## Recommended rolling-wave order (revisable)
+## Verification pass — batch 2 (adversarial, 2026-05-31)
+
+A second batch of explorers was sent as **skeptics** (default verdict REFUTED; confirm only by
+quoting the exact unguarded code) against batch-1's specific claims. This counters the "finders
+find work" bias by inverting the incentive. Reconciled verdicts:
+
+| Finding (batch 1) | Batch-2 verdict | Reconciled |
+| --- | --- | --- |
+| Analysis `RuleRegistry` hand-list → new rule silently never fires | **CONFIRMED** (no meta-test enumerates `IAnalysisRule` impls vs registry) | **HIGH — strongest, most concrete finding.** Lead unit. |
+| Bytecode verifier "no default, 20 opcodes skip ALL validation" | **REFINED** — two generic guards run before the switch (`IsDefined` + A-reg bounds), so not "no validation". BUT a sharper real gap: multi-register-range opcodes (`Call`,`NewArray`,`Interpolate`,`Command`,…) skip B/C/companion **register-bounds** checks → out-of-bounds regs pass verification, crash at runtime. | **MED-HIGH — real, narrower than claimed.** Unit justified on the multi-register-bounds gap specifically. |
+| Dap "8 value kinds silently unexpandable" | **REFINED** — only **3** are real gaps (`StashFrozenArray`,`StashDuration`,`StashStreamingProcess`); the other ~5 are legitimately non-expandable leaves where empty is correct. | **MED — overstated 8→3.** `StashFrozenArray` is the clear bug. |
+| Lsp handler/legend/completion gaps | **CONFIRMED** — and found concrete present bugs: `MapMemberKind`/`MapBareIdentifierKind` silently drop `Method` and `Interface` to Text/null. | **MED — ceiling is mostly Detect** (DI/legend can't be Construct), plus one real Construct fix (2 missing switch cases). |
+| Registry (non-authz) exception→500 "scattered, missing handler" | **REFUTED** — it's ASP.NET's standard implicit 500 fallback, not a registry-specific scattered mapping. | **DROP — false positive.** |
+| Bytecode `OpcodeOperands` -1 fallback "silently disables DCE" | **REFUTED** — the -1 is intentional/correct (opcode writes no single reg); at most a conservative-optimization choice, not a bug. | **DROP — non-bug.** |
+| Scheduler `ServiceState _ => Unknown` ×3 platforms | **CONFIRMED** | **MED** (observability misreport, not safety). |
+| Tpl filter `switch` DETECT; Cli magic exit codes | **CONFIRMED** | **MED** each. |
+| **Core "the reference, fully Construct"** | **REFINED (enhancement)** — BOTH the Core and Analysis skeptics independently found the visitor interfaces define 4 export methods as **default-throw** (not abstract): a node added that way does NOT force the 6 visitors → silent runtime gap. The reference has a hole. | **NEW cross-cutting unit candidate:** harden visitor exhaustiveness (kill the default-throw escape hatch / meta-test that no visitor method has a `NotImplementedException` default). |
+| Keyword vocabulary desync (Playground) | **CONFIRMED but COSMETIC** — Playground lists phantom keywords (`spawn`,`typeof`,`delete`,`match`,`onRetry`,`until`); `true/false/null` are correctly under `builtinConstants`. UX/highlighting, not correctness. | **LOW — downgrade.** Latent real risk (add keyword, forget grammar) keeps a small meta-test worthwhile. |
+
+**Meta-result:** of batch-1's headline findings, the second pass produced **2 refutations** (Registry,
+OpcodeOperands), **1 material overstatement** (Dap 8→3), **2 downgrades** (keyword cosmetic, Lsp
+Detect-ceiling), **confirmations** of Analysis/Scheduler/Tpl/Cli, and **1 new finding** (visitor
+default-throw escape hatch). A real false-positive rate — exactly why the adversarial pass was worth
+running, and why each unit's `/spec` phase-1 still re-verifies.
+
+## Recommended rolling-wave order (reconciled, revisable)
 
 1. **`stdlib`** — in flight (unit 1).
-2. **`bytecode`** — Tier A, highest-confidence safety gap (silent verifier bypass). True Construct (throwing default).
-3. **`analysis`** — Tier A, "new rule silently never fires" is a real correctness gap.
-4. **`keyword-vocabulary-sync`** — cross-project unit (Core + Playground + VSCode); concrete desync, clean Detect meta-test.
-5. **`lsp`+`dap`** (paired) — Tier B; mostly Detect-meta-test ceiling (DI/reflection), record justification.
-6. **`cli` / `registry-nonauthz` / `scheduler` / `tpl`** — Tier C, as appetite allows.
-7. **Core / Format / Docs / Tap** — Tier D, confirmation only; likely no unit (fold Core's keyword bit into #4).
+2. **`analysis`** — strongest, highest-confidence: `RuleRegistry` auto-discovery (or enumerating meta-test) so a new rule can't silently never-fire. Also folds the visitor default-throw fix (shared with Core).
+3. **`bytecode`** — real safety gap, narrowed: verifier must bounds-check multi-register-range opcodes. (Generic A-check + dispatch-throw already mitigate the worst case.)
+4. **`lsp`+`dap`** (paired) — concrete small fixes (Lsp: add `Method`/`Interface` cases + Detect meta-tests; Dap: `StashFrozenArray` expansion + handler meta-test). Ceiling mostly Detect — record the justification.
+5. **`tpl` / `cli` / `scheduler`** — Tier C, confirmed-MED, as appetite allows.
+6. **`keyword-vocabulary-sync`** — LOW/cosmetic; small meta-test only.
+7. **Core / Format / Docs / Tap** — confirmation only; the one real Core item (visitor escape hatch) rides with `analysis` (#2).
+- **Dropped:** `registry-nonauthz` (refuted — generic ASP.NET 500, not an omission).
