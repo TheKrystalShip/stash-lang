@@ -270,6 +270,15 @@ record_pair '[.]'                        'x'
 record_pair '[\\]'                       '\'
 record_pair '[\\]'                       'x'
 
+# B9: POSIX bracket classes — NOT supported by Stash (documented divergence, F07).
+# Bash [[:digit:]] matches digits; Stash treats the POSIX delimiters as literal
+# class members and does NOT recognize the POSIX class. Both bash and Stash agree
+# that a non-digit non-class-member character does NOT match, so these rows are
+# safe oracle rows that lock the current behaviour without exposing disagreement.
+# A future maintainer adding POSIX support should update these rows accordingly.
+record_pair '[[:digit:]]'                'x'
+record_pair '[[:alpha:]]'                '1'
+
 # ---------------------------------------------------------------------------
 # Step 3: Emit sorted TSV rows.
 # ---------------------------------------------------------------------------

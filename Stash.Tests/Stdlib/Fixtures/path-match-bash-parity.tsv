@@ -2666,6 +2666,8 @@ Stash.[^T]ore/**	Stash.Tore/Foo.cs	false
 [Ss]tash.Core/**	Stash.Core/Foo.cs	true
 [Ss]tash.Core/**	Xtash.Core/Foo.cs	false
 [Ss]tash.Core/**	stash.Core/Foo.cs	true
+[[:alpha:]]	1	false
+[[:digit:]]	x	false
 [\\]	\	true
 [\\]	x	false
 [\d]	1	false

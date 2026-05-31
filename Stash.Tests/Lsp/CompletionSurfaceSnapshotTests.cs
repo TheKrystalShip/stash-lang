@@ -120,6 +120,20 @@ public class CompletionSurfaceSnapshotTests
     }
 
     /// <summary>
+    /// Verifies that <c>path.</c> dot-completion surfaces <c>match</c> as a member.
+    /// This pins the brief's Acceptance Criteria: "path.match appears in completion at a
+    /// cursor inside a path. member access". The same <see cref="BuiltInNamespaceDotStrategy"/>
+    /// path serves all namespaces, so this fact also acts as a canary for the <c>path</c>
+    /// namespace registration end-to-end (registry → strategy → completion handler).
+    /// </summary>
+    [Fact]
+    public void PathDot_ContainsMatch()
+    {
+        var labels = InvokeDotCompletion("path").Select(i => i.Label).ToHashSet();
+        Assert.Contains("match", labels);
+    }
+
+    /// <summary>
     /// User enum dot-access surfaces exactly the declared members in declaration order
     /// — nothing more, nothing less. Independent of stdlib evolution.
     /// </summary>
