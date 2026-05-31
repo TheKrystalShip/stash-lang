@@ -1,16 +1,16 @@
 schema_version: 1
 feature: checkpoint-scripts-stash-port
 current: null
-updated: '2026-05-31T21:54:58Z'
+updated: '2026-05-31T22:22:05Z'
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: cb44f3ef5bd00e8f0ed1c04543df9fef165846b2
+    verified: true
+    started: '2026-05-31T22:13:27Z'
+    completed: '2026-05-31T22:22:05Z'
+    attempts: 1
+    notes: _common.stash 11 exports + lint guard with self-test + coverage stub
   P2:
     status: pending
     commit: null
