@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-scripts-stash-port
 current: null
-updated: '2026-05-31T22:38:13Z'
+updated: '2026-05-31T22:49:34Z'
 phases:
   P1:
     status: done
@@ -21,13 +21,14 @@ phases:
     notes: 'difftest_runner.stash: 16/16 advance-checkpoint cases pass; self-test, coverage-check, lint
       all green'
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e7a29b004f5fcfc441a90d64559d15a7986f5e39
+    verified: true
+    started: '2026-05-31T22:39:23Z'
+    completed: '2026-05-31T22:49:34Z'
+    attempts: 1
+    notes: validate-spec.stash 9/9 oracle cases pass; runner extended with per-case plan override; lint+coverage
+      green
   P4:
     status: pending
     commit: null
