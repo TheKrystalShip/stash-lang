@@ -1,0 +1,211 @@
+#!/usr/bin/env stash
+// advance-checkpoint.stash <slug> <phase-id> <status> [--commit SHA] [--notes "..."]
+//                          [--verified true|false] [--review-status STATUS]
+//
+// Stash port of advance-checkpoint.py (checkpoint-script-rewrite Milestone A pilot).
+// Behaviour-equivalent to the Python original; written idiomatically in Stash.
+//
+// Atomically updates checkpoint.yaml for a phase. Drives the state machine:
+//
+//   pending -> in_progress   (set started, attempts++)
+//   in_progress -> done      (set completed, verified, commit; clear `current`)
+//   in_progress -> failed    (set notes; leave `current` set)
+//   failed -> in_progress    (retry; attempts++)
+//
+// For review state, pass `--review-status not_started|in_progress|resolved` (no
+// phase-id needed, pass `-` as phase-id).
+//
+// Paths are resolved relative to the current working directory (the checkpoint
+// workflow always invokes these scripts from the repo root), unlike the Python
+// original which resolves from its own __file__ location.
+
+// ── Bounded domains (no magic strings: the legal sets live here, once) ──────────
+const VALID = ["pending", "in_progress", "done", "failed"];
+
+// Legal (from -> to) transitions, modelled as a nested dict-of-bools keyed by
+// state name. Every state name is a valid identifier, so identifier-key dict
+// literals suffice (the parser rejects string-literal keys — see Milestone A notes).
+const TRANSITIONS = {
+    pending:     { in_progress: true, pending: true },   // pending->pending idempotent
+    in_progress: { done: true, failed: true },
+    failed:      { in_progress: true },
+    done:        { done: true }                          // done->done idempotent
+};
+
+// ── Shared helpers (ported from _common.py) ─────────────────────────────────────
+
+/// UTC ISO-8601 second-precision timestamp, e.g. "2026-05-31T20:07:01Z".
+/// Matches Python's datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ").
+fn now_iso() {
+    return time.format(time.now(), "yyyy-MM-dd'T'HH:mm:ss'Z'");
+}
+
+/// Print an error to stderr and exit with the given code (default 1).
+fn die(msg, code) {
+    io.eprintln("error: " + msg);
+    env.exit(code);
+}
+
+/// Resolve a feature's directory: prefer 2-in-progress/, fall back to 4-done/
+/// (so callers that re-run after /done still resolve the same slug). Dies if
+/// neither exists.
+fn feature_dir(slug) {
+    let inprog = ".kanban/2-in-progress/" + slug;
+    if (fs.dirExists(inprog)) {
+        return inprog;
+    }
+    let done = ".kanban/4-done/" + slug;
+    if (fs.dirExists(done)) {
+        return done;
+    }
+    die("feature directory not found in 2-in-progress/ or 4-done/: " + slug, 1);
+}
+
+/// Load a YAML file as a mapping, dying on a missing file or non-mapping content.
+fn load_yaml(path) {
+    if (!fs.exists(path)) {
+        die("file not found: " + path, 1);
+    }
+    let data = yaml.parse(fs.readFile(path));
+    if (typeof(data) != "dict") {
+        die(path + " did not parse to a mapping", 1);
+    }
+    return data;
+}
+
+fn load_checkpoint(slug) {
+    return load_yaml(feature_dir(slug) + "/checkpoint.yaml");
+}
+
+fn load_plan(slug) {
+    return load_yaml(feature_dir(slug) + "/plan.yaml");
+}
+
+/// Atomic write: serialize to a sibling .tmp file, then move it into place.
+fn save_yaml(path, data) {
+    let tmp = path + ".tmp";
+    fs.writeFile(tmp, yaml.stringify(data));
+    fs.move(tmp, path, true);
+}
+
+/// Stamp `updated` and persist the checkpoint.
+fn save_checkpoint(slug, data) {
+    data.updated = now_iso();
+    save_yaml(feature_dir(slug) + "/checkpoint.yaml", data);
+}
+
+/// Validate that a phase id exists in the plan; dies otherwise.
+fn require_phase(plan, pid) {
+    let phases = dict.get(plan, "phases") ?? [];
+    let found = arr.find(phases, (ph) => dict.get(ph, "id") == pid);
+    if (found == null) {
+        die("phase " + pid + " not found in plan.yaml", 1);
+    }
+}
+
+/// Is (cur -> nxt) a legal state-machine transition?
+fn can_transition(cur, nxt) {
+    let inner = dict.get(TRANSITIONS, cur);
+    if (inner == null) {
+        return false;
+    }
+    return dict.get(inner, nxt) == true;
+}
+
+// ── Argument parsing ─────────────────────────────────────────────────────────
+const schema = cli.schema({
+    slug:          cli.positional("string", { help: "feature slug" }),
+    phase_id:      cli.positional("string", { help: "phase id, or '-' when only updating review state" }),
+    status:        cli.positional("string", { required: false, help: "one of pending|in_progress|done|failed (omit for review-only updates)" }),
+    commit:        cli.option("string", { default: null, help: "commit SHA to record on the phase" }),
+    notes:         cli.option("string", { default: null, help: "free-text notes for the phase" }),
+    verified:      cli.option("string", { default: null, choices: ["true", "false"], help: "mark the phase verified" }),
+    review_status: cli.option("string", { name: "review-status", default: null,
+                                           choices: ["not_started", "in_progress", "resolved"],
+                                           help: "update review state (no phase-id needed)" })
+});
+
+const parsed = cli.tryParse(schema);
+if (!parsed.ok) {
+    io.eprintln("error: " + parsed.error.message);
+    env.exit(2);
+}
+const args = parsed.value;
+
+// ── Main ─────────────────────────────────────────────────────────────────────
+let cp = load_checkpoint(args.slug);
+
+if (args.phase_id != "-") {
+    if (args.status == null || !(args.status in VALID)) {
+        die("status must be one of ['done', 'failed', 'in_progress', 'pending']", 1);
+    }
+    let plan = load_plan(args.slug);
+    require_phase(plan, args.phase_id);   // validates id exists in plan
+
+    // setdefault cp["phases"]
+    if (!dict.has(cp, "phases")) {
+        cp.phases = dict.new();
+    }
+    let phases = cp.phases;
+
+    // setdefault the per-phase state
+    if (!dict.has(phases, args.phase_id)) {
+        phases[args.phase_id] = {
+            status: "pending", commit: null, verified: false,
+            started: null, completed: null, attempts: 0, notes: ""
+        };
+    }
+    let state = phases[args.phase_id];
+    let cur = dict.get(state, "status") ?? "pending";
+
+    if (!can_transition(cur, args.status)) {
+        die("illegal transition " + cur + " -> " + args.status + " for phase " + args.phase_id, 1);
+    }
+
+    if (cur != "in_progress" && args.status == "in_progress") {
+        state.started = now_iso();
+        state.attempts = (dict.get(state, "attempts") ?? 0) + 1;
+        cp.current = args.phase_id;
+    }
+    if (args.status == "done") {
+        state.completed = now_iso();
+        if (dict.get(cp, "current") == args.phase_id) {
+            cp.current = null;
+        }
+    }
+    if (args.status == "failed") {
+        // Keep `current` pointing at the failed phase so /resume notices it.
+        cp.current = args.phase_id;
+    }
+
+    state.status = args.status;
+    if (args.commit != null) {
+        state.commit = args.commit;
+    }
+    if (args.verified != null) {
+        state.verified = (args.verified == "true");
+    }
+    if (args.notes != null) {
+        state.notes = args.notes;
+    }
+}
+
+if (args.review_status != null) {
+    if (!dict.has(cp, "review")) {
+        cp.review = dict.new();
+    }
+    let review = cp.review;
+    review.status = args.review_status;
+    if (args.review_status == "in_progress") {
+        let started = dict.get(review, "started");
+        if (started == null || started == "") {
+            review.started = now_iso();
+        }
+    }
+    if (args.review_status == "resolved") {
+        review.resolved = now_iso();
+    }
+}
+
+save_checkpoint(args.slug, cp);
+io.eprintln("checkpoint updated: " + args.slug);
