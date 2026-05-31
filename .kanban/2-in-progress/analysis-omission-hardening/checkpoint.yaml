@@ -1,7 +1,7 @@
 schema_version: 1
 feature: analysis-omission-hardening
 current: null
-updated: '2026-05-31T12:51:08Z'
+updated: '2026-05-31T12:55:30Z'
 phases:
   P1:
     status: done
@@ -15,13 +15,14 @@ phases:
       for P3. Deltas logged: ''single call site'' nuance, Configure vs ApplyOptions, Category is string
       not enum, two ScopeKind enums.'
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e6602024e2be574bb124b67c2dddb750fc6b4436
+    verified: true
+    started: '2026-05-31T12:52:39Z'
+    completed: '2026-05-31T12:55:30Z'
+    attempts: 1
+    notes: 4 export methods made abstract (no default-throw body); dotnet build green on first try; VisitorEscapeHatchMetaTests
+      ships with fail-path self-test, all 3 tests pass
   P3:
     status: pending
     commit: null
