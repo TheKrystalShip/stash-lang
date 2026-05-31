@@ -14,8 +14,10 @@
 //       assert the runner correctly reports FAIL. Exit 0 only if detected.
 //
 // Architecture:
-//   1. A static registry maps script-name → {cases, slug, plan} (see REGISTRY).
-//      Adding a ported script requires: one import + one registry entry here.
+//   1. build_registry() globs scripts/checkpoint/ for difftest_*_cases.stash files
+//      and dynamically imports each one at startup. Module paths are importing-file-
+//      relative (basename only). Adding a ported script needs NO runner edit — just
+//      drop a new difftest_<script>_cases.stash file.
 //   2. For each case, two isolated fixture trees (py and stash) are seeded:
 //      - git init -q <tree>  (so git worktree list works in P7/P8)
 //      - .kanban/2-in-progress/<slug>/{brief.md, plan.yaml, checkpoint.yaml}
@@ -23,12 +25,12 @@
 //   3. Both sides are run via process.exec (cwd=tree; strict=false → captures exit).
 //   4. Comparison: exit EXACT (HARD); configured TIGHT axes EXACT; stderr SOFT.
 
-// ── Case table imports (append-only; each new script-phase adds one line) ──
-// (Imports must appear before any non-import top-level declarations.)
-import "difftest_advance-checkpoint_cases.stash" as _ac_cases;
-import "difftest_validate-spec_cases.stash" as _vs_cases;
-
 // ── Bounded domains (closed sets pinned as named consts, never inlined) ─────
+
+// Case-table file naming convention (used by build_registry)
+const CASES_PREFIX = "difftest_";
+const CASES_SUFFIX = "_cases.stash";
+
 const TIGHT_AXES       = ["exit", "stdout_exact", "stderr_must_contain", "file_mutation"];
 const SOFT_AXES        = ["stderr"];
 const TS_ROOT_FIELDS   = ["updated"];
@@ -59,19 +61,61 @@ fn resolve_stash_bin() {
 // Stash binary path (resolved once at startup; fn must be defined above this).
 const STASH_BIN = resolve_stash_bin();
 
-// ── Registry (script-name → table; append one entry per ported script) ─────
-const REGISTRY = {
-    "advance-checkpoint": { cases: _ac_cases.CASES, slug: _ac_cases.SLUG, plan: _ac_cases.PLAN,
-                             py_script: "advance-checkpoint.py",
-                             st_script: "advance-checkpoint.stash",
-                             py_common: "_common.py",
-                             st_common: "_common.stash" },
-    "validate-spec":      { cases: _vs_cases.CASES, slug: _vs_cases.SLUG, plan: _vs_cases.PLAN,
-                             py_script: "validate-spec.py",
-                             st_script: "validate-spec.stash",
-                             py_common: "_common.py",
-                             st_common: "_common.stash" }
-};
+/// Build the registry dict by glob-discovering all difftest_*_cases.stash files
+/// in the scripts/checkpoint directory and dynamically importing each one.
+/// Module paths are importing-file-relative, so tables import by basename only.
+/// Adding a ported script requires NO edit to this file — only a new case table.
+///
+/// Optional META override: if a case table exports a META dict, its keys
+/// (py_script, st_script, py_common, st_common) override the convention defaults.
+/// This lets scripts with non-conventional invocations declare their overrides
+/// in the case table without touching the runner.
+fn build_registry(repo_root) {
+    let cp_dir   = repo_root + "/scripts/checkpoint";
+    let entries  = fs.listDir(cp_dir, CASES_PREFIX + "*" + CASES_SUFFIX);
+    let registry = {};
+
+    for (let full_path in entries) {
+        let base        = path.base(full_path);
+        let script_name = str.replace(str.replace(base, CASES_PREFIX, ""), CASES_SUFFIX, "");
+
+        // Dynamic import by basename — resolution is relative to this file's directory
+        // (scripts/checkpoint/), so no path prefix needed.
+        import (base) as t;
+
+        // Convention defaults
+        let py_script = script_name + ".py";
+        let st_script = script_name + ".stash";
+        let py_common = "_common.py";
+        let st_common = "_common.stash";
+
+        // Optional META override from the case table
+        let meta = null;
+        try {
+            meta = t.META;
+        } catch (RuntimeError _) {
+            // META not exported — use convention defaults
+        }
+        if (meta != null) {
+            if (dict.has(meta, "py_script")) { py_script = dict.get(meta, "py_script"); }
+            if (dict.has(meta, "st_script")) { st_script = dict.get(meta, "st_script"); }
+            if (dict.has(meta, "py_common")) { py_common = dict.get(meta, "py_common"); }
+            if (dict.has(meta, "st_common")) { st_common = dict.get(meta, "st_common"); }
+        }
+
+        registry[script_name] = {
+            cases:     t.CASES,
+            slug:      t.SLUG,
+            plan:      t.PLAN,
+            py_script: py_script,
+            st_script: st_script,
+            py_common: py_common,
+            st_common: st_common
+        };
+    }
+
+    return registry;
+}
 
 /// Deep-equal comparison for two values (dicts are order-insensitive key-set equal).
 /// Returns true if structurally and value-equal.
@@ -414,9 +458,10 @@ fn run_self_test(repo_root) {
         env.exit(1);
     }
 
-    let slug    = _ac_cases.SLUG;
-    let plan    = _ac_cases.PLAN;
-    let seed_cp = {
+    let ac_entry = dict.get(REGISTRY, "advance-checkpoint");
+    let slug     = ac_entry.slug;
+    let plan     = ac_entry.plan;
+    let seed_cp  = {
         schema_version: 1,
         feature:        slug,
         current:        null,
@@ -498,6 +543,10 @@ const args = parsed.value;
 
 // Repo root = CWD (the checkpoint workflow always runs from repo root)
 const REPO_ROOT = path.abs(env.cwd);
+
+// Registry built once at startup by glob-discovering case tables (build_registry
+// must be defined above this line).
+const REGISTRY = build_registry(REPO_ROOT);
 
 io.println("stash binary: " + STASH_BIN);
 
