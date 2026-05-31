@@ -1,0 +1,249 @@
+# plan.yaml — checkpoint-scripts-stash-port
+#
+# Faithful Stash port of the deterministic checkpoint-workflow scripts.
+# Pilot (advance-checkpoint.stash) is already committed; this plan ports the rest.
+# Each phase keeps an existing .py/.sh original load-bearing and ADDS a .stash twin
+# proven byte-equivalent by a per-script differential oracle (generalized in phase 2).
+#
+# Validate: python3 scripts/checkpoint/validate-spec.py checkpoint-scripts-stash-port
+
+schema_version: 1
+
+feature: checkpoint-scripts-stash-port
+title: "Checkpoint scripts: faithful Stash port (Milestone A)"
+
+brief: ./brief.md
+
+created: 2026-05-31
+architect_session: spec-2026-05-31
+
+# Default verify on every phase — cheap. Ensures the Construct chokepoint stays
+# intact (every ported .stash imports _common.stash and never re-defines a helper),
+# and that every ported script has a registered oracle case table.
+default_verify:
+  - stash scripts/checkpoint/lint_common_imports.stash
+  - stash scripts/checkpoint/difftest_coverage_check.stash
+
+# Safety rail. The whole feature lives under scripts/checkpoint/, .claude/, and
+# the feature dir itself. Touching anything else is a planning mistake.
+scope:
+  - scripts/checkpoint/**
+  - .claude/commands/**
+  - .claude/agents/**
+  - .kanban/2-in-progress/checkpoint-scripts-stash-port/**
+
+phases:
+  - id: P1
+    title: "_common.stash chokepoint + import lint"
+    deps: []
+    files:
+      - scripts/checkpoint/_common.stash
+      - scripts/checkpoint/lint_common_imports.stash
+      - scripts/checkpoint/lint_common_imports.fixtures/**
+    verify:
+      # The import lint must run green AND prove its teeth on a fail-path fixture.
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/lint_common_imports.stash --self-test
+      # The pilot must still pass — _common.stash must not break advance-checkpoint.stash.
+      - python3 scripts/checkpoint/difftest_advance_checkpoint.py
+    done_when:
+      - "_common.stash exports: now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml, load_plan, load_checkpoint, save_checkpoint, phase_by_id, expand_globs — each one behaviour-equivalent to its _common.py counterpart on a unit-case sweep run by the import lint."
+      - "lint_common_imports.stash scans every scripts/checkpoint/*.stash (except _common.stash, difftest_runner.stash, and pinned allow-list) and FAILS when a scanned file imports zero symbols from _common.stash, OR defines a function whose name shadows a _common.stash export."
+      - "lint_common_imports.stash --self-test runs a tampered fixture (helper inlined instead of imported) and asserts the lint trips on it — proving the Construct guard has teeth."
+      - "Running python3 scripts/checkpoint/difftest_advance_checkpoint.py is still 16/16 (the pilot oracle is unchanged)."
+    notes: |
+      Build this FIRST — every later script-phase imports from here.
+      Mirror the _common.py shape: REPO_ROOT-relative resolution, atomic save via
+      sibling .tmp, 4-done/ fallback in feature_dir (NOT used by next-phase's
+      brief path — see brief.md "Notable preserved-behaviour traps").
+      The lint's pinned-exemption list lives at the top of lint_common_imports.stash.
+
+  - id: P2
+    title: "Generalized differential oracle (difftest_runner.stash)"
+    deps: [P1]
+    files:
+      - scripts/checkpoint/difftest_runner.stash
+      - scripts/checkpoint/difftest_coverage_check.stash
+      - scripts/checkpoint/difftest_runner.fixtures/**
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash --self-test
+      - stash scripts/checkpoint/difftest_coverage_check.stash
+      - stash scripts/checkpoint/difftest_coverage_check.stash --self-test
+      # Re-run the pilot oracle through the new runner (with an adapter shim) to
+      # prove the generalization preserves the pilot's 16/16 result.
+      - stash scripts/checkpoint/difftest_runner.stash advance-checkpoint
+    done_when:
+      - "difftest_runner.stash takes a script-name argument, loads scripts/checkpoint/difftest_<script>_cases.stash, seeds two isolated fixture trees (py and stash sides), runs both implementations, and reports per-case pass/fail. Exit 0 iff every case is pass."
+      - "Per-case asserts: exit code EXACT match; configured TIGHT stdout/stderr fields EXACT (the case can declare 'stderr_must_contain' substrings for discriminator phrases); configured file-mutation parsed deep-equal (timestamp-masked using the pilot's ISO-Z mask)."
+      - "Soft (LOOSE) fields are reported but never gate pass/fail — preserves the pilot's stderr-soft behaviour."
+      - "Each fixture tree is a real `git init` repo so `git worktree list`-using scripts see consistent state (required for P7/P8)."
+      - "The runner exposes `--all` to iterate every registered case table; exit 0 iff every script's table passes."
+      - "difftest_coverage_check.stash enumerates every scripts/checkpoint/*.stash (excluding _common.stash, difftest_runner.stash, lint_*, *.fixtures/**) and FAILS if any lacks a corresponding difftest_<name>_cases.stash. Pinned allow-list for the bash-skinned verify-phase.sh (key: verify-phase-scope)."
+      - "difftest_coverage_check.stash --self-test trips on a fixture script-without-a-case-table — proving the Detect guard has teeth."
+      - "Running `stash scripts/checkpoint/difftest_runner.stash advance-checkpoint` reproduces the pilot's 16/16 result via a thin case-table adapter (no behaviour change to advance-checkpoint.stash itself)."
+    notes: |
+      The runner is the verification chokepoint. Every later phase's verify
+      runs `difftest_runner.stash <script>`. Keep case tables in their own files
+      so phase scope is per-script. Adapter for advance-checkpoint lives at
+      scripts/checkpoint/difftest_advance-checkpoint_cases.stash.
+
+  - id: P3
+    title: "validate-spec.stash + oracle cases"
+    deps: [P1, P2]
+    files:
+      - scripts/checkpoint/validate-spec.stash
+      - scripts/checkpoint/difftest_validate-spec_cases.stash
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash validate-spec
+      # End-to-end: the new .stash twin must validate THIS feature's own spec.
+      - stash scripts/checkpoint/validate-spec.stash checkpoint-scripts-stash-port
+      # The .py original must still work — coexistence invariant.
+      - python3 scripts/checkpoint/validate-spec.py checkpoint-scripts-stash-port
+    done_when:
+      - "validate-spec.stash <slug?> resolves a single active feature when no slug given (mirrors resolve_feature), reports MISSING plan keys, MISSING phase keys, duplicate phase ids, unknown deps, empty files/verify/done_when, est_tokens out-of-range, checkpoint feature mismatch, and entries-for-unknown-phases."
+      - "Auto-heal path: missing checkpoint per-phase entries are added with the default state shape and `save_checkpoint` is called — this checkpoint.yaml mutation is part of the TIGHT contract (oracle diffs it timestamp-masked)."
+      - "Success stdout line is byte-equal to the Python original: `plan/checkpoint OK for '<slug>': N phases`."
+      - "Exit code is 0 on success, 1 on any problem — exact-match TIGHT against the Python original on every oracle case."
+      - "difftest_runner.stash validate-spec exits 0 with every registered case pass (cases cover: clean spec, missing key per category, duplicate id, unknown dep, est_tokens bounds, auto-heal mutation, stale checkpoint entry)."
+      - "`stash scripts/checkpoint/validate-spec.stash checkpoint-scripts-stash-port` succeeds on this feature's own brief+plan."
+
+  - id: P4
+    title: "next-phase.stash + oracle cases"
+    deps: [P1, P2]
+    files:
+      - scripts/checkpoint/next-phase.stash
+      - scripts/checkpoint/difftest_next-phase_cases.stash
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash next-phase
+    done_when:
+      - "next-phase.stash <slug?> <count?> matches the Python argv ambiguity: a single non-digit arg is the slug, a single digit arg is count; two args are slug+count; count must be 1..5."
+      - "Selection algorithm matches the Python: status==pending AND every dep is done OR was chosen earlier in the same batch; stops at `count` selections."
+      - "count==1 emits a SINGLE-PHASE document with keys `id`, `title`, `deps`, `files`, `verify`, `done_when`, `_brief.{feature,title,feature_dir,brief_path,spec_path,context_path,default_verify,scope,attempts,previous_summary}`."
+      - "count>1 emits a BATCH document with keys `batch: true`, `requested_count`, `selected_count`, `phase_ids`, `phases`, `_brief.{…}`."
+      - "Emitted feature/brief/spec paths come from `2-in-progress/<slug>` directly — NOT through the 4-done/ fallback resolver (matches Python line 113)."
+      - "Stderr discriminator phrases are byte-equal substrings of the Python original: `# all phases done`, `# phase <id> is in_progress (use /resume to inspect)`, `# no phase ready (all remaining are blocked on failed/pending deps)`."
+      - "Exit code: 0 when at least one phase was selected; 2 in every empty-selection branch (all done | in_progress | blocked); 1 on usage errors. Exact-match TIGHT against the Python."
+      - "difftest_runner.stash next-phase exits 0 with every case pass (cases cover: count=1 happy, count=3 batch happy, count=1 with digit arg, count=2 with all-done state, in_progress state, blocked state, batch where selected_count < requested_count, deps-resolved-by-prior-in-batch)."
+
+  - id: P5
+    title: "verify-phase.sh scope/glob port (Stash helper) + oracle"
+    deps: [P1, P2]
+    files:
+      - scripts/checkpoint/verify-phase.sh
+      - scripts/checkpoint/verify-phase-scope.stash
+      - scripts/checkpoint/difftest_verify-phase-scope_cases.stash
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash verify-phase-scope
+      # Self-host: this very feature's plan must verify under the rewritten verify-phase.sh.
+      - bash scripts/checkpoint/verify-phase.sh checkpoint-scripts-stash-port P5
+    done_when:
+      - "verify-phase.sh no longer invokes `python3` or `jq` — it calls `stash scripts/checkpoint/verify-phase-scope.stash <slug> <phase-id>` and consumes its output."
+      - "verify-phase-scope.stash reads plan.yaml via _common.load_plan, locates the phase, computes the list of git-tracked-or-untracked changed files vs HEAD, classifies each against the union of phase `files` + plan `scope` using `path.match` (bash [[ ]] globstar semantics, `*` crosses `/`), and emits one line per out-of-scope file prefixed `  - ` (byte-equal to the bash original) plus done_when echoes."
+      - "Always-allow carve-out: any path under `.kanban/2-in-progress/<slug>/` is never out-of-scope (matches bash original)."
+      - "Leading `./` strip on patterns is preserved (matches the Python check-parallel-safety implementation and the bash glob).` "
+      - "Exit codes: 0 ok, 2 out-of-scope detected, 3 bad args/setup — exact-match TIGHT against the bash original."
+      - "difftest_runner.stash verify-phase-scope exits 0 with every case pass (cases cover: single-segment `*` glob match, cross-segment `**` glob match, single-`*` crossing `/` matches, `?` wildcard, `[...]` char class, leading `./` on pattern, always-allow .kanban carve-out, untracked vs modified files, multiple out-of-scope files, no changes)."
+    notes: |
+      The bash command-runner block (lines 92-106) stays intact — only the
+      Python jq-fed metadata block (lines 28-89) is replaced by a stash call.
+      Stash side computes the out-of-scope list AND the early-exit condition;
+      bash runs the verify commands afterward.
+
+  - id: P6
+    title: "status.stash (LOOSE smoke parity)"
+    deps: [P1, P2]
+    files:
+      - scripts/checkpoint/status.stash
+      - scripts/checkpoint/difftest_status_cases.stash
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash status
+      - stash scripts/checkpoint/status.stash checkpoint-scripts-stash-port
+    done_when:
+      - "status.stash <slug?> prints the same information set as status.py: feature header, phase table (Phase/Status/Attempts/Verified/Commit/Notes), current phase, git branch/last commit/dirty state with top-10 dirty files, worktree listing when >1 entry, review block when status!=not_started."
+      - "Exit code 0 always (LOOSE). Wording / column widths may differ — the oracle reports stdout but does not gate on it (LOOSE contract)."
+      - "difftest_runner.stash status exits 0 with every case pass — TIGHT axis is exit code only; stdout is reported for human review."
+      - "`stash scripts/checkpoint/status.stash checkpoint-scripts-stash-port` runs without error and shows this feature."
+
+  - id: P7
+    title: "check-parallel-safety.stash + oracle (git worktrees)"
+    deps: [P1, P2]
+    files:
+      - scripts/checkpoint/check-parallel-safety.stash
+      - scripts/checkpoint/difftest_check-parallel-safety_cases.stash
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash check-parallel-safety
+    done_when:
+      - "check-parallel-safety.stash <slug?> reduces phase file-globs to top-level subsystems (first path segment, leading `./` stripped, NOISE set excluded — same NOISE = {Stash.Tests, .kanban, docs, examples, benchmarks, .vscode, scripts, .claude})."
+      - "Shells out to `git worktree list --porcelain` via process.exec (cwd=repo root), parses the porcelain into (path, branch) entries, scans each sibling worktree's `.kanban/2-in-progress/*/plan.yaml`."
+      - "Reports OVERLAP / disjoint per sibling; prints `clean: …` when no sibling features OR no overlap."
+      - "Exit codes 0 (clean), 2 (no source subsystems found), 3 (overlap warning) — exact-match TIGHT against the Python."
+      - "difftest_runner.stash check-parallel-safety exits 0 with every case pass (fixtures `git init` two worktrees with seeded plan.yaml files exercising: no siblings → 0, disjoint subsystems → 0, overlapping subsystems → 3, mine-empty → 2)."
+
+  - id: P8
+    title: "milestone-status.stash (LOOSE smoke parity)"
+    deps: [P1, P2]
+    files:
+      - scripts/checkpoint/milestone-status.stash
+      - scripts/checkpoint/difftest_milestone-status_cases.stash
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash milestone-status
+      - stash scripts/checkpoint/milestone-status.stash omission-hardening
+    done_when:
+      - "milestone-status.stash <milestone-slug?> resolves the single milestone when omitted (lists when >1), scans `.kanban/4-done/*/plan.yaml` and `.kanban/2-in-progress/*/plan.yaml` across every git worktree, filters by `milestone: <slug>` tag, dedupes by slug (current-checkout wins), and prints the ledger header + DONE list + IN-FLIGHT list."
+      - "Tolerates malformed plan.yaml (one bad file does not abort the scan)."
+      - "Exit code 0 on success, 1 when no milestone matches or `<slug>/MILESTONE.md` missing — exact-match TIGHT against the Python."
+      - "Stdout wording / column widths may differ — LOOSE contract."
+      - "difftest_runner.stash milestone-status exits 0 with every case pass (cases cover: single-milestone resolution, multi-milestone require-slug, no-features tagged, mixed done+in-flight across two worktrees with dedup, malformed plan.yaml tolerated)."
+      - "`stash scripts/checkpoint/milestone-status.stash omission-hardening` runs without error on the real milestone."
+
+  - id: P9
+    title: "Cutover — flip slash-command + agent invocations to stash; end-to-end dogfood"
+    deps: [P3, P4, P5, P6, P7, P8]
+    files:
+      - .claude/commands/continue.md
+      - .claude/commands/next-phase.md
+      - .claude/commands/milestone.md
+      - .claude/commands/spec.md
+      - .claude/commands/feature-review.md
+      - .claude/commands/resolve.md
+      - .claude/agents/architect.md
+      - .claude/agents/implementer.md
+      - .claude/agents/reviewer.md
+      - .claude/agents/resolver.md
+    verify:
+      - stash scripts/checkpoint/difftest_runner.stash --all
+      # Slash-command call-sites must no longer use python3 for checkpoint scripts.
+      - bash -c '! grep -rn "python3 scripts/checkpoint/" .claude/commands/ .claude/agents/'
+      # The full workflow must self-validate via the new entry points.
+      - stash scripts/checkpoint/validate-spec.stash checkpoint-scripts-stash-port
+      - stash scripts/checkpoint/status.stash checkpoint-scripts-stash-port
+    done_when:
+      - "Every `python3 scripts/checkpoint/<x>.py` invocation in .claude/commands/*.md and .claude/agents/*.md is rewritten to `stash scripts/checkpoint/<x>.stash` (same argv shape preserved)."
+      - "`grep -rn 'python3 scripts/checkpoint/' .claude/commands/ .claude/agents/` returns no matches."
+      - "`stash scripts/checkpoint/difftest_runner.stash --all` exits 0 (every ported script's oracle still green after the flip)."
+      - "An end-to-end dogfood run — a real `/next-phase`-style dispatch using ONLY the new entry points — completes successfully, captured as a log line in the phase 9 commit message."
+      - "The .py originals remain present and the pilot oracle (`python3 scripts/checkpoint/difftest_advance_checkpoint.py`) still passes — proves coexistence held to the very end."
+    notes: |
+      This is the only phase that edits .claude/*.md. Keep it surgical: replace
+      the invocation lines, do not refactor the surrounding prose.
+      The dogfood log line is informational; the green oracle is the gate.
+
+# /done acceptance gate. Narrowed dotnet test filter excludes documented flakies
+# (DiffPackageTests, Registry*, NetBuiltInsTests, parallel flakies) per project
+# convention; keeps the meta-tests that catch checklist omissions
+# (StandardLibraryReferenceTests, CompletionSurfaceSnapshotTests,
+# Wave1/Wave2ThrowsCoverageTests).
+final_verify:
+  - dotnet build
+  - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~Registry&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~ParallelExecution"
+  # Core gate for THIS feature: every ported script's differential oracle green.
+  - stash scripts/checkpoint/difftest_runner.stash --all
+  # Pilot oracle still green (coexistence invariant).
+  - python3 scripts/checkpoint/difftest_advance_checkpoint.py
+  # Construct + Detect guards have teeth (self-test paths) AND pass on the live tree.
+  - stash scripts/checkpoint/lint_common_imports.stash
+  - stash scripts/checkpoint/lint_common_imports.stash --self-test
+  - stash scripts/checkpoint/difftest_coverage_check.stash
+  - stash scripts/checkpoint/difftest_coverage_check.stash --self-test
+  # Slash-command cutover invariant (post-P9).
+  - bash -c '! grep -rn "python3 scripts/checkpoint/" .claude/commands/ .claude/agents/'
