@@ -1,7 +1,7 @@
 schema_version: 1
 feature: analysis-omission-hardening
 current: null
-updated: '2026-05-31T13:06:34Z'
+updated: '2026-05-31T13:11:31Z'
 phases:
   P1:
     status: done
@@ -42,8 +42,8 @@ phases:
     notes: 130 descriptors discovered; all keyed in AllByCode; non-vacuity floor=100; fail-path self-test
       via fixture code absent from BuildCodeLookup
 review:
-  status: in_progress
+  status: resolved
   started: '2026-05-31T13:06:34Z'
-  resolved: null
+  resolved: '2026-05-31T13:11:31Z'
   findings_open: 0
   findings_fixed: 0

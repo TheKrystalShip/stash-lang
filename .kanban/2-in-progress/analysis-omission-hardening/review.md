@@ -20,7 +20,8 @@ Counts: **2 IMPORTANT**, **0 CRITICAL**, **0 MINOR**.
 
 ## F01 — [IMPORTANT] P3 fail-path self-test does not drive the production assertion's failure path
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** a11fbd6
 **Files:** `Stash.Tests/Analysis/RuleRegistryCoverageTests.cs:146-171`, `Stash.Tests/Analysis/RuleRegistryCoverageTests.cs:190-204`
 **Phase:** P3
 **Commit:** 2049998
@@ -73,7 +74,8 @@ All four asserts must remain green, and the new self-test must fail loudly if `W
 
 ## F02 — [IMPORTANT] P4 fail-path self-test does not drive the production assertion's failure path
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** a11fbd6
 **Files:** `Stash.Tests/Analysis/DiagnosticDescriptorsCoverageTests.cs:143-156`
 **Phase:** P4
 **Commit:** 6fd8b6c
