@@ -46,18 +46,27 @@ public sealed class NamespaceMemberPayload
     /// </summary>
     public StashValue Invoke(IInterpreterContext ctx)
     {
-        if (Stability == Stability.Live)
-            return Getter(ctx);
+        switch (Stability)
+        {
+            case Stability.Live:
+                return Getter(ctx);
 
-        // Cached — once-set pattern. Accept a benign race: two threads may invoke
-        // the getter concurrently on first access; the last write wins. For Cached
-        // members whose getters are idempotent process-identity reads this is safe.
-        if (Volatile.Read(ref _cacheState) == 1)
-            return _cachedValue;
+            case Stability.Cached:
+            {
+                // Once-set pattern. Accept a benign race: two threads may invoke
+                // the getter concurrently on first access; the last write wins. For Cached
+                // members whose getters are idempotent process-identity reads this is safe.
+                if (Volatile.Read(ref _cacheState) == 1)
+                    return _cachedValue;
 
-        var result = Getter(ctx);
-        _cachedValue = result;
-        Volatile.Write(ref _cacheState, 1);
-        return result;
+                var result = Getter(ctx);
+                _cachedValue = result;
+                Volatile.Write(ref _cacheState, 1);
+                return result;
+            }
+
+            default:
+                throw new InvalidOperationException($"unhandled Stability: {Stability}");
+        }
     }
 }

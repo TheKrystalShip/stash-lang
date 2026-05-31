@@ -381,4 +381,35 @@ public class StashMemberGeneratorTests
     }
 
     #endregion
+
+    #region MapStabilityLiteral exhaustiveness
+
+    [Fact]
+    public void MapStabilityLiteral_Cached_ReturnsExpectedLiteral()
+    {
+        // Stability.Cached = 0
+        Assert.Equal(
+            "global::Stash.Stdlib.Abstractions.Stability.Cached",
+            StashNamespaceGenerator.MapStabilityLiteral(0));
+    }
+
+    [Fact]
+    public void MapStabilityLiteral_Live_ReturnsExpectedLiteral()
+    {
+        // Stability.Live = 1
+        Assert.Equal(
+            "global::Stash.Stdlib.Abstractions.Stability.Live",
+            StashNamespaceGenerator.MapStabilityLiteral(1));
+    }
+
+    [Fact]
+    public void MapStabilityLiteral_UnknownInt_Throws()
+    {
+        // An integer that doesn't correspond to any Stability variant must throw
+        // so that adding a new variant without updating this mapping is caught at build time.
+        Assert.Throws<System.InvalidOperationException>(
+            () => StashNamespaceGenerator.MapStabilityLiteral(2));
+    }
+
+    #endregion
 }

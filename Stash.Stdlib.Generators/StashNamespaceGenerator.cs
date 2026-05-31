@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.Generators;
 
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
@@ -505,9 +506,7 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
                 if (na.Key == "Capability" && na.Value.Value is int capVal)
                     capabilityFull = FormatCapabilityFlags(capVal);
                 if (na.Key == "Stability" && na.Value.Value is int stab)
-                    stabilityFull = stab == 0
-                        ? "global::Stash.Stdlib.Abstractions.Stability.Cached"
-                        : "global::Stash.Stdlib.Abstractions.Stability.Live";
+                    stabilityFull = MapStabilityLiteral(stab);
                 if (na.Key == "Throws" && !na.Value.IsNull && na.Value.Kind == TypedConstantKind.Array)
                 {
                     foreach (var tc in na.Value.Values)
@@ -854,5 +853,25 @@ public sealed class StashNamespaceGenerator : IIncrementalGenerator
             case byte by: return by.ToString(CultureInfo.InvariantCulture);
         }
         return value.ToString() ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Maps the integer backing value of a <c>Stability</c> enum read from a named argument
+    /// to the fully-qualified C# literal that the emitter should write into generated code.
+    /// Throws <see cref="InvalidOperationException"/> for any integer value that does not
+    /// correspond to a known <c>Stability</c> variant, so that adding a new variant without
+    /// updating this mapping is a build-time failure rather than a silent wrong emit.
+    /// </summary>
+    internal static string MapStabilityLiteral(int stab)
+    {
+        switch (stab)
+        {
+            case 0: // Stability.Cached
+                return "global::Stash.Stdlib.Abstractions.Stability.Cached";
+            case 1: // Stability.Live
+                return "global::Stash.Stdlib.Abstractions.Stability.Live";
+            default:
+                throw new InvalidOperationException($"unhandled Stability integer value: {stab}");
+        }
     }
 }

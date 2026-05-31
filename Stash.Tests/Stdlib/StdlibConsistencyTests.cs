@@ -1,8 +1,12 @@
+using System;
+using System.Collections.Generic;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
+using Stash.Stdlib.Abstractions;
+using Stash.Stdlib.Models;
 
 namespace Stash.Tests.Stdlib;
 
@@ -260,5 +264,54 @@ public class StdlibConsistencyTests
             Assert.True(definedNamespaces.Contains(ns),
                 $"Core namespace '{ns}' should always be defined regardless of capabilities");
         }
+    }
+
+    // ── Stability exhaustiveness ──
+
+    [Fact]
+    public void NamespaceMemberPayload_UnknownStability_Throws()
+    {
+        // (Stability)99 is not a valid variant. Invoke must throw InvalidOperationException
+        // rather than silently falling through to the Cached or Live branch.
+        var payload = new NamespaceMemberPayload(
+            getter: _ => default,
+            stability: (Stability)99,
+            returnType: null);
+
+        Assert.Throws<InvalidOperationException>(() => payload.Invoke(null!));
+    }
+
+    // ── UFCS map validation ──
+
+    [Fact]
+    public void ValidateUfcsTargets_MissingNamespace_Throws()
+    {
+        // A UFCS map entry whose value is not in the namespace list must throw.
+        // We call the internal helper directly so the real StdlibRegistry static ctor
+        // is never triggered with invalid data (TypeInitializationException is process-sticky).
+        var bogusMap = new Dictionary<string, string>
+        {
+            ["string"] = "str",
+            ["widget"] = "nonexistent_ns",
+        };
+        var knownNamespaces = new List<string> { "str", "arr", "math" };
+
+        Assert.Throws<InvalidOperationException>(
+            () => StdlibRegistry.ValidateUfcsTargets(bogusMap, knownNamespaces));
+    }
+
+    [Fact]
+    public void ValidateUfcsTargets_AllTargetsPresent_DoesNotThrow()
+    {
+        // The production map is valid — test the green-path too.
+        var validMap = new Dictionary<string, string>
+        {
+            ["string"] = "str",
+            ["array"] = "arr",
+        };
+        var knownNamespaces = new List<string> { "str", "arr", "math" };
+
+        var ex = Record.Exception(() => StdlibRegistry.ValidateUfcsTargets(validMap, knownNamespaces));
+        Assert.Null(ex);
     }
 }
