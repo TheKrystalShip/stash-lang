@@ -266,6 +266,81 @@ public class StdlibConsistencyTests
         }
     }
 
+    // ── DataMembers (NamespaceMemberPayload) registry↔runtime consistency ──
+    //
+    // These two facts mirror the NamespaceFunctions pair above and cover GAP C from the
+    // stdlib-omission-hardening audit: [StashMember]-registered slots were previously only
+    // tracked in the registry, with no test asserting the runtime namespace carries a
+    // matching NamespaceMemberPayload slot (or vice-versa).
+    //
+    // Fail-path explanation (matches the existing Functions/Constants pattern):
+    //   • NamespaceMembers_RegistryEntries_HaveRuntimePayload — if a [StashMember] is
+    //     registered in StdlibDefinitions but its builder call (ns.DefineMember / emitted
+    //     code) is removed or the member key is renamed, the qualified-name lookup in
+    //     GetAllMembers() returns nothing → Assert.True fires on the missing member.
+    //   • NamespaceMembers_RuntimePayloads_HaveRegistryMetadata — if a NamespaceMemberPayload
+    //     is added to a namespace builder without a matching [StashMember] attribute (and
+    //     therefore no registry entry), TryGetNamespaceDataMember returns false → Assert.True
+    //     fires on the orphaned runtime slot.
+
+    [Fact]
+    public void NamespaceMembers_RegistryEntries_HaveRuntimePayload()
+    {
+        var globals = CreateGlobals();
+
+        var runtimePayloadNames = new HashSet<string>();
+        foreach (var binding in globals)
+        {
+            if (binding.Value is not StashNamespace ns)
+            {
+                continue;
+            }
+
+            foreach (var (memberKey, memberValue) in ns.GetAllMembers())
+            {
+                if (memberValue is NamespaceMemberPayload)
+                {
+                    runtimePayloadNames.Add($"{ns.Name}.{memberKey}");
+                }
+            }
+        }
+
+        foreach (var nsName in StdlibRegistry.NamespaceNames)
+        {
+            foreach (var member in StdlibRegistry.GetNamespaceDataMembers(nsName))
+            {
+                Assert.True(runtimePayloadNames.Contains(member.QualifiedName),
+                    $"StdlibRegistry has data member '{member.QualifiedName}' but no matching NamespaceMemberPayload slot exists in the runtime namespace");
+            }
+        }
+    }
+
+    [Fact]
+    public void NamespaceMembers_RuntimePayloads_HaveRegistryMetadata()
+    {
+        var globals = CreateGlobals();
+
+        foreach (var binding in globals)
+        {
+            if (binding.Value is not StashNamespace ns)
+            {
+                continue;
+            }
+
+            foreach (var (memberKey, memberValue) in ns.GetAllMembers())
+            {
+                if (memberValue is not NamespaceMemberPayload)
+                {
+                    continue;
+                }
+
+                string qualifiedName = $"{ns.Name}.{memberKey}";
+                Assert.True(StdlibRegistry.TryGetNamespaceDataMember(qualifiedName, out _),
+                    $"Runtime namespace '{ns.Name}' has a NamespaceMemberPayload slot '{memberKey}' but StdlibRegistry has no data member metadata for '{qualifiedName}'");
+            }
+        }
+    }
+
     // ── Stability exhaustiveness ──
 
     [Fact]
