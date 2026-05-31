@@ -102,6 +102,26 @@ public sealed class RuleRegistryCoverageTests
             $"assembly or MinExpectedRuleCount needs updating after a deliberate rule removal.");
     }
 
+    // ── Missing-set computation (shared by production test and self-test) ───────
+
+    /// <summary>
+    /// Returns every type in <paramref name="discovered"/> that has no corresponding
+    /// instance in <see cref="RuleRegistry.GetAllRules"/>, ordered by full name.
+    /// Both the production compliance test and the fail-path self-test call this helper
+    /// so the self-test genuinely exercises the production missing-set pipeline.
+    /// </summary>
+    private static IReadOnlyList<Type> ComputeMissingRuleTypes(IEnumerable<Type> discovered)
+    {
+        var registeredTypes = RuleRegistry.GetAllRules()
+            .Select(r => r.GetType())
+            .ToHashSet();
+
+        return discovered
+            .Where(t => !registeredTypes.Contains(t))
+            .OrderBy(t => t.FullName, StringComparer.Ordinal)
+            .ToList();
+    }
+
     // ── Assertion 2: Production compliance ───────────────────────────────────
 
     /// <summary>
@@ -115,14 +135,7 @@ public sealed class RuleRegistryCoverageTests
     public void AllConcreteRuleTypes_ArePresentInRegistry()
     {
         var discovered = DiscoverProductionRuleTypes();
-        var registeredTypes = RuleRegistry.GetAllRules()
-            .Select(r => r.GetType())
-            .ToHashSet();
-
-        var missing = discovered
-            .Where(t => !registeredTypes.Contains(t))
-            .OrderBy(t => t.FullName, StringComparer.Ordinal)
-            .ToList();
+        var missing = ComputeMissingRuleTypes(discovered);
 
         Assert.True(
             missing.Count == 0,
@@ -137,37 +150,33 @@ public sealed class RuleRegistryCoverageTests
     // ── Assertion 3: Fail-path self-test (scanner has teeth) ─────────────────
 
     /// <summary>
-    /// Verifies that the registry-lookup logic used by
-    /// <see cref="AllConcreteRuleTypes_ArePresentInRegistry"/> would flag a rule type
-    /// that is intentionally absent from the registry, proving the gate is wired
-    /// correctly and cannot produce a vacuous pass.
+    /// Verifies that <see cref="ComputeMissingRuleTypes"/> — the same helper the
+    /// production test uses — correctly identifies a rule type that is absent from the
+    /// registry when it is fed a synthetic discovered set containing that type.
     /// </summary>
+    /// <remarks>
+    /// The synthetic discovered set contains only <see cref="UnregisteredFixtureRule"/>,
+    /// which is deliberately absent from <see cref="RuleRegistry.GetAllRules"/>.
+    /// <see cref="ComputeMissingRuleTypes"/> must return it in the missing list,
+    /// proving that the <c>Where(t =&gt; !registeredTypes.Contains(t))</c> predicate in
+    /// the shared helper is wired correctly and cannot be short-circuited to a vacuous
+    /// empty result without this test failing.
+    /// </remarks>
     [Fact]
     public void Scanner_UnregisteredFixtureRule_WouldBeDetectedAbsentExemption()
     {
-        // Build the same registered-type set the production test uses.
-        var registeredTypes = RuleRegistry.GetAllRules()
-            .Select(r => r.GetType())
-            .ToHashSet();
+        // Construct a synthetic discovered set that contains only the fixture rule.
+        // UnregisteredFixtureRule is deliberately absent from the registry, so
+        // ComputeMissingRuleTypes must return it as missing.
+        var syntheticDiscovered = new List<Type> { typeof(UnregisteredFixtureRule) };
 
-        // The fixture rule is deliberately NOT in the registry.
-        var fixtureType = typeof(UnregisteredFixtureRule);
+        var missing = ComputeMissingRuleTypes(syntheticDiscovered);
 
-        bool wouldBeDetected = !registeredTypes.Contains(fixtureType);
-
-        Assert.True(
-            wouldBeDetected,
-            $"{nameof(UnregisteredFixtureRule)} was found in RuleRegistry.GetAllRules(), " +
-            $"but it must NOT be registered — it exists solely as a fixture to prove the " +
-            $"detection mechanism works. Remove it from RuleRegistry if it was added by mistake.");
-
-        // Also confirm that the fixture type does implement IAnalysisRule (i.e. it is a
-        // valid stand-in for a real rule), so the self-test genuinely mirrors the
-        // production scenario.
-        Assert.True(
-            typeof(IAnalysisRule).IsAssignableFrom(fixtureType),
-            $"{nameof(UnregisteredFixtureRule)} must implement IAnalysisRule to serve as " +
-            $"a valid fail-path fixture.");
+        // The production missing-set computation must identify the unregistered fixture.
+        // If ComputeMissingRuleTypes's Where predicate were changed to Where(_ => false),
+        // this assertion would fail — proving the gate has real teeth.
+        Assert.Single(missing);
+        Assert.Equal(typeof(UnregisteredFixtureRule), missing[0]);
     }
 
     // ── Fixture rule (lives in Stash.Tests, not in Stash.Analysis) ───────────

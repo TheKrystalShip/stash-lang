@@ -84,6 +84,28 @@ public sealed class DiagnosticDescriptorsCoverageTests
             $"are wrong, or MinExpectedDescriptorCount needs updating after a deliberate removal.");
     }
 
+    // ── Missing-set computation (shared by production test and self-test) ───────
+
+    /// <summary>
+    /// Returns the identifier string for every entry in <paramref name="discovered"/>
+    /// whose descriptor is absent from <see cref="DiagnosticDescriptors.AllByCode"/>
+    /// (keyed by <c>Code</c>, requiring the same instance), ordered by identifier.
+    /// Both the production compliance test and the fail-path self-test call this helper
+    /// so the self-test genuinely exercises the production missing-set pipeline.
+    /// </summary>
+    private static IReadOnlyList<string> ComputeMissingFromAllByCode(
+        IEnumerable<(string Identifier, DiagnosticDescriptor Descriptor)> discovered)
+    {
+        var allByCode = DiagnosticDescriptors.AllByCode;
+
+        return discovered
+            .Where(t => !allByCode.TryGetValue(t.Descriptor.Code, out var registered)
+                        || !ReferenceEquals(registered, t.Descriptor))
+            .Select(t => t.Identifier)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ToList();
+    }
+
     // ── Assertion 2: Production compliance ───────────────────────────────────
 
     /// <summary>
@@ -100,15 +122,10 @@ public sealed class DiagnosticDescriptorsCoverageTests
     [Fact]
     public void AllStaticDescriptorFields_AreKeyedInAllByCode()
     {
-        var discovered = DiscoverDescriptorFields();
-        var allByCode = DiagnosticDescriptors.AllByCode;
+        var discovered = DiscoverDescriptorFields()
+            .Select(t => (Identifier: t.Field.Name, t.Descriptor));
 
-        var missing = discovered
-            .Where(t => !allByCode.TryGetValue(t.Descriptor.Code, out var registered)
-                        || !ReferenceEquals(registered, t.Descriptor))
-            .Select(t => t.Field.Name)
-            .OrderBy(n => n, StringComparer.Ordinal)
-            .ToList();
+        var missing = ComputeMissingFromAllByCode(discovered);
 
         Assert.True(
             missing.Count == 0,
@@ -121,37 +138,43 @@ public sealed class DiagnosticDescriptorsCoverageTests
     // ── Assertion 3: Fail-path self-test (scanner has teeth) ─────────────────
 
     /// <summary>
-    /// Verifies that the <c>AllByCode</c> lookup used by
-    /// <see cref="AllStaticDescriptorFields_AreKeyedInAllByCode"/> would detect a descriptor
-    /// that is absent from the dictionary, proving the gate cannot produce a vacuous pass.
+    /// Verifies that <see cref="ComputeMissingFromAllByCode"/> — the same helper the
+    /// production test uses — correctly flags a descriptor that is absent from
+    /// <see cref="DiagnosticDescriptors.AllByCode"/> when fed a synthetic discovered list
+    /// containing that descriptor.
     /// </summary>
     /// <remarks>
-    /// The fixture descriptor below uses the code <c>"FIXTURE-COVERAGE-TEST"</c>, which is
-    /// intentionally NOT registered in <see cref="DiagnosticDescriptors.BuildCodeLookup"/>.
-    /// The test asserts that <see cref="DiagnosticDescriptors.AllByCode"/> does NOT contain
-    /// this code — confirming that a missing registration would surface as a failing lookup,
-    /// exactly as the production compliance test checks.
-    ///
-    /// Fail-path proof (comment-documented fixture):
-    ///   If a developer adds <c>dict["FIXTURE-COVERAGE-TEST"] = …</c> to BuildCodeLookup,
-    ///   this assertion changes to <c>Assert.False(wouldBeDetected)</c> — the test fails,
-    ///   alerting the team that the self-test was broken.
-    ///   Conversely, if the production lookup were changed to always return true (vacuous),
-    ///   the <c>Assert.True(wouldBeDetected)</c> here would also fail, proving the gate.
+    /// The synthetic discovered list contains a single <see cref="DiagnosticDescriptor"/>
+    /// whose code is <c>"FIXTURE-COVERAGE-TEST"</c> — intentionally absent from
+    /// <see cref="DiagnosticDescriptors.BuildCodeLookup"/>.
+    /// <see cref="ComputeMissingFromAllByCode"/> must return it in the missing list,
+    /// proving that the <c>TryGetValue / ReferenceEquals</c> predicate in the shared helper
+    /// is wired correctly and cannot be short-circuited to an empty result without this
+    /// test failing.
     /// </remarks>
     [Fact]
     public void Scanner_FixtureDescriptorAbsentFromAllByCode_WouldBeDetected()
     {
-        // This code is intentionally not present in DiagnosticDescriptors.BuildCodeLookup.
-        const string fixtureCode = "FIXTURE-COVERAGE-TEST";
+        // Construct a synthetic descriptor whose code is known absent from AllByCode.
+        var fixtureDescriptor = new DiagnosticDescriptor(
+            code: "FIXTURE-COVERAGE-TEST",
+            title: "Fixture descriptor — not a real diagnostic",
+            defaultLevel: DiagnosticLevel.Warning,
+            category: "Test",
+            messageFormat: "This descriptor exists only to test DiagnosticDescriptorsCoverageTests.");
 
-        bool wouldBeDetected = !DiagnosticDescriptors.AllByCode.ContainsKey(fixtureCode);
+        var syntheticDiscovered = new List<(string, DiagnosticDescriptor)>
+        {
+            ("FixtureField", fixtureDescriptor)
+        };
 
-        Assert.True(
-            wouldBeDetected,
-            $"The fixture code '{fixtureCode}' was found in DiagnosticDescriptors.AllByCode, " +
-            $"but it must NOT be registered — it exists solely to prove that the " +
-            $"AllByCode lookup logic detects missing registrations. " +
-            $"Remove it from BuildCodeLookup if it was added by mistake.");
+        var missing = ComputeMissingFromAllByCode(syntheticDiscovered);
+
+        // The production missing-set computation must identify the unregistered fixture.
+        // If ComputeMissingFromAllByCode's Where predicate were changed to Where(_ => false)
+        // (or otherwise short-circuited), this assertion would fail — proving the gate has
+        // real teeth and the self-test drives the production logic's failure path.
+        Assert.Single(missing);
+        Assert.Equal("FixtureField", missing[0]);
     }
 }
