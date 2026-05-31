@@ -38,7 +38,8 @@ phases:
     files:
       - .kanban/2-in-progress/stdlib-omission-hardening/brief.md
     verify:
-      - dotnet build Stash.Stdlib Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib
     done_when:
       - Every row of brief.md's "Cross-Cutting Concerns" table is reproduced against the code; rows that did not reproduce as written are revised in-place with a Decision Log entry naming the delta.
       - The table commits with each row carrying its single source of truth (file + line or test class), its current Construct/Detect/Instruct level, and its disposition (Keep / Promote / Justify / No-op / Drop).
@@ -58,7 +59,8 @@ phases:
       - Stash.Stdlib.Generators/AnalyzerReleases.Unshipped.md
       - Stash.Tests/Stdlib/SourceGenerator/*.cs
     verify:
-      - dotnet build Stash.Stdlib.Generators Stash.Stdlib
+      - dotnet build Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib
       - dotnet test Stash.Tests --filter "FullyQualifiedName~Stash.Tests.Stdlib.SourceGenerator"
     done_when:
       - "A method annotated `[StashFn]` on a class NOT marked `[StashNamespace]` produces build-error STSG014 with a message naming the offending method."
@@ -81,7 +83,8 @@ phases:
       - Stash.Tests/Stdlib/StdlibConsistencyTests.cs
       - Stash.Tests/Stdlib/SourceGenerator/*.cs
     verify:
-      - dotnet build Stash.Stdlib Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib.Generators
+      - dotnet build Stash.Stdlib
       - dotnet test Stash.Tests --filter "FullyQualifiedName~StdlibConsistencyTests|FullyQualifiedName~Stash.Tests.Stdlib.SourceGenerator"
     done_when:
       - "`NamespaceMemberPayload.Invoke` is an exhaustive switch on `Stability`; a `(Stability)99` cast throws `InvalidOperationException` rather than executing the Cached branch (unit test asserts the throw)."
