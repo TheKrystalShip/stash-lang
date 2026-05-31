@@ -341,7 +341,7 @@ public class Parser
                         }
                         names.Add(Consume(TokenType.Identifier, "Expected variable name in destructuring pattern."));
                     }
-                } while (Match(TokenType.Comma));
+                } while (Match(TokenType.Comma) && !Check(TokenType.RightBracket));
             }
             Consume(TokenType.RightBracket, "Expected ']' after destructuring pattern.");
         }
@@ -370,7 +370,7 @@ public class Parser
                         }
                         names.Add(Consume(TokenType.Identifier, "Expected property name in destructuring pattern."));
                     }
-                } while (Match(TokenType.Comma));
+                } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
             }
             Consume(TokenType.RightBrace, "Expected '}' after destructuring pattern.");
         }
@@ -455,7 +455,7 @@ public class Parser
                     Error(Previous(), "Non-default parameter cannot follow a default parameter.");
                 }
                 defaultValues.Add(defaultValue);
-            } while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma) && !Check(TokenType.RightParen));
         }
 
         Consume(TokenType.RightParen, "Expected ')' after parameters.");
@@ -519,7 +519,7 @@ public class Parser
                     fieldType = ParseTypeExpression();
                 }
                 fieldTypes.Add(fieldType);
-            } while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
         }
 
         // Parse methods (including async methods)
@@ -561,7 +561,7 @@ public class Parser
             do
             {
                 members.Add(Consume(TokenType.Identifier, "Expected enum member name."));
-            } while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
         }
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after enum members.");
@@ -618,7 +618,7 @@ public class Parser
                                 paramType = ParseTypeExpression();
                             }
                             parameterTypes.Add(paramType);
-                        } while (Match(TokenType.Comma));
+                        } while (Match(TokenType.Comma) && !Check(TokenType.RightParen));
                     }
 
                     Consume(TokenType.RightParen, "Expected ')' after interface method parameters.");
@@ -642,7 +642,7 @@ public class Parser
                     fields.Add(memberName);
                     fieldTypes.Add(fieldType);
                 }
-            } while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
         }
 
         if (fields.Count == 0 && methods.Count == 0)
@@ -713,7 +713,7 @@ public class Parser
                 do
                 {
                     names.Add(Consume(TokenType.Identifier, "Expected name to import."));
-                } while (Match(TokenType.Comma));
+                } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
             }
 
             Consume(TokenType.RightBrace, "Expected '}' after import names.");
@@ -2159,7 +2159,7 @@ public class Parser
                                     value = new IdentifierExpr(field, field.Span);
                                 }
                                 fieldValues.Add((field, value));
-                            } while (Match(TokenType.Comma));
+                            } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
 
                             Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
                             expr = new StructInitExpr(name, dotExpr, fieldValues, MakeSpan(expr.Span, close.Span));
@@ -2370,7 +2370,7 @@ public class Parser
                 {
                     arguments.Add(Expression());
                 }
-            } while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma) && !Check(TokenType.RightParen));
         }
 
         Token paren = Consume(TokenType.RightParen, "Expected ')' after arguments.");
@@ -2443,7 +2443,7 @@ public class Parser
                     {
                         elements.Add(Expression());
                     }
-                } while (Match(TokenType.Comma));
+                } while (Match(TokenType.Comma) && !Check(TokenType.RightBracket));
             }
             Token close = Consume(TokenType.RightBracket, "Expected ']' after array elements.");
             return new ArrayExpr(elements, MakeSpan(open.Span, close.Span));
@@ -2561,7 +2561,7 @@ public class Parser
                         Expr value = Expression();
                         entries.Add(DictEntry.Constant(key, value));
                     }
-                } while (Match(TokenType.Comma));
+                } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
 
                 Token close = Consume(TokenType.RightBrace, "Expected '}' after dict entries.");
                 return new DictLiteralExpr(entries, MakeSpan(open.Span, close.Span));
@@ -2632,7 +2632,7 @@ public class Parser
                                 value = new IdentifierExpr(field, field.Span);
                             }
                             fieldValues.Add((field, value));
-                        } while (Match(TokenType.Comma));
+                        } while (Match(TokenType.Comma) && !Check(TokenType.RightBrace));
 
                         Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
                         return new StructInitExpr(name, fieldValues, MakeSpan(name.Span, close.Span));
@@ -2765,6 +2765,12 @@ public class Parser
                 if (Check(TokenType.Comma))
                 {
                     Advance(); // skip ','
+                    // Trailing comma: if next is ')' this is still a valid lambda param list
+                    if (Check(TokenType.RightParen))
+                    {
+                        Advance(); // skip ')'
+                        return Check(TokenType.FatArrow);
+                    }
                     continue;
                 }
 
@@ -3196,7 +3202,7 @@ public class Parser
                     Error(Previous(), "Non-default parameter cannot follow a default parameter.");
                 }
                 defaultValues.Add(defaultValue);
-            } while (Match(TokenType.Comma));
+            } while (Match(TokenType.Comma) && !Check(TokenType.RightParen));
         }
 
         Consume(TokenType.RightParen, "Expected ')' after lambda parameters.");
