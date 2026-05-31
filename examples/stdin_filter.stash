@@ -1,0 +1,27 @@
+// stdin_filter.stash — reading ALL of standard input at once with io.readAll().
+//
+// io.readAll() is the bulk-read counterpart to io.readLine(): it consumes the
+// entire standard-input stream and returns it as a single string — the Stash
+// equivalent of `sys.stdin.read()` in Python or `$(cat)` in the shell. This is
+// what lets a Stash script act as a Unix filter:
+//
+//     printf 'hello\nworld\n' | stash examples/stdin_filter.stash
+//
+// On an interactive terminal it waits until the stream is closed (Ctrl-D),
+// exactly like `cat`. When nothing is piped in (stdin already at end-of-stream),
+// readAll() returns "" immediately rather than blocking.
+
+let input = io.readAll();
+
+if (input == "") {
+    io.println("(no input — try: echo 'hello world' | stash examples/stdin_filter.stash)");
+} else {
+    // Trim a single trailing newline so the line count isn't inflated by the
+    // final terminator, then split on newlines.
+    let lines = str.split(str.trimEnd(input, "\n"), "\n");
+
+    io.println("lines read: " + conv.toStr(len(lines)));
+    io.println("chars read: " + conv.toStr(len(input)));
+    io.println("--- upper-cased passthrough ---");
+    io.print(str.upper(input));
+}

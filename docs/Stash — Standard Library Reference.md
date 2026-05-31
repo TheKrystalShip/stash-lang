@@ -5029,6 +5029,7 @@ Converts a dictionary to INI-formatted text.
 | `io.eprintln` | `null` | — | Prints a value followed by a newline to standard error. |
 | `io.eprint` | `null` | — | Prints a value to standard error without a trailing newline. |
 | `io.readLine` | `string` | — | Displays a prompt and reads a line of input from the user. |
+| `io.readAll` | `string` | — | Reads all remaining text from standard input until end-of-stream and returns it as a single string. |
 | `io.confirm` | `bool` | `TypeError` | Prompts the user for a yes/no confirmation. |
 | `io.readPassword` | `secret` | `IOError`, `TypeError` | Reads a password from stdin without echoing typed characters. |
 | `io.pathSeparator` | `string` | — | Returns the platform-specific path-list separator character as a string (`:` on Unix, `;` on Windows). |
@@ -5085,6 +5086,12 @@ Displays a prompt and reads a line of input from the user.
 - `rest`: `...any` — Optional prompt text to display before reading input
 
 **Returns:** `string` — The line of text entered by the user, or null on end of input
+
+#### `io.readAll() -> string`
+
+Reads all remaining text from standard input until end-of-stream and returns it as a single string. This is the bulk-read counterpart to `io.readLine` (the equivalent of `sys.stdin.read()` / `$(cat)`): use it to consume piped or redirected input in one call. Returns the empty string if input is already at end-of-stream. On an interactive terminal it blocks until the stream is closed (Ctrl-D / Ctrl-Z).
+
+**Returns:** `string` — The entire remaining contents of standard input.
 
 #### `io.confirm(prompt: any, ...rest: ...any) -> bool`
 

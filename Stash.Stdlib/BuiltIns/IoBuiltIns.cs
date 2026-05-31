@@ -73,6 +73,16 @@ public static partial class IoBuiltIns
         return result is null ? StashValue.Null : StashValue.FromObj(result);
     }
 
+    /// <summary>Reads all remaining text from standard input until end-of-stream and
+    /// returns it as a single string. This is the bulk-read counterpart to `io.readLine`
+    /// (the equivalent of `sys.stdin.read()` / `$(cat)`): use it to consume piped or
+    /// redirected input in one call. Returns the empty string if input is already at
+    /// end-of-stream. On an interactive terminal it blocks until the stream is closed
+    /// (Ctrl-D / Ctrl-Z).</summary>
+    /// <returns>The entire remaining contents of standard input.</returns>
+    [StashFn(ReturnType = "string")]
+    private static string ReadAll(IInterpreterContext ctx) => ctx.Input.ReadToEnd();
+
     /// <summary>Prompts the user for a yes/no confirmation.</summary>
     /// <param name="prompt">The prompt text to display</param>
     /// <param name="rest">Optional default value: true shows [Y/n] (Enter = yes), false shows [y/N] (Enter = no)</param>

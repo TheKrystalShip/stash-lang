@@ -299,4 +299,45 @@ public class IoBuiltInsTests : StashTestBase
         var result = Run("let result = io.newLine();");
         Assert.Equal(expected, result);
     }
+
+    // ── io.readAll() — bulk stdin read (sys.stdin.read() / $(cat) parity) ─────
+
+    /// <summary>Runs <paramref name="src"/> with <paramref name="stdin"/> wired as standard input.</summary>
+    private static object? RunWithStdin(string src, string stdin)
+    {
+        var lexer = new Lexer(src, "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        vm.Output = new System.IO.StringWriter();
+        vm.Input = new System.IO.StringReader(stdin);
+        return vm.Execute(chunk);
+    }
+
+    [Fact]
+    public void ReadAll_MultiLineInput_ReturnsEntireStream()
+    {
+        var result = RunWithStdin("let result = io.readAll();\nreturn result;", "alpha\nbeta\ngamma\n");
+        Assert.Equal("alpha\nbeta\ngamma\n", result);
+    }
+
+    [Fact]
+    public void ReadAll_EmptyInput_ReturnsEmptyString()
+    {
+        var result = RunWithStdin("let result = io.readAll();\nreturn result;", "");
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void ReadAll_AfterReadLine_ReturnsRemainder()
+    {
+        // io.readLine consumes the first line (terminator stripped); io.readAll takes the rest verbatim.
+        var result = RunWithStdin(
+            "let first = io.readLine();\nlet result = io.readAll();\nreturn result;",
+            "first\nsecond\nthird\n");
+        Assert.Equal("second\nthird\n", result);
+    }
 }

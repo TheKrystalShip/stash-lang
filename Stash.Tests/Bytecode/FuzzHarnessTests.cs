@@ -39,6 +39,9 @@ public class FuzzHarnessTests(ITestOutputHelper output) : BytecodeTestBase
         "elevate", "lock_block", "file_watching",
         "logging", "time_zone", "aliases",
         "binary_data",
+        // stdin-dependent filter: output depends on piped input (non-deterministic),
+        // and io.readAll() would block on a non-redirected stream.
+        "stdin",
         // Pre-existing Phase-3 LVN optimizer bug (tracked separately):
         // bitwise.stash line 159 triggers "int and string" type mismatch in compound assignment
         // after the optimizer incorrectly aliases registers across the permission-flag section.
