@@ -1,16 +1,16 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T21:43:34Z"
+updated: "2026-06-01T22:36:31Z"
 phases:
   1A:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 50e54557f0993eeb648ce460b092cd65845ae5b6
+    verified: true
+    started: "2026-06-01T21:59:27Z"
+    completed: "2026-06-01T22:36:31Z"
+    attempts: 1
+    notes: "checkpoint.stash facade + _registry.stash pure module; --selftest 17/17 byte-parity; $> passthrough"
   2A:
     status: pending
     commit: null
