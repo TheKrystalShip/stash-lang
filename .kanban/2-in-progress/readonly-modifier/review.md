@@ -297,7 +297,8 @@ dotnet test --filter "FullyQualifiedName~ReadOnlyMutationRule|FullyQualifiedName
 
 ## F05 — [MINOR] Brief's acceptance criterion uses `is` for reference-identity, but Stash `is` is a type check (would throw `RuntimeError`)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 4caf1ac
 **Files:** `.kanban/2-in-progress/readonly-modifier/brief.md:212`, `brief.md:276-277` (acceptance criterion)
 **Phase:** P3 (Q1 design log)
 **Commit:** - (brief, pre-implementation)
