@@ -35,7 +35,7 @@ if (fs.exists(dst) || fs.dirExists(dst)) { die(dst + " already exists", 1); }
 // ── Promotion gate (delegated to promote-gate.stash) ─────────────────────────
 // Phase gate (all phases done) + review.md open-finding gate, with the drift note.
 // Single source of truth — /feature-review uses the same script (--phases-only).
-let gate = try $!(stash scripts/checkpoint/promote-gate.stash ${slug});
+let gate = try $!(stash scripts/checkpoint/checkpoint.stash promote-gate ${slug});
 if (gate is Error) { io.eprint(gate.stderr); env.exit(gate.exitCode); }
 
 let plan = load_plan(slug);

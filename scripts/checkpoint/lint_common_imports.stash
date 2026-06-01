@@ -122,10 +122,7 @@ const RAWPATH_EXEMPTIONS = [
     ".claude/WORKFLOW.md",
     ".kanban/milestones/embedding/MILESTONE.md",
     ".kanban/milestones/omission-hardening/MILESTONE.md",
-    ".kanban/_templates/milestone-template.md",
-    "scripts/checkpoint/bootstrap-feature.stash",
-    "scripts/checkpoint/promote-done.stash",
-    "scripts/checkpoint/worktree-start.stash"
+    ".kanban/_templates/milestone-template.md"
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────

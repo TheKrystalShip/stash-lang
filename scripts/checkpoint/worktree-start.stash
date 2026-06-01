@@ -66,6 +66,6 @@ if (add is Error) { env.exit(add.exitCode); }
 
 io.println("created worktree: " + worktree_path + "  (branch " + branch + " off " + base + ")");
 io.println("next: cd \"" + worktree_path + "\" && run /spec <topic>");
-io.println("then: stash scripts/checkpoint/check-parallel-safety.stash " + slug + "   # after spec, before implementing");
-io.println("done: from the main checkout run  stash scripts/checkpoint/worktree-finish.stash " + slug);
+io.println("then: stash scripts/checkpoint/checkpoint.stash check-parallel-safety " + slug + "   # after spec, before implementing");
+io.println("done: from the main checkout run  stash scripts/checkpoint/checkpoint.stash worktree-finish " + slug);
 env.exit(0);

@@ -63,5 +63,5 @@ let cp = $(sed -e ${c_feature} -e ${c_updated} ${cp_tmpl});
 fs.writeFile(dest + "/checkpoint.yaml", cp.stdout);
 
 io.println("created: " + dest);
-io.println("next: edit brief.md and plan.yaml, then run stash scripts/checkpoint/validate-spec.stash " + slug);
+io.println("next: edit brief.md and plan.yaml, then run stash scripts/checkpoint/checkpoint.stash validate-spec " + slug);
 env.exit(0);
