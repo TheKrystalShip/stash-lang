@@ -18,10 +18,8 @@ using System.Collections.Generic;
 /// <b>Design.</b> Previously plain Stash arrays were bare <c>List&lt;StashValue&gt;</c>
 /// objects pushed onto the stack by <c>NewArray</c>.  P3 of the <c>readonly-modifier</c>
 /// feature replaces every construction site with <c>new StashArray(capacity)</c> /
-/// <c>new StashArray(items)</c>.  The <c>StashFrozenArray</c> wrapper is kept as a
-/// thin compatibility shim (boundary callers that previously wrapped via
-/// <c>new StashFrozenArray(list)</c> now call <c>sa.Freeze()</c> instead, after
-/// guaranteeing the list is a <c>StashArray</c>).
+/// <c>new StashArray(items)</c>.  All frozen arrays are uniformly
+/// <c>StashArray { IsFrozen = true }</c> — there is no separate frozen-array wrapper type.
 /// </para>
 /// </summary>
 public sealed class StashArray : List<StashValue>

@@ -67,7 +67,6 @@ public static class SvArgs
         {
             if (v.AsObj is List<StashValue> l) return l;
             if (v.AsObj is StashTypedArray ta) return MaterializeTypedArray(ta);
-            if (v.AsObj is StashFrozenArray fa) return fa.Items;
         }
         throw new TypeError($"{Ordinal(index)} argument to '{funcName}' must be an array.");
     }

@@ -17,16 +17,6 @@ public sealed partial class VirtualMachine
 {
     private object? GetIndexValue(object? obj, object? index, ref CallFrame frame)
     {
-        if (obj is StashFrozenArray fa)
-        {
-            if (index is not long faIdx)
-                throw new RuntimeError("Array index must be an integer.", GetCurrentSpan(ref frame));
-            long faIdxAdj = faIdx;
-            if (faIdxAdj < 0) faIdxAdj += fa.Count;
-            if (faIdxAdj < 0 || faIdxAdj >= fa.Count)
-                throw new RuntimeError($"Index {faIdx} out of bounds for array of length {fa.Count}.", GetCurrentSpan(ref frame));
-            return fa.Items[(int)faIdxAdj].ToObject();
-        }
         if (obj is StashTypedArray ta)
         {
             if (index is not long tIdx)
@@ -83,10 +73,6 @@ public sealed partial class VirtualMachine
 
     private void SetIndexValue(object? obj, object? index, object? value, ref CallFrame frame)
     {
-        if (obj is StashFrozenArray)
-        {
-            throw new ReadOnlyError("Cannot mutate a frozen array.", GetCurrentSpan(ref frame));
-        }
         if (obj is StashTypedArray ta)
         {
             if (index is not long tIdx)

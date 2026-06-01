@@ -195,7 +195,7 @@ public class CliMembersTests : StashTestBase
     public void FrozenRead_ArrSlice_AcceptsFrozenInput()
     {
         // Regression: arr.slice on cli.argv used to raise TypeError because the
-        // SvArgs.StashList extractor didn't unwrap StashFrozenArray. F01 fixed.
+        // SvArgs.StashList extractor didn't handle frozen arrays. F01 fixed.
         // We slice [0, 0) so the result is empty regardless of argv content.
         var result = RunWithArgs("""
             let result = arr.slice(cli.argv, 0, 0);

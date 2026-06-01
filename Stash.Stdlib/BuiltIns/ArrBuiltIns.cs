@@ -1290,10 +1290,8 @@ public static partial class ArrBuiltIns
     }
 
     /// <summary>
-    /// Returns true if <paramref name="obj"/> is a frozen array — either a
-    /// <see cref="StashArray"/> with <see cref="StashArray.IsFrozen"/> set, or the
-    /// legacy <see cref="StashFrozenArray"/> boundary wrapper.
+    /// Returns true if <paramref name="obj"/> is a frozen <see cref="StashArray"/>.
     /// </summary>
     private static bool IsArrayFrozen(object? obj) =>
-        obj is StashFrozenArray || (obj is StashArray sa && sa.IsFrozen);
+        obj is StashArray sa && sa.IsFrozen;
 }
