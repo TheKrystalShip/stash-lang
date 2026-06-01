@@ -35,7 +35,7 @@ fi
 ### 3. Run promotion script
 
 ```bash
-stash scripts/checkpoint/promote-done.stash "$SLUG"
+stash scripts/checkpoint/checkpoint.stash promote-done "$SLUG"
 ```
 
 This script will:

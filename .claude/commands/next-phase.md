@@ -61,7 +61,7 @@ echo "slug: $SLUG  count: $COUNT"
 ### 2. Validate plan + auto-heal checkpoint
 
 ```bash
-stash scripts/checkpoint/validate-spec.stash "$SLUG"
+stash scripts/checkpoint/checkpoint.stash validate-spec "$SLUG"
 ```
 
 Fix any reported problems before continuing. If validation fails, **do not invoke the implementer** — tell the user the brief/plan needs architect attention.
@@ -77,7 +77,7 @@ If the tree is dirty, that's a red flag. The previous phase might not have commi
 ### 4. Get the next phase or phase batch
 
 ```bash
-stash scripts/checkpoint/next-phase.stash "$SLUG" "$COUNT"
+stash scripts/checkpoint/checkpoint.stash next-phase "$SLUG" "$COUNT"
 ```
 
 Capture the YAML output. If exit code is 2:
@@ -104,7 +104,7 @@ For every selected phase:
 Only mark the first selected phase before dispatch. For a batch, the implementer marks each later phase `in_progress` immediately before starting it, then verifies, commits, and advances it before moving on.
 
 ```bash
-stash scripts/checkpoint/advance-checkpoint.stash "$SLUG" "<first-phase-id>" in_progress
+stash scripts/checkpoint/checkpoint.stash advance-checkpoint "$SLUG" "<first-phase-id>" in_progress
 ```
 
 ## Dispatch the implementer
@@ -117,11 +117,11 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
    - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read summary, design path, acceptance criteria, and sections relevant to this phase)
    - Legacy spec/context paths if `_brief` reports them for an older feature
 4. **Batch contract** — the implementer must process selected phases sequentially. For each phase: mark it `in_progress` if it is not already, implement only that phase's intent, run `verify-phase.stash`, commit, advance it to `done`, then continue to the next selected phase.
-5. **Verification contract** — for each phase, the implementer must run `stash scripts/checkpoint/verify-phase.stash <slug> <id>` (not just the bare verify commands — the script also enforces scope).
+5. **Verification contract** — for each phase, the implementer must run `stash scripts/checkpoint/checkpoint.stash verify-phase <slug> <id>` (not just the bare verify commands — the script also enforces scope).
 6. **Commit contract** — one commit per phase, using the exact commit message format from `.claude/agents/implementer.md`. Verify must pass before each commit.
 7. **Advance contract** — after each green phase commit, advance the phase and then chore-commit the checkpoint so the tree is clean between phases (the implementer owns this commit, not the orchestrator):
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> done \
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> <id> done \
        --commit "$(git rev-parse HEAD)" --verified true \
        --notes "<one-line summary>"
    git add .kanban/2-in-progress/<slug>/checkpoint.yaml
@@ -130,7 +130,7 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
    Feat commits must stage only code/test files — never `git add -A` — so checkpoint churn never leaks into them.
 8. **Failure protocol** — if a selected phase cannot be made to pass after bounded plan corrections, run:
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> failed \
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> <id> failed \
        --notes "<reason>"
    ```
    and stop the batch. Do not start later selected phases after a failure.
@@ -140,7 +140,7 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
 1. Read the implementer's report.
 2. **Assert each completed phase actually landed.** `assert-phase-landed` replaces eyeballing `git log` / `git status` / `status.stash` with one deterministic verdict — tree clean, phase `done`+`verified`, and the recorded commit reachable in git:
    ```bash
-   stash scripts/checkpoint/assert-phase-landed.stash "$SLUG" "<completed-phase-id>"
+   stash scripts/checkpoint/checkpoint.stash assert-phase-landed "$SLUG" "<completed-phase-id>"
    ```
    Run it once per phase the implementer completed this turn. Omit `--main-ref` here — standalone `/next-phase` may run directly on `main`; the worktree split-brain pin is `/autopilot`'s job. **Exit 0 = landed;** a non-zero prints exactly what's wrong. The common recoverable case is a dirty `checkpoint.yaml` with no `chore(<slug>): record <id> done state` commit — the implementer didn't finish its chore commit; commit it yourself as a fallback (`git add .kanban/2-in-progress/$SLUG/checkpoint.yaml && git commit -m "chore($SLUG): record <id> done state"`), then re-run the assertion before reporting.
 3. Tell the user:

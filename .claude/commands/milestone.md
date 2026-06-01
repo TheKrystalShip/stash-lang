@@ -14,7 +14,7 @@ $ARGUMENTS
 ### 1. Print the derived ledger
 
 ```bash
-stash scripts/checkpoint/milestone-status.stash "$ARGUMENTS"
+stash scripts/checkpoint/checkpoint.stash milestone-status "$ARGUMENTS"
 ```
 
 (The script resolves the slug itself: omitted + exactly one milestone → that one; multiple → it lists them and asks for an explicit slug.)

@@ -54,9 +54,9 @@ echo "slug: $SLUG  finding: $FID  reason: $REASON"
 # Read severity + status through the SHARED parser (review-findings.stash) — the
 # SAME parse promote-gate uses, so /accept's pre-check can never drift from the
 # gate it mirrors. `--field` exits 1 when the finding id is absent.
-SEV=$(stash scripts/checkpoint/review-findings.stash "$SLUG" --id "$FID" --field severity) \
+SEV=$(stash scripts/checkpoint/checkpoint.stash review-findings "$SLUG" --id "$FID" --field severity) \
   || { echo "finding $FID not found in $REVIEW" >&2; exit 1; }
-STATUS=$(stash scripts/checkpoint/review-findings.stash "$SLUG" --id "$FID" --field status) \
+STATUS=$(stash scripts/checkpoint/checkpoint.stash review-findings "$SLUG" --id "$FID" --field status) \
   || { echo "finding $FID not found in $REVIEW" >&2; exit 1; }
 
 [ "$STATUS" = "open" ] || { echo "refusing: $FID status is '$STATUS', not 'open' — only an open finding can be accepted" >&2; exit 1; }

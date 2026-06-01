@@ -30,7 +30,7 @@ echo "slug: $SLUG"
 ### 2. Refuse if phases not all done
 
 ```bash
-stash scripts/checkpoint/promote-gate.stash "$SLUG" --phases-only
+stash scripts/checkpoint/checkpoint.stash promote-gate "$SLUG" --phases-only
 ```
 
 If this fails, tell the user which phases are pending and to run `/next-phase` for them.
@@ -38,7 +38,7 @@ If this fails, tell the user which phases are pending and to run `/next-phase` f
 ### 3. Compute the diff range
 
 ```bash
-stash scripts/checkpoint/feature-diff-range.stash "$SLUG"
+stash scripts/checkpoint/checkpoint.stash feature-diff-range "$SLUG"
 ```
 
 This is the **single source of truth** for the feature boundary — it prints `base`/`head`/`range`,
@@ -49,7 +49,7 @@ unrelated files — this is the computation that mis-resolved by hand more than 
 the range for the reviewer prompt with:
 
 ```bash
-RANGE=$(stash scripts/checkpoint/feature-diff-range.stash "$SLUG" --range)
+RANGE=$(stash scripts/checkpoint/checkpoint.stash feature-diff-range "$SLUG" --range)
 ```
 
 If it **warns** that no commits matched `($SLUG)`, the phases may not have been committed (or used a
@@ -60,7 +60,7 @@ the range to the reviewer.
 ### 4. Run the full test suite once as a baseline
 
 ```bash
-stash scripts/checkpoint/run-verify.stash "dotnet test" --name baseline
+stash scripts/checkpoint/checkpoint.stash run-verify "dotnet test" --name baseline
 ```
 
 `run-verify` streams the run live and prints a structured, fail-closed verdict (`PASS`/`FAIL`, failed/passed/skipped counts, and any failing-test names) instead of leaving you to eyeball `tail`. **For a cold build, invoke it under the Bash tool's `run_in_background` and poll** — it streams a *warm* build but cannot stream a silent cold build, so it does **not** by itself eliminate the stream-idle timeout. The suite is green — a `FAIL` verdict is a real regression, not noise to excuse.
@@ -83,13 +83,13 @@ Invoke the `reviewer` agent via the `Agent` tool with `subagent_type: "reviewer"
    - Findings format is STRICT: `## Fxx — [SEVERITY] <title>` with the fields documented in the template.
 9. **Update checkpoint** when done:
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status <in_progress|resolved>
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> - --review-status <in_progress|resolved>
    ```
    `resolved` only if zero findings; otherwise `in_progress`.
 
 ## After the reviewer returns
 
-1. List the findings with the shared parser — `stash scripts/checkpoint/review-findings.stash "$SLUG"` (id, severity, status, title; the same parse `/resolve` and the promotion gate use). Add `--json` if you want the structured form.
+1. List the findings with the shared parser — `stash scripts/checkpoint/checkpoint.stash review-findings "$SLUG"` (id, severity, status, title; the same parse `/resolve` and the promotion gate use). Add `--json` if you want the structured form.
 2. Tell the user:
    - Counts by severity
    - Next action:

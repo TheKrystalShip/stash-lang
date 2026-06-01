@@ -126,7 +126,7 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 6. **Failure protocol** — if the selected batch cannot be resolved cleanly, stop before committing and report what should be split or corrected.
 7. **Checkpoint advance after success:**
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status in_progress
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> - --review-status in_progress
    ```
 
 ## After the resolver returns
@@ -134,10 +134,10 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 1. Verify the commit landed: `git log -1 --oneline`.
 2. List remaining open findings with the shared parser — the SAME one the promotion gate uses, so the loop and the gate can never disagree about what is still open:
    ```bash
-   stash scripts/checkpoint/review-findings.stash "$SLUG" --open
+   stash scripts/checkpoint/checkpoint.stash review-findings "$SLUG" --open
    ```
 3. If there are still open findings, suggest the next explicit batch: `/resolve <slug> Fxx [Fyy...]`.
 4. If all findings are fixed, update the checkpoint and tell the user `/done <slug>` is ready:
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status resolved
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> - --review-status resolved
    ```

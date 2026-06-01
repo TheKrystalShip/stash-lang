@@ -62,7 +62,7 @@ Stop on the first failure and tell the user how to fix it.
    ```
 2. **Spec validates.**
    ```bash
-   stash scripts/checkpoint/validate-spec.stash "$SLUG"
+   stash scripts/checkpoint/checkpoint.stash validate-spec "$SLUG"
    ```
    If this fails, the brief/plan needs the architect — stop and say so (`/spec`).
 3. **Pin `main` for the split-brain guard.** Record main's SHA now, in the main checkout —
@@ -84,13 +84,13 @@ Stop on the first failure and tell the user how to fix it.
   ```
 - **Otherwise — create it:**
   ```bash
-  stash scripts/checkpoint/worktree-start.stash "$SLUG"
+  stash scripts/checkpoint/checkpoint.stash worktree-start "$SLUG"
   ```
   then `EnterWorktree path: ../stash-<slug>`. Once inside (cwd is now the worktree, with its own
   `.kanban/` and `scripts/`), run the parallel-safety heads-up and **surface its warning but do
   not stop** (it is non-blocking, exit 3):
   ```bash
-  stash scripts/checkpoint/check-parallel-safety.stash "$SLUG" || true
+  stash scripts/checkpoint/checkpoint.stash check-parallel-safety "$SLUG" || true
   ```
 
 Everything from here runs **inside the worktree** (or the current checkout under `--here`), so the
@@ -98,7 +98,7 @@ sub-commands resolve all paths locally — no cross-checkout orchestration.
 
 ## Step 3 — Phase loop (until all phases `done`)
 
-Repeat until `stash scripts/checkpoint/status.stash "$SLUG"` shows every phase `done`:
+Repeat until `stash scripts/checkpoint/checkpoint.stash status "$SLUG"` shows every phase `done`:
 
 1. Invoke **`/next-phase <slug>`** (Skill tool). One implementer, one phase. `/next-phase` already
    runs its own pre-flight (validate, clean-tree check, get-next-phase) and its own
@@ -107,7 +107,7 @@ Repeat until `stash scripts/checkpoint/status.stash "$SLUG"` shows every phase `
    `status.stash` + `git status` by hand). In worktree mode add the `--main-ref` pin from Step 1 so a
    stray commit onto `main` is caught:
    ```bash
-   stash scripts/checkpoint/assert-phase-landed.stash "$SLUG" "<phase-id>" --main-ref <MAIN_REF>
+   stash scripts/checkpoint/checkpoint.stash assert-phase-landed "$SLUG" "<phase-id>" --main-ref <MAIN_REF>
    ```
    (Drop `--main-ref` under `--here`.) A non-zero exit means the phase did NOT land cleanly — dirty
    tree, phase not `done`/`verified`, recorded commit unreachable, or `main` moved. Treat a red
@@ -131,13 +131,13 @@ When `/next-phase` reports "all phases done," continue to Step 4.
    so skipping it deadlocks the pipeline.
 3. **Decide via the enumerator** (not by eyeballing `review.md`):
    ```bash
-   stash scripts/checkpoint/review-findings.stash "$SLUG" --count
+   stash scripts/checkpoint/checkpoint.stash review-findings "$SLUG" --count
    ```
    Prints `0` → skip Steps 5–6, go straight to Step 7 (`/done`). Non-zero → go to Step 5.
 
 ## Step 5 — Resolve all findings (of the current review)
 
-Loop until `stash scripts/checkpoint/review-findings.stash "$SLUG" --open --count` prints `0`:
+Loop until `stash scripts/checkpoint/checkpoint.stash review-findings "$SLUG" --open --count` prints `0`:
 
 1. Invoke **`/resolve <slug> Fxx`** (Skill tool) — one finding, or a small batch of clearly
    related/small findings. The resolver fixes only those, runs their Verify union, commits the fix,
@@ -181,7 +181,7 @@ regressions the fixes introduced.
   must run from `main`, and `keep` leaves the worktree in place for that merge. Then tell the user
   to integrate from there:
   ```bash
-  stash scripts/checkpoint/worktree-finish.stash <slug>
+  stash scripts/checkpoint/checkpoint.stash worktree-finish <slug>
   ```
   Merging is left to a human because it needs judgment the script can't make: *last-to-merge-pays*
   ordering against sibling features, green-on-branch ≠ green-on-merged-`main`, and the guaranteed
@@ -190,7 +190,7 @@ regressions the fixes introduced.
   1. `ExitWorktree action: keep` (return to the main checkout; do **not** remove — the script
      removes the worktree itself only if the post-merge verify is green).
   2. ```bash
-     stash scripts/checkpoint/worktree-finish.stash <slug>
+     stash scripts/checkpoint/checkpoint.stash worktree-finish <slug>
      ```
      It merges `--no-ff`, re-runs `final_verify` on the merged `main`, and cleans up only if green.
   3. **Merge conflict or post-merge `final_verify` red → HARD STOP + handoff.** The script
