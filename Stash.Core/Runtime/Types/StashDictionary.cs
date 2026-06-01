@@ -31,7 +31,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     public void Set(object key, StashValue value)
     {
         if (_frozen)
-            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         ValidateKey(key);
         _entries[key] = value;
     }
@@ -49,14 +49,14 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     public bool Remove(object key)
     {
         if (_frozen)
-            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         return _entries.Remove(key);
     }
 
     public void Clear()
     {
         if (_frozen)
-            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         _entries.Clear();
     }
 

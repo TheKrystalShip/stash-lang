@@ -2,6 +2,7 @@ namespace Stash.Runtime;
 
 using System.Collections.Generic;
 using System.Text;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 
 /// <summary>
@@ -299,6 +300,85 @@ public static class RuntimeValues
     }
 
     /// <summary>
+    /// Deep-freezes a Stash runtime value in place, making the entire transitive
+    /// object graph immutable. Safe to call on primitives (no-op). Cycle-safe.
+    ///
+    /// <para>
+    /// Frozen flag placement per type:
+    /// <list type="bullet">
+    ///   <item><see cref="StashArray"/> — calls <see cref="StashArray.Freeze()"/>, then recurses into elements.</item>
+    ///   <item><see cref="StashDictionary"/> — calls <see cref="StashDictionary.Freeze()"/>, then recurses into values.</item>
+    ///   <item><see cref="StashInstance"/> — calls <see cref="StashInstance.Freeze()"/>, then recurses into fields.</item>
+    ///   <item><see cref="StashError"/> — no write-guard added (already rejects field writes); recurses into <c>Properties</c> values.</item>
+    ///   <item>Primitives, strings, functions, closures, etc. — skipped (no-op).</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    /// <param name="value">The <see cref="StashValue"/> to freeze. Primitives are accepted as a no-op.</param>
+    public static void DeepFreeze(StashValue value)
+    {
+        if (!value.IsObj) return; // primitives: int, float, bool, null, byte — already immutable
+        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        DeepFreezeObject(value.AsObj, visited);
+    }
+
+    private static void DeepFreezeObject(object? obj, HashSet<object> visited)
+    {
+        if (obj is null) return;
+        // Cycle guard — also prevents double-traversal of already-frozen nodes
+        if (!visited.Add(obj)) return;
+
+        switch (obj)
+        {
+            case StashArray arr:
+                arr.Freeze();
+                for (int i = 0; i < arr.Count; i++)
+                {
+                    StashValue elem = arr[i];
+                    if (elem.IsObj) DeepFreezeObject(elem.AsObj, visited);
+                }
+                break;
+
+            case StashDictionary dict:
+                dict.Freeze();
+                foreach (var kv in dict.RawEntries())
+                {
+                    StashValue val = kv.Value;
+                    if (val.IsObj) DeepFreezeObject(val.AsObj, visited);
+                }
+                break;
+
+            case StashInstance inst:
+                inst.Freeze();
+                foreach (var kv in inst.GetAllFields())
+                {
+                    StashValue val = kv.Value;
+                    if (val.IsObj) DeepFreezeObject(val.AsObj, visited);
+                }
+                break;
+
+            case StashError err:
+                // StashError is already write-blocked (no IVMFieldMutable).
+                // DeepFreeze only needs to traverse into its Properties dict to
+                // freeze any nested reference-typed values.
+                if (err.Properties is not null)
+                {
+                    foreach (var propVal in err.Properties.Values)
+                    {
+                        if (propVal is not null)
+                            DeepFreezeObject(propVal, visited);
+                    }
+                }
+                break;
+
+            // Functions, closures, bound methods, namespaces, typed arrays, etc.
+            // are treated as opaque — they are skipped but do not throw.
+            default:
+                break;
+        }
+    }
+
+    /// <summary>
     /// Creates a deep copy of a Stash runtime value. Immutable values (primitives, enums,
     /// ranges, namespaces) are returned as-is. Mutable values (lists, dictionaries, struct
     /// instances, functions/lambdas with closures) are recursively cloned.
@@ -341,7 +421,8 @@ public static class RuntimeValues
 
     private static List<StashValue> DeepCopyStashList(List<StashValue> list)
     {
-        var copy = new List<StashValue>(list.Count);
+        // Preserve StashArray subtype so frozen-flag semantics survive the copy.
+        var copy = list is StashArray ? new StashArray(list.Count) : new List<StashValue>(list.Count);
         for (int i = 0; i < list.Count; i++)
         {
             object? deepCopied = DeepCopy(list[i].ToObject());

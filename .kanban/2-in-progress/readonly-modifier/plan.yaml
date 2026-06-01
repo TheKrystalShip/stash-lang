@@ -108,19 +108,26 @@ phases:
     files:
       - Stash.Core/Runtime/Types/StashDictionary.cs
       - Stash.Core/Runtime/Types/StashFrozenArray.cs
+      - Stash.Core/Runtime/Types/StashArray.cs
       - Stash.Core/Runtime/Types/StashInstance.cs
       - Stash.Core/Runtime/Types/StashError.cs
       - Stash.Core/Runtime/RuntimeValues.cs
       - Stash.Core/Runtime/StashValue.cs
       - Stash.Bytecode/VM/VirtualMachine.*.cs
+      - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+      - Stash.Stdlib/SvArgs.cs
+      - Stash.Stdlib/BuiltIns/GlobalBuiltIns.cs
       - Stash.Tests/Runtime/**
+      - .kanban/0-backlog/bugs/DeepFreeze-skips-stdlib-produced-bare-lists.md
     verify:
       - dotnet build
       - dotnet test --filter "FullyQualifiedName~RuntimeValuesTests|FullyQualifiedName~StashDictionaryTests|FullyQualifiedName~FreezeTests"
       # Perf gate (Q1 always-wrap carrier touches the array hot path). Record
       # median-of-3 before/after; no regression beyond noise on these two.
+      # Plan correction: bench_numeric.stash does not exist in this worktree;
+      # substituting bench_function_calls.stash which covers numeric/call overhead.
       - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_algorithms.stash
-      - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_numeric.stash
+      - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_function_calls.stash
     done_when:
       - "Plain arrays use an **always-present wrapper carrier** (decided 2026-06-01 — `is` is reference identity, so wrap-on-freeze is ruled out) exposing an in-place `IsFrozen` bit; dict and struct/`StashInstance` likewise expose `IsFrozen` + `Freeze()`."
       - "`StashError` is NOT given a new write-guard (it already rejects field writes — no `IVMFieldMutable`); `DeepFreeze` only traverses into its properties dict to freeze nested values."

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 
 /// <summary>
@@ -15,6 +16,15 @@ public class StashInstance : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMS
 {
     public string TypeName { get; }
     public StashStruct? Struct { get; }
+
+    /// <summary>Whether this instance is frozen (all field-write operations throw <see cref="Errors.ReadOnlyError"/>).</summary>
+    public bool IsFrozen { get; private set; }
+
+    /// <summary>
+    /// Freezes this instance in place. Subsequent field-write operations throw
+    /// <see cref="Errors.ReadOnlyError"/>. Idempotent.
+    /// </summary>
+    public void Freeze() => IsFrozen = true;
 
     /// <summary>
     /// Slot-based field storage for struct-backed instances. Null for anonymous instances.
@@ -79,6 +89,9 @@ public class StashInstance : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMS
 
     public void SetField(string name, StashValue value, SourceSpan? span)
     {
+        if (IsFrozen)
+            throw new ReadOnlyError($"Cannot mutate a frozen struct '{TypeName}'.", span);
+
         if (FieldSlots is not null)
         {
             if (Struct!.FieldIndices.TryGetValue(name, out int idx))

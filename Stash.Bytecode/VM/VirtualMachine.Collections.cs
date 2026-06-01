@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Models;
 
@@ -84,7 +85,7 @@ public sealed partial class VirtualMachine
     {
         if (obj is StashFrozenArray)
         {
-            throw new RuntimeError("Cannot mutate a read-only array returned by a namespace member.", GetCurrentSpan(ref frame));
+            throw new ReadOnlyError("Cannot mutate a frozen array.", GetCurrentSpan(ref frame));
         }
         if (obj is StashTypedArray ta)
         {
@@ -98,6 +99,9 @@ public sealed partial class VirtualMachine
         }
         if (obj is List<StashValue> svList)
         {
+            // StashArray subclass carries IsFrozen; bare List<StashValue> is never frozen.
+            if (svList is StashArray sa && sa.IsFrozen)
+                throw new ReadOnlyError("Cannot mutate a frozen array.", GetCurrentSpan(ref frame));
             if (index is not long i)
             {
                 throw new RuntimeError("Array index must be an integer.", GetCurrentSpan(ref frame));
@@ -194,6 +198,9 @@ public sealed partial class VirtualMachine
         // Fast path: array[non-negative int] = val
         if (obj.Tag == StashValueTag.Obj && obj.AsObj is List<StashValue> list && idx.IsInt)
         {
+            // Frozen-array guard — StashArray subclass carries IsFrozen.
+            if (list is StashArray sa && sa.IsFrozen)
+                throw new ReadOnlyError("Cannot mutate a frozen array.", GetCurrentSpan(ref frame));
             long i = idx.AsInt;
             if ((ulong)i < (ulong)list.Count)
             {
@@ -416,7 +423,7 @@ public sealed partial class VirtualMachine
         byte a = Instruction.GetA(inst);
         byte count = Instruction.GetB(inst);
         int @base = frame.BaseSlot;
-        var list = new List<StashValue>(count);
+        var list = new StashArray(count);
         for (int i = 0; i < count; i++)
         {
             StashValue val = _stack[@base + a + 1 + i];
@@ -621,22 +628,36 @@ public sealed partial class VirtualMachine
     /// Freezes reference-typed values returned by a DataMember getter so that callers
     /// cannot silently mutate a cached or shared collection.
     /// Primitive types (int, string, bool, float) are returned unchanged.
+    ///
+    /// <para>P3 change: <see cref="StashArray"/> (and bare <see cref="List{StashValue}"/>
+    /// returned by older getters) are frozen in place via <see cref="StashArray.Freeze()"/>.
+    /// If the getter returns a bare <see cref="List{StashValue}"/>, it is first wrapped in a
+    /// <see cref="StashArray"/> to carry the flag (identity may change at this one boundary
+    /// callsite — the DataMember getter, not user code).</para>
     /// </summary>
     private static StashValue FreezeMemberValue(StashValue value)
     {
         if (!value.IsObj) return value; // primitives: int, float, bool, null
         object? obj = value.AsObj;
-        return obj switch
+        switch (obj)
         {
-            List<StashValue> list => StashValue.FromObj(new StashFrozenArray(list)),
-            StashDictionary dict when !dict.IsFrozen => FreezeDict(dict, value),
-            _ => value, // strings (interned/immutable), BuiltInFunction, StashInstance, etc.
-        };
-    }
+            case StashArray sa:
+                if (!sa.IsFrozen) sa.Freeze();
+                return value;
 
-    private static StashValue FreezeDict(StashDictionary dict, StashValue original)
-    {
-        dict.Freeze();
-        return original;
+            case List<StashValue> list:
+                // Older getter returning a bare List — upgrade to StashArray so the
+                // frozen flag has somewhere to live, then freeze in place.
+                var wrapped = new StashArray(list);
+                wrapped.Freeze();
+                return StashValue.FromObj(wrapped);
+
+            case StashDictionary dict:
+                if (!dict.IsFrozen) dict.Freeze();
+                return value;
+
+            default:
+                return value; // strings, BuiltInFunction, StashInstance, etc.
+        }
     }
 }
