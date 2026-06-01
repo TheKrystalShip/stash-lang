@@ -132,6 +132,10 @@ Loop until `grep '\*\*Status:\*\* open' .kanban/2-in-progress/$SLUG/review.md` i
 3. **2-attempt rule:** if `/resolve` reports a finding it cannot cleanly fix (conflicting batch,
    needs design judgment, verify won't pass), re-attempt it once alone. If it still fails →
    **STOP + handoff** (which finding, why, the remaining open findings).
+   - **Never self-accept.** The autopilot does not mark findings `accepted` — that is a human-only
+     decision (`/accept <slug> <Fxx> <reason>`, non-CRITICAL only). On a STOP, the human's options
+     are: `/resolve` it differently, `/accept` a non-CRITICAL one (then re-run `/autopilot`), or
+     re-scope. A CRITICAL finding is always fix-or-stop — it can never be accepted.
 
 ## Step 6 — Review pass 2 (the single re-review)
 

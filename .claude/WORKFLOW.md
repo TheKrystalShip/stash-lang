@@ -45,6 +45,7 @@ The plan should be trusted, but it is not sacred. Implementers may make small, d
 | `/next-phase [slug] [count]` | Implement the next ready phase(s) in one implementer turn. |
 | `/feature-review [slug]` | Review the completed feature against `brief.md`. |
 | `/resolve [slug] <Fxx> [Fyy...]` | Fix exactly the selected review finding(s). |
+| `/accept [slug] <Fxx> <reason>` | **Human-only.** Record a deliberate decision to ship a **non-CRITICAL** finding *without* fixing it (`Status: accepted` + justification). The promotion gate honors it; CRITICAL findings can never be accepted. |
 | `/done [slug]` | Run final verification and move the feature to `.kanban/4-done/`. |
 | `/resume [slug]` | Print current state and recommend the next command. |
 | `/milestone [slug]` | Print a long-term milestone's derived ledger + the next unit to spec. (See "Milestones" below.) |

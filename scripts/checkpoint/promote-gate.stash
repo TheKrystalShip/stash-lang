@@ -1,5 +1,5 @@
 #!/usr/bin/env stash
-// promote-gate.stash <slug> [--phases-only]
+// promote-gate.stash <slug> [--phases-only] [--selftest]
 //
 // Read-only promotion/review gate. Replaces the embedded `python3 - <<PY`
 // heredoc in promote-done.sh and the inline python in the /feature-review
@@ -7,9 +7,11 @@
 // stderr message on the FIRST failing check. Emits nothing on stdout.
 //
 //   phases gate (always): every plan phase must be checkpoint-status "done".
-//   review gate (unless --phases-only): review.md must contain zero
-//     "**Status:** open" findings (review.md is the source of truth), with a
-//     drift note when the checkpoint's findings_open counter disagrees.
+//   review gate (unless --phases-only): each finding in review.md must be
+//     fixed, or accepted (non-CRITICAL, with a non-empty justification).
+//     review.md is the source of truth.
+//   --selftest: run six inline cases that prove review_gate_block_reasons
+//     works; exit 0 if all pass, exit 1 otherwise. No kanban state needed.
 //
 // CONTRACT: exit code is TIGHT (0 pass / 1 fail — callers branch on it via
 // `set -e`). The stderr wording is human-facing (LOOSE), kept close to the
@@ -17,17 +19,161 @@
 
 import { resolve_feature, load_plan, load_checkpoint, feature_dir } from "_common.stash";
 
-// ── Argument parse (manual: slug positional + --phases-only flag) ───────────
+// ── Argument parse (manual: slug positional + --phases-only + --selftest) ───
 let slug_arg = null;
 let phases_only = false;
+let selftest_mode = false;
 for (let a in cli.argv) {
     if (a == "--phases-only") {
         phases_only = true;
+    } else if (a == "--selftest") {
+        selftest_mode = true;
     } else if (slug_arg == null) {
         slug_arg = a;
     }
 }
 
+// ── Pure review-gate logic: parse findings, return blocking reason strings ───
+//
+// A finding block in review.md looks like:
+//   ## F01 — [CRITICAL] short title
+//   **Status:** open
+//   **Accepted because:** optional justification text
+//   ...
+//
+// Findings are delimited by "## Fxx — [SEVERITY]" H2 headers.
+// Walk lines as a state machine: on a header line, close the previous finding
+// and start a new one; on a status/justification line, update current finding.
+//
+// Verdict table:
+//   status == "fixed"                                          → OK
+//   status == "accepted" AND severity != "CRITICAL"
+//                        AND non-empty **Accepted because:**   → OK
+//   status == "accepted" AND severity == "CRITICAL"            → BLOCK
+//   status == "accepted" AND no non-empty justification line   → BLOCK
+//   status == "open"                                           → BLOCK
+//   any other status (unknown / missing)                       → BLOCK
+fn review_gate_block_reasons(content) {
+    let reasons = [];
+
+    // State for the finding currently being accumulated.
+    let cur_id       = null;
+    let cur_severity = null;
+    let cur_status   = null;
+    let cur_just     = false;   // has a non-empty **Accepted because:** line?
+
+    // Close the accumulated finding and evaluate it, appending to reasons.
+    // The em-dash in the header regex below is U+2014 (same char in review.md).
+    let close_finding = (id, severity, status, has_justification) => {
+        if (id == null) {
+            return;
+        }
+        if (status == "fixed") {
+            return;   // OK
+        }
+        if (status == "accepted") {
+            if (severity == "CRITICAL") {
+                arr.push(reasons, id + ": CRITICAL findings cannot be accepted; fix it or stop");
+            } else if (!has_justification) {
+                arr.push(reasons, id + ": accepted without a justification (add **Accepted because:** <reason>)");
+            }
+            // else: accepted + non-CRITICAL + justification → OK
+            return;
+        }
+        if (status == "open") {
+            arr.push(reasons, id + ": still open");
+            return;
+        }
+        if (status == null) {
+            arr.push(reasons, id + ": no **Status:** line found (fail-closed)");
+            return;
+        }
+        // Unknown status (wontfix, typo, …)
+        arr.push(reasons, id + ": unknown status '" + status + "'");
+    };
+
+    // Header pattern: ^## (F[0-9]+)\s*—\s*\[([A-Z]+)\]
+    // The — is the literal em-dash U+2014 that review.md uses.
+    let header_pattern  = "^## (F[0-9]+)\\s*—\\s*\\[([A-Z]+)\\]";
+    let status_pattern  = "^\\*\\*Status:\\*\\*\\s*([A-Za-z]+)";
+    let just_pattern    = "^\\*\\*Accepted because:\\*\\*\\s*\\S";
+
+    for (let line in str.lines(content)) {
+        let hm = re.capture(line, header_pattern);
+        if (hm != null) {
+            // Close previous finding before starting a new one.
+            close_finding(cur_id, cur_severity, cur_status, cur_just);
+            cur_id       = hm.groups[1].value;
+            cur_severity = hm.groups[2].value;
+            cur_status   = null;
+            cur_just     = false;
+        } else {
+            let sm = re.capture(line, status_pattern);
+            if (sm != null) {
+                cur_status = sm.groups[1].value;
+            } else if (re.test(line, just_pattern)) {
+                cur_just = true;
+            }
+        }
+    }
+    // Close the last finding.
+    close_finding(cur_id, cur_severity, cur_status, cur_just);
+
+    return reasons;
+}
+
+// ── --selftest: validate review_gate_block_reasons with six inline cases ────
+if (selftest_mode) {
+    let all_passed = true;
+
+    let check = (case_num, label, reasons, expect_empty) => {
+        let ok = expect_empty ? (reasons.length == 0) : (reasons.length > 0);
+        let verdict = ok ? "PASS" : "FAIL";
+        io.println(verdict + "  case " + conv.toStr(case_num) + ": " + label);
+        if (!ok) {
+            all_passed = false;
+            if (expect_empty) {
+                io.println("       got blocking reasons: [" + arr.join(reasons, "; ") + "]");
+            } else {
+                io.println("       expected NON-EMPTY reasons but got EMPTY — function is vacuous");
+            }
+        }
+    };
+
+    // Case 1 — two fixed findings → PASS (expect empty, proves non-vacuity partner of case 2)
+    let c1 = "## F01 — [IMPORTANT] thing one\n**Status:** fixed\n\n## F02 — [MINOR] thing two\n**Status:** fixed\n";
+    check(1, "two fixed findings → gate passes", review_gate_block_reasons(c1), true);
+
+    // Case 2 — one open finding → FAIL (expect non-empty, proves discriminator)
+    let c2 = "## F01 — [IMPORTANT] outstanding thing\n**Status:** open\n";
+    check(2, "one open finding → gate blocks", review_gate_block_reasons(c2), false);
+
+    // Case 3 — accepted MINOR with justification → PASS
+    let c3 = "## F01 — [MINOR] edge case\n**Status:** accepted\n**Accepted because:** edge case not worth fixing\n";
+    check(3, "MINOR accepted with justification → gate passes", review_gate_block_reasons(c3), true);
+
+    // Case 4 — accepted CRITICAL (with justification) → FAIL
+    let c4 = "## F01 — [CRITICAL] severe bug\n**Status:** accepted\n**Accepted because:** we tried\n";
+    check(4, "CRITICAL accepted → gate blocks (criticals can't be accepted)", review_gate_block_reasons(c4), false);
+
+    // Case 5 — accepted MINOR without any justification line → FAIL
+    let c5 = "## F01 — [MINOR] small thing\n**Status:** accepted\n";
+    check(5, "MINOR accepted without justification → gate blocks", review_gate_block_reasons(c5), false);
+
+    // Case 6 — unknown status 'wontfix' → FAIL
+    let c6 = "## F01 — [IMPORTANT] ignored thing\n**Status:** wontfix\n";
+    check(6, "unknown status 'wontfix' → gate blocks", review_gate_block_reasons(c6), false);
+
+    if (all_passed) {
+        io.println("all 6 cases passed.");
+        env.exit(0);
+    } else {
+        io.println("one or more selftest cases FAILED.");
+        env.exit(1);
+    }
+}
+
+// ── Normal operation: load feature state ────────────────────────────────────
 let slug = resolve_feature(slug_arg);   // dies (exit 1) if unresolvable
 let plan = load_plan(slug);
 let cp   = load_checkpoint(slug);
@@ -63,31 +209,23 @@ if (phases_only) {
     env.exit(0);
 }
 
-// ── Review gate: zero open findings in review.md (source of truth) ──────────
-// Mirrors promote-done.sh: derive the authoritative open-finding count from
-// review.md's per-finding `**Status:** open` headers — NOT the checkpoint's
-// findings_open counter, which is not auto-maintained and silently drifts.
-let rv = dict.get(cp, "review") ?? {};
+// ── Review gate: all findings in review.md must be fixed or validly accepted ─
+// review.md is the source of truth. The checkpoint's findings_open counter is
+// not auto-maintained and can silently drift — ignore it here.
 let review_md = feature_dir(slug) + "/review.md";
 
 if (fs.exists(review_md)) {
-    let open_count = 0;
-    for (let line in str.lines(fs.readFile(review_md))) {
-        if (re.test(line, "^\\*\\*Status:\\*\\*\\s*open\\b")) {
-            open_count = open_count + 1;
+    let reasons = review_gate_block_reasons(fs.readFile(review_md));
+    if (reasons.length > 0) {
+        io.eprintln("refusing to promote: review gate failed:");
+        for (let r in reasons) {
+            io.eprintln("  " + r);
         }
-    }
-    if (open_count > 0) {
-        let stored = dict.get(rv, "findings_open");
-        let drift = (stored == open_count)
-            ? ""
-            : " [checkpoint counter says " + conv.toStr(stored) + " — drift, ignored]";
-        io.eprintln("refusing to promote: " + conv.toStr(open_count)
-                  + " open review finding(s) in review.md" + drift);
         env.exit(1);
     }
 } else {
     // No review.md on disk — fall back to the stored counter.
+    let rv = dict.get(cp, "review") ?? {};
     let stored = dict.get(rv, "findings_open");
     if (stored != null && stored != 0) {
         io.eprintln("refusing to promote: " + conv.toStr(stored) + " open review findings");
