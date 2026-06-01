@@ -86,6 +86,7 @@ const LIVE_DOC_GLOBS = [
     "CLAUDE.md",
     ".claude/repo.md",
     ".kanban/_templates/**/*.md",
+    ".kanban/_templates/**/*.yaml",
     ".kanban/milestones/**/*.md",
     "scripts/checkpoint/*.stash"
 ];

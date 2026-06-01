@@ -1,7 +1,7 @@
 # checkpoint.yaml — live state for an in-progress feature
 #
-# Created by `/spec` (or `scripts/checkpoint/bootstrap-feature.stash`).
-# Updated atomically by `scripts/checkpoint/advance-checkpoint.stash` after every
+# Created by `/spec` (or `scripts/checkpoint/checkpoint.stash bootstrap-feature`).
+# Updated atomically by `scripts/checkpoint/checkpoint.stash advance-checkpoint` after every
 # implementer / resolver turn. Never hand-edit during normal flow.
 
 schema_version: 1

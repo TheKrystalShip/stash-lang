@@ -2,7 +2,7 @@
 #
 # Authored by the architect, consumed by checkpoint scripts. Keep design prose in
 # brief.md; keep only script inputs here.
-# Validate with: stash scripts/checkpoint/validate-spec.stash checkpoint-cli
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec checkpoint-cli
 
 schema_version: 1
 
