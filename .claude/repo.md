@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - pkg-cli-api-parity — Stash pkg CLI parity with scoped registry API | .kanban/2-in-progress/pkg-cli-api-parity/ | 8 phases | started 2026-05-30
+- checkpoint-cli — Single checkpoint CLI entrypoint (facade) | .kanban/2-in-progress/checkpoint-cli/ | 7 phases | started 2026-06-01
 
 ---
 

@@ -1,0 +1,233 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/validate-spec.stash checkpoint-cli
+
+schema_version: 1
+
+feature: checkpoint-cli
+title: Single checkpoint CLI entrypoint (facade)
+
+brief: ./brief.md
+
+created: 2026-06-01
+architect_session: 2026-06-01-architect-checkpoint-cli
+
+# Default verify command run after every phase. Keep it cheap.
+# The full dotnet test suite + per-tool selftests live in final_verify.
+default_verify:
+  - stash scripts/checkpoint/lint_common_imports.stash
+
+# Broad scope. Safety rail, not a prison.
+scope:
+  - scripts/checkpoint/**
+  - .claude/**
+  - CLAUDE.md
+  - .kanban/_templates/*.md
+  - .kanban/milestones/**/*.md
+  - .kanban/2-in-progress/checkpoint-cli/**
+
+phases:
+  - id: 1A
+    title: Dispatcher + registry pure-module + per-sub --help + parity selftest
+    deps: []
+    files:
+      - scripts/checkpoint/_registry.stash
+      - scripts/checkpoint/checkpoint.stash
+    verify:
+      - stash scripts/checkpoint/checkpoint.stash --help
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+      - stash scripts/checkpoint/lint_common_imports.stash
+    done_when:
+      - "`scripts/checkpoint/_registry.stash` exists as an importable pure module: `export const SUBCOMMANDS = [...]` (one entry per subcommand with `name`/`path`/`group`/`one_liner`/`usage`) plus `export const INTERNAL_TOOLS = [...]`. NO top-level side effects (no `io.println`, no `env.exit`, no `cli.argv` reads) — verified by running `stash scripts/checkpoint/_registry.stash` directly and observing exit 0 + empty stdout/stderr."
+      - "`stash scripts/checkpoint/checkpoint.stash --help` prints a grouped subcommand list with one-liners and exits 0."
+      - "`stash scripts/checkpoint/checkpoint.stash -h` and zero-arg invocation behave identically to `--help`."
+      - "`stash scripts/checkpoint/checkpoint.stash nope` exits 2 with `error: unknown subcommand: nope` on stderr followed by the top-level help on stderr."
+      - "For every subcommand S in the registry, `checkpoint S --help` and `checkpoint S -h` print a usage line (from the registry's `usage` field) and exit 0 WITHOUT invoking the underlying tool."
+      - "For every subcommand S that has a `--selftest` or `--self-test` flag, the dispatcher's `--selftest` invokes both `checkpoint S <flag>` and `stash scripts/checkpoint/S.stash <flag>` and asserts byte-identical stdout, byte-identical stderr, and identical exit codes. Both flag spellings (`--selftest` and `--self-test`) must passthrough verbatim — the dispatcher does NOT normalize them."
+      - "For every subcommand S without a selftest flag, the dispatcher's `--selftest` invokes a SIDE-EFFECT-FREE usage-error probe (e.g. `checkpoint S` with intentionally wrong/missing args that hits the script's `usage:` exit-code-2 path) and asserts exit-code + stderr-bytes parity with the raw invocation. The probe MUST NOT cause any filesystem write, directory creation, `mv`, git mutation, or checkpoint-state change. Listed in the dispatcher source with a comment explaining why each probe is non-mutating."
+      - "Subcommand names, groups, paths, one-liners, and usage strings live in `_registry.stash`; `checkpoint.stash` references them only through `SUBCOMMANDS`/`INTERNAL_TOOLS` imports — no inlined subcommand-name literals at any use site within the dispatcher."
+      - "`checkpoint.stash` imports at least one symbol from `_common.stash` (satisfies the existing `lint_common_imports` rule for files under `scripts/checkpoint/`)."
+      - "`_registry.stash` is exempt from the existing `lint_common_imports` `_common` import rule (registered in that lint's `IMPORT_ALLOW_LIST` or equivalent) — it is intentionally pure and has no need of `_common` helpers."
+      - "Existing `lint_common_imports.stash` normal scan AND `--self-test` are green."
+      - "Every existing tool's `--selftest` (run directly) is green — no tool was edited in this phase."
+    notes: |
+      Author both `_registry.stash` and `checkpoint.stash` via the `stash-author`
+      agent (docs-first protocol). Use the same strict-passthrough primitive
+      existing tools use: `$!>(stash ${path} ${args...})`. Propagate `exitCode`
+      exactly.
+
+      `_registry.stash` MUST be pure — Stash executes top-level statements on
+      import, so any `io.println` or `env.exit` at top level would fire every
+      time the dispatcher or the lint imports it.
+
+      The `--selftest` for the dispatcher is itself the differential-validation
+      vehicle — when it passes, byte-transparent passthrough is proven for the
+      full registry. Wire it into final_verify in phase 5A; for now it runs as
+      this phase's verify.
+
+  - id: 2A
+    title: Omission guard — registry coverage (Construct supplement) + no-raw-path (Detect, RED with exemptions)
+    deps: [1A]
+    files:
+      - scripts/checkpoint/lint_common_imports.stash
+      - scripts/checkpoint/lint_common_imports.fixtures/bad_raw_subcommand_path.md
+      - scripts/checkpoint/lint_common_imports.fixtures/ok_raw_internal_path.md
+      - scripts/checkpoint/_registry.stash
+    verify:
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/lint_common_imports.stash --self-test
+      - stash scripts/checkpoint/checkpoint.stash lint
+      - stash scripts/checkpoint/checkpoint.stash lint --self-test
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+    done_when:
+      - "The lint imports `SUBCOMMANDS` and `INTERNAL_TOOLS` from `_registry.stash` (NOT text-parsed from `checkpoint.stash`) — single source of truth, no drift seam."
+      - "Invariant (a) is asserted: every `scripts/checkpoint/*.stash` not on `INTERNAL_TOOLS` MUST appear in `SUBCOMMANDS`, and every `SUBCOMMANDS` entry MUST point at an existing file. The lint fails on mismatch in either direction."
+      - "Invariant (b) is asserted: no file in the `LIVE_DOC_GLOBS` set (minus `RAWPATH_SCAN_EXCLUSIONS`, minus `RAWPATH_EXEMPTIONS`) contains a raw `scripts/checkpoint/<name>.stash` reference where `<name>` is in `SUBCOMMANDS`."
+      - "`LIVE_DOC_GLOBS` is a named const including `.claude/**/*.md`, `CLAUDE.md`, `.claude/repo.md`, `.kanban/_templates/**/*.md`, `.kanban/milestones/**/*.md`, and `scripts/checkpoint/*.stash`. It explicitly EXCLUDES `.kanban/4-done/**` and `.kanban/0-backlog/**`."
+      - "`INTERNAL_TOOLS` (in `_registry.stash`) includes `_common.stash`, `_registry.stash`, `verify-phase-scope.stash`, `lint_common_imports.stash`, and `checkpoint.stash` (the facade)."
+      - "`RAWPATH_SCAN_EXCLUSIONS` is a SEPARATE, PERMANENT named const in the lint listing files that legitimately hold raw subcommand paths as data. At minimum: `scripts/checkpoint/_registry.stash`. Never shrunk; never grown casually (any addition is a documented architectural choice)."
+      - "`RAWPATH_EXEMPTIONS` is a TEMPORARY, SHRINKING named const in the lint listing live-surface files still containing a raw subcommand path at the end of phase 2A. Distinct from `RAWPATH_SCAN_EXCLUSIONS`. Phases 3A-4C shrink this list to empty; phase 5A asserts it is empty."
+      - "The lint's `--self-test` ships TWO fixtures: (i) `bad_raw_subcommand_path.md` containing a literal `scripts/checkpoint/next-phase.stash` reference — the guard MUST fire on this; (ii) `ok_raw_internal_path.md` containing a literal `scripts/checkpoint/verify-phase-scope.stash` reference — the guard MUST NOT fire on this. The self-test exits 0 only when BOTH expectations hold."
+      - "Neither fixture file is in `LIVE_DOC_GLOBS` (the `lint_common_imports.fixtures/` directory is not scanned by the markdown globs), so the positive fixture's raw path does not accidentally trip the normal scan."
+      - "Removing any entry from `RAWPATH_EXEMPTIONS` while that path still contains a raw subcommand path makes the lint FAIL (proves the exemption list is the actual control, not a paper one)."
+      - "Adding the `_registry.stash` path to `RAWPATH_SCAN_EXCLUSIONS` does NOT silence the positive fail-path fixture (which lives under `lint_common_imports.fixtures/`, not in `_registry.stash`) — the self-test fires the guard on the fixture regardless. Verified by running `--self-test`."
+      - "`checkpoint lint` is registered as a subcommand in `_registry.stash`'s `SUBCOMMANDS`."
+      - "Existing `_common` import + shadow check remain functional."
+    notes: |
+      Author via `stash-author`. The guard is intentionally RED-with-exemptions:
+      `RAWPATH_EXEMPTIONS` lists every un-migrated live file from phase 1A's
+      discovery (the 19 markdown files + the 2 intra-script callers
+      `promote-done.stash`, `bootstrap-feature.stash`, `worktree-start.stash`).
+      Phases 3A-4C shrink `RAWPATH_EXEMPTIONS` to empty.
+
+      Wire `--self-test` to verify BOTH fixtures (positive and negative) in one
+      run. The negative fixture is load-bearing: it pins the "internal-tool
+      reference is correct" semantics so a future implementer cannot widen the
+      guard to flag `verify-phase-scope` references inside `verify-phase.stash`.
+
+  - id: 3A
+    title: Intra-script migration — promote-done, bootstrap-feature, worktree-start
+    deps: [2A]
+    files:
+      - scripts/checkpoint/promote-done.stash
+      - scripts/checkpoint/bootstrap-feature.stash
+      - scripts/checkpoint/worktree-start.stash
+      - scripts/checkpoint/lint_common_imports.stash
+    verify:
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+      - stash scripts/checkpoint/promote-done.stash --help || true
+      - stash scripts/checkpoint/checkpoint.stash next-phase --help
+    done_when:
+      - "`promote-done.stash`'s `$!(stash scripts/checkpoint/promote-gate.stash ${slug})` is rewritten to invoke `checkpoint promote-gate` (exact shell-out form to be determined by the implementer, preserving strict-passthrough semantics and exit-code propagation)."
+      - "`bootstrap-feature.stash`'s `io.println` hint string referencing `stash scripts/checkpoint/validate-spec.stash` is rewritten to reference `checkpoint validate-spec`."
+      - "`worktree-start.stash`'s two `io.println` hint strings referencing `stash scripts/checkpoint/check-parallel-safety.stash` and `stash scripts/checkpoint/worktree-finish.stash` are rewritten to the `checkpoint <sub>` form."
+      - "`verify-phase.stash`'s call to `verify-phase-scope.stash` (internal tool) is unchanged — the guard does NOT flag it (proven by `ok_raw_internal_path.md` fixture remaining green)."
+      - "`RAWPATH_EXEMPTIONS` list in the lint shrinks by exactly the three `.stash` files migrated in this phase."
+      - "Every per-tool `--selftest` for the three edited tools is green."
+      - "Lint normal + `--self-test` green."
+      - "Dispatcher `--selftest` (byte-parity for every registry entry) still green."
+
+  - id: 4A
+    title: Doc migration batch 1 — slash commands (.claude/commands/*.md)
+    deps: [3A]
+    files:
+      - .claude/commands/spec.md
+      - .claude/commands/next-phase.md
+      - .claude/commands/feature-review.md
+      - .claude/commands/resolve.md
+      - .claude/commands/accept.md
+      - .claude/commands/done.md
+      - .claude/commands/continue.md
+      - .claude/commands/milestone.md
+      - .claude/commands/autopilot.md
+      - scripts/checkpoint/lint_common_imports.stash
+    verify:
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/lint_common_imports.stash --self-test
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+    done_when:
+      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in `.claude/commands/*.md` where `<sub>` is a registered subcommand is rewritten to `checkpoint <sub>`."
+      - "`RAWPATH_EXEMPTIONS` removes every file in `.claude/commands/`."
+      - "The lint passes on this batch's files (no exemption, no violation)."
+      - "Slash-command flow examples remain syntactically valid (the replacement is a one-to-one string swap; no semantic edits)."
+      - "Existing `_common.stash` import check still green."
+
+  - id: 4B
+    title: Doc migration batch 2 — agents + WORKFLOW + CLAUDE + repo.md
+    deps: [4A]
+    files:
+      - .claude/agents/architect.md
+      - .claude/agents/implementer.md
+      - .claude/agents/reviewer.md
+      - .claude/agents/resolver.md
+      - .claude/agents/stash-author.md
+      - .claude/WORKFLOW.md
+      - CLAUDE.md
+      - .claude/repo.md
+      - scripts/checkpoint/lint_common_imports.stash
+    verify:
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/lint_common_imports.stash --self-test
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+    done_when:
+      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in the listed agent / workflow / project-memory files where `<sub>` is a registered subcommand is rewritten to `checkpoint <sub>`."
+      - "`RAWPATH_EXEMPTIONS` removes every file in this batch."
+      - "The lint passes on this batch's files (no exemption, no violation)."
+      - "`.claude/WORKFLOW.md`'s 'Scripts' table is updated so its example invocations use the `checkpoint <sub>` form (the table's `Script` column may keep file names for grep-continuity, but the example commands beneath / surrounding it must be migrated)."
+
+  - id: 4C
+    title: Doc migration batch 3 — templates + milestones
+    deps: [4B]
+    files:
+      - .kanban/_templates/milestone-template.md
+      - .kanban/milestones/omission-hardening/MILESTONE.md
+      - .kanban/milestones/embedding/MILESTONE.md
+      - scripts/checkpoint/lint_common_imports.stash
+    verify:
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/lint_common_imports.stash --self-test
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+    done_when:
+      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in the listed template / milestone files where `<sub>` is a registered subcommand is rewritten to `checkpoint <sub>`."
+      - "`RAWPATH_EXEMPTIONS` is empty after this phase."
+      - "The lint normal scan reports zero exemptions, zero violations across the full `LIVE_DOC_GLOBS` set."
+
+  - id: 5A
+    title: Final acceptance — guard at empty exemptions, full final_verify
+    deps: [4C]
+    files:
+      - .kanban/2-in-progress/checkpoint-cli/brief.md
+      - .kanban/2-in-progress/checkpoint-cli/plan.yaml
+      - .claude/repo.md
+    verify:
+      - dotnet build
+      - dotnet test
+      - stash scripts/checkpoint/lint_common_imports.stash
+      - stash scripts/checkpoint/lint_common_imports.stash --self-test
+      - stash scripts/checkpoint/checkpoint.stash --selftest
+    done_when:
+      - "`RAWPATH_EXEMPTIONS` (the temporary migration list) is empty AND the lint exits 0 with `0 violations` over the full `LIVE_DOC_GLOBS` set."
+      - "`RAWPATH_SCAN_EXCLUSIONS` (the permanent data-file list) remains exactly its phase-2A contents (`_registry.stash` only, unless an explicit Decision Log entry has added another) — verified by inspection."
+      - "`checkpoint --selftest` is green: byte-parity for every registered subcommand (selftest cases) and exit-code+stderr parity for the side-effect-free usage-error probes (no-selftest cases)."
+      - "Every per-tool `--selftest`/`--self-test` is green when invoked via both `checkpoint <sub> <flag>` AND `stash scripts/checkpoint/<sub>.stash <flag>`."
+      - "Full `dotnet test` suite is green (zero failures), including all `Category=Gotcha` change-detector tests."
+      - "Brief and plan.yaml have any minor end-state corrections folded in."
+      - "`.claude/repo.md` Recent Completed Work entry prepared for `/done` to promote."
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Includes the full test suite, the dispatcher selftest (byte-parity over the
+# whole registry), the lint normal+self-test, and a representative per-tool
+# selftest sweep. Never exclude enforcement / Category=Gotcha tests.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/lint_common_imports.stash
+  - stash scripts/checkpoint/lint_common_imports.stash --self-test
+  - stash scripts/checkpoint/checkpoint.stash --selftest
+  - stash scripts/checkpoint/feature-diff-range.stash --selftest
+  - stash scripts/checkpoint/assert-phase-landed.stash --selftest
+  - stash scripts/checkpoint/run-verify.stash --selftest
+  - stash scripts/checkpoint/promote-gate.stash --selftest

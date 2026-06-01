@@ -1,0 +1,67 @@
+schema_version: 1
+feature: checkpoint-cli
+current: null
+updated: "2026-06-01T21:43:34Z"
+phases:
+  1A:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  2A:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  3A:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  4A:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  4B:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  4C:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  5A:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+review:
+  status: not_started
+  started: null
+  resolved: null
+  findings_open: 0
+  findings_fixed: 0
