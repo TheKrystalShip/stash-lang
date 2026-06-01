@@ -1,0 +1,60 @@
+// difftest_milestone-status_cases.stash
+//
+// Case table for the milestone-status differential oracle. milestone-status is
+// LOOSE: exit code (0 success / 1 multi-or-missing) is TIGHT; stdout wording is
+// not. The dedup/no-features cases add stdout_must_contain on the DERIVED COUNTS
+// (the semantic core) since dedup correctness isn't observable via exit alone.
+//
+// Auto-discovered + imported by difftest_runner.stash. Exports SLUG, PLAN, CASES.
+//
+// The runner's milestone_test staging writes milestone dirs + milestone-tagged
+// feature dirs (4-done / 2-in-progress, valid or malformed) and optional sibling
+// worktrees with their own tagged features (cross-worktree scan + dedup).
+
+export const SLUG = "ms";
+
+export const PLAN = {
+    schema_version: 1, feature: SLUG, title: "MS Test", brief: "./brief.md",
+    phases: [ { id: "P1", title: "First", deps: [], files: ["x"], verify: ["true"] } ]
+};
+
+const SEED_CP = {
+    schema_version: 1, feature: SLUG, current: null, updated: "2026-01-01T00:00:00Z",
+    phases: { P1: { status: "pending", commit: null, verified: false,
+                    started: null, completed: null, attempts: 0, notes: "" } }
+};
+
+fn case_of(name, argv, extra) {
+    let c = { name: name, plan: PLAN, seed_cp: SEED_CP, argv: argv,
+              milestone_test: true, file_mutation: false };
+    for (let k in dict.keys(extra)) { c[k] = dict.get(extra, k); }
+    return c;
+}
+
+export const CASES = [
+    case_of("single milestone resolves with no arg (exit 0)", [],
+            { milestones: ["m1"] }),
+
+    case_of("multiple milestones require explicit slug (exit 1)", [],
+            { milestones: ["m1", "m2"],
+              stdout_must_contain: ["multiple milestones; pass a slug explicitly"] }),
+
+    case_of("no child features tagged (exit 0)", ["m1"],
+            { milestones: ["m1"],
+              stdout_must_contain: ["No child features tagged `milestone: m1`"] }),
+
+    case_of("mixed done + in-flight across two worktrees with dedup (exit 0)", ["m1"],
+            { milestones: ["m1"],
+              done:     [ { slug: "d1",  title: "Done One",     milestone: "m1" } ],
+              inflight: [ { slug: "dup", title: "Dup Feature",  milestone: "m1" } ],
+              siblings: [ { name: "sib", branch: "feature/sib",
+                            inflight: [ { slug: "dup", title: "Dup Feature",  milestone: "m1" },
+                                        { slug: "i2",  title: "Inflight Two",  milestone: "m1" } ] } ],
+              stdout_must_contain: ["done:      1", "in-flight: 2"] }),
+
+    case_of("malformed plan.yaml tolerated (exit 0)", ["m1"],
+            { milestones: ["m1"],
+              inflight:  [ { slug: "good", title: "Good", milestone: "m1" } ],
+              malformed: ["bad"],
+              stdout_must_contain: ["in-flight: 1"] })
+];

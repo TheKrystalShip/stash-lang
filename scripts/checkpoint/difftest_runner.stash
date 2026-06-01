@@ -315,6 +315,55 @@ fn stage_worktree_scenario(tree_root, case_obj) {
     }
 }
 
+/// Stage a milestone scenario (used by milestone-status cases). Wipes the seeded
+/// 2-in-progress, then writes the declared milestone dirs + milestone-tagged
+/// feature dirs (in 4-done / 2-in-progress, valid or deliberately malformed).
+/// `siblings` get the same treatment in their own git worktree (own tagged
+/// features, no inherited .kanban) to exercise the cross-worktree scan + dedup.
+fn stage_milestone_scenario(tree_root, case_obj) {
+    fn write_feat(root, stage, slug, title, mtag, valid) {
+        let d = root + "/.kanban/" + stage + "/" + slug;
+        fs.createDir(d);
+        if (valid) {
+            let p = { schema_version: 1, feature: slug, title: title,
+                      phases: [ { id: "P1", title: "x", deps: [], files: ["x"], verify: ["true"] } ] };
+            if (mtag != null) { p.milestone = mtag; }
+            fs.writeFile(d + "/plan.yaml", yaml.stringify(p));
+        } else {
+            fs.writeFile(d + "/plan.yaml", ": : not [ valid } yaml :\n");
+        }
+    }
+    fn setup(root, spec) {
+        let ip = root + "/.kanban/2-in-progress";
+        if (fs.dirExists(ip)) { fs.delete(ip); }
+        for (let m in dict.get(spec, "milestones") ?? []) {
+            let md = root + "/.kanban/milestones/" + m;
+            fs.createDir(md);
+            fs.writeFile(md + "/MILESTONE.md", "# " + m + "\n");
+        }
+        for (let f in dict.get(spec, "done") ?? [])      { write_feat(root, "4-done",       f.slug, f.title, f.milestone, true); }
+        for (let f in dict.get(spec, "inflight") ?? [])  { write_feat(root, "2-in-progress", f.slug, f.title, f.milestone, true); }
+        for (let f in dict.get(spec, "malformed") ?? []) { write_feat(root, "2-in-progress", f, "", null, false); }
+    }
+    setup(tree_root, case_obj);
+    let sibs = dict.get(case_obj, "siblings") ?? [];
+    if (sibs.length > 0) {
+        process.exec("git", ["-C", tree_root, "add", "-A"], ExecOptions { strict: false });
+        process.exec("git", ["-C", tree_root, "-c", "user.email=t@t", "-c", "user.name=t",
+                             "commit", "-q", "-m", "base"], ExecOptions { strict: false });
+        let side = path.base(tree_root);
+        let parent = path.dir(tree_root);
+        for (let sib in sibs) {
+            let sib_path = parent + "/wt-" + side + "-" + sib.name;
+            process.exec("git", ["-C", tree_root, "worktree", "add", "-q", "-b", sib.branch, sib_path],
+                         ExecOptions { strict: false });
+            let sk = sib_path + "/.kanban";
+            if (fs.dirExists(sk)) { fs.delete(sk); }
+            setup(sib_path, sib);
+        }
+    }
+}
+
 /// Run one implementation (py or stash) in a fixture tree.
 /// Returns { exit_code, stdout, stderr }.
 fn run_impl(tree_root, is_stash, script_name, argv) {
@@ -377,6 +426,10 @@ fn run_case(case_obj, entry, repo_root) {
     if (dict.get(case_obj, "worktree_test") == true) {
         stage_worktree_scenario(py_root, case_obj);
         stage_worktree_scenario(st_root, case_obj);
+    }
+    if (dict.get(case_obj, "milestone_test") == true) {
+        stage_milestone_scenario(py_root, case_obj);
+        stage_milestone_scenario(st_root, case_obj);
     }
 
     // Run both

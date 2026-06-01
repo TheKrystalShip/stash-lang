@@ -1,0 +1,168 @@
+#!/usr/bin/env stash
+// milestone-status.stash <milestone-slug?>
+//
+// Stash port of milestone-status.py. Prints the DERIVED ledger for a long-term
+// milestone: which child features are done vs in flight, computed by scanning
+// feature dirs (across ALL git worktrees) for a `milestone: <slug>` tag in their
+// plan.yaml — never read from the (drift-prone) milestone doc itself.
+//
+// LOOSE contract: exit 0 success / 1 (no milestone match or MILESTONE.md missing)
+// is TIGHT; stdout wording/columns may differ.
+
+import { die } from "_common.stash";
+
+const MILESTONES_DIR = ".kanban/milestones";
+const STAGE_DONE     = ".kanban/4-done";
+const STAGE_INFLIGHT = ".kanban/2-in-progress";
+
+/// Tolerant load — a single malformed plan.yaml must not abort the scan.
+fn safe_load(p) {
+    if (!fs.exists(p)) { return {}; }
+    try {
+        let data = yaml.parse(fs.readFile(p));
+        return (typeof(data) == "dict") ? data : {};
+    } catch (e) {
+        // Untyped catch: yaml.parse throws ParseError (not RuntimeError) on
+        // malformed input — a single bad plan.yaml must not abort the scan.
+        return {};
+    }
+}
+
+/// Sorted list of milestone slugs that have a MILESTONE.md.
+fn list_milestones() {
+    if (!fs.dirExists(MILESTONES_DIR)) { return []; }
+    let out = [];
+    for (let e in fs.listDir(MILESTONES_DIR)) {
+        if (fs.isDir(e) && fs.exists(e + "/MILESTONE.md")) {
+            arr.push(out, path.base(e));
+        }
+    }
+    arr.sort(out);
+    return out;
+}
+
+/// (path, branch, is_current) for every git worktree; falls back to the current
+/// checkout alone if git is unavailable.
+fn worktrees(repo_root) {
+    let r = process.exec("git", ["worktree", "list", "--porcelain"],
+                         ExecOptions { cwd: repo_root, strict: false });
+    if (r.exitCode != 0) {
+        return [{ path: repo_root, branch: null, is_current: true }];
+    }
+    let out = [];
+    let p = null;
+    let branch = null;
+    for (let line in str.lines(r.stdout)) {
+        if (str.startsWith(line, "worktree ")) {
+            p = str.substring(line, 9); branch = null;
+        } else if (str.startsWith(line, "branch ")) {
+            branch = str.replace(str.substring(line, 7), "refs/heads/", "");
+        } else if (line == "" && p != null) {
+            arr.push(out, { path: p, branch: branch, is_current: (path.abs(p) == repo_root) });
+            p = null; branch = null;
+        }
+    }
+    if (p != null) {
+        arr.push(out, { path: p, branch: branch, is_current: (path.abs(p) == repo_root) });
+    }
+    if (out.length == 0) {
+        return [{ path: repo_root, branch: null, is_current: true }];
+    }
+    return out;
+}
+
+/// (slug, title, loc) for features tagged with this milestone in `stage_rel`
+/// across ALL worktrees, deduped by slug (current checkout preferred).
+fn members(repo_root, stage_rel, slug) {
+    let seen = {};         // feature-slug -> {fslug, title, loc}
+    for (let wt in worktrees(repo_root)) {
+        let stage_dir = wt.path + "/" + stage_rel;
+        if (!fs.dirExists(stage_dir)) { continue; }
+        let dirs = arr.filter(fs.listDir(stage_dir), (e) => fs.isDir(e));
+        arr.sort(dirs);
+        for (let d in dirs) {
+            let plan = d + "/plan.yaml";
+            if (!fs.exists(plan)) { continue; }
+            let data = safe_load(plan);
+            if (dict.get(data, "milestone") != slug) { continue; }
+            let name = path.base(d);
+            if (dict.has(seen, name) && !wt.is_current) { continue; }
+            let loc = wt.is_current ? "" : (wt.branch != null ? ("(" + wt.branch + ")") : "(worktree)");
+            seen[name] = { fslug: name, title: conv.toStr(dict.get(data, "title") ?? ""), loc: loc };
+        }
+    }
+    let keys = dict.keys(seen);
+    arr.sort(keys);
+    let rows = [];
+    for (let k in keys) { arr.push(rows, dict.get(seen, k)); }
+    return rows;
+}
+
+fn fmt(rows) {
+    for (let r in rows) {
+        let suffix = (r.loc != "") ? ("  " + r.loc) : "";
+        io.println("  " + str.padEnd(r.fslug, 40) + " " + r.title + suffix);
+    }
+}
+
+// ── Main ──────────────────────────────────────────────────────────────────────
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+let slug = raw.length > 0 ? raw[0] : null;
+let repo_root = path.abs(env.cwd);
+
+if (slug == null || slug == "") {
+    let found = list_milestones();
+    if (found.length == 0) {
+        io.println("no milestones in .kanban/milestones/");
+        env.exit(0);
+    }
+    if (found.length > 1) {
+        io.println("multiple milestones; pass a slug explicitly:");
+        for (let m in found) { io.println("  " + m); }
+        env.exit(1);
+    }
+    slug = found[0];
+}
+
+let mdir = MILESTONES_DIR + "/" + slug;
+if (!fs.exists(mdir + "/MILESTONE.md")) {
+    die("milestone not found: " + mdir + "/MILESTONE.md", 1);
+}
+
+let done = members(repo_root, STAGE_DONE, slug);
+let done_slugs = {};
+for (let f in done) { done_slugs[f.fslug] = true; }
+
+let inflight = [];
+for (let f in members(repo_root, STAGE_INFLIGHT, slug)) {
+    if (!dict.has(done_slugs, f.fslug)) { arr.push(inflight, f); }
+}
+
+io.println("Milestone: " + slug);
+io.println("Charter:   " + mdir + "/MILESTONE.md");
+io.println("");
+io.println("Ledger (derived from feature dirs across all worktrees — not from the charter):");
+io.println("  done:      " + conv.toStr(done.length));
+io.println("  in-flight: " + conv.toStr(inflight.length));
+io.println("");
+
+if (done.length > 0) {
+    io.println("DONE (in 4-done/):");
+    fmt(done);
+    io.println("");
+}
+if (inflight.length > 0) {
+    io.println("IN-FLIGHT (in 2-in-progress/):");
+    fmt(inflight);
+    io.println("");
+}
+if (done.length == 0 && inflight.length == 0) {
+    io.println("No child features tagged `milestone: " + slug + "` yet.");
+    io.println("");
+}
+
+io.println("Next up: read the 'Rough order & next up' section of the charter.");
+io.println("To start the next unit:  /spec <next-unit-slug>");
+io.println("Remember to add  `milestone: " + slug + "`  to that feature's plan.yaml.");
+env.exit(0);
