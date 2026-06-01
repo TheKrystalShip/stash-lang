@@ -27,6 +27,17 @@ You receive:
 6. Commit only when that phase's verification passes.
 7. **Do not author `.stash` code yourself — delegate Stash authoring to the `stash-author` agent** (it reads the docs first and is the sole `.stash` author; this prevents plausible-but-wrong Stash written from memory). Trivial mechanical edits (rename, whitespace, a path/command flip) are exempt; new Stash logic or non-trivial edits are not. C#/interpreter code is yours as usual.
 
+## Long-running commands — background them (avoid stream-idle timeouts)
+
+`verify-phase.stash` shells out to `dotnet build`/`dotnet test`, and perf-gated phases run
+`dotnet run -c Release -- benchmarks/...`. Any of these can run for minutes with **no incremental
+output**, idling your stream past its timeout and killing the turn mid-phase. So: launch every
+command that may exceed ~60s — each `dotnet build`/`test`/`run -c Release`, and `verify-phase.stash`
+itself — with the Bash tool's `run_in_background: true`, then poll its output file to completion.
+Short commands (git, file ops, a quick targeted test filter) run in the foreground normally. If a
+perf baseline is already known (handed to you, or the prior phase measured the same benchmark on the
+same code state), reuse it rather than re-running a cold build.
+
 ## Bounded Plan Deviations
 
 You may make a small judgment call when implementation proves the plan is slightly wrong: a file was renamed, a function lives in a neighboring file, a signature differs from discovery notes, or a helper must move with its direct caller.

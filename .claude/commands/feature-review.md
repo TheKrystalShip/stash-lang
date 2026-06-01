@@ -38,15 +38,34 @@ If this fails, tell the user which phases are pending and to run `/next-phase` f
 ### 3. Compute the diff range
 
 ```bash
-git fetch origin main 2>/dev/null || true
-BASE=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main)
-echo "base: $BASE"
+# Feature boundary = the PARENT OF THE FIRST FEATURE COMMIT on this branch.
+# Do NOT use `git merge-base HEAD origin/main`: origin/main is frequently stale
+# (it lags local main), which silently widens the base and pollutes the review
+# diff with hundreds of unrelated files. This computation is robust against both
+# a stale origin/main AND a local main that has advanced (merge-base would still
+# be correct there, but parent-of-first-commit is tighter and model-agnostic).
+#
+# Feature commits are tagged "<type>($SLUG)" — feat/fix/test/docs/chore — so match
+# the slug, not just feat(). --reverse|head -1 = the oldest such commit (P1).
+FIRST=$(git log --reverse --format=%H --grep="($SLUG)" main..HEAD 2>/dev/null | head -1)
+if [ -n "$FIRST" ]; then
+  BASE=$(git rev-parse "$FIRST^")
+else
+  # Fallback (e.g. --here mode, or unconventional commit messages): the local
+  # fork point. Prefer LOCAL main over origin/main — origin can be stale.
+  BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main)
+fi
+echo "base: $BASE   (parent of first $SLUG commit)"
 echo "head: $(git rev-parse HEAD)"
-git log --oneline "$BASE"..HEAD --grep="feat($SLUG)" --grep="fix($SLUG)"
-git diff --stat "$BASE"..HEAD
+git log --oneline "$BASE"..HEAD --grep="($SLUG)"
+echo "--- diff stat (should be ONLY this feature's files) ---"
+git diff --stat "$BASE"..HEAD | tail -40
 ```
 
-If no commits match the feature grep, the user may not have committed phases (or used a different prefix). Investigate before dispatching.
+If no commits match the feature grep, the user may not have committed phases (or used a
+different prefix) — investigate before dispatching. **Sanity-check the diff stat**: if it lists
+files far outside the feature's `scope:` globs (hundreds of unrelated files), the base resolved
+wrong — recompute from the first feature commit's parent before handing the range to the reviewer.
 
 ### 4. Run the full test suite once as a baseline
 

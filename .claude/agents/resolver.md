@@ -33,6 +33,14 @@ You produce:
 5. **Verify before commit.** Run every distinct `Verify` command from the selected findings. If a command is stale but the intent is clear, use the nearest equivalent and report that deviation.
 6. **Don't author `.stash` code yourself — delegate Stash authoring to the `stash-author` agent** (sole `.stash` author, docs-first). Trivial mechanical edits (rename, whitespace, a path/command flip) are exempt; fixing or writing Stash logic is not.
 
+## Long-running commands — background them (avoid stream-idle timeouts)
+
+A finding's `Verify` commands usually include `dotnet test`/`dotnet build` (and sometimes
+`dotnet run -c Release` benchmarks). These run for minutes with **no incremental output** and can
+idle your stream past its timeout, killing the fix mid-turn. Launch any command that may exceed ~60s
+with the Bash tool's `run_in_background: true`, then poll its output file to completion. Short
+commands run in the foreground normally.
+
 ## Workflow
 
 ### Step 1 — Read Inputs

@@ -65,6 +65,14 @@ Each finding must be parseable:
 
 Severities: `CRITICAL`, `IMPORTANT`, `MINOR`.
 
+## Long-running commands — background them (avoid stream-idle timeouts)
+
+If you run `dotnet test`/`dotnet build` yourself, launch it with the Bash tool's
+`run_in_background: true` and poll its output file to completion — a full suite runs for minutes with
+**no incremental output** and can idle your stream past its timeout, killing the review mid-turn. The
+orchestrator usually hands you the baseline result in the prompt, so prefer reading the diff and
+assessing over re-running the suite at all.
+
 ## Hard Rules
 
 - Do not fix anything.
