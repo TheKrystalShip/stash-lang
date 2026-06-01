@@ -1,6 +1,6 @@
 # DeepFreeze does not traverse bare List<StashValue> returned by stdlib functions
 
-**Status:** Fixed — 2026-06-01 (commit TBD — see F02 fix in readonly-modifier review.md)
+**Status:** Fixed — 2026-06-01 (commit 45a99c0 — see F02 fix in readonly-modifier review.md)
 **Created:** 2026-06-01
 **Discovery context:** P3 of readonly-modifier feature. The always-present `StashArray` carrier was introduced for `ExecuteNewArray` (array literals), but stdlib producers (`arr.slice`, `arr.concat`, `arr.map`, `arr.keys`, `arr.values`, etc.) still return bare `List<StashValue>`, not `StashArray`. The `DeepFreezeObject` switch has no `List<StashValue>` case — only a `StashArray` case — so these bare lists are silently skipped during deep-freeze traversal.
 
@@ -102,4 +102,4 @@ Fixed as review finding F02 of the `readonly-modifier` feature. Approach (A) —
 3. A defense-in-depth `case List<StashValue> list:` was added to `DeepFreezeObject` (placed AFTER the `StashArray` case to preserve correct dispatch order) to recurse into bare lists that may still slip through.
 4. New tests added to `FreezeTests.cs` and `ReadonlyTests.cs` covering slice, map, chunk, zip, and a bare-list safety-net case.
 
-Commit: see `fix(readonly-modifier): F02` in `feature/readonly-modifier` branch.
+Commit: 45a99c0 (`fix(readonly-modifier): F02 — deep-freeze transitivity through stdlib-produced arrays`) in `feature/readonly-modifier` branch.
