@@ -1,7 +1,7 @@
 schema_version: 1
 feature: readonly-modifier
 current: null
-updated: "2026-06-01T15:52:49Z"
+updated: "2026-06-01T16:12:01Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: Freeze opcode + compiler wiring for readonly init/rebind; upvalue const/readonly enforcement; 21 e2e tests green; bench stable 120/121ms vs 120/94ms baseline
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 36febd30966240e5b894492556aa4fb4b1a6e96b
+    verified: true
+    started: "2026-06-01T16:00:44Z"
+    completed: "2026-06-01T16:12:01Z"
+    attempts: 1
+    notes: "SA0847 ReadOnlyMutationRule: DotAssign/IndexAssign/CallExpr on readonly bindings; KnownInPlaceMutators set; DispatchNodeRules added to VisitIndexAssignExpr; 30 tests green; arr.shuffle frozen-guard bug filed in backlog"
   P6:
     status: pending
     commit: null
