@@ -209,9 +209,11 @@ try {
   `readonly` as a name. Because `let`/`const` are hard keywords, `readonly let`
   / `readonly const` is unambiguous on a two-token lookahead.
 - **Identity-preserving.** Freezing does **not** change a value's runtime type
-  from the author's perspective: after `readonly let a = arr`, `typeof(a) ==
-  "array"` and `a is arr` (same reference). This is the central implementation
-  constraint — see Implementation Path.
+  from the author's perspective: `readonly let a = D` does not alter the
+  underlying reference, so a mutation through `a` reaches the same frozen graph
+  that `D` sees (the aliasing-throws test in `FreezeTests` proves this), and
+  `typeof(a) == "dict"` / `typeof(a) == "array"` is unchanged. This is the
+  central implementation constraint — see Implementation Path.
 - **`readonly let` re-freezes on every rebind.** Every value assigned to a
   `readonly let` binding is deep-frozen at assignment time, not only the
   initializer.
@@ -273,9 +275,11 @@ plumbing) — both options preserve value identity from the Stash side.
   re-freezes).
 - `readonly let n = 42;` is accepted, and `n = 99` works (primitive no-op,
   binding axis remains `let`).
-- Identity is preserved by freezing: `readonly let a = D; a is D` is true and
-  `typeof(a) == "dict"` — the value's reference and author-visible type are
-  unchanged by the in-place freeze.
+- Identity is preserved by freezing: `readonly let a = D` does not alter the
+  underlying reference, so a mutation through `a` reaches the same frozen graph
+  that `D` sees (the aliasing-throws test in `FreezeTests` proves this), and
+  `typeof(a) == "dict"` / `typeof(a) == "array"` is unchanged — the value's
+  reference and author-visible type are unchanged by the in-place freeze.
 - `let shared = { count: 0 }; readonly const snap = { data: shared };
   shared.count = 1;` raises `ReadOnlyError` — deep freeze reaches a pre-existing
   alias (the headline footgun; a **loud** failure, never silent data skew).
