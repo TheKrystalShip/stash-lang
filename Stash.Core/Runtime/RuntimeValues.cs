@@ -371,6 +371,17 @@ public static class RuntimeValues
                 }
                 break;
 
+            // Defense-in-depth: a bare List<StashValue> (not a StashArray subclass) can slip
+            // through if any producer is not yet migrated to StashArray.  The list has no IsFrozen
+            // bit so it cannot be frozen itself, but we can still recurse into its elements and
+            // freeze any nested freezable carriers (StashArray/StashDictionary/StashInstance).
+            case System.Collections.Generic.List<StashValue> list:
+                foreach (var elem in list)
+                {
+                    if (elem.IsObj) DeepFreezeObject(elem.AsObj, visited);
+                }
+                break;
+
             // Functions, closures, bound methods, namespaces, typed arrays, etc.
             // are treated as opaque — they are skipped but do not throw.
             default:

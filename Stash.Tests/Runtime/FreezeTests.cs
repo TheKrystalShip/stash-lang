@@ -424,4 +424,59 @@ public class FreezeTests
         var ex = RunWithFrozenGlobal("frozenInner[0] = 99;", "frozenInner", StashValue.FromObj(inner));
         Assert.IsType<ReadOnlyError>(ex);
     }
+
+    // =========================================================================
+    // F02: DeepFreeze traverses into stdlib-produced StashArray values
+    // =========================================================================
+
+    [Fact]
+    public void DeepFreeze_TraversesStdlibProducedArray_SliceIsStashArray()
+    {
+        // After the F02 fix, arr.slice returns a StashArray. Verify it carries IsFrozen
+        // by constructing an equivalent StashArray in C# and deep-freezing a dict holding it.
+        var sliceResult = new StashArray { StashValue.FromInt(1L), StashValue.FromInt(2L) };
+        var dict = new StashDictionary();
+        dict.Set("items", StashValue.FromObj(sliceResult));
+        RuntimeValues.DeepFreeze(StashValue.FromObj(dict));
+        Assert.True(sliceResult.IsFrozen);
+    }
+
+    [Fact]
+    public void DeepFreeze_TraversesStdlibProducedArray_MapIsStashArray()
+    {
+        // arr.map result is also a StashArray; nested in a dict it must be frozen.
+        var mapResult = new StashArray { StashValue.FromInt(2L), StashValue.FromInt(4L) };
+        var dict = new StashDictionary();
+        dict.Set("xs", StashValue.FromObj(mapResult));
+        RuntimeValues.DeepFreeze(StashValue.FromObj(dict));
+        Assert.True(mapResult.IsFrozen);
+    }
+
+    [Fact]
+    public void DeepFreeze_BareLists_NestedCarriersStillFrozen()
+    {
+        // Safety-net: if a bare List<StashValue> somehow slips through (e.g. from
+        // a future un-migrated producer), DeepFreeze should still recurse into it
+        // and freeze any nested StashArray/StashDictionary carriers.
+        var innerArr = new StashArray { StashValue.One };
+        var bareList = new List<StashValue> { StashValue.FromObj(innerArr) };
+        var dict = new StashDictionary();
+        dict.Set("items", StashValue.FromObj(bareList));
+        RuntimeValues.DeepFreeze(StashValue.FromObj(dict));
+        // The bare list has no IsFrozen, but the nested StashArray must be frozen.
+        Assert.True(innerArr.IsFrozen);
+    }
+
+    [Fact]
+    public void DeepFreeze_TraversesStdlibProducedArray_ZipInnerPairsAreStashArray()
+    {
+        // arr.zip inner pair arrays must be StashArray, so they get frozen transitively.
+        var innerPair = new StashArray { StashValue.One, StashValue.FromInt(3L) };
+        var outerArr = new StashArray { StashValue.FromObj(innerPair) };
+        var dict = new StashDictionary();
+        dict.Set("pairs", StashValue.FromObj(outerArr));
+        RuntimeValues.DeepFreeze(StashValue.FromObj(dict));
+        Assert.True(outerArr.IsFrozen);
+        Assert.True(innerPair.IsFrozen);
+    }
 }

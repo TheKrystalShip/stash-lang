@@ -318,4 +318,55 @@ outer();
 ";
         Assert.ThrowsAny<RuntimeError>(() => Execute(source));
     }
+
+    // =========================================================================
+    // 15. F02: deep-freeze transitivity through stdlib-produced arrays
+    // =========================================================================
+
+    [Fact]
+    public void ReadonlyConst_ArrSliceProducedArray_PushThrows()
+    {
+        // arr.slice returns a StashArray (not a bare List<StashValue>), so
+        // DeepFreeze reaches it and the frozen flag sticks.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = { items: arr.slice([1,2,3], 0, 2) }; arr.push(D.items, 99);"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_ArrSliceProducedArray_IndexSetThrows()
+    {
+        // Mutation via index-assign on a stdlib-produced array should also throw.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = { items: arr.slice([1,2,3], 0, 2) }; D.items[0] = 99;"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_ArrMapProducedArray_MutationThrows()
+    {
+        // arr.map produces a StashArray; nested inside a readonly dict it must be frozen.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = { xs: arr.map([1,2,3], (x) => x*2) }; D.xs[0] = 99;"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_ArrChunkInnerList_MutationThrows()
+    {
+        // arr.chunk inner lists must also be StashArray so freeze reaches them.
+        // D.chunks[0] is a chunk sub-array; mutation of it must throw.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = { chunks: arr.chunk([1,2,3,4], 2) }; D.chunks[0][0] = 99;"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_ArrZipInnerPair_MutationThrows()
+    {
+        // arr.zip inner pair arrays must be StashArray.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = { pairs: arr.zip([1,2], [3,4]) }; D.pairs[0][0] = 99;"));
+    }
 }

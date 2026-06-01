@@ -1,6 +1,6 @@
 # DeepFreeze does not traverse bare List<StashValue> returned by stdlib functions
 
-**Status:** Backlog — Bug
+**Status:** Fixed — 2026-06-01 (commit TBD — see F02 fix in readonly-modifier review.md)
 **Created:** 2026-06-01
 **Discovery context:** P3 of readonly-modifier feature. The always-present `StashArray` carrier was introduced for `ExecuteNewArray` (array literals), but stdlib producers (`arr.slice`, `arr.concat`, `arr.map`, `arr.keys`, `arr.values`, etc.) still return bare `List<StashValue>`, not `StashArray`. The `DeepFreezeObject` switch has no `List<StashValue>` case — only a `StashArray` case — so these bare lists are silently skipped during deep-freeze traversal.
 
@@ -92,3 +92,14 @@ D.sliced[0] = 99;  // must throw ReadOnlyError
 - Decision log entry 2026-06-01 "always-present wrapper carrier" in `brief.md`
 - `Stash.Core/Runtime/RuntimeValues.cs` `DeepFreezeObject` method
 - `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs` — all functions returning `new List<StashValue>(...)`
+
+## Resolution (2026-06-01)
+
+Fixed as review finding F02 of the `readonly-modifier` feature. Approach (A) — migrate stdlib producers — was applied:
+
+1. All array-producing functions in `ArrBuiltIns.cs` (`Slice`, `Concat`, `Map`, `Filter`, `Flat`, `FlatMap`, `Unique`, `SortBy`, `Zip`, `Chunk`, `Partition`, `Take`, `Drop`, `Untyped`, `GroupBy` inner lists, `ExecuteParMap`, `ExecuteParFilter`) changed from `new List<StashValue>(...)` to `new StashArray(...)`.
+2. `StashDictionary.Keys()`, `Values()`, and `Pairs()` changed to build and return `StashArray`.
+3. A defense-in-depth `case List<StashValue> list:` was added to `DeepFreezeObject` (placed AFTER the `StashArray` case to preserve correct dispatch order) to recurse into bare lists that may still slip through.
+4. New tests added to `FreezeTests.cs` and `ReadonlyTests.cs` covering slice, map, chunk, zip, and a bare-list safety-net case.
+
+Commit: see `fix(readonly-modifier): F02` in `feature/readonly-modifier` branch.
