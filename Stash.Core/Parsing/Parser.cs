@@ -185,6 +185,32 @@ public class Parser
                 return ExportDeclaration();
             }
 
+            // Soft keyword: 'readonly' — 3-way dispatch:
+            //   readonly let/const  → modifier (sets IsReadonly on the declaration)
+            //   readonly fn/struct/enum/interface → clear diagnostic
+            //   anything else       → fall through (plain identifier)
+            if (Check(TokenType.Identifier) && Peek().Lexeme == "readonly"
+                && _current + 1 < _tokens.Count)
+            {
+                TokenType next = _tokens[_current + 1].Type;
+                if (next == TokenType.Let || next == TokenType.Const)
+                {
+                    Advance(); // consume 'readonly'
+                    Token readonlyToken = Previous();
+                    Advance(); // consume 'let' or 'const'
+                    return next == TokenType.Let
+                        ? VarDeclaration(readonlyKeyword: readonlyToken)
+                        : ConstDeclaration(readonlyKeyword: readonlyToken);
+                }
+                if (next == TokenType.Fn || next == TokenType.Struct
+                    || next == TokenType.Enum || next == TokenType.Interface)
+                {
+                    Advance(); // consume 'readonly'
+                    throw Error(Peek(), "'readonly' only modifies 'let' and 'const' declarations. It cannot be used on 'fn', 'struct', 'enum', or 'interface'.");
+                }
+                // else: fall through — 'readonly' is used as a plain identifier
+            }
+
             switch (Peek().Type)
             {
                 case TokenType.Let:
@@ -223,13 +249,17 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses a variable declaration: <c>let name = expr;</c> or <c>let name;</c>.
-    /// The <c>let</c> token has already been consumed.
+    /// Parses a variable declaration: <c>let name = expr;</c>, <c>let name;</c>, or (with modifier)
+    /// <c>readonly let name = expr;</c>.
+    /// The <c>let</c> token has already been consumed. <paramref name="readonlyKeyword"/> is the
+    /// already-consumed <c>readonly</c> token when the modifier is present, or <c>null</c> otherwise.
     /// </summary>
     /// <returns>A <see cref="VarDeclStmt"/>.</returns>
-    private Stmt VarDeclaration()
+    private Stmt VarDeclaration(Token? readonlyKeyword = null)
     {
         Token letToken = Previous();
+        // Span starts at 'readonly' when the modifier is present.
+        SourceSpan startSpan = readonlyKeyword?.Span ?? letToken.Span;
 
         // Check for destructuring pattern
         if (Check(TokenType.LeftBracket))
@@ -263,17 +293,24 @@ public class Parser
         }
 
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after variable declaration.");
-        return new VarDeclStmt(name, typeHint, initializer, MakeSpan(letToken.Span, semi.Span));
+        return new VarDeclStmt(name, typeHint, initializer, MakeSpan(startSpan, semi.Span))
+        {
+            ReadonlyKeyword = readonlyKeyword
+        };
     }
 
     /// <summary>
-    /// Parses a constant declaration: <c>const NAME = expr;</c>.
-    /// The <c>const</c> token has already been consumed.
+    /// Parses a constant declaration: <c>const NAME = expr;</c> or (with modifier)
+    /// <c>readonly const NAME = expr;</c>.
+    /// The <c>const</c> token has already been consumed. <paramref name="readonlyKeyword"/> is the
+    /// already-consumed <c>readonly</c> token when the modifier is present, or <c>null</c> otherwise.
     /// </summary>
     /// <returns>A <see cref="ConstDeclStmt"/>.</returns>
-    private Stmt ConstDeclaration()
+    private Stmt ConstDeclaration(Token? readonlyKeyword = null)
     {
         Token constToken = Previous();
+        // Span starts at 'readonly' when the modifier is present.
+        SourceSpan startSpan = readonlyKeyword?.Span ?? constToken.Span;
 
         // Check for destructuring pattern
         if (Check(TokenType.LeftBracket))
@@ -304,7 +341,10 @@ public class Parser
         }
 
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after constant declaration.");
-        return new ConstDeclStmt(name, typeHint, initializer, MakeSpan(constToken.Span, semi.Span));
+        return new ConstDeclStmt(name, typeHint, initializer, MakeSpan(startSpan, semi.Span))
+        {
+            ReadonlyKeyword = readonlyKeyword
+        };
     }
 
     /// <summary>
@@ -814,6 +854,27 @@ public class Parser
             return new ExportDeclStmt(exportKeyword, inner, MakeSpan(exportKeyword.Span, inner.Span));
         }
 
+        // export readonly const — canonical order: export readonly const NAME = expr;
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "readonly"
+            && _current + 1 < _tokens.Count)
+        {
+            TokenType nextAfterReadonly = _tokens[_current + 1].Type;
+            if (nextAfterReadonly == TokenType.Const)
+            {
+                Advance(); // consume 'readonly'
+                Token readonlyToken = Previous();
+                Advance(); // consume 'const'
+                Stmt inner = ConstDeclaration(readonlyKeyword: readonlyToken);
+                return new ExportDeclStmt(exportKeyword, inner, MakeSpan(exportKeyword.Span, inner.Span));
+            }
+            if (nextAfterReadonly == TokenType.Let)
+            {
+                Advance(); // consume 'readonly'
+                throw Error(Peek(), "Exporting mutable bindings is not allowed. Use 'const' instead of 'let'. For a read-only exported binding, use 'export readonly const'.");
+            }
+            // readonly before anything else (fn, struct, etc.) — let the normal path produce the right error
+        }
+
         // export fn/const/struct/enum/interface — declaration-site form
         switch (Peek().Type)
         {
@@ -1157,6 +1218,12 @@ public class Parser
     {
         Token forToken = Previous();
         Consume(TokenType.LeftParen, "Expected '(' after 'for'.");
+
+        // Reject 'readonly' in the for-init clause: a rebound loop variable cannot be meaningfully frozen.
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "readonly")
+        {
+            throw Error(Peek(), "'readonly' is not allowed in a 'for' loop initializer.");
+        }
 
         // Disambiguate: if we see 'let' followed by identifier(s) and 'in', it's a for-in loop
         if (Check(TokenType.Let) && IsForInLoop())
@@ -2996,6 +3063,14 @@ public class Parser
                 if (_tokens[_current + 1].Lexeme == "async"
                     && _current + 2 < _tokens.Count
                     && _tokens[_current + 2].Type == TokenType.Fn)
+                {
+                    return true;
+                }
+                // 'export readonly const' — canonical readonly export form
+                if (_tokens[_current + 1].Lexeme == "readonly"
+                    && _current + 2 < _tokens.Count
+                    && (_tokens[_current + 2].Type == TokenType.Const
+                        || _tokens[_current + 2].Type == TokenType.Let))
                 {
                     return true;
                 }
