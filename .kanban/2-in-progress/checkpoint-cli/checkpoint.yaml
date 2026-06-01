@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T23:38:03Z"
+updated: "2026-06-01T23:43:52Z"
 phases:
   1A:
     status: done

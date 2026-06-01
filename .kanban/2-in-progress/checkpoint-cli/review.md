@@ -43,7 +43,8 @@ The two findings are below.
 
 ## F01 — [MEDIUM] LIVE_DOC_GLOBS `.md`-only exclusion lets `plan-template.yaml` re-seed the legacy form into every new feature
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 546024e2
 **Files:** `.kanban/_templates/plan-template.yaml:5`, `.kanban/_templates/checkpoint-template.yaml:3-4`, `scripts/checkpoint/lint_common_imports.stash:84-91` (the `LIVE_DOC_GLOBS` definition)
 **Phase:** 2A (LIVE_DOC_GLOBS shape) / 4C (templates batch)
 **Commit:** e581ef7c (2A guard), 964a4971 (4C)
@@ -149,7 +150,8 @@ stash scripts/checkpoint/lint_common_imports.stash
 
 ## F02 — [LOW] Brief Semantics text says `$!>` (strict) but the dispatcher uses `$>` (non-strict) — code is correct, brief is stale
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 546024e2
 **Files:** `.kanban/2-in-progress/checkpoint-cli/brief.md:93`, `scripts/checkpoint/checkpoint.stash:189`
 **Phase:** 1A
 **Commit:** 50e54557
