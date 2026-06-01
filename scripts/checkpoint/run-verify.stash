@@ -1,0 +1,202 @@
+#!/usr/bin/env stash
+// run-verify.stash <command...> [--name LABEL] [--json] [--selftest]
+//
+// Run a verify command (typically `dotnet test`) and emit a STRUCTURED, fail-
+// closed verdict parsed from its output — instead of leaving an agent to eyeball
+// `tail -50` and judge pass/fail. The command streams LIVE (piped through `tee`)
+// so a *warm* build won't go stream-idle.
+//
+//   ⚠ THIS DOES NOT ELIMINATE THE COLD-BUILD STREAM-IDLE TIMEOUT.
+//   A cold Release build is silent for minutes and `tee` cannot stream silence.
+//   Callers MUST still run this under the Bash tool's run_in_background (or
+//   pre-warm the build) for a cold build. run-verify's value is the parsed,
+//   fail-closed verdict + live streaming on a *warm* build — not backgrounding.
+//
+// The captured log is written OUTSIDE the working tree (under $TMPDIR) so it can
+// never dirty the tree and trip the next workflow command's clean-tree check.
+//
+//   --name L   label for the verdict line (e.g. the phase id under test)
+//   --json     emit {command, exitCode, ok, failed, passed, skipped,
+//              saw_summary, failing_tests}
+//   --selftest run the pure parser cases (parse_test_summary) and exit
+//
+// Exit code: 0 ONLY if the command exited 0 AND a test summary was parsed AND
+// failed == 0. Otherwise the command's own non-zero exit code — or 1 if it
+// exited 0 but no summary could be parsed (fail closed: an unconfirmable run is
+// NOT green).
+
+import { die } from "_common.stash";
+
+// ── Pure parser core (testable with no subprocess) ──────────────────────────
+// `dotnet test` prints one summary line per test project, e.g. (real output):
+//   Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, ...
+// and a "  Failed <FQN> [<dur>]" line per failing test. We sum the counts across
+// every summary line (multi-project runs => multiple lines) and collect the
+// fully-qualified names of failing tests. The two patterns are disjoint: a
+// summary line begins "Passed!"/"Failed!" (word + '!', so "Failed\s+" can't
+// match it), and a failing-test line never contains "Failed:".
+fn parse_test_summary(content) {
+    let summary_pattern   = "Failed:\\s*([0-9]+),\\s*Passed:\\s*([0-9]+),\\s*Skipped:\\s*([0-9]+)";
+    let fail_line_pattern = "^\\s*Failed\\s+(\\S+)\\s+\\[";
+
+    let failed      = 0;
+    let passed      = 0;
+    let skipped     = 0;
+    let saw_summary = false;
+    let failing     = [];
+
+    for (let line in str.lines(content)) {
+        let sm = re.capture(line, summary_pattern);
+        if (sm != null) {
+            failed      = failed  + conv.toInt(sm.groups[1].value);
+            passed      = passed  + conv.toInt(sm.groups[2].value);
+            skipped     = skipped + conv.toInt(sm.groups[3].value);
+            saw_summary = true;
+        }
+        let fm = re.capture(line, fail_line_pattern);
+        if (fm != null) {
+            let name = fm.groups[1].value;
+            if (!arr.contains(failing, name)) {
+                arr.push(failing, name);
+            }
+        }
+    }
+
+    return { failed: failed, passed: passed, skipped: skipped,
+             saw_summary: saw_summary, failing_tests: failing };
+}
+
+// ── --selftest ──────────────────────────────────────────────────────────────
+fn run_selftest() {
+    let all_passed = true;
+    let expect = (case_num, label, got, want) => {
+        let ok = (got == want);
+        io.println((ok ? "PASS" : "FAIL") + "  case " + conv.toStr(case_num) + ": " + label);
+        if (!ok) {
+            all_passed = false;
+            io.println("       got " + conv.toStr(got) + ", want " + conv.toStr(want));
+        }
+    };
+
+    // Case 1 — REAL captured passing summary line (spacing is verbatim).
+    let pass_fix = "Passed!  - Failed:     0, Passed:     1, Skipped:     0, Total:     1, Duration: 131 ms - Stash.Tests.dll (net10.0)\n";
+    let p = parse_test_summary(pass_fix);
+    expect(1, "passing run: saw_summary true", p.saw_summary, true);   // non-vacuity partner of case 6
+    expect(1, "passing run: failed == 0", p.failed, 0);
+    expect(1, "passing run: passed == 1", p.passed, 1);
+    expect(1, "passing run: no failing names", p.failing_tests.length, 0);
+
+    // Case 2 — failing run (real summary spacing; FQN lines as VSTest emits them).
+    let fail_fix = "  Failed Stash.Tests.Foo.AlphaTest [5 ms]\n"
+        + "    Error Message:\n     boom\n"
+        + "  Failed Stash.Tests.Bar.BetaTest [3 ms]\n"
+        + "Failed!  - Failed:     2, Passed:  1230, Skipped:     6, Total:  1238, Duration: 4 s - Stash.Tests.dll (net10.0)\n";
+    let f = parse_test_summary(fail_fix);
+    expect(2, "failing run: failed == 2", f.failed, 2);
+    expect(2, "failing run: passed == 1230", f.passed, 1230);
+    expect(2, "failing run: skipped == 6", f.skipped, 6);
+    expect(2, "failing run: 2 failing names captured", f.failing_tests.length, 2);
+    expect(2, "failing run: first failing name", f.failing_tests[0], "Stash.Tests.Foo.AlphaTest");
+
+    // Case 3 — multi-project run: counts SUM across two summary lines.
+    let multi_fix = "Passed!  - Failed:     0, Passed:    10, Skipped:     0, Total:    10, Duration: 1 s - Stash.A.dll (net10.0)\n"
+        + "Failed!  - Failed:     3, Passed:    20, Skipped:     1, Total:    24, Duration: 2 s - Stash.B.dll (net10.0)\n";
+    let m = parse_test_summary(multi_fix);
+    expect(3, "multi-project: failed summed == 3", m.failed, 3);
+    expect(3, "multi-project: passed summed == 30", m.passed, 30);
+    expect(3, "multi-project: skipped summed == 1", m.skipped, 1);
+
+    // Case 4 — garbage / build-only output: NO summary parsed (fail-closed floor).
+    let junk_fix = "error CS1002: ; expected\nBuild FAILED.\n";
+    let j = parse_test_summary(junk_fix);
+    expect(4, "no summary in output → saw_summary false", j.saw_summary, false);
+    expect(4, "no summary in output → failing empty", j.failing_tests.length, 0);
+
+    if (all_passed) {
+        io.println("all selftest cases passed.");
+        env.exit(0);
+    } else {
+        io.println("one or more selftest cases FAILED.");
+        env.exit(1);
+    }
+}
+
+// ── Argument parse (command tokens + flags) ─────────────────────────────────
+let cmd_parts = [];
+let label = null;
+let json_mode = false;
+let selftest_mode = false;
+let argv = [];
+for (let x in cli.argv) { arr.push(argv, x); }
+let i = 0;
+while (i < argv.length) {
+    let a = argv[i];
+    if (a == "--selftest") {
+        selftest_mode = true;
+    } else if (a == "--json") {
+        json_mode = true;
+    } else if (a == "--name") {
+        i = i + 1;
+        if (i < argv.length) { label = argv[i]; }
+    } else {
+        arr.push(cmd_parts, a);
+    }
+    i = i + 1;
+}
+
+if (selftest_mode) {
+    run_selftest();
+}
+
+if (cmd_parts.length == 0) {
+    die("usage: run-verify.stash <command...> [--name LABEL] [--json]", 2);
+}
+let cmd = arr.join(cmd_parts, " ");
+
+// ── Run: stream live via tee, capture to a temp log OUTSIDE the tree ─────────
+let tmpdir = env.get("TMPDIR") ?? "/tmp";
+let stamp  = time.format(time.now(), "yyyyMMddHHmmss");
+let logf   = tmpdir + "/run-verify-" + stamp + ".log";
+// pipefail so the pipe's exit reflects the command, not tee. `${shell}` is
+// passed to bash -c as ONE argument (same pattern as verify-phase.stash).
+let shell = "set -o pipefail; " + cmd + " 2>&1 | tee " + logf;
+let run = try $!>(bash -c ${shell});
+let ec  = (run is Error) ? run.exitCode : 0;
+
+if (!fs.exists(logf)) {
+    die("run-verify: command produced no log (did it run?)", ec != 0 ? ec : 1);
+}
+let parsed = parse_test_summary(fs.readFile(logf));
+
+// ── Verdict (fail closed) ───────────────────────────────────────────────────
+let ok = (ec == 0) && parsed.saw_summary && (parsed.failed == 0);
+let lbl = (label != null) ? ("[" + label + "] ") : "";
+
+if (json_mode) {
+    let out = {
+        command:       cmd,
+        exitCode:      ec,
+        ok:            ok,
+        failed:        parsed.failed,
+        passed:        parsed.passed,
+        skipped:       parsed.skipped,
+        saw_summary:   parsed.saw_summary,
+        failing_tests: parsed.failing_tests
+    };
+    io.println(json.stringify(out));
+} else {
+    io.println("run-verify: " + lbl + (ok ? "PASS" : "FAIL")
+        + " — failed=" + conv.toStr(parsed.failed)
+        + " passed=" + conv.toStr(parsed.passed)
+        + " skipped=" + conv.toStr(parsed.skipped)
+        + " (exit " + conv.toStr(ec) + ")");
+    if (!parsed.saw_summary) {
+        io.eprintln("run-verify: no test summary parsed — cannot confirm green (fail-closed)");
+    }
+    if (parsed.failing_tests.length > 0) {
+        io.eprintln("failing tests:");
+        for (let t in parsed.failing_tests) { io.eprintln("  " + t); }
+    }
+}
+
+env.exit(ok ? 0 : (ec != 0 ? ec : 1));

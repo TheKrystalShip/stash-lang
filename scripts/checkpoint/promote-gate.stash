@@ -17,7 +17,7 @@
 // `set -e`). The stderr wording is human-facing (LOOSE), kept close to the
 // retired python for minimal workflow surprise.
 
-import { resolve_feature, load_plan, load_checkpoint, feature_dir } from "_common.stash";
+import { resolve_feature, load_plan, load_checkpoint, feature_dir, parse_findings } from "_common.stash";
 
 // ── Argument parse (manual: slug positional + --phases-only + --selftest) ───
 let slug_arg = null;
@@ -53,72 +53,35 @@ for (let a in cli.argv) {
 //   status == "accepted" AND no non-empty justification line   → BLOCK
 //   status == "open"                                           → BLOCK
 //   any other status (unknown / missing)                       → BLOCK
+// Parsing now lives in _common.parse_findings (the single source of truth for
+// the review.md finding format). This function is purely the VERDICT TABLE: it
+// maps each parsed finding to a blocking reason (or none). The table is
+// unchanged from the inline-parser version — the six --selftest cases below
+// pin it byte-for-byte across the extraction.
 fn review_gate_block_reasons(content) {
     let reasons = [];
-
-    // State for the finding currently being accumulated.
-    let cur_id       = null;
-    let cur_severity = null;
-    let cur_status   = null;
-    let cur_just     = false;   // has a non-empty **Accepted because:** line?
-
-    // Close the accumulated finding and evaluate it, appending to reasons.
-    // The em-dash in the header regex below is U+2014 (same char in review.md).
-    let close_finding = (id, severity, status, has_justification) => {
-        if (id == null) {
-            return;
-        }
+    for (let f in parse_findings(content)) {
+        let status   = f.status;
+        let severity = f.severity;
+        let id       = f.id;
         if (status == "fixed") {
-            return;   // OK
-        }
-        if (status == "accepted") {
+            // OK
+        } else if (status == "accepted") {
             if (severity == "CRITICAL") {
                 arr.push(reasons, id + ": CRITICAL findings cannot be accepted; fix it or stop");
-            } else if (!has_justification) {
+            } else if (!f.has_justification) {
                 arr.push(reasons, id + ": accepted without a justification (add **Accepted because:** <reason>)");
             }
             // else: accepted + non-CRITICAL + justification → OK
-            return;
-        }
-        if (status == "open") {
+        } else if (status == "open") {
             arr.push(reasons, id + ": still open");
-            return;
-        }
-        if (status == null) {
+        } else if (status == null) {
             arr.push(reasons, id + ": no **Status:** line found (fail-closed)");
-            return;
-        }
-        // Unknown status (wontfix, typo, …)
-        arr.push(reasons, id + ": unknown status '" + status + "'");
-    };
-
-    // Header pattern: ^## (F[0-9]+)\s*—\s*\[([A-Z]+)\]
-    // The — is the literal em-dash U+2014 that review.md uses.
-    let header_pattern  = "^## (F[0-9]+)\\s*—\\s*\\[([A-Z]+)\\]";
-    let status_pattern  = "^\\*\\*Status:\\*\\*\\s*([A-Za-z]+)";
-    let just_pattern    = "^\\*\\*Accepted because:\\*\\*\\s*\\S";
-
-    for (let line in str.lines(content)) {
-        let hm = re.capture(line, header_pattern);
-        if (hm != null) {
-            // Close previous finding before starting a new one.
-            close_finding(cur_id, cur_severity, cur_status, cur_just);
-            cur_id       = hm.groups[1].value;
-            cur_severity = hm.groups[2].value;
-            cur_status   = null;
-            cur_just     = false;
         } else {
-            let sm = re.capture(line, status_pattern);
-            if (sm != null) {
-                cur_status = sm.groups[1].value;
-            } else if (re.test(line, just_pattern)) {
-                cur_just = true;
-            }
+            // Unknown status (wontfix, typo, …)
+            arr.push(reasons, id + ": unknown status '" + status + "'");
         }
     }
-    // Close the last finding.
-    close_finding(cur_id, cur_severity, cur_status, cur_just);
-
     return reasons;
 }
 

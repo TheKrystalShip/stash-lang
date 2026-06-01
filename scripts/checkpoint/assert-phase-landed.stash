@@ -1,0 +1,233 @@
+#!/usr/bin/env stash
+// assert-phase-landed.stash <slug> <phase-id> [--main-ref <sha>] [--selftest]
+//
+// Deterministic post-/next-phase state assertion. After an implementer turn,
+// confirms the phase actually LANDED — replacing the ad-hoc `git status` /
+// `git log` / status.stash eyeballing the orchestrator does by hand each phase
+// with one trustable verdict.
+//
+// Checks (ALL are evaluated; every failure is reported, not just the first):
+//   1. working tree is clean (no uncommitted changes left after the phase)
+//   2. checkpoint phase <id> status == "done"
+//   3. checkpoint phase <id> verified == true
+//   4. checkpoint phase <id> has a recorded commit, reachable in git
+//   5. (only with --main-ref) `main` still points at <sha> — i.e. the feature
+//      work stayed on the branch (the worktree split-brain guard)
+//
+// Note there is deliberately NO "chore-commit message present" check: a clean
+// tree (1) plus a reachable recorded commit (4) already prove the phase's
+// commits landed — if the implementer's chore-commit had NOT landed, the
+// checkpoint advance would have left checkpoint.yaml dirty and (1) would fail.
+// Grepping a prose-defined commit message (with the slug fed into a regex)
+// would only add a false-failure surface.
+//
+// Exit 0 = landed cleanly; exit 1 = one or more checks failed (reasons on
+// stderr); exit 2 = bad arguments.
+//
+//   --selftest  run the pure verdict cases (phase_landed_reasons) and exit.
+
+import { resolve_feature, load_checkpoint, die } from "_common.stash";
+
+// ── Pure verdict core (testable with no git / no checkpoint) ─────────────────
+// `facts` is a dict of already-gathered values:
+//   tree_clean       bool
+//   phase_status     string | null   (null = phase absent from checkpoint)
+//   phase_verified   bool
+//   phase_commit     string | null
+//   commit_reachable bool
+//   main_expected    string | null   (null = --main-ref not passed → skip)
+//   main_actual      string | null
+// Returns an array of blocking-reason strings (empty == landed cleanly).
+fn phase_landed_reasons(pid, facts) {
+    let reasons = [];
+
+    // (1) tree — independent of the phase
+    if (dict.get(facts, "tree_clean") != true) {
+        arr.push(reasons, "working tree is dirty (uncommitted changes after phase " + pid + ")");
+    }
+
+    // (2)(3)(4) phase state — nested so an absent phase yields ONE reason, not three
+    let status = dict.get(facts, "phase_status");
+    if (status == null) {
+        arr.push(reasons, "phase " + pid + " not found in checkpoint");
+    } else {
+        if (status != "done") {
+            arr.push(reasons, "phase " + pid + " status is '" + status + "', expected 'done'");
+        }
+        if (dict.get(facts, "phase_verified") != true) {
+            arr.push(reasons, "phase " + pid + " is not marked verified");
+        }
+        let commit = dict.get(facts, "phase_commit");
+        if (commit == null || commit == "") {
+            arr.push(reasons, "phase " + pid + " has no recorded commit");
+        } else if (dict.get(facts, "commit_reachable") != true) {
+            arr.push(reasons, "recorded commit " + commit + " for phase " + pid + " is not reachable in git");
+        }
+    }
+
+    // (5) main pin — only when --main-ref was supplied
+    let main_expected = dict.get(facts, "main_expected");
+    if (main_expected != null) {
+        let main_actual = dict.get(facts, "main_actual");
+        if (main_actual != main_expected) {
+            arr.push(reasons, "main moved: expected " + main_expected
+                + ", got " + conv.toStr(main_actual)
+                + " (feature work must stay on the branch)");
+        }
+    }
+
+    return reasons;
+}
+
+// ── --selftest ──────────────────────────────────────────────────────────────
+fn run_selftest() {
+    let all_passed = true;
+    let check = (case_num, label, reasons, expect_empty) => {
+        let ok = expect_empty ? (reasons.length == 0) : (reasons.length > 0);
+        io.println((ok ? "PASS" : "FAIL") + "  case " + conv.toStr(case_num) + ": " + label);
+        if (!ok) {
+            all_passed = false;
+            if (expect_empty) {
+                io.println("       got blocking reasons: [" + arr.join(reasons, "; ") + "]");
+            } else {
+                io.println("       expected NON-EMPTY reasons but got EMPTY — function is vacuous");
+            }
+        }
+    };
+
+    // Case 1 — everything landed → PASS (non-vacuity partner of case 2)
+    let good = { tree_clean: true, phase_status: "done", phase_verified: true,
+                 phase_commit: "abc1234", commit_reachable: true,
+                 main_expected: "m1", main_actual: "m1" };
+    check(1, "all checks pass → landed", phase_landed_reasons("P3", good), true);
+
+    // Case 2 — dirty tree → BLOCK (proves the discriminator)
+    let dirty = { tree_clean: false, phase_status: "done", phase_verified: true,
+                  phase_commit: "abc1234", commit_reachable: true,
+                  main_expected: null, main_actual: null };
+    check(2, "dirty tree → blocks", phase_landed_reasons("P3", dirty), false);
+
+    // Case 3 — phase still pending → BLOCK
+    let pending = { tree_clean: true, phase_status: "pending", phase_verified: false,
+                    phase_commit: null, commit_reachable: false,
+                    main_expected: null, main_actual: null };
+    check(3, "phase not done → blocks", phase_landed_reasons("P3", pending), false);
+
+    // Case 4 — recorded commit unreachable → BLOCK
+    let unreachable = { tree_clean: true, phase_status: "done", phase_verified: true,
+                        phase_commit: "deadbeef", commit_reachable: false,
+                        main_expected: null, main_actual: null };
+    check(4, "recorded commit not in git → blocks", phase_landed_reasons("P3", unreachable), false);
+
+    // Case 5 — main moved → BLOCK (split-brain guard)
+    let moved = { tree_clean: true, phase_status: "done", phase_verified: true,
+                  phase_commit: "abc1234", commit_reachable: true,
+                  main_expected: "m1", main_actual: "m2" };
+    check(5, "main moved off the pin → blocks", phase_landed_reasons("P3", moved), false);
+
+    // Case 6 — phase absent yields EXACTLY ONE reason (nesting works, no noise)
+    let absent = { tree_clean: true, phase_status: null, phase_verified: false,
+                   phase_commit: null, commit_reachable: false,
+                   main_expected: null, main_actual: null };
+    let absent_reasons = phase_landed_reasons("P9", absent);
+    let absent_ok = (absent_reasons.length == 1);
+    io.println((absent_ok ? "PASS" : "FAIL") + "  case 6: absent phase → exactly one reason");
+    if (!absent_ok) {
+        all_passed = false;
+        io.println("       got " + conv.toStr(absent_reasons.length) + " reasons: ["
+            + arr.join(absent_reasons, "; ") + "]");
+    }
+
+    if (all_passed) {
+        io.println("all 6 cases passed.");
+        env.exit(0);
+    } else {
+        io.println("one or more selftest cases FAILED.");
+        env.exit(1);
+    }
+}
+
+// ── Argument parse (slug + phase-id positionals; --main-ref value; --selftest) ─
+let positionals = [];
+let main_ref = null;
+let selftest_mode = false;
+let argv = [];
+for (let x in cli.argv) { arr.push(argv, x); }
+let i = 0;
+while (i < argv.length) {
+    let a = argv[i];
+    if (a == "--selftest") {
+        selftest_mode = true;
+    } else if (a == "--main-ref") {
+        i = i + 1;
+        if (i < argv.length) { main_ref = argv[i]; }
+    } else {
+        arr.push(positionals, a);
+    }
+    i = i + 1;
+}
+
+if (selftest_mode) {
+    run_selftest();
+}
+
+if (positionals.length != 2) {
+    io.eprintln("usage: assert-phase-landed.stash <slug> <phase-id> [--main-ref <sha>]");
+    env.exit(2);
+}
+let slug     = positionals[0];
+let phase_id = positionals[1];
+
+// ── Gather facts from git + checkpoint ──────────────────────────────────────
+resolve_feature(slug);   // dies (exit 1) if the feature does not exist
+let cp = load_checkpoint(slug);
+let phases = dict.get(cp, "phases") ?? {};
+let state = dict.get(phases, phase_id);   // null if absent
+
+let tree_clean = (str.trim($(git status --porcelain).stdout) == "");
+
+let phase_status   = null;
+let phase_verified = false;
+let phase_commit   = null;
+if (state != null) {
+    phase_status   = dict.get(state, "status");
+    phase_verified = (dict.get(state, "verified") == true);
+    phase_commit   = dict.get(state, "commit");
+}
+
+// Is the recorded commit reachable in git? (only meaningful if one is recorded)
+let commit_reachable = false;
+if (phase_commit != null && phase_commit != "") {
+    commit_reachable = ($(git cat-file -e ${phase_commit}).exitCode == 0);
+}
+
+let main_actual = null;
+if (main_ref != null) {
+    let main_branch = env.get("MAIN_BRANCH") ?? "main";
+    main_actual = str.trim($(git rev-parse ${main_branch}).stdout);
+}
+
+let facts = {
+    tree_clean:       tree_clean,
+    phase_status:     phase_status,
+    phase_verified:   phase_verified,
+    phase_commit:     phase_commit,
+    commit_reachable: commit_reachable,
+    main_expected:    main_ref,
+    main_actual:      main_actual
+};
+
+// ── Verdict ─────────────────────────────────────────────────────────────────
+let reasons = phase_landed_reasons(phase_id, facts);
+if (reasons.length > 0) {
+    io.eprintln("assert-phase-landed: " + slug + "/" + phase_id + " did NOT land cleanly:");
+    for (let r in reasons) {
+        io.eprintln("  " + r);
+    }
+    env.exit(1);
+}
+
+let pin = (main_ref != null) ? (", main pinned @ " + main_ref) : "";
+io.println("assert-phase-landed: " + slug + "/" + phase_id
+    + " OK (commit " + conv.toStr(phase_commit) + pin + ")");
+env.exit(0);

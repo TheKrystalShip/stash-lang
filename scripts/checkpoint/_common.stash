@@ -116,6 +116,72 @@ export fn phase_by_id(plan, pid) {
     return found;
 }
 
+// ── review.md finding parsing (single source of truth) ─────────────────────
+//
+// A finding block in review.md looks like:
+//   ## F01 — [CRITICAL] short title
+//   **Status:** open
+//   **Files:** `path/to/file.cs:123`, `path/to/other.cs:45`
+//   **Accepted because:** optional justification text (only on accepted findings)
+//   ...
+//
+// Findings are delimited by "## Fxx — [SEVERITY]" H2 headers (the — is the
+// literal em-dash U+2014 that review.md uses). This is the ONE parser for that
+// format — promote-gate's review gate, review-findings.stash, and any future
+// consumer all call it, so the closed shape of a finding lives in exactly one
+// place (no duplicated `## Fxx` regex scattered across files).
+//
+/// Parse review.md `content` into an array of finding dicts, in document order:
+///   { id, severity, title, status, has_justification, files }
+/// - id:                "F01"  (string)
+/// - severity:          "CRITICAL" | "IMPORTANT" | "MINOR" | …  (the [TAG])
+/// - title:             text after the severity bracket on the header line
+/// - status:            "open" | "fixed" | "accepted" | <other> | null
+///                      (null = no **Status:** line found → callers fail closed)
+/// - has_justification: true if a non-empty **Accepted because:** line is present
+/// - files:             the **Files:** line value, or null
+export fn parse_findings(content) {
+    let findings = [];
+
+    // Header: ^## (F[0-9]+)\s*—\s*\[([A-Z]+)\]\s*(.*)$  (— is U+2014)
+    let header_pattern = "^## (F[0-9]+)\\s*—\\s*\\[([A-Z]+)\\]\\s*(.*)$";
+    let status_pattern = "^\\*\\*Status:\\*\\*\\s*([A-Za-z]+)";
+    let just_pattern   = "^\\*\\*Accepted because:\\*\\*\\s*\\S";
+    let files_pattern  = "^\\*\\*Files:\\*\\*\\s*(\\S.*)$";
+
+    let cur = null;   // the finding dict currently being accumulated
+
+    for (let line in str.lines(content)) {
+        let hm = re.capture(line, header_pattern);
+        if (hm != null) {
+            if (cur != null) { arr.push(findings, cur); }
+            cur = {
+                id:                hm.groups[1].value,
+                severity:          hm.groups[2].value,
+                title:             str.trim(hm.groups[3].value),
+                status:            null,
+                has_justification: false,
+                files:             null
+            };
+        } else if (cur != null) {
+            let sm = re.capture(line, status_pattern);
+            if (sm != null) {
+                cur.status = sm.groups[1].value;
+            } else if (re.test(line, just_pattern)) {
+                cur.has_justification = true;
+            } else {
+                let fm = re.capture(line, files_pattern);
+                if (fm != null) {
+                    cur.files = str.trim(fm.groups[1].value);
+                }
+            }
+        }
+    }
+    if (cur != null) { arr.push(findings, cur); }
+
+    return findings;
+}
+
 /// Expand a list of glob patterns relative to CWD and return all matching paths.
 /// Mirrors Python _common.expand_globs(patterns) -> list[Path].
 export fn expand_globs(patterns) {

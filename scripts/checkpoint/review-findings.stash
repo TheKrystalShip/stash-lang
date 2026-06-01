@@ -1,0 +1,69 @@
+#!/usr/bin/env stash
+// review-findings.stash <slug> [--open] [--count] [--json]
+//
+// Enumerate the findings in a feature's review.md using the SINGLE shared parser
+// (_common.parse_findings). This replaces the ad-hoc `grep '**Status:** open'`
+// the resolve loop did by hand with a structured, trustable list — same parser
+// the promotion gate uses, so the loop and the gate can never disagree about
+// what a finding is.
+//
+//   --open    only findings whose Status is "open"
+//   --count   print just the integer count of the (filtered) set, nothing else
+//   --json    print the (filtered) findings as a compact JSON array
+//   (default) one human line per finding: "F01  [CRITICAL]  open   <title>"
+//
+// Exit code is always 0 when review.md parses — enumeration is NOT a gate (the
+// gate is promote-gate.stash). Dies (exit 1) only when the feature or its
+// review.md is missing.
+
+import { resolve_feature, feature_dir, parse_findings, die } from "_common.stash";
+
+// ── Args (manual: slug positional + flags) ──────────────────────────────────
+let slug_arg = null;
+let only_open = false;
+let count_mode = false;
+let json_mode = false;
+for (let a in cli.argv) {
+    if (a == "--open") {
+        only_open = true;
+    } else if (a == "--count") {
+        count_mode = true;
+    } else if (a == "--json") {
+        json_mode = true;
+    } else if (slug_arg == null) {
+        slug_arg = a;
+    }
+}
+
+let slug = resolve_feature(slug_arg);   // dies (exit 1) if unresolvable
+let review_md = feature_dir(slug) + "/review.md";
+if (!fs.exists(review_md)) {
+    die("no review.md for " + slug + " (run /feature-review first)", 1);
+}
+
+let findings = parse_findings(fs.readFile(review_md));
+if (only_open) {
+    findings = arr.filter(findings, (f) => f.status == "open");
+}
+
+// ── Emit ────────────────────────────────────────────────────────────────────
+if (count_mode) {
+    io.println(conv.toStr(findings.length));
+    env.exit(0);
+}
+if (json_mode) {
+    io.println(json.stringify(findings));
+    env.exit(0);
+}
+if (findings.length == 0) {
+    io.eprintln(only_open ? "no open findings" : "no findings");
+    env.exit(0);
+}
+for (let f in findings) {
+    let status = f.status ?? "(no status)";
+    io.println(f.id + "  [" + f.severity + "]  " + status + "   " + f.title);
+}
+let open_count = arr.filter(findings, (f) => f.status == "open").length;
+io.eprintln(conv.toStr(findings.length) + " finding(s)"
+    + (only_open ? "" : ", " + conv.toStr(open_count) + " open"));
+env.exit(0);

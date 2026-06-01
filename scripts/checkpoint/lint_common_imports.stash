@@ -21,7 +21,7 @@
 
 import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
          load_plan, load_checkpoint, save_checkpoint, phase_by_id,
-         expand_globs } from "_common.stash";
+         expand_globs, parse_findings } from "_common.stash";
 
 // ── Bounded domains ────────────────────────────────────────────────────────
 
@@ -55,7 +55,8 @@ const COMMON_EXPORTS = [
     "load_checkpoint",
     "save_checkpoint",
     "phase_by_id",
-    "expand_globs"
+    "expand_globs",
+    "parse_findings"
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -241,6 +242,26 @@ fn run_unit_sweep() {
     let hits = expand_globs(["scripts/checkpoint/_common.stash"]);
     if (hits.length == 0) {
         arr.push(failures, "expand_globs: expected at least 1 match for scripts/checkpoint/_common.stash");
+    }
+
+    // parse_findings: parse a tiny review block into one structured finding.
+    // The — in the header is the literal em-dash U+2014 review.md uses.
+    let pf = parse_findings("## F01 — [MINOR] tweak the thing\n**Status:** fixed\n");
+    if (typeof(pf) != "array") {
+        arr.push(failures, "parse_findings: expected array, got " + typeof(pf));
+    } else if (pf.length != 1) {
+        arr.push(failures, "parse_findings: expected 1 finding, got " + conv.toStr(pf.length));
+    } else {
+        let f0 = pf[0];
+        if (dict.get(f0, "id") != "F01") {
+            arr.push(failures, "parse_findings: wrong id: " + conv.toStr(dict.get(f0, "id")));
+        }
+        if (dict.get(f0, "severity") != "MINOR") {
+            arr.push(failures, "parse_findings: wrong severity: " + conv.toStr(dict.get(f0, "severity")));
+        }
+        if (dict.get(f0, "status") != "fixed") {
+            arr.push(failures, "parse_findings: wrong status: " + conv.toStr(dict.get(f0, "status")));
+        }
     }
 
     // Remove the throwaway fixture.
