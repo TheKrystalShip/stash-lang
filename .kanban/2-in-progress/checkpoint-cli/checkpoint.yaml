@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T23:28:10Z"
+updated: "2026-06-01T23:38:03Z"
 phases:
   1A:
     status: done
@@ -60,8 +60,8 @@ phases:
     attempts: 1
     notes: "final acceptance: exemptions empty, scan-exclusions documented, selftest 17/17, dotnet test 12825 passed 0 failed"
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: "2026-06-01T23:38:03Z"
   resolved: null
   findings_open: 0
   findings_fixed: 0
