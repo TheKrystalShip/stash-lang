@@ -371,6 +371,11 @@ public static class RuntimeValues
                 }
                 break;
 
+            case StashTypedArray ta:
+                // Element types are primitives (int/float/bool/byte/string) — no recursion needed.
+                ta.Freeze();
+                break;
+
             // Defense-in-depth: a bare List<StashValue> (not a StashArray subclass) can slip
             // through if any producer is not yet migrated to StashArray.  The list has no IsFrozen
             // bit so it cannot be frozen itself, but we can still recurse into its elements and
@@ -382,7 +387,7 @@ public static class RuntimeValues
                 }
                 break;
 
-            // Functions, closures, bound methods, namespaces, typed arrays, etc.
+            // Functions, closures, bound methods, namespaces, etc.
             // are treated as opaque — they are skipped but do not throw.
             default:
                 break;

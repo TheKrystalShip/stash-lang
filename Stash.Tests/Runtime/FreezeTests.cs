@@ -479,4 +479,115 @@ public class FreezeTests
         Assert.True(outerArr.IsFrozen);
         Assert.True(innerPair.IsFrozen);
     }
+
+    // =========================================================================
+    // F03: StashTypedArray — IsFrozen bit + write guards
+    // =========================================================================
+
+    [Fact]
+    public void DeepFreeze_OnStashIntArray_FreezesAndBlocksWrites()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One, StashValue.FromInt(2L) });
+        RuntimeValues.DeepFreeze(StashValue.FromObj(ta));
+        Assert.True(ta.IsFrozen);
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.Set(0, StashValue.FromInt(99L)));
+        Assert.Contains("frozen", ex.Message);
+        Assert.Contains("int", ex.Message);
+    }
+
+    [Fact]
+    public void DeepFreeze_OnStashByteArray_FreezesAndBlocksWrites()
+    {
+        var ta = new StashByteArray(new byte[] { 0x01, 0x02 });
+        RuntimeValues.DeepFreeze(StashValue.FromObj(ta));
+        Assert.True(ta.IsFrozen);
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.Set(0, StashValue.FromByte(0xFF)));
+        Assert.Contains("frozen", ex.Message);
+        Assert.Contains("byte", ex.Message);
+    }
+
+    [Fact]
+    public void DeepFreeze_OnStashStringArray_FreezesAndBlocksWrites()
+    {
+        var ta = new StashStringArray(new List<StashValue> { StashValue.FromObj("hello"), StashValue.FromObj("world") });
+        RuntimeValues.DeepFreeze(StashValue.FromObj(ta));
+        Assert.True(ta.IsFrozen);
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.Set(0, StashValue.FromObj("changed")));
+        Assert.Contains("frozen", ex.Message);
+        Assert.Contains("string", ex.Message);
+    }
+
+    [Fact]
+    public void StashTypedArray_Add_WhenFrozen_ThrowsReadOnlyError()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One });
+        ta.Freeze();
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.Add(StashValue.FromInt(2L)));
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
+    public void StashTypedArray_Clear_WhenFrozen_ThrowsReadOnlyError()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One });
+        ta.Freeze();
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.Clear());
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
+    public void StashTypedArray_RemoveAt_WhenFrozen_ThrowsReadOnlyError()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One });
+        ta.Freeze();
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.RemoveAt(0));
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
+    public void StashTypedArray_Insert_WhenFrozen_ThrowsReadOnlyError()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One });
+        ta.Freeze();
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.Insert(0, StashValue.FromInt(2L)));
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
+    public void StashByteArray_GetBackingArray_WhenFrozen_ThrowsReadOnlyError()
+    {
+        var ba = new StashByteArray(new byte[] { 0x01, 0x02 });
+        ba.Freeze();
+        var ex = Assert.Throws<ReadOnlyError>(() => ba.GetBackingArray(out int _));
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
+    public void StashTypedArray_Freeze_Idempotent()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One });
+        ta.Freeze();
+        ta.Freeze(); // must not throw
+        Assert.True(ta.IsFrozen);
+    }
+
+    [Fact]
+    public void VM_IndexSet_OnFrozenIntArray_ThrowsReadOnlyError()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One, StashValue.FromInt(2L) });
+        ta.Freeze();
+        var ex = RunWithFrozenGlobal("frozenArr[0] = 99;", "frozenArr", StashValue.FromObj(ta));
+        Assert.IsType<ReadOnlyError>(ex);
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
+    public void VM_IndexSet_OnFrozenByteArray_ThrowsReadOnlyError()
+    {
+        var ba = new StashByteArray(new byte[] { 0x68, 0x69 }); // "hi"
+        ba.Freeze();
+        var ex = RunWithFrozenGlobal("frozenBuf[0] = 0;", "frozenBuf", StashValue.FromObj(ba));
+        Assert.IsType<ReadOnlyError>(ex);
+        Assert.Contains("frozen", ex.Message);
+    }
 }

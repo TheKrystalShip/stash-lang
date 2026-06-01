@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 public sealed class StashByteArray : StashTypedArray
 {
@@ -53,12 +54,12 @@ public sealed class StashByteArray : StashTypedArray
         return StashValue.FromByte(_data[index]);
     }
 
-    public override void Set(int index, StashValue val)
+    protected override void SetCore(int index, StashValue val)
     {
         _data[index] = ExtractByteForSet(val, index);
     }
 
-    public override void Add(StashValue val)
+    protected override void AddCore(StashValue val)
     {
         byte b = ExtractByteForAdd(val);
         EnsureCapacity(_count + 1);
@@ -71,7 +72,7 @@ public sealed class StashByteArray : StashTypedArray
         return StashValue.FromByte(_data[--_count]);
     }
 
-    public override void Insert(int index, StashValue val)
+    protected override void InsertCore(int index, StashValue val)
     {
         byte b = ExtractByteForInsert(val);
         EnsureCapacity(_count + 1);
@@ -80,14 +81,14 @@ public sealed class StashByteArray : StashTypedArray
         _count++;
     }
 
-    public override void RemoveAt(int index)
+    protected override void RemoveAtCore(int index)
     {
         _count--;
         Array.Copy(_data, index + 1, _data, index, _count - index);
     }
 
     public override StashTypedArray Clone() => new StashByteArray(_data, _count);
-    public override void Clear() => _count = 0;
+    protected override void ClearCore() => _count = 0;
     public override StashTypedArray CreateEmpty() => new StashByteArray(new List<StashValue>());
 
     /// <summary>
@@ -96,10 +97,13 @@ public sealed class StashByteArray : StashTypedArray
     public ReadOnlySpan<byte> AsSpan() => _data.AsSpan(0, _count);
 
     /// <summary>
-    /// Returns the raw backing array and active count. Used by stdlib for bulk operations.
+    /// Returns the raw backing array and active count for in-place mutation.
+    /// Callers MUST only use this for write operations. Throws <see cref="ReadOnlyError"/> if frozen.
+    /// For read-only zero-copy access use <see cref="AsSpan"/>.
     /// </summary>
     public byte[] GetBackingArray(out int count)
     {
+        if (IsFrozen) throw new ReadOnlyError("Cannot mutate a frozen byte[] array.");
         count = _count;
         return _data;
     }

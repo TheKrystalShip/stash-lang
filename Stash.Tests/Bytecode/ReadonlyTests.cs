@@ -369,4 +369,44 @@ outer();
             ExecuteWithStdlib(
                 "readonly const D = { pairs: arr.zip([1,2], [3,4]) }; D.pairs[0][0] = 99;"));
     }
+
+    // =========================================================================
+    // 16. F03: typed arrays (StashTypedArray subclasses) are frozen and write-guarded
+    // =========================================================================
+
+    [Fact]
+    public void ReadonlyConst_TypedIntArray_IndexSetThrows()
+    {
+        // arr.typed([1,2,3], "int") produces a StashIntArray; after freeze, index-set must throw.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const xs = arr.typed([1,2,3], \"int\"); xs[0] = 99;"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_TypedByteArray_IndexSetThrows()
+    {
+        // buf.from produces a StashByteArray; after freeze, index-set must throw.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const buf_data = buf.from(\"hi\"); buf_data[0] = 0;"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_TypedStringArray_IndexSetThrows()
+    {
+        // arr.typed(["a","b"], "string") produces a StashStringArray; after freeze must throw.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const ss = arr.typed([\"a\",\"b\"], \"string\"); ss[0] = \"c\";"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_TypedArray_IsStillReadable()
+    {
+        // After freeze the values must still be readable.
+        object? result = ExecuteWithStdlib(
+            "readonly const xs = arr.typed([10, 20, 30], \"int\"); return xs[1];");
+        Assert.Equal(20L, result);
+    }
 }

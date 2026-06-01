@@ -58,7 +58,7 @@ public sealed class StashFloatArray : StashTypedArray
         return StashValue.FromFloat(_data[index]);
     }
 
-    public override void Set(int index, StashValue val)
+    protected override void SetCore(int index, StashValue val)
     {
         if (val.IsFloat)
             _data[index] = val.AsFloat;
@@ -68,7 +68,7 @@ public sealed class StashFloatArray : StashTypedArray
             throw new RuntimeError($"Cannot assign {TypeNameOf(val)} to element of float[] at index {index} — expected float.");
     }
 
-    public override void Add(StashValue val)
+    protected override void AddCore(StashValue val)
     {
         if (val.IsFloat)
         {
@@ -92,7 +92,7 @@ public sealed class StashFloatArray : StashTypedArray
         return StashValue.FromFloat(_data[--_count]);
     }
 
-    public override void Insert(int index, StashValue val)
+    protected override void InsertCore(int index, StashValue val)
     {
         double stored;
         if (val.IsFloat)
@@ -108,14 +108,14 @@ public sealed class StashFloatArray : StashTypedArray
         _count++;
     }
 
-    public override void RemoveAt(int index)
+    protected override void RemoveAtCore(int index)
     {
         _count--;
         Array.Copy(_data, index + 1, _data, index, _count - index);
     }
 
     public override StashTypedArray Clone() => new StashFloatArray(_data, _count);
-    public override void Clear() => _count = 0;
+    protected override void ClearCore() => _count = 0;
     public override StashTypedArray CreateEmpty() => new StashFloatArray(new List<StashValue>());
 
     private void EnsureCapacity(int min)
