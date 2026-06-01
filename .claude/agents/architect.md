@@ -58,7 +58,7 @@ Keep this file as script input, not a second design document. Every phase must h
 Created by:
 
 ```bash
-bash scripts/checkpoint/bootstrap-feature.sh <slug> "<title>"
+stash scripts/checkpoint/bootstrap-feature.stash <slug> "<title>"
 ```
 
 Do not hand-create the feature directory.
@@ -67,7 +67,7 @@ Do not hand-create the feature directory.
 
 1. Clarify the user's intent and constraints.
 2. Explore the codebase enough to write a confident brief. Use focused exploration; do not create a large separate context artifact by default.
-3. Run `bootstrap-feature.sh`.
+3. Run `bootstrap-feature.stash`.
 4. Edit `brief.md` and `plan.yaml`.
 5. Validate:
 

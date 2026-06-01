@@ -151,16 +151,16 @@ All deterministic workflow operations live in `scripts/checkpoint/`:
 
 | Script | Purpose |
 | --- | --- |
-| `bootstrap-feature.sh <slug> [title]` | Creates the feature directory from templates. |
+| `bootstrap-feature.stash <slug> [title]` | Creates the feature directory from templates. |
 | `validate-spec.stash [slug]` | Validates `plan.yaml` and syncs missing checkpoint phase entries. |
 | `next-phase.stash [slug] [count]` | Prints the next ready phase or ready phase batch as YAML. |
-| `verify-phase.sh <slug> <phase-id>` | Prints `done_when`, checks the current plan's scope, and runs verify commands. |
+| `verify-phase.stash <slug> <phase-id>` | Prints `done_when`, checks the current plan's scope, and runs verify commands. |
 | `advance-checkpoint.stash <slug> <phase-id> <status>` | Performs legal state transitions. |
 | `status.stash [slug]` | Prints a compact status report (incl. sibling feature worktrees). |
-| `promote-done.sh <slug>` | Runs final verification and moves the feature to done. |
-| `worktree-start.sh <slug> [base]` | Creates `../stash-<slug>` on a fresh `feature/<slug>` branch (parallel work). |
+| `promote-done.stash <slug>` | Runs final verification and moves the feature to done. |
+| `worktree-start.stash <slug> [base]` | Creates `../stash-<slug>` on a fresh `feature/<slug>` branch (parallel work). |
 | `check-parallel-safety.stash [slug]` | Warns when a feature shares a subsystem with an in-flight sibling worktree. |
-| `worktree-finish.sh <slug>` | Merges the branch `--no-ff`, re-verifies on `main`, removes the worktree if green. |
+| `worktree-finish.stash <slug>` | Merges the branch `--no-ff`, re-verifies on `main`, removes the worktree if green. |
 
 The scripts should answer deterministic questions: what phase is next, what files are allowed, what commands prove it, and whether state is legal. They should not become a second planning language.
 
@@ -204,7 +204,7 @@ The implementer receives the current phase or selected phase batch, the path to 
 The implementer must:
 
 - start from the planned files and keep any deviations small, documented, and within the phase intent
-- run `bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>` for each selected phase
+- run `stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>` for each selected phase
 - commit each phase separately
 - advance the checkpoint after each phase
 
@@ -300,7 +300,7 @@ A language feature is cross-cutting by construction (the six-visitor rule), so t
 Deterministic steps are scripted so no agent has to reconstruct them. From the main checkout:
 
 ```bash
-bash scripts/checkpoint/worktree-start.sh <slug>
+stash scripts/checkpoint/worktree-start.stash <slug>
 ```
 
 This creates the worktree at `../stash-<slug>` on a fresh `feature/<slug>` branch (based on the committed `main` ref, so a dirty primary tree doesn't leak in), refusing on any naming collision. Then run the **entire** lifecycle inside that worktree — including `/spec`. Creating the worktree *first* means the feature's `.kanban/2-in-progress/<slug>/` directory, every phase commit, and `/done`'s promotion to `.kanban/4-done/` all live on the branch and arrive on `main` as one coherent unit. The review range stays clean by construction:
@@ -322,7 +322,7 @@ It reduces every feature's file-globs to top-level subsystems and warns (non-blo
 When a feature is green on its branch and `/done` has promoted it, integrate from the main checkout:
 
 ```bash
-bash scripts/checkpoint/worktree-finish.sh <slug>
+stash scripts/checkpoint/worktree-finish.stash <slug>
 ```
 
 The script merges `feature/<slug>` with `--no-ff` (one labeled boundary commit, `chore(<slug>): …` commits intact), **re-runs `final_verify` against the merged `main`**, and removes the worktree + branch **only if that verify is green**. It refuses unless run from `main` on a clean tree with the feature already promoted. The three rules it encodes, stated plainly:

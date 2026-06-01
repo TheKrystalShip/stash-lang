@@ -116,8 +116,8 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
 3. **Pointers**:
    - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read summary, design path, acceptance criteria, and sections relevant to this phase)
    - Legacy spec/context paths if `_brief` reports them for an older feature
-4. **Batch contract** — the implementer must process selected phases sequentially. For each phase: mark it `in_progress` if it is not already, implement only that phase's intent, run `verify-phase.sh`, commit, advance it to `done`, then continue to the next selected phase.
-5. **Verification contract** — for each phase, the implementer must run `bash scripts/checkpoint/verify-phase.sh <slug> <id>` (not just the bare verify commands — the script also enforces scope).
+4. **Batch contract** — the implementer must process selected phases sequentially. For each phase: mark it `in_progress` if it is not already, implement only that phase's intent, run `verify-phase.stash`, commit, advance it to `done`, then continue to the next selected phase.
+5. **Verification contract** — for each phase, the implementer must run `stash scripts/checkpoint/verify-phase.stash <slug> <id>` (not just the bare verify commands — the script also enforces scope).
 6. **Commit contract** — one commit per phase, using the exact commit message format from `.claude/agents/implementer.md`. Verify must pass before each commit.
 7. **Advance contract** — after each green phase commit, advance the phase and then chore-commit the checkpoint so the tree is clean between phases (the implementer owns this commit, not the orchestrator):
    ```bash

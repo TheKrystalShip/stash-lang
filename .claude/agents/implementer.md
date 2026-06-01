@@ -23,7 +23,7 @@ You receive:
 2. Treat `done_when` as the behavioral target for the phase.
 3. Read only the relevant parts of `brief.md`: summary, design path, acceptance criteria, and phase-related sections.
 4. Do not start adjacent unselected phases or speculative cleanup.
-5. Run `bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>` before committing each phase.
+5. Run `stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>` before committing each phase.
 6. Commit only when that phase's verification passes.
 
 ## Bounded Plan Deviations
@@ -54,7 +54,7 @@ When you receive multiple selected phases, process them in the YAML order. Keep 
 - If it is not already `in_progress`, mark it `in_progress`:
   `stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> in_progress`
 - Implement only phase N's intent.
-- Run `verify-phase.sh` for phase N.
+- Run `verify-phase.stash` for phase N.
 - Commit phase N.
 - Advance phase N to `done`.
 - Then start phase N+1.
@@ -69,7 +69,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 4. Run:
 
    ```bash
-   bash scripts/checkpoint/verify-phase.sh <slug> <phase-id>
+   stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>
    ```
 
 5. Commit the current phase. Stage **only** the code and test files you changed — never `git add -A`/`git add .` — so the feat commit stays free of checkpoint churn (a pending `in_progress` marker for a batched next phase must not leak into this commit):

@@ -32,7 +32,7 @@ Once the slug is confirmed, invoke the `architect` agent via the `Agent` tool wi
 - The user's topic (verbatim)
 - The agreed slug
 - An instruction to start by reading `.claude/skills/checkpoint-workflow.md` and `.kanban/_templates/` before doing anything
-- An instruction to run `bash scripts/checkpoint/bootstrap-feature.sh <slug> "<title>"` only AFTER initial design discussion has converged enough to commit to a slug and title
+- An instruction to run `stash scripts/checkpoint/bootstrap-feature.stash <slug> "<title>"` only AFTER initial design discussion has converged enough to commit to a slug and title
 - An instruction to run `stash scripts/checkpoint/validate-spec.stash <slug>` before declaring the spec ready, and fix every reported problem
 - An instruction to add a one-line pointer to `.claude/repo.md` "Active Multi-Phase Work" when done
 - An instruction to NOT write implementation code — only `brief.md`, `plan.yaml`, and checkpoint artifacts
