@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T22:36:31Z"
+updated: "2026-06-01T23:04:39Z"
 phases:
   1A:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "checkpoint.stash facade + _registry.stash pure module; --selftest 17/17 byte-parity; $> passthrough"
   2A:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e581ef7ce9b323e8a1c64609ea8a6055c067a5e9
+    verified: true
+    started: "2026-06-01T22:51:10Z"
+    completed: "2026-06-01T23:04:39Z"
+    attempts: 1
+    notes: "omission guard: coverage (by-path) + no-raw-path RED-with-22-exemptions; 3 fixtures; seed verified"
   3A:
     status: pending
     commit: null
