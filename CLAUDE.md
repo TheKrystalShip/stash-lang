@@ -106,12 +106,22 @@ This project's agents live in `.claude/agents/`. Under the checkpoint workflow, 
 | `implementer` | Sonnet | `/next-phase` — implement one phase |
 | `reviewer` | Opus | `/feature-review` — produce review.md |
 | `resolver` | Sonnet | `/resolve` — fix one finding |
+| `stash-author` | Sonnet | Writing/non-trivially editing `.stash` code — the SOLE author of Stash; other agents delegate to it (see below) |
 | `profiler` | Opus | Performance investigation, benchmarking (manual invocation) |
 | `debugger` | Sonnet | Tracing runtime bugs, minimal repros (manual invocation) |
 | `explore` | Haiku | Spawned by other agents for codebase search (never invoke directly) |
 | `orchestrator` | — | **Deprecated.** See `.claude/agents/orchestrator.md` for redirect. |
 
 For a small one-off change (bug fix, single test, one-file refactor), skip the checkpoint workflow and dispatch `implementer` directly with file paths.
+
+### Writing Stash code: delegate to `stash-author`
+
+Stash is dogfooded across this repo (`examples/`, `scripts/checkpoint/*`, fixtures), and the recurring failure is agents writing Stash from memory instead of the docs — producing plausible-but-wrong code (it has caused real bugs more than once). The fix is a single docs-first specialist:
+
+- **All `.stash` authoring goes through the `stash-author` agent — and this binds the orchestrator too, not just sub-agents.** The most common real path is the orchestrator writing Stash inline; if you (the orchestrator) write `.stash` directly instead of delegating, you must follow the **identical docs-first protocol** in `.claude/agents/stash-author.md` (read the relevant `docs/Stash — Language Specification.md` + `Standard Library Reference.md` sections first, emit the API plan, then write). The protocol that only sub-agents follow is the protocol that gets walked around.
+- **Exempt:** trivial mechanical edits (rename, whitespace, a path/command flip). New Stash logic or non-trivial edits are not exempt.
+- **Gotcha memory:** `stash-author` maintains `.claude/agents/stash-author.gotchas.md` (doc/reality mismatches), each entry backed by a `Category=Gotcha` xUnit test in `Stash.Tests/Interpreting/GotchaTests.cs`.
+- **`Category=Gotcha` tests are change-detectors — never exclude them from a gate** (unlike documented flakies). Each asserts *current buggy* behavior, so it is green today and flips **red when the bug is fixed**; that red is the signal to flip the assertion to correct behavior and prune the gotcha entry. Excluding them defeats the entire mechanism.
 
 ### Exploration: find then refute
 

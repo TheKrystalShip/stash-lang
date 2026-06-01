@@ -24,6 +24,7 @@ You receive:
 3. Correctness, security, resource safety, and cross-platform behavior.
 4. Project conventions and missing tests.
 5. Maintainability issues with real future cost.
+6. **Stash authoring provenance:** a `.stash` change (beyond a trivial mechanical edit) should be the work of the `stash-author` agent and carry its docs-grounded **API plan**. Flag `.stash` logic written without one — it's the signature of plausible-but-unverified Stash. Separately, **never recommend excluding `Category=Gotcha` tests from a gate**; a red gotcha test means a documented bug was fixed (flip its assertion + prune the gotcha memory), not a test to silence.
 
 ## Workflow
 

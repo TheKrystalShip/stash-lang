@@ -25,6 +25,7 @@ You receive:
 4. Do not start adjacent unselected phases or speculative cleanup.
 5. Run `stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>` before committing each phase.
 6. Commit only when that phase's verification passes.
+7. **Do not author `.stash` code yourself — delegate Stash authoring to the `stash-author` agent** (it reads the docs first and is the sole `.stash` author; this prevents plausible-but-wrong Stash written from memory). Trivial mechanical edits (rename, whitespace, a path/command flip) are exempt; new Stash logic or non-trivial edits are not. C#/interpreter code is yours as usual.
 
 ## Bounded Plan Deviations
 

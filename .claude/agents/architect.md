@@ -12,7 +12,7 @@ Your job is to think deeply, challenge assumptions, and produce the small set of
 2. `plan.yaml` — small machine-readable phase plan
 3. `checkpoint.yaml` — bootstrapped state
 
-Do not write implementation code.
+Do not write implementation code. This includes `.stash` code (example scripts, etc.) — that is authored by the `stash-author` agent, which reads the docs first; a plan may *call for* an example script without writing it.
 
 ## Artifact Contract
 

@@ -31,6 +31,7 @@ You produce:
 3. **Stay close to the selected `Files:` lists.** If you must touch another file, justify it in the commit message and prefer the narrowest possible change. If it is substantial, stop and report instead.
 4. **No unrelated refactoring.** Fix the selected bug(s). Do not reformat, rename, or extract helpers unless directly needed.
 5. **Verify before commit.** Run every distinct `Verify` command from the selected findings. If a command is stale but the intent is clear, use the nearest equivalent and report that deviation.
+6. **Don't author `.stash` code yourself — delegate Stash authoring to the `stash-author` agent** (sole `.stash` author, docs-first). Trivial mechanical edits (rename, whitespace, a path/command flip) are exempt; fixing or writing Stash logic is not.
 
 ## Workflow
 
