@@ -1,0 +1,71 @@
+#!/usr/bin/env stash
+// worktree-start.stash <slug> [base-branch]
+//
+// Creates a sibling git worktree on a fresh feature/<slug> branch so a feature
+// can progress in isolation from main (the parallel-features workflow — see
+// .claude/WORKFLOW.md "Running Features in Parallel").
+//
+// Naming is the single source of truth here so every agent does it identically:
+//   worktree path = <parent-of-repo>/stash-<slug>
+//   branch        = feature/<slug>
+// The new branch is based on the committed <base-branch> ref (default: main),
+// so a dirty primary working tree does NOT leak into the new worktree.
+//
+// Run from the main checkout. Stash port of worktree-start.sh — git stays the
+// tool (invoked via command expressions); Stash owns the guards + control flow.
+
+import { die } from "_common.stash";
+
+// ── Arguments ───────────────────────────────────────────────────────────────
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+if (raw.length < 1) {
+    die("usage: worktree-start.stash <slug> [base-branch]", 2);
+}
+let slug = raw[0];
+let base = (raw.length >= 2 && raw[1] != "") ? raw[1] : "main";
+
+let repo_root     = path.abs(env.cwd);
+let parent_dir    = path.dir(repo_root);
+let worktree_path = parent_dir + "/stash-" + slug;
+let branch        = "feature/" + slug;
+
+// ── Guards ────────────────────────────────────────────────────────────────────
+if ($(git rev-parse --git-dir).exitCode != 0) {
+    die("not inside a git repository", 1);
+}
+let base_ref = "refs/heads/" + base;
+if ($(git show-ref --verify --quiet ${base_ref}).exitCode != 0) {
+    die("base branch '" + base + "' does not exist", 1);
+}
+let branch_ref = "refs/heads/" + branch;
+if ($(git show-ref --verify --quiet ${branch_ref}).exitCode == 0) {
+    die("branch '" + branch + "' already exists", 1);
+}
+if (fs.exists(worktree_path) || fs.dirExists(worktree_path)) {
+    die("worktree path already exists: " + worktree_path, 1);
+}
+
+// ── Non-blocking heads-up: other in-flight feature worktrees ─────────────────
+// The real per-feature overlap check runs post-spec via check-parallel-safety.stash
+// (this feature has no plan.yaml yet).
+let others = [];
+for (let line in str.lines($(git worktree list --porcelain).stdout)) {
+    if (str.startsWith(line, "branch refs/heads/feature/")) {
+        arr.push(others, "  - " + str.substring(line, 18));   // strip "branch refs/heads/"
+    }
+}
+if (others.length > 0) {
+    io.eprintln("in-flight feature worktrees (consider subsystem overlap):");
+    for (let o in others) { io.eprintln(o); }
+}
+
+// ── Create the worktree ───────────────────────────────────────────────────────
+let add = try $!>(git worktree add -b ${branch} ${worktree_path} ${base});
+if (add is Error) { env.exit(add.exitCode); }
+
+io.println("created worktree: " + worktree_path + "  (branch " + branch + " off " + base + ")");
+io.println("next: cd \"" + worktree_path + "\" && run /spec <topic>");
+io.println("then: stash scripts/checkpoint/check-parallel-safety.stash " + slug + "   # after spec, before implementing");
+io.println("done: from the main checkout run  stash scripts/checkpoint/worktree-finish.stash " + slug);
+env.exit(0);
