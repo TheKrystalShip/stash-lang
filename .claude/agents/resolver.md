@@ -88,7 +88,7 @@ Do not alter any unselected finding except when needed to preserve markdown form
 ### Step 6 — Update Checkpoint
 
 ```bash
-python3 scripts/checkpoint/advance-checkpoint.py <slug> - \
+stash scripts/checkpoint/advance-checkpoint.stash <slug> - \
     --review-status in_progress
 ```
 

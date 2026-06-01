@@ -126,7 +126,7 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 6. **Failure protocol** — if the selected batch cannot be resolved cleanly, stop before committing and report what should be split or corrected.
 7. **Checkpoint advance after success:**
    ```bash
-   python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status in_progress
+   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status in_progress
    ```
 
 ## After the resolver returns
@@ -136,5 +136,5 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 3. If there are still open findings, suggest the next explicit batch: `/resolve <slug> Fxx [Fyy...]`.
 4. If all findings are fixed, update the checkpoint and tell the user `/done <slug>` is ready:
    ```bash
-   python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status resolved
+   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status resolved
    ```

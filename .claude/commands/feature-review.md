@@ -85,7 +85,7 @@ Invoke the `reviewer` agent via the `Agent` tool with `subagent_type: "reviewer"
    - Findings format is STRICT: `## Fxx — [SEVERITY] <title>` with the fields documented in the template.
 9. **Update checkpoint** when done:
    ```bash
-   python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status <in_progress|resolved>
+   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status <in_progress|resolved>
    ```
    `resolved` only if zero findings; otherwise `in_progress`.
 

@@ -36,7 +36,7 @@ You receive:
 7. Update review status:
 
    ```bash
-   python3 scripts/checkpoint/advance-checkpoint.py <slug> - --review-status in_progress
+   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status in_progress
    ```
 
    Use `resolved` if there are zero findings.

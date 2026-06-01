@@ -33,13 +33,13 @@ echo "slug: $SLUG"
 ### 2. Print status
 
 ```bash
-python3 scripts/checkpoint/status.py "$SLUG"
+stash scripts/checkpoint/status.stash "$SLUG"
 ```
 
 ### 3. Validate (auto-heals checkpoint if needed)
 
 ```bash
-python3 scripts/checkpoint/validate-spec.py "$SLUG"
+stash scripts/checkpoint/validate-spec.stash "$SLUG"
 ```
 
 ### 4. Decide what's next

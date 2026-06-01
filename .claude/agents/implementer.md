@@ -52,7 +52,7 @@ When you receive multiple selected phases, process them in the YAML order. Keep 
 
 - Start phase N.
 - If it is not already `in_progress`, mark it `in_progress`:
-  `python3 scripts/checkpoint/advance-checkpoint.py <slug> <id> in_progress`
+  `stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> in_progress`
 - Implement only phase N's intent.
 - Run `verify-phase.sh` for phase N.
 - Commit phase N.
@@ -86,7 +86,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 6. Advance the current phase:
 
    ```bash
-   python3 scripts/checkpoint/advance-checkpoint.py <slug> <id> done \
+   stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> done \
        --commit "$(git rev-parse HEAD)" --verified true \
        --notes "<one-line summary>"
    ```
@@ -101,7 +101,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 8. If another selected phase remains, mark it `in_progress` and repeat from step 2:
 
    ```bash
-   python3 scripts/checkpoint/advance-checkpoint.py <slug> <next-id> in_progress
+   stash scripts/checkpoint/advance-checkpoint.stash <slug> <next-id> in_progress
    ```
 
    This re-dirties `checkpoint.yaml`; that's fine — the next phase's step 7 chore commit sweeps it up. Just keep its feat commit (step 5) code-only so the marker doesn't leak in.
@@ -111,7 +111,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 If verification cannot pass after bounded plan corrections:
 
 ```bash
-python3 scripts/checkpoint/advance-checkpoint.py <slug> <id> failed \
+stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> failed \
     --notes "<reason>"
 ```
 
