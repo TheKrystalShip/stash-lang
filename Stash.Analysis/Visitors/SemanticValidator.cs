@@ -877,6 +877,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         expr.Index.Accept(this);
         expr.Value.Accept(this);
         _parentBinaryOperator = savedParent;
+        DispatchNodeRules(expr);
         return null;
     }
 

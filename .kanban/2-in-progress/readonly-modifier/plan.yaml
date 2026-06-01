@@ -182,7 +182,9 @@ phases:
     files:
       - Stash.Analysis/Visitors/SemanticValidator.cs
       - Stash.Analysis/Rules/**
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
       - Stash.Tests/Analysis/**
+      - .kanban/0-backlog/bugs/**
     verify:
       - dotnet build
       - dotnet test --filter "FullyQualifiedName~SemanticValidatorTests|FullyQualifiedName~AnalyzerTests"

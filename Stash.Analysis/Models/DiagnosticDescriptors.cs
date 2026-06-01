@@ -135,6 +135,15 @@ public static class DiagnosticDescriptors
     /// <summary>SA0846 — emitted when a namespace data member is called like a function.</summary>
     public static readonly DiagnosticDescriptor SA0846 = new("SA0846", "Call of namespace data member", DiagnosticLevel.Error, "Namespaces", "'{0}' is a value member, not a function. Drop the parentheses to read its value.");
 
+    // ── SA0847 — Readonly mutations ───────────────────────────────────
+    /// <summary>
+    /// SA0847 — emitted when a direct mutation is attempted on a known-<c>readonly</c> binding:
+    /// field assignment (<c>D.x = …</c>), index assignment (<c>D[i] = …</c>), or a known
+    /// in-place stdlib mutator called with the <c>readonly</c> binding as its first argument
+    /// (e.g. <c>arr.push(D, …)</c>).
+    /// </summary>
+    public static readonly DiagnosticDescriptor SA0847 = new("SA0847", "Mutation of readonly binding", DiagnosticLevel.Error, "Readonly", "'{0}' is declared readonly and cannot be mutated.");
+
     // ── SA085x — Aliases ──────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0850 = new("SA0850", "Invalid alias name", DiagnosticLevel.Error, "Aliases", "Alias name '{0}' must be a valid identifier (letters, digits, underscores; cannot start with digit).");
     public static readonly DiagnosticDescriptor SA0851 = new("SA0851", "Empty alias confirm prompt", DiagnosticLevel.Warning, "Aliases", "AliasOptions.confirm is empty; the user will see no prompt text.");
@@ -379,6 +388,7 @@ public static class DiagnosticDescriptors
         dict[SA0844.Code] = SA0844;
         dict[SA0845.Code] = SA0845;
         dict[SA0846.Code] = SA0846;
+        dict[SA0847.Code] = SA0847;
         dict[SA0850.Code] = SA0850;
         dict[SA0851.Code] = SA0851;
         dict[SA0860.Code] = SA0860;
