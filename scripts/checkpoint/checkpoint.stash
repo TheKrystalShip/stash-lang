@@ -1,0 +1,190 @@
+#!/usr/bin/env stash
+// checkpoint.stash — facade dispatcher for the checkpoint workflow tools.
+//
+// Usage:
+//   checkpoint [-h | --help]
+//   checkpoint <subcommand> [args...] [-h | --help]
+//   checkpoint --selftest
+//
+// All subcommand names, paths, groups, and one-liners come from _registry.stash —
+// there are no inlined subcommand-name or group literals in this file.
+//
+// Passthrough semantics (empirically verified):
+//   $>(cmd)  — non-strict passthrough; streams stdout+stderr live to parent streams;
+//              returns a CommandResult struct with .exitCode for ALL exit codes (never
+//              throws). This is the byte-transparent dispatch form: run the tool then
+//              env.exit with its exact exit code, for every code 0 and non-zero alike.
+//   $(cmd)   — capture; returns CommandResult{.stdout,.stderr,.exitCode}; never throws.
+//              Used in --selftest to capture both invocations.
+
+import { die } from "_common.stash";
+import { SUBCOMMANDS, GROUPS, PARITY_SELFTEST, PARITY_PROBE } from "_registry.stash";
+
+// ── Constants (UI chrome, reserved flag tokens) ────────────────────────────────
+const FLAG_HELP_LONG  = "--help";
+const FLAG_HELP_SHORT = "-h";
+const FLAG_SELFTEST   = "--selftest";
+const HELP_INDENT     = "  ";
+const HELP_FOOTER     = "Use 'checkpoint <subcommand> --help' for per-subcommand usage.";
+
+// ── Help generator ─────────────────────────────────────────────────────────────
+//
+// Computes the column width from the longest subcommand name (+2 padding), then
+// emits one group heading + members per GROUPS entry (in registry order).
+// Returns the help string so it can be printed to either stdout OR stderr.
+fn build_help() {
+    // Compute column width: longest name + 2 spaces padding
+    let max_len = 0;
+    for (let entry in SUBCOMMANDS) {
+        if (entry.name.length > max_len) {
+            max_len = entry.name.length;
+        }
+    }
+    let col_width = max_len + 2;
+
+    let lines = [];
+    arr.push(lines, "checkpoint [-h | --help]");
+    arr.push(lines, "checkpoint <subcommand> [args...] [-h | --help]");
+
+    for (let grp in GROUPS) {
+        arr.push(lines, "");
+        arr.push(lines, grp.label + ":");
+
+        // All subcommands whose group matches this key, in registry order
+        let members = arr.filter(SUBCOMMANDS, (e) => e.group == grp.key);
+        for (let entry in members) {
+            let padded = str.padEnd(entry.name, col_width, " ");
+            arr.push(lines, HELP_INDENT + padded + entry.one_liner);
+        }
+    }
+
+    arr.push(lines, "");
+    arr.push(lines, HELP_FOOTER);
+
+    return arr.join(lines, "\n");
+}
+
+// ── Selftest — differential-validation engine ──────────────────────────────────
+//
+// Strategy: for every registered subcommand, run it TWICE as a real subprocess —
+// once via this dispatcher ("checkpoint <name> <pargs>") and once directly
+// ("stash <path> <pargs>") — and assert that stdout, stderr, and exitCode are
+// byte-for-byte identical. The comparison proves that the dispatcher is
+// byte-transparent: no buffering, no stream-mangling, no exit-code smearing.
+//
+// The probe arguments (parity.flag for PARITY_SELFTEST, parity.args for
+// PARITY_PROBE) are chosen to be SIDE-EFFECT-FREE: every PARITY_PROBE entry
+// either passes no args (triggering a usage-error die() before any I/O mutation)
+// or passes a clearly-bogus value (triggering a "not found" die() before any
+// dir-creation, mv, git, or write). The rationale for each entry — the exact
+// source-read proof that it exits before any mutation — lives in the per-entry
+// parity.note field in _registry.stash.
+//
+// Because the probes never mutate state, this selftest can be run safely at any
+// time (CI, cold repo, after a failed run) without side effects.
+fn run_selftest() {
+    let pass_count = 0;
+    let fail_count = 0;
+
+    for (let entry in SUBCOMMANDS) {
+        // Build the probe arg list from the parity descriptor
+        let pargs = [];
+        if (entry.parity.kind == PARITY_SELFTEST) {
+            arr.push(pargs, entry.parity.flag);
+        } else {
+            // PARITY_PROBE: pargs may be empty (zero-arg probe) or have elements
+            for (let a in entry.parity.args) {
+                arr.push(pargs, a);
+            }
+        }
+
+        // Run both invocations via subprocess capture — $(…) never throws on non-zero,
+        // which is essential since the probe exits are intentionally non-zero.
+        let via_dispatcher = $(stash scripts/checkpoint/checkpoint.stash ${entry.name} ${...pargs});
+        let via_raw        = $(stash ${entry.path} ${...pargs});
+
+        // Assert all three dimensions are identical
+        let stdout_ok   = (via_dispatcher.stdout   == via_raw.stdout);
+        let stderr_ok   = (via_dispatcher.stderr   == via_raw.stderr);
+        let exitcode_ok = (via_dispatcher.exitCode == via_raw.exitCode);
+        let all_ok = stdout_ok && stderr_ok && exitcode_ok;
+
+        if (all_ok) {
+            io.println("PASS  " + entry.name);
+            pass_count = pass_count + 1;
+        } else {
+            io.println("FAIL  " + entry.name);
+            if (!stdout_ok) {
+                io.println("      stdout diverged:");
+                io.println("        dispatcher: " + conv.toStr(via_dispatcher.stdout));
+                io.println("        raw:        " + conv.toStr(via_raw.stdout));
+            }
+            if (!stderr_ok) {
+                io.println("      stderr diverged:");
+                io.println("        dispatcher: " + conv.toStr(via_dispatcher.stderr));
+                io.println("        raw:        " + conv.toStr(via_raw.stderr));
+            }
+            if (!exitcode_ok) {
+                io.println("      exitCode diverged:");
+                io.println("        dispatcher: " + conv.toStr(via_dispatcher.exitCode));
+                io.println("        raw:        " + conv.toStr(via_raw.exitCode));
+            }
+            fail_count = fail_count + 1;
+        }
+    }
+
+    let total = pass_count + fail_count;
+    io.println("");
+    io.println(conv.toStr(pass_count) + "/" + conv.toStr(total) + " passed");
+
+    if (fail_count == 0) {
+        env.exit(0);
+    } else {
+        env.exit(1);
+    }
+}
+
+// ── Main dispatch ──────────────────────────────────────────────────────────────
+
+let argv = [];
+for (let x in cli.argv) { arr.push(argv, x); }
+
+// 1. Top-level reserved tokens (checked BEFORE subcommand lookup)
+if (argv.length == 0
+    || argv[0] == FLAG_HELP_SHORT
+    || argv[0] == FLAG_HELP_LONG) {
+    io.println(build_help());
+    env.exit(0);
+}
+
+if (argv[0] == FLAG_SELFTEST) {
+    run_selftest();
+    // run_selftest calls env.exit internally; this line is unreachable but
+    // kept for clarity (env.exit does not return)
+}
+
+// 2. Subcommand lookup
+let subcmd_name = argv[0];
+let entry = arr.find(SUBCOMMANDS, (e) => e.name == subcmd_name);
+
+if (entry == null) {
+    // Unknown subcommand: error + help both go to STDERR, exit 2
+    io.eprintln("error: unknown subcommand: " + subcmd_name);
+    io.eprint(build_help() + "\n");
+    env.exit(2);
+}
+
+// 3. Per-subcommand help intercept (before shelling out — tools don't handle it)
+if (argv.length > 1 && (argv[1] == FLAG_HELP_SHORT || argv[1] == FLAG_HELP_LONG)) {
+    io.println(entry.usage);
+    env.exit(0);
+}
+
+// 4. Real dispatch: byte-transparent passthrough
+//    $>(…) streams stdout+stderr live to the parent's streams and returns a struct
+//    with .exitCode for all exit codes (no throw). This satisfies the acceptance
+//    criterion: for any S and V, `checkpoint S V` ≡ `stash S.stash V` on stdout,
+//    stderr, and exit code.
+let rest = arr.slice(argv, 1, argv.length);
+let result = $>(stash ${entry.path} ${...rest});
+env.exit(result.exitCode);

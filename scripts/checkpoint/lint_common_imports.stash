@@ -30,7 +30,8 @@ import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
 //   lint_common_imports.stash — this file (scan would be self-referential)
 const SCAN_EXCLUSIONS = [
     "_common.stash",
-    "lint_common_imports.stash"
+    "lint_common_imports.stash",
+    "_registry.stash"    // pure registry-data library module, like _common.stash
 ];
 
 // Files that ARE scanned but are ALLOWED to import zero symbols from _common.stash

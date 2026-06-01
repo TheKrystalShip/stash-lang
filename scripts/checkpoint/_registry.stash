@@ -1,0 +1,203 @@
+// _registry.stash — single source of truth for all checkpoint subcommands.
+//
+// This is a PURE DATA MODULE — no top-level side effects whatsoever.
+// It may be safely imported by both the dispatcher (checkpoint.stash) and
+// the lint (lint_common_imports.stash) without any observable output.
+//
+// Acceptance criterion: `stash scripts/checkpoint/_registry.stash` exits 0
+// with EMPTY stdout and EMPTY stderr.
+
+// ── Parity kind constants (bounded domain — no bare string literals at compare sites) ──
+
+/// Kind A: the tool has its own --selftest / --self-test flag.
+export const PARITY_SELFTEST = "selftest";
+
+/// Kind B: no selftest flag; use a side-effect-free usage/error probe.
+export const PARITY_PROBE = "probe";
+
+// ── Group metadata — drives section order and headings in the help generator ──
+
+export const GROUPS = [
+    { key: "lifecycle", label: "Lifecycle" },
+    { key: "worktree",  label: "Worktree"  },
+    { key: "milestone", label: "Milestone" },
+    { key: "meta",      label: "Meta"      }
+];
+
+// ── Internal files — NOT subcommands (used by the lint's rawpath guard) ──────
+//
+// Deliberate: "lint_common_imports.stash" is NOT here — it IS the `lint`
+// subcommand (path: "scripts/checkpoint/lint_common_imports.stash", group:
+// "meta"). Listing it here would cause the phase-2A lint to treat doc
+// references to it as "internal, leave raw" and skip migrating them to
+// `checkpoint lint`. The 4 genuine non-subcommands are:
+//   _common.stash           — shared helper library
+//   _registry.stash         — this file (pure data library)
+//   verify-phase-scope.stash — internal callee of verify-phase
+//   checkpoint.stash        — the facade itself
+export const INTERNAL_TOOLS = [
+    "_common.stash",
+    "_registry.stash",
+    "verify-phase-scope.stash",
+    "checkpoint.stash"
+];
+
+// ── Subcommand registry (single source of truth) ─────────────────────────────
+//
+// Each entry: { name, path, group, one_liner, usage, parity }
+//
+// parity shapes:
+//   Kind A (PARITY_SELFTEST): { kind: PARITY_SELFTEST, flag: "<exact flag>" }
+//   Kind B (PARITY_PROBE):    { kind: PARITY_PROBE, args: [...], note: "<why no mutation>" }
+//
+// Probe verification (read source in order before writing):
+//   bootstrap-feature  — raw.length < 1 → die(usage, 2) BEFORE fs.createDir          [verified]
+//   advance-checkpoint — cli.tryParse with required positionals fails exit 2 BEFORE load_checkpoint [verified]
+//   promote-done       — raw.length != 1 → die(usage, 2) BEFORE any fs/mv/promote-gate call [verified]
+//   worktree-start     — raw.length < 1 → die(usage, 2) BEFORE any git/fs mutation    [verified]
+//   worktree-finish    — raw.length != 1 → die(usage, 2) BEFORE any git/fs mutation   [verified]
+//   check-parallel-safety — resolve_feature("__parity_probe__") → feature_dir → die("not found") [verified]
+//   milestone-status   — fs.exists(MILESTONE.md) fails → die("milestone not found")   [verified]
+
+export const SUBCOMMANDS = [
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
+    {
+        name:      "bootstrap-feature",
+        path:      "scripts/checkpoint/bootstrap-feature.stash",
+        group:     "lifecycle",
+        one_liner: "Create feature dir from templates",
+        usage:     "checkpoint bootstrap-feature <slug> [title]",
+        parity:    { kind: PARITY_PROBE, args: [], note: "no args → raw.length < 1 → die(usage,2) before fs.createDir" }
+    },
+    {
+        name:      "validate-spec",
+        path:      "scripts/checkpoint/validate-spec.stash",
+        group:     "lifecycle",
+        one_liner: "Validate plan.yaml + heal checkpoint",
+        usage:     "checkpoint validate-spec [slug]",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus slug → feature_dir → die('not found') before any write" }
+    },
+    {
+        name:      "next-phase",
+        path:      "scripts/checkpoint/next-phase.stash",
+        group:     "lifecycle",
+        one_liner: "Print the next ready phase(s) as YAML",
+        usage:     "checkpoint next-phase [slug] [count]",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus slug → feature_dir → die('not found') before any write" }
+    },
+    {
+        name:      "verify-phase",
+        path:      "scripts/checkpoint/verify-phase.stash",
+        group:     "lifecycle",
+        one_liner: "Run a phase's verify commands + scope check",
+        usage:     "checkpoint verify-phase <slug> <phase-id>",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus slug → feature_dir → die('not found') before any write" }
+    },
+    {
+        name:      "advance-checkpoint",
+        path:      "scripts/checkpoint/advance-checkpoint.stash",
+        group:     "lifecycle",
+        one_liner: "Advance phase state (pending -> in_progress -> done)",
+        usage:     "checkpoint advance-checkpoint <slug> <phase-id> <status> [--commit SHA] [--notes \"...\"] [--verified true|false] [--review-status STATUS]",
+        parity:    { kind: PARITY_PROBE, args: [], note: "no args → cli.tryParse missing required positionals → exit 2 before load_checkpoint" }
+    },
+    {
+        name:      "assert-phase-landed",
+        path:      "scripts/checkpoint/assert-phase-landed.stash",
+        group:     "lifecycle",
+        one_liner: "Confirm a phase commit landed on the branch",
+        usage:     "checkpoint assert-phase-landed <slug> <phase-id> [--main-ref <sha>]",
+        parity:    { kind: PARITY_SELFTEST, flag: "--selftest" }
+    },
+    {
+        name:      "status",
+        path:      "scripts/checkpoint/status.stash",
+        group:     "lifecycle",
+        one_liner: "Print compact status for /resume",
+        usage:     "checkpoint status [slug]",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus slug → feature_dir → die('not found') before any write" }
+    },
+    {
+        name:      "review-findings",
+        path:      "scripts/checkpoint/review-findings.stash",
+        group:     "lifecycle",
+        one_liner: "Parse review.md findings (--open, --count, --json)",
+        usage:     "checkpoint review-findings <slug> [--open] [--count] [--json]",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus slug → feature_dir → die('not found') before any write" }
+    },
+    {
+        name:      "promote-gate",
+        path:      "scripts/checkpoint/promote-gate.stash",
+        group:     "lifecycle",
+        one_liner: "Run the promotion gate (phases + open findings)",
+        usage:     "checkpoint promote-gate <slug> [--phases-only] [--selftest]",
+        parity:    { kind: PARITY_SELFTEST, flag: "--selftest" }
+    },
+    {
+        name:      "promote-done",
+        path:      "scripts/checkpoint/promote-done.stash",
+        group:     "lifecycle",
+        one_liner: "Final acceptance + move to 4-done/",
+        usage:     "checkpoint promote-done <slug>",
+        parity:    { kind: PARITY_PROBE, args: [], note: "no args → raw.length != 1 → die(usage,2) before any fs/mv/promote-gate call" }
+    },
+    {
+        name:      "feature-diff-range",
+        path:      "scripts/checkpoint/feature-diff-range.stash",
+        group:     "lifecycle",
+        one_liner: "Compute feature review diff boundary",
+        usage:     "checkpoint feature-diff-range <slug> [--range|--base|--head] [--json]",
+        parity:    { kind: PARITY_SELFTEST, flag: "--selftest" }
+    },
+    {
+        name:      "run-verify",
+        path:      "scripts/checkpoint/run-verify.stash",
+        group:     "lifecycle",
+        one_liner: "Run a command, parse test summary, write report",
+        usage:     "checkpoint run-verify <command...> [--name LABEL] [--json]",
+        parity:    { kind: PARITY_SELFTEST, flag: "--selftest" }
+    },
+    // ── Worktree ───────────────────────────────────────────────────────────────
+    {
+        name:      "worktree-start",
+        path:      "scripts/checkpoint/worktree-start.stash",
+        group:     "worktree",
+        one_liner: "Create ../stash-<slug> on feature/<slug>",
+        usage:     "checkpoint worktree-start <slug> [base-branch]",
+        parity:    { kind: PARITY_PROBE, args: [], note: "no args → raw.length < 1 → die(usage,2) before any git worktree add or fs mutation" }
+    },
+    {
+        name:      "check-parallel-safety",
+        path:      "scripts/checkpoint/check-parallel-safety.stash",
+        group:     "worktree",
+        one_liner: "Warn on subsystem overlap with sibling worktrees",
+        usage:     "checkpoint check-parallel-safety [slug]",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus slug → resolve_feature → feature_dir → die('not found') before any worktree scan mutation" }
+    },
+    {
+        name:      "worktree-finish",
+        path:      "scripts/checkpoint/worktree-finish.stash",
+        group:     "worktree",
+        one_liner: "Merge --no-ff, re-verify on main, remove worktree",
+        usage:     "checkpoint worktree-finish <slug>",
+        parity:    { kind: PARITY_PROBE, args: [], note: "no args → raw.length != 1 → die(usage,2) before any git merge or fs mutation" }
+    },
+    // ── Milestone ──────────────────────────────────────────────────────────────
+    {
+        name:      "milestone-status",
+        path:      "scripts/checkpoint/milestone-status.stash",
+        group:     "milestone",
+        one_liner: "Print a milestone's derived ledger",
+        usage:     "checkpoint milestone-status [milestone-slug]",
+        parity:    { kind: PARITY_PROBE, args: ["__parity_probe__"], note: "bogus milestone slug → MILESTONE.md not found → die('milestone not found') with no mutation" }
+    },
+    // ── Meta ───────────────────────────────────────────────────────────────────
+    {
+        name:      "lint",
+        path:      "scripts/checkpoint/lint_common_imports.stash",
+        group:     "meta",
+        one_liner: "Run the _common.stash chokepoint lint + sub-cmd guards",
+        usage:     "checkpoint lint [--self-test]",
+        parity:    { kind: PARITY_SELFTEST, flag: "--self-test" }
+    }
+];
