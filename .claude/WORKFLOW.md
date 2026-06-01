@@ -48,6 +48,7 @@ The plan should be trusted, but it is not sacred. Implementers may make small, d
 | `/done [slug]` | Run final verification and move the feature to `.kanban/4-done/`. |
 | `/resume [slug]` | Print current state and recommend the next command. |
 | `/milestone [slug]` | Print a long-term milestone's derived ledger + the next unit to spec. (See "Milestones" below.) |
+| `/autopilot [slug] [--here] [--merge]` | **Driver** — runs the whole lifecycle (Steps 2–5 below) autonomously to `/done`, in a worktree by default. (See "Autopilot" below.) |
 
 `[slug]` is optional only when exactly one feature is active.
 
@@ -332,6 +333,45 @@ The script merges `feature/<slug>` with `--no-ff` (one labeled boundary commit, 
 3. **`.claude/repo.md` "Active Multi-Phase Work" is the one guaranteed collision** — both features append a pointer line. Resolve the trivial conflict, or only update `repo.md` at merge time.
 
 ---
+
+## Autopilot — driving a spec to completion
+
+The per-turn commands above give you fine control, one bounded job at a time. When you'd rather
+hand off a *fully specced* feature and have it driven to completion, use:
+
+```text
+/autopilot <slug>
+```
+
+It is a **thin driver that composes the existing commands** — it adds no new dispatch logic, just
+the loop and the guardrails around `/next-phase` → `/feature-review` → `/resolve` → `/done`. The
+spec must already exist (it does **not** run `/spec`).
+
+**What it does, in order:** verifies the spec is committed on `main` and `validate-spec` is green →
+creates a worktree and works inside it → loops `/next-phase` until every phase is done → reviews,
+resolves all findings, **re-reviews once**, resolves again → `/done` (promote to `4-done/` on the
+branch) → **stops**, telling you the `worktree-finish` command to merge.
+
+**Two defaults, both overridable:**
+
+- **Worktree by default** (so it never blocks other in-flight work). `--here` runs it in the
+  current checkout instead.
+- **Stops before merging to `main`.** Promotion happens on the branch; the human runs
+  `worktree-finish` because last-to-merge-pays ordering and green-on-merged-`main` are judgment
+  calls. `--merge` opts in to an automatic merge that still stops on any conflict or post-merge
+  failure.
+
+**It is fail-closed and resumable.** Hard gates (red `verify-phase`, red `final_verify`, merge
+conflict) **stop it immediately** — it never forces a gate green. Soft failures get 2 attempts,
+then stop. Because every step leaves a clean tree and an advanced checkpoint, re-invoking
+`/autopilot <slug>` after any interruption resumes from where it left off.
+
+**When not to use it:** a one-off fix, a single phase, or anything you want to eyeball between
+steps — reach for the granular `/next-phase` / `/resolve` commands instead. Autopilot is for the
+"this spec is solid, take it home" case.
+
+Parallel-safe by construction: because each `/autopilot` runs in its own worktree, you can drive
+several disjoint-subsystem features at once (see "Running Features in Parallel" above).
 
 ## Filing Bugs Discovered During Work
 

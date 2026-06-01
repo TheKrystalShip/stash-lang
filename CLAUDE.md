@@ -35,6 +35,14 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 | `/done [slug]` | Runs `final_verify`, refuses if anything is open, promotes feature to `.kanban/4-done/`. Script-only. | none |
 | `/resume [slug]` | Diagnostic — prints state, suggests next command. Script-only. | none |
 
+**Driver (spans many turns, composes the above):** `/autopilot [slug] [--here] [--merge]` runs the
+whole lifecycle from an existing spec to `/done` autonomously — loops `/next-phase`, then
+review → resolve → one re-review → resolve, then `/done`. Worktree-by-default (so it never blocks
+other in-flight work; `--here` opts out), fail-closed (hard gates stop it, never forced), and
+resumable from `checkpoint.yaml`. Stops at `/done` on the branch; merging to `main` stays a human
+step unless `--merge`. It adds no dispatch logic — it's thin glue over the per-turn commands. Full
+contract: `.claude/commands/autopilot.md`; tutorial: `.claude/WORKFLOW.md` → "Autopilot".
+
 ### Helper scripts (`scripts/checkpoint/`)
 
 | Script | Purpose |
