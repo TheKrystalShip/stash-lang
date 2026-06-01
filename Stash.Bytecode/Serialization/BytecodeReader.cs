@@ -193,14 +193,18 @@ public static class BytecodeReader
         for (int i = 0; i < constantCount; i++)
             constants[i] = ReadConstant(reader, hasDebugInfo, formatVersion);
 
-        // Upvalues (u8 count + (u8 index, u8 isLocal) pairs)
+        // Upvalues (u8 count + (u8 index, u8 flags) pairs)
+        // flags: bit 0 = IsLocal, bit 1 = IsConst, bit 2 = IsReadonly
         int upvalueCount = reader.ReadByte();
         var upvalues = new UpvalueDescriptor[upvalueCount];
         for (int i = 0; i < upvalueCount; i++)
         {
-            byte index   = reader.ReadByte();
-            bool isLocal = reader.ReadByte() != 0;
-            upvalues[i]  = new UpvalueDescriptor(index, isLocal);
+            byte index  = reader.ReadByte();
+            byte flags  = reader.ReadByte();
+            bool isLocal    = (flags & 0x01) != 0;
+            bool isConst    = (flags & 0x02) != 0;
+            bool isReadonly = (flags & 0x04) != 0;
+            upvalues[i] = new UpvalueDescriptor(index, isLocal, isConst, isReadonly);
         }
 
         // GlobalNameTable (u16 count + u16-length-prefixed strings)

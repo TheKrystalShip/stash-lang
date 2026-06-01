@@ -13,6 +13,7 @@ public sealed class GlobalSlotAllocator
     private readonly Dictionary<string, ushort> _nameToSlot = new(StringComparer.Ordinal);
     private ushort _nextSlot;
     private readonly Dictionary<string, object?> _constValues = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _readonlyGlobals = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Returns the slot index for <paramref name="name"/>, allocating a new one if first seen.
@@ -35,6 +36,12 @@ public sealed class GlobalSlotAllocator
 
     /// <summary>Removes the compile-time folded value for <paramref name="name"/>, invalidating the const-fold cache entry.</summary>
     public void RemoveConstValue(string name) => _constValues.Remove(name);
+
+    /// <summary>Marks a global variable as <c>readonly</c> so that rebind stores emit a deep-freeze.</summary>
+    public void TrackReadonlyGlobal(string name) => _readonlyGlobals.Add(name);
+
+    /// <summary>Returns <see langword="true"/> if the named global was declared <c>readonly</c>.</summary>
+    public bool IsReadonlyGlobal(string name) => _readonlyGlobals.Contains(name);
 
     /// <summary>Total number of global slots allocated so far.</summary>
     public int Count => _nextSlot;

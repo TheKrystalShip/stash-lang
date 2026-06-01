@@ -158,7 +158,7 @@ public sealed class ChunkBuilder
     /// Register an upvalue descriptor. Returns the upvalue index.
     /// Deduplicates identical descriptors.
     /// </summary>
-    public byte AddUpvalue(byte index, bool isLocal)
+    public byte AddUpvalue(byte index, bool isLocal, bool isConst = false, bool isReadonly = false)
     {
         for (int i = 0; i < _upvalues.Count; i++)
         {
@@ -170,9 +170,15 @@ public sealed class ChunkBuilder
             throw new InvalidOperationException("Upvalue overflow (>256 upvalues per function).");
 
         byte idx = (byte)_upvalues.Count;
-        _upvalues.Add(new UpvalueDescriptor(index, isLocal));
+        _upvalues.Add(new UpvalueDescriptor(index, isLocal, isConst, isReadonly));
         return idx;
     }
+
+    /// <summary>Returns the number of upvalue descriptors registered so far.</summary>
+    public int UpvalueCount => _upvalues.Count;
+
+    /// <summary>Returns the upvalue descriptor at the given index.</summary>
+    public UpvalueDescriptor GetUpvalue(int index) => _upvalues[index];
 
     // ==================================================================
     // Inline Cache

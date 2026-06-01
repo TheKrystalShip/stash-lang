@@ -269,6 +269,7 @@ public sealed partial class VirtualMachine
                 case OpCode.SetUpval: ExecuteSetUpval(ref frame, inst); break;
                 case OpCode.CloseUpval: ExecuteCloseUpval(ref frame, inst); break;
                 case OpCode.CheckNumeric: ExecuteCheckNumeric(ref frame, inst); break;
+                case OpCode.Freeze: ExecuteFreeze(ref frame, inst); break;
 
                 // ==================== Arithmetic ====================
                 case OpCode.Add: ExecuteAdd(ref frame, inst); break;

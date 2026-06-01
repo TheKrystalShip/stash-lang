@@ -444,6 +444,11 @@ public enum OpCode : byte
     /// </summary>
     [OpCode(Mnemonic = "stream.pipe", Format = OpCodeFormat.ABC, Operands = OperandTemplate.Bespoke, Summary = "Streaming pipe chain", Writes = OperandRole.RegA, CompanionWords = CompanionWordKind.PipeStages)]
     StreamingPipeline = 100,
+
+    // === Readonly ===
+    /// <summary>ABC: DeepFreeze R(A) in place — no-op for primitives; freezes dicts, arrays, structs transitively.</summary>
+    [OpCode(Mnemonic = "freeze", Format = OpCodeFormat.ABC, Operands = "R(A)", Summary = "Deep-freeze value in place", Writes = OperandRole.None, Reads = OperandRole.RegA)]
+    Freeze = 101,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

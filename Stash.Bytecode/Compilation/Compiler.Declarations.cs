@@ -40,7 +40,7 @@ partial class Compiler
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme);
+        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme, isReadonly: stmt.IsReadonly);
         if (stmt.Initializer != null)
             CompileExprTo(stmt.Initializer, reg);
         else
@@ -48,6 +48,10 @@ partial class Compiler
 
         // Type annotations are erased — they are metadata only and produce no runtime
         // wrapping / coercion. Use conv.byte() and friends for explicit narrowing.
+
+        // readonly modifier: deep-freeze the initial value in place.
+        if (stmt.IsReadonly)
+            _builder.EmitA(OpCode.Freeze, reg);
 
         _scope.MarkInitialized();
 
@@ -60,6 +64,9 @@ partial class Compiler
         {
             ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
             _builder.EmitABx(OpCode.SetGlobal, reg, gslot);
+            // Track readonly globals so rebind assignments can emit Freeze.
+            if (stmt.IsReadonly)
+                _globalSlots.TrackReadonlyGlobal(stmt.Name.Lexeme);
         }
         return null;
     }
@@ -90,6 +97,11 @@ partial class Compiler
         }
 
         // Type annotations on const are erased — same erasure semantics as let.
+
+        // readonly modifier: deep-freeze the initial value in place.
+        // Only emit for non-primitive initialisers (metadata-init values are always primitive literals).
+        if (stmt.IsReadonly && !useMetadataInit)
+            _builder.EmitA(OpCode.Freeze, reg);
 
         _scope.MarkInitialized();
 
