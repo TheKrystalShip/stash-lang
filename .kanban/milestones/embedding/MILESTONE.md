@@ -114,7 +114,7 @@ Completion is computed from feature dirs, not asserted here. Each child feature'
 carries `milestone: embedding`; the status script groups them across all git worktrees:
 
 ```bash
-stash scripts/checkpoint/milestone-status.stash embedding
+stash scripts/checkpoint/checkpoint.stash milestone-status embedding
 ```
 
 - **Done** = features in `.kanban/4-done/` tagged with this milestone.

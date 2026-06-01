@@ -100,14 +100,12 @@ const RAWPATH_SCAN_EXCLUSIONS = [
     "scripts/checkpoint/lint_common_imports.stash"
 ];
 
-// TEMPORARY exemptions — files still containing a raw subcommand path reference
-// at the end of phase 2A. This list SHRINKS to empty across phases 3A–4C.
-// Each entry is a repo-relative path. When a file is migrated, remove its entry.
-const RAWPATH_EXEMPTIONS = [
-    ".kanban/milestones/embedding/MILESTONE.md",
-    ".kanban/milestones/omission-hardening/MILESTONE.md",
-    ".kanban/_templates/milestone-template.md"
-];
+// TEMPORARY exemptions — files still containing a raw subcommand path reference.
+// SHRANK to empty across phases 3A–4C (every live file is now migrated). This
+// list MUST stay empty: any new raw subcommand path in a live file is a real
+// leak the guard fires on, not something to re-exempt. Each entry (if ever
+// re-added) is a repo-relative path.
+const RAWPATH_EXEMPTIONS = [];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
