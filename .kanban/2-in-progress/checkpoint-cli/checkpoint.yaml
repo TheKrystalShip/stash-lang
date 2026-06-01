@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T23:23:05Z"
+updated: "2026-06-01T23:28:10Z"
 phases:
   1A:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: final doc batch migrated; RAWPATH_EXEMPTIONS now EMPTY; guard fully enforces; selftest 17/17
   5A:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d056a3b9d42bd952eefea9a181aee27758cdfb7c
+    verified: true
+    started: "2026-06-01T23:26:13Z"
+    completed: "2026-06-01T23:28:10Z"
+    attempts: 1
+    notes: "final acceptance: exemptions empty, scan-exclusions documented, selftest 17/17, dotnet test 12825 passed 0 failed"
 review:
   status: not_started
   started: null
