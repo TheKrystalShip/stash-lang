@@ -88,6 +88,8 @@ phases:
       - Stash.Analysis/Visitors/SymbolCollector.cs
       - Stash.Analysis/Visitors/SemanticTokenWalker.cs
       - Stash.Analysis/Visitors/StashFormatter.cs
+      - Stash.Analysis/Formatting/Printers/DeclarationPrinter.cs
+      - Stash.Analysis/Models/SymbolInfo.cs
       - Stash.Bytecode/Compilation/Compiler.Declarations.cs
       - Stash.Tests/Analysis/**
     verify:

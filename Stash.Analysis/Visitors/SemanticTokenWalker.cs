@@ -327,6 +327,8 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitVarDeclStmt(VarDeclStmt stmt)
     {
+        if (stmt.ReadonlyKeyword is { } roKw)
+            EmitFromToken(roKw, TokenTypeKeyword, 0);
         EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration);
         if (stmt.TypeHint is not null)
         {
@@ -340,6 +342,8 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitConstDeclStmt(ConstDeclStmt stmt)
     {
+        if (stmt.ReadonlyKeyword is { } roKw)
+            EmitFromToken(roKw, TokenTypeKeyword, 0);
         EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration | ModifierReadonly);
         if (stmt.TypeHint is not null)
         {
