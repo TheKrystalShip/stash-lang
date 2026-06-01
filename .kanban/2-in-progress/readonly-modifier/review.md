@@ -170,7 +170,7 @@ dotnet test                            # ensure no broad regressions from the pr
 ## F03 — [CRITICAL] Typed arrays (`StashTypedArray` and all five subclasses) are neither frozen nor write-guarded
 
 **Status:** fixed
-**Fixed in:** 0b353ae
+**Fixed in:** 0b353ae (follow-up: 05fe9f4)
 **Files:** `Stash.Core/Runtime/Types/StashTypedArray.cs:100-107`, `Stash.Core/Runtime/Types/StashIntArray.cs`, `StashStringArray.cs`, `StashFloatArray.cs`, `StashBoolArray.cs`, `StashByteArray.cs`, `Stash.Core/Runtime/RuntimeValues.cs:316-376` (`DeepFreezeObject` switch)
 **Phase:** P3
 **Commit:** 6b302819
