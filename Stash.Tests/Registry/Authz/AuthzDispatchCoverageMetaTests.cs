@@ -4,7 +4,6 @@ using System.Linq;
 using System.Reflection;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth.Authorization;
-using Stash.Registry.Controllers;
 using Stash.Tests.Registry.Fixtures;
 using Xunit;
 
@@ -30,13 +29,14 @@ namespace Stash.Tests.Registry.Authz;
 /// <para>
 /// Three assertions are provided:
 /// <list type="number">
-///   <item><b>Production compliance</b> — all six real controllers pass.</item>
+///   <item><b>Production compliance</b> — every controller in the Stash.Registry assembly passes.</item>
 ///   <item><b>Fail-path (teeth)</b> — <see cref="UnclassifiedDispatchFixtureController"/> is
 ///     reported; <see cref="ClassifiedDispatchFixtureController"/> is not.  The fixture
 ///     controller carries <c>[Authorize]</c> but no dispatch attribute, directly proving the
 ///     scanner catches the gap that <c>AuthzCoverageMetaTests</c> does not.</item>
 ///   <item><b>Imperative-pin</b> — the exact set of <c>[ImperativeAuthz]</c>-bearing
-///     production actions equals <c>{PublishPackage, ClaimScope}</c>.
+///     production actions equals <c>{ClaimScope}</c> (<c>PublishPackage</c> was folded into
+///     the shared filter; see <see cref="PinnedImperativeActions"/>).
 ///     Adding or removing the marker requires updating this assertion, forcing reviewer
 ///     attention on every future exemption.</item>
 /// </list>
@@ -46,15 +46,12 @@ public sealed class AuthzDispatchCoverageMetaTests
 {
     // ── Registry controller types under coverage ──────────────────────────────
 
-    private static readonly IReadOnlyList<Type> ProductionControllers =
-    [
-        typeof(AuthController),
-        typeof(PackagesController),
-        typeof(OrganizationsController),
-        typeof(ScopesController),
-        typeof(SearchController),
-        typeof(AdminController),
-    ];
+    /// <summary>
+    /// The production controllers scanned by this gate, derived by reflection over the
+    /// Stash.Registry assembly (see <see cref="RegistryControllerInventory"/>) so a newly
+    /// added controller is held to dispatch coverage automatically — no hand-maintained list.
+    /// </summary>
+    private static IReadOnlyList<Type> ProductionControllers => RegistryControllerInventory.Production;
 
     // ── The exact pinned set of imperative-exemption endpoints ────────────────
 

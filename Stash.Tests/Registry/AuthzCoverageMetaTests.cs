@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Controllers;
+using Stash.Tests.Registry.Authz;
 using Stash.Tests.Registry.Fixtures;
 using Xunit;
 
@@ -26,10 +27,12 @@ namespace Stash.Tests.Registry;
 /// </list>
 /// </para>
 /// <para>
-/// The production-compliance assertions scan only the six real registry controllers
-/// (<see cref="AuthController"/>, <see cref="PackagesController"/>,
-/// <see cref="OrganizationsController"/>, <see cref="ScopesController"/>,
-/// <see cref="SearchController"/>, <see cref="AdminController"/>).
+/// The production-compliance assertions scan every concrete controller in the
+/// <c>Stash.Registry</c> assembly, derived by reflection via
+/// <see cref="RegistryControllerInventory"/> (currently <see cref="AuthController"/>,
+/// <see cref="PackagesController"/>, <see cref="OrganizationsController"/>,
+/// <see cref="ScopesController"/>, <see cref="SearchController"/>, <see cref="AdminController"/>) —
+/// so a newly added controller is held to classification automatically.
 /// The fixture-controller assertions target the two test-only fixtures directly.
 /// </para>
 /// </remarks>
@@ -37,15 +40,12 @@ public sealed class AuthzCoverageMetaTests
 {
     // ── Registry controller types under coverage ──────────────────────────────
 
-    private static readonly IReadOnlyList<Type> ProductionControllers =
-    [
-        typeof(AuthController),
-        typeof(PackagesController),
-        typeof(OrganizationsController),
-        typeof(ScopesController),
-        typeof(SearchController),
-        typeof(AdminController),
-    ];
+    /// <summary>
+    /// The production controllers scanned by this gate, derived by reflection over the
+    /// Stash.Registry assembly (see <see cref="RegistryControllerInventory"/>) so a newly
+    /// added controller is held to classification automatically — no hand-maintained list.
+    /// </summary>
+    private static IReadOnlyList<Type> ProductionControllers => RegistryControllerInventory.Production;
 
     // ── Core scanning logic ───────────────────────────────────────────────────
 
