@@ -106,11 +106,13 @@ public class BasePathIntegrationTests
         var prefixed = await client.GetAsync("/registry");
         Assert.Equal(HttpStatusCode.OK, prefixed.StatusCode);
 
-        var rootRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/packages/nonexistent");
+        // Use a fully scoped path ({scope}/{name}) so it matches the PackagesController route;
+        // a single-segment path would never match and would return an empty unmatched-route body.
+        var rootRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/packages/myscope/nonexistent");
         var rootResponse = await client.SendAsync(rootRequest);
         Assert.Equal(HttpStatusCode.NotFound, rootResponse.StatusCode);
 
-        var prefixedRequest = new HttpRequestMessage(HttpMethod.Get, "/registry/api/v1/packages/nonexistent");
+        var prefixedRequest = new HttpRequestMessage(HttpMethod.Get, "/registry/api/v1/packages/myscope/nonexistent");
         var prefixedResponse = await client.SendAsync(prefixedRequest);
         // Either 404 (package not found) or 200 — the key assertion is that the route MATCHED, not 404 from routing miss.
         // PackagesController returns 404 from the action body when the package is not found, so we just verify

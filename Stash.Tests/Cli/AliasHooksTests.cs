@@ -400,7 +400,7 @@ public sealed class AliasHooksTests : IDisposable
         // → ExecuteAlias, which checks the expansion stack. Since "recur" is already pushed
         // before hooks run (spec §9.3), the cycle guard fires.
         ShellRunner.EvaluateSource("""
-            alias.define("recur", "echo hello ${args}", AliasOptions {
+            alias.define("recur", "echo hello \${args}", AliasOptions {
                 before: (n, a) => {
                     alias.exec("recur", []);
                     return true;

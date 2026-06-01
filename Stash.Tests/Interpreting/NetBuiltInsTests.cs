@@ -751,12 +751,24 @@ let result = info.hostCount;
     {
         // HttpListener cannot bind port 0 (no OS ephemeral-port assignment), so we
         // self-allocate with a retry-on-conflict loop: probe a free loopback TCP
-        // port, try to bind the HttpListener to it, and retry on the (rare) race
-        // where the port is taken between probe and bind. No hardcoded ports, no
-        // Stop→Start gap. The listener is fully started (listening) before return.
-        HttpListener listener;
-        int port;
-        while (true)
+        // port, try to bind the HttpListener to it, and retry on the race where the
+        // port is taken between probe and bind. The probe socket MUST be closed
+        // before Start() — HttpListener cannot adopt a pre-bound socket, so the
+        // probe→bind TOCTOU gap is inherent and retry-on-conflict is the only
+        // legitimate mitigation. Crucially, a bind conflict on Linux/.NET surfaces
+        // as EITHER HttpListenerException OR a bare SocketException (the latter is
+        // NOT a subclass of the former — they only share Win32Exception as a base),
+        // so we must catch both or the conflict escapes uncaught and flakes the
+        // test under heavy parallel load. A fresh ephemeral port is probed on every
+        // attempt, so collisions are rare; the cap is generous and we rethrow the
+        // last conflict if exhausted so failure is loud, not a hang. No hardcoded
+        // ports, no Stop→Start gap. The listener is listening before return.
+        const int maxAttempts = 40;
+        HttpListener listener = null!;
+        int port = 0;
+        Exception? lastConflict = null;
+        var started = false;
+        for (var attempt = 0; attempt < maxAttempts && !started; attempt++)
         {
             using (var probe = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
             {
@@ -768,13 +780,20 @@ let result = info.hostCount;
             try
             {
                 listener.Start();
-                break;
+                started = true;
             }
-            catch (HttpListenerException)
+            catch (Exception ex) when (ex is HttpListenerException || ex is SocketException)
             {
+                lastConflict = ex;
                 try { listener.Close(); } catch { }
                 // Port was reclaimed between probe and bind — pick another.
             }
+        }
+        if (!started)
+        {
+            throw new InvalidOperationException(
+                $"StartWsEchoServer: could not bind a free loopback port after {maxAttempts} attempts.",
+                lastConflict);
         }
 
         var serverTask = Task.Run(async () =>

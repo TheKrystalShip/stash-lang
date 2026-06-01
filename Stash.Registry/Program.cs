@@ -3,7 +3,9 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Configuration;
 
 namespace Stash.Registry;
@@ -102,11 +104,16 @@ public class Program
 
         startup.Configure(app);
 
-        Console.WriteLine($"Stash Registry v{Version}");
-        Console.WriteLine($"Listening on http://{config.Server.Host}:{config.Server.Port}{config.Server.BasePath}");
-        Console.WriteLine($"Database: {config.Database.Type} ({(config.Database.Type == "sqlite" ? config.Database.Path : "configured")})");
-        Console.WriteLine($"Storage: {config.Storage.Type} ({(config.Storage.Type == "filesystem" ? config.Storage.Path : config.Storage.Bucket)})");
-        Console.WriteLine($"Auth: {config.Auth.Type}");
+        // Skip the startup banner under WebApplicationFactory (TestServer): it writes to the
+        // process-global Console.Out, which races into parallel tests that capture stdout.
+        if (app.Services.GetRequiredService<IServer>().GetType().Name != "TestServer")
+        {
+            Console.WriteLine($"Stash Registry v{Version}");
+            Console.WriteLine($"Listening on http://{config.Server.Host}:{config.Server.Port}{config.Server.BasePath}");
+            Console.WriteLine($"Database: {config.Database.Type} ({(config.Database.Type == "sqlite" ? config.Database.Path : "configured")})");
+            Console.WriteLine($"Storage: {config.Storage.Type} ({(config.Storage.Type == "filesystem" ? config.Storage.Path : config.Storage.Bucket)})");
+            Console.WriteLine($"Auth: {config.Auth.Type}");
+        }
 
         await app.RunAsync();
     }

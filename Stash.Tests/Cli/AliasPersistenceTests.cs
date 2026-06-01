@@ -148,7 +148,7 @@ public sealed class AliasPersistenceTests : IDisposable
     public void Load_TagsNewAliasesAsSaved()
     {
         var (runner, vm) = MakeEnv();
-        File.WriteAllText(_aliasFile, "alias.define(\"g\", \"git ${args}\");\n");
+        File.WriteAllText(_aliasFile, "alias.define(\"g\", \"git \\${args}\");\n");
 
         AliasPersistence.Load(vm, runner);
 
