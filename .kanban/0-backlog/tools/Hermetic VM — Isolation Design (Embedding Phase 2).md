@@ -3,6 +3,9 @@
 > **Status:** Design note — NOT yet a spec. Do **not** bootstrap `/spec` until the `readonly`
 > modifier (phase 1) ships, because the async-child model here depends on the concrete freeze API
 > that phase produces (see §3).
+> **Tracked under:** the `embedding` milestone (`.kanban/milestones/embedding/MILESTONE.md`) as
+> **phase 2**. The milestone records the strict-sequencing decision and the spec-time obligation
+> to re-verify §4's leak inventory against current source before writing `plan.yaml`.
 > **Created:** 2026-05-30
 > **Type:** Design note — captures fresh design context so the future architect inherits it.
 > **Discovery context:** Produced during the from-scratch embedding design discussion (2026-05-30)
