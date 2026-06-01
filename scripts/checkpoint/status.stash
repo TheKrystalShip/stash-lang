@@ -1,0 +1,124 @@
+#!/usr/bin/env stash
+// status.stash <slug?>
+//
+// Stash port of status.py. Prints a compact status report for an active feature.
+// Used by /resume/-style advice. No agent invocation.
+//
+// LOOSE contract: exit code 0 always; the printed information set mirrors
+// status.py (feature header, phase table, current phase, git state, worktree
+// listing, review block) but exact wording / column widths may differ.
+
+import { resolve_feature, load_plan, load_checkpoint } from "_common.stash";
+
+const INPROGRESS_DIR = ".kanban/2-in-progress";
+
+/// Run `git <args>` and return trimmed stdout (empty string on failure).
+fn git(args) {
+    let r = process.exec("git", args, ExecOptions { strict: false });
+    if (r.exitCode != 0) { return null; }
+    return str.trim(r.stdout);
+}
+
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+let slug = resolve_feature(raw.length > 0 ? raw[0] : null);
+let plan = load_plan(slug);
+let cp   = load_checkpoint(slug);
+let fdir = INPROGRESS_DIR + "/" + slug;
+
+io.println("Feature: " + slug + "  (" + conv.toStr(dict.get(plan, "title")) + ")");
+io.println("Dir:     " + fdir);
+io.println("Updated: " + conv.toStr(dict.get(cp, "updated")));
+io.println("");
+
+// ── Phase table ──────────────────────────────────────────────────────────────
+io.println(str.padEnd("Phase", 6) + " " + str.padEnd("Status", 12) + " "
+         + str.padEnd("Attempts", 10) + " " + str.padEnd("Verified", 10) + " "
+         + str.padEnd("Commit", 12) + " Notes");
+io.println(str.repeat("-", 80));
+
+let cp_phases = dict.get(cp, "phases") ?? {};
+for (let ph in dict.get(plan, "phases") ?? []) {
+    let pid = dict.get(ph, "id");
+    let s = dict.get(cp_phases, pid) ?? {};
+    let status   = dict.get(s, "status") ?? "pending";
+    let attempts = dict.get(s, "attempts") ?? 0;
+    let verified = dict.get(s, "verified") ?? false;
+    let commit   = dict.get(s, "commit") ?? "-";
+    if (commit == null) { commit = "-"; }
+    let commit10 = str.substring(commit, 0, commit.length < 10 ? commit.length : 10);
+    let notes    = dict.get(s, "notes") ?? "";
+    let notes40  = str.substring(notes, 0, notes.length < 40 ? notes.length : 40);
+    io.println(str.padEnd(conv.toStr(pid), 6) + " " + str.padEnd(status, 12) + " "
+             + str.padEnd(conv.toStr(attempts), 10) + " " + str.padEnd(conv.toStr(verified), 10) + " "
+             + str.padEnd(commit10, 12) + " " + notes40);
+}
+
+io.println("");
+let cur = dict.get(cp, "current");
+if (cur != null && cur != "") {
+    io.println("current phase: " + conv.toStr(cur));
+} else {
+    io.println("current phase: (none — between phases)");
+}
+
+// ── Git state ────────────────────────────────────────────────────────────────
+let branch = git(["branch", "--show-current"]);
+if (branch == null) {
+    io.println("git: not a repo or error");
+} else {
+    let dirty = git(["status", "--porcelain"]) ?? "";
+    let last  = git(["log", "-1", "--oneline"]) ?? "";
+    io.println("branch: " + branch);
+    io.println("last commit: " + last);
+    io.println("working tree: " + (dirty != "" ? "dirty" : "clean"));
+    if (dirty != "") {
+        let dlines = str.lines(dirty);
+        let shown = dlines.length < 10 ? dlines.length : 10;
+        for (let i = 0; i < shown; i = i + 1) {
+            io.println("  " + dlines[i]);
+        }
+        let extra = dlines.length - 10;
+        if (extra > 0) {
+            io.println("  ... and " + conv.toStr(extra) + " more files");
+        }
+    }
+}
+
+// ── Worktree context ──────────────────────────────────────────────────────────
+let wt_raw = git(["worktree", "list", "--porcelain"]);
+if (wt_raw != null) {
+    let entries = [];
+    let p = "";
+    for (let line in str.lines(wt_raw)) {
+        if (str.startsWith(line, "worktree ")) {
+            p = str.substring(line, 9);
+        } else if (str.startsWith(line, "branch ")) {
+            let b = str.replace(str.substring(line, 7), "refs/heads/", "");
+            arr.push(entries, { path: p, branch: b });
+        } else if (str.startsWith(line, "detached")) {
+            arr.push(entries, { path: p, branch: "(detached)" });
+        }
+    }
+    if (entries.length > 1) {
+        let here = path.abs(env.cwd);
+        io.println("");
+        io.println("worktrees:");
+        for (let e in entries) {
+            let mark = (e.path == here) ? " <- here" : "";
+            io.println("  " + str.padEnd(e.branch, 32) + " " + e.path + mark);
+        }
+    }
+}
+
+// ── Review state ──────────────────────────────────────────────────────────────
+let rv = dict.get(cp, "review") ?? {};
+let rv_status = dict.get(rv, "status");
+if (rv_status != null && rv_status != "not_started") {
+    io.println("");
+    io.println("review: " + conv.toStr(rv_status)
+             + "  open=" + conv.toStr(dict.get(rv, "findings_open") ?? 0)
+             + "  fixed=" + conv.toStr(dict.get(rv, "findings_fixed") ?? 0));
+}
+
+env.exit(0);
