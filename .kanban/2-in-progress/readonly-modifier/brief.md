@@ -74,15 +74,18 @@ expressing intent) — part of why it is worth shipping standalone and first.
 - Best-effort **compile-time / analyzer diagnostics** for statically-visible
   direct mutations of a known-`readonly` binding (`D.x = …`, `D[i] = …`,
   in-place stdlib mutators on `D`).
-- Full toolchain coverage per `.claude/language-changes.md`: lexer,
-  `TokenType`, parser, all six AST visitors, analyzer, LSP semantic tokens /
-  hover / completion, playground Monarch tokenizer, VS Code TextMate grammar,
+- Full toolchain coverage per `.claude/language-changes.md`: lexer +
+  soft-keyword table, parser, all six AST visitors, analyzer, LSP semantic
+  tokens / hover / completion, playground Monarch tokenizer, VS Code TextMate
+  grammar, **tree-sitter grammar** (`tree-sitter-stash/grammar.js`),
   language-specification update + ToC, an `examples/*.stash` showcase,
   xUnit tests.
-- Ship a sibling runtime stdlib function — `freeze(value)` — that is a second
-  front-end to the same mechanism, since the frozen-flag plumbing exists
-  regardless and `freeze()` is required by the hermetic-VM phase. (Decision
-  log records this scope choice.)
+- Build the deep-freeze mechanism (cycle-safe `DeepFreeze` walker + per-value
+  `IsFrozen` flag) as an **internal-only** primitive, surfaced through the
+  single `readonly` front-end. **No Stash-callable `freeze()` is exposed**
+  (decision 2026-06-01): the hermetic-VM phase consumes the internal
+  `IsFrozen`/`DeepFreeze`, not a stdlib function, and a `freeze()` name would
+  collide with JavaScript's deliberately *shallow* `Object.freeze`.
 
 ## Non-Goals
 
@@ -106,13 +109,21 @@ expressing intent) — part of why it is worth shipping standalone and first.
 ## Design
 
 The end state is a single runtime concept — **"this value is frozen"** —
-reachable via two front-ends:
+reachable through **one** author-facing front-end:
 
-- **Declarative:** `readonly` modifier on a `let` / `const` declaration. The
-  initializer (and every rebind value, for `readonly let`) is deep-frozen at
-  assignment time.
-- **Dynamic:** `freeze(value)` stdlib function. Deep-freezes any reference-typed
-  value in place, returns the same value (identity preserved).
+- **Declarative:** the `readonly` modifier on a `let` / `const` declaration.
+  The initializer (and every rebind value, for `readonly let`) is deep-frozen
+  at assignment time.
+
+The underlying mechanism — a cycle-safe `DeepFreeze` walker plus a per-value
+`IsFrozen` flag — is built as an **internal** primitive. It is *not* exposed as
+a Stash-callable `freeze()` function (decision 2026-06-01): the name would
+collide with JavaScript's deliberately *shallow* `Object.freeze`, and the only
+downstream consumer (the hermetic-VM phase) binds to the internal
+`IsFrozen`/`DeepFreeze`, not to a stdlib surface. Keeping `readonly` the sole
+trigger also shrinks the aliasing footgun (see Semantics) — every deep-freeze
+now originates at a syntactically visible `readonly` site, never from an
+arbitrary function call.
 
 Frozenness is **carried by the value, not the binding** — aliasing
 (`let a = readonlyD; a.x = 2`) must still throw, which only a value-side flag
@@ -141,10 +152,14 @@ alias.a = 2;            // throws — alias points at the same frozen value
 // Primitives — harmless no-op
 readonly let n = 42;    // ok; ints are already immutable
 
-// Dynamic
-let dyn = { a: 1 };
-freeze(dyn);
-dyn.a = 2;              // throws
+// Soft keyword — `readonly` is still a legal identifier elsewhere
+let readonly = true;    // ok; only special immediately before let/const
+
+// Aliasing footgun — deep freeze reaches a PRE-EXISTING nested value
+let shared = { count: 0 };
+readonly const snap = { data: shared };
+shared.count = 1;       // throws — `shared` was frozen as collateral,
+                        // even though it carries no `readonly` keyword
 
 // Catching
 try {
@@ -158,15 +173,44 @@ try {
 
 - **Deep / transitive.** Freezing a dict freezes every nested dict, array,
   struct, and `StashError` reachable through it. Cycle-safe (visited set).
-  This **diverges from C#'s `readonly`** (which is shallow / binding-only);
-  the spec explicitly calls out the divergence.
+  Depth follows from **purpose**: `readonly` is *value immutability for safe
+  sharing* (the Rust / Swift-value-type / Clojure / Java-immutability-guidance
+  camp), **not** the *binding/annotation* immutability that C# `readonly`,
+  JS `const`, TS `readonly`, Java `final`, and Kotlin `val` provide — those are
+  shallow because they fix a name or type, not a value. A shallowly-frozen
+  value with a mutable nested collection is still unsafe to share across the
+  `async`-child thread boundary, which would defeat the motivation. The
+  languages whose freeze-like primitive is shallow (JS `Object.freeze`, Python
+  `frozen`) never hit this problem because they forbid sharing mutable objects
+  across threads at all (structured-clone copy / the GIL) — an architectural
+  choice Stash already declined. So the spec frames the C# contrast as
+  *"different category, not bolder."*
+- **The genuine novelty is retroactive in-place freeze, not depth.**
+  Rust/Clojure/Swift make values immutable *from birth*; Stash freezes
+  *post-hoc*, because the modifier decorates an initializer that may reference
+  pre-existing values — so a deep-freeze can reach a nested value that some
+  other (non-`readonly`) binding still aliases. Two properties keep this safe:
+  it fails **loud** (`ReadOnlyError` at the offending write — never silent data
+  skew), and every freeze originates at a visible `readonly` declaration. A
+  *clone-on-freeze* alternative (deep-copy the initializer, Rust/Swift-style
+  value semantics) was **considered and rejected**: it would convert the loud
+  throw into a *silent* divergence between the frozen copy and the still-mutable
+  original — exactly the bug class immutability exists to prevent — and would
+  carve a surprising island of copy-semantics into an otherwise
+  reference-semantic language.
 - **Reference types only.** On primitives (`int`, `float`, `bool`, `string`,
   `duration`, `ip_address`, `semver`, `byte_size`, enums, etc.) `readonly` is
   a harmless no-op — primitive values are already immutable; the binding axis
   is `const`'s job there.
+- **`readonly` is a soft (contextual) keyword.** It is special only immediately
+  before `let`/`const`; everywhere else it stays a legal identifier
+  (`let readonly = 1;` parses). This matches Stash's existing declaration
+  modifiers `async` and `export` (also soft) and never breaks code that uses
+  `readonly` as a name. Because `let`/`const` are hard keywords, `readonly let`
+  / `readonly const` is unambiguous on a two-token lookahead.
 - **Identity-preserving.** Freezing does **not** change a value's runtime type
-  from the author's perspective: `typeof(freeze(arr)) == "array"`,
-  `freeze(arr) is arr` (same reference). This is the central implementation
+  from the author's perspective: after `readonly let a = arr`, `typeof(a) ==
+  "array"` and `a is arr` (same reference). This is the central implementation
   constraint — see Implementation Path.
 - **`readonly let` re-freezes on every rebind.** Every value assigned to a
   `readonly let` binding is deep-frozen at assignment time, not only the
@@ -185,7 +229,16 @@ try {
 
 ### Implementation Path
 
-Parser/lexer add the modifier on declaration nodes → `VarDeclStmt`/`ConstDeclStmt`
+`readonly` joins `Keywords.SoftKeywords` (the lexer emits it as an `Identifier`;
+it stays usable as a name). The parser's `Declaration()` statement entry — which
+also parses declarations inside every block and function body via `ParseBlock` —
+gains a 3-way branch on `Identifier("readonly")`: followed by `let`/`const` →
+modifier (sets `IsReadonly`); followed by `fn`/`struct`/`enum`/`interface` →
+targeted "readonly only modifies let/const" diagnostic; otherwise → fall through
+to a plain identifier. Two declaration sites bypass `Declaration()` and need
+explicit handling: the `for`-init clause (`readonly` **rejected** there — a
+rebound loop variable can't be meaningfully frozen) and `export` (which
+**allows** `export readonly const`, single canonical order). `VarDeclStmt`/`ConstDeclStmt`
 carry an `IsReadonly` flag → SemanticResolver / SymbolCollector mark the binding
 slot as readonly so the analyzer can diagnose direct mutations → Compiler emits
 an "after the initializer, deep-freeze" step on the value (for both initial
@@ -193,7 +246,7 @@ binding and `readonly let` rebinds) → Runtime collection / object types
 (`StashDictionary`, plain array carrier, `StashInstance`, `StashError`) all
 carry a uniform `IsFrozen` bit and reject writes with `ReadOnlyError` → a
 single `DeepFreeze` walker traverses any value graph, frozen-flagging each
-node exactly once (cycle-safe) → stdlib `freeze()` calls the same walker →
+node exactly once (cycle-safe) →
 the existing internal shallow uses (`cli.argv` etc.) and the
 `StashFrozenArray` wrapper are migrated to the in-place flag → all six AST
 visitors, the formatter, the LSP semantic-token walker, completion, hover,
@@ -220,20 +273,28 @@ plumbing) — both options preserve value identity from the Stash side.
   re-freezes).
 - `readonly let n = 42;` is accepted, and `n = 99` works (primitive no-op,
   binding axis remains `let`).
-- `freeze(d); d.a = 1;` raises `ReadOnlyError`; `freeze(d) is d` is true
-  (identity preserved); `typeof(freeze(d)) == "dict"`.
+- Identity is preserved by freezing: `readonly let a = D; a is D` is true and
+  `typeof(a) == "dict"` — the value's reference and author-visible type are
+  unchanged by the in-place freeze.
+- `let shared = { count: 0 }; readonly const snap = { data: shared };
+  shared.count = 1;` raises `ReadOnlyError` — deep freeze reaches a pre-existing
+  alias (the headline footgun; a **loud** failure, never silent data skew).
 - The analyzer surfaces a diagnostic for a statically-visible direct mutation
   of a `readonly` binding (e.g. `D.x = …` where `D` is declared `readonly`)
   *before* runtime.
 - `readonly` is rejected on declarations that are not `let` or `const` (parse
-  error with a clear message).
+  error with a clear message), and is rejected in a `for`-init clause.
+- `readonly` remains usable as a plain identifier (`let readonly = 1;` parses) —
+  confirming the soft-keyword treatment.
+- `export readonly const Config = {...};` parses and produces an exported,
+  binding-fixed, deeply-frozen constant.
 - LSP highlights `readonly` as a keyword/modifier; the formatter round-trips
   `readonly let`/`readonly const` declarations unchanged; completions
   for `readonly` appear at statement-start.
 - The language specification documents `readonly` (with a section in the ToC),
   including the explicit divergence from C#'s shallow `readonly`.
 - An `examples/readonly.stash` script runs under the CLI and exercises every
-  decided semantic (deep, alias, rebind, primitive no-op, `freeze()`,
+  decided semantic (deep, alias, rebind, primitive no-op, the aliasing footgun,
   `ReadOnlyError` catch).
 - `dotnet test` (with the documented-flakies filter, but **including**
   `StandardLibraryReferenceTests`, `CompletionSurfaceSnapshotTests`, and
@@ -243,8 +304,10 @@ plumbing) — both options preserve value identity from the Stash side.
 
 The phase list lives in `plan.yaml` so scripts can read it. Spine:
 
-1. **P1 — Lexer + parser surface.** `readonly` keyword + modifier flag on
-   `VarDeclStmt` / `ConstDeclStmt`; parse errors for bad placement.
+1. **P1 — Lexer + parser surface.** `readonly` as a **soft keyword**
+   (`Keywords.SoftKeywords`) + `IsReadonly` flag on `VarDeclStmt` /
+   `ConstDeclStmt`; 3-way dispatch in `Declaration()`; `for`-init rejection;
+   `export readonly const` wiring; parse errors for bad placement.
 2. **P2 — All six AST visitors compile + formatter round-trips.** Resolver,
    Validator, SymbolCollector, SemanticTokenWalker, StashFormatter, Compiler
    accept the new flag; formatter prints it; semantic token walker tags it.
@@ -256,20 +319,21 @@ The phase list lives in `plan.yaml` so scripts can read it. Spine:
 4. **P4 — Compiler wiring.** After initializer (and after each `readonly let`
    rebind), emit a deep-freeze of the value. End-to-end CLI script shows
    direct/aliased/nested writes all throwing.
-5. **P5 — `freeze()` stdlib function.** Second front-end onto the P3
-   primitive; throws metadata, completion, docs regen.
-6. **P6 — Analyzer best-effort diagnostics.** Static detection of direct
+5. **P5 — Analyzer best-effort diagnostics.** Static detection of direct
    field/index mutation and known in-place mutator stdlib calls on a
    known-`readonly` binding.
-7. **P7 — LSP / playground / TextMate / spec / examples.** Hover, completion,
-   semantic tokens for `readonly`; Monarch tokenizer; TextMate grammar; spec
-   section + ToC entry; `examples/readonly.stash`.
+6. **P6 — LSP / playground / TextMate / tree-sitter / spec / examples.** Hover,
+   completion, semantic tokens for `readonly` (AST-driven, so precise); Monarch
+   tokenizer; TextMate `storage.modifier` scope (contextual, before
+   `let`/`const`); tree-sitter grammar rule; spec section + ToC entry carrying
+   the deep-vs-shallow rationale and the aliasing-footgun example;
+   `examples/readonly.stash`.
 
 ## Open Questions
 
-- **Q2 — `freeze()` capability gate?** The existing `StashCapabilities` set
-  is about side effects (filesystem / network / process). `freeze()` is
-  pure and should likely require **no** capability — confirm during P5.
+*All design-review questions are resolved as of 2026-06-01 (see below). Q2 —
+the `freeze()` capability gate — is moot: no Stash-callable `freeze()` is
+exposed.*
 
 ### Resolved during design review (2026-06-01)
 
@@ -277,7 +341,9 @@ The phase list lives in `plan.yaml` so scripts can read it. Spine:
   Verified `is`/`==` on reference types is C# reference identity
   (`RuntimeOps.IsEqualSlow` → `RuntimeValues.IsEqual` → `object.Equals`).
   This rules out "wrap only when frozen" (swapping the bare `List` for a
-  wrapper on freeze would make `freeze(arr) is arr` **false**). **Decision:**
+  wrapper at freeze time would make a frozen array fail `is`-identity with its
+  pre-freeze reference — `readonly let a = arr; a is arr` would be **false**).
+  **Decision:**
   every plain array is an always-present wrapper carrier (uniform with
   `StashDictionary`'s in-place `_frozen` model), carrying an `IsFrozen` bit
   from creation. Because this touches the VM's hottest path, P3/P4 carry a
@@ -299,21 +365,39 @@ The phase list lives in `plan.yaml` so scripts can read it. Spine:
   upvalue store path so closure rebinds also re-freeze. This incidentally
   closes a **pre-existing `const`-through-closure enforcement hole** (filed as
   a backlog bug; the fix lands here).
+- **Q5 — Reserved vs soft keyword — RESOLVED: soft (contextual).** Verified
+  Stash's existing declaration modifiers `async`/`export` are soft keywords
+  (`Keywords.SoftKeywords`, recognized by the parser via lexeme comparison);
+  `readonly` is the same shape and joins them. Unambiguous because it is always
+  followed by the hard keywords `let`/`const`. Keeps `readonly` usable as an
+  identifier and matches the sibling precedent. The hook lives in
+  `Declaration()` (which `ParseBlock` re-enters, covering blocks + fn bodies);
+  the `for`-init and `export` sites bypass it and are handled explicitly.
+- **Q6 — `freeze()` stdlib — RESOLVED: not exposed.** The internal `DeepFreeze`
+  walker is built in P3 and surfaced only through `readonly`. A Stash-callable
+  `freeze()` is dropped (collides with JS's shallow `Object.freeze`; the
+  hermetic-VM phase depends on the internal `IsFrozen`/`DeepFreeze`, not a
+  stdlib function; a sole `readonly` trigger shrinks the aliasing footgun). The
+  old `freeze()` phase (P5) is removed and the phases renumbered.
 
 ## Decision Log
 
 | Date | Decision | Rationale |
 | --- | --- | --- |
 | 2026-05-30 | Modifier on top of `let`/`const`, not a standalone keyword. | Two orthogonal axes (binding mutability vs value mutability); a modifier lets authors answer both independently. |
-| 2026-05-30 | `readonly` is deep / transitive, **not** shallow like C#. | Shallow freezing does not make a value safe to share across threads, defeating the motivation. Divergence from C# is documented in the spec. |
+| 2026-05-30 | `readonly` is deep / transitive, **not** shallow like C#. | `readonly` is *value immutability for safe sharing* (Rust / Swift value types / Clojure / Java-guidance camp), not *binding/annotation* immutability (C# `readonly`, JS `const`, TS `readonly`, Java `final`, Kotlin `val` — all shallow). Shallow freezing leaves nested collections mutable and unsafe to share across the `async`-child boundary, defeating the motivation. The shallow-`freeze` languages (JS/Python) dodge the problem by forbidding cross-thread mutable sharing — a choice Stash already declined. |
 | 2026-05-30 | Do **not** redefine `const` to be deeply immutable. | Breaking change to established JS-style semantics; high blast radius across existing scripts; surprises exactly the audience the `const` design courted. |
 | 2026-05-30 | Compile-time checks are best-effort, not a total static guarantee. | A complete transitive-immutability type system is out of scope. Aliasing escapes any pure compile-time check; the runtime flag is load-bearing. |
-| 2026-05-30 | Ship `freeze()` stdlib in the same feature. | The mechanism is built here regardless; `freeze()` is needed by the hermetic-VM phase; shipping both together avoids a partial primitive. |
+| 2026-06-01 | **Reversed:** do **not** expose a Stash-callable `freeze()`; surface the deep-freeze mechanism only through the `readonly` modifier. | The `DeepFreeze` walker is internal and built regardless; the hermetic-VM phase binds to the internal `IsFrozen`/`DeepFreeze`, not a stdlib function; `freeze()` would collide with JS's deliberately *shallow* `Object.freeze`; and a single `readonly` trigger keeps every deep-freeze at a visible site, shrinking the aliasing footgun. Supersedes the 2026-05-30 "ship `freeze()`" decision. |
 | 2026-05-30 | Out of scope: actual wiring into `SpawnAsyncFunction`. | Belongs to the next phase (hermetic VM); this spec delivers the primitive that phase consumes. |
 | 2026-05-30 | Retire `StashFrozenArray` wrapper in favour of an in-place flag on the unified array carrier. | Identity-preserving freeze is a Goal; two mechanisms (in-place flag for dicts, wrapper for arrays) is the existing inconsistency this feature exists to resolve. |
-| 2026-06-01 | Q1: plain arrays become an **always-present wrapper carrier** with an in-place `IsFrozen` bit (not wrap-on-freeze). | `is`/`==` is C# reference identity; swapping the carrier on freeze would break the `freeze(arr) is arr` acceptance criterion. Always-present carrier preserves identity and unifies with the `StashDictionary` model. |
+| 2026-06-01 | Q1: plain arrays become an **always-present wrapper carrier** with an in-place `IsFrozen` bit (not wrap-on-freeze). | `is`/`==` is C# reference identity; swapping the carrier at freeze time would break the identity criterion (`readonly let a = arr; a is arr`). Always-present carrier preserves identity and unifies with the `StashDictionary` model. |
 | 2026-06-01 | Q4: thread the readonly/mutability bit into `UpvalueDescriptor` and guard the upvalue store so closure rebinds of `readonly let` re-freeze. | The runtime-flag-is-load-bearing doctrine still protects the original graph, but full enforcement closes the rebind escape hatch *and* a pre-existing `const`-through-closure hole surfaced during review. |
 | 2026-06-01 | Add a before/after **perf gate** (`bench_algorithms` / `bench_numeric`) to P3 and P4. | The always-present array carrier touches the VM's hottest path; the project's mandatory perf doctrine should catch a carrier-choice regression in-phase, not post-merge. |
 | 2026-06-01 | Q3 corrected: `StashError` is already write-blocked (no `IVMFieldMutable`); P3 only needs `DeepFreeze` to **traverse into** its properties, not a new write-guard. | Verified against `VirtualMachine.TypeOps.cs`; the brief's "user can extend `e.foo`" premise was false. |
 | 2026-06-01 | `DeepFreeze` treats **function/closure values as opaque** (traversal skips them; they are not frozen). | A complete capture-graph freeze is out of scope and matches the "functions aren't frozen" mental model; recorded as a case in the `DeepFreeze` type switch. |
 | 2026-06-01 | Spec must call out two sharp edges: transitive freeze reaches **pre-existing aliases** of nested values, and `ReadOnlyError`'s message is **generalized per value kind** (the current text is namespace-member-specific). | Both are author-visible behaviors the original examples don't show; documenting them prevents surprise. |
+| 2026-06-01 | Q5: `readonly` is a **soft (contextual) keyword**, not reserved. | Matches the existing soft declaration modifiers `async`/`export`; never breaks `readonly` used as an identifier; unambiguous since it is always followed by the hard keywords `let`/`const`. |
+| 2026-06-01 | Parser hook lives in `Declaration()` with a 3-way branch; `for`-init **rejects** `readonly`; `export readonly const` is **allowed** (single canonical order). | `Declaration()` covers top-level + blocks + fn bodies (via `ParseBlock`); the `for`-init and `export` construction sites bypass it and are handled explicitly, so `for (readonly let …)` and `export readonly const` don't yield cryptic errors. |
+| 2026-06-01 | `tree-sitter-stash/grammar.js` added to the toolchain surface. | It carries keywords inlined per-rule and was absent from the original toolchain list; the modifier needs a grammar rule there too. Scope glob `tree-sitter-stash/**` added to `plan.yaml`. |
+| 2026-06-01 | Clone-on-freeze (value-semantics deep copy) **considered and rejected** in favour of in-place deep freeze. | In-place fails *loud* (`ReadOnlyError` at the write); clone-on-freeze would fail *silent* (the frozen copy and the still-mutable original diverge) — the bug class immutability exists to prevent — and would island copy-semantics into a reference-semantic language. Preserves Q1's always-present in-place carrier. |

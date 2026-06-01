@@ -32,6 +32,7 @@ scope:
   - .vscode/extensions/stash-lang/**
   - docs/**
   - examples/**
+  - tree-sitter-stash/**
 
 phases:
   # ---------------------------------------------------------------------------
@@ -39,8 +40,8 @@ phases:
     title: Lexer + parser surface for `readonly` modifier
     deps: []
     files:
+      - Stash.Core/Lexing/Keywords.cs
       - Stash.Core/Lexing/TokenType.cs
-      - Stash.Core/Lexing/Lexer.cs
       - Stash.Core/Parsing/Parser.cs
       - Stash.Core/Parsing/AST/VarDeclStmt.cs
       - Stash.Core/Parsing/AST/ConstDeclStmt.cs
@@ -50,14 +51,25 @@ phases:
       - dotnet build Stash.Core
       - dotnet test --filter "FullyQualifiedName~LexerTests|FullyQualifiedName~ParserTests"
     done_when:
-      - "`readonly` lexes as a dedicated keyword TokenType (not as a free identifier)."
-      - "`readonly let x = 1;` and `readonly const y = 2;` parse into `VarDeclStmt`/`ConstDeclStmt` nodes carrying an `IsReadonly = true` flag."
-      - "Parser rejects `readonly` placed anywhere other than immediately before `let`/`const` with a clear diagnostic (e.g. before `fn`, struct member, expression position)."
-      - "Lexing `readonly` as an identifier in pre-feature scripts now fails — confirmed there is no existing identifier use in the codebase or examples (verified during P1 discovery)."
+      - "`readonly` is registered in `Keywords.SoftKeywords` (soft/contextual, like `async`/`export`); the lexer emits it as `Identifier` and it remains usable as a plain identifier elsewhere."
+      - "`readonly let x = 1;` and `readonly const y = 2;` parse into `VarDeclStmt`/`ConstDeclStmt` nodes carrying an `IsReadonly = true` flag, via a 3-way branch on `Identifier(\"readonly\")` in `Declaration()` (→ `let`/`const` = modifier; → `fn`/`struct`/`enum`/`interface` = targeted diagnostic; → else = plain identifier)."
+      - "`readonly` before a non-`let`/`const` declaration produces a clear `readonly only modifies let/const` diagnostic; `readonly` in a `for`-init clause is rejected with a clear message."
+      - "`export readonly const X = …;` parses (the `export` site wires the readonly hook; single canonical order `export readonly const`)."
+      - "`let readonly = 1;` still parses (soft keyword does not break identifier use)."
+      - "The `Keywords.SoftKeywords` drift/snapshot guard (analogue of the `HardKeywords == Lexer.KeywordNames` assertion in `LexerTests.cs`) is updated to include `readonly`."
     notes: |
-      Confirmed during architect discovery: `readonly` is NOT currently a Stash
-      keyword and is NOT used as an identifier in examples or tests. Adding it
-      as a reserved word is safe.
+      Keyword kind RESOLVED (2026-06-01): SOFT/contextual, consistent with the
+      existing soft declaration modifiers `async`/`export`. `readonly` is NOT
+      used as an identifier anywhere in the corpus (verified), so a hard keyword
+      would also be safe today — but soft matches the sibling precedent and never
+      breaks external code. Unambiguous because `readonly` is always followed by
+      the hard keywords `let`/`const`.
+
+      Construction sites (verified in Parser.cs): the hook lives in
+      `Declaration()`, which is re-entered by `ParseBlock()` — so top-level,
+      every block, and every function body are covered by one hook. Two sites
+      bypass it and need explicit handling: `ForStatement` (for-init → reject)
+      and `ExportDeclaration` (→ allow `export readonly const`).
 
       The carrier AST nodes already exist (`VarDeclStmt`, `ConstDeclStmt`); this
       phase only adds an `IsReadonly` flag and the parser-side modifier slot.
@@ -111,12 +123,13 @@ phases:
       - "`ReadOnlyError`'s message is generalized per value kind (the current text is namespace-member-specific and would be wrong on a user dict/array)."
       - "An in-process attempt to mutate a deeply-nested frozen value through a fresh alias throws `ReadOnlyError` at runtime (the flag is on the value, not the binding)."
       - "Primitives passed to `DeepFreeze` are accepted as no-ops (no exception, no flag change)."
-      - "The existing `StashFrozenArray` wrapper is deleted or reduced to a thin shim over the in-place flag; `cli.argv`-style boundary callers now flag the underlying value in place and value identity is preserved (`freeze(arr) is arr`)."
+      - "The existing `StashFrozenArray` wrapper is deleted or reduced to a thin shim over the in-place flag; `cli.argv`-style boundary callers now flag the underlying value in place and value identity is preserved (a frozen array `is` the same reference it was before — observable via aliasing, e.g. `readonly let a = arr; a is arr`)."
       - "No perf regression beyond run-to-run noise on `bench_algorithms` / `bench_numeric` vs the pre-P3 baseline (record both in the phase commit)."
     notes: |
       Q1 RESOLVED (2026-06-01): always-present wrapper carrier for plain arrays
       (NOT wrap-on-freeze) — `is`/`==` is C# reference identity, so swapping the
-      carrier would break `freeze(arr) is arr`. Q3 corrected: `StashError` is
+      carrier would break identity (`readonly let a = arr; a is arr`). Q3
+      corrected: `StashError` is
       already write-blocked; no new guard, traverse-into only. See brief.md
       Decision Log (2026-06-01 entries).
 
@@ -151,25 +164,6 @@ phases:
 
   # ---------------------------------------------------------------------------
   - id: P5
-    title: Stdlib `freeze()` function — second front-end onto the P3 primitive
-    deps: [P3]
-    files:
-      - Stash.Stdlib/BuiltIns/**
-      - Stash.Tests/Stdlib/**
-      - Stash.Tests/**Wave1Throws**
-    verify:
-      - dotnet build
-      - dotnet test --filter "FullyQualifiedName~FreezeBuiltInTests|FullyQualifiedName~Wave1ThrowsCoverageTests"
-      - dotnet run --project Stash.Docs/
-    done_when:
-      - "Stash source `freeze(d)` where `d` is a dict / array / struct / error deep-freezes the value in place and returns the same value (identity preserved)."
-      - "Subsequent `d.a = 1` after `freeze(d)` raises `ReadOnlyError` at runtime."
-      - "`freeze(42)` (primitive) returns `42` and does not throw."
-      - "`freeze` carries `[StashFn]`, throws metadata, and XML docs sufficient for `Wave1ThrowsCoverageTests` to pass without an allow-list entry."
-      - "`Stash.Docs/` regen produces the updated standard library reference with the `freeze` entry, and `StandardLibraryReferenceTests` passes."
-
-  # ---------------------------------------------------------------------------
-  - id: P6
     title: Analyzer best-effort static diagnostics for `readonly` mutations
     deps: [P2, P3]
     files:
@@ -186,15 +180,16 @@ phases:
       - "Mutation of a non-`readonly` binding produces no diagnostic (no regression of existing behavior)."
 
   # ---------------------------------------------------------------------------
-  - id: P7
-    title: LSP / playground / TextMate / spec / examples — full toolchain surface
-    deps: [P2, P4, P5]
+  - id: P6
+    title: LSP / playground / TextMate / tree-sitter / spec / examples — full toolchain surface
+    deps: [P2, P4]
     files:
       - Stash.Lsp/Handlers/SemanticTokensHandler.cs
       - Stash.Lsp/Handlers/CompletionHandler.cs
       - Stash.Lsp/Handlers/HoverHandler.cs
       - Stash.Playground/wwwroot/js/stash-language.js
       - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
+      - tree-sitter-stash/grammar.js
       - docs/Stash — Language Specification.md
       - examples/readonly.stash
       - Stash.Tests/Lsp/**
@@ -204,13 +199,15 @@ phases:
       - dotnet test --filter "FullyQualifiedName~SemanticTokenTests|FullyQualifiedName~CompletionHandlerTests|FullyQualifiedName~HoverHandlerTests|FullyQualifiedName~CompletionSurfaceSnapshotTests|FullyQualifiedName~StandardLibraryReferenceTests"
       - dotnet run --project Stash.Cli/ -- examples/readonly.stash
     done_when:
-      - "LSP completion at statement-start in a `.stash` file offers `readonly` as a keyword completion."
-      - "LSP semantic tokens classify `readonly` as `keyword` (or the project's modifier class) at every occurrence."
+      - "LSP completion at statement-start in a `.stash` file offers `readonly` as a keyword completion (auto-flows from `Keywords.SoftKeywords` via `Keywords.All` → `KeywordCompletionProvider`)."
+      - "LSP semantic tokens classify `readonly` as the modifier/`keyword` class — AST-driven, so it tags only true modifiers and never a variable named `readonly`."
       - "LSP hover on `readonly` shows a description that includes the deep/transitive semantics."
       - "The playground Monarch tokenizer highlights `readonly` consistently with `let`/`const`."
-      - "The VS Code TextMate grammar matches `readonly` and assigns it a `storage.modifier`-class scope."
-      - "`docs/Stash — Language Specification.md` contains a `readonly` section reachable from the ToC, documenting the modifier, the deep/transitive semantics, the C# divergence callout, and the `freeze()` sibling."
-      - "`examples/readonly.stash` runs under the CLI end-to-end, exercises deep-freeze, aliasing-throws, rebind-refreezes, primitive no-op, `freeze()`, and a `ReadOnlyError` catch, and is referenced from the examples README/index if one exists."
+      - "The VS Code TextMate grammar matches `readonly` contextually (before `let`/`const`) and assigns it a `storage.modifier.stash` scope (new scope — none existed before)."
+      - "`tree-sitter-stash/grammar.js` gains an `optional('readonly')` prefix in the `variable_declaration` and `constant_declaration` rules; the grammar regenerates cleanly."
+      - "`docs/Stash — Language Specification.md` contains a `readonly` section reachable from the ToC, documenting the modifier, the deep/transitive semantics, the soft-keyword treatment, the **deep-vs-shallow rationale** (value-immutability-for-sharing camp vs binding-annotation camp; why shallow is insufficient here), the retroactive-in-place novelty, and the headline aliasing-footgun example."
+      - "`examples/readonly.stash` runs under the CLI end-to-end, exercises deep-freeze, aliasing-throws, rebind-refreezes, primitive no-op, the aliasing footgun (collateral freeze of a pre-existing nested value), and a `ReadOnlyError` catch, and is referenced from the examples README/index if one exists."
+      - "DAP verified — no change required (a declaration modifier never appears in an evaluable watch/REPL expression)."
       - "`CompletionSurfaceSnapshotTests` either passes against the existing baseline, or is re-baselined in this phase with `STASH_SNAPSHOT_REGEN=1` and the regenerated snapshot is committed."
 
 # Final acceptance — run by `/done` before promoting to 4-done/.
