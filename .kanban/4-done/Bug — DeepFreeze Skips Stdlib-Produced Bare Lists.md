@@ -1,6 +1,6 @@
 # DeepFreeze does not traverse bare List<StashValue> returned by stdlib functions
 
-**Status:** Fixed — 2026-06-01 (commit 45a99c0 — see F02 fix in readonly-modifier review.md)
+**Status:** Fixed — 2026-06-01 (commit 45a99c0 — F02, PARTIAL: migrated `arr.*`/`dict.*` producers only; completed by commit 027f915c — F08, which normalized bare `List<StashValue>`→`StashArray` at the `StashValue.FromObj`/`FromObject` choke-point, covering ALL stdlib namespaces incl. `json.parse`/`str.split`/`xml`/`toml`. See F02 + F08 in readonly-modifier review.md.)
 **Created:** 2026-06-01
 **Discovery context:** P3 of readonly-modifier feature. The always-present `StashArray` carrier was introduced for `ExecuteNewArray` (array literals), but stdlib producers (`arr.slice`, `arr.concat`, `arr.map`, `arr.keys`, `arr.values`, etc.) still return bare `List<StashValue>`, not `StashArray`. The `DeepFreezeObject` switch has no `List<StashValue>` case — only a `StashArray` case — so these bare lists are silently skipped during deep-freeze traversal.
 
