@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-scripts-stash-port
 current: null
-updated: '2026-06-01T00:03:41Z'
+updated: '2026-06-01T00:10:33Z'
 phases:
   P1:
     status: done
@@ -55,13 +55,13 @@ phases:
     attempts: 1
     notes: status.stash LOOSE parity; 3/3 oracle exit-code
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 892d4f374ab4acdb064131873be667b15e6b4679
+    verified: true
+    started: '2026-06-01T00:03:50Z'
+    completed: '2026-06-01T00:10:33Z'
+    attempts: 1
+    notes: check-parallel-safety.stash; git worktree shellout; 4/4 oracle
   P8:
     status: pending
     commit: null
