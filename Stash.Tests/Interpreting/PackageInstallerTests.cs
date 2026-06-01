@@ -522,16 +522,36 @@ public class IntegrityVerificationTests : IDisposable
     /// </summary>
     private static (string baseUrl, IDisposable server) StartTestServer(byte[] tarballBytes, string? integrityHeader)
     {
-        // Find a free port by binding to port 0 and reading back the assigned port.
-        var tempListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        tempListener.Start();
-        int port = ((System.Net.IPEndPoint)tempListener.LocalEndpoint).Port;
-        tempListener.Stop();
+        // HttpListener cannot bind port 0, so we discover a free port and bind to it.
+        // The naive approach (bind a TcpListener to 0, read the port, Stop(), then
+        // Start() an HttpListener on it) has a TOCTOU race: the port can be reclaimed
+        // in the Stop→Start gap, producing intermittent "address already in use".
+        // Eliminate the gap with a retry-on-conflict loop: probe a free port, try to
+        // bind the HttpListener, and on the (rare) conflict pick another port.
+        HttpListener listener;
+        string prefix;
+        while (true)
+        {
+            int port;
+            var tempListener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            tempListener.Start();
+            port = ((System.Net.IPEndPoint)tempListener.LocalEndpoint).Port;
+            tempListener.Stop();
 
-        string prefix = $"http://127.0.0.1:{port}/";
-        var listener = new HttpListener();
-        listener.Prefixes.Add(prefix);
-        listener.Start();
+            prefix = $"http://127.0.0.1:{port}/";
+            listener = new HttpListener();
+            listener.Prefixes.Add(prefix);
+            try
+            {
+                listener.Start();
+                break;
+            }
+            catch (HttpListenerException)
+            {
+                try { listener.Close(); } catch { }
+                // Port was reclaimed between probe and bind — pick another.
+            }
+        }
 
         var cts = new System.Threading.CancellationTokenSource();
         _ = Task.Run(async () =>
@@ -782,7 +802,7 @@ public class IntegrityVerificationTests : IDisposable
         }
     }
 
-    [Fact(Skip = "Flaky, address already in use errors")]
+    [Fact]
     public void DownloadAndCache_MissingHeaderWithAllowFlag_Succeeds()
     {
         string tarball = BuildTarball();

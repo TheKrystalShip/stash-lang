@@ -14,7 +14,6 @@
 // stash-disable SA0802
 // stash-disable SA0804
 
-import "lib/types.stash" as types;
-import "lib/constants.stash" as constants;
-import "lib/render.stash" as render;
-import { lines, files, equal } from "lib/diff.stash";
+export "lib/types.stash" as types;
+export "lib/render.stash" as render;
+export { lines, files, equal } from "lib/diff.stash";

@@ -6,6 +6,7 @@ using Stash.Format;
 
 namespace Stash.Tests.Analysis;
 
+[Collection("SystemCwdTests")]
 public class StashFormatTests
 {
     // ───────────────────────────────────────────────────────────────

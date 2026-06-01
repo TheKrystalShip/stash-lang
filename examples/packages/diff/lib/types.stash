@@ -5,7 +5,7 @@
 
 /// Operation tag for each line in a diff result.
 /// Bare strings ("add", "delete") are forbidden — always use this enum.
-enum Op {
+export enum Op {
   EQUAL,
   INSERT,
   DELETE
@@ -13,7 +13,7 @@ enum Op {
 
 /// Which algorithm to run. Caller-selected so we can ship more later
 /// without breaking signatures.
-enum DiffAlgorithm {
+export enum DiffAlgorithm {
   /// O((N+M)D) edit script — default
   MYERS,
   /// Anchored on unique lines — nicer hunks for source code
@@ -24,7 +24,7 @@ enum DiffAlgorithm {
 
 /// How `ignoreWhitespace` interprets "whitespace differences".
 /// Replaces the bool form recommended in §9.2 of the design spec.
-enum WhitespaceMode {
+export enum WhitespaceMode {
   /// No whitespace handling — exact comparison
   NONE,
   /// Collapse all runs of whitespace to a single space (Git's -w)
@@ -34,7 +34,7 @@ enum WhitespaceMode {
 }
 
 /// A single edit in the diff stream.
-struct Edit {
+export struct Edit {
   op: Op,          // Op
   oldLine: int,    // int | null — 1-based line number in `a`, null for INSERT
   newLine: int,    // int | null — 1-based line number in `b`, null for DELETE
@@ -43,7 +43,7 @@ struct Edit {
 }
 
 /// A contiguous run of changes plus its surrounding context.
-struct Hunk {
+export struct Hunk {
   oldStart: int, // int — 1-based start line in `a` (0 if oldCount is 0)
   oldCount: int, // int
   newStart: int, // int — 1-based start line in `b` (0 if newCount is 0)
@@ -52,7 +52,7 @@ struct Hunk {
 }
 
 /// Top-level result returned by lines / files.
-struct DiffResult{
+export struct DiffResult{
   hunks: Hunk [],         // [Hunk]
   insertions: int ,       // int — total INSERT count
   deletions: int,         // int — total DELETE count
@@ -64,7 +64,7 @@ struct DiffResult{
 }
 
 /// Caller-supplied options.
-struct DiffOptions {
+export struct DiffOptions {
   algorithm: DiffAlgorithm,     // DiffAlgorithm — default MYERS
   contextLines: int ,           // int — default 3 (lines of unchanged context around hunks)
   whitespace: WhitespaceMode,   // WhitespaceMode — default NONE

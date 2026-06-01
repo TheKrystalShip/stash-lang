@@ -59,7 +59,7 @@ fn _formatRange(start: int, count: int) -> string {
 ///
 /// Output ends with a trailing LF, matching GNU diff. When `result.equal`
 /// is true an empty string is returned.
-fn unified(result: DiffResult) -> string {
+export fn unified(result: DiffResult) -> string {
   if (result.equal) {
     return "";
   }
@@ -134,7 +134,7 @@ fn unified(result: DiffResult) -> string {
 ///
 /// File headers go bold; hunk headers go cyan; INSERT lines green;
 /// DELETE lines red; "\ No newline" and EQUAL lines are untouched.
-fn colorize(text: string, enable: bool) -> string {
+export fn colorize(text: string, enable: bool) -> string {
   if (!enable || text == "") {
     return text;
   }

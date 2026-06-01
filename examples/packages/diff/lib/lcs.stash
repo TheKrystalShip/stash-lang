@@ -14,7 +14,7 @@ import { Op, Edit, DiffAlgorithm } from "types.stash";
 
 /// Compute the canonical edit script for two arrays of lines.
 /// `algorithm` selects the engine; unknown values fall back to MYERS.
-fn _computeEditScript(a, b, algorithm) -> array {
+export fn _computeEditScript(a, b, algorithm) -> array {
   let raw;
   if (algorithm == DiffAlgorithm.PATIENCE) {
     raw = _patience(a, b);

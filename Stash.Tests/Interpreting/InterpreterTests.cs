@@ -8668,7 +8668,7 @@ let result = labels;
 
     // ── Array for-in snapshot safety ────────────────────────────────
 
-    [Fact(Skip = "It hangs for some reason")]
+    [Fact]
     public void ForIn_ArrayMutation_DoesNotCrash()
     {
         var result = Run(@"

@@ -38,6 +38,9 @@ public sealed class AuthEndpointTests : IDisposable
         return new WebApplicationFactory<Stash.Registry.Program>()
             .WithWebHostBuilder(builder =>
             {
+                // Pin content root to an absolute path so the factory is cwd-independent
+                // (parallel cwd-mutating tests would otherwise break relative resolution).
+                builder.UseSolutionRelativeContentRoot("Stash.Registry");
                 builder.UseSetting("environment", "Development");
                 builder.ConfigureTestServices(services =>
                 {
@@ -68,6 +71,8 @@ public sealed class AuthEndpointTests : IDisposable
         return new WebApplicationFactory<Stash.Registry.Program>()
             .WithWebHostBuilder(builder =>
             {
+                // Pin content root to an absolute path so the factory is cwd-independent.
+                builder.UseSolutionRelativeContentRoot("Stash.Registry");
                 // Use non-development environment so appsettings.Development.json override doesn't apply.
                 builder.UseSetting("environment", "Testing");
                 // Explicitly disable registration.

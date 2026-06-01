@@ -391,7 +391,7 @@ public sealed class AliasHooksTests : IDisposable
     // 14. Hook recursion — before invokes same alias via alias.exec → AliasError
     // =========================================================================
 
-    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
+    [Fact]
     public void HookRecursion_BeforeInvokesSameAlias_CycleDetected()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;

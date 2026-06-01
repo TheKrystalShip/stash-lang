@@ -108,7 +108,13 @@ public class FuzzHarnessTests(ITestOutputHelper output) : BytecodeTestBase
 
     // ── Main theory ────────────────────────────────────────────────────────────
 
-    [Fact(Skip = "Flaky due to pre-existing non-determinism in some examples; see skip list.")]
+    // QUARANTINED: running this CRASHES the test host process (confirmed in isolation,
+    // 2026-06-01) — one corpus example crashes the VM with an uncatchable failure
+    // (likely StackOverflowException), which aborts the whole `dotnet test` run and masks
+    // every other test. This is a real pre-existing bug, NOT test non-determinism. It needs
+    // a dedicated fix: run each example in a child process so a crash fails soft (and then
+    // identify/fix the crashing example). See .kanban/0-backlog/bugs/fuzz-host-crash-pipeline-on-off.md.
+    [Fact(Skip = "Crashes the test host (uncatchable VM crash on a corpus example); needs subprocess isolation — see fuzz-host-crash-pipeline-on-off.md")]
     public void FuzzCorpus_PipelineOnAndOff_IdenticalOutput()
     {
         string? examplesDir = FindExamplesDir();
