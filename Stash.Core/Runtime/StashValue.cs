@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Stash.Runtime.Types;
 
 namespace Stash.Runtime;
 
@@ -36,7 +37,16 @@ public readonly struct StashValue : IEquatable<StashValue>
     public static StashValue FromBool(bool value) => value ? True : False;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static StashValue FromObj(object value) => new(StashValueTag.Obj, 0, value);
+    public static StashValue FromObj(object value)
+    {
+        // Normalise bare List<StashValue> to StashArray so every array that reaches a
+        // StashValue has the IsFrozen bit and is guarded by the VM's readonly write path.
+        // StashArray is already a List<StashValue>, so all existing `is List<StashValue>`
+        // checks in the VM and stdlib continue to match without modification.
+        if (value is List<StashValue> list && value is not StashArray)
+            return new(StashValueTag.Obj, 0, new StashArray(list));
+        return new(StashValueTag.Obj, 0, value);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StashValue FromByte(byte value) => new(StashValueTag.Byte, (long)value, null);
@@ -110,6 +120,10 @@ public readonly struct StashValue : IEquatable<StashValue>
             long l => FromInt(l),
             double d => FromFloat(d),
             byte by => FromByte(by),
+            // Normalise bare List<StashValue> so that array values returned through
+            // the object? boundary (e.g. IStashCallable, StashFuture results) also
+            // carry an IsFrozen bit.
+            List<StashValue> list when list is not StashArray => FromObj(new StashArray(list)),
             _ => FromObj(value),
         };
     }

@@ -418,4 +418,51 @@ outer();
             ExecuteWithStdlib(
                 "readonly const xs = arr.typed([1,2,3], \"int\"); arr.pop(xs);"));
     }
+
+    // =========================================================================
+    // 17. F08: deep-freeze through stdlib namespaces OTHER than arr.*
+    //     Each producer family must return StashArray, not a bare List<StashValue>.
+    // =========================================================================
+
+    [Theory]
+    [InlineData("readonly const D = json.parse(\"[1, 2, 3]\"); D[0] = 99;")]
+    [InlineData("readonly const D = json.parse(\"[1, 2, 3]\"); arr.push(D, 4);")]
+    [InlineData("readonly const D = { lines: str.split(\"a,b,c\", \",\") }; D.lines[0] = \"X\";")]
+    [InlineData("readonly const D = { lines: str.split(\"a,b,c\", \",\") }; arr.push(D.lines, \"x\");")]
+    [InlineData("readonly const D = { lines: str.lines(\"a\\nb\\nc\") }; D.lines[0] = \"X\";")]
+    [InlineData("readonly const D = { chars: str.chars(\"abc\") }; D.chars[0] = \"X\";")]
+    [InlineData("readonly const D = { words: str.words(\"hello world\") }; D.words[0] = \"X\";")]
+    [InlineData("readonly const D = { parts: str.shellSplit(\"a b c\") }; D.parts[0] = \"X\";")]
+    [InlineData("readonly const D = { ms: str.matchAll(\"aaa\", \"a\") }; arr.push(D.ms, \"x\");")]
+    public void Readonly_StdlibProducerArray_MutationThrowsReadOnlyError(string src)
+    {
+        Assert.Throws<ReadOnlyError>(() => ExecuteWithStdlib(src));
+    }
+
+    [Fact]
+    public void ReadonlyConst_JsonParseNestedArray_DeepFreezeWorks()
+    {
+        // Nested JSON arrays must also be StashArray and frozen transitively.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib("readonly const D = json.parse(\"{\\\"nums\\\":[1,2,3]}\"); D.nums[0] = 99;"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_StrSplitProducedArray_StillReadable()
+    {
+        // After freeze, the array must remain readable (no regression on read path).
+        object? result = ExecuteWithStdlib(
+            "readonly const D = str.split(\"a,b,c\", \",\"); return D[1];");
+        Assert.Equal("b", result);
+    }
+
+    [Fact]
+    public void ReadonlyConst_JsonParseTopLevelArray_StillReadable()
+    {
+        // After freeze, json.parse result must remain readable.
+        // json.parse returns integer-valued numbers as long.
+        object? result = ExecuteWithStdlib(
+            "readonly const D = json.parse(\"[10, 20, 30]\"); return D[1];");
+        Assert.Equal(20L, result);
+    }
 }
