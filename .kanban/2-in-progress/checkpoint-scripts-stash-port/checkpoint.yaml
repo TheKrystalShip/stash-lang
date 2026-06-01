@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-scripts-stash-port
 current: null
-updated: '2026-06-01T00:14:45Z'
+updated: '2026-06-01T00:16:40Z'
 phases:
   P1:
     status: done
@@ -71,13 +71,13 @@ phases:
     attempts: 1
     notes: milestone-status.stash LOOSE parity; cross-worktree dedup; 5/5 oracle
   P9:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 22c7e917ac3951ff3b6d21e28dcb01c7ac9cd923
+    verified: true
+    started: '2026-06-01T00:16:05Z'
+    completed: '2026-06-01T00:16:40Z'
+    attempts: 1
+    notes: cutover .claude/*.md python3->stash; dogfood green; coexistence held
 review:
   status: not_started
   started: null
