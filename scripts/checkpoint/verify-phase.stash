@@ -1,0 +1,58 @@
+#!/usr/bin/env stash
+// verify-phase.stash <slug> <phase-id>
+//
+// Runs a phase's verify commands AND checks that the working tree's modified
+// files stay within the current phase plan. Implementers may correct plan.yaml
+// first when the original plan is stale; this script enforces the updated plan.
+//
+// Exit codes:
+//   0  verification passed
+//   1  a verify command failed
+//   2  out-of-scope file modification detected
+//   3  bad arguments / setup
+//
+// Stash port of verify-phase.sh. The scope/glob check stays delegated to
+// verify-phase-scope.stash (unchanged) — this wrapper captures its command list
+// (stdout), replays its human output (stderr), propagates its exit code, then
+// runs each verify command. The command STRINGS are free-form shell (e.g.
+// `dotnet test --filter "A&B"`), so they're interpreted by `bash -c` via a
+// strict-passthrough command expression: streams live and fails the script on
+// non-zero — the per-command equivalent of `set -e`.
+
+import { die } from "_common.stash";
+
+// ── Arguments ───────────────────────────────────────────────────────────────
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+if (raw.length != 2) {
+    io.eprintln("usage: verify-phase.stash <slug> <phase-id>");
+    env.exit(3);
+}
+let slug     = raw[0];
+let phase_id = raw[1];
+
+// ── Scope/glob check (delegated) ─────────────────────────────────────────────
+// $!(...) is strict: it throws CommandError on non-zero. verify-phase-scope exits
+// 0 (ok, command list on stdout), 2 (out-of-scope), or 3 (bad args) — so a
+// non-zero is meaningful, not a capture failure. `try` turns the throw into a
+// value we can branch on. Either way we replay the scope check's human stderr.
+let scope = try $!(stash scripts/checkpoint/verify-phase-scope.stash ${slug} ${phase_id});
+if (scope is Error) {
+    io.eprint(scope.stderr);          // out-of-scope block / error, verbatim
+    env.exit(scope.exitCode);          // 2 or 3
+}
+io.eprint(scope.stderr);               // header + "Done when:" echoes, verbatim
+
+// ── Verify commands ───────────────────────────────────────────────────────────
+for (let cmd in str.lines(scope.stdout)) {
+    if (str.trim(cmd) == "") { continue; }
+    io.println("+ " + cmd);
+    let run = try $!>(bash -c ${cmd});   // strict + passthrough: stream live, throw on non-zero
+    if (run is Error) {
+        io.eprintln("verify-phase: command failed: " + cmd);
+        env.exit(1);
+    }
+}
+
+io.println("verify-phase: " + slug + "/" + phase_id + " OK");
+env.exit(0);
