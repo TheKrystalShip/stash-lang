@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T23:17:22Z"
+updated: "2026-06-01T23:20:24Z"
 phases:
   1A:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: intra-script migration (3 files) to dispatcher form; RAWPATH_EXEMPTIONS 22→19; lint enforces; selftest 17/17
   4A:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d6a7bbe20b4e591033e6646ab633d66bcaba5d05
+    verified: true
+    started: "2026-06-01T23:19:35Z"
+    completed: "2026-06-01T23:20:24Z"
+    attempts: 1
+    notes: 9 slash-command docs migrated to dispatcher form (34 swaps); RAWPATH_EXEMPTIONS 19→10; lint enforces
   4B:
     status: pending
     commit: null
