@@ -1,0 +1,104 @@
+#!/usr/bin/env stash
+// verify-phase-scope.stash <slug> <phase-id>
+//
+// Stash port of the file-scope glob check formerly embedded in verify-phase.sh
+// (the python3 + jq metadata block and the bash globstar scope loop). Replaces
+// the Python/jq dependency with _common.stash + path.match.
+//
+// Contract with the bash verify-phase.sh wrapper:
+//   stdout — the verify commands to run (default_verify then phase verify), one
+//            per line; the wrapper captures these and runs them.
+//   stderr — human output: the header, the "Done when:" echoes, and (on a
+//            violation) the out-of-scope block + hint. Streams to the terminal.
+//   exit   — 0 scope ok, 2 out-of-scope detected, 3 bad args.
+//
+// path.match uses bash [[ ]] globstar semantics (bare * crosses /), matching the
+// original `[[ "$f" == $pat ]]` under `shopt -s globstar`.
+
+import { load_plan, phase_by_id } from "_common.stash";
+
+// ── Bounded domains (no magic strings — closed sets named once) ─────────────
+const EXIT_OK           = 0;
+const EXIT_OUT_OF_SCOPE = 2;
+const EXIT_BAD_ARGS     = 3;
+const OOS_PREFIX        = "  - ";   // out-of-scope / done-when line prefix (byte-equal to bash original)
+const ALLOW_PREFIX      = "  + ";   // declared-files line prefix
+const INPROGRESS_DIR    = ".kanban/2-in-progress";
+
+// ── Argv ────────────────────────────────────────────────────────────────────
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+if (raw.length != 2) {
+    io.eprintln("usage: verify-phase-scope.stash <slug> <phase-id>");
+    env.exit(EXIT_BAD_ARGS);
+}
+let slug     = raw[0];
+let phase_id = raw[1];
+
+// ── Load plan + phase ────────────────────────────────────────────────────────
+let plan  = load_plan(slug);
+let phase = phase_by_id(plan, phase_id);   // dies (exit 1) if not found, like _common.py
+
+let title          = dict.get(phase, "title") ?? "";
+let allowed        = dict.get(phase, "files") ?? [];
+let scope          = dict.get(plan, "scope") ?? [];
+let done_when      = dict.get(phase, "done_when") ?? [];
+let default_verify = dict.get(plan, "default_verify") ?? [];
+let phase_verify   = dict.get(phase, "verify") ?? [];
+
+// ── Header + done-when echoes (human, stderr) ────────────────────────────────
+io.eprintln("verify-phase: " + slug + "/" + phase_id + " " + title);
+if (done_when.length > 0) {
+    io.eprintln("Done when:");
+    for (let item in done_when) {
+        io.eprintln(OOS_PREFIX + item);
+    }
+}
+
+// ── Compute changed files vs HEAD (tracked-modified + untracked) ─────────────
+fn lines_of(s) {
+    let out = [];
+    for (let ln in str.split(s, "\n")) {
+        if (ln != "") { arr.push(out, ln); }
+    }
+    return out;
+}
+
+let diff_r   = process.exec("git", ["diff", "--name-only", "HEAD"], ExecOptions { strict: false });
+let others_r = process.exec("git", ["ls-files", "--others", "--exclude-standard"], ExecOptions { strict: false });
+let changed = arr.concat(lines_of(diff_r.stdout), lines_of(others_r.stdout));
+
+// ── Classify against union of phase files + plan scope (leading ./ stripped) ─
+let patterns = arr.concat(allowed, scope);
+let carve_out = INPROGRESS_DIR + "/" + slug + "/*";   // bash glob; * crosses / in [[ ]]
+
+let out_of_scope = [];
+for (let f in changed) {
+    let matched = false;
+    for (let pat0 in patterns) {
+        let pat = pat0;
+        if (str.startsWith(pat, "./")) { pat = str.substring(pat, 2); }
+        if (path.match(f, pat)) { matched = true; break; }
+    }
+    if (!matched) {
+        // Always-allow the feature's own kanban dir (matches bash original).
+        if (!path.match(f, carve_out)) {
+            arr.push(out_of_scope, f);
+        }
+    }
+}
+
+// ── Report ───────────────────────────────────────────────────────────────────
+if (out_of_scope.length > 0) {
+    io.eprintln("verify-phase: out-of-scope file modifications detected:");
+    for (let f in out_of_scope) { io.eprintln(OOS_PREFIX + f); }
+    io.eprintln("phase " + phase_id + " declares these files:");
+    for (let p in allowed) { io.eprintln(ALLOW_PREFIX + p); }
+    io.eprintln("If the plan is stale, make the smallest justified correction to plan.yaml and rerun.");
+    env.exit(EXIT_OUT_OF_SCOPE);
+}
+
+// ── Success: emit the verify-command list on stdout for the bash wrapper ─────
+for (let c in default_verify) { if (c != "") { io.println(c); } }
+for (let c in phase_verify)   { if (c != "") { io.println(c); } }
+env.exit(EXIT_OK);

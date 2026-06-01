@@ -137,8 +137,10 @@ phases:
       - scripts/checkpoint/difftest_verify-phase-scope_cases.stash
     verify:
       - stash scripts/checkpoint/difftest_runner.stash verify-phase-scope
-      # Self-host: this very feature's plan must verify under the rewritten verify-phase.sh.
-      - bash scripts/checkpoint/verify-phase.sh checkpoint-scripts-stash-port P5
+      # Self-host: the rewritten verify-phase.sh must work on a real phase. Target
+      # an ALREADY-DONE phase (P1), not P5 — verifying P5 *via* verify-phase.sh would
+      # recurse infinitely (verify-phase.sh runs the phase's own verify list).
+      - bash scripts/checkpoint/verify-phase.sh checkpoint-scripts-stash-port P1
     done_when:
       - "verify-phase.sh no longer invokes `python3` or `jq` — it calls `stash scripts/checkpoint/verify-phase-scope.stash <slug> <phase-id>` and consumes its output."
       - "verify-phase-scope.stash reads plan.yaml via _common.load_plan, locates the phase, computes the list of git-tracked-or-untracked changed files vs HEAD, classifies each against the union of phase `files` + plan `scope` using `path.match` (bash [[ ]] globstar semantics, `*` crosses `/`), and emits one line per out-of-scope file prefixed `  - ` (byte-equal to the bash original) plus done_when echoes."

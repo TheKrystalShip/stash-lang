@@ -264,6 +264,29 @@ fn seed_tree(tree_root, seed_cp, slug, plan, script_src, common_src, script_dst,
     process.exec("git", ["init", "-q", tree_root], ExecOptions { strict: false });
 }
 
+/// Stage a git scope scenario in a seeded tree (used by verify-phase-scope cases).
+/// Commits a clean baseline so `git diff HEAD` has a reference, then creates the
+/// declared changed files so the scope check sees a precise, controlled set:
+///   case.committed — files created+committed into the baseline (so a later
+///                    `modified` entry has something to modify; usually out-of-scope
+///                    paths to test the tracked-modified branch).
+///   case.changed   — files created AFTER the commit (untracked → git ls-files --others).
+///   case.modified  — committed files rewritten AFTER the commit (→ git diff HEAD).
+fn stage_scope_scenario(tree_root, case_obj) {
+    fn write_rel(root, rel, body) {
+        let full = root + "/" + rel;
+        let dir = path.dir(full);
+        if (!fs.exists(dir)) { fs.createDir(dir); }
+        fs.writeFile(full, body);
+    }
+    for (let rel in dict.get(case_obj, "committed") ?? []) { write_rel(tree_root, rel, "base\n"); }
+    process.exec("git", ["-C", tree_root, "add", "-A"], ExecOptions { strict: false });
+    process.exec("git", ["-C", tree_root, "-c", "user.email=t@t", "-c", "user.name=t",
+                         "commit", "-q", "-m", "base"], ExecOptions { strict: false });
+    for (let rel in dict.get(case_obj, "changed")  ?? []) { write_rel(tree_root, rel, "x\n"); }
+    for (let rel in dict.get(case_obj, "modified") ?? []) { write_rel(tree_root, rel, "modified\n"); }
+}
+
 /// Run one implementation (py or stash) in a fixture tree.
 /// Returns { exit_code, stdout, stderr }.
 fn run_impl(tree_root, is_stash, script_name, argv) {
@@ -316,6 +339,13 @@ fn run_case(case_obj, entry, repo_root) {
               py_script_src, py_common_src, entry.py_script, entry.py_common);
     seed_tree(st_root, case_obj.seed_cp, slug, plan,
               st_script_src, st_common_src, entry.st_script, entry.st_common);
+
+    // Optional git scope scenario (verify-phase-scope): commit a baseline and
+    // stage a controlled changed-file set in BOTH trees identically.
+    if (dict.get(case_obj, "scope_test") == true) {
+        stage_scope_scenario(py_root, case_obj);
+        stage_scope_scenario(st_root, case_obj);
+    }
 
     // Run both
     let py_res = run_impl(py_root, false, script_key, case_obj.argv);
