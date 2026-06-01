@@ -112,7 +112,7 @@ stash scripts/checkpoint/advance-checkpoint.stash "$SLUG" "<first-phase-id>" in_
 Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implementer"`. The prompt **must** contain, in this order:
 
 1. **Plan trust reminder** — tell the implementer to trust the plan as the default route, but allow small documented corrections when a file path, symbol location, signature, or verify command is stale. If `non_goals` exists on any selected phase, quote it verbatim.
-2. **Phase brief** — the full YAML from `next-phase.py`. For batches, preserve the `phases` order exactly.
+2. **Phase brief** — the full YAML from `next-phase.stash`. For batches, preserve the `phases` order exactly.
 3. **Pointers**:
    - Brief: `.kanban/2-in-progress/<slug>/brief.md` (read summary, design path, acceptance criteria, and sections relevant to this phase)
    - Legacy spec/context paths if `_brief` reports them for an older feature

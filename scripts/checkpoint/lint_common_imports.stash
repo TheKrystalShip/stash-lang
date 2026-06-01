@@ -29,7 +29,8 @@ import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
 //   _common.stash        — the module itself
 //   difftest_runner.stash — internal runner, no _common import by design
 //   lint_common_imports.stash — this file (scan would be self-referential)
-//   difftest_coverage_check.stash — coverage guard; imports from _common
+// (difftest_coverage_check.stash is NOT excluded — it imports expand_globs from
+//  _common.stash and is scanned like any other script.)
 const SCAN_EXCLUSIONS = [
     "_common.stash",
     "difftest_runner.stash",

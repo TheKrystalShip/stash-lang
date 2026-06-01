@@ -78,6 +78,25 @@ fn check_coverage(name, sdir) {
     return null;
 }
 
+/// Scan a directory's *.stash files (single-*, no descent) and return
+/// { scanned, violations }. Shared by normal mode and --self-test so the
+/// self-test exercises the SAME loop (glob + is_excluded + is_case_table +
+/// extension strip + check_coverage aggregation), not just the leaf predicate.
+fn scan_dir(sdir) {
+    let scanned = 0;
+    let violations = [];
+    for (let fpath in fs.glob(sdir + "/*.stash")) {
+        let base = path.base(fpath);
+        if (is_excluded(base)) { continue; }
+        if (is_case_table(base)) { continue; }  // case tables don't need their own table
+        let name = str.substring(base, 0, base.length - 6);  // remove ".stash"
+        scanned = scanned + 1;
+        let v = check_coverage(name, sdir);
+        if (v != null) { arr.push(violations, v); }
+    }
+    return { scanned: scanned, violations: violations };
+}
+
 // ── Argument parsing ───────────────────────────────────────────────────────
 
 const schema = cli.schema({
@@ -97,54 +116,37 @@ const SDIR = "scripts/checkpoint";
 // ── Self-test mode ─────────────────────────────────────────────────────────
 
 if (args.self_test) {
-    // Simulate a script-without-a-case-table by pointing at a temp directory
-    // that contains a ported script BUT no corresponding case table.
-    //
-    // We test the check_coverage function directly against a known-missing table.
-    // The fixture "fake_ported_script" does not have a case table in SDIR,
-    // so check_coverage must return a violation.
-
-    let fake_name = "fake_ported_script_selftest_zz";
-    let violation = check_coverage(fake_name, SDIR);
-    if (violation == null) {
-        io.eprintln("FAIL self-test: coverage check did NOT fire on missing case table — guard has no teeth!");
+    // Run the REAL scan loop against a fixture directory containing a ported
+    // script (script_no_table.stash) with no corresponding case table. Exercising
+    // scan_dir end-to-end (glob + filters + extension strip + aggregation) gives
+    // the guard teeth against scan-loop regressions, not just leaf-predicate ones.
+    // The fixture lives in a subdir so the normal single-* scan never sees it.
+    let fixture_dir = SDIR + "/difftest_coverage_check.fixtures";
+    let r = scan_dir(fixture_dir);
+    let found = false;
+    for (let v in r.violations) {
+        if (str.contains(v, "script_no_table")) { found = true; }
+    }
+    if (!found) {
+        io.eprintln("FAIL self-test: scan of " + fixture_dir + " did NOT flag the table-less fixture script — guard has no teeth!");
         env.exit(1);
     }
-    io.println("PASS self-test: coverage check correctly fired:");
-    io.println("  + " + violation);
+    io.println("PASS self-test: coverage check correctly fired (scanned fixture loop):");
+    for (let v in r.violations) { io.println("  + " + v); }
     env.exit(0);
 }
 
 // ── Normal scan mode ───────────────────────────────────────────────────────
 
 // Scan every scripts/checkpoint/*.stash (single-* glob, does NOT descend into subdirs).
-let all_files = fs.glob(SDIR + "/*.stash");
-let scanned = 0;
-let violations = [];
+let result = scan_dir(SDIR);
 
-for (let fpath in all_files) {
-    let base = path.base(fpath);
-    if (is_excluded(base)) {
-        continue;
-    }
-    if (is_case_table(base)) {
-        continue;  // case-table files don't need their own case table
-    }
-    // Strip .stash extension to get script name
-    let name = str.substring(base, 0, base.length - 6);  // remove ".stash"
-    scanned = scanned + 1;
-    let v = check_coverage(name, SDIR);
-    if (v != null) {
-        arr.push(violations, v);
-    }
-}
-
-if (violations.length > 0) {
-    io.eprintln("FAIL difftest_coverage_check: " + violations.length + " script(s) missing case table(s):");
-    for (let v in violations) {
+if (result.violations.length > 0) {
+    io.eprintln("FAIL difftest_coverage_check: " + result.violations.length + " script(s) missing case table(s):");
+    for (let v in result.violations) {
         io.eprintln("  - " + v);
     }
     env.exit(1);
 }
 
-io.println("difftest_coverage_check: OK — " + scanned + " script(s) checked, 0 missing case tables");
+io.println("difftest_coverage_check: OK — " + result.scanned + " script(s) checked, 0 missing case tables");

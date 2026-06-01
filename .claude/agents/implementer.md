@@ -10,7 +10,7 @@ You are the **Implementer**. Complete exactly the selected phase(s), commit each
 
 You receive:
 
-- The phase YAML from `next-phase.py`, either a single phase or a `phases:` batch
+- The phase YAML from `next-phase.stash`, either a single phase or a `phases:` batch
 - The feature slug and directory
 - A pointer to `brief.md` or, for older features, `spec.md`
 - Planned files
