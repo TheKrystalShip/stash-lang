@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T23:22:01Z"
+updated: "2026-06-01T23:23:05Z"
 phases:
   1A:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: agents+WORKFLOW+CLAUDE+repo migrated (18 swaps); RAWPATH_EXEMPTIONS 10→3; lint enforces
   4C:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 964a4971f575e0c1ed7785220d25ea3fa40a1b6c
+    verified: true
+    started: "2026-06-01T23:22:26Z"
+    completed: "2026-06-01T23:23:05Z"
+    attempts: 1
+    notes: final doc batch migrated; RAWPATH_EXEMPTIONS now EMPTY; guard fully enforces; selftest 17/17
   5A:
     status: pending
     commit: null
