@@ -276,7 +276,7 @@ fn stage_scope_scenario(tree_root, case_obj) {
     fn write_rel(root, rel, body) {
         let full = root + "/" + rel;
         let dir = path.dir(full);
-        if (!fs.exists(dir)) { fs.createDir(dir); }
+        if (!fs.dirExists(dir)) { fs.createDir(dir); }
         fs.writeFile(full, body);
     }
     for (let rel in dict.get(case_obj, "committed") ?? []) { write_rel(tree_root, rel, "base\n"); }
@@ -285,6 +285,34 @@ fn stage_scope_scenario(tree_root, case_obj) {
                          "commit", "-q", "-m", "base"], ExecOptions { strict: false });
     for (let rel in dict.get(case_obj, "changed")  ?? []) { write_rel(tree_root, rel, "x\n"); }
     for (let rel in dict.get(case_obj, "modified") ?? []) { write_rel(tree_root, rel, "modified\n"); }
+}
+
+/// Stage a git-worktree scenario (used by check-parallel-safety cases). Commits a
+/// baseline (required before `git worktree add`), then for each declared sibling
+/// adds a real worktree on its own branch with a seeded plan.yaml. Siblings live
+/// OUTSIDE the main tree (as `git worktree list` reports), named per-side so the
+/// py and stash trees don't collide on disk.
+fn stage_worktree_scenario(tree_root, case_obj) {
+    process.exec("git", ["-C", tree_root, "add", "-A"], ExecOptions { strict: false });
+    process.exec("git", ["-C", tree_root, "-c", "user.email=t@t", "-c", "user.name=t",
+                         "commit", "-q", "-m", "base"], ExecOptions { strict: false });
+    let side = path.base(tree_root);   // "py" or "st" — disambiguates sibling paths
+    let parent = path.dir(tree_root);
+    for (let sib in dict.get(case_obj, "siblings") ?? []) {
+        let sib_path = parent + "/wt-" + side + "-" + sib.name;
+        process.exec("git", ["-C", tree_root, "worktree", "add", "-q", "-b", sib.branch, sib_path],
+                     ExecOptions { strict: false });
+        // The new worktree is a checkout of the baseline commit, so it INHERITS the
+        // main tree's .kanban/2-in-progress/<slug>/. Wipe it so the sibling worktree
+        // advertises only its OWN feature (else the main feature self-overlaps).
+        let sib_inprog = sib_path + "/.kanban/2-in-progress";
+        if (fs.dirExists(sib_inprog)) { fs.delete(sib_inprog); }
+        let sdir = sib_inprog + "/" + sib.name;
+        fs.createDir(sdir);
+        let sib_plan = { schema_version: 1, feature: sib.name, title: sib.name,
+                         phases: [ { id: "P1", title: "x", deps: [], files: sib.files, verify: ["true"] } ] };
+        fs.writeFile(sdir + "/plan.yaml", yaml.stringify(sib_plan));
+    }
 }
 
 /// Run one implementation (py or stash) in a fixture tree.
@@ -345,6 +373,10 @@ fn run_case(case_obj, entry, repo_root) {
     if (dict.get(case_obj, "scope_test") == true) {
         stage_scope_scenario(py_root, case_obj);
         stage_scope_scenario(st_root, case_obj);
+    }
+    if (dict.get(case_obj, "worktree_test") == true) {
+        stage_worktree_scenario(py_root, case_obj);
+        stage_worktree_scenario(st_root, case_obj);
     }
 
     // Run both
@@ -422,6 +454,21 @@ fn run_case(case_obj, entry, repo_root) {
             }
             if (!str.contains(st_res.stderr, phrase)) {
                 arr.push(problems, "stderr_must_contain: stash stderr missing phrase: " + phrase);
+            }
+        }
+    }
+
+    // ── HARD: stdout_must_contain (if configured) ────────────────────────────
+    // Substring presence in BOTH sides. Grounds a case whose stdout is otherwise
+    // LOOSE (e.g. check-parallel-safety's OVERLAP/disjoint lines) so a same-bug
+    // false-pass can't slip through on exit code alone.
+    if (dict.has(case_obj, "stdout_must_contain") && case_obj.stdout_must_contain != null) {
+        for (let phrase in case_obj.stdout_must_contain) {
+            if (!str.contains(py_res.stdout, phrase)) {
+                arr.push(problems, "stdout_must_contain: py stdout missing phrase: " + phrase);
+            }
+            if (!str.contains(st_res.stdout, phrase)) {
+                arr.push(problems, "stdout_must_contain: stash stdout missing phrase: " + phrase);
             }
         }
     }

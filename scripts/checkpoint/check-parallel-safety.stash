@@ -1,0 +1,139 @@
+#!/usr/bin/env stash
+// check-parallel-safety.stash <slug?>
+//
+// Stash port of check-parallel-safety.py. Advisory check for the
+// parallel-features workflow: compares this feature's plan.yaml file-globs
+// against features in flight in OTHER git worktrees and warns on a shared source
+// subsystem (the signal that two branches will collide on hot files).
+//
+// Exit codes (TIGHT):
+//   0  no overlap (safe) or no sibling worktrees
+//   2  usage / cannot determine this feature's globs
+//   3  subsystem overlap found (non-blocking WARNING)
+//
+// Heuristic: reduce a glob to its top-level path segment; exclude NOISE dirs that
+// almost every feature touches.
+
+import { resolve_feature } from "_common.stash";
+
+const EXIT_OK       = 0;
+const EXIT_NO_SUBS  = 2;
+const EXIT_OVERLAP  = 3;
+
+// Dirs touched by nearly every feature — excluded so they don't manufacture
+// false overlaps. (Closed set — single source of truth.)
+const NOISE = ["Stash.Tests", ".kanban", "docs", "examples", "benchmarks",
+               ".vscode", "scripts", ".claude"];
+
+/// Reduce file-globs to the sorted list of top-level source subsystems they touch.
+fn subsystems_of(globs) {
+    let seen = {};
+    for (let g0 in globs ?? []) {
+        let g = str.trim(g0);
+        if (str.startsWith(g, "./")) { g = str.substring(g, 2); }  // strip leading ./ prefix
+        if (g == "") { continue; }
+        let seg = str.split(g, "/")[0];
+        if (seg == "" || str.contains(seg, "*") || arr.contains(NOISE, seg)) { continue; }
+        seen[seg] = true;
+    }
+    let out = dict.keys(seen);
+    arr.sort(out);
+    return out;
+}
+
+/// Collect all phase `files` globs from a plan.yaml path (empty if missing/unreadable).
+fn feature_globs(plan_path) {
+    if (!fs.exists(plan_path)) { return []; }
+    let plan = yaml.parse(fs.readFile(plan_path));
+    if (typeof(plan) != "dict") { return []; }
+    let globs = [];
+    for (let ph in dict.get(plan, "phases") ?? []) {
+        for (let f in dict.get(ph, "files") ?? []) { arr.push(globs, f); }
+    }
+    return globs;
+}
+
+/// Parse `git worktree list --porcelain` into [{path, branch}] (branch may be null).
+fn worktrees(repo_root) {
+    let r = process.exec("git", ["worktree", "list", "--porcelain"],
+                         ExecOptions { cwd: repo_root, strict: false });
+    if (r.exitCode != 0) { return []; }
+    let out = [];
+    let p = null;
+    let branch = null;
+    for (let line in str.lines(r.stdout)) {
+        if (str.startsWith(line, "worktree ")) {
+            p = str.substring(line, 9);
+            branch = null;
+        } else if (str.startsWith(line, "branch ")) {
+            branch = str.replace(str.substring(line, 7), "refs/heads/", "");
+        } else if (line == "" && p != null) {
+            arr.push(out, { path: p, branch: branch });
+            p = null; branch = null;
+        }
+    }
+    if (p != null) { arr.push(out, { path: p, branch: branch }); }
+    return out;
+}
+
+/// Intersection of two string arrays (sorted).
+fn intersect(a, b) {
+    let out = [];
+    for (let x in a) { if (arr.contains(b, x)) { arr.push(out, x); } }
+    arr.sort(out);
+    return out;
+}
+
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+let slug = resolve_feature(raw.length > 0 ? raw[0] : null);
+let repo_root = path.abs(env.cwd);
+
+let mine = subsystems_of(feature_globs(".kanban/2-in-progress/" + slug + "/plan.yaml"));
+if (mine.length == 0) {
+    io.eprintln("error: no source subsystems found for '" + slug + "' — run after /spec writes plan.yaml");
+    env.exit(EXIT_NO_SUBS);
+}
+
+io.println("feature '" + slug + "' touches: " + (mine.length > 0 ? arr.join(mine, ", ") : "(none)"));
+
+let overlaps = [];
+let siblings = 0;
+for (let wt in worktrees(repo_root)) {
+    if (path.abs(wt.path) == repo_root) { continue; }   // this worktree
+    let inprog = wt.path + "/.kanban/2-in-progress";
+    if (!fs.dirExists(inprog)) { continue; }
+    let fdirs = arr.filter(fs.listDir(inprog), (e) => fs.isDir(e));
+    arr.sort(fdirs);
+    for (let fdir in fdirs) {
+        siblings = siblings + 1;
+        let theirs = subsystems_of(feature_globs(fdir + "/plan.yaml"));
+        let shared = intersect(mine, theirs);
+        let name = path.base(fdir);
+        let label = (wt.branch != null) ? (name + " (" + wt.branch + ")") : name;
+        if (shared.length > 0) {
+            arr.push(overlaps, { label: label, shared: shared });
+            io.println("  vs " + label + ": OVERLAP " + arr.join(shared, ", "));
+        } else {
+            let extra = (theirs.length > 0) ? ("  touches " + arr.join(theirs, ", ")) : "";
+            io.println("  vs " + label + ": disjoint" + extra);
+        }
+    }
+}
+
+if (siblings == 0) {
+    io.println("clean: no in-flight features in sibling worktrees");
+    env.exit(EXIT_OK);
+}
+if (overlaps.length > 0) {
+    io.println("");
+    io.println("WARN: shared subsystem(s) with in-flight feature(s):");
+    for (let o in overlaps) {
+        io.println("  - " + o.label + ": " + arr.join(o.shared, ", "));
+    }
+    io.println("→ collision on hot files likely at integration. Consider serializing,");
+    io.println("  or accept that last-to-merge pays the conflict cost.");
+    env.exit(EXIT_OVERLAP);
+}
+io.println("clean: no subsystem overlap with in-flight features");
+env.exit(EXIT_OK);
