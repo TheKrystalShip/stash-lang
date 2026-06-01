@@ -1,6 +1,6 @@
 # arr.shuffle missing ReadOnlyError guard when array is frozen
 
-**Status:** Backlog — Bug
+**Status:** Fixed — 2026-06-01 (commit 8650d20)
 **Created:** 2026-06-01
 **Discovery context:** P5 of the `readonly-modifier` feature. During implementation of the best-effort static mutation diagnostics, the in-place array mutators with runtime `ReadOnlyError` guards were enumerated to build the analyzer's `KnownInPlaceMutators` set. `arr.shuffle` was found to lack the frozen guard that all other in-place array mutators (`push`, `pop`, `insert`, `removeAt`, `remove`, `clear`, `reverse`, `sort`) have.
 
@@ -89,3 +89,15 @@ dotnet test --filter "FullyQualifiedName~ReadOnlyMutationRule|FullyQualifiedName
 - Feature: `.kanban/2-in-progress/readonly-modifier/brief.md` — the `readonly` modifier feature (P5 is where this bug was discovered)
 - All other `arr` in-place mutators in `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs` have the correct frozen guard (lines 27, 50, 91, 120, 149, 187, 349, 382)
 - `ReadOnlyMutationRule.cs` `KnownInPlaceMutators` set — must be updated alongside the runtime fix
+
+## Resolution (2026-06-01)
+
+**Fix commit:** 8650d20 (`fix(readonly-modifier): F04 — guard arr.shuffle on frozen arrays + SA0847 parity`)
+
+**What changed:**
+- Added `if (array.IsObj && IsArrayFrozen(array.AsObj)) throw new ReadOnlyError("Cannot mutate a frozen array.");` at the top of `ArrBuiltIns.Shuffle`, matching the identical guard in all sibling in-place mutators.
+- Added `"arr.shuffle"` to `ReadOnlyMutationRule.KnownInPlaceMutators` so SA0847 fires statically for `arr.shuffle(readonlyBinding)`.
+- Added `VM_ArrShuffle_OnFrozenArray_ThrowsReadOnlyError` in `FreezeTests.cs`.
+- Added `ReadonlyConst_ArrShuffle_EmitsSA0847` in `ReadonlyMutationAnalyzerTests.cs`.
+
+**Verification:** Full suite: 12807 passed, 0 failed, 6 skipped.

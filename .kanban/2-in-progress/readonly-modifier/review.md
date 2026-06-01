@@ -247,7 +247,8 @@ dotnet test --filter "FullyQualifiedName~ArrBuiltInsTests"    # regression check
 
 ## F04 — [IMPORTANT] `arr.shuffle` is missing the frozen guard and absent from SA0847's `KnownInPlaceMutators`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 8650d20
 **Files:** `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs:918-943`, `Stash.Analysis/Rules/Declarations/ReadOnlyMutationRule.cs:50-64`
 **Phase:** P5
 **Commit:** 36febd30 (analyzer half); P3/runtime half pre-existing
