@@ -102,7 +102,7 @@ Default: **one feature on `main` at a time.** Never run two agents against the s
 
 ### `/feature-review` diff range on a shared `main`
 
-The skill's `git merge-base HEAD origin/main` base is misleading when `origin/main` is stale and local `main` carries interleaved sibling-feature commits — it pollutes the review diff with unrelated work. Prefer `<parent-of-first-feature-commit>..HEAD` intersected with the plan's `scope` globs as the feature boundary, and don't rely on `--grep="feat(<slug>)"` alone to enumerate the diff: feature-related commits are sometimes tagged `test(<area>)`/`docs(...)`. Hand the reviewer the scope-glob'd diff, not the raw `BASE..HEAD`.
+`scripts/checkpoint/feature-diff-range.stash <slug>` is the **single source of truth** for the boundary — `/feature-review` calls it (capture just the range with `--range`). BASE = parent of the first feature-tagged (`<type>(<slug>)`) commit on `main..HEAD`; it deliberately does **not** use `git merge-base HEAD origin/main` (origin/main lags local main and silently widens the base, polluting the diff with sibling-feature work — this computation mis-resolved by hand more than once). It matches the slug across **all** commit types (feat/fix/test/docs/chore), not `feat()` alone, and warns when nothing matches. Scope-glob intersection against the plan's `scope:` stays the reviewer's / `verify-phase-scope.stash`'s job — the range script computes the *boundary*, not the in-scope *filter* (kept separate to avoid a second scope-matcher).
 
 ## Specialized agents
 

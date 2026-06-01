@@ -38,34 +38,24 @@ If this fails, tell the user which phases are pending and to run `/next-phase` f
 ### 3. Compute the diff range
 
 ```bash
-# Feature boundary = the PARENT OF THE FIRST FEATURE COMMIT on this branch.
-# Do NOT use `git merge-base HEAD origin/main`: origin/main is frequently stale
-# (it lags local main), which silently widens the base and pollutes the review
-# diff with hundreds of unrelated files. This computation is robust against both
-# a stale origin/main AND a local main that has advanced (merge-base would still
-# be correct there, but parent-of-first-commit is tighter and model-agnostic).
-#
-# Feature commits are tagged "<type>($SLUG)" — feat/fix/test/docs/chore — so match
-# the slug, not just feat(). --reverse|head -1 = the oldest such commit (P1).
-FIRST=$(git log --reverse --format=%H --grep="($SLUG)" main..HEAD 2>/dev/null | head -1)
-if [ -n "$FIRST" ]; then
-  BASE=$(git rev-parse "$FIRST^")
-else
-  # Fallback (e.g. --here mode, or unconventional commit messages): the local
-  # fork point. Prefer LOCAL main over origin/main — origin can be stale.
-  BASE=$(git merge-base HEAD main 2>/dev/null || git merge-base HEAD origin/main)
-fi
-echo "base: $BASE   (parent of first $SLUG commit)"
-echo "head: $(git rev-parse HEAD)"
-git log --oneline "$BASE"..HEAD --grep="($SLUG)"
-echo "--- diff stat (should be ONLY this feature's files) ---"
-git diff --stat "$BASE"..HEAD | tail -40
+stash scripts/checkpoint/feature-diff-range.stash "$SLUG"
 ```
 
-If no commits match the feature grep, the user may not have committed phases (or used a
+This is the **single source of truth** for the feature boundary — it prints `base`/`head`/`range`,
+the feature commit list, and the diff stat. BASE is the parent of the first feature-tagged
+(`<type>($SLUG)`) commit on `main..HEAD`; it deliberately does **not** use `git merge-base HEAD
+origin/main` (origin/main lags local main and silently widens the base, polluting the diff with
+unrelated files — this is the computation that mis-resolved by hand more than once). Capture just
+the range for the reviewer prompt with:
+
+```bash
+RANGE=$(stash scripts/checkpoint/feature-diff-range.stash "$SLUG" --range)
+```
+
+If it **warns** that no commits matched `($SLUG)`, the phases may not have been committed (or used a
 different prefix) — investigate before dispatching. **Sanity-check the diff stat**: if it lists
-files far outside the feature's `scope:` globs (hundreds of unrelated files), the base resolved
-wrong — recompute from the first feature commit's parent before handing the range to the reviewer.
+files far outside the feature's `scope:` globs, the base resolved wrong — investigate before handing
+the range to the reviewer.
 
 ### 4. Run the full test suite once as a baseline
 
@@ -82,8 +72,8 @@ Invoke the `reviewer` agent via the `Agent` tool with `subagent_type: "reviewer"
 1. **Slug** and feature dir: `.kanban/2-in-progress/<slug>/`
 2. **Brief path:** `.kanban/2-in-progress/<slug>/brief.md` — must be read fully. If this is an older feature with only `spec.md`, pass that instead.
 3. **Plan path:** `.kanban/2-in-progress/<slug>/plan.yaml` — phase scope and `done_when`
-4. **Diff range:** `BASE..HEAD` (paste the actual SHAs)
-5. **Phase commits:** the `git log --grep` output
+4. **Diff range:** the `range` from Step 3 (`feature-diff-range.stash "$SLUG" --range`) — paste the actual `BASE..HEAD` SHAs
+5. **Phase commits:** the feature commit list from Step 3's report
 6. **Baseline test summary:** test pass/fail counts before review begins
 7. **Review template:** `.kanban/_templates/review-template.md` — copy this to `.kanban/2-in-progress/<slug>/review.md`
 8. **Hard rules** (reiterate):

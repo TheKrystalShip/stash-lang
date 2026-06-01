@@ -1,0 +1,198 @@
+#!/usr/bin/env stash
+// feature-diff-range.stash <slug> [--range|--base|--head] [--json] [--selftest]
+//
+// Compute a feature's review diff boundary DETERMINISTICALLY — the one
+// computation that has silently mis-resolved more than once when left as inline
+// bash in /feature-review. This is the single source of truth for "what is this
+// feature's diff range", reused by /feature-review and /autopilot.
+//
+// THE RULE (and why):
+//   BASE = parent of the FIRST feature commit on <main>..HEAD.
+//   Feature commits are tagged "<type>(<slug>)" — feat/fix/test/docs/chore — so
+//   we match the slug, NOT just feat(). The oldest such commit is phase 1; its
+//   parent is the fork point.
+//   Do NOT use `git merge-base HEAD origin/main`: origin/main frequently lags
+//   local main, which silently widens BASE and pollutes the diff with hundreds
+//   of unrelated files. merge-base (against LOCAL main) is only a FALLBACK for
+//   when no feature-tagged commit is found (e.g. --here mode, unconventional
+//   messages). When a first feature commit exists, its parent ALWAYS wins over
+//   merge-base — that precedence is the bug this script pins (see --selftest).
+//
+// Output:
+//   (default)  base / head / range lines, the feature commit list, and the diff
+//              stat (tail-capped) — the full "feature boundary" report that
+//              replaces the inline /feature-review block.
+//   --range    print ONLY "<base>..<head>" (for `RANGE=$(...)` capture)
+//   --base     print ONLY <base>      --head  print ONLY <head>
+//   --json     {slug, base, head, range, base_source, commits:[...] }
+//   --selftest run the pure resolve_base() cases and exit.
+//
+// Exit 0 on success; 1 if no base can be determined (fail closed); 2 on bad args.
+
+import { die } from "_common.stash";
+
+// ── Pure core: choose BASE + its provenance (testable with no git) ──────────
+// first_parent: parent SHA of the first feature commit, or null/"" if none.
+// mergebase:    the merge-base fallback SHA, or null/"".
+// first_parent ALWAYS wins when present — that precedence is the whole fix.
+fn resolve_base(first_parent, mergebase) {
+    if (first_parent != null && first_parent != "") {
+        return { base: first_parent, source: "first-commit-parent" };
+    }
+    if (mergebase != null && mergebase != "") {
+        return { base: mergebase, source: "merge-base" };
+    }
+    return { base: null, source: "none" };
+}
+
+// ── --selftest ──────────────────────────────────────────────────────────────
+fn run_selftest() {
+    let all_passed = true;
+    let expect = (case_num, label, got, want) => {
+        let ok = (got == want);
+        io.println((ok ? "PASS" : "FAIL") + "  case " + conv.toStr(case_num) + ": " + label);
+        if (!ok) {
+            all_passed = false;
+            io.println("       got '" + conv.toStr(got) + "', want '" + conv.toStr(want) + "'");
+        }
+    };
+
+    // Case 1 — BOTH present: first-commit-parent WINS (the precedence bug pin).
+    let r1 = resolve_base("aaa111", "bbb222");
+    expect(1, "first-parent wins over merge-base (base)", r1.base, "aaa111");
+    expect(1, "first-parent wins over merge-base (source)", r1.source, "first-commit-parent");
+
+    // Case 2 — only merge-base → fallback used.
+    let r2 = resolve_base(null, "bbb222");
+    expect(2, "merge-base fallback (base)", r2.base, "bbb222");
+    expect(2, "merge-base fallback (source)", r2.source, "merge-base");
+
+    // Case 3 — neither → null (caller fails closed).
+    let r3 = resolve_base(null, null);
+    expect(3, "no base determinable (base null)", r3.base, null);
+    expect(3, "no base determinable (source)", r3.source, "none");
+
+    // Case 4 — empty-string first_parent treated as absent (non-vacuity partner
+    // of case 1: proves the guard distinguishes "" from a real SHA).
+    let r4 = resolve_base("", "bbb222");
+    expect(4, "empty first-parent falls through to merge-base", r4.base, "bbb222");
+
+    if (all_passed) {
+        io.println("all selftest cases passed.");
+        env.exit(0);
+    } else {
+        io.println("one or more selftest cases FAILED.");
+        env.exit(1);
+    }
+}
+
+// ── Argument parse (slug positional + flags) ────────────────────────────────
+let slug = null;
+let mode = "report";   // report | range | base | head
+let json_mode = false;
+let selftest_mode = false;
+for (let a in cli.argv) {
+    if (a == "--selftest") {
+        selftest_mode = true;
+    } else if (a == "--range") {
+        mode = "range";
+    } else if (a == "--base") {
+        mode = "base";
+    } else if (a == "--head") {
+        mode = "head";
+    } else if (a == "--json") {
+        json_mode = true;
+    } else if (slug == null) {
+        slug = a;
+    }
+}
+
+if (selftest_mode) {
+    run_selftest();
+}
+
+if (slug == null) {
+    die("usage: feature-diff-range.stash <slug> [--range|--base|--head] [--json]", 2);
+}
+
+// ── Gather git facts ────────────────────────────────────────────────────────
+let main_branch = env.get("MAIN_BRANCH") ?? "main";
+let grep_pat    = "(" + slug + ")";
+let range_spec  = main_branch + "..HEAD";
+
+// First (oldest, via --reverse) feature-tagged commit on main..HEAD.
+let log_out = $(git log --reverse --format=%H --grep=${grep_pat} ${range_spec}).stdout;
+let commit_shas = arr.filter(str.lines(log_out), (l) => str.trim(l) != "");
+let first_commit = (commit_shas.length > 0) ? str.trim(commit_shas[0]) : null;
+
+// Parent of the first feature commit (the fork point).
+let first_parent = null;
+if (first_commit != null) {
+    let parent_ref = first_commit + "^";
+    let fp = $(git rev-parse ${parent_ref});
+    if (fp.exitCode == 0) { first_parent = str.trim(fp.stdout); }
+}
+
+// merge-base fallback: LOCAL main first, then origin/<main> (origin can be stale).
+let mergebase = null;
+let mb = $(git merge-base HEAD ${main_branch});
+if (mb.exitCode == 0) {
+    mergebase = str.trim(mb.stdout);
+} else {
+    let origin_ref = "origin/" + main_branch;
+    let mbo = $(git merge-base HEAD ${origin_ref});
+    if (mbo.exitCode == 0) { mergebase = str.trim(mbo.stdout); }
+}
+
+let chosen = resolve_base(first_parent, mergebase);
+let base   = chosen.base;
+let source = chosen.source;
+let head   = str.trim($(git rev-parse HEAD).stdout);
+
+if (base == null) {
+    die("could not determine a base for '" + slug + "': no feature-tagged commits on "
+        + range_spec + " and no merge-base. Are you on the feature branch with committed phases?", 1);
+}
+if (first_commit == null) {
+    io.eprintln("warning: no commits matched " + grep_pat + " on " + range_spec
+        + " — using merge-base fallback. Verify the feature's phases were committed.");
+}
+
+let range = base + ".." + head;
+
+// ── Terse modes (for capture) ───────────────────────────────────────────────
+if (mode == "range") { io.println(range); env.exit(0); }
+if (mode == "base")  { io.println(base);  env.exit(0); }
+if (mode == "head")  { io.println(head);  env.exit(0); }
+
+// Feature commit list (oneline), gathered once for both json + report.
+let commit_lines = arr.filter(str.lines($(git log --oneline ${range} --grep=${grep_pat}).stdout),
+                              (l) => str.trim(l) != "");
+
+if (json_mode) {
+    io.println(json.stringify({
+        slug:        slug,
+        base:        base,
+        head:        head,
+        range:       range,
+        base_source: source,
+        commits:     commit_lines
+    }));
+    env.exit(0);
+}
+
+// ── Default: full feature-boundary report ───────────────────────────────────
+io.println("base:  " + base + "   (" + source + ")");
+io.println("head:  " + head);
+io.println("range: " + range);
+io.println("--- feature commits " + grep_pat + " ---");
+for (let c in commit_lines) { io.println(c); }
+io.println("--- diff stat (should be ONLY this feature's files) ---");
+let stat_lines = str.lines($(git diff --stat ${range}).stdout);
+let start = (stat_lines.length > 40) ? (stat_lines.length - 40) : 0;
+let idx = start;
+while (idx < stat_lines.length) {
+    if (str.trim(stat_lines[idx]) != "") { io.println(stat_lines[idx]); }
+    idx = idx + 1;
+}
+env.exit(0);
