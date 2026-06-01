@@ -104,12 +104,16 @@ for (let cmd in cmds) {
 }
 
 // ── Green on merged main — safe to clean up ──────────────────────────────────
+// Wrap the teardown so a git failure exits with git's code (like bash set -e),
+// not a Stash stack trace.
 if (worktree_path != "" && fs.dirExists(worktree_path)) {
     io.println("+ git worktree remove " + worktree_path);
-    $!>(git worktree remove ${worktree_path});
+    let rm = try $!>(git worktree remove ${worktree_path});
+    if (rm is Error) { env.exit(rm.exitCode); }
 }
 io.println("+ git branch -d " + branch);
-$!>(git branch -d ${branch});
+let bd = try $!>(git branch -d ${branch});
+if (bd is Error) { env.exit(bd.exitCode); }
 
 io.println("integrated: " + branch + " -> " + main_branch + " (final_verify green); worktree and branch removed");
 env.exit(0);
