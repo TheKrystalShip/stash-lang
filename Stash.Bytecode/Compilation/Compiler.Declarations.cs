@@ -83,7 +83,7 @@ partial class Compiler
         if (isTopLevelGlobal && TryEvaluateConstant(stmt.Initializer, out foldedValue))
             useMetadataInit = true;
 
-        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: true);
+        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: true, isReadonly: stmt.IsReadonly);
 
         if (useMetadataInit)
         {

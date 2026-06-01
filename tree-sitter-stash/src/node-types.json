@@ -952,7 +952,18 @@
   {
     "type": "for_statement",
     "named": true,
-    "fields": {},
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
     "children": {
       "multiple": true,
       "required": true,
@@ -966,7 +977,11 @@
           "named": true
         },
         {
-          "type": "variable_declaration",
+          "type": "destructure_pattern",
+          "named": true
+        },
+        {
+          "type": "type_annotation",
           "named": true
         }
       ]

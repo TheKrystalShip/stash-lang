@@ -329,7 +329,8 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         if (stmt.ReadonlyKeyword is { } roKw)
             EmitFromToken(roKw, TokenTypeKeyword, 0);
-        EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration);
+        int mods = ModifierDeclaration | (stmt.IsReadonly ? ModifierReadonly : 0);
+        EmitFromToken(stmt.Name, TokenTypeVariable, mods);
         if (stmt.TypeHint is not null)
         {
             EmitTypeReference(stmt.TypeHint);

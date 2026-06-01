@@ -228,6 +228,17 @@ public class SemanticTokenWalkerTests : AnalysisTestBase
     }
 
     [Fact]
+    public void ReadonlyLetDeclaration_BindingName_EmitsReadonlyModifier()
+    {
+        // "readonly let X = 1;"
+        //              ^col 14
+        var map = Classify("readonly let X = 1;");
+        var (type, mods) = TokenAt(map, 1, 14);
+        Assert.Equal(TokenTypeVariable, type);
+        Assert.Equal(ModifierDeclaration | ModifierReadonly, mods);
+    }
+
+    [Fact]
     public void ReadonlyConstDeclaration_ReadonlyLexeme_EmitsKeywordToken()
     {
         // "readonly const X = 1;"
