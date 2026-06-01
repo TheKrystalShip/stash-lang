@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-scripts-stash-port
 current: null
-updated: '2026-05-31T23:27:08Z'
+updated: '2026-06-01T00:01:28Z'
 phases:
   P1:
     status: done
@@ -39,13 +39,13 @@ phases:
     notes: next-phase.stash 8/8 oracle cases pass; stdout_yaml_equal axis added to runner (JSON round-trip
       anchor expand); lint+coverage+self-test green
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 71fa1bfa3ead8b0cfcfe360225bc9479f60302d2
+    verified: true
+    started: '2026-05-31T23:35:27Z'
+    completed: '2026-06-01T00:01:28Z'
+    attempts: 1
+    notes: verify-phase.sh scope/glob ported to verify-phase-scope.stash (path.match); 11/11 oracle
   P6:
     status: pending
     commit: null
