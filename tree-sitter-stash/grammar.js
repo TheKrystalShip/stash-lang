@@ -79,6 +79,7 @@ module.exports = grammar({
     ),
 
     variable_declaration: $ => seq(
+      optional('readonly'),
       'let',
       choice(
         $.destructure_pattern,
@@ -89,6 +90,7 @@ module.exports = grammar({
     ),
 
     constant_declaration: $ => seq(
+      optional('readonly'),
       'const',
       field('name', $.identifier),
       optional($.type_annotation),

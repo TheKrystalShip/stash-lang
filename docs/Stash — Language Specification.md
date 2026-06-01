@@ -31,6 +31,7 @@ protocols are specified separately.
 4. [Source Files and Modules](#source-files-and-modules)
 5. [Values and Types](#values-and-types)
 6. [Bindings and Scope](#bindings-and-scope)
+   - [The `readonly` Modifier](#the-readonly-modifier)
 7. [Expressions](#expressions)
 8. [Statements and Control Flow](#statements-and-control-flow)
 9. [Functions, Closures, and Async](#functions-closures-and-async)
@@ -798,6 +799,145 @@ unset config.debug, config.trace;
 
 Unsetting a missing binding, immutable binding, or unsupported target produces a
 runtime error.
+
+### The `readonly` Modifier
+
+`readonly` composes with `let` or `const` to mark the declared value as **deeply
+and transitively frozen**. Every write to any part of the frozen object graph —
+including nested dicts, arrays, and struct instances reachable from the value —
+throws `ReadOnlyError` at runtime.
+
+```stash
+let D            = { a: 1 }  // reassignable name, mutable value
+const D          = { a: 1 }  // fixed name,        mutable value (JS-style)
+readonly let D   = { a: 1 }  // reassignable name, deeply-frozen value
+readonly const D = { a: 1 }  // fixed name,        deeply-frozen value (fully locked)
+```
+
+#### Syntax and Soft-Keyword Treatment
+
+`readonly` is a **soft (contextual) keyword**: it is only special immediately
+before `let` or `const`. Everywhere else it remains a valid identifier.
+
+```stash
+readonly const Config = { host: "localhost", ports: [80, 443] };
+
+let readonly = true;  // ok — identifier, not the modifier
+```
+
+This matches the existing soft declaration modifiers `async` and `export`.
+`readonly` is unambiguous on a two-token lookahead because `let`/`const` are
+hard keywords.
+
+`readonly` may not appear in a `for`-init clause (a rebound loop variable
+cannot be meaningfully frozen); it may appear in an `export` site as
+`export readonly const` (single canonical order).
+
+#### Deep / Transitive Semantics
+
+Freezing is **deep and transitive**: it reaches every nested dict, array, struct,
+and `StashError` reachable through the initializer value. Traversal is cycle-safe.
+Function / closure values encountered during traversal are treated as opaque and
+are not frozen.
+
+```stash
+readonly const Config = { host: "localhost", ports: [80, 443] };
+Config.host = "x";       // throws ReadOnlyError
+Config.ports.push(22);   // throws — deep: nested array is frozen too
+```
+
+For `readonly let`, every value assigned to the binding — including the
+initializer and every subsequent rebind — is deep-frozen at assignment time.
+
+```stash
+readonly let Snapshot = { x: 1 };
+Snapshot.x = 2;            // throws ReadOnlyError
+Snapshot = { x: 3 };      // ok — binding is rebindable
+Snapshot.x = 4;            // throws — new value is also frozen
+```
+
+#### Deep vs Shallow — Design Rationale
+
+**Why deep?** `readonly` is *value immutability for safe sharing*, not the
+*binding/annotation* immutability that C# `readonly`, JS `const`, TypeScript
+`readonly`, Java `final`, and Kotlin `val` provide. Those are shallow because
+they fix a *name or type*, not a *value*. Stash `readonly` must be deep because
+its primary motivation is safe sharing across async child VMs: a shallowly-frozen
+value with mutable nested collections is still unsafe to share across the async
+boundary, which would defeat the purpose.
+
+Languages whose freeze-like primitive is shallow (JS `Object.freeze`, Python
+`frozenset`) avoid the threading hazard via architecture — JS is single-threaded
+by design; Python has the GIL. Stash already declined both approaches by offering
+true concurrency through `async fn`. So the spec frames C# `readonly` as
+*"different category, not bolder"*: C# freezes a *slot*, Stash freezes a *graph*.
+
+#### The Aliasing Footgun — Retroactive In-Place Freeze
+
+The genuine novelty of Stash `readonly` is **retroactive in-place freeze**: the
+modifier decorates an initializer that may reference pre-existing values, so a
+deep-freeze can reach a nested value that some other (non-`readonly`) binding
+still aliases.
+
+```stash
+// Aliasing footgun: freeze is applied in-place, reaching pre-existing aliases
+let shared = { count: 0 };
+readonly const snap = { data: shared };
+
+// `shared` is now frozen — it was reached during snap's deep-freeze traversal
+// even though `shared` itself carries no `readonly` keyword.
+shared.count = 1;       // throws ReadOnlyError — loud, never silent data skew
+```
+
+Two properties keep this safe:
+- **Loud failure:** the runtime throws `ReadOnlyError` at the offending write.
+  There is never silent data skew.
+- **Visible origin:** every deep-freeze originates at a syntactically visible
+  `readonly` declaration, never from an arbitrary function call.
+
+A *clone-on-freeze* alternative (deep-copy the initializer) was considered and
+rejected: it would convert the loud throw into a *silent* divergence between the
+frozen copy and the still-mutable original — precisely the bug class immutability
+exists to prevent — and would introduce copy-semantics into an otherwise
+reference-semantic language.
+
+#### Direct Aliasing
+
+Frozenness is **carried by the value, not the binding**. An alias to a frozen
+value is equally blocked regardless of whether the alias's declaration uses
+`readonly`:
+
+```stash
+readonly const D = { a: 1 };
+let alias = D;
+alias.a = 2;            // throws ReadOnlyError — same frozen value
+```
+
+#### Primitives
+
+On primitives (`int`, `float`, `bool`, `string`, `duration`, `ip_address`,
+`semver`, `byte_size`, enums, etc.) `readonly` is a harmless no-op — primitive
+values are already immutable. The binding axis (`const` vs `let`) continues to
+apply independently.
+
+```stash
+readonly let n = 42;    // ok — no freeze semantics needed
+n = 99;                 // ok — binding is let, reassignment is allowed
+```
+
+#### Catching `ReadOnlyError`
+
+Mutation of a frozen value throws `ReadOnlyError`, which can be caught like any
+other error:
+
+```stash
+readonly const Config = { host: "localhost" };
+try {
+    Config.host = "x";
+} catch (ReadOnlyError e) {
+    io.println("cannot mutate: " + e.message);
+}
+```
 
 ## Expressions
 

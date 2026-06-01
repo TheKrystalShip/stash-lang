@@ -138,6 +138,13 @@
     "variable-declaration": {
       "patterns": [
         {
+          "comment": "readonly modifier — matches contextually before let/const only",
+          "match": "\\b(readonly)\\b(?=\\s+(let|const)\\b)",
+          "captures": {
+            "1": { "name": "storage.modifier.stash" }
+          }
+        },
+        {
           "match": "\\b(let|const)\\s+(\\[)",
           "captures": {
             "1": { "name": "storage.type.stash" },

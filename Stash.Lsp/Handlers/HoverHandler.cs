@@ -10,6 +10,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
+using Stash.Lexing;
 using Stash.Stdlib;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
@@ -246,6 +247,43 @@ public class HoverHandler : HoverHandlerBase
                     {
                         Kind = MarkupKind.Markdown,
                         Value = markdown
+                    })
+                });
+            }
+
+            // Soft-keyword hover — `readonly` modifier
+            if (!afterDot && word == "readonly" && Keywords.SoftKeywords.Contains(word))
+            {
+                const string ReadonlyHoverText =
+                    "```stash\nreadonly\n```\n" +
+                    "*declaration modifier* — deep / transitive value immutability\n\n" +
+                    "---\n\n" +
+                    "Composes with `let` or `const` to mark the declared value as **deeply and transitively frozen**. " +
+                    "Every write to any part of the frozen object graph — including nested dicts, arrays, and struct " +
+                    "instances reachable from the value — throws `ReadOnlyError` at runtime.\n\n" +
+                    "```stash\nreadonly const Config = { host: \"localhost\", ports: [80, 443] };\n" +
+                    "Config.host = \"x\";       // throws ReadOnlyError\n" +
+                    "Config.ports.push(22);   // throws — deep: nested array is frozen too\n\n" +
+                    "readonly let Snapshot = makeSnapshot();\n" +
+                    "Snapshot = makeSnapshot(); // ok — binding is rebindable (let)\n" +
+                    "Snapshot.x = 1;            // throws — new value is also frozen\n```\n\n" +
+                    "**Soft keyword:** `readonly` is only special immediately before `let`/`const`. " +
+                    "It remains a valid identifier elsewhere (`let readonly = 1;` is legal).\n\n" +
+                    "**Deep vs shallow:** freezing is deep and transitive, reaching every nested " +
+                    "value in the object graph. This differs from C# `readonly` (binding-only) and " +
+                    "JS `Object.freeze` (shallow). The depth is required for safe sharing across " +
+                    "async child VMs — a shallowly-frozen value with mutable nested collections " +
+                    "would still be unsafe to share.\n\n" +
+                    "**Retroactive in-place freeze:** freeze is applied to the existing value " +
+                    "in place, reaching every alias that already points to it. " +
+                    "Mutating through any alias after the `readonly` declaration throws `ReadOnlyError`.";
+
+                return Task.FromResult<Hover?>(new Hover
+                {
+                    Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = ReadonlyHoverText
                     })
                 });
             }
