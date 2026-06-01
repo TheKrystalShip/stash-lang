@@ -412,6 +412,17 @@ public class FreezeTests
     }
 
     [Fact]
+    public void VM_ArrShuffle_OnFrozenArray_ThrowsReadOnlyError()
+    {
+        // arr.shuffle is an in-place mutator — must throw on a frozen StashArray.
+        var arr = new StashArray { StashValue.One, StashValue.FromInt(2L), StashValue.FromInt(3L) };
+        arr.Freeze();
+        var ex = RunWithFrozenGlobal("arr.shuffle(frozenArr);", "frozenArr", StashValue.FromObj(arr));
+        Assert.IsType<ReadOnlyError>(ex);
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
     public void VM_DeepFreeze_NestedArray_IndexSet_ThrowsReadOnlyError()
     {
         // Deep-freeze a dict that contains an array; injection ensures VM gets the

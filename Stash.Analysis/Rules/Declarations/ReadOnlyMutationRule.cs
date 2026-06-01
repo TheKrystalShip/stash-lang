@@ -57,6 +57,7 @@ public sealed class ReadOnlyMutationRule : IAnalysisRule
         "arr.clear",
         "arr.reverse",
         "arr.sort",
+        "arr.shuffle",
         // dict namespace — all mutators that throw ReadOnlyError when frozen
         "dict.set",
         "dict.remove",

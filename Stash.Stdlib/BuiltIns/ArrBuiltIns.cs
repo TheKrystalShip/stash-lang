@@ -917,6 +917,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "null")]
     private static void Shuffle(IInterpreterContext ctx, StashValue array)
     {
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taShuffle)
         {
             var rng = new Random();

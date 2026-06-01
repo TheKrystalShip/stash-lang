@@ -196,6 +196,17 @@ public class ReadonlyMutationAnalyzerTests : AnalysisTestBase
     }
 
     [Fact]
+    public void ReadonlyConst_ArrShuffle_EmitsSA0847()
+    {
+        var source = """
+            readonly const D = [3, 1, 2];
+            arr.shuffle(D);
+            """;
+        var diagnostics = Validate(source);
+        Assert.Contains(diagnostics, d => d.Code == "SA0847");
+    }
+
+    [Fact]
     public void ReadonlyConst_DictSet_EmitsSA0847()
     {
         var source = """
