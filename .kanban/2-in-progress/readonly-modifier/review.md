@@ -79,7 +79,8 @@ dotnet test --filter "FullyQualifiedName~BytecodeInstructionReferenceTests"   # 
 
 ## F02 — [CRITICAL] Deep-freeze is non-transitive through any stdlib-produced array (every `arr.*` / `dict.keys/values/pairs` etc.)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 45a99c0
 **Files:** `Stash.Core/Runtime/RuntimeValues.cs:316-376`, `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs` (~30 sites returning bare `List<StashValue>`), `Stash.Stdlib/BuiltIns/DictBuiltIns.cs:97-131`
 **Phase:** P3
 **Commit:** 6b302819
