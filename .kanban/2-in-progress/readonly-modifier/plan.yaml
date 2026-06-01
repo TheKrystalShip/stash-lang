@@ -99,18 +99,26 @@ phases:
     verify:
       - dotnet build
       - dotnet test --filter "FullyQualifiedName~RuntimeValuesTests|FullyQualifiedName~StashDictionaryTests|FullyQualifiedName~FreezeTests"
+      # Perf gate (Q1 always-wrap carrier touches the array hot path). Record
+      # median-of-3 before/after; no regression beyond noise on these two.
+      - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_algorithms.stash
+      - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_numeric.stash
     done_when:
-      - "Every reference-typed runtime value reachable from Stash code (dict, plain array carrier, struct/`StashInstance`, `StashError`) exposes an `IsFrozen` bit and a `Freeze()` entry."
-      - "A cycle-safe `DeepFreeze(StashValue)` helper exists in a single source-of-truth location and is the only caller path that flips the flag on nested values."
-      - "Every write path on those types (field set, index set, in-place mutators like `push`/`pop`/`set`/`del`/`clear`) throws `ReadOnlyError` when the carrier is frozen — verified by direct C# unit tests, not via Stash-source-level tests."
+      - "Plain arrays use an **always-present wrapper carrier** (decided 2026-06-01 — `is` is reference identity, so wrap-on-freeze is ruled out) exposing an in-place `IsFrozen` bit; dict and struct/`StashInstance` likewise expose `IsFrozen` + `Freeze()`."
+      - "`StashError` is NOT given a new write-guard (it already rejects field writes — no `IVMFieldMutable`); `DeepFreeze` only traverses into its properties dict to freeze nested values."
+      - "A cycle-safe `DeepFreeze(StashValue)` helper exists in a single source-of-truth location and is the only caller path that flips the flag on nested values; **function/closure values are treated as opaque** (skipped, not frozen)."
+      - "Every write path on dict / array carrier / struct (field set, index set, in-place mutators like `push`/`pop`/`set`/`del`/`clear`) throws `ReadOnlyError` when the carrier is frozen — verified by direct C# unit tests, not via Stash-source-level tests."
+      - "`ReadOnlyError`'s message is generalized per value kind (the current text is namespace-member-specific and would be wrong on a user dict/array)."
       - "An in-process attempt to mutate a deeply-nested frozen value through a fresh alias throws `ReadOnlyError` at runtime (the flag is on the value, not the binding)."
       - "Primitives passed to `DeepFreeze` are accepted as no-ops (no exception, no flag change)."
-      - "The existing `StashFrozenArray` wrapper is either deleted or reduced to a thin shim over the in-place flag; `cli.argv`-style boundary callers now flag the underlying value in place and value identity is preserved (`freeze(arr) is arr`)."
+      - "The existing `StashFrozenArray` wrapper is deleted or reduced to a thin shim over the in-place flag; `cli.argv`-style boundary callers now flag the underlying value in place and value identity is preserved (`freeze(arr) is arr`)."
+      - "No perf regression beyond run-to-run noise on `bench_algorithms` / `bench_numeric` vs the pre-P3 baseline (record both in the phase commit)."
     notes: |
-      This phase resolves Q1 (single carrier type for plain arrays). The
-      implementer must explicitly record which option was chosen — extend an
-      existing carrier vs introduce a minimal wrapper — and update brief.md's
-      Open Questions section accordingly.
+      Q1 RESOLVED (2026-06-01): always-present wrapper carrier for plain arrays
+      (NOT wrap-on-freeze) — `is`/`==` is C# reference identity, so swapping the
+      carrier would break `freeze(arr) is arr`. Q3 corrected: `StashError` is
+      already write-blocked; no new guard, traverse-into only. See brief.md
+      Decision Log (2026-06-01 entries).
 
   # ---------------------------------------------------------------------------
   - id: P4
@@ -119,18 +127,27 @@ phases:
     files:
       - Stash.Bytecode/Compilation/Compiler.Declarations.cs
       - Stash.Bytecode/Compilation/Compiler.Assignments.cs
+      - Stash.Bytecode/Compilation/Compiler.Helpers.cs
+      - Stash.Bytecode/Compilation/CompilerScope.cs
+      - Stash.Bytecode/Runtime/UpvalueDescriptor.cs
       - Stash.Bytecode/VM/VirtualMachine.*.cs
       - Stash.Tests/Bytecode/**
       - Stash.Tests/VM/**
     verify:
       - dotnet build
       - dotnet test --filter "FullyQualifiedName~CompilerTests|FullyQualifiedName~VMTests|FullyQualifiedName~ReadonlyTests"
+      # Perf gate — the init/rebind freeze emission sits on the declaration/assign hot path.
+      - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_algorithms.stash
+      - dotnet run --project Stash.Cli/ -c Release -- benchmarks/bench_function_calls.stash
     done_when:
       - "`readonly const D = { ports: [80] };` followed by `D.ports.push(22);` raises `ReadOnlyError` when executed by the CLI (end-to-end through parse → compile → VM)."
       - "`readonly const D = {...}; let a = D; a.x = 2;` raises `ReadOnlyError` (aliasing through `let` is caught by the value-side flag)."
       - "`readonly let S = makeSnapshot(); S = makeSnapshot(); S.x = 1;` raises `ReadOnlyError` (rebind re-freezes)."
       - "`readonly let n = 42; n = 99;` executes without error (primitive no-op; binding remains rebindable)."
       - "A `readonly const` binding still cannot be reassigned (existing `const` binding-axis behavior is preserved unchanged)."
+      - "Q4: rebind through a closure upvalue re-freezes too — `readonly let S = {...}; fn g() { S = makeMutable(); } g(); S.x = 1;` raises `ReadOnlyError`. Requires the readonly bit threaded into `UpvalueDescriptor` and the upvalue store path guarded."
+      - "Regression guard for the incidental const fix: an outer `const` reassigned inside a closure (`const c = 1; fn g() { c = 2; } g();`) now raises (previously silently succeeded — see backlog bug)."
+      - "No perf regression beyond run-to-run noise on `bench_algorithms` / `bench_function_calls` vs the pre-P4 baseline."
 
   # ---------------------------------------------------------------------------
   - id: P5
