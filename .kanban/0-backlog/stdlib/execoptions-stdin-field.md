@@ -18,4 +18,4 @@ If repeated `process.exec` call-sites accumulate temp-file boilerplate just to f
 
 ## Related
 
-- Worked around in `scripts/checkpoint/difftest_runner.stash` (`stdout_yaml_equal` axis writes py stdout to a temp file before the normalization exec).
+- Worked around in `scripts/checkpoint/difftest_runner.stash` (`stdout_yaml_equal` axis writes py stdout to a temp file before the normalization exec). *(That oracle was retired in Milestone A.5 with the Python originals; the underlying stdlib gap remains open.)*

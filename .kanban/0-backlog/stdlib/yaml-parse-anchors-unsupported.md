@@ -44,4 +44,4 @@ Configure the YamlDotNet deserializer used by `yaml.parse` to resolve aliases in
 ## Related
 
 - `.kanban/0-backlog/stdlib/yaml-stringify-width-option.md` (sibling yaml-builtin gap)
-- Worked around in `scripts/checkpoint/difftest_runner.stash` (`stdout_yaml_equal` axis, Python round-trip normalization).
+- Worked around in `scripts/checkpoint/difftest_runner.stash` (`stdout_yaml_equal` axis, Python round-trip normalization). *(That oracle was retired in Milestone A.5 with the Python originals; the underlying stdlib gap remains open.)*

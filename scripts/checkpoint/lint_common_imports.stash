@@ -171,11 +171,13 @@ fn run_unit_sweep() {
     // Self-seed a throwaway fixture feature so the sweep depends on NOTHING in
     // the live kanban. The previous version hardcoded a real feature slug and a
     // 2-in-progress/ temp path — which broke the instant that feature was
-    // promoted to 4-done/ (the dir moved out from under it). We create the
-    // fixture under 2-in-progress/ so feature_dir/resolve_feature resolve it,
-    // exercise every export against it, then remove it.
+    // promoted to 4-done/ (the dir moved out from under it). We seed under
+    // 4-done/ (not 2-in-progress/): feature_dir falls back to 4-done so the
+    // exports still resolve it, but resolve_feature(null)'s single-active
+    // inference never scans 4-done — so an orphan from a crashed run can't be
+    // miscounted as an active feature by a concurrent /resume.
     let sweep_slug = "_lint_common_sweep_fixture";
-    let sweep_dir = ".kanban/2-in-progress/" + sweep_slug;
+    let sweep_dir = ".kanban/4-done/" + sweep_slug;
     if (fs.dirExists(sweep_dir)) { fs.delete(sweep_dir); }   // leftover from a prior aborted run
     fs.createDir(sweep_dir);
     // Seed plan + checkpoint via the exports under test (save_yaml).
