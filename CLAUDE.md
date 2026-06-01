@@ -50,9 +50,9 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 | `check-parallel-safety.stash` | Warn on subsystem overlap with an in-flight sibling worktree |
 | `worktree-finish.stash` | Merge `--no-ff`, re-verify on `main`, remove worktree if green |
 
-### `final_verify` must filter documented flakies
+### `final_verify` runs the full suite — trust it
 
-When authoring `plan.yaml`, narrow `final_verify`'s `dotnet test` step to exclude documented flaky / environment-dependent classes (see `.claude/repo.md` "Known Issues"). Bare `dotnet test` fails `/done` due to pre-existing `DiffPackageTests`, `Registry*Tests`, `NetBuiltInsTests`, parallel-execution flakies, etc. — these are not feature regressions. Precedent: `exports-private-default` and `stdlib-namespace-members` `plan.yaml` carry the canonical filter shape.
+The unfiltered `dotnet test` suite is **green** (0 failures). Author `final_verify` to run a full `dotnet test` (optionally a feature-scoped `--filter` for fast per-phase `verify:` steps, but the final gate runs everything). Do **not** add namespace-exclusion filters to "work around flakies" — there are none. If `dotnet test` fails, that is a real regression to investigate, not noise to filter. (A handful of tests are quarantined at the source with `[Fact(Skip = "<reason + backlog link>")]` for genuinely-deep deferred bugs; xUnit skips them automatically, so they never affect a run and need no filter.)
 
 ### Workflow agents advance checkpoint state after the code commit
 
@@ -121,7 +121,7 @@ Stash is dogfooded across this repo (`examples/`, `scripts/checkpoint/*`, fixtur
 - **All `.stash` authoring goes through the `stash-author` agent — and this binds the orchestrator too, not just sub-agents.** The most common real path is the orchestrator writing Stash inline; if you (the orchestrator) write `.stash` directly instead of delegating, you must follow the **identical docs-first protocol** in `.claude/agents/stash-author.md` (read the relevant `docs/Stash — Language Specification.md` + `Standard Library Reference.md` sections first, emit the API plan, then write). The protocol that only sub-agents follow is the protocol that gets walked around.
 - **Exempt:** trivial mechanical edits (rename, whitespace, a path/command flip). New Stash logic or non-trivial edits are not exempt.
 - **Gotcha memory:** `stash-author` maintains `.claude/agents/stash-author.gotchas.md` (doc/reality mismatches), each entry backed by a `Category=Gotcha` xUnit test in `Stash.Tests/Interpreting/GotchaTests.cs`.
-- **`Category=Gotcha` tests are change-detectors — never exclude them from a gate** (unlike documented flakies). Each asserts *current buggy* behavior, so it is green today and flips **red when the bug is fixed**; that red is the signal to flip the assertion to correct behavior and prune the gotcha entry. Excluding them defeats the entire mechanism.
+- **`Category=Gotcha` tests are change-detectors — never exclude them from a gate.** Each asserts *current buggy* behavior, so it is green today and flips **red when the bug is fixed**; that red is the signal to flip the assertion to correct behavior and prune the gotcha entry. Excluding them defeats the entire mechanism.
 
 ### Exploration: find then refute
 

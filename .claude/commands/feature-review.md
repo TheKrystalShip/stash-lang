@@ -54,7 +54,7 @@ If no commits match the feature grep, the user may not have committed phases (or
 dotnet test 2>&1 | tail -50
 ```
 
-Note any pre-existing flakies (cross-reference `.claude/repo.md` Known Issues).
+The suite is green — a failure here is a real regression, not noise to excuse.
 
 ## Dispatch the reviewer
 
