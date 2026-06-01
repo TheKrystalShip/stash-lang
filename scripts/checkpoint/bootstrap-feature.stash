@@ -1,0 +1,67 @@
+#!/usr/bin/env stash
+// bootstrap-feature.stash <slug> [title]
+//
+// Creates .kanban/2-in-progress/<slug>/ from templates with the slug substituted.
+// Used by the architect after the spec is approved.
+//
+// Stash port of bootstrap-feature.sh. Orchestration is Stash; the actual text
+// substitution stays delegated to `sed` (invoked via a command expression) —
+// porting a tool's job into str.replace would only be worse syntax for the same
+// result. Dates come from time.format; the committer name from `git config`.
+
+import { die } from "_common.stash";
+
+const INPROGRESS_DIR = ".kanban/2-in-progress";
+const TEMPLATES_DIR  = ".kanban/_templates";
+
+// ── Arguments ───────────────────────────────────────────────────────────────
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+if (raw.length < 1) {
+    die("usage: bootstrap-feature.stash <slug> [title]", 2);
+}
+let slug = raw[0];
+// title default = slug with dashes turned into spaces (bash: ${slug//-/ }).
+let title = (raw.length >= 2 && raw[1] != "") ? raw[1] : arr.join(str.split(slug, "-"), " ");
+
+let dest = INPROGRESS_DIR + "/" + slug;
+if (fs.exists(dest) || fs.dirExists(dest)) {
+    die(dest + " already exists", 1);
+}
+fs.createDir(dest);
+
+// ── Substitution values ──────────────────────────────────────────────────────
+// Committer name (fall back to "unknown" if git has none); $() does not throw on
+// non-zero, so an unset name yields exitCode != 0 / empty stdout.
+let gc = $(git config user.name);
+let user = (gc.exitCode == 0 && str.trim(gc.stdout) != "") ? str.trim(gc.stdout) : "unknown";
+let today = time.format(time.now(), "yyyy-MM-dd");
+
+// ── Render templates via sed (kept as the substitution tool) ─────────────────
+// brief.md: {{...}} placeholders.
+let brief_tmpl = TEMPLATES_DIR + "/brief-template.md";
+let s_name = "s/{{Feature Name}}/" + title + "/g";
+let s_slug = "s/{{feature-slug}}/" + slug + "/g";
+let s_user = "s/{{user}}/" + user + "/g";
+let s_date = "s/{{YYYY-MM-DD}}/" + today + "/g";
+let brief = $(sed -e ${s_name} -e ${s_slug} -e ${s_user} -e ${s_date} ${brief_tmpl});
+fs.writeFile(dest + "/brief.md", brief.stdout);
+
+// plan.yaml: anchored field substitutions.
+let plan_tmpl = TEMPLATES_DIR + "/plan-template.yaml";
+let p_feature = "s/^feature: feature-slug$/feature: " + slug + "/";
+let p_title   = "s/^title: Feature Title$/title: " + title + "/";
+let p_created = "s/^created: 2026-05-16$/created: " + today + "/";
+let plan = $(sed -e ${p_feature} -e ${p_title} -e ${p_created} ${plan_tmpl});
+fs.writeFile(dest + "/plan.yaml", plan.stdout);
+
+// checkpoint.yaml: anchored field substitutions.
+let cp_tmpl = TEMPLATES_DIR + "/checkpoint-template.yaml";
+let c_feature = "s/^feature: feature-slug$/feature: " + slug + "/";
+let c_updated = "s/^updated: 2026-05-16T00:00:00Z$/updated: " + today + "T00:00:00Z/";
+let cp = $(sed -e ${c_feature} -e ${c_updated} ${cp_tmpl});
+fs.writeFile(dest + "/checkpoint.yaml", cp.stdout);
+
+io.println("created: " + dest);
+io.println("next: edit brief.md and plan.yaml, then run stash scripts/checkpoint/validate-spec.stash " + slug);
+env.exit(0);
