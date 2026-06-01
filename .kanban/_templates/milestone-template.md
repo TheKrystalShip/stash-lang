@@ -13,7 +13,7 @@ thinking*; the road is built as you go (rolling-wave: detail the next unit, sket
 - The **Charter** below is hand-maintained and evolves freely. It is the authority on the
   *future* (vision, end-goal, what's next, what you've learned).
 - The **Ledger** is *derived, never hand-written*. It is the authority on the *past* (what's
-  actually done) and is computed from `4-done/` by `scripts/checkpoint/milestone-status.py`.
+  actually done) and is computed from `4-done/` by `scripts/checkpoint/milestone-status.stash`.
   A living doc drifts; the completion record must not, so it is not written here.
 
 Run `/milestone {{milestone-slug}}` to see the derived ledger + next-action advice.
@@ -67,7 +67,7 @@ Completion is computed from feature dirs, not asserted here. Each child feature'
 - **In-flight** = features in `.kanban/2-in-progress/` tagged with this milestone.
 
 ```bash
-python3 scripts/checkpoint/milestone-status.py {{milestone-slug}}
+stash scripts/checkpoint/milestone-status.stash {{milestone-slug}}
 ```
 
 If anything written here ever disagrees with that command's output, the command wins —

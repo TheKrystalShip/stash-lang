@@ -97,7 +97,7 @@ Completion is computed from feature dirs, not asserted here. Each child feature'
 carries `milestone: omission-hardening`; the status script groups them:
 
 ```bash
-python3 scripts/checkpoint/milestone-status.py omission-hardening
+stash scripts/checkpoint/milestone-status.stash omission-hardening
 ```
 
 - **Done** = features in `.kanban/4-done/` tagged with this milestone.

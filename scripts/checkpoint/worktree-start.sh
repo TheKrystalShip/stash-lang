@@ -49,7 +49,7 @@ fi
 
 # Non-blocking heads-up: what subsystems are already in flight in sibling
 # worktrees? The real per-feature overlap check runs post-spec via
-# check-parallel-safety.py (this feature has no plan.yaml yet).
+# check-parallel-safety.stash (this feature has no plan.yaml yet).
 others="$(git worktree list --porcelain | awk '/^branch refs\/heads\/feature\// {sub("branch refs/heads/","",$0); print "  - "$0}')"
 if [ -n "$others" ]; then
   echo "in-flight feature worktrees (consider subsystem overlap):" >&2
@@ -60,5 +60,5 @@ git worktree add -b "$branch" "$worktree_path" "$base"
 
 echo "created worktree: $worktree_path  (branch $branch off $base)"
 echo "next: cd \"$worktree_path\" && run /spec <topic>"
-echo "then: python3 scripts/checkpoint/check-parallel-safety.py $slug   # after spec, before implementing"
+echo "then: stash scripts/checkpoint/check-parallel-safety.stash $slug   # after spec, before implementing"
 echo "done: from the main checkout run  bash scripts/checkpoint/worktree-finish.sh $slug"

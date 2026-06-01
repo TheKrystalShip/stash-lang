@@ -40,14 +40,14 @@ Multi-phase work (new language features, large refactors, anything beyond a one-
 | Script | Purpose |
 | --- | --- |
 | `bootstrap-feature.sh` | Create `.kanban/2-in-progress/<slug>/` from templates |
-| `validate-spec.py` | Strict structural validation of `plan.yaml`; auto-heals checkpoint |
-| `next-phase.py` | Print next pending phase as a YAML brief |
+| `validate-spec.stash` | Strict structural validation of `plan.yaml`; auto-heals checkpoint |
+| `next-phase.stash` | Print next pending phase as a YAML brief |
 | `verify-phase.sh` | Run phase verify commands AND enforce file-scope |
-| `advance-checkpoint.py` | Atomic state transitions in `checkpoint.yaml` |
-| `status.py` | Compact text status for `/resume` |
+| `advance-checkpoint.stash` | Atomic state transitions in `checkpoint.yaml` |
+| `status.stash` | Compact text status for `/resume` |
 | `promote-done.sh` | Final acceptance + move to `4-done/` |
 | `worktree-start.sh` | Create `../stash-<slug>` on a fresh `feature/<slug>` branch (parallel work) |
-| `check-parallel-safety.py` | Warn on subsystem overlap with an in-flight sibling worktree |
+| `check-parallel-safety.stash` | Warn on subsystem overlap with an in-flight sibling worktree |
 | `worktree-finish.sh` | Merge `--no-ff`, re-verify on `main`, remove worktree if green |
 
 ### `final_verify` must filter documented flakies
@@ -56,7 +56,7 @@ When authoring `plan.yaml`, narrow `final_verify`'s `dotnet test` step to exclud
 
 ### Workflow agents advance checkpoint state after the code commit
 
-`advance-checkpoint.py` (called by implementer, reviewer, and resolver flows) rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the corresponding code commit. Reviewer also writes a new `review.md`; resolver also flips finding statuses inside `review.md`. A turn that stops there ends dirty, and the next workflow command refuses on a dirty tree.
+`advance-checkpoint.stash` (called by implementer, reviewer, and resolver flows) rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the corresponding code commit. Reviewer also writes a new `review.md`; resolver also flips finding statuses inside `review.md`. A turn that stops there ends dirty, and the next workflow command refuses on a dirty tree.
 
 **The implementer owns its own chore commit.** Per `.claude/agents/implementer.md` step 7, every implementer phase ends by committing the checkpoint advance (`chore(<slug>): record <id> done state`) so the tree is clean between phases. After an implementer turn the orchestrator's job is to *verify* this — `git status --porcelain` should already be clean. Only as a **fallback**, when the implementer didn't do its job (dirty `checkpoint.yaml`, no chore commit landed), does the orchestrator commit it:
 
@@ -88,7 +88,7 @@ Default: **one feature on `main` at a time.** Never run two agents against the s
 
 **Orchestrating a worktree feature from another checkout (e.g. `main`).** The slash commands and helper scripts resolve paths from their *own* checkout, so a worktree feature's `2-in-progress/<slug>/` is invisible from `main` — drive it from a worktree-rooted session, or orchestrate manually:
 - Dispatch `implementer`/`reviewer`/`resolver` via the Agent tool with the **absolute worktree root stated up front** (every Read/Edit/Bash/git op rooted there — they start in the main cwd otherwise). Do **not** pass `isolation: worktree`; the worktree already exists.
-- Run `verify-phase.sh` / `advance-checkpoint.py` / `promote-done.sh` from inside the worktree. `advance-checkpoint.py` enforces `pending → in_progress → done` (a direct `pending → done` is rejected).
+- Run `verify-phase.sh` / `advance-checkpoint.stash` / `promote-done.sh` from inside the worktree. `advance-checkpoint.stash` enforces `pending → in_progress → done` (a direct `pending → done` is rejected).
 - `promote-done.sh` runs `final_verify` + `mv`s the dir but does **not** commit — the orchestrator commits the move + the `repo.md` Recent-Completed entry.
 - Preview a held merge read-only before handoff: `git merge-tree --write-tree main feature/<slug>` (exit 0 = clean). `repo.md` (active + completed lists) is the highest-contention file — catch a conflict before the user hits it at a cold start.
 

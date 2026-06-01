@@ -72,11 +72,11 @@ Use scripts for deterministic work:
 | Script | Purpose |
 | --- | --- |
 | `bootstrap-feature.sh <slug> [title]` | Create feature files from templates. |
-| `validate-spec.py [slug]` | Validate plan/checkpoint shape and heal missing checkpoint phase entries. |
-| `next-phase.py [slug] [count]` | Print the next ready phase or ready phase batch as YAML. |
+| `validate-spec.stash [slug]` | Validate plan/checkpoint shape and heal missing checkpoint phase entries. |
+| `next-phase.stash [slug] [count]` | Print the next ready phase or ready phase batch as YAML. |
 | `verify-phase.sh <slug> <phase-id>` | Print `done_when`, enforce the current plan's file scope, and run verify commands. |
-| `advance-checkpoint.py <slug> <phase-id> <status>` | Advance state legally. |
-| `status.py [slug]` | Print compact current state. |
+| `advance-checkpoint.stash <slug> <phase-id> <status>` | Advance state legally. |
+| `status.stash [slug]` | Print compact current state. |
 | `promote-done.sh <slug>` | Run final verification and move feature to done. |
 
 ## Lifecycle

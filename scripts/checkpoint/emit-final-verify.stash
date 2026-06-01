@@ -1,0 +1,42 @@
+#!/usr/bin/env stash
+// emit-final-verify.stash <slug> [--done]
+//
+// Print each plan.yaml `final_verify` command on its own stdout line. Consumed
+// by `mapfile -t cmds < <(...)` in promote-done.sh and worktree-finish.sh,
+// which then run each command. Replaces the embedded `python3 - <<PY` heredocs
+// those wrappers used to extract the command list.
+//
+//   default:  resolve the plan via feature_dir (2-in-progress/, then 4-done/).
+//   --done:   force-read .kanban/4-done/<slug>/plan.yaml — worktree-finish.sh
+//             runs AFTER the feature dir has been merged into 4-done, and asserts
+//             it is there (a missing plan is a hard error, not a fallback).
+//
+// CONTRACT: stdout is one final_verify command per line (TIGHT — the wrappers
+// machine-read it). Exit 0 on success; exit 1 if the plan is missing.
+
+import { load_plan, load_yaml } from "_common.stash";
+
+let slug_arg = null;
+let from_done = false;
+for (let a in cli.argv) {
+    if (a == "--done") {
+        from_done = true;
+    } else if (slug_arg == null) {
+        slug_arg = a;
+    }
+}
+
+if (slug_arg == null || slug_arg == "") {
+    io.eprintln("usage: emit-final-verify.stash <slug> [--done]");
+    env.exit(2);
+}
+
+let plan = from_done
+    ? load_yaml(".kanban/4-done/" + slug_arg + "/plan.yaml")   // dies if absent
+    : load_plan(slug_arg);
+
+for (let cmd in dict.get(plan, "final_verify") ?? []) {
+    io.println(conv.toStr(cmd));
+}
+
+env.exit(0);

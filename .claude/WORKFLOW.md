@@ -152,14 +152,14 @@ All deterministic workflow operations live in `scripts/checkpoint/`:
 | Script | Purpose |
 | --- | --- |
 | `bootstrap-feature.sh <slug> [title]` | Creates the feature directory from templates. |
-| `validate-spec.py [slug]` | Validates `plan.yaml` and syncs missing checkpoint phase entries. |
-| `next-phase.py [slug] [count]` | Prints the next ready phase or ready phase batch as YAML. |
+| `validate-spec.stash [slug]` | Validates `plan.yaml` and syncs missing checkpoint phase entries. |
+| `next-phase.stash [slug] [count]` | Prints the next ready phase or ready phase batch as YAML. |
 | `verify-phase.sh <slug> <phase-id>` | Prints `done_when`, checks the current plan's scope, and runs verify commands. |
-| `advance-checkpoint.py <slug> <phase-id> <status>` | Performs legal state transitions. |
-| `status.py [slug]` | Prints a compact status report (incl. sibling feature worktrees). |
+| `advance-checkpoint.stash <slug> <phase-id> <status>` | Performs legal state transitions. |
+| `status.stash [slug]` | Prints a compact status report (incl. sibling feature worktrees). |
 | `promote-done.sh <slug>` | Runs final verification and moves the feature to done. |
 | `worktree-start.sh <slug> [base]` | Creates `../stash-<slug>` on a fresh `feature/<slug>` branch (parallel work). |
-| `check-parallel-safety.py [slug]` | Warns when a feature shares a subsystem with an in-flight sibling worktree. |
+| `check-parallel-safety.stash [slug]` | Warns when a feature shares a subsystem with an in-flight sibling worktree. |
 | `worktree-finish.sh <slug>` | Merges the branch `--no-ff`, re-verifies on `main`, removes the worktree if green. |
 
 The scripts should answer deterministic questions: what phase is next, what files are allowed, what commands prove it, and whether state is legal. They should not become a second planning language.
@@ -185,7 +185,7 @@ The architect creates:
 The feature is ready when:
 
 ```bash
-python3 scripts/checkpoint/validate-spec.py <slug>
+stash scripts/checkpoint/validate-spec.stash <slug>
 ```
 
 passes.
@@ -312,10 +312,10 @@ git log main..feature/<slug>   # exactly this feature's commits, no cross-featur
 Once `/spec` has written `plan.yaml`, check the feature won't collide with anything already in flight:
 
 ```bash
-python3 scripts/checkpoint/check-parallel-safety.py <slug>
+stash scripts/checkpoint/check-parallel-safety.stash <slug>
 ```
 
-It reduces every feature's file-globs to top-level subsystems and warns (non-blocking, exit 3) when this feature shares one with an in-flight sibling worktree — the signal that the two branches will fight over the same hot files. `status.py` (and so `/resume`) also lists sibling feature worktrees so you always know what else is open.
+It reduces every feature's file-globs to top-level subsystems and warns (non-blocking, exit 3) when this feature shares one with an in-flight sibling worktree — the signal that the two branches will fight over the same hot files. `status.stash` (and so `/resume`) also lists sibling feature worktrees so you always know what else is open.
 
 ### Integration — `merge --no-ff` per feature
 

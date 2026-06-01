@@ -42,4 +42,4 @@ sed -e "s/^feature: feature-slug$/feature: $slug/" \
     "$templates/checkpoint-template.yaml" > "$dest/checkpoint.yaml"
 
 echo "created: $dest"
-echo "next: edit brief.md and plan.yaml, then run python3 scripts/checkpoint/validate-spec.py $slug"
+echo "next: edit brief.md and plan.yaml, then run stash scripts/checkpoint/validate-spec.stash $slug"

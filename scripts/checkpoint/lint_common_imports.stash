@@ -26,22 +26,12 @@ import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
 // ── Bounded domains ────────────────────────────────────────────────────────
 
 // Files that are EXCLUDED from the scan entirely (not subject to the import rule).
-//   _common.stash        — the module itself
-//   difftest_runner.stash — internal runner, no _common import by design
+//   _common.stash             — the module itself
 //   lint_common_imports.stash — this file (scan would be self-referential)
-// (difftest_coverage_check.stash is NOT excluded — it imports expand_globs from
-//  _common.stash and is scanned like any other script.)
 const SCAN_EXCLUSIONS = [
     "_common.stash",
-    "difftest_runner.stash",
     "lint_common_imports.stash"
 ];
-
-// Filename patterns excluded from the scan (checked via prefix+suffix matching).
-// Case-table files (difftest_*_cases.stash) are data modules for the differential
-// oracle runner — they don't run helpers, so the _common import rule doesn't apply.
-const SCAN_EXCLUSION_PREFIX = "difftest_";
-const SCAN_EXCLUSION_SUFFIX = "_cases.stash";
 
 // Files that ARE scanned but are ALLOWED to import zero symbols from _common.stash
 // (append-only; document reason for each entry).
@@ -70,17 +60,9 @@ const COMMON_EXPORTS = [
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-/// Return true if the given basename is in the exclusion list or matches an
-/// exclusion pattern (e.g. difftest_*_cases.stash case-table files).
+/// Return true if the given basename is in the exclusion list.
 fn is_excluded(base) {
-    if (arr.contains(SCAN_EXCLUSIONS, base)) {
-        return true;
-    }
-    // Exclude case-table files by prefix+suffix pattern
-    if (str.startsWith(base, SCAN_EXCLUSION_PREFIX) && str.endsWith(base, SCAN_EXCLUSION_SUFFIX)) {
-        return true;
-    }
-    return false;
+    return arr.contains(SCAN_EXCLUSIONS, base);
 }
 
 /// Return true if the given basename is on the import allow-list.
@@ -186,10 +168,24 @@ fn run_unit_sweep() {
         arr.push(failures, "now_iso: unexpected format: " + ts);
     }
 
-    // feature_dir: happy path — must resolve a known dir
-    // We test with a known-good slug (the current feature) from CWD
-    let known_slug = "checkpoint-scripts-stash-port";
-    let fdir = feature_dir(known_slug);
+    // Self-seed a throwaway fixture feature so the sweep depends on NOTHING in
+    // the live kanban. The previous version hardcoded a real feature slug and a
+    // 2-in-progress/ temp path — which broke the instant that feature was
+    // promoted to 4-done/ (the dir moved out from under it). We create the
+    // fixture under 2-in-progress/ so feature_dir/resolve_feature resolve it,
+    // exercise every export against it, then remove it.
+    let sweep_slug = "_lint_common_sweep_fixture";
+    let sweep_dir = ".kanban/2-in-progress/" + sweep_slug;
+    if (fs.dirExists(sweep_dir)) { fs.delete(sweep_dir); }   // leftover from a prior aborted run
+    fs.createDir(sweep_dir);
+    // Seed plan + checkpoint via the exports under test (save_yaml).
+    save_yaml(sweep_dir + "/plan.yaml",
+              { title: "lint sweep fixture", phases: [{ id: "P1", title: "p1" }] });
+    save_yaml(sweep_dir + "/checkpoint.yaml",
+              { phases: { P1: { status: "pending" } } });
+
+    // feature_dir: resolves the fixture dir
+    let fdir = feature_dir(sweep_slug);
     if (typeof(fdir) != "string") {
         arr.push(failures, "feature_dir: expected string, got " + typeof(fdir));
     } else if (!fs.dirExists(fdir)) {
@@ -197,13 +193,13 @@ fn run_unit_sweep() {
     }
 
     // resolve_feature: given explicit slug returns it
-    let resolved = resolve_feature(known_slug);
-    if (resolved != known_slug) {
-        arr.push(failures, "resolve_feature: expected '" + known_slug + "', got '" + resolved + "'");
+    let resolved = resolve_feature(sweep_slug);
+    if (resolved != sweep_slug) {
+        arr.push(failures, "resolve_feature: expected '" + sweep_slug + "', got '" + resolved + "'");
     }
 
     // load_yaml / save_yaml round-trip: write a temp file, parse it back
-    let tmp_path = ".kanban/2-in-progress/" + known_slug + "/_common_sweep.tmp.yaml";
+    let tmp_path = sweep_dir + "/_roundtrip.tmp.yaml";
     let test_data = { hello: "world", count: 42 };
     save_yaml(tmp_path, test_data);
     if (!fs.exists(tmp_path)) {
@@ -217,32 +213,26 @@ fn run_unit_sweep() {
         } else if (dict.get(loaded, "count") != 42) {
             arr.push(failures, "load_yaml: round-trip mismatch for key 'count'");
         }
-        // Clean up
-        fs.delete(tmp_path);
     }
 
-    // load_plan: loads plan.yaml for the known slug
-    let plan = load_plan(known_slug);
+    // load_plan / load_checkpoint / phase_by_id against the fixture
+    let plan = load_plan(sweep_slug);
     if (typeof(plan) != "dict") {
         arr.push(failures, "load_plan: expected dict, got " + typeof(plan));
     } else if (!dict.has(plan, "phases")) {
         arr.push(failures, "load_plan: missing 'phases' key in returned dict");
     }
-
-    // load_checkpoint: loads checkpoint.yaml for the known slug
-    let cp = load_checkpoint(known_slug);
+    let cp = load_checkpoint(sweep_slug);
     if (typeof(cp) != "dict") {
         arr.push(failures, "load_checkpoint: expected dict, got " + typeof(cp));
     } else if (!dict.has(cp, "phases")) {
         arr.push(failures, "load_checkpoint: missing 'phases' key in returned dict");
     }
-
-    // phase_by_id: finds phase P1 in the plan
     let ph = phase_by_id(plan, "P1");
     if (typeof(ph) != "dict") {
         arr.push(failures, "phase_by_id: expected dict, got " + typeof(ph));
     } else if (dict.get(ph, "id") != "P1") {
-        arr.push(failures, "phase_by_id: returned wrong phase id: " + dict.get(ph, "id"));
+        arr.push(failures, "phase_by_id: returned wrong phase id: " + conv.toStr(dict.get(ph, "id")));
     }
 
     // expand_globs: expand a glob that should match at least one file
@@ -250,6 +240,9 @@ fn run_unit_sweep() {
     if (hits.length == 0) {
         arr.push(failures, "expand_globs: expected at least 1 match for scripts/checkpoint/_common.stash");
     }
+
+    // Remove the throwaway fixture.
+    fs.delete(sweep_dir);
 
     return failures;
 }

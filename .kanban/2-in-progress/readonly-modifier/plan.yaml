@@ -2,7 +2,7 @@
 #
 # Authored by the architect, consumed by checkpoint scripts. Keep design prose in
 # brief.md; keep only script inputs here.
-# Validate with: python3 scripts/checkpoint/validate-spec.py readonly-modifier
+# Validate with: stash scripts/checkpoint/validate-spec.stash readonly-modifier
 
 schema_version: 1
 
@@ -208,4 +208,4 @@ final_verify:
   - dotnet test --filter "FullyQualifiedName!~DiffPackageTests&FullyQualifiedName!~FirstRegistrationAdminTests&FullyQualifiedName!~AuthEndpointTests&FullyQualifiedName!~BasePathIntegrationTests&FullyQualifiedName!~FuzzHarnessTests&FullyQualifiedName!~IntegrityVerification&FullyQualifiedName!~FsWatchBuiltIns&FullyQualifiedName!~NetBuiltInsTests&FullyQualifiedName!~FormatRunner_ExcludeGlob&FullyQualifiedName!~AsyncFn_ParallelExecution&FullyQualifiedName!~TcpSend_ReturnsByteCount&FullyQualifiedName!~NamespaceExpansion_CliNamespace_ShowsMembersWithMemberType"
   - dotnet run --project Stash.Docs/
   - dotnet run --project Stash.Cli/ -- examples/readonly.stash
-  - python3 scripts/checkpoint/validate-spec.py readonly-modifier
+  - stash scripts/checkpoint/validate-spec.stash readonly-modifier

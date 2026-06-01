@@ -30,18 +30,7 @@ echo "slug: $SLUG"
 ### 2. Refuse if phases not all done
 
 ```bash
-python3 - <<PY
-import sys, pathlib
-sys.path.insert(0, "scripts/checkpoint")
-from _common import load_checkpoint, load_plan
-cp = load_checkpoint("$SLUG")
-plan = load_plan("$SLUG")
-bad = [p["id"] for p in plan["phases"]
-       if (cp.get("phases") or {}).get(p["id"], {}).get("status") != "done"]
-if bad:
-    print(f"refusing review: phases not done: {bad}", file=sys.stderr)
-    sys.exit(1)
-PY
+stash scripts/checkpoint/promote-gate.stash "$SLUG" --phases-only
 ```
 
 If this fails, tell the user which phases are pending and to run `/next-phase` for them.

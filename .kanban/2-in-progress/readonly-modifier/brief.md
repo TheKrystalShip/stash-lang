@@ -267,22 +267,38 @@ The phase list lives in `plan.yaml` so scripts can read it. Spine:
 
 ## Open Questions
 
-- **Q1 — Single carrier type for plain arrays?** Today plain arrays are bare
-  `List<StashValue>` (`StashValue.Obj`), which cannot carry a flag. P3 must
-  choose between (a) introducing a minimal wrapper class for plain arrays to
-  hang the flag on (identity preserved on the Stash side, runtime CLR type
-  changes once) and (b) extending an existing array-bearing type to cover
-  the plain-array case. Decision deferred to the P3 implementer with the
-  guidance that identity from the Stash author's perspective is the binding
-  constraint.
 - **Q2 — `freeze()` capability gate?** The existing `StashCapabilities` set
   is about side effects (filesystem / network / process). `freeze()` is
   pure and should likely require **no** capability — confirm during P5.
-- **Q3 — Frozen `StashError` properties.** `StashError` carries a properties
-  dict that user code can extend (`e.foo = "bar"`). Settle in P3 by giving
-  `StashError` the same `IsFrozen` flag; confirm no existing test relies on
-  mutating a caught error after the catch site froze it (none expected — the
-  freeze surface is new for `StashError`).
+
+### Resolved during design review (2026-06-01)
+
+- **Q1 — Single carrier type for plain arrays — RESOLVED: always-wrap.**
+  Verified `is`/`==` on reference types is C# reference identity
+  (`RuntimeOps.IsEqualSlow` → `RuntimeValues.IsEqual` → `object.Equals`).
+  This rules out "wrap only when frozen" (swapping the bare `List` for a
+  wrapper on freeze would make `freeze(arr) is arr` **false**). **Decision:**
+  every plain array is an always-present wrapper carrier (uniform with
+  `StashDictionary`'s in-place `_frozen` model), carrying an `IsFrozen` bit
+  from creation. Because this touches the VM's hottest path, P3/P4 carry a
+  perf gate (see Decision Log).
+- **Q3 — Frozen `StashError` — premise corrected; near-zero work.** The brief
+  assumed user code can extend a caught error's properties (`e.foo = "bar"`).
+  Verified false: `StashError` does **not** implement `IVMFieldMutable`, so
+  `VirtualMachine.TypeOps.cs` already throws on any field write today.
+  `StashError` is therefore already write-blocked. **Decision:** P3 does *not*
+  add an `IsFrozen` write-guard to `StashError`; `DeepFreeze` only needs to
+  **traverse into** its properties dict to freeze nested reachable values.
+- **Q4 — `readonly let` rebind through a closure — RESOLVED: full enforcement.**
+  Verified the compiler knows declared mutability for **locals**
+  (`CompilerScope.IsLocalConst`, used by `Compiler.Helpers.cs` to reject const
+  reassignment), but `UpvalueDescriptor` carries **no** mutability flag and
+  `ExecuteSetUpval` is unguarded — so a closure can today rebind an outer
+  `readonly let` (and, separately, an outer `const`) without a check.
+  **Decision:** thread the readonly bit into `UpvalueDescriptor` and guard the
+  upvalue store path so closure rebinds also re-freeze. This incidentally
+  closes a **pre-existing `const`-through-closure enforcement hole** (filed as
+  a backlog bug; the fix lands here).
 
 ## Decision Log
 
@@ -295,3 +311,9 @@ The phase list lives in `plan.yaml` so scripts can read it. Spine:
 | 2026-05-30 | Ship `freeze()` stdlib in the same feature. | The mechanism is built here regardless; `freeze()` is needed by the hermetic-VM phase; shipping both together avoids a partial primitive. |
 | 2026-05-30 | Out of scope: actual wiring into `SpawnAsyncFunction`. | Belongs to the next phase (hermetic VM); this spec delivers the primitive that phase consumes. |
 | 2026-05-30 | Retire `StashFrozenArray` wrapper in favour of an in-place flag on the unified array carrier. | Identity-preserving freeze is a Goal; two mechanisms (in-place flag for dicts, wrapper for arrays) is the existing inconsistency this feature exists to resolve. |
+| 2026-06-01 | Q1: plain arrays become an **always-present wrapper carrier** with an in-place `IsFrozen` bit (not wrap-on-freeze). | `is`/`==` is C# reference identity; swapping the carrier on freeze would break the `freeze(arr) is arr` acceptance criterion. Always-present carrier preserves identity and unifies with the `StashDictionary` model. |
+| 2026-06-01 | Q4: thread the readonly/mutability bit into `UpvalueDescriptor` and guard the upvalue store so closure rebinds of `readonly let` re-freeze. | The runtime-flag-is-load-bearing doctrine still protects the original graph, but full enforcement closes the rebind escape hatch *and* a pre-existing `const`-through-closure hole surfaced during review. |
+| 2026-06-01 | Add a before/after **perf gate** (`bench_algorithms` / `bench_numeric`) to P3 and P4. | The always-present array carrier touches the VM's hottest path; the project's mandatory perf doctrine should catch a carrier-choice regression in-phase, not post-merge. |
+| 2026-06-01 | Q3 corrected: `StashError` is already write-blocked (no `IVMFieldMutable`); P3 only needs `DeepFreeze` to **traverse into** its properties, not a new write-guard. | Verified against `VirtualMachine.TypeOps.cs`; the brief's "user can extend `e.foo`" premise was false. |
+| 2026-06-01 | `DeepFreeze` treats **function/closure values as opaque** (traversal skips them; they are not frozen). | A complete capture-graph freeze is out of scope and matches the "functions aren't frozen" mental model; recorded as a case in the `DeepFreeze` type switch. |
+| 2026-06-01 | Spec must call out two sharp edges: transitive freeze reaches **pre-existing aliases** of nested values, and `ReadOnlyError`'s message is **generalized per value kind** (the current text is namespace-member-specific). | Both are author-visible behaviors the original examples don't show; documenting them prevents surprise. |

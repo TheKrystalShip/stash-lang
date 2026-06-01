@@ -1,5 +1,0 @@
-// Self-test fixture for difftest_coverage_check.stash.
-// A "ported script" deliberately MISSING its difftest_script_no_table_cases.stash
-// case table. The coverage check's --self-test scans THIS directory and must flag
-// this file — proving the Detect guard's scan loop has teeth. Never executed; lives
-// in a subdir so the normal scan (scripts/checkpoint/*.stash, single-*) never sees it.

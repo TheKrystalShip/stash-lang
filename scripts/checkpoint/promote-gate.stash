@@ -1,0 +1,98 @@
+#!/usr/bin/env stash
+// promote-gate.stash <slug> [--phases-only]
+//
+// Read-only promotion/review gate. Replaces the embedded `python3 - <<PY`
+// heredoc in promote-done.sh and the inline python in the /feature-review
+// command. Exits 0 if the feature passes the gate; exits 1 with an explanatory
+// stderr message on the FIRST failing check. Emits nothing on stdout.
+//
+//   phases gate (always): every plan phase must be checkpoint-status "done".
+//   review gate (unless --phases-only): review.md must contain zero
+//     "**Status:** open" findings (review.md is the source of truth), with a
+//     drift note when the checkpoint's findings_open counter disagrees.
+//
+// CONTRACT: exit code is TIGHT (0 pass / 1 fail — callers branch on it via
+// `set -e`). The stderr wording is human-facing (LOOSE), kept close to the
+// retired python for minimal workflow surprise.
+
+import { resolve_feature, load_plan, load_checkpoint, feature_dir } from "_common.stash";
+
+// ── Argument parse (manual: slug positional + --phases-only flag) ───────────
+let slug_arg = null;
+let phases_only = false;
+for (let a in cli.argv) {
+    if (a == "--phases-only") {
+        phases_only = true;
+    } else if (slug_arg == null) {
+        slug_arg = a;
+    }
+}
+
+let slug = resolve_feature(slug_arg);   // dies (exit 1) if unresolvable
+let plan = load_plan(slug);
+let cp   = load_checkpoint(slug);
+let cp_phases = dict.get(cp, "phases") ?? {};
+
+// ── Phase gate: every plan phase must be "done" ─────────────────────────────
+let bad = [];
+for (let ph in dict.get(plan, "phases") ?? []) {
+    let pid = dict.get(ph, "id");
+    let s = dict.get(cp_phases, pid) ?? {};
+    let status = dict.get(s, "status");
+    if (status != "done") {
+        if (phases_only) {
+            arr.push(bad, conv.toStr(pid));
+        } else {
+            arr.push(bad, conv.toStr(pid) + "=" + conv.toStr(status));
+        }
+    }
+}
+if (bad.length > 0) {
+    if (phases_only) {
+        // /feature-review pre-flight wording.
+        io.eprintln("refusing review: phases not done: [" + arr.join(bad, ", ") + "]");
+    } else {
+        // /done (promote-done.sh) wording.
+        io.eprintln("refusing to promote: incomplete phases: " + arr.join(bad, ", "));
+    }
+    env.exit(1);
+}
+
+// /feature-review only cares about the phase gate.
+if (phases_only) {
+    env.exit(0);
+}
+
+// ── Review gate: zero open findings in review.md (source of truth) ──────────
+// Mirrors promote-done.sh: derive the authoritative open-finding count from
+// review.md's per-finding `**Status:** open` headers — NOT the checkpoint's
+// findings_open counter, which is not auto-maintained and silently drifts.
+let rv = dict.get(cp, "review") ?? {};
+let review_md = feature_dir(slug) + "/review.md";
+
+if (fs.exists(review_md)) {
+    let open_count = 0;
+    for (let line in str.lines(fs.readFile(review_md))) {
+        if (re.test(line, "^\\*\\*Status:\\*\\*\\s*open\\b")) {
+            open_count = open_count + 1;
+        }
+    }
+    if (open_count > 0) {
+        let stored = dict.get(rv, "findings_open");
+        let drift = (stored == open_count)
+            ? ""
+            : " [checkpoint counter says " + conv.toStr(stored) + " — drift, ignored]";
+        io.eprintln("refusing to promote: " + conv.toStr(open_count)
+                  + " open review finding(s) in review.md" + drift);
+        env.exit(1);
+    }
+} else {
+    // No review.md on disk — fall back to the stored counter.
+    let stored = dict.get(rv, "findings_open");
+    if (stored != null && stored != 0) {
+        io.eprintln("refusing to promote: " + conv.toStr(stored) + " open review findings");
+        env.exit(1);
+    }
+}
+
+env.exit(0);

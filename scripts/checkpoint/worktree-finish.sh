@@ -21,7 +21,6 @@ fi
 slug="$1"
 branch="feature/$slug"
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
-script_dir="$(cd "$(dirname "$0")" && pwd)"
 cd "$repo_root"
 
 main_branch="${MAIN_BRANCH:-main}"
@@ -61,20 +60,9 @@ if ! git merge --no-ff "$branch" -m "merge: $branch"; then
 fi
 
 # Re-run final_verify against the MERGED main, reading plan.yaml from its
-# now-promoted location.
-mapfile -t cmds < <(python3 - "$slug" <<'PY'
-import sys, pathlib, yaml
-slug = sys.argv[1]
-root = pathlib.Path.cwd()
-plan_path = root / ".kanban" / "4-done" / slug / "plan.yaml"
-if not plan_path.is_file():
-    print(f"error: {plan_path} not found after merge", file=sys.stderr)
-    sys.exit(1)
-plan = yaml.safe_load(plan_path.read_text(encoding="utf-8")) or {}
-for c in plan.get("final_verify") or []:
-    print(c)
-PY
-)
+# now-promoted location (.kanban/4-done/<slug>/). --done forces that path and
+# errors if it is absent — after a merge the dir must be there.
+mapfile -t cmds < <(stash scripts/checkpoint/emit-final-verify.stash "$slug" --done)
 
 verify_failed=0
 ran_any=0

@@ -1,7 +1,7 @@
 # checkpoint.yaml — live state for an in-progress feature
 #
 # Created by `/spec` (or `scripts/checkpoint/bootstrap-feature.sh`).
-# Updated atomically by `scripts/checkpoint/advance-checkpoint.py` after every
+# Updated atomically by `scripts/checkpoint/advance-checkpoint.stash` after every
 # implementer / resolver turn. Never hand-edit during normal flow.
 
 schema_version: 1
@@ -16,9 +16,9 @@ current: null
 # Last update wall-clock time (informational).
 updated: 2026-05-16T00:00:00Z
 
-# Per-phase state. Seeded automatically by validate-spec.py from plan.yaml on first run.
+# Per-phase state. Seeded automatically by validate-spec.stash from plan.yaml on first run.
 # Each entry has: status (pending|in_progress|done|failed), commit, verified, started,
-# completed, attempts, notes. Never hand-edit during normal flow — use advance-checkpoint.py.
+# completed, attempts, notes. Never hand-edit during normal flow — use advance-checkpoint.stash.
 phases: {}
 
 # Review state. Populated by /feature-review and /resolve. Findings detail
