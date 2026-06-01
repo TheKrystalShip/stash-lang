@@ -78,7 +78,7 @@ public sealed class StashStringArray : StashTypedArray
         }
     }
 
-    public override StashValue RemoveLast()
+    protected override StashValue RemoveLastCore()
     {
         if (_count == 0) throw new RuntimeError("Cannot pop from empty string[].");
         return StashValue.FromObj(_data[--_count]);

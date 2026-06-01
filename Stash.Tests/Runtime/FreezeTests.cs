@@ -554,6 +554,15 @@ public class FreezeTests
     }
 
     [Fact]
+    public void StashTypedArray_RemoveLast_WhenFrozen_ThrowsReadOnlyError()
+    {
+        var ta = new StashIntArray(new List<StashValue> { StashValue.One });
+        ta.Freeze();
+        var ex = Assert.Throws<ReadOnlyError>(() => ta.RemoveLast());
+        Assert.Contains("frozen", ex.Message);
+    }
+
+    [Fact]
     public void StashByteArray_GetBackingArray_WhenFrozen_ThrowsReadOnlyError()
     {
         var ba = new StashByteArray(new byte[] { 0x01, 0x02 });

@@ -409,4 +409,13 @@ outer();
             "readonly const xs = arr.typed([10, 20, 30], \"int\"); return xs[1];");
         Assert.Equal(20L, result);
     }
+
+    [Fact]
+    public void ReadonlyConst_TypedIntArray_ArrPopThrows()
+    {
+        // arr.pop is RemoveLast — must throw on a frozen typed array.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const xs = arr.typed([1,2,3], \"int\"); arr.pop(xs);"));
+    }
 }

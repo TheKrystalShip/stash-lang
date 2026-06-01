@@ -33,7 +33,7 @@ public abstract class StashTypedArray : IVMTyped, IVMIterable, IVMIndexable, IVM
     public abstract StashValue Get(int index);
     protected abstract void SetCore(int index, StashValue val);
     protected abstract void AddCore(StashValue val);
-    public abstract StashValue RemoveLast();
+    protected abstract StashValue RemoveLastCore();
     protected abstract void InsertCore(int index, StashValue val);
     protected abstract void RemoveAtCore(int index);
     public abstract StashTypedArray Clone();
@@ -72,6 +72,12 @@ public abstract class StashTypedArray : IVMTyped, IVMIterable, IVMIndexable, IVM
     {
         if (IsFrozen) throw new ReadOnlyError($"Cannot mutate a frozen {ElementTypeName}[] array.");
         ClearCore();
+    }
+
+    public StashValue RemoveLast()
+    {
+        if (IsFrozen) throw new ReadOnlyError($"Cannot mutate a frozen {ElementTypeName}[] array.");
+        return RemoveLastCore();
     }
 
     // Shared negative-index resolution
