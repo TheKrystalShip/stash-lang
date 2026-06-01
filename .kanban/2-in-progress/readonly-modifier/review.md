@@ -8,7 +8,7 @@
 **Brief:** ./brief.md
 **Generated:** 2026-06-01 18:24 UTC
 
-**Summary of findings:** 1 open — 1 CRITICAL, 0 IMPORTANT, 0 MINOR.
+**Summary of findings:** 0 open — all findings resolved.
 
 Pass-1 status (verified, not re-filed):
 - **F01** (stale bytecode-instruction reference doc) — fixed at `b8c6242`. Verified: the reference shows `Opcode count | 101` and includes a `Freeze` row.

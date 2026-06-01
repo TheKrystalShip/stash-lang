@@ -465,4 +465,60 @@ outer();
             "readonly const D = json.parse(\"[10, 20, 30]\"); return D[1];");
         Assert.Equal(20L, result);
     }
+
+    [Fact]
+    public void ReadonlyConst_XmlParseChildrenField_MutationThrowsReadOnlyError()
+    {
+        // XmlNode.children is a List<StashValue> stored via FromObj(children) in MakeXmlNode.
+        // This is the struct-field-carrier case that the marshaller path misses but
+        // the FromObj normalization catches. Confirmed fix covers it.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = xml.parse(\"<a><b/><c/></a>\"); arr.push(D.children, \"x\");"));
+    }
+
+    [Fact]
+    public void ReadonlyConst_TomlParseArrayField_MutationThrowsReadOnlyError()
+    {
+        // toml.parse returns arrays as List<StashValue> via ConvertArray.
+        // After readonly freeze, mutation must throw.
+        Assert.Throws<ReadOnlyError>(() =>
+            ExecuteWithStdlib(
+                "readonly const D = toml.parse(\"nums = [1, 2, 3]\"); D.nums[0] = 99;"));
+    }
+
+    // =========================================================================
+    // 18. Choke-point invariant: FromObj/FromObject normalize bare lists
+    //     Locks the bug-class shut — red if normalization is removed.
+    // =========================================================================
+
+    [Fact]
+    public void FromObj_BareList_NormalizesToStashArray()
+    {
+        // StashValue.FromObj must wrap bare List<StashValue> in StashArray so that
+        // every array reaching a StashValue carries the IsFrozen bit.
+        var list = new System.Collections.Generic.List<StashValue> { StashValue.FromInt(1) };
+        object? obj = StashValue.FromObj(list).AsObj;
+        Assert.IsType<StashArray>(obj);
+    }
+
+    [Fact]
+    public void FromObject_BareList_NormalizesToStashArray()
+    {
+        // StashValue.FromObject must also normalize bare lists coming through
+        // the object? boundary (e.g. IStashCallable returns, StashFuture results).
+        var list = new System.Collections.Generic.List<StashValue> { StashValue.FromInt(1) };
+        object? obj = StashValue.FromObject(list).AsObj;
+        Assert.IsType<StashArray>(obj);
+    }
+
+    [Fact]
+    public void FromObj_StashArray_IsNotDoubleWrapped()
+    {
+        // A StashArray passed to FromObj must not be wrapped again — it is already
+        // a StashArray and should remain the same reference.
+        var arr = new StashArray { StashValue.FromInt(1) };
+        object? obj = StashValue.FromObj(arr).AsObj;
+        Assert.Same(arr, obj);
+    }
 }
