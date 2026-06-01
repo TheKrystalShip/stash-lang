@@ -839,8 +839,11 @@ let result = info.hostCount;
 
     private static void StopWsEchoServer(HttpListener listener, Task serverTask)
     {
-        listener.Stop();
-        listener.Close();
+        // Teardown must never fail the test: on Linux/.NET, HttpListener.Stop()/Close()
+        // can throw HttpListenerException ("Address already in use") from the shared
+        // HttpEndPointManager under heavy parallel load, even when the server ran fine.
+        try { listener.Stop(); } catch { }
+        try { listener.Close(); } catch { }
         try {
 #pragma warning disable VSTHRD002 // Avoid problematic synchronous waits
             serverTask.Wait(TimeSpan.FromSeconds(2));
