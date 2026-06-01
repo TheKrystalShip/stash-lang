@@ -58,7 +58,7 @@ Keep this file as script input, not a second design document. Every phase must h
 Created by:
 
 ```bash
-stash scripts/checkpoint/bootstrap-feature.stash <slug> "<title>"
+stash scripts/checkpoint/checkpoint.stash bootstrap-feature <slug> "<title>"
 ```
 
 Do not hand-create the feature directory.
@@ -72,7 +72,7 @@ Do not hand-create the feature directory.
 5. Validate:
 
    ```bash
-   stash scripts/checkpoint/validate-spec.stash <slug>
+   stash scripts/checkpoint/checkpoint.stash validate-spec <slug>
    ```
 
 6. Add a one-line pointer to `.claude/repo.md` under "Active Multi-Phase Work":
@@ -118,7 +118,7 @@ Do not declare the brief ready until:
 - Acceptance criteria include at least one end-to-end behavior.
 - Every phase has a concrete `done_when`.
 - Every concern shared across phases has a named single source of truth and a recorded prevention mechanism in `Cross-Cutting Concerns` — preferring **Construct** (compile error / fail-closed default) over a **Detect** meta-test, and never relying on **Instruct** (prose) alone. (Single-subsystem features: "None.")
-- `stash scripts/checkpoint/validate-spec.stash <slug>` passes.
+- `stash scripts/checkpoint/checkpoint.stash validate-spec <slug>` passes.
 
 ## Reference
 

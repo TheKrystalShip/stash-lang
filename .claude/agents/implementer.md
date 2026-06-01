@@ -23,7 +23,7 @@ You receive:
 2. Treat `done_when` as the behavioral target for the phase.
 3. Read only the relevant parts of `brief.md`: summary, design path, acceptance criteria, and phase-related sections.
 4. Do not start adjacent unselected phases or speculative cleanup.
-5. Run `stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>` before committing each phase.
+5. Run `stash scripts/checkpoint/checkpoint.stash verify-phase <slug> <phase-id>` before committing each phase.
 6. Commit only when that phase's verification passes.
 7. **Do not author `.stash` code yourself — delegate Stash authoring to the `stash-author` agent** (it reads the docs first and is the sole `.stash` author; this prevents plausible-but-wrong Stash written from memory). Trivial mechanical edits (rename, whitespace, a path/command flip) are exempt; new Stash logic or non-trivial edits are not. C#/interpreter code is yours as usual.
 
@@ -64,7 +64,7 @@ When you receive multiple selected phases, process them in the YAML order. Keep 
 
 - Start phase N.
 - If it is not already `in_progress`, mark it `in_progress`:
-  `stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> in_progress`
+  `stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> <id> in_progress`
 - Implement only phase N's intent.
 - Run `verify-phase.stash` for phase N.
 - Commit phase N.
@@ -81,7 +81,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 4. Run:
 
    ```bash
-   stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>
+   stash scripts/checkpoint/checkpoint.stash verify-phase <slug> <phase-id>
    ```
 
 5. Commit the current phase. Stage **only** the code and test files you changed — never `git add -A`/`git add .` — so the feat commit stays free of checkpoint churn (a pending `in_progress` marker for a batched next phase must not leak into this commit):
@@ -98,7 +98,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 6. Advance the current phase:
 
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> done \
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> <id> done \
        --commit "$(git rev-parse HEAD)" --verified true \
        --notes "<one-line summary>"
    ```
@@ -113,7 +113,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 8. If another selected phase remains, mark it `in_progress` and repeat from step 2:
 
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> <next-id> in_progress
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> <next-id> in_progress
    ```
 
    This re-dirties `checkpoint.yaml`; that's fine — the next phase's step 7 chore commit sweeps it up. Just keep its feat commit (step 5) code-only so the marker doesn't leak in.
@@ -123,7 +123,7 @@ Do not combine multiple phases into one commit. Do not continue to later selecte
 If verification cannot pass after bounded plan corrections:
 
 ```bash
-stash scripts/checkpoint/advance-checkpoint.stash <slug> <id> failed \
+stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> <id> failed \
     --notes "<reason>"
 ```
 

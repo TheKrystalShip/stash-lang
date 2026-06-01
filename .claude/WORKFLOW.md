@@ -187,7 +187,7 @@ The architect creates:
 The feature is ready when:
 
 ```bash
-stash scripts/checkpoint/validate-spec.stash <slug>
+stash scripts/checkpoint/checkpoint.stash validate-spec <slug>
 ```
 
 passes.
@@ -206,7 +206,7 @@ The implementer receives the current phase or selected phase batch, the path to 
 The implementer must:
 
 - start from the planned files and keep any deviations small, documented, and within the phase intent
-- run `stash scripts/checkpoint/verify-phase.stash <slug> <phase-id>` for each selected phase
+- run `stash scripts/checkpoint/checkpoint.stash verify-phase <slug> <phase-id>` for each selected phase
 - commit each phase separately
 - advance the checkpoint after each phase
 
@@ -302,7 +302,7 @@ A language feature is cross-cutting by construction (the six-visitor rule), so t
 Deterministic steps are scripted so no agent has to reconstruct them. From the main checkout:
 
 ```bash
-stash scripts/checkpoint/worktree-start.stash <slug>
+stash scripts/checkpoint/checkpoint.stash worktree-start <slug>
 ```
 
 This creates the worktree at `../stash-<slug>` on a fresh `feature/<slug>` branch (based on the committed `main` ref, so a dirty primary tree doesn't leak in), refusing on any naming collision. Then run the **entire** lifecycle inside that worktree — including `/spec`. Creating the worktree *first* means the feature's `.kanban/2-in-progress/<slug>/` directory, every phase commit, and `/done`'s promotion to `.kanban/4-done/` all live on the branch and arrive on `main` as one coherent unit. The review range stays clean by construction:
@@ -314,7 +314,7 @@ git log main..feature/<slug>   # exactly this feature's commits, no cross-featur
 Once `/spec` has written `plan.yaml`, check the feature won't collide with anything already in flight:
 
 ```bash
-stash scripts/checkpoint/check-parallel-safety.stash <slug>
+stash scripts/checkpoint/checkpoint.stash check-parallel-safety <slug>
 ```
 
 It reduces every feature's file-globs to top-level subsystems and warns (non-blocking, exit 3) when this feature shares one with an in-flight sibling worktree — the signal that the two branches will fight over the same hot files. `status.stash` (and so `/resume`) also lists sibling feature worktrees so you always know what else is open.
@@ -324,7 +324,7 @@ It reduces every feature's file-globs to top-level subsystems and warns (non-blo
 When a feature is green on its branch and `/done` has promoted it, integrate from the main checkout:
 
 ```bash
-stash scripts/checkpoint/worktree-finish.stash <slug>
+stash scripts/checkpoint/checkpoint.stash worktree-finish <slug>
 ```
 
 The script merges `feature/<slug>` with `--no-ff` (one labeled boundary commit, `chore(<slug>): …` commits intact), **re-runs `final_verify` against the merged `main`**, and removes the worktree + branch **only if that verify is green**. It refuses unless run from `main` on a clean tree with the feature already promoted. The three rules it encodes, stated plainly:

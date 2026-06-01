@@ -97,7 +97,7 @@ Do not alter any unselected finding except when needed to preserve markdown form
 ### Step 6 — Update Checkpoint
 
 ```bash
-stash scripts/checkpoint/advance-checkpoint.stash <slug> - \
+stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> - \
     --review-status in_progress
 ```
 

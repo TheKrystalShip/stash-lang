@@ -104,13 +104,6 @@ const RAWPATH_SCAN_EXCLUSIONS = [
 // at the end of phase 2A. This list SHRINKS to empty across phases 3A–4C.
 // Each entry is a repo-relative path. When a file is migrated, remove its entry.
 const RAWPATH_EXEMPTIONS = [
-    ".claude/agents/architect.md",
-    ".claude/agents/implementer.md",
-    ".claude/agents/resolver.md",
-    ".claude/agents/reviewer.md",
-    "CLAUDE.md",
-    ".claude/repo.md",
-    ".claude/WORKFLOW.md",
     ".kanban/milestones/embedding/MILESTONE.md",
     ".kanban/milestones/omission-hardening/MILESTONE.md",
     ".kanban/_templates/milestone-template.md"

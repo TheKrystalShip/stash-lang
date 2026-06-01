@@ -37,7 +37,7 @@ You receive:
 7. Update review status:
 
    ```bash
-   stash scripts/checkpoint/advance-checkpoint.stash <slug> - --review-status in_progress
+   stash scripts/checkpoint/checkpoint.stash advance-checkpoint <slug> - --review-status in_progress
    ```
 
    Use `resolved` if there are zero findings.
