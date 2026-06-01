@@ -1,18 +1,32 @@
 #!/usr/bin/env stash
-// lint_common_imports.stash — Construct chokepoint guard for _common.stash imports.
+// lint_common_imports.stash — Chokepoint guard: _common.stash imports + subcommand invariants.
 //
 // Normal run:
 //   stash scripts/checkpoint/lint_common_imports.stash
-//   Scans every scripts/checkpoint/*.stash that is not on the exclusion list.
-//   Fails (exit 1) if any scanned file:
-//     (a) imports zero symbols from _common.stash, OR
-//     (b) defines a function whose name shadows a _common.stash export.
+//   Runs three checks:
+//   (1) _common.stash import chokepoint: every scripts/checkpoint/*.stash not on
+//       SCAN_EXCLUSIONS must import from _common.stash and must not shadow its exports.
+//   (2) Registry coverage (invariant a, Construct supplement): every
+//       scripts/checkpoint/*.stash not on INTERNAL_TOOLS must appear as the basename
+//       of a SUBCOMMANDS entry's `path` field; every SUBCOMMANDS entry's `path` must
+//       point at a file that exists. Keys off the registry `path` field (NOT `name`) —
+//       the `lint` row (name != filename) is the canonical by-path test case.
+//   (3) No raw subcommand-path leak (invariant b, Detect with teeth): scans the live
+//       operational surface (LIVE_DOC_GLOBS) for raw "scripts/checkpoint/<basename>"
+//       substrings where <basename> is a SUBCOMMANDS path basename. Files in
+//       RAWPATH_SCAN_EXCLUSIONS are permanently exempt (legitimate data homes);
+//       files in RAWPATH_EXEMPTIONS are temporarily exempt (migration backlog — shrinks
+//       to empty across phases 3A–4C).
+//   Fails (exit 1) on any violation.
 //
 // Self-test run (proves the guard has teeth):
 //   stash scripts/checkpoint/lint_common_imports.stash --self-test
-//   Runs against a single tampered fixture under lint_common_imports.fixtures/.
-//   Exits 0 ONLY if the guard correctly fires on the fixture.
-//   Exits 1 if the guard fails to trip (guard is broken).
+//   Checks THREE fixtures under lint_common_imports.fixtures/:
+//   - bad_inlines_helper.stash  → _common import rule MUST fire
+//   - bad_raw_subcommand_path.md → rawpath guard MUST fire
+//   - ok_raw_internal_path.md   → rawpath guard MUST NOT fire
+//   Exits 0 ONLY if all three behave correctly.
+//   Exits 1 if any fixture misbehaves (guard is broken).
 //
 // Unit-case sweep (validates _common.stash exports are behaviour-equivalent):
 //   Runs inside both normal and self-test modes. Imports _common.stash and calls
@@ -22,6 +36,7 @@
 import { now_iso, die, feature_dir, resolve_feature, load_yaml, save_yaml,
          load_plan, load_checkpoint, save_checkpoint, phase_by_id,
          expand_globs, parse_findings } from "_common.stash";
+import { SUBCOMMANDS, INTERNAL_TOOLS } from "_registry.stash";
 
 // ── Bounded domains ────────────────────────────────────────────────────────
 
@@ -58,6 +73,59 @@ const COMMON_EXPORTS = [
     "phase_by_id",
     "expand_globs",
     "parse_findings"
+];
+
+// ── Invariant (b): raw subcommand-path leak guard ──────────────────────────
+
+// Live operational surface scanned for raw subcommand path references.
+// Deliberately EXCLUDES .kanban/4-done/** (immutable, per .kanban/CLAUDE.md) and
+// .kanban/0-backlog/** (historical narrative only).
+// Note: .kanban/_templates/**/*.md is .md only — .yaml templates are out of scope.
+const LIVE_DOC_GLOBS = [
+    ".claude/**/*.md",
+    "CLAUDE.md",
+    ".claude/repo.md",
+    ".kanban/_templates/**/*.md",
+    ".kanban/milestones/**/*.md",
+    "scripts/checkpoint/*.stash"
+];
+
+// PERMANENT exclusions — files that legitimately hold raw subcommand paths as
+// DATA and must never be flagged. This list is NEVER shrunk.
+//   _registry.stash          — the registry data home: all SUBCOMMANDS paths live here
+//   lint_common_imports.stash — this guard's own source: RAWPATH_EXEMPTIONS entries
+//                               and header comments mention subcommand paths as data
+const RAWPATH_SCAN_EXCLUSIONS = [
+    "scripts/checkpoint/_registry.stash",
+    "scripts/checkpoint/lint_common_imports.stash"
+];
+
+// TEMPORARY exemptions — files still containing a raw subcommand path reference
+// at the end of phase 2A. This list SHRINKS to empty across phases 3A–4C.
+// Each entry is a repo-relative path. When a file is migrated, remove its entry.
+const RAWPATH_EXEMPTIONS = [
+    ".claude/agents/architect.md",
+    ".claude/agents/implementer.md",
+    ".claude/agents/resolver.md",
+    ".claude/agents/reviewer.md",
+    ".claude/commands/accept.md",
+    ".claude/commands/autopilot.md",
+    ".claude/commands/continue.md",
+    ".claude/commands/done.md",
+    ".claude/commands/feature-review.md",
+    ".claude/commands/milestone.md",
+    ".claude/commands/next-phase.md",
+    ".claude/commands/resolve.md",
+    ".claude/commands/spec.md",
+    "CLAUDE.md",
+    ".claude/repo.md",
+    ".claude/WORKFLOW.md",
+    ".kanban/milestones/embedding/MILESTONE.md",
+    ".kanban/milestones/omission-hardening/MILESTONE.md",
+    ".kanban/_templates/milestone-template.md",
+    "scripts/checkpoint/bootstrap-feature.stash",
+    "scripts/checkpoint/promote-done.stash",
+    "scripts/checkpoint/worktree-start.stash"
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -123,6 +191,108 @@ fn shadowing_fns(source) {
         }
     }
     return shadows;
+}
+
+/// Build the set of subcommand path basenames from the registry.
+/// Returns an array of strings like ["next-phase.stash", "promote-done.stash", ...].
+/// Keys off the `path` field of each SUBCOMMANDS entry — NOT `name` — so the
+/// `lint` row (name="lint", path=".../lint_common_imports.stash") is correctly
+/// represented as "lint_common_imports.stash", not "lint".
+fn subcommand_path_basenames() {
+    let basenames = [];
+    for (let entry in SUBCOMMANDS) {
+        arr.push(basenames, path.base(entry.path));
+    }
+    return basenames;
+}
+
+/// Check invariant (a): registry coverage in the forward direction.
+/// Returns a list of violation strings: every scripts/checkpoint/*.stash that
+/// is not in INTERNAL_TOOLS but has no matching SUBCOMMANDS entry by path basename.
+fn coverage_forward_violations() {
+    let violations = [];
+    let sub_basenames = subcommand_path_basenames();
+    let all_files = fs.glob("scripts/checkpoint/*.stash");
+    for (let fpath in all_files) {
+        let base = path.base(fpath);
+        // Internal tools are exempt — they are not subcommands by design.
+        if (arr.contains(INTERNAL_TOOLS, base)) {
+            continue;
+        }
+        // Must appear as the basename of some SUBCOMMANDS entry's path.
+        if (!arr.contains(sub_basenames, base)) {
+            arr.push(violations, "registry-coverage forward: '" + base + "' is not in INTERNAL_TOOLS and has no SUBCOMMANDS entry by path — add it to SUBCOMMANDS or INTERNAL_TOOLS");
+        }
+    }
+    return violations;
+}
+
+/// Check invariant (a): registry coverage in the backward direction.
+/// Returns a list of violation strings: every SUBCOMMANDS entry whose `path`
+/// does not point at a file that exists.
+fn coverage_backward_violations() {
+    let violations = [];
+    for (let entry in SUBCOMMANDS) {
+        if (!fs.exists(entry.path)) {
+            arr.push(violations, "registry-coverage backward: SUBCOMMANDS entry '" + entry.name + "' path '" + entry.path + "' does not exist");
+        }
+    }
+    return violations;
+}
+
+/// Scan a single file for raw subcommand path references.
+/// sub_basenames: array of basenames like ["next-phase.stash", ...].
+/// Does NOT consult exemption or exclusion lists — callers apply those.
+/// Returns a list of violation strings (empty = clean).
+fn rawpath_violations_in_file(fpath, sub_basenames) {
+    let violations = [];
+    if (!fs.exists(fpath)) {
+        arr.push(violations, "rawpath-scan: file not found: " + fpath);
+        return violations;
+    }
+    let source = fs.readFile(fpath);
+    for (let base in sub_basenames) {
+        let needle = "scripts/checkpoint/" + base;
+        if (str.contains(source, needle)) {
+            arr.push(violations, fpath + ": contains raw subcommand path reference '" + needle + "'");
+        }
+    }
+    return violations;
+}
+
+/// Run invariant (b): raw subcommand-path leak scan over the live operational surface.
+/// Applies RAWPATH_SCAN_EXCLUSIONS (permanent) and RAWPATH_EXEMPTIONS (temporary).
+/// Returns a list of violation strings.
+fn rawpath_scan_violations() {
+    let violations = [];
+    let sub_basenames = subcommand_path_basenames();
+
+    // Expand all globs and deduplicate.
+    let all_paths = expand_globs(LIVE_DOC_GLOBS);
+    let seen = [];
+    let deduped = [];
+    for (let fpath in all_paths) {
+        if (!arr.contains(seen, fpath)) {
+            arr.push(seen, fpath);
+            arr.push(deduped, fpath);
+        }
+    }
+
+    for (let fpath in deduped) {
+        // Apply permanent exclusions (data homes — never flagged).
+        if (arr.contains(RAWPATH_SCAN_EXCLUSIONS, fpath)) {
+            continue;
+        }
+        // Apply temporary exemptions (migration backlog).
+        if (arr.contains(RAWPATH_EXEMPTIONS, fpath)) {
+            continue;
+        }
+        let viols = rawpath_violations_in_file(fpath, sub_basenames);
+        for (let v in viols) {
+            arr.push(violations, v);
+        }
+    }
+    return violations;
 }
 
 /// Lint one file. Returns a list of violation strings (empty = clean).
@@ -298,30 +468,105 @@ io.eprintln("unit sweep: " + COMMON_EXPORTS.length + " exports verified OK");
 // ── Self-test mode ─────────────────────────────────────────────────────────
 
 if (args.self_test) {
-    // Point at the tampered fixture — must fire on it.
-    let fixture = "scripts/checkpoint/lint_common_imports.fixtures/bad_inlines_helper.stash";
-    if (!fs.exists(fixture)) {
-        io.eprintln("FAIL self-test: fixture not found: " + fixture);
-        env.exit(1);
+    let self_test_ok = true;
+    let sub_basenames = subcommand_path_basenames();
+
+    // Fixture 1: _common import rule MUST fire on bad_inlines_helper.stash.
+    let fixture1 = "scripts/checkpoint/lint_common_imports.fixtures/bad_inlines_helper.stash";
+    if (!fs.exists(fixture1)) {
+        io.eprintln("FAIL self-test [fixture1]: fixture not found: " + fixture1);
+        self_test_ok = false;
+    } else {
+        let viols1 = lint_file(fixture1);
+        if (viols1.length == 0) {
+            io.eprintln("FAIL self-test [fixture1]: lint did NOT fire on _common fixture — guard has no teeth!");
+            self_test_ok = false;
+        } else {
+            io.eprintln("PASS self-test [fixture1]: _common import rule fired with " + viols1.length + " violation(s):");
+            for (let v in viols1) {
+                io.eprintln("  + " + v);
+            }
+        }
     }
-    let viols = lint_file(fixture);
-    if (viols.length == 0) {
-        io.eprintln("FAIL self-test: lint did NOT fire on tampered fixture — guard has no teeth!");
-        env.exit(1);
+
+    // Fixture 2 (positive): rawpath guard MUST fire on bad_raw_subcommand_path.md.
+    let fixture2 = "scripts/checkpoint/lint_common_imports.fixtures/bad_raw_subcommand_path.md";
+    if (!fs.exists(fixture2)) {
+        io.eprintln("FAIL self-test [fixture2]: fixture not found: " + fixture2);
+        self_test_ok = false;
+    } else {
+        let viols2 = rawpath_violations_in_file(fixture2, sub_basenames);
+        if (viols2.length == 0) {
+            io.eprintln("FAIL self-test [fixture2]: rawpath guard did NOT fire on subcommand fixture — guard has no teeth!");
+            self_test_ok = false;
+        } else {
+            io.eprintln("PASS self-test [fixture2]: rawpath guard fired with " + viols2.length + " violation(s):");
+            for (let v in viols2) {
+                io.eprintln("  + " + v);
+            }
+        }
     }
-    io.eprintln("self-test PASS: lint correctly fired on fixture with " + viols.length + " violation(s):");
-    for (let v in viols) {
-        io.eprintln("  + " + v);
+
+    // Fixture 3 (negative): rawpath guard MUST NOT fire on ok_raw_internal_path.md.
+    // verify-phase-scope.stash is an internal tool, not a subcommand — must be silent.
+    let fixture3 = "scripts/checkpoint/lint_common_imports.fixtures/ok_raw_internal_path.md";
+    if (!fs.exists(fixture3)) {
+        io.eprintln("FAIL self-test [fixture3]: fixture not found: " + fixture3);
+        self_test_ok = false;
+    } else {
+        let viols3 = rawpath_violations_in_file(fixture3, sub_basenames);
+        if (viols3.length != 0) {
+            io.eprintln("FAIL self-test [fixture3]: rawpath guard INCORRECTLY fired on internal-tool fixture (" + viols3.length + " violation(s)):");
+            for (let v in viols3) {
+                io.eprintln("  - " + v);
+            }
+            self_test_ok = false;
+        } else {
+            io.eprintln("PASS self-test [fixture3]: rawpath guard correctly silent on internal-tool fixture");
+        }
+    }
+
+    if (!self_test_ok) {
+        env.exit(1);
     }
     env.exit(0);
 }
 
 // ── Normal scan mode ───────────────────────────────────────────────────────
 
+let total_violations = [];
+
+// ── Pass 1: invariant (a) — registry coverage ──────────────────────────────
+let cov_fwd = coverage_forward_violations();
+for (let v in cov_fwd) {
+    arr.push(total_violations, v);
+}
+let cov_bwd = coverage_backward_violations();
+for (let v in cov_bwd) {
+    arr.push(total_violations, v);
+}
+let coverage_ok = (cov_fwd.length == 0 && cov_bwd.length == 0);
+if (coverage_ok) {
+    io.eprintln("registry-coverage: OK — " + SUBCOMMANDS.length + " subcommand(s) registered, all files accounted for");
+} else {
+    io.eprintln("registry-coverage: " + (cov_fwd.length + cov_bwd.length) + " violation(s)");
+}
+
+// ── Pass 2: invariant (b) — raw subcommand-path leak scan ──────────────────
+let rawpath_viols = rawpath_scan_violations();
+for (let v in rawpath_viols) {
+    arr.push(total_violations, v);
+}
+if (rawpath_viols.length == 0) {
+    io.eprintln("rawpath-scan: OK — 0 violations (" + RAWPATH_EXEMPTIONS.length + " file(s) temporarily exempted)");
+} else {
+    io.eprintln("rawpath-scan: " + rawpath_viols.length + " violation(s)");
+}
+
+// ── Pass 3: _common.stash import chokepoint ────────────────────────────────
 // Scan every scripts/checkpoint/*.stash (single-* glob, does NOT descend into subdirs).
 let all_files = fs.glob("scripts/checkpoint/*.stash");
 let scanned = 0;
-let total_violations = [];
 
 for (let fpath in all_files) {
     let base = path.base(fpath);
@@ -334,9 +579,13 @@ for (let fpath in all_files) {
         arr.push(total_violations, v);
     }
 }
+if (scanned > 0) {
+    io.eprintln("common-import: scanned " + scanned + " file(s)");
+}
 
+// ── Final summary ──────────────────────────────────────────────────────────
 if (total_violations.length > 0) {
-    io.eprintln("FAIL: " + total_violations.length + " violation(s) across " + scanned + " scanned file(s):");
+    io.eprintln("FAIL: " + total_violations.length + " violation(s):");
     for (let v in total_violations) {
         io.eprintln("  - " + v);
     }

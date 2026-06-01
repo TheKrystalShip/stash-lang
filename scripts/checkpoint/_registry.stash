@@ -27,14 +27,18 @@ export const GROUPS = [
 // ── Internal files — NOT subcommands (used by the lint's rawpath guard) ──────
 //
 // Deliberate: "lint_common_imports.stash" is NOT here — it IS the `lint`
-// subcommand (path: "scripts/checkpoint/lint_common_imports.stash", group:
-// "meta"). Listing it here would cause the phase-2A lint to treat doc
-// references to it as "internal, leave raw" and skip migrating them to
-// `checkpoint lint`. The 4 genuine non-subcommands are:
-//   _common.stash           — shared helper library
-//   _registry.stash         — this file (pure data library)
-//   verify-phase-scope.stash — internal callee of verify-phase
-//   checkpoint.stash        — the facade itself
+// subcommand per the boundary table (brief.md §129): it has useful manual
+// invocation, is promoted to a subcommand for discoverability, and appears as
+// { name: "lint", path: "scripts/checkpoint/lint_common_imports.stash", ... }
+// in SUBCOMMANDS below. Both lint invariants key off the registry `path` field
+// (not `name`), so the lint-row (where name ≠ filename) is the canonical
+// by-path test case — coverage passes WITH lint_common_imports.stash present
+// because the `lint` row's path basename matches it. The 4 genuine
+// non-subcommands (library / facade / internal callee) are:
+//   _common.stash            — shared helper library
+//   _registry.stash          — this file (pure data library)
+//   verify-phase-scope.stash — internal callee of verify-phase only
+//   checkpoint.stash         — the facade itself
 export const INTERNAL_TOOLS = [
     "_common.stash",
     "_registry.stash",
