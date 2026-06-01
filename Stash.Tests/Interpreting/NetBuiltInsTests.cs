@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Bytecode;
@@ -23,6 +24,96 @@ public class NetBuiltInsTests : StashTestBase
         var chunk = Compiler.Compile(stmts);
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.ThrowsAny<RuntimeError>(() => vm.Execute(chunk));
+    }
+
+    // ── loopback test-server helpers (hermetic, ephemeral-port, no sleeps) ─────
+
+    /// <summary>
+    /// Starts a single-shot TCP echo server on loopback bound to an OS-assigned
+    /// ephemeral port (port 0). Returns the listener and the actual bound port.
+    /// The listener is already in the LISTENING state on return (TcpListener.Start
+    /// is synchronous), so a client connecting to the returned port can never race
+    /// the bind — no sleep needed. The server accepts one connection, reads the
+    /// request, writes "echo:" + request, then closes.
+    /// </summary>
+    private static (TcpListener listener, int port, Task serverTask) StartTcpEchoServer()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            try
+            {
+                using var client = await listener.AcceptTcpClientAsync();
+                using var stream = client.GetStream();
+                var buffer = new byte[4096];
+                int read = await stream.ReadAsync(buffer, 0, buffer.Length);
+                var request = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
+                var reply = System.Text.Encoding.UTF8.GetBytes("echo:" + request);
+                await stream.WriteAsync(reply, 0, reply.Length);
+            }
+            catch (ObjectDisposedException) { }
+            catch (SocketException) { }
+            catch (System.IO.IOException) { }
+        });
+
+        return (listener, port, serverTask);
+    }
+
+    /// <summary>
+    /// Starts a single-shot TCP server that accepts one connection, drains it,
+    /// then closes — used by tests that only exercise the client send/connect path.
+    /// Bound to an OS-assigned ephemeral loopback port and already listening on return.
+    /// </summary>
+    private static (TcpListener listener, int port, Task serverTask) StartTcpDrainServer()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var serverTask = Task.Run(async () =>
+        {
+            try
+            {
+                using var client = await listener.AcceptTcpClientAsync();
+                using var stream = client.GetStream();
+                var buffer = new byte[4096];
+                await stream.ReadAsync(buffer, 0, buffer.Length);
+            }
+            catch (ObjectDisposedException) { }
+            catch (SocketException) { }
+            catch (System.IO.IOException) { }
+        });
+
+        return (listener, port, serverTask);
+    }
+
+    private static void StopTcpServer(TcpListener listener, Task serverTask)
+    {
+        try { listener.Stop(); } catch { }
+        try
+        {
+#pragma warning disable VSTHRD002 // Avoid problematic synchronous waits
+            serverTask.Wait(TimeSpan.FromSeconds(2));
+#pragma warning restore VSTHRD002
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Allocates a currently-free UDP port on loopback by binding a socket to
+    /// port 0 and reading back the OS-assigned port. The socket is then released
+    /// so the Stash receiver task can bind it (net.udpRecv rejects port 0, so the
+    /// concrete port must be discovered out of band). Any bind-vs-send ordering
+    /// race is absorbed by the retry-send loop in the test itself.
+    /// </summary>
+    private static int FreeUdpPort()
+    {
+        using var probe = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        return ((IPEndPoint)probe.LocalEndPoint!).Port;
     }
 
     // ── net.subnetInfo ────────────────────────────────────────────────────────
@@ -367,102 +458,93 @@ let result = info.hostCount;
         ");
     }
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or blocked in environment. Works in isolation.")]
+    [Fact]
     public void TcpEcho_SendRecv_ReturnsData()
     {
-        // Use task.run for the server, connect from main thread
-        var output = RunCapturingOutput(@"
-            let serverReady = false;
-            let port = 19876;
-
-            // Server task
-            let server = task.run(() => {
-                net.tcpListen(port, (conn) => {
-                    let data = net.tcpRecv(conn);
-                    net.tcpSend(conn, ""echo:"" + data);
-                    net.tcpClose(conn);
-                });
-            });
-
-            // Give server time to start
-            time.sleep(0.1);
-
-            // Client
-            let conn = net.tcpConnect(""127.0.0.1"", port);
-            net.tcpSend(conn, ""hello"");
-            let response = net.tcpRecv(conn);
-            net.tcpClose(conn);
-
-            io.println(response);
-            task.await(server);
-        ");
-        Assert.Contains("echo:hello", output.Trim());
+        // Hermetic: C# echo server on an OS-assigned ephemeral loopback port,
+        // already listening before the Stash client connects (no sleep, no port race).
+        var (listener, port, serverTask) = StartTcpEchoServer();
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let conn = net.tcpConnect(""127.0.0.1"", {port});
+                net.tcpSend(conn, ""hello"");
+                let response = net.tcpRecv(conn);
+                net.tcpClose(conn);
+                io.println(response);
+            ");
+            Assert.Contains("echo:hello", output.Trim());
+        }
+        finally { StopTcpServer(listener, serverTask); }
     }
 
     [Fact]
     public void TcpConnect_ReturnsStruct()
     {
-        // Start a temp listener, connect, check fields
-        var output = RunCapturingOutput(@"
-            let port = 19877;
-            let server = task.run(() => {
-                net.tcpListen(port, (conn) => {
-                    net.tcpClose(conn);
-                });
-            });
-            time.sleep(0.1);
-            let conn = net.tcpConnect(""127.0.0.1"", port);
-            io.println(conn.host);
-            io.println(conn.port);
-            io.println(conn.localPort > 0);
-            net.tcpClose(conn);
-            task.await(server);
-        ");
-        var lines = output.Trim().Split('\n');
-        Assert.Equal("127.0.0.1", lines[0].Trim());
-        Assert.Equal("19877", lines[1].Trim());
-        Assert.Equal("true", lines[2].Trim());
+        // Hermetic: C# drain server on an ephemeral loopback port, already listening
+        // before the Stash client connects (no sleep, no port race).
+        var (listener, port, serverTask) = StartTcpDrainServer();
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let conn = net.tcpConnect(""127.0.0.1"", {port});
+                io.println(conn.host);
+                io.println(conn.port);
+                io.println(conn.localPort > 0);
+                net.tcpClose(conn);
+            ");
+            var lines = output.Trim().Split('\n');
+            Assert.Equal("127.0.0.1", lines[0].Trim());
+            Assert.Equal(port.ToString(), lines[1].Trim());
+            Assert.Equal("true", lines[2].Trim());
+        }
+        finally { StopTcpServer(listener, serverTask); }
     }
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or blocked in environment. Works in isolation.")]
+    [Fact]
     public void TcpSend_ReturnsByteCount()
     {
-        var output = RunCapturingOutput(@"
-            let port = 19878;
-            let server = task.run(() => {
-                net.tcpListen(port, (conn) => {
-                    net.tcpRecv(conn);
-                    net.tcpClose(conn);
-                });
-            });
-            time.sleep(0.1);
-            let conn = net.tcpConnect(""127.0.0.1"", port);
-            let sent = net.tcpSend(conn, ""hello"");
-            io.println(sent);
-            net.tcpClose(conn);
-            task.await(server);
-        ");
-        Assert.Equal("5", output.Trim());
+        // Hermetic: C# drain server on an ephemeral loopback port, already listening
+        // before the Stash client connects (no sleep, no port race).
+        var (listener, port, serverTask) = StartTcpDrainServer();
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let conn = net.tcpConnect(""127.0.0.1"", {port});
+                let sent = net.tcpSend(conn, ""hello"");
+                io.println(sent);
+                net.tcpClose(conn);
+            ");
+            Assert.Equal("5", output.Trim());
+        }
+        finally { StopTcpServer(listener, serverTask); }
     }
 
     // ── net.udpSend / udpRecv ──────────────────────────────────────────────
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or UDP blocked in environment")]
+    [Fact]
     public void UdpSendRecv_Loopback_ReturnsData()
     {
-        var output = RunCapturingOutput(@"
-            let port = 19879;
+        // The receiver (the unit under test) must stay in Stash. net.udpRecv binds
+        // and blocks atomically and rejects port 0, so there is no in-Stash
+        // bind-completion signal and no ephemeral read-back. Instead of a fixed
+        // sleep, the sender RETRANSMITS until the receiver task reports it has
+        // completed — UDP datagrams sent before the bind are simply dropped, so the
+        // retry loop converges deterministically (and the recv timeout bounds it).
+        int port = FreeUdpPort();
+        var output = RunCapturingOutput($@"
+            let port = {port};
 
-            // Start receiver in a task
-            let receiver = task.run(() => {
+            let receiver = task.run(() => {{
                 let msg = net.udpRecv(port, 5000);
                 return msg.data;
-            });
+            }});
 
-            // Give receiver time to bind
-            time.sleep(0.1);
-
-            net.udpSend(""127.0.0.1"", port, ""hello udp"");
+            // Retransmit until the receiver has actually received a datagram.
+            // No fixed sleep: the loop is gated on the receiver's task status.
+            while (task.status(receiver) == task.Status.Running) {{
+                net.udpSend(""127.0.0.1"", port, ""hello udp"");
+            }}
 
             let result = task.await(receiver);
             io.println(result);
@@ -470,17 +552,22 @@ let result = info.hostCount;
         Assert.Equal("hello udp", output.Trim());
     }
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or UDP blocked in environment")]
+    [Fact]
     public void UdpRecv_ReturnsUdpMessageStruct()
     {
-        var output = RunCapturingOutput(@"
-            let port = 19880;
-            let receiver = task.run(() => {
+        // Same hermetic pattern as UdpSendRecv_Loopback_ReturnsData: the receiver
+        // stays in Stash (it is the unit under test), and the sender retransmits
+        // until the receiver task completes instead of sleeping for a fixed delay.
+        int port = FreeUdpPort();
+        var output = RunCapturingOutput($@"
+            let port = {port};
+            let receiver = task.run(() => {{
                 let msg = net.udpRecv(port, 5000);
                 return msg;
-            });
-            time.sleep(0.1);
-            net.udpSend(""127.0.0.1"", port, ""test"");
+            }});
+            while (task.status(receiver) == task.Status.Running) {{
+                net.udpSend(""127.0.0.1"", port, ""test"");
+            }}
             let msg = task.await(receiver);
             io.println(msg.data);
             io.println(msg.host);
@@ -660,11 +747,54 @@ let result = info.hostCount;
 
     #region WebSocket
 
-    private static (HttpListener listener, Task serverTask) StartWsEchoServer(int port)
+    private static (HttpListener listener, int port, Task serverTask) StartWsEchoServer()
     {
-        var listener = new HttpListener();
-        listener.Prefixes.Add($"http://localhost:{port}/");
-        listener.Start();
+        // HttpListener cannot bind port 0 (no OS ephemeral-port assignment), so we
+        // self-allocate with a retry-on-conflict loop: probe a free loopback TCP
+        // port, try to bind the HttpListener to it, and retry on the race where the
+        // port is taken between probe and bind. The probe socket MUST be closed
+        // before Start() — HttpListener cannot adopt a pre-bound socket, so the
+        // probe→bind TOCTOU gap is inherent and retry-on-conflict is the only
+        // legitimate mitigation. Crucially, a bind conflict on Linux/.NET surfaces
+        // as EITHER HttpListenerException OR a bare SocketException (the latter is
+        // NOT a subclass of the former — they only share Win32Exception as a base),
+        // so we must catch both or the conflict escapes uncaught and flakes the
+        // test under heavy parallel load. A fresh ephemeral port is probed on every
+        // attempt, so collisions are rare; the cap is generous and we rethrow the
+        // last conflict if exhausted so failure is loud, not a hang. No hardcoded
+        // ports, no Stop→Start gap. The listener is listening before return.
+        const int maxAttempts = 40;
+        HttpListener listener = null!;
+        int port = 0;
+        Exception? lastConflict = null;
+        var started = false;
+        for (var attempt = 0; attempt < maxAttempts && !started; attempt++)
+        {
+            using (var probe = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+            {
+                probe.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+                port = ((IPEndPoint)probe.LocalEndPoint!).Port;
+            }
+            listener = new HttpListener();
+            listener.Prefixes.Add($"http://localhost:{port}/");
+            try
+            {
+                listener.Start();
+                started = true;
+            }
+            catch (Exception ex) when (ex is HttpListenerException || ex is SocketException)
+            {
+                lastConflict = ex;
+                try { listener.Close(); } catch { }
+                // Port was reclaimed between probe and bind — pick another.
+            }
+        }
+        if (!started)
+        {
+            throw new InvalidOperationException(
+                $"StartWsEchoServer: could not bind a free loopback port after {maxAttempts} attempts.",
+                lastConflict);
+        }
 
         var serverTask = Task.Run(async () =>
         {
@@ -704,7 +834,7 @@ let result = info.hostCount;
             }
         });
 
-        return (listener, serverTask);
+        return (listener, port, serverTask);
     }
 
     private static void StopWsEchoServer(HttpListener listener, Task serverTask)
@@ -726,8 +856,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19900;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -748,8 +877,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19901;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -768,8 +896,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19902;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -794,8 +921,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19903;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -814,8 +940,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19904;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -833,8 +958,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19905;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             RunCapturingOutput($@"
@@ -852,8 +976,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19906;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -874,8 +997,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19907;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -896,8 +1018,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19908;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -941,13 +1062,12 @@ let result = info.hostCount;
         ");
     }
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or blocked in environment. Works in isolation.")]
+    [Fact]
     public void WsSendBinary_InvalidBase64_ThrowsError()
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19909;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             RunExpectingError($@"
@@ -958,13 +1078,12 @@ let result = info.hostCount;
         finally { StopWsEchoServer(listener, serverTask); }
     }
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or UDP blocked in environment")]
+    [Fact]
     public void WsClose_InvalidCode_ThrowsError()
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19910;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             RunExpectingError($@"
@@ -980,8 +1099,7 @@ let result = info.hostCount;
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19911;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"
@@ -996,13 +1114,12 @@ let result = info.hostCount;
         finally { StopWsEchoServer(listener, serverTask); }
     }
 
-    [Fact(Skip = "Flaky test - may fail if port is in use or blocked in environment. Works in isolation.")]
+    [Fact]
     public void WsConnect_DurationTimeout_Accepted()
     {
         if (OperatingSystem.IsWindows()) return;
 
-        int port = 19912;
-        var (listener, serverTask) = StartWsEchoServer(port);
+        var (listener, port, serverTask) = StartWsEchoServer();
         try
         {
             var output = RunCapturingOutput($@"

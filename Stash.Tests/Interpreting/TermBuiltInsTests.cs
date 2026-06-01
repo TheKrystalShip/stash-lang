@@ -243,12 +243,15 @@ let result = term.strip(outer);
 
     // ── term.width ────────────────────────────────────────────────────────────
 
-    [Fact(Skip = "Flaky as heck, need to refactor to be more testable")]
+    [Fact]
     public void Width_ReturnsPositiveInt()
     {
+        // term.width() returns the terminal column count, or 80 as a fallback when
+        // not attached to a TTY (the implementation catches the headless IOException),
+        // so a positive width always holds.
         var result = Run("let result = term.width();");
         var width = Assert.IsType<long>(result);
-        Assert.False(width > 0);
+        Assert.True(width > 0);
     }
 
     // ── term.isInteractive ────────────────────────────────────────────────────

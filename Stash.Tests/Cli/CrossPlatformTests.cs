@@ -15,6 +15,7 @@ namespace Stash.Tests.Cli;
 /// Platform-specific tests are individually gated via <c>if (OperatingSystem.IsWindows()) return;</c>
 /// (or the inverse) so they run only on the appropriate platform.
 /// </summary>
+[Collection("SystemCwdTests")]
 public class CrossPlatformTests
 {
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -681,13 +681,15 @@ public class DapIntegrationTests
 
     // ── 19. Script with Arguments ─────────────────────────────────────────────
 
-    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
+    [Fact(Skip = "Blocked by the cached NamespaceMember payload bug: cli.argv is a Cached member whose value is cached process-globally (first VM wins), so under parallel test load this reads another test's argv. Passes in isolation. Needs the VM-context cache fix — see 0-backlog/bugs/Cached NamespaceMember Payload Shared Across VM Instances.md")]
     public void Integration_ScriptArgs_Accessible()
     {
-        // Use the args.parse API to expose script arguments as Stash values.
+        // Expose script arguments as Stash values via cli.argv (the launch args below).
+        // Read argv directly rather than cli.parse: cli.parse exits the process on a
+        // parse failure (ExitException), which would crash the DAP test host.
         var script =
-            "let a = args.parse({ positionals: [{ name: \"target\", type: \"string\", description: \"Target\" }] });\n" +
-            "let first = a.target;\n" +
+            "let argv = cli.argv;\n" +
+            "let first = argv[0];\n" +
             "let x = first;\n";
         var path = CreateTempScript(script);
         try

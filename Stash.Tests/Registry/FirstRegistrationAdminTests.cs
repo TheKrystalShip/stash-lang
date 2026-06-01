@@ -40,6 +40,9 @@ public sealed class FirstRegistrationAdminTests : IDisposable
         return new WebApplicationFactory<Stash.Registry.Program>()
             .WithWebHostBuilder(builder =>
             {
+                // Pin content root to an absolute path so the factory is cwd-independent
+                // (parallel cwd-mutating tests would otherwise break relative resolution).
+                builder.UseSolutionRelativeContentRoot("Stash.Registry");
                 builder.UseSetting("environment", "Development");
                 builder.ConfigureTestServices(services =>
                 {

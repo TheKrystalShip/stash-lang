@@ -29,13 +29,15 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
         Assert.Equal(true, result);
     }
 
-    [Fact(Skip = "Flaky, sensitive to timing and load. May fail if file events are coalesced or delayed.")]
+    [Fact]
     public void Watch_DirectoryFileCreated_CallbackFires()
     {
         var dir = Path.Combine(TestDir, "watch_created_dir").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         var newFile = $"{dir}/newfile.txt";
 
+        // Poll for the Created callback up to a 5s deadline instead of a fixed sleep:
+        // a slow watcher gets the time it needs, a fast one isn't delayed.
         var result = Run($$"""
             let state = {matched: false};
             let w = fs.watch("{{dir}}", (event) => {
@@ -44,7 +46,10 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
                 }
             });
             fs.writeFile("{{newFile}}", "hello");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!state.matched && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
             let result = state.matched;
             """);
@@ -408,12 +413,18 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
         Assert.True((long)result! > 1);
     }
 
-    [Fact(Skip = "Flaky, sensitive to timing and load.")]
+    [Fact]
     public void Watch_DebounceDifferentFiles_NoCoalescing()
     {
         var dir = Path.Combine(TestDir, "debounce_diff").Replace("\\", "/");
         Directory.CreateDirectory(dir);
 
+        // The debounce timer is keyed on "{path}:{eventType}" (FsBuiltIns.FireCallback),
+        // so three writes to three DISTINCT files land in three distinct debounce buckets
+        // and never coalesce — each is guaranteed its own callback. >= 3 is therefore the
+        // exact contract guarantee, not a brittle heuristic. We poll until the three
+        // callbacks have fired (up to a 5s deadline) rather than sleeping a fixed window,
+        // so the default 100ms debounce delay plus any watcher latency is tolerated.
         var result = Run($$"""
             let state = {count: 0};
             let w = fs.watch("{{dir}}", (event) => {
@@ -422,7 +433,10 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
             fs.writeFile("{{dir}}/a.txt", "1");
             fs.writeFile("{{dir}}/b.txt", "2");
             fs.writeFile("{{dir}}/c.txt", "3");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (state.count < 3 && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
             let result = state.count;
             """);

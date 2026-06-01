@@ -62,14 +62,22 @@ public class CliExecutionTests : StashTestBase
 
         using var process = Process.Start(psi)!;
 
+        // Drain stdout and stderr concurrently. Reading one stream to completion before
+        // the other (sequential ReadToEnd) can deadlock when the child fills the other
+        // pipe's buffer and blocks on a write while we block on a read. Kick off both
+        // reads as tasks before touching stdin, then await both before WaitForExit so
+        // the pipes are fully drained.
+        Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+        Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+
         if (stdinInput is not null)
         {
             process.StandardInput.Write(stdinInput);
             process.StandardInput.Close();
         }
 
-        string stdout = process.StandardOutput.ReadToEnd();
-        string stderr = process.StandardError.ReadToEnd();
+        string stdout = stdoutTask.GetAwaiter().GetResult();
+        string stderr = stderrTask.GetAwaiter().GetResult();
         process.WaitForExit();
 
         return (stdout.TrimEnd('\n', '\r'), stderr.TrimEnd('\n', '\r'), process.ExitCode);
@@ -216,7 +224,7 @@ public class CliExecutionTests : StashTestBase
     // Stdin Piping (Process-level integration)
     // =========================================================================
 
-    [Fact(Skip = "Flaky, may fail due to buffering issues. Works in isolation.")]
+    [Fact]
     [Trait("Category", "Integration")]
     public void Stdin_SimplePrint_PrintsOutput()
     {

@@ -130,7 +130,13 @@ public sealed class Startup
                         ?? throw new InvalidOperationException("PostgreSQL connection string is required."));
                     break;
                 default:
-                    options.UseSqlite($"Data Source={_config.Database.Path}");
+                    // Append a busy-wait timeout so a second concurrent writer waits for the
+                    // SQLite write lock instead of failing fast with SQLITE_BUSY (which the
+                    // request pipeline would surface as an HTTP 500). Microsoft.Data.Sqlite
+                    // retries on SQLITE_BUSY/SQLITE_LOCKED up to the command timeout; "Default
+                    // Timeout" sets that. SQLite-only — Postgres handles concurrent writers
+                    // natively and is unaffected.
+                    options.UseSqlite($"Data Source={_config.Database.Path};Default Timeout=30");
                     break;
             }
         });

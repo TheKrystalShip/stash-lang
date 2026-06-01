@@ -144,11 +144,11 @@ public sealed class AliasPersistenceTests : IDisposable
 
     // ── 5. Loaded aliases have Source = Saved ────────────────────────────────
 
-    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
+    [Fact]
     public void Load_TagsNewAliasesAsSaved()
     {
         var (runner, vm) = MakeEnv();
-        File.WriteAllText(_aliasFile, "alias.define(\"g\", \"git ${args}\");\n");
+        File.WriteAllText(_aliasFile, "alias.define(\"g\", \"git \\${args}\");\n");
 
         AliasPersistence.Load(vm, runner);
 

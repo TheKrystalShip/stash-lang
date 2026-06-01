@@ -300,7 +300,7 @@ fn _buildHunk(edits: Edit[], groupStart: int, groupEnd: int, contextLines: int, 
 
 /// Compare two strings as line streams. Always returns a DiffResult,
 /// even when the inputs are line-equal (hunks=[], equal=true).
-fn lines(a: string, b: string, opts: DiffOptions = null) -> DiffResult {
+export fn lines(a: string, b: string, opts: DiffOptions = null) -> DiffResult {
   const o = _coalesceOpts(opts);
   const aLines = _splitLines(a);
   const bLines = _splitLines(b);
@@ -382,7 +382,7 @@ fn lines(a: string, b: string, opts: DiffOptions = null) -> DiffResult {
 
 /// Read both files via fs.* and diff them. Labels default to the
 /// supplied paths when the caller has not overridden them.
-fn files(pathA: string, pathB: string, opts: DiffOptions = null) -> DiffResult {
+export fn files(pathA: string, pathB: string, opts: DiffOptions = null) -> DiffResult {
   const a = fs.readFile(pathA);
   const b = fs.readFile(pathB);
   const o = _coalesceOpts(opts);
@@ -400,6 +400,6 @@ fn files(pathA: string, pathB: string, opts: DiffOptions = null) -> DiffResult {
 }
 
 /// True iff `a` and `b` are line-equal under the supplied options.
-fn equal(a: string, b: string, opts: DiffOptions = null) -> bool {
+export fn equal(a: string, b: string, opts: DiffOptions = null) -> bool {
   return lines(a, b, opts).equal;
 }

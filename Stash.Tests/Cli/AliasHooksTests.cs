@@ -391,7 +391,7 @@ public sealed class AliasHooksTests : IDisposable
     // 14. Hook recursion — before invokes same alias via alias.exec → AliasError
     // =========================================================================
 
-    [Fact(Skip = "args namespace removed in cli-arg-parsing; migrated by follow-up spec")]
+    [Fact]
     public void HookRecursion_BeforeInvokesSameAlias_CycleDetected()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
@@ -400,7 +400,7 @@ public sealed class AliasHooksTests : IDisposable
         // → ExecuteAlias, which checks the expansion stack. Since "recur" is already pushed
         // before hooks run (spec §9.3), the cycle guard fires.
         ShellRunner.EvaluateSource("""
-            alias.define("recur", "echo hello ${args}", AliasOptions {
+            alias.define("recur", "echo hello \${args}", AliasOptions {
                 before: (n, a) => {
                     alias.exec("recur", []);
                     return true;

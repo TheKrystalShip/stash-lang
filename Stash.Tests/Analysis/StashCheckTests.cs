@@ -4,6 +4,7 @@ using Stash.Check;
 
 namespace Stash.Tests.Analysis;
 
+[Collection("SystemCwdTests")]
 public class StashCheckTests
 {
     // ── Helper: Create temp .stash files for testing ─────────────────

@@ -7,41 +7,41 @@
 // stash-disable SA0201
 
 // ── Unified-diff line markers ────────────────────────────────────────────
-const MARKER_INSERT: string = "+";
-const MARKER_DELETE: string = "-";
-const MARKER_EQUAL: string  = " ";
-const MARKER_NO_NEWLINE: string = "\\ No newline at end of file";
+export const MARKER_INSERT: string = "+";
+export const MARKER_DELETE: string = "-";
+export const MARKER_EQUAL: string  = " ";
+export const MARKER_NO_NEWLINE: string = "\\ No newline at end of file";
 
 // ── Hunk and file headers ────────────────────────────────────────────────
-const HUNK_HEADER_OPEN: string  = "@@ ";
-const HUNK_HEADER_CLOSE: string = " @@";
-const FILE_HEADER_A: string     = "--- ";
-const FILE_HEADER_B: string     = "+++ ";
-const RANGE_SEPARATOR: string   = ",";   // "5,3" in "@@ -5,3 +5,3 @@"
-const RANGE_PREFIX_OLD: string  = "-";
-const RANGE_PREFIX_NEW: string  = "+";
+export const HUNK_HEADER_OPEN: string  = "@@ ";
+export const HUNK_HEADER_CLOSE: string = " @@";
+export const FILE_HEADER_A: string     = "--- ";
+export const FILE_HEADER_B: string     = "+++ ";
+export const RANGE_SEPARATOR: string   = ",";   // "5,3" in "@@ -5,3 +5,3 @@"
+export const RANGE_PREFIX_OLD: string  = "-";
+export const RANGE_PREFIX_NEW: string  = "+";
 
 // ── Line endings ─────────────────────────────────────────────────────────
-const LINE_SEPARATOR_LF: string   = "\n";
-const LINE_SEPARATOR_CRLF: string = "\r\n";
+export const LINE_SEPARATOR_LF: string   = "\n";
+export const LINE_SEPARATOR_CRLF: string = "\r\n";
 
 // ── Default option values ────────────────────────────────────────────────
-const DEFAULT_CONTEXT_LINES: int = 3;
-const DEFAULT_LABEL_A: string = "a";
-const DEFAULT_LABEL_B: string = "b";
-const DEFAULT_MAX_LINES: int = 0;        // 0 = unlimited
-const UNLIMITED: int = 0;
+export const DEFAULT_CONTEXT_LINES: int = 3;
+export const DEFAULT_LABEL_A: string = "a";
+export const DEFAULT_LABEL_B: string = "b";
+export const DEFAULT_MAX_LINES: int = 0;        // 0 = unlimited
+export const UNLIMITED: int = 0;
 
 // ── ANSI escape codes for color rendering ────────────────────────────────
 // Disabled by default — caller must opt in via diff.colorize(text, true).
 // Stash string literals do not support \x escapes, so the ESC byte (27)
 // is materialized via str.fromCharCode and concatenated here.
 const ANSI_ESC: string   = str.fromCharCode(27);
-const ANSI_RESET: string = ANSI_ESC + "[0m";
-const ANSI_RED: string   = ANSI_ESC + "[31m";
-const ANSI_GREEN: string = ANSI_ESC + "[32m";
-const ANSI_CYAN: string  = ANSI_ESC + "[36m";
-const ANSI_BOLD: string  = ANSI_ESC + "[1m";
+export const ANSI_RESET: string = ANSI_ESC + "[0m";
+export const ANSI_RED: string   = ANSI_ESC + "[31m";
+export const ANSI_GREEN: string = ANSI_ESC + "[32m";
+export const ANSI_CYAN: string  = ANSI_ESC + "[36m";
+export const ANSI_BOLD: string  = ANSI_ESC + "[1m";
 
 // ── Internal sentinels (do not export beyond the package) ────────────────
 const _NULL_LINE: int = -1;   // sentinel oldLine/newLine for INSERT/DELETE encoding internally

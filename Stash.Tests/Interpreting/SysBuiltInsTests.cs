@@ -488,7 +488,7 @@ let result = true;
         RunExpectingError("sys.offSignal(\"SIGTERM\");");
     }
 
-    [Fact(Skip = "Flaky test - may fail if another test has already registered a handler for the same signal or if signals are not supported in the environment")]
+    [Fact]
     public void OnSignal_SIGUSR1_HandlerInvoked()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -496,15 +496,27 @@ let result = true;
         string marker = Path.Combine(Path.GetTempPath(), $"stash_signal_test_{Guid.NewGuid():N}");
         try
         {
+            // The handler writes the marker when SIGUSR1 is delivered. We send the signal
+            // to our own PID, then poll (inside Stash) for the marker up to a 5s deadline
+            // instead of a fixed sleep — robust to signal-delivery latency under load.
+            // SIGUSR1 is registered process-globally, so the script unregisters it before
+            // returning, and the C# finally re-runs offSignal as a belt-and-suspenders
+            // cleanup so a mid-script failure can't leak the handler into a sibling test
+            // (OnSignal_AllSignalEnumMembers_CanRegister also touches SIGUSR1).
             var result = Run($@"
+let state = {{handled: false}};
 sys.onSignal(sys.Signal.SIGUSR1, () => {{
     fs.writeFile(""{marker.Replace("\\", "\\\\")}"", ""handled"");
+    state.handled = true;
 }});
 let pid = sys.pid();
 $(kill -USR1 ${{pid}});
-let _ = try $(sleep 0.3);
+let deadline = time.millis() + 5000;
+while (!state.handled && time.millis() < deadline) {{
+    let _ = try $(sleep 0.02);
+}}
 sys.offSignal(sys.Signal.SIGUSR1);
-let result = true;
+let result = state.handled;
 ");
             Assert.Equal(true, result);
             Assert.True(File.Exists(marker), "Signal handler should have created the marker file");
@@ -512,6 +524,10 @@ let result = true;
         }
         finally
         {
+            // Belt-and-suspenders: ensure SIGUSR1 is unregistered even if the script
+            // threw before reaching its own offSignal call.
+            try { Run("sys.offSignal(sys.Signal.SIGUSR1); let result = true;"); }
+            catch { /* cleanup is best-effort */ }
             if (File.Exists(marker))
                 File.Delete(marker);
         }
