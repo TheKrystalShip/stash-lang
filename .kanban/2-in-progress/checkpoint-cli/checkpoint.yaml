@@ -1,7 +1,7 @@
 schema_version: 1
 feature: checkpoint-cli
 current: null
-updated: "2026-06-01T23:04:39Z"
+updated: "2026-06-01T23:17:22Z"
 phases:
   1A:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "omission guard: coverage (by-path) + no-raw-path RED-with-22-exemptions; 3 fixtures; seed verified"
   3A:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 6a820ed7df333289568084600de28e2f565701a6
+    verified: true
+    started: "2026-06-01T23:16:07Z"
+    completed: "2026-06-01T23:17:22Z"
+    attempts: 1
+    notes: intra-script migration (3 files) to dispatcher form; RAWPATH_EXEMPTIONS 22→19; lint enforces; selftest 17/17
   4A:
     status: pending
     commit: null
