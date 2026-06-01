@@ -1,7 +1,7 @@
 schema_version: 1
 feature: readonly-modifier
 current: null
-updated: "2026-06-01T16:12:01Z"
+updated: "2026-06-01T16:26:22Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "SA0847 ReadOnlyMutationRule: DotAssign/IndexAssign/CallExpr on readonly bindings; KnownInPlaceMutators set; DispatchNodeRules added to VisitIndexAssignExpr; 30 tests green; arr.shuffle frozen-guard bug filed in backlog"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 9f79eea0834c51dd6ea37342c3d7af4ae5953290
+    verified: true
+    started: "2026-06-01T16:13:14Z"
+    completed: "2026-06-01T16:26:22Z"
+    attempts: 1
+    notes: Hover with deep/transitive description; playground keyword; TextMate storage.modifier.stash; tree-sitter optional(readonly); spec ToC+section with rationale+footgun; examples/readonly.stash 7 scenarios; HoverHandlerTests 2 tests; DAP no change
 review:
   status: not_started
   started: null
