@@ -121,9 +121,9 @@ phases:
       - stash scripts/checkpoint/promote-done.stash --help || true
       - stash scripts/checkpoint/checkpoint.stash next-phase --help
     done_when:
-      - "`promote-done.stash`'s `$!(stash scripts/checkpoint/promote-gate.stash ${slug})` is rewritten to invoke `checkpoint promote-gate` (exact shell-out form to be determined by the implementer, preserving strict-passthrough semantics and exit-code propagation)."
-      - "`bootstrap-feature.stash`'s `io.println` hint string referencing `stash scripts/checkpoint/validate-spec.stash` is rewritten to reference `checkpoint validate-spec`."
-      - "`worktree-start.stash`'s two `io.println` hint strings referencing `stash scripts/checkpoint/check-parallel-safety.stash` and `stash scripts/checkpoint/worktree-finish.stash` are rewritten to the `checkpoint <sub>` form."
+      - "`promote-done.stash`'s `$!(stash scripts/checkpoint/promote-gate.stash ${slug})` is rewritten to invoke `stash scripts/checkpoint/checkpoint.stash promote-gate ${slug}` (preserving the `try $!(...)` strict-capture + fail-closed semantics and exit-code propagation)."
+      - "`bootstrap-feature.stash`'s `io.println` hint string referencing `stash scripts/checkpoint/validate-spec.stash` is rewritten to reference `stash scripts/checkpoint/checkpoint.stash validate-spec`."
+      - "`worktree-start.stash`'s two `io.println` hint strings referencing `stash scripts/checkpoint/check-parallel-safety.stash` and `stash scripts/checkpoint/worktree-finish.stash` are rewritten to the `stash scripts/checkpoint/checkpoint.stash <sub>` form."
       - "`verify-phase.stash`'s call to `verify-phase-scope.stash` (internal tool) is unchanged — the guard does NOT flag it (proven by `ok_raw_internal_path.md` fixture remaining green)."
       - "`RAWPATH_EXEMPTIONS` list in the lint shrinks by exactly the three `.stash` files migrated in this phase."
       - "Every per-tool `--selftest` for the three edited tools is green."
@@ -149,7 +149,7 @@ phases:
       - stash scripts/checkpoint/lint_common_imports.stash --self-test
       - stash scripts/checkpoint/checkpoint.stash --selftest
     done_when:
-      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in `.claude/commands/*.md` where `<sub>` is a registered subcommand is rewritten to `checkpoint <sub>`."
+      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in `.claude/commands/*.md` where `<sub>` is a registered subcommand is rewritten to `stash scripts/checkpoint/checkpoint.stash <sub>`."
       - "`RAWPATH_EXEMPTIONS` removes every file in `.claude/commands/`."
       - "The lint passes on this batch's files (no exemption, no violation)."
       - "Slash-command flow examples remain syntactically valid (the replacement is a one-to-one string swap; no semantic edits)."
@@ -173,10 +173,10 @@ phases:
       - stash scripts/checkpoint/lint_common_imports.stash --self-test
       - stash scripts/checkpoint/checkpoint.stash --selftest
     done_when:
-      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in the listed agent / workflow / project-memory files where `<sub>` is a registered subcommand is rewritten to `checkpoint <sub>`."
+      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in the listed agent / workflow / project-memory files where `<sub>` is a registered subcommand is rewritten to `stash scripts/checkpoint/checkpoint.stash <sub>`."
       - "`RAWPATH_EXEMPTIONS` removes every file in this batch."
       - "The lint passes on this batch's files (no exemption, no violation)."
-      - "`.claude/WORKFLOW.md`'s 'Scripts' table is updated so its example invocations use the `checkpoint <sub>` form (the table's `Script` column may keep file names for grep-continuity, but the example commands beneath / surrounding it must be migrated)."
+      - "`.claude/WORKFLOW.md`'s 'Scripts' table is updated so its example invocations use the `stash scripts/checkpoint/checkpoint.stash <sub>` form (the table's `Script` column may keep file names for grep-continuity, but the example commands beneath / surrounding it must be migrated)."
 
   - id: 4C
     title: Doc migration batch 3 — templates + milestones
@@ -191,7 +191,7 @@ phases:
       - stash scripts/checkpoint/lint_common_imports.stash --self-test
       - stash scripts/checkpoint/checkpoint.stash --selftest
     done_when:
-      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in the listed template / milestone files where `<sub>` is a registered subcommand is rewritten to `checkpoint <sub>`."
+      - "Every occurrence of `stash scripts/checkpoint/<sub>.stash` in the listed template / milestone files where `<sub>` is a registered subcommand is rewritten to `stash scripts/checkpoint/checkpoint.stash <sub>`."
       - "`RAWPATH_EXEMPTIONS` is empty after this phase."
       - "The lint normal scan reports zero exemptions, zero violations across the full `LIVE_DOC_GLOBS` set."
 
@@ -212,7 +212,7 @@ phases:
       - "`RAWPATH_EXEMPTIONS` (the temporary migration list) is empty AND the lint exits 0 with `0 violations` over the full `LIVE_DOC_GLOBS` set."
       - "`RAWPATH_SCAN_EXCLUSIONS` (the permanent data-file list) remains exactly its phase-2A contents (`_registry.stash` only, unless an explicit Decision Log entry has added another) — verified by inspection."
       - "`checkpoint --selftest` is green: byte-parity for every registered subcommand (selftest cases) and exit-code+stderr parity for the side-effect-free usage-error probes (no-selftest cases)."
-      - "Every per-tool `--selftest`/`--self-test` is green when invoked via both `checkpoint <sub> <flag>` AND `stash scripts/checkpoint/<sub>.stash <flag>`."
+      - "Every per-tool `--selftest`/`--self-test` is green when invoked via both `stash scripts/checkpoint/checkpoint.stash <sub> <flag>` AND `stash scripts/checkpoint/<sub>.stash <flag>`."
       - "Full `dotnet test` suite is green (zero failures), including all `Category=Gotcha` change-detector tests."
       - "Brief and plan.yaml have any minor end-state corrections folded in."
       - "`.claude/repo.md` Recent Completed Work entry prepared for `/done` to promote."
