@@ -1,86 +1,83 @@
 schema_version: 1
 feature: checkpoint-scripts-stash-port
 current: null
-updated: '2026-06-01T00:16:40Z'
+updated: "2026-06-01T05:27:15Z"
 phases:
   P1:
     status: done
     commit: cb44f3ef5bd00e8f0ed1c04543df9fef165846b2
     verified: true
-    started: '2026-05-31T22:13:27Z'
-    completed: '2026-05-31T22:22:05Z'
+    started: "2026-05-31T22:13:27Z"
+    completed: "2026-05-31T22:22:05Z"
     attempts: 1
     notes: _common.stash 11 exports + lint guard with self-test + coverage stub
   P2:
     status: done
     commit: 1e4d68332a71138d82c6687ec308cef41b1cd2fb
     verified: true
-    started: '2026-05-31T22:23:17Z'
-    completed: '2026-05-31T22:38:13Z'
+    started: "2026-05-31T22:23:17Z"
+    completed: "2026-05-31T22:38:13Z"
     attempts: 1
-    notes: 'difftest_runner.stash: 16/16 advance-checkpoint cases pass; self-test, coverage-check, lint
-      all green'
+    notes: "difftest_runner.stash: 16/16 advance-checkpoint cases pass; self-test, coverage-check, lint all green"
   P3:
     status: done
     commit: e7a29b004f5fcfc441a90d64559d15a7986f5e39
     verified: true
-    started: '2026-05-31T22:39:23Z'
-    completed: '2026-05-31T22:49:34Z'
+    started: "2026-05-31T22:39:23Z"
+    completed: "2026-05-31T22:49:34Z"
     attempts: 1
-    notes: validate-spec.stash 9/9 oracle cases pass; runner extended with per-case plan override; lint+coverage
-      green
+    notes: validate-spec.stash 9/9 oracle cases pass; runner extended with per-case plan override; lint+coverage green
   P4:
     status: done
     commit: 8f1b973b6342db9a0ee55aa3c6ff8c4d93c4d69f
     verified: true
-    started: '2026-05-31T23:07:17Z'
-    completed: '2026-05-31T23:27:08Z'
+    started: "2026-05-31T23:07:17Z"
+    completed: "2026-05-31T23:27:08Z"
     attempts: 1
-    notes: next-phase.stash 8/8 oracle cases pass; stdout_yaml_equal axis added to runner (JSON round-trip
-      anchor expand); lint+coverage+self-test green
+    notes: next-phase.stash 8/8 oracle cases pass; stdout_yaml_equal axis added to runner (JSON round-trip anchor expand); lint+coverage+self-test green
   P5:
     status: done
     commit: 71fa1bfa3ead8b0cfcfe360225bc9479f60302d2
     verified: true
-    started: '2026-05-31T23:35:27Z'
-    completed: '2026-06-01T00:01:28Z'
+    started: "2026-05-31T23:35:27Z"
+    completed: "2026-06-01T00:01:28Z"
     attempts: 1
     notes: verify-phase.sh scope/glob ported to verify-phase-scope.stash (path.match); 11/11 oracle
   P6:
     status: done
     commit: 03a1d2183ce5b8d3c00178e87e8ee170fba55dbf
     verified: true
-    started: '2026-06-01T00:02:02Z'
-    completed: '2026-06-01T00:03:41Z'
+    started: "2026-06-01T00:02:02Z"
+    completed: "2026-06-01T00:03:41Z"
     attempts: 1
     notes: status.stash LOOSE parity; 3/3 oracle exit-code
   P7:
     status: done
     commit: 892d4f374ab4acdb064131873be667b15e6b4679
     verified: true
-    started: '2026-06-01T00:03:50Z'
-    completed: '2026-06-01T00:10:33Z'
+    started: "2026-06-01T00:03:50Z"
+    completed: "2026-06-01T00:10:33Z"
     attempts: 1
     notes: check-parallel-safety.stash; git worktree shellout; 4/4 oracle
   P8:
     status: done
     commit: 6a776f3748d379fc0029eadedeb431559f213e2c
     verified: true
-    started: '2026-06-01T00:10:39Z'
-    completed: '2026-06-01T00:14:45Z'
+    started: "2026-06-01T00:10:39Z"
+    completed: "2026-06-01T00:14:45Z"
     attempts: 1
     notes: milestone-status.stash LOOSE parity; cross-worktree dedup; 5/5 oracle
   P9:
     status: done
     commit: 22c7e917ac3951ff3b6d21e28dcb01c7ac9cd923
     verified: true
-    started: '2026-06-01T00:16:05Z'
-    completed: '2026-06-01T00:16:40Z'
+    started: "2026-06-01T00:16:05Z"
+    completed: "2026-06-01T00:16:40Z"
     attempts: 1
-    notes: cutover .claude/*.md python3->stash; dogfood green; coexistence held
+    notes: "cutover .claude/*.md python3->stash; dogfood green; coexistence held"
 review:
-  status: not_started
-  started: null
-  resolved: null
+  status: resolved
+  started: "2026-06-01T05:22:58Z"
+  resolved: "2026-06-01T05:27:15Z"
   findings_open: 0
   findings_fixed: 0
