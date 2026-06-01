@@ -10,29 +10,54 @@
 //   --open    only findings whose Status is "open"
 //   --count   print just the integer count of the (filtered) set, nothing else
 //   --json    print the (filtered) findings as a compact JSON array
+//   --id Fxx  restrict to the single finding Fxx
+//   --field K print ONLY field K of the first matching finding, nothing else
+//             (K ∈ id|severity|title|status|files|has_justification); exit 1 if
+//             no finding matches. Pair with --id for a targeted lookup — this is
+//             how /accept reads a finding's severity/status through the shared
+//             parser instead of its own awk/sed.
 //   (default) one human line per finding: "F01  [CRITICAL]  open   <title>"
 //
 // Exit code is always 0 when review.md parses — enumeration is NOT a gate (the
-// gate is promote-gate.stash). Dies (exit 1) only when the feature or its
-// review.md is missing.
+// gate is promote-gate.stash) — EXCEPT --field with no match, which exits 1.
+// Dies (exit 1) only when the feature or its review.md is missing.
 
 import { resolve_feature, feature_dir, parse_findings, die } from "_common.stash";
 
-// ── Args (manual: slug positional + flags) ──────────────────────────────────
+// The field names --field may request — bounded set, single source of truth.
+const FINDING_FIELDS = ["id", "severity", "title", "status", "files", "has_justification"];
+
+// ── Args (manual: slug positional + flags; --id/--field take a value) ───────
 let slug_arg = null;
 let only_open = false;
 let count_mode = false;
 let json_mode = false;
-for (let a in cli.argv) {
+let id_filter = null;
+let field_name = null;
+let argv = [];
+for (let x in cli.argv) { arr.push(argv, x); }
+let i = 0;
+while (i < argv.length) {
+    let a = argv[i];
     if (a == "--open") {
         only_open = true;
     } else if (a == "--count") {
         count_mode = true;
     } else if (a == "--json") {
         json_mode = true;
+    } else if (a == "--id") {
+        i = i + 1;
+        if (i < argv.length) { id_filter = argv[i]; }
+    } else if (a == "--field") {
+        i = i + 1;
+        if (i < argv.length) { field_name = argv[i]; }
     } else if (slug_arg == null) {
         slug_arg = a;
     }
+    i = i + 1;
+}
+if (field_name != null && !arr.contains(FINDING_FIELDS, field_name)) {
+    die("unknown --field '" + field_name + "' (one of: " + arr.join(FINDING_FIELDS, ", ") + ")", 2);
 }
 
 let slug = resolve_feature(slug_arg);   // dies (exit 1) if unresolvable
@@ -44,6 +69,19 @@ if (!fs.exists(review_md)) {
 let findings = parse_findings(fs.readFile(review_md));
 if (only_open) {
     findings = arr.filter(findings, (f) => f.status == "open");
+}
+if (id_filter != null) {
+    findings = arr.filter(findings, (f) => f.id == id_filter);
+}
+
+// ── --field: print one field of the first match, exit 1 if no match ─────────
+if (field_name != null) {
+    if (findings.length == 0) {
+        die("no finding" + (id_filter != null ? " " + id_filter : "") + " in " + slug + "'s review.md", 1);
+    }
+    let val = dict.get(findings[0], field_name);
+    io.println(conv.toStr(val ?? ""));
+    env.exit(0);
 }
 
 // ── Emit ────────────────────────────────────────────────────────────────────

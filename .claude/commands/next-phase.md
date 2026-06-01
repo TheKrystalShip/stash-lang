@@ -138,7 +138,11 @@ Invoke the `implementer` agent via the `Agent` tool with `subagent_type: "implem
 ## After the implementer returns
 
 1. Read the implementer's report.
-2. Confirm with `git log -1 --oneline`, `git status --porcelain`, and `stash scripts/checkpoint/status.stash "$SLUG"` that the state advanced as expected. The implementer should have left the tree **clean** (it owns its chore commit). If `checkpoint.yaml` is still dirty with no `chore(<slug>): record <id> done state` commit, the implementer didn't finish — commit it yourself as a fallback before reporting.
+2. **Assert each completed phase actually landed.** `assert-phase-landed` replaces eyeballing `git log` / `git status` / `status.stash` with one deterministic verdict — tree clean, phase `done`+`verified`, and the recorded commit reachable in git:
+   ```bash
+   stash scripts/checkpoint/assert-phase-landed.stash "$SLUG" "<completed-phase-id>"
+   ```
+   Run it once per phase the implementer completed this turn. Omit `--main-ref` here — standalone `/next-phase` may run directly on `main`; the worktree split-brain pin is `/autopilot`'s job. **Exit 0 = landed;** a non-zero prints exactly what's wrong. The common recoverable case is a dirty `checkpoint.yaml` with no `chore(<slug>): record <id> done state` commit — the implementer didn't finish its chore commit; commit it yourself as a fallback (`git add .kanban/2-in-progress/$SLUG/checkpoint.yaml && git commit -m "chore($SLUG): record <id> done state"`), then re-run the assertion before reporting.
 3. Tell the user:
    - On success: completed phase ids, commit SHAs, the next phase id (or "all phases done → `/feature-review <slug>`")
    - On failure: failed phase id, any completed phase ids, failure reason, suggested next action

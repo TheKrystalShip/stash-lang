@@ -132,7 +132,10 @@ Invoke the `resolver` agent via the `Agent` tool with `subagent_type: "resolver"
 ## After the resolver returns
 
 1. Verify the commit landed: `git log -1 --oneline`.
-2. Re-grep `review.md` for remaining open findings: `grep -B1 "Status:\*\* open" .kanban/2-in-progress/$SLUG/review.md`.
+2. List remaining open findings with the shared parser — the SAME one the promotion gate uses, so the loop and the gate can never disagree about what is still open:
+   ```bash
+   stash scripts/checkpoint/review-findings.stash "$SLUG" --open
+   ```
 3. If there are still open findings, suggest the next explicit batch: `/resolve <slug> Fxx [Fyy...]`.
 4. If all findings are fixed, update the checkpoint and tell the user `/done <slug>` is ready:
    ```bash

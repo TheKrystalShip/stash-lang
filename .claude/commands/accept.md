@@ -51,15 +51,13 @@ echo "slug: $SLUG  finding: $FID  reason: $REASON"
 ### 3. Locate the finding and ENFORCE the accept rules (fail closed)
 
 ```bash
-# Extract the finding's block: from its `## Fxx ` header to the next `## F` header.
-BLOCK=$(awk -v fid="$FID" '
-  $0 ~ ("^## " fid " ") {f=1}
-  f && /^## F/ && $0 !~ ("^## " fid " ") {exit}
-  f {print}' "$REVIEW")
-[ -n "$BLOCK" ] || { echo "finding $FID not found in $REVIEW" >&2; exit 1; }
-
-SEV=$(printf '%s\n' "$BLOCK" | head -1 | sed -E 's/^## [^[]*\[([A-Z]+)\].*/\1/')
-STATUS=$(printf '%s\n' "$BLOCK" | grep -m1 -E '^\*\*Status:\*\*' | sed -E 's/^\*\*Status:\*\*[[:space:]]*([A-Za-z]+).*/\1/')
+# Read severity + status through the SHARED parser (review-findings.stash) — the
+# SAME parse promote-gate uses, so /accept's pre-check can never drift from the
+# gate it mirrors. `--field` exits 1 when the finding id is absent.
+SEV=$(stash scripts/checkpoint/review-findings.stash "$SLUG" --id "$FID" --field severity) \
+  || { echo "finding $FID not found in $REVIEW" >&2; exit 1; }
+STATUS=$(stash scripts/checkpoint/review-findings.stash "$SLUG" --id "$FID" --field status) \
+  || { echo "finding $FID not found in $REVIEW" >&2; exit 1; }
 
 [ "$STATUS" = "open" ] || { echo "refusing: $FID status is '$STATUS', not 'open' — only an open finding can be accepted" >&2; exit 1; }
 [ "$SEV" != "CRITICAL" ] || { echo "refusing: $FID is CRITICAL — it must be fixed (/resolve) or the run stops; CRITICAL findings can never be accepted" >&2; exit 1; }

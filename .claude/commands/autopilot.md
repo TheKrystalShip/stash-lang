@@ -65,6 +65,13 @@ Stop on the first failure and tell the user how to fix it.
    stash scripts/checkpoint/validate-spec.stash "$SLUG"
    ```
    If this fails, the brief/plan needs the architect — stop and say so (`/spec`).
+3. **Pin `main` for the split-brain guard.** Record main's SHA now, in the main checkout —
+   you pass it to `assert-phase-landed --main-ref` each phase so a worktree run can *prove* its
+   commits never leaked onto `main`:
+   ```bash
+   git rev-parse main      # remember this SHA — referred to as <MAIN_REF> below
+   ```
+   (Under `--here` there is no worktree, so the pin is moot — skip `--main-ref` in Step 3.)
 
 ## Step 2 — Enter the worktree (default) / resume / `--here`
 
@@ -96,7 +103,15 @@ Repeat until `stash scripts/checkpoint/status.stash "$SLUG"` shows every phase `
 1. Invoke **`/next-phase <slug>`** (Skill tool). One implementer, one phase. `/next-phase` already
    runs its own pre-flight (validate, clean-tree check, get-next-phase) and its own
    post-dispatch verification + implementer chore-commit fallback — let it.
-2. After it returns, confirm the phase advanced (`status.stash`) and the tree is clean.
+2. After it returns, **assert the phase landed** with the deterministic verdict (replaces eyeballing
+   `status.stash` + `git status` by hand). In worktree mode add the `--main-ref` pin from Step 1 so a
+   stray commit onto `main` is caught:
+   ```bash
+   stash scripts/checkpoint/assert-phase-landed.stash "$SLUG" "<phase-id>" --main-ref <MAIN_REF>
+   ```
+   (Drop `--main-ref` under `--here`.) A non-zero exit means the phase did NOT land cleanly — dirty
+   tree, phase not `done`/`verified`, recorded commit unreachable, or `main` moved. Treat a red
+   assertion like a failed phase: do not advance to the next phase on it.
 3. **If a phase reaches `failed`** (verify never went green after the implementer's bounded
    corrections): that is the retry boundary. Re-invoke `/next-phase <slug>` **once** more (attempt
    2). If it fails again → **STOP + handoff** (phase id, failure reason, `/resume <slug>` to continue).
@@ -114,12 +129,15 @@ When `/next-phase` reports "all phases done," continue to Step 4.
    ```
    This chore-commit is **mandatory before any `/resolve`** — `/resolve` refuses on a dirty tree,
    so skipping it deadlocks the pipeline.
-3. **Zero findings →** skip Steps 5–6, go straight to Step 7 (`/done`).
-   **Findings exist →** go to Step 5.
+3. **Decide via the enumerator** (not by eyeballing `review.md`):
+   ```bash
+   stash scripts/checkpoint/review-findings.stash "$SLUG" --count
+   ```
+   Prints `0` → skip Steps 5–6, go straight to Step 7 (`/done`). Non-zero → go to Step 5.
 
 ## Step 5 — Resolve all findings (of the current review)
 
-Loop until `grep '\*\*Status:\*\* open' .kanban/2-in-progress/$SLUG/review.md` is empty:
+Loop until `stash scripts/checkpoint/review-findings.stash "$SLUG" --open --count` prints `0`:
 
 1. Invoke **`/resolve <slug> Fxx`** (Skill tool) — one finding, or a small batch of clearly
    related/small findings. The resolver fixes only those, runs their Verify union, commits the fix,
@@ -143,8 +161,9 @@ This is the **one** re-review (per the locked design: exactly two review passes 
 regressions the fixes introduced.
 
 1. Invoke **`/feature-review <slug>`** again, then chore-commit `land review.md` as in Step 4.2.
-2. **Zero findings →** Step 7. **Findings exist →** resolve them all (Step 5 mechanics), then go to
-   Step 7 with **no third review** — `/done`'s `final_verify` is the backstop for the pass-2 fixes.
+2. **Zero findings** (`review-findings.stash "$SLUG" --count` prints `0`) **→** Step 7.
+   **Findings exist →** resolve them all (Step 5 mechanics), then go to Step 7 with **no third
+   review** — `/done`'s `final_verify` is the backstop for the pass-2 fixes.
 
 ## Step 7 — Finish (promote on the branch)
 

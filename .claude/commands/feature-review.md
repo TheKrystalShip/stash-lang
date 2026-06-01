@@ -70,10 +70,10 @@ wrong — recompute from the first feature commit's parent before handing the ra
 ### 4. Run the full test suite once as a baseline
 
 ```bash
-dotnet test 2>&1 | tail -50
+stash scripts/checkpoint/run-verify.stash "dotnet test" --name baseline
 ```
 
-The suite is green — a failure here is a real regression, not noise to excuse.
+`run-verify` streams the run live and prints a structured, fail-closed verdict (`PASS`/`FAIL`, failed/passed/skipped counts, and any failing-test names) instead of leaving you to eyeball `tail`. **For a cold build, invoke it under the Bash tool's `run_in_background` and poll** — it streams a *warm* build but cannot stream a silent cold build, so it does **not** by itself eliminate the stream-idle timeout. The suite is green — a `FAIL` verdict is a real regression, not noise to excuse.
 
 ## Dispatch the reviewer
 
@@ -99,7 +99,7 @@ Invoke the `reviewer` agent via the `Agent` tool with `subagent_type: "reviewer"
 
 ## After the reviewer returns
 
-1. Read `review.md` (or at least the headers — `grep "^## F" .kanban/2-in-progress/$SLUG/review.md`).
+1. List the findings with the shared parser — `stash scripts/checkpoint/review-findings.stash "$SLUG"` (id, severity, status, title; the same parse `/resolve` and the promotion gate use). Add `--json` if you want the structured form.
 2. Tell the user:
    - Counts by severity
    - Next action:
