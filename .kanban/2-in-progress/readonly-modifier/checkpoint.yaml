@@ -1,16 +1,16 @@
 schema_version: 1
 feature: readonly-modifier
 current: null
-updated: '2026-05-30T18:04:18Z'
+updated: "2026-06-01T14:37:39Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 02f6625194fca4bb198aac949b08d7fc76e380aa
+    verified: true
+    started: "2026-06-01T14:25:44Z"
+    completed: "2026-06-01T14:37:39Z"
+    attempts: 1
+    notes: "readonly added to SoftKeywords; VarDeclStmt/ConstDeclStmt carry ReadonlyKeyword token + IsReadonly bool; 3-way Declaration() branch, for-init rejection, export readonly const wiring; SoftKeywords drift guard and parser tests added; snapshot re-baselined"
   P2:
     status: pending
     commit: null
