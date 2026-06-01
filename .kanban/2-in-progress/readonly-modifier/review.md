@@ -27,7 +27,8 @@ guarantee, not architectural problems with the design.
 
 ## F01 — [CRITICAL] Bytecode instruction reference doc is stale; final_verify fails on `dotnet test`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** b8c6242
 **Files:** `docs/Bytecode VM — Instruction Set Reference.md:17`, `Stash.Bytecode/Bytecode/OpCode.cs:451`
 **Phase:** P4
 **Commit:** 4df52173
