@@ -210,3 +210,31 @@ grep -n "\\$!>(stash" .kanban/2-in-progress/checkpoint-cli/brief.md
 # expect: no match in the Semantics section (the brief may still mention $!> elsewhere
 #         when describing the historical primitive used by verify-phase / promote-done)
 ```
+
+---
+
+## Re-review (pass 2)
+
+**Date:** 2026-06-02
+**Scope:** verify the F01/F02 fixes in `546024e2` introduced no regressions; *not* a from-scratch re-review.
+
+The two fixes are sound and introduced **zero new findings**.
+
+### Regression checks performed
+
+1. **`LIVE_DOC_GLOBS` glob-extension behaviour (the only file-format-sensitive change).** Confirmed by source-read that the lint scans every file via `fs.readFile` + `str.contains` substring match (`rawpath_violations_in_file`, lines 227-241) — format-agnostic by construction. There is no YAML parser involved; adding `.kanban/_templates/**/*.yaml` simply enlarges the set of paths that get a substring scan. No risk of mis-parse on `.yaml`.
+2. **The guard has teeth on `.yaml`.** Empirically verified by writing a scratch `.kanban/_templates/_scratch.yaml` containing a literal `scripts/checkpoint/next-phase.stash` reference; `stash scripts/checkpoint/lint_common_imports.stash` fired with exit 1 and the expected violation line. Scratch file removed; tree returned to clean.
+3. **Lint normal scan still green.** `stash scripts/checkpoint/lint_common_imports.stash` → `OK — 18 file(s) scanned, 0 violations`, with the now-extended glob set (18 = same as pre-fix because the `.yaml` templates are now post-migration). `RAWPATH_EXEMPTIONS` is still empty.
+4. **Lint `--self-test` still green across all three fixtures.** PASS on `bad_inlines_helper.stash` (2 violations as expected), PASS on `bad_raw_subcommand_path.md` (1 violation), PASS on `ok_raw_internal_path.md` (correctly silent). Fixtures live under `scripts/checkpoint/lint_common_imports.fixtures/` — not matched by any `LIVE_DOC_GLOBS` entry, so the deliberately-raw fixture cannot pollute the normal scan.
+5. **Dispatcher `--selftest` still 17/17.** All registered subcommands byte-identical for `--selftest`/`--self-test`/`--help`/no-op probes. (Sanity: the F01/F02 fix touched only `brief.md`, `plan.yaml` (this feature), the two templates, and one line of `lint_common_imports.stash`. `checkpoint.stash` itself is untouched in the fix commit — `git diff c7d7125e..HEAD -- scripts/checkpoint/checkpoint.stash` shows only the initial new-file addition.)
+6. **Templates produce a clean bootstrap.** Bootstrapped a throwaway feature `_test_re_review_throwaway` via `stash scripts/checkpoint/checkpoint.stash bootstrap-feature`; the seeded `plan.yaml:5` carries `Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>` (dispatcher form), and the seeded `checkpoint.yaml:3-4` carry the dispatcher form too. `stash scripts/checkpoint/checkpoint.stash validate-spec _test_re_review_throwaway` returned `plan/checkpoint OK ... 3 phases`. Throwaway feature dir removed; tree clean.
+7. **No new raw-path leak.** `grep -rn scripts/checkpoint/ .kanban/_templates/` shows only dispatcher-form references; `grep -rn scripts/checkpoint/ .claude/` shows only dispatcher-form references plus narrative directory mentions in `repo.md` and `stash-author.md` (descriptive, not invocations).
+8. **F02 brief text is now accurate.** `brief.md:93` correctly describes `$>` (non-strict), `env.exit(result.exitCode)`, and explicitly contrasts with the strict `$!>` (which would break passthrough). Matches `checkpoint.stash:189`.
+
+### Notes on the deliberate scope of the fix
+
+Per the brief's Cross-Cutting Concerns table, `.kanban/2-in-progress/**/plan.yaml` is **not** in `LIVE_DOC_GLOBS` — and the fix preserved that exclusion. As a side-effect, an in-flight peer feature `pkg-cli-api-parity/plan.yaml` still carries `stash scripts/checkpoint/validate-spec.stash pkg-cli-api-parity` on line 5 (and elsewhere) because it was bootstrapped *before* this feature shipped. That is consistent with the fix's chosen scope (seed + templates, not retroactive rewrites of in-flight features) and is not a regression introduced by the fix — it's pre-existing state the fix deliberately did not touch. Worth flagging as a follow-up consideration but it is **not** a finding against this feature: the new template seed prevents future occurrences, and the in-progress feature will be re-seeded next time its plan.yaml is regenerated, or migrated manually during its own work.
+
+### Verdict
+
+Both prior findings are correctly fixed; no regressions; full live surface clean; dispatcher contract intact. Setting review status to `resolved`.
