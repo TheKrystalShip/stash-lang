@@ -36,3 +36,7 @@ This rule covers bugs surfaced during any workflow phase: architect design sessi
 ### Other backlog stubs
 
 Optimization ideas, design sketches, and other non-bug notes use the same general shape (`Status:`, `Created:`, `Discovery context:`, narrative) but are not bound to the bug template. Existing files in `0-backlog/{optimizations,language,stdlib,...}/` are the convention.
+
+### Fixed bugs → promote to `4-done/`
+
+When a backlog bug is fixed: append a `## Resolution (<date>)` section (fix commit, what changed, verification performed) to its stub, set `**Status:** Fixed — <date> (commit <hash>)`, and move it to `4-done/` as a flat **`Bug — <Title-Case>.md`** file — there is **no** `4-done/bugs/` subfolder; fixed-bug stubs sit alongside completed features. A bug filed *and* fixed in the same session may go straight to `4-done/` "born resolved."
