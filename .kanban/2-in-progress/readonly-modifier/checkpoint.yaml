@@ -1,7 +1,7 @@
 schema_version: 1
 feature: readonly-modifier
 current: null
-updated: "2026-06-01T14:47:06Z"
+updated: "2026-06-01T15:23:11Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: SymbolInfo.IsReadonly added; SymbolCollector passes isReadonly to AddSymbol; SemanticTokenWalker emits TokenTypeKeyword for readonly lexeme; DeclarationPrinter conditionally emits readonly token before let/const; plan.yaml extended with SymbolInfo.cs + DeclarationPrinter.cs; 16 new tests across FormatterTests/SymbolCollectorTests/SemanticTokenWalkerTests
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 6b302819dc679e36e118a01ec1dccec92edc1f3c
+    verified: true
+    started: "2026-06-01T14:47:57Z"
+    completed: "2026-06-01T15:23:11Z"
+    attempts: 1
+    notes: "StashArray always-present carrier; DeepFreeze in RuntimeValues; StashInstance.Freeze; dict/arr/struct write-guard; 36 C# tests green; bench stable (120ms vs 121ms baseline)"
   P4:
     status: pending
     commit: null
