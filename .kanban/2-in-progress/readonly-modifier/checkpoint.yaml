@@ -1,7 +1,7 @@
 schema_version: 1
 feature: readonly-modifier
 current: null
-updated: "2026-06-01T15:23:11Z"
+updated: "2026-06-01T15:52:49Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "StashArray always-present carrier; DeepFreeze in RuntimeValues; StashInstance.Freeze; dict/arr/struct write-guard; 36 C# tests green; bench stable (120ms vs 121ms baseline)"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4df52173d356b2d89e601e143c252193dd121937
+    verified: true
+    started: "2026-06-01T15:24:37Z"
+    completed: "2026-06-01T15:52:49Z"
+    attempts: 1
+    notes: Freeze opcode + compiler wiring for readonly init/rebind; upvalue const/readonly enforcement; 21 e2e tests green; bench stable 120/121ms vs 120/94ms baseline
   P5:
     status: pending
     commit: null
