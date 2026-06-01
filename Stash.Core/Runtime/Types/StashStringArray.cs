@@ -57,7 +57,7 @@ public sealed class StashStringArray : StashTypedArray
         return StashValue.FromObj(_data[index]);
     }
 
-    public override void Set(int index, StashValue val)
+    protected override void SetCore(int index, StashValue val)
     {
         if (val.IsObj && val.AsObj is string s)
             _data[index] = s;
@@ -65,7 +65,7 @@ public sealed class StashStringArray : StashTypedArray
             throw new RuntimeError($"Cannot assign {TypeNameOf(val)} to element of string[] at index {index} — expected string.");
     }
 
-    public override void Add(StashValue val)
+    protected override void AddCore(StashValue val)
     {
         if (val.IsObj && val.AsObj is string s)
         {
@@ -78,13 +78,13 @@ public sealed class StashStringArray : StashTypedArray
         }
     }
 
-    public override StashValue RemoveLast()
+    protected override StashValue RemoveLastCore()
     {
         if (_count == 0) throw new RuntimeError("Cannot pop from empty string[].");
         return StashValue.FromObj(_data[--_count]);
     }
 
-    public override void Insert(int index, StashValue val)
+    protected override void InsertCore(int index, StashValue val)
     {
         if (val.IsObj && val.AsObj is string s)
         {
@@ -99,14 +99,14 @@ public sealed class StashStringArray : StashTypedArray
         }
     }
 
-    public override void RemoveAt(int index)
+    protected override void RemoveAtCore(int index)
     {
         _count--;
         Array.Copy(_data, index + 1, _data, index, _count - index);
     }
 
     public override StashTypedArray Clone() => new StashStringArray(_data, _count);
-    public override void Clear() => _count = 0;
+    protected override void ClearCore() => _count = 0;
     public override StashTypedArray CreateEmpty() => new StashStringArray(new List<StashValue>());
 
     private void EnsureCapacity(int min)

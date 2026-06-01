@@ -51,14 +51,14 @@ public sealed class StashBoolArray : StashTypedArray
         return _data[index] ? StashValue.True : StashValue.False;
     }
 
-    public override void Set(int index, StashValue val)
+    protected override void SetCore(int index, StashValue val)
     {
         if (!val.IsBool)
             throw new RuntimeError($"Cannot assign {TypeNameOf(val)} to element of bool[] at index {index} — expected bool.");
         _data[index] = val.AsBool;
     }
 
-    public override void Add(StashValue val)
+    protected override void AddCore(StashValue val)
     {
         if (!val.IsBool)
             throw new RuntimeError($"Cannot add {TypeNameOf(val)} to bool[] — expected bool.");
@@ -66,13 +66,13 @@ public sealed class StashBoolArray : StashTypedArray
         _data[_count++] = val.AsBool;
     }
 
-    public override StashValue RemoveLast()
+    protected override StashValue RemoveLastCore()
     {
         if (_count == 0) throw new RuntimeError("Cannot pop from empty bool[].");
         return _data[--_count] ? StashValue.True : StashValue.False;
     }
 
-    public override void Insert(int index, StashValue val)
+    protected override void InsertCore(int index, StashValue val)
     {
         if (!val.IsBool)
             throw new RuntimeError($"Cannot insert {TypeNameOf(val)} into bool[] — expected bool.");
@@ -82,14 +82,14 @@ public sealed class StashBoolArray : StashTypedArray
         _count++;
     }
 
-    public override void RemoveAt(int index)
+    protected override void RemoveAtCore(int index)
     {
         _count--;
         Array.Copy(_data, index + 1, _data, index, _count - index);
     }
 
     public override StashTypedArray Clone() => new StashBoolArray(_data, _count);
-    public override void Clear() => _count = 0;
+    protected override void ClearCore() => _count = 0;
     public override StashTypedArray CreateEmpty() => new StashBoolArray(new List<StashValue>());
 
     private void EnsureCapacity(int min)

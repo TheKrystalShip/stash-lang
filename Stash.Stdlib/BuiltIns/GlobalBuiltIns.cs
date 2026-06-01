@@ -132,7 +132,6 @@ public static partial class GlobalBuiltIns
             }
             if (obj is string s) return StashValue.FromInt((long)s.Length);
             if (obj is List<StashValue> svList) return StashValue.FromInt((long)svList.Count);
-            if (obj is StashFrozenArray frozenArr) return StashValue.FromInt((long)frozenArr.Count);
             if (obj is StashTypedArray typedArr) return StashValue.FromInt((long)typedArr.Count);
             if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
         }

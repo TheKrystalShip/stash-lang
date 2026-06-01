@@ -574,4 +574,34 @@ public class FormatterTests
         var result = FormatRange(input, 1, 1);
         Assert.Equal(input, result);
     }
+
+    // ── readonly modifier round-trip ──────────────────────────────────────
+
+    [Fact]
+    public void Format_ReadonlyLetDeclaration_RoundTrips()
+    {
+        var result = Format("readonly let X = 1;");
+        Assert.Equal("readonly let X = 1;\n", result);
+    }
+
+    [Fact]
+    public void Format_ReadonlyConstDeclaration_RoundTrips()
+    {
+        var result = Format("readonly const Y = 2;");
+        Assert.Equal("readonly const Y = 2;\n", result);
+    }
+
+    [Fact]
+    public void Format_ReadonlyLetWithExtraSpaces_NormalisesWhitespace()
+    {
+        var result = Format("readonly   let   X  =  42;");
+        Assert.Equal("readonly let X = 42;\n", result);
+    }
+
+    [Fact]
+    public void Format_ReadonlyConstWithTypeHint_RoundTrips()
+    {
+        var result = Format("readonly const MAX:int = 100;");
+        Assert.Equal("readonly const MAX: int = 100;\n", result);
+    }
 }

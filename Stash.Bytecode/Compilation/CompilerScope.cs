@@ -9,11 +9,12 @@ namespace Stash.Bytecode;
 /// </summary>
 internal sealed class CompilerScope
 {
-    private readonly record struct Local(string Name, int Depth, bool IsConst, bool Initialized);
+    private readonly record struct Local(string Name, int Depth, bool IsConst, bool IsReadonly, bool Initialized);
 
     private readonly List<Local> _locals = new();
     private readonly Dictionary<int, string> _localNamesByReg = new();
     private readonly Dictionary<int, bool> _localConstByReg = new();
+    private readonly Dictionary<int, bool> _localReadonlyByReg = new();
     private readonly Stack<int> _scopeNextFreeRegs = new();
     private readonly HashSet<int> _knownNumericRegs = new();
     private int _nextFreeReg;  // Next available register (after all locals + temps in use)
@@ -35,15 +36,16 @@ internal sealed class CompilerScope
     /// Declare a local variable, assigning it a register.
     /// Returns the register number.
     /// </summary>
-    public byte DeclareLocal(string name, bool isConst = false)
+    public byte DeclareLocal(string name, bool isConst = false, bool isReadonly = false)
     {
         int reg = _locals.Count;
         if (reg > 255)
             throw new InvalidOperationException("Too many local variables (>255).");
 
-        _locals.Add(new Local(name, ScopeDepth, isConst, Initialized: false));
+        _locals.Add(new Local(name, ScopeDepth, isConst, isReadonly, Initialized: false));
         _localNamesByReg[reg] = name;
         _localConstByReg[reg] = isConst;
+        _localReadonlyByReg[reg] = isReadonly;
 
         // Locals always occupy registers in order, so the next free reg is at least past this local
         if (reg + 1 > _nextFreeReg)
@@ -83,6 +85,14 @@ internal sealed class CompilerScope
     {
         if (reg >= 0 && reg < _locals.Count)
             return _locals[reg].IsConst;
+        return false;
+    }
+
+    /// <summary>Check if a register holds a readonly local.</summary>
+    public bool IsLocalReadonly(int reg)
+    {
+        if (reg >= 0 && reg < _locals.Count)
+            return _locals[reg].IsReadonly;
         return false;
     }
 
@@ -169,8 +179,10 @@ internal sealed class CompilerScope
         int freed = 0;
         while (_locals.Count > 0 && _locals[^1].Depth == ScopeDepth)
         {
-            _locals.RemoveAt(_locals.Count - 1);
-            _knownNumericRegs.Remove(_locals.Count); // reg index = count after removal
+            int removedReg = _locals.Count - 1;
+            _locals.RemoveAt(removedReg);
+            _knownNumericRegs.Remove(removedReg);
+            _localReadonlyByReg.Remove(removedReg);
             freed++;
         }
         // Restore _nextFreeReg: use max of remaining locals and the saved value

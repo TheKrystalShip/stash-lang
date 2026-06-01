@@ -349,9 +349,10 @@ public sealed class BytecodeVerifier
                     break;
                 }
 
-                // ── IterClose: A = iterator register; B/C unused ────────────────────
+                // ── IterClose / Freeze: A = target register; B/C unused ─────────────
 
                 case OpCode.IterClose:
+                case OpCode.Freeze:
                     // A already validated by the general A-register check above.
                     break;
             }

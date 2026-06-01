@@ -79,6 +79,19 @@ module.exports = grammar({
     ),
 
     variable_declaration: $ => seq(
+      optional('readonly'),
+      'let',
+      choice(
+        $.destructure_pattern,
+        seq(field('name', $.identifier), optional($.type_annotation)),
+      ),
+      optional(seq('=', $._expression)),
+      ';',
+    ),
+
+    // Like variable_declaration but without the optional 'readonly' prefix.
+    // Used in the for-loop init slot, where 'readonly' is rejected by the parser.
+    _for_var_init: $ => seq(
       'let',
       choice(
         $.destructure_pattern,
@@ -89,6 +102,7 @@ module.exports = grammar({
     ),
 
     constant_declaration: $ => seq(
+      optional('readonly'),
       'const',
       field('name', $.identifier),
       optional($.type_annotation),
@@ -324,7 +338,7 @@ module.exports = grammar({
       'for',
       '(',
       optional(choice(
-        $.variable_declaration,
+        $._for_var_init,
         seq($._expression, ';'),
       )),
       optional($._expression),

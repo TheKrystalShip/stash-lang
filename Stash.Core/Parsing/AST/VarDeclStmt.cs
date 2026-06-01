@@ -4,11 +4,13 @@ using Stash.Common;
 using Stash.Lexing;
 
 /// <summary>
-/// A variable declaration: <c>let x = expr;</c> or <c>let x;</c> (initializer is null → value is null).
+/// A variable declaration: <c>let x = expr;</c>, <c>let x;</c>, or <c>readonly let x = expr;</c>.
 /// </summary>
 /// <remarks>
 /// When the <see cref="Initializer"/> is <c>null</c>, the variable is initialized to <c>null</c>.
 /// An optional <see cref="TypeHint"/> may be present for documentation purposes (type hints are not enforced at runtime).
+/// When <see cref="ReadonlyKeyword"/> is non-<c>null</c>, the <c>readonly</c> modifier was present and the value
+/// is to be deep-frozen after the initializer is evaluated (and on every subsequent rebind).
 /// </remarks>
 public class VarDeclStmt : Stmt
 {
@@ -18,6 +20,16 @@ public class VarDeclStmt : Stmt
     public TypeExpression? TypeHint { get; }
     /// <summary>Gets the optional initializer expression. <c>null</c> for uninitialized declarations (<c>let x;</c>).</summary>
     public Expr? Initializer { get; }
+    /// <summary>
+    /// Gets the <c>readonly</c> modifier token when this declaration carries the modifier, or <c>null</c> if absent.
+    /// Use <see cref="IsReadonly"/> as a convenient boolean test.
+    /// </summary>
+    public Token? ReadonlyKeyword { get; init; }
+    /// <summary>
+    /// Returns <see langword="true"/> when this declaration carries the <c>readonly</c> modifier.
+    /// Derived from <see cref="ReadonlyKeyword"/>.
+    /// </summary>
+    public bool IsReadonly => ReadonlyKeyword is not null;
 
     /// <summary>Initializes a new instance of <see cref="VarDeclStmt"/>.</summary>
     /// <param name="name">The identifier token of the variable being declared.</param>

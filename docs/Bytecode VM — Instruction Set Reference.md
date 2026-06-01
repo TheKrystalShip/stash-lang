@@ -14,9 +14,9 @@
 
 | Property | Value |
 | --- | --- |
-| Opcode count | `100` |
-| Numeric range | `0..100` |
-| Opcode table hash | `0xE905CD26` |
+| Opcode count | `101` |
+| Numeric range | `0..101` |
+| Opcode table hash | `0x46B97458` |
 | Instruction width | 32 bits |
 | Register index width | 8 bits |
 
@@ -55,6 +55,7 @@
    - [5.24 Global Bindings](#524-global-bindings)
    - [5.25 Iterator Cleanup](#525-iterator-cleanup)
    - [5.26 Streaming Pipe Chains](#526-streaming-pipe-chains)
+   - [5.27 Readonly](#527-readonly)
 6. [Companion Words](#6-companion-words)
 7. [Compatibility](#7-compatibility)
 8. [Change Rules](#8-change-rules)
@@ -69,7 +70,7 @@ source maps, global metadata, closure metadata, and inline-cache metadata.
 
 | Physical CPU concept | Stash VM equivalent |
 | --- | --- |
-| Instruction set | `100` opcodes |
+| Instruction set | `101` opcodes |
 | Registers | Virtual registers `r0..rN` in the current call frame |
 | Machine code | `uint` instruction words |
 | Program counter | `IP` per call frame |
@@ -353,6 +354,12 @@ on the opcode itself, including companion-word notes where applicable.
 | Value | Opcode | Encoding | Operands | Effect |
 | ---: | --- | --- | --- | --- |
 | `100` | `StreamingPipeline` | `ABC` | `ABC + B companion words (one per stage)` | A=destReg, B=stageCount, C=partsBase. Each companion word: bits 15-8 = partCount, bits 7-0 = flags (bit 0x01 = strict on the last stage). Spawns all stages with intermediate stages captured-piped, exposes the last stage's stdout via a multi-stage handle. |
+
+### 5.27 Readonly
+
+| Value | Opcode | Encoding | Operands | Effect |
+| ---: | --- | --- | --- | --- |
+| `101` | `Freeze` | `ABC` | `ABC` | DeepFreeze R(A) in place — no-op for primitives; freezes dicts, arrays, structs transitively. |
 
 ## 6. Companion Words
 

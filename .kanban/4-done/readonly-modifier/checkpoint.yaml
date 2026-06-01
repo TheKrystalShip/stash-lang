@@ -1,0 +1,59 @@
+schema_version: 1
+feature: readonly-modifier
+current: null
+updated: "2026-06-01T18:42:12Z"
+phases:
+  P1:
+    status: done
+    commit: 02f6625194fca4bb198aac949b08d7fc76e380aa
+    verified: true
+    started: "2026-06-01T14:25:44Z"
+    completed: "2026-06-01T14:37:39Z"
+    attempts: 1
+    notes: "readonly added to SoftKeywords; VarDeclStmt/ConstDeclStmt carry ReadonlyKeyword token + IsReadonly bool; 3-way Declaration() branch, for-init rejection, export readonly const wiring; SoftKeywords drift guard and parser tests added; snapshot re-baselined"
+  P2:
+    status: done
+    commit: 2878912df34969a98d775d6e9ab88cd7fabca3c1
+    verified: true
+    started: "2026-06-01T14:38:43Z"
+    completed: "2026-06-01T14:47:06Z"
+    attempts: 1
+    notes: SymbolInfo.IsReadonly added; SymbolCollector passes isReadonly to AddSymbol; SemanticTokenWalker emits TokenTypeKeyword for readonly lexeme; DeclarationPrinter conditionally emits readonly token before let/const; plan.yaml extended with SymbolInfo.cs + DeclarationPrinter.cs; 16 new tests across FormatterTests/SymbolCollectorTests/SemanticTokenWalkerTests
+  P3:
+    status: done
+    commit: 6b302819dc679e36e118a01ec1dccec92edc1f3c
+    verified: true
+    started: "2026-06-01T14:47:57Z"
+    completed: "2026-06-01T15:23:11Z"
+    attempts: 1
+    notes: "StashArray always-present carrier; DeepFreeze in RuntimeValues; StashInstance.Freeze; dict/arr/struct write-guard; 36 C# tests green; bench stable (120ms vs 121ms baseline)"
+  P4:
+    status: done
+    commit: 4df52173d356b2d89e601e143c252193dd121937
+    verified: true
+    started: "2026-06-01T15:24:37Z"
+    completed: "2026-06-01T15:52:49Z"
+    attempts: 1
+    notes: Freeze opcode + compiler wiring for readonly init/rebind; upvalue const/readonly enforcement; 21 e2e tests green; bench stable 120/121ms vs 120/94ms baseline
+  P5:
+    status: done
+    commit: 36febd30966240e5b894492556aa4fb4b1a6e96b
+    verified: true
+    started: "2026-06-01T16:00:44Z"
+    completed: "2026-06-01T16:12:01Z"
+    attempts: 1
+    notes: "SA0847 ReadOnlyMutationRule: DotAssign/IndexAssign/CallExpr on readonly bindings; KnownInPlaceMutators set; DispatchNodeRules added to VisitIndexAssignExpr; 30 tests green; arr.shuffle frozen-guard bug filed in backlog"
+  P6:
+    status: done
+    commit: 9f79eea0834c51dd6ea37342c3d7af4ae5953290
+    verified: true
+    started: "2026-06-01T16:13:14Z"
+    completed: "2026-06-01T16:26:22Z"
+    attempts: 1
+    notes: Hover with deep/transitive description; playground keyword; TextMate storage.modifier.stash; tree-sitter optional(readonly); spec ToC+section with rationale+footgun; examples/readonly.stash 7 scenarios; HoverHandlerTests 2 tests; DAP no change
+review:
+  status: resolved
+  started: "2026-06-01T16:51:28Z"
+  resolved: "2026-06-01T18:42:12Z"
+  findings_open: 0
+  findings_fixed: 0

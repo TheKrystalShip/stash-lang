@@ -1669,4 +1669,47 @@ public class LexerTests
         // and the tooling-facing keyword list.
         Assert.Equal(Lexer.KeywordNames.ToHashSet(), Keywords.HardKeywords.ToHashSet());
     }
+
+    // ── Invariant: Keywords.SoftKeywords snapshot guard ─────────────────────
+
+    /// <summary>
+    /// Snapshot guard: all known soft keywords must be present.
+    /// Update this set whenever a new soft keyword is added to <see cref="Keywords.SoftKeywords"/>.
+    /// This prevents silent drift where a soft keyword is added to the parser but not declared
+    /// in the canonical <see cref="Keywords.SoftKeywords"/> table (or vice versa).
+    /// </summary>
+    [Fact]
+    public void Keywords_SoftKeywords_ContainsAllKnownSoftKeywords()
+    {
+        var expected = new HashSet<string>
+        {
+            "defer", "async", "await", "retry", "timeout", "elevate", "lock", "export", "readonly"
+        };
+        Assert.True(
+            expected.IsSubsetOf(Keywords.SoftKeywords),
+            $"Keywords.SoftKeywords is missing entries. Missing: {string.Join(", ", expected.Except(Keywords.SoftKeywords))}");
+    }
+
+    // ── Soft keyword 'readonly' is emitted as Identifier ─────────────────────
+
+    [Fact]
+    public void Readonly_IsEmittedAsIdentifier_NotAHardKeyword()
+    {
+        // 'readonly' is a soft keyword: the lexer emits it as Identifier, not a dedicated token.
+        var tokens = Scan("readonly");
+        Assert.Equal(2, tokens.Count); // Identifier + EOF
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal("readonly", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void Readonly_UsedAsVariableName_ParsesWithoutError()
+    {
+        // 'readonly' is usable as a plain identifier — soft keyword does not restrict identifier use.
+        var tokens = Scan("let readonly = 1;");
+        // Should contain: Let, Identifier("readonly"), Equal, IntegerLiteral, Semicolon, EOF
+        var identToken = tokens.FirstOrDefault(t => t.Lexeme == "readonly");
+        Assert.NotNull(identToken);
+        Assert.Equal(TokenType.Identifier, identToken!.Type);
+    }
 }

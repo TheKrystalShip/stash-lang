@@ -44,6 +44,7 @@ public static class RuleRegistry
             new NamingConventionRule(),
             new FunctionInLoopRule(),
             new ShadowsBuiltinNamespaceRule(),
+            new ReadOnlyMutationRule(),
 
             // Type Safety (SA03xx)
             new VariableTypeMismatchRule(),

@@ -23,8 +23,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "null")]
     private static void Push(IInterpreterContext ctx, StashValue array, StashValue value)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taPush)
         {
             taPush.Add(value);
@@ -46,8 +46,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "any")]
     private static StashValue Pop(IInterpreterContext ctx, StashValue array)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taPop)
         {
             if (taPop.Count == 0)
@@ -87,8 +87,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "null")]
     private static void Insert(IInterpreterContext ctx, StashValue array, long index, StashValue value)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taInsert)
         {
             int i = (int)(index < 0 ? index + taInsert.Count : index);
@@ -116,8 +116,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "any")]
     private static StashValue RemoveAt(IInterpreterContext ctx, StashValue array, long index)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taRemoveAt)
         {
             int i = (int)(index < 0 ? index + taRemoveAt.Count : index);
@@ -145,8 +145,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "bool")]
     private static bool Remove(IInterpreterContext ctx, StashValue array, StashValue value)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taRemove)
         {
             object? target = value.ToObject();
@@ -183,8 +183,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "null")]
     private static void Clear(IInterpreterContext ctx, StashValue array)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taClear)
         {
             taClear.Clear();
@@ -297,7 +297,7 @@ public static partial class ArrBuiltIns
         int s = (int)Math.Max(0, Math.Min(start, list.Count));
         int e = (int)Math.Max(0, Math.Min(end, list.Count));
         if (e < s) e = s;
-        var result = list.GetRange(s, e - s);
+        var result = new StashArray(list.GetRange(s, e - s));
         return elementType != null
             ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
             : StashValue.FromObj(result);
@@ -317,7 +317,7 @@ public static partial class ArrBuiltIns
         string? et2 = args[1].IsObj && args[1].AsObj is StashTypedArray srcCb ? srcCb.ElementTypeName : null;
         var list1 = SvArgs.StashList(args, 0, "arr.concat");
         var list2 = SvArgs.StashList(args, 1, "arr.concat");
-        var result = new List<StashValue>(list1.Count + list2.Count);
+        var result = new StashArray(list1.Count + list2.Count);
         result.AddRange(list1);
         result.AddRange(list2);
         return et1 != null && et1 == et2
@@ -345,8 +345,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "null")]
     private static void Reverse(IInterpreterContext ctx, StashValue array)
     {
-        if (array.IsObj && array.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taReverse)
         {
             for (int i = 0, j = taReverse.Count - 1; i < j; i++, j--)
@@ -378,8 +378,8 @@ public static partial class ArrBuiltIns
         if (args.Length < 1 || args.Length > 2)
             throw new RuntimeError("'arr.sort' requires 1 or 2 arguments.");
         StashValue arrSortVal = args[0];
-        if (arrSortVal.IsObj && arrSortVal.AsObj is StashFrozenArray)
-            throw new ReadOnlyError("Cannot mutate a read-only array returned by a namespace member.");
+        if (arrSortVal.IsObj && IsArrayFrozen(arrSortVal.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (arrSortVal.IsObj && arrSortVal.AsObj is StashTypedArray taSort)
         {
             var tempList = new List<StashValue>(taSort.Count);
@@ -462,7 +462,7 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Map(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var result = new List<StashValue>(array.Count);
+        var result = new StashArray(array.Count);
         foreach (StashValue item in array)
         {
             StashValue mapped = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
@@ -485,7 +485,7 @@ public static partial class ArrBuiltIns
         string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcFl ? srcFl.ElementTypeName : null;
         var list = SvArgs.StashList(args, 0, "arr.filter");
         var fn = SvArgs.Callable(args, 1, "arr.filter");
-        var result = new List<StashValue>(list.Count);
+        var result = new StashArray(list.Count);
         foreach (StashValue item in list)
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
@@ -607,7 +607,7 @@ public static partial class ArrBuiltIns
             throw new RuntimeError("'arr.unique' requires 1 or 2 arguments.");
         string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcUniq ? srcUniq.ElementTypeName : null;
         var list = SvArgs.StashList(args, 0, "arr.unique");
-        var result = new List<StashValue>();
+        var result = new StashArray();
         if (args.Length == 2)
         {
             var fn = SvArgs.Callable(args, 1, "arr.unique");
@@ -693,7 +693,7 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Flat(IInterpreterContext ctx, List<StashValue> array, long depth = 1)
     {
-        var result = new List<StashValue>();
+        var result = new StashArray();
         FlattenInto(array, result, (int)depth);
         return result;
     }
@@ -705,7 +705,7 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "array")]
     private static List<StashValue> FlatMap(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var result = new List<StashValue>();
+        var result = new StashArray();
         foreach (StashValue item in array)
         {
             StashValue mapped = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
@@ -770,7 +770,7 @@ public static partial class ArrBuiltIns
         string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcSby ? srcSby.ElementTypeName : null;
         var list = SvArgs.StashList(args, 0, "arr.sortBy");
         var fn = SvArgs.Callable(args, 1, "arr.sortBy");
-        var sorted = new List<StashValue>(list);
+        var sorted = new StashArray(list);
         try
         {
             sorted.Sort((a, b) =>
@@ -807,7 +807,7 @@ public static partial class ArrBuiltIns
             }
             else
             {
-                result.Set(key, StashValue.FromObj(new List<StashValue> { item }));
+                result.Set(key, StashValue.FromObj(new StashArray { item }));
             }
         }
         return result;
@@ -885,9 +885,9 @@ public static partial class ArrBuiltIns
     private static List<StashValue> Zip(IInterpreterContext ctx, List<StashValue> a, List<StashValue> b)
     {
         int len = Math.Min(a.Count, b.Count);
-        var result = new List<StashValue>(len);
+        var result = new StashArray(len);
         for (int i = 0; i < len; i++)
-            result.Add(StashValue.FromObj(new List<StashValue> { a[i], b[i] }));
+            result.Add(StashValue.FromObj(new StashArray { a[i], b[i] }));
         return result;
     }
 
@@ -901,11 +901,11 @@ public static partial class ArrBuiltIns
     {
         if (size <= 0)
             throw new ValueError("'arr.chunk' size must be > 0.");
-        var result = new List<StashValue>();
+        var result = new StashArray();
         for (int i = 0; i < array.Count; i += (int)size)
         {
             int chunkSize = Math.Min((int)size, array.Count - i);
-            result.Add(StashValue.FromObj(array.GetRange(i, chunkSize)));
+            result.Add(StashValue.FromObj(new StashArray(array.GetRange(i, chunkSize))));
         }
         return result;
     }
@@ -917,6 +917,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "null")]
     private static void Shuffle(IInterpreterContext ctx, StashValue array)
     {
+        if (array.IsObj && IsArrayFrozen(array.AsObj))
+            throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taShuffle)
         {
             var rng = new Random();
@@ -957,7 +959,7 @@ public static partial class ArrBuiltIns
         var list = SvArgs.StashList(args, 0, "arr.take");
         var n = SvArgs.Long(args, 1, "arr.take");
         int count = (int)Math.Max(0, Math.Min(n, list.Count));
-        var result = list.GetRange(0, count);
+        var result = new StashArray(list.GetRange(0, count));
         return elementType != null
             ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
             : StashValue.FromObj(result);
@@ -978,7 +980,7 @@ public static partial class ArrBuiltIns
         var list = SvArgs.StashList(args, 0, "arr.drop");
         var n = SvArgs.Long(args, 1, "arr.drop");
         int skip = (int)Math.Max(0, Math.Min(n, list.Count));
-        var result = list.GetRange(skip, list.Count - skip);
+        var result = new StashArray(list.GetRange(skip, list.Count - skip));
         return elementType != null
             ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
             : StashValue.FromObj(result);
@@ -991,8 +993,8 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "array")]
     private static List<StashValue> Partition(IInterpreterContext ctx, List<StashValue> array, IStashCallable fn)
     {
-        var matching = new List<StashValue>();
-        var nonMatching = new List<StashValue>();
+        var matching = new StashArray();
+        var nonMatching = new StashArray();
         foreach (StashValue item in array)
         {
             if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
@@ -1004,7 +1006,7 @@ public static partial class ArrBuiltIns
                 nonMatching.Add(item);
             }
         }
-        return new List<StashValue> { StashValue.FromObj(matching), StashValue.FromObj(nonMatching) };
+        return new StashArray { StashValue.FromObj(matching), StashValue.FromObj(nonMatching) };
     }
 
     /// <summary>Creates a typed array from a generic array. Validates all elements match the specified type.</summary>
@@ -1028,7 +1030,7 @@ public static partial class ArrBuiltIns
     private static StashValue Untyped(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
         StashTypedArray ta = SvArgs.TypedArray(args, 0, "arr.untyped");
-        var result = new List<StashValue>(ta.Count);
+        var result = new StashArray(ta.Count);
         for (int i = 0; i < ta.Count; i++)
             result.Add(ta.Get(i));
         return StashValue.FromObj(result);
@@ -1120,7 +1122,7 @@ public static partial class ArrBuiltIns
             throw new RuntimeError($"arr.parMap() failed: {first.Message}");
         }
 
-        return new List<StashValue>(results);
+        return new StashArray(results);
     }
 
     private static object? ExecuteParFilter(IInterpreterContext ctx, List<StashValue> args)
@@ -1169,7 +1171,7 @@ public static partial class ArrBuiltIns
             throw new RuntimeError($"arr.parFilter() failed: {first.Message}");
         }
 
-        var filtered = new List<StashValue>();
+        var filtered = new StashArray();
         for (int i = 0; i < count; i++)
         {
             if (keep[i])
@@ -1286,4 +1288,10 @@ public static partial class ArrBuiltIns
 
         throw new TypeError("Cannot compare values of incompatible types in 'arr.sortBy'.");
     }
+
+    /// <summary>
+    /// Returns true if <paramref name="obj"/> is a frozen <see cref="StashArray"/>.
+    /// </summary>
+    private static bool IsArrayFrozen(object? obj) =>
+        obj is StashArray sa && sa.IsFrozen;
 }

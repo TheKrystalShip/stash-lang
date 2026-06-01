@@ -212,4 +212,51 @@ public class SemanticTokenWalkerTests : AnalysisTestBase
         Assert.False(map.ContainsKey((0, 8)),
             "Numeric literals should be left to the grammar.");
     }
+
+    // ── readonly modifier semantic tokens ──────────────────────────────────
+
+    [Fact]
+    public void ReadonlyLetDeclaration_ReadonlyLexeme_EmitsKeywordToken()
+    {
+        // "readonly let X = 1;"
+        //  ^col 1
+        var map = Classify("readonly let X = 1;");
+        var (type, mods) = TokenAt(map, 1, 1);
+        Assert.Equal(TokenTypeKeyword, type);
+        // No specific modifiers required for the readonly keyword token itself
+        _ = mods;
+    }
+
+    [Fact]
+    public void ReadonlyLetDeclaration_BindingName_EmitsReadonlyModifier()
+    {
+        // "readonly let X = 1;"
+        //              ^col 14
+        var map = Classify("readonly let X = 1;");
+        var (type, mods) = TokenAt(map, 1, 14);
+        Assert.Equal(TokenTypeVariable, type);
+        Assert.Equal(ModifierDeclaration | ModifierReadonly, mods);
+    }
+
+    [Fact]
+    public void ReadonlyConstDeclaration_ReadonlyLexeme_EmitsKeywordToken()
+    {
+        // "readonly const X = 1;"
+        //  ^col 1
+        var map = Classify("readonly const X = 1;");
+        var (type, mods) = TokenAt(map, 1, 1);
+        Assert.Equal(TokenTypeKeyword, type);
+        _ = mods;
+    }
+
+    [Fact]
+    public void PlainLetDeclaration_NoReadonlyToken_AtCol1()
+    {
+        // A plain `let` decl should not emit a keyword at col 1 as a readonly token.
+        var map = Classify("let X = 1;");
+        // The `let` keyword itself is not semantically emitted (it's lexical),
+        // only the name `X` at col 5 is emitted as a variable declaration.
+        Assert.False(map.ContainsKey((0, 0)),
+            "No semantic token should be emitted at col 1 for a plain let declaration.");
+    }
 }

@@ -51,14 +51,14 @@ public sealed class StashIntArray : StashTypedArray
         return StashValue.FromInt(_data[index]);
     }
 
-    public override void Set(int index, StashValue val)
+    protected override void SetCore(int index, StashValue val)
     {
         if (!val.IsInt)
             throw new RuntimeError($"Cannot assign {TypeNameOf(val)} to element of int[] at index {index} — expected int.");
         _data[index] = val.AsInt;
     }
 
-    public override void Add(StashValue val)
+    protected override void AddCore(StashValue val)
     {
         if (!val.IsInt)
             throw new RuntimeError($"Cannot add {TypeNameOf(val)} to int[] — expected int.");
@@ -66,13 +66,13 @@ public sealed class StashIntArray : StashTypedArray
         _data[_count++] = val.AsInt;
     }
 
-    public override StashValue RemoveLast()
+    protected override StashValue RemoveLastCore()
     {
         if (_count == 0) throw new RuntimeError("Cannot pop from empty int[].");
         return StashValue.FromInt(_data[--_count]);
     }
 
-    public override void Insert(int index, StashValue val)
+    protected override void InsertCore(int index, StashValue val)
     {
         if (!val.IsInt)
             throw new RuntimeError($"Cannot insert {TypeNameOf(val)} into int[] — expected int.");
@@ -82,14 +82,14 @@ public sealed class StashIntArray : StashTypedArray
         _count++;
     }
 
-    public override void RemoveAt(int index)
+    protected override void RemoveAtCore(int index)
     {
         _count--;
         Array.Copy(_data, index + 1, _data, index, _count - index);
     }
 
     public override StashTypedArray Clone() => new StashIntArray(_data, _count);
-    public override void Clear() => _count = 0;
+    protected override void ClearCore() => _count = 0;
     public override StashTypedArray CreateEmpty() => new StashIntArray(new List<StashValue>());
 
     private void EnsureCapacity(int min)

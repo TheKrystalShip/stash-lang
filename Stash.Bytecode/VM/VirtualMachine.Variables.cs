@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
@@ -117,7 +118,30 @@ public sealed partial class VirtualMachine
     {
         byte a = Instruction.GetA(inst);
         byte idx = Instruction.GetB(inst);
+
+        // Guard: check the compiled mutability flags on this upvalue descriptor.
+        if (idx < frame.Chunk.Upvalues.Length)
+        {
+            UpvalueDescriptor desc = frame.Chunk.Upvalues[idx];
+            if (desc.IsConst)
+                throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+            if (desc.IsReadonly)
+            {
+                StashValue newVal = _stack[frame.BaseSlot + a];
+                RuntimeValues.DeepFreeze(newVal);
+                frame.Upvalues![idx].Value = newVal;
+                return;
+            }
+        }
+
         frame.Upvalues![idx].Value = _stack[frame.BaseSlot + a];
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteFreeze(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        RuntimeValues.DeepFreeze(_stack[frame.BaseSlot + a]);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

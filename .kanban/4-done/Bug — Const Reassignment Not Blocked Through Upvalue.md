@@ -1,6 +1,6 @@
 # `const` reassignment is not blocked when the binding is captured as an upvalue
 
-**Status:** Backlog — Bug
+**Status:** Fixed — 2026-06-01 (readonly-modifier P4, commit 4df52173)
 **Created:** 2026-06-01
 **Discovery context:** Surfaced during the `readonly-modifier` design review (2026-06-01) while verifying Q4 — whether the compiler can re-freeze a `readonly let` rebound through a closure. Tracing the upvalue store path revealed `const` itself is not enforced there.
 
@@ -66,3 +66,13 @@ A new test asserting that `fn outer() { const c = 1; fn g() { c = 2; } g(); }` r
 - `readonly-modifier` (`.kanban/2-in-progress/readonly-modifier/`) — Q4 / P4; the descriptor mutability-bit fix closes this hole. Brief Decision Log entry 2026-06-01.
 - Phase 1 of the embedding roadmap (`reference: project_embedding_roadmap`).
 - Same surface: `UpvalueDescriptor.cs`, `VirtualMachine.Variables.cs` (`ExecuteSetUpval`), `Compiler.Helpers.cs`.
+
+---
+
+## Resolution (2026-06-01)
+
+**Fixed by `readonly-modifier` P4** (fix commit `4df52173`; regression-test commit `265ae0e8`) via the recommended **option (B)**: `UpvalueDescriptor` gained `IsConst`/`IsReadonly` fields, threaded through `Compiler.Helpers.ResolveUpvalue` from the enclosing scope, and `VirtualMachine.Variables.ExecuteSetUpval` now guards the upvalue store. A `const` captured as an upvalue can no longer be reassigned (and a `readonly let` rebind re-freezes on the same guarded path — the two share the plumbing exactly as predicted in the Suggested-fix note).
+
+**Verification:** `Stash.Tests/Bytecode/ReadonlyTests.cs` — `Const_ClosureRebind_NowThrows` and `Const_NestedClosure_UpvalueRebind_Throws` (the nested-local Reproduction case above: previously printed `2`, now raises a const-assignment error). Legitimate `let`-upvalue rebinds (CONTRAST 2) still succeed; top-level `const` (CONTRAST 1) still raises. Green in the readonly-modifier `final_verify` (full suite 12825/0).
+
+Promoted to `4-done/` as part of `readonly-modifier` completion; the fix shipped on `feature/readonly-modifier` and this stub move rides the same merge to `main`.

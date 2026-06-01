@@ -31,7 +31,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     public void Set(object key, StashValue value)
     {
         if (_frozen)
-            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         ValidateKey(key);
         _entries[key] = value;
     }
@@ -49,20 +49,20 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     public bool Remove(object key)
     {
         if (_frozen)
-            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         return _entries.Remove(key);
     }
 
     public void Clear()
     {
         if (_frozen)
-            throw new ReadOnlyError("Cannot mutate a read-only dictionary returned by a namespace member.");
+            throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         _entries.Clear();
     }
 
-    public List<StashValue> Keys()
+    public StashArray Keys()
     {
-        var keys = new List<StashValue>(_entries.Count);
+        var keys = new StashArray(_entries.Count);
         foreach (var key in _entries.Keys)
         {
             keys.Add(StashValue.FromObject(key));
@@ -81,9 +81,9 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         return keys;
     }
 
-    public List<StashValue> Values()
+    public StashArray Values()
     {
-        var values = new List<StashValue>(_entries.Count);
+        var values = new StashArray(_entries.Count);
         foreach (var value in _entries.Values)
         {
             values.Add(value);
@@ -91,9 +91,9 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         return values;
     }
 
-    public List<StashValue> Pairs()
+    public StashArray Pairs()
     {
-        var pairs = new List<StashValue>(_entries.Count);
+        var pairs = new StashArray(_entries.Count);
         foreach (var kvp in _entries)
         {
             var fields = new Dictionary<string, StashValue> { { "key", StashValue.FromObject(kvp.Key) }, { "value", kvp.Value } };

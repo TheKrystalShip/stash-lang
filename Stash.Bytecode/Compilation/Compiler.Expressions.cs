@@ -264,6 +264,9 @@ partial class Compiler
             {
                 // Compile RHS directly into the local's register
                 CompileExprTo(expr.Value, (byte)localReg);
+                // readonly let: re-freeze on every rebind
+                if (_scope.IsLocalReadonly(localReg))
+                    _builder.EmitA(OpCode.Freeze, (byte)localReg);
                 if (IsNumericExpr(expr.Value))
                     _scope.MarkNumeric(localReg);
                 else
@@ -278,6 +281,9 @@ partial class Compiler
 
         // Fallback for globals, upvalues, and const violations
         CompileExprTo(expr.Value, dest);
+        // readonly global: freeze the value before storing to the global slot
+        if (expr.ResolvedDistance == -1 && _globalSlots.IsReadonlyGlobal(expr.Name.Lexeme))
+            _builder.EmitA(OpCode.Freeze, dest);
         EmitVariable(expr.Name.Lexeme, expr.ResolvedDistance, expr.ResolvedSlot, isLoad: false, dest);
         return null;
     }

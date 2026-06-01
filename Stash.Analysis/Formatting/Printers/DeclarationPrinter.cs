@@ -9,6 +9,11 @@ internal static class DeclarationPrinter
 {
     internal static void PrintVarDecl(VarDeclStmt stmt, FormatContext ctx, Action<Expr> formatExpr)
     {
+        if (stmt.IsReadonly)
+        {
+            ctx.EmitToken(); // readonly
+            ctx.Space();
+        }
         ctx.EmitToken(); // let
         ctx.Space();
         ctx.EmitToken(); // name
@@ -30,6 +35,11 @@ internal static class DeclarationPrinter
 
     internal static void PrintConstDecl(ConstDeclStmt stmt, FormatContext ctx, Action<Expr> formatExpr)
     {
+        if (stmt.IsReadonly)
+        {
+            ctx.EmitToken(); // readonly
+            ctx.Space();
+        }
         ctx.EmitToken(); // const
         ctx.Space();
         ctx.EmitToken(); // name

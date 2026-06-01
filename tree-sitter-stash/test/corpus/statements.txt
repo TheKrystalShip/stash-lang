@@ -155,6 +155,30 @@ defer cleanup();
       (argument_list))))
 
 ==================
+For loop with let init
+==================
+
+for (let x = 0; x < 10; x = x + 1) { x; }
+
+---
+
+(source_file
+  (for_statement
+    name: (identifier)
+    (number)
+    (binary_expression
+      left: (identifier)
+      right: (number))
+    (assignment_expression
+      left: (identifier)
+      right: (binary_expression
+        left: (identifier)
+        right: (number)))
+    (block
+      (expression_statement
+        (identifier)))))
+
+==================
 Switch statement
 ==================
 

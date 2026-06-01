@@ -78,12 +78,6 @@ public class NamespaceMemberRuntimeTests
             foreach (var sv in svList) result.Add(Normalize(sv.ToObject()));
             return result;
         }
-        if (value is StashFrozenArray fa)
-        {
-            var result = new List<object?>(fa.Count);
-            foreach (var sv in fa.Items) result.Add(Normalize(sv.ToObject()));
-            return result;
-        }
         if (value is StashValue sv2)
             return Normalize(sv2.ToObject());
         return value;
@@ -273,7 +267,7 @@ public class NamespaceMemberRuntimeTests
     [Fact]
     public void DataMember_ArrayReturn_IsFrozenAtBoundary()
     {
-        // A getter returning List<StashValue> should produce a StashFrozenArray at the Stash level.
+        // A getter returning List<StashValue> should produce a frozen StashArray at the Stash level.
         // Attempting to index-assign into it must raise a RuntimeError.
         Func<IInterpreterContext, StashValue> getter = _ =>
             StashValue.FromObj(new List<StashValue> { StashValue.FromInt(1L), StashValue.FromInt(2L), StashValue.FromInt(3L) });

@@ -637,7 +637,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         var typeStr = stmt.TypeHint?.ToCanonicalString();
         var detail = typeStr != null ? $"let {stmt.Name.Lexeme}: {typeStr}" : $"let {stmt.Name.Lexeme}";
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null, isReadonly: stmt.IsReadonly));
         RecordTypeReference(stmt.TypeHint);
         stmt.Initializer?.Accept(this);
         return null;
@@ -653,7 +653,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         var typeStr = stmt.TypeHint?.ToCanonicalString();
         var detail = typeStr != null ? $"const {stmt.Name.Lexeme}: {typeStr}" : $"const {stmt.Name.Lexeme}";
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null, isReadonly: stmt.IsReadonly));
         RecordTypeReference(stmt.TypeHint);
         stmt.Initializer.Accept(this);
         return null;

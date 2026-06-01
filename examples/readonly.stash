@@ -1,0 +1,142 @@
+#!/usr/bin/env stash
+
+// ============================================================
+// readonly modifier — deep value immutability
+// ============================================================
+// `readonly` composes with `let` or `const` to mark the declared
+// value as deeply and transitively frozen. Every write to any
+// part of the frozen object graph — including nested dicts,
+// arrays, and struct instances — throws ReadOnlyError at runtime.
+
+// ─── 1. Deep freeze through nested collections ───────────────
+
+io.println("=== 1. Deep freeze (nested array) ===");
+
+readonly const Config = { host: "localhost", ports: [80, 443] };
+
+try {
+    Config.host = "changed";
+} catch (ReadOnlyError e) {
+    io.println("direct field write blocked: " + e.message);
+}
+
+try {
+    Config.ports.push(22);
+} catch (ReadOnlyError e) {
+    io.println("nested array mutation blocked: " + e.message);
+}
+
+io.println();
+
+// ─── 2. Aliasing — value carries the frozen flag ─────────────
+//
+// Frozenness is carried by the value, not the binding.
+// An alias to a frozen value is equally blocked.
+
+io.println("=== 2. Aliasing — alias is blocked too ===");
+
+readonly const D = { a: 1 };
+let alias = D;
+
+try {
+    alias.a = 2;
+} catch (ReadOnlyError e) {
+    io.println("alias mutation blocked: " + e.message);
+}
+
+io.println();
+
+// ─── 3. readonly let — rebind re-freezes ─────────────────────
+//
+// For `readonly let`, every assigned value is deep-frozen at
+// assignment time — including the initializer and every rebind.
+
+io.println("=== 3. readonly let — rebind re-freezes ===");
+
+fn makeSnapshot(val) {
+    return { x: val };
+}
+
+readonly let Snapshot = makeSnapshot(1);
+
+try {
+    Snapshot.x = 99;
+} catch (ReadOnlyError e) {
+    io.println("initial value frozen: " + e.message);
+}
+
+Snapshot = makeSnapshot(2);     // ok — binding is let, rebind is allowed
+io.println("rebind succeeded: Snapshot.x = " + conv.toStr(Snapshot.x));
+
+try {
+    Snapshot.x = 99;
+} catch (ReadOnlyError e) {
+    io.println("rebind value frozen too: " + e.message);
+}
+
+io.println();
+
+// ─── 4. Primitives — no-op ───────────────────────────────────
+//
+// On primitives (int, float, bool, string, …) readonly is a
+// harmless no-op — they are already immutable.
+
+io.println("=== 4. Primitives — no-op, binding stays rebindable ===");
+
+readonly let n = 42;
+io.println("n = " + conv.toStr(n));
+n = 99;                          // ok — binding is let
+io.println("after rebind: n = " + conv.toStr(n));
+
+io.println();
+
+// ─── 5. Aliasing footgun — retroactive in-place freeze ───────
+//
+// The headline sharp edge: freeze is applied IN PLACE to the
+// initializer value. It reaches every pre-existing alias of any
+// nested value in the graph — even aliases that carry no
+// `readonly` keyword themselves.
+
+io.println("=== 5. Aliasing footgun — retroactive in-place freeze ===");
+
+let shared = { count: 0 };
+readonly const snap = { data: shared };
+
+// `shared` is now frozen — it was reached during snap's
+// deep-freeze traversal even though `shared` itself has no
+// `readonly` keyword. This always fails loud (ReadOnlyError),
+// never silent data skew.
+try {
+    shared.count = 1;
+} catch (ReadOnlyError e) {
+    io.println("shared alias blocked (collateral freeze): " + e.message);
+}
+
+io.println();
+
+// ─── 6. Catching ReadOnlyError ───────────────────────────────
+
+io.println("=== 6. Catching ReadOnlyError ===");
+
+readonly const Cfg = { debug: false };
+
+try {
+    Cfg.debug = true;
+} catch (ReadOnlyError e) {
+    io.println("caught ReadOnlyError: " + e.message);
+} finally {
+    io.println("finally block ran");
+}
+
+io.println();
+
+// ─── 7. Soft keyword — still usable as identifier ────────────
+//
+// `readonly` is a soft (contextual) keyword. It is only special
+// immediately before `let`/`const`. Everywhere else it is a
+// valid identifier.
+
+io.println("=== 7. Soft keyword — usable as identifier ===");
+
+let readonly = true;             // ok — identifier, not the modifier
+io.println("let readonly = " + conv.toStr(readonly));

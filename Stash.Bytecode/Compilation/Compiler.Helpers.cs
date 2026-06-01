@@ -123,7 +123,9 @@ partial class Compiler
         if (localSlot >= 0)
         {
             _enclosing._builder.MayHaveCapturedLocals = true;
-            byte idx = _builder.AddUpvalue((byte)localSlot, isLocal: true);
+            bool isConst    = _enclosing._scope.IsLocalConst(localSlot);
+            bool isReadonly = _enclosing._scope.IsLocalReadonly(localSlot);
+            byte idx = _builder.AddUpvalue((byte)localSlot, isLocal: true, isConst: isConst, isReadonly: isReadonly);
             if (idx == (_upvalueNames ??= new()).Count)
                 _upvalueNames.Add(name);
             return idx;
@@ -132,7 +134,17 @@ partial class Compiler
         if (distance > 1 && _enclosing._enclosing != null)
         {
             byte enclosingUpvalue = _enclosing.ResolveUpvalue(name, distance - 1);
-            byte idx = _builder.AddUpvalue(enclosingUpvalue, isLocal: false);
+            // For re-captured (non-local) upvalues, propagate the mutability flags from the
+            // enclosing function's upvalue descriptor so the innermost closure also sees them.
+            bool isConst    = false;
+            bool isReadonly = false;
+            if (enclosingUpvalue < _enclosing._builder.UpvalueCount)
+            {
+                UpvalueDescriptor uvDesc = _enclosing._builder.GetUpvalue(enclosingUpvalue);
+                isConst    = uvDesc.IsConst;
+                isReadonly = uvDesc.IsReadonly;
+            }
+            byte idx = _builder.AddUpvalue(enclosingUpvalue, isLocal: false, isConst: isConst, isReadonly: isReadonly);
             if (idx == (_upvalueNames ??= new()).Count)
                 _upvalueNames.Add(name);
             return idx;

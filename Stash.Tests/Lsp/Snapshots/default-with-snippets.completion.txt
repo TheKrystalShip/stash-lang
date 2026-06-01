@@ -38,6 +38,7 @@ Keyword	let
 Keyword	lock
 Keyword	null
 Keyword	or
+Keyword	readonly
 Keyword	retry
 Keyword	return
 Keyword	struct

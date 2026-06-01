@@ -416,7 +416,13 @@ public static class BytecodeWriter
         foreach (UpvalueDescriptor upvalue in upvalues)
         {
             writer.Write(upvalue.Index);
-            writer.Write((byte)(upvalue.IsLocal ? 1 : 0));
+            // Pack isLocal, isConst, isReadonly into a single flags byte:
+            //   bit 0 = IsLocal, bit 1 = IsConst, bit 2 = IsReadonly
+            byte flags = 0;
+            if (upvalue.IsLocal)    flags |= 0x01;
+            if (upvalue.IsConst)    flags |= 0x02;
+            if (upvalue.IsReadonly) flags |= 0x04;
+            writer.Write(flags);
         }
     }
 
