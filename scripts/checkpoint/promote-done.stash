@@ -1,0 +1,61 @@
+#!/usr/bin/env stash
+// promote-done.stash <slug>
+//
+// Final acceptance: runs the promotion gate (all phases done + zero open review
+// findings), then plan.yaml `final_verify`, then moves the feature directory from
+// .kanban/2-in-progress/ to .kanban/4-done/. Called by the `/done` slash command
+// after the reviewer is satisfied.
+//
+// Stash port of promote-done.sh. The phase + review.md open-finding gate stays in
+// promote-gate.stash (the canonical gate, also used by /feature-review's
+// --phases-only check) and is invoked here rather than duplicated. The former
+// emit-final-verify.stash is re-absorbed: the final_verify list is a trivial read
+// from the plan. Each final_verify command is a free-form shell string, run via
+// $!>(bash -c ${cmd}) (strict-passthrough = `set -e` + live output). The directory
+// move uses `mv` (fs.move is file-only).
+
+import { die, load_plan } from "_common.stash";
+
+const INPROGRESS_DIR = ".kanban/2-in-progress";
+const DONE_DIR       = ".kanban/4-done";
+
+// ── Arguments ───────────────────────────────────────────────────────────────
+let raw = [];
+for (let x in cli.argv) { arr.push(raw, x); }
+if (raw.length != 1) {
+    die("usage: promote-done.stash <slug>", 2);
+}
+let slug = raw[0];
+let src = INPROGRESS_DIR + "/" + slug;
+let dst = DONE_DIR + "/" + slug;
+
+if (!fs.dirExists(src)) { die(src + " not found", 1); }
+if (fs.exists(dst) || fs.dirExists(dst)) { die(dst + " already exists", 1); }
+
+// ── Promotion gate (delegated to promote-gate.stash) ─────────────────────────
+// Phase gate (all phases done) + review.md open-finding gate, with the drift note.
+// Single source of truth — /feature-review uses the same script (--phases-only).
+let gate = try $!(stash scripts/checkpoint/promote-gate.stash ${slug});
+if (gate is Error) { io.eprint(gate.stderr); env.exit(gate.exitCode); }
+
+let plan = load_plan(slug);
+
+// ── final_verify (re-absorbed from emit-final-verify.stash) ──────────────────
+let cmds = [];
+for (let c in dict.get(plan, "final_verify") ?? []) {
+    if (conv.toStr(c) != "") { arr.push(cmds, conv.toStr(c)); }
+}
+for (let cmd in cmds) {
+    io.println("+ " + cmd);
+    let v = try $!>(bash -c ${cmd});   // strict-passthrough; `set -e`: abort on non-zero
+    if (v is Error) { env.exit(v.exitCode); }
+}
+
+// ── Promote: mv src -> dst ───────────────────────────────────────────────────
+// fs.move is file-only (can't move a directory), so use `mv` — the same tool the
+// bash original used. dst is already guaranteed not to exist.
+let mv = try $!(mv ${src} ${dst});
+if (mv is Error) { die("failed to move " + src + " -> " + dst + ": " + str.trim(mv.stderr), 1); }
+io.println("promoted: " + src + " -> " + dst);
+io.println("remember to: prepend a one-line entry to .claude/repo.md under 'Recent Completed Work'");
+env.exit(0);
