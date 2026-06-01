@@ -25,7 +25,8 @@ Pass-1 status (verified, not re-filed):
 
 ## F08 — [CRITICAL] Deep-freeze still silently bypassed for `json.parse`, `str.split`, and every other stdlib namespace that returns a bare `List<StashValue>` (F02 fix was scoped only to `arr.*` + `dict.keys/values/pairs`)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 027f915
 **Files:** `Stash.Core/Runtime/RuntimeValues.cs:379-388` (`DeepFreezeObject` bare-list safety net — admits the hole in its own comment), `Stash.Bytecode/VM/VirtualMachine.Collections.cs:188-189` and `:86-90` (write-paths gate only on `is StashArray && IsFrozen`), `Stash.Stdlib.Generators/TypeMarshaller.cs:106-108` (the choke point for auto-marshalled producers), `Stash.Stdlib/BuiltIns/StrBuiltIns.cs:254`, `:297`, `:449`, `:556`, `:667`, `:680`, `:694`, `Stash.Stdlib/BuiltIns/JsonBuiltIns.cs:91-100` (`ConvertArray`), plus equivalents in `XmlBuiltIns.cs`, `TomlBuiltIns.cs`, `SysBuiltIns.cs`, `ArchiveBuiltIns.cs`, `CompleteBuiltIns.cs`, `AliasBuiltIns.cs`, `CliBuiltIns.*.cs`, `ProcessBuiltIns.cs`, `NetSocketImpl.cs`, `SshBuiltIns.cs`, `SftpBuiltIns.cs`, `PkgBuiltIns.cs`, `TaskBuiltIns.cs`, `GlobalBuiltIns.cs:181`, `Stash.Tpl/TemplateFilters.cs:227`, `Stash.Tpl/TemplateRenderer.cs:283`, `:291`, `:299`
 **Phase:** P3
 **Commit:** `45a99c0` (F02 fix — partial); regression class still open

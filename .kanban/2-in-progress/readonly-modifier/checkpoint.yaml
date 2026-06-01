@@ -1,7 +1,7 @@
 schema_version: 1
 feature: readonly-modifier
 current: null
-updated: "2026-06-01T18:25:35Z"
+updated: "2026-06-01T18:42:12Z"
 phases:
   P1:
     status: done
@@ -52,8 +52,8 @@ phases:
     attempts: 1
     notes: Hover with deep/transitive description; playground keyword; TextMate storage.modifier.stash; tree-sitter optional(readonly); spec ToC+section with rationale+footgun; examples/readonly.stash 7 scenarios; HoverHandlerTests 2 tests; DAP no change
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-01T16:51:28Z"
-  resolved: "2026-06-01T18:10:39Z"
+  resolved: "2026-06-01T18:42:12Z"
   findings_open: 0
   findings_fixed: 0
