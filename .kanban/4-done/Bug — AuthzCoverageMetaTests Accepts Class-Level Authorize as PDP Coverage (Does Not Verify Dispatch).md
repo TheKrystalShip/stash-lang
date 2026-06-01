@@ -1,6 +1,6 @@
 # AuthzCoverageMetaTests treats a class-level [Authorize] as authorization coverage without verifying the endpoint dispatches to the PDP
 
-**Status:** Backlog — Bug
+**Status:** Fixed — 2026-06-01 (resolved by `registry-authz-filter` P3, commit `efa5f11b`)
 **Created:** 2026-05-30
 **Discovery context:** Surfaced during `registry-authz-pipeline` P7 (originally the docs+cleanup phase). The implementer refused to delete the legacy `RequireAdmin` policy because five `AdminController` endpoints (`GetStats`, `CreateUser`, `DeleteUser`, `AdminAssignRole`, `GetAuditLog`) were gated *only* by the class-level `[Authorize(Policy=RequireAdmin)]` and never called `IRegistryAuthorizer`. The default-deny meta-test had reported full compliance the whole time — it counts a class-level `[Authorize]` as "classified" and never checks that an endpoint actually makes a PDP decision.
 
@@ -62,3 +62,22 @@ Cross-cutting checks that must continue to pass: `AuthzCoverageMetaTests` (the e
 - Feature that surfaced it: `registry-authz-pipeline` — P7 (`c703a40`, the migration that closed the product-side gap) and the inserted-phase rationale in that feature's `brief.md` (`## Phases`, P7) and `plan.yaml`.
 - Mechanism that let it persist: P4 (`635c7bc`) — `done_when` asserted full AdminController PDP migration but verified it only with a `grep "HasPackagePermissionAsync"` proxy.
 - Same surface: `Stash.Tests/Registry/AuthzCoverageMetaTests.cs`, `Stash.Registry/Auth/Authorization/RegistryAction.cs` (the closed action enum), `Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs` (the existing Roslyn-scan meta-test to mirror for approach A).
+
+---
+
+## Resolution (2026-06-01)
+
+Fixed under feature **`registry-authz-filter`**, phase **P3** (commit `efa5f11b`, on `main`, 2026-05-30) — *not* via approach (A)'s Roslyn body-scan but via a **stronger structural guarantee** that makes the original "attribute presence ≠ PDP dispatch" failure mode impossible:
+
+- **Declarative dispatch attribute.** `[RegistryAuthorize(RegistryAction.X)]` implements `IFilterFactory` (`Stash.Registry/Auth/Authorization/RegistryAuthorizeAttribute.cs`), so its mere presence instantiates `RegistryAuthorizeFilter` per request. `RegistryAuthorizeFilter.OnAuthorizationAsync` (`…/RegistryAuthorizeFilter.cs`) **calls `IRegistryAuthorizer.AuthorizeAsync(principal, _action, resource)` and short-circuits with a deny `context.Result` on failure.** Unlike the legacy `[Authorize]` (authentication-only), this attribute cannot be present without a PDP dispatch firing — closing the root cause.
+- **New meta-test** `Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs` (4 `[Fact]`s, all green) asserts every non-`[PublicEndpoint]` production action carries `[RegistryAuthorize]` **or** `[ImperativeAuthz("reason")]`; bare class-level `[Authorize]` is explicitly rejected. It ships the teeth the Verification section demanded: `UnclassifiedDispatchFixtureController` (`[Authorize]`, no PDP call) which `UnclassifiedDispatchFixture_IsDetectedByScanner` requires the scan to flag, plus a positive-control fixture.
+- **Product side closed.** All five (now six) `AdminController` endpoints carry `[RegistryAuthorize(...)]` (`GetStats`→`ReadAdminStats`, `CreateUser`/`DeleteUser`→`ManageUser`, `AdminAssignRole`→`AdminAssignPackageRole`, `GetAuditLog`→`ReadAuditLog`, `AdminRevokeRole`→`AdminRevokePackageRole`). The legacy `RequireAdmin` policy is removed.
+
+Verification (`dotnet test --filter "FullyQualifiedName~AuthzDispatchCoverageMetaTests"`) → **Passed: 4, Failed: 0**.
+
+### Residual hardening gaps (NOT this bug — candidates for a follow-up stub)
+
+An adversarial refute pass confirmed the root cause is closed but surfaced two adjacent, narrower weaknesses left by the chosen approach:
+
+1. **`[ImperativeAuthz]` is a non-body-verified marker.** Nothing statically proves an `[ImperativeAuthz]`-tagged action actually calls `AuthorizeAsync` inline — only code review + the pinned-set assertion (`ImperativeAuthzEndpoints_MatchPinnedSet`, pinned to `{ScopesController.ClaimScope}`, which *was* confirmed to dispatch inline) guard it. A new imperative endpoint that forgets the PDP call is caught only if it also forgets to update the pin.
+2. **`ProductionControllers` is a hardcoded 6-type list.** A *new* `ControllerBase` added to `Stash.Registry` but not appended to that list escapes both `AuthzCoverageMetaTests` and `AuthzDispatchCoverageMetaTests` silently — a Construct-vs-Detect gap (no reflection sweep cross-checks the list against the actual controller set). This is the same omission shape the project's omission-hardening doctrine targets.
