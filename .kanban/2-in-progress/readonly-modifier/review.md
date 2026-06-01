@@ -357,7 +357,8 @@ git diff -- .kanban/2-in-progress/readonly-modifier/brief.md
 
 ## F06 — [MINOR] `StashFrozenArray` is not retired or shimmed; two parallel frozen-array mechanisms now coexist
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 96de0c8
 **Files:** `Stash.Core/Runtime/Types/StashFrozenArray.cs` (full implementation, unchanged), `Stash.Bytecode/VM/VirtualMachine.Collections.cs:20-29,86-89`, `Stash.Stdlib/SvArgs.cs:70`, `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs:1295-1296` (`IsArrayFrozen`), `Stash.Stdlib/BuiltIns/GlobalBuiltIns.cs:135`
 **Phase:** P3
 **Commit:** 6b302819
