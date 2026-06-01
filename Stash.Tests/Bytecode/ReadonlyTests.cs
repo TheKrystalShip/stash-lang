@@ -262,4 +262,60 @@ return caught;
         Assert.Throws<ReadOnlyError>(() =>
             Execute("readonly let S = { x: 0 }; S = { x: 1 }; S.x = 99;"));
     }
+
+    // =========================================================================
+    // 14. Q4 upvalue path: nested function forces set.upval (not set.global)
+    //     These tests ensure the UpvalueDescriptor.IsReadonly/IsConst bits and
+    //     the ExecuteSetUpval guard are actually exercised.
+    // =========================================================================
+
+    [Fact]
+    public void ReadonlyLet_NestedClosure_UpvalueRebind_RefreezesAndThrows()
+    {
+        // S is a local inside outer(); g() captures it as an upvalue (set.upval).
+        // After g() stores a new dict, S is frozen; S.x = 9 must throw.
+        string source = @"
+fn outer() {
+  readonly let S = { x: 0 };
+  fn g() { S = { x: 1 }; }
+  g();
+  S.x = 9;
+}
+outer();
+";
+        Assert.Throws<ReadOnlyError>(() => Execute(source));
+    }
+
+    [Fact]
+    public void ReadonlyLet_NestedClosure_UpvalueRebindSucceeds_ValueReadable()
+    {
+        // Rebind via upvalue succeeds; result is accessible after g() returns.
+        string source = @"
+fn outer() {
+  readonly let S = { x: 0 };
+  fn g() { S = { x: 42 }; }
+  g();
+  return S.x;
+}
+return outer();
+";
+        object? result = Execute(source);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Const_NestedClosure_UpvalueRebind_Throws()
+    {
+        // Regression guard (Q4): const local captured as upvalue, rebind inside
+        // nested fn → must throw (the backlog bug: previously silently succeeded).
+        string source = @"
+fn outer() {
+  const c = 1;
+  fn g() { c = 2; }
+  g();
+}
+outer();
+";
+        Assert.ThrowsAny<RuntimeError>(() => Execute(source));
+    }
 }
