@@ -425,7 +425,8 @@ dotnet test
 
 ## F07 — [MINOR] `readonly let` binding doesn't get the `readonly` semantic-token modifier; tree-sitter accepts `for (readonly let ...)`; non-top-level `readonly const` local doesn't set `IsLocalReadonly`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 90e64c7
 **Files:** `Stash.Analysis/Visitors/SemanticTokenWalker.cs:328-355`, `tree-sitter-stash/grammar.js:81,92`, `Stash.Bytecode/Compilation/Compiler.Declarations.cs:86`
 **Phase:** P2 / P6
 **Commit:** 2878912d (semantic tokens), 9f79eea0 (tree-sitter)
