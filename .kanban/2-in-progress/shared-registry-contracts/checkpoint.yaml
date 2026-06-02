@@ -1,7 +1,7 @@
 schema_version: 1
 feature: shared-registry-contracts
 current: null
-updated: "2026-06-02T20:11:13Z"
+updated: "2026-06-02T20:49:59Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles moved to Stash.Registry.Contracts/BoundedDomains.cs; 11 call-site files updated with using; BoundedDomainPlacementTests added; 136 tests green"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e23c5d38ba600280b90e039b1e2d8241e471a3ad
+    verified: true
+    started: "2026-06-02T20:12:56Z"
+    completed: "2026-06-02T20:49:59Z"
+    attempts: 1
+    notes: "CLI references shared contracts; 12 duplicate DTOs deleted from CliJsonContext; bounded-domain literals replaced (2 sites); WhoamiInfo.email dropped; CliNoMagicWireStringsMetaTests live with empty exemption list + real semantic binding + fail-path/clean-path self-tests + floor guard; CliContractsConsumptionTests live; AOT publish clean (IL2026 suppressed via [UnconditionalSuppressMessage] on DeprecatePackage/VersionRequest.Message); verify-phase P3 OK"
   P4:
     status: pending
     commit: null
