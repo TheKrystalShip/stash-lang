@@ -88,27 +88,76 @@ public sealed class CliNoMagicWireStringsMetaTests
     // ── Metadata references ───────────────────────────────────────────────────
 
     /// <summary>
-    /// Builds metadata references for a Roslyn compilation from all non-dynamic assemblies
-    /// in the current AppDomain that have a non-empty file location, plus the
-    /// <c>Stash.Registry.Contracts</c> assembly (guaranteed via <see cref="AssignRoleRequest"/>
-    /// which is loaded transitively through <c>Stash.Tests</c>).
-    /// The CLI's own assembly is excluded: we supply its source files to the compilation
-    /// directly (referencing both source and assembly would produce duplicate definitions).
+    /// Builds a deterministic, order-independent set of metadata references for a Roslyn
+    /// compilation. Uses the Trusted Platform Assemblies (TPA) list — the full framework
+    /// reference closure present at runtime — plus the <c>Stash.Registry.Contracts</c>
+    /// assembly and <c>System.ComponentModel.DataAnnotations</c> (required because the
+    /// contracts types carry validation attributes). Paths are de-duplicated so that
+    /// assemblies already in the TPA set are not added twice.
     /// </summary>
+    /// <remarks>
+    /// The previous implementation used <c>AppDomain.CurrentDomain.GetAssemblies()</c>,
+    /// which is non-deterministic (varies with test execution order). When the contracts
+    /// assembly was not yet loaded into the AppDomain, the Roslyn compilation could not
+    /// bind <c>Stash.Registry.Contracts</c> types, causing the scanner to find 0
+    /// violations — a silent vacuous pass. The TPA-based approach is a fixed, coherent
+    /// reference closure that does not depend on which tests ran before this one.
+    /// </remarks>
     private static MetadataReference[] BuildMetadataReferences()
     {
-        // Ensure the contracts assembly is actually loaded into the AppDomain.
-        _ = typeof(AssignRoleRequest);
+        // Collect the full framework reference closure from the trusted platform assemblies.
+        var tpaPaths = (AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Where(p => !string.IsNullOrEmpty(p));
 
-        return AppDomain.CurrentDomain
-            .GetAssemblies()
-            .Where(a =>
-                !a.IsDynamic
-                && !string.IsNullOrEmpty(a.Location)
-                // Exclude the CLI's own assembly — its source is provided directly.
-                && !a.GetName().Name!.Equals("Stash", StringComparison.Ordinal))
-            .Select(a => MetadataReference.CreateFromFile(a.Location))
-            .ToArray<MetadataReference>();
+        // Additional assemblies that must be present for the contracts types to bind.
+        var extraPaths = new[]
+        {
+            // The contracts assembly itself — the primary target of this scanner.
+            typeof(AssignRoleRequest).Assembly.Location,
+            // DataAnnotations — contracts types carry [MinLength] and similar attributes.
+            typeof(System.ComponentModel.DataAnnotations.MinLengthAttribute).Assembly.Location,
+        };
+
+        // De-duplicate by path (TPA may already include the extra assemblies).
+        var allPaths = tpaPaths
+            .Concat(extraPaths)
+            .Where(p => !string.IsNullOrEmpty(p) && File.Exists(p))
+            .Distinct(StringComparer.Ordinal)
+            // Exclude the CLI's own assembly — its source is provided directly to the
+            // compilation, so referencing both source and assembly would produce duplicates.
+            .Where(p => !Path.GetFileNameWithoutExtension(p)
+                             .Equals("Stash", StringComparison.Ordinal));
+
+        return allPaths
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Asserts that the metadata references produced by <see cref="BuildMetadataReferences"/>
+    /// can actually resolve a known <c>Stash.Registry.Contracts</c> type to a real, non-error
+    /// symbol. A vacuous scan (refs insufficient → 0 violations, which is always "passing")
+    /// is worse than a failing scan, so we fail loudly here rather than silently.
+    /// </summary>
+    private static void AssertBindingFloor(MetadataReference[] refs)
+    {
+        var probeCompilation = CSharpCompilation.Create(
+            "__BindingFloorProbe__",
+            syntaxTrees: [],
+            references: refs,
+            options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var symbol = probeCompilation.GetTypeByMetadataName(
+            "Stash.Registry.Contracts.AssignRoleRequest");
+
+        Assert.True(
+            symbol != null && symbol.TypeKind != TypeKind.Error,
+            "Meta-test reference set cannot bind Stash.Registry.Contracts types — " +
+            "the scan would be vacuous (0 violations is meaningless). " +
+            "Fix BuildMetadataReferences() so it can resolve AssignRoleRequest. " +
+            $"Resolved symbol: {symbol?.ToDisplayString() ?? "<null>"}, " +
+            $"TypeKind: {symbol?.TypeKind.ToString() ?? "N/A"}");
     }
 
     // ── Scanner ───────────────────────────────────────────────────────────────
@@ -206,6 +255,13 @@ public sealed class CliNoMagicWireStringsMetaTests
     public void NoCliWireSink_ReceivesBareLiteral()
     {
         string sourceDir = FindCliSourceDir();
+
+        // Assert the binding floor BEFORE trusting any violation count.
+        // If the metadata references cannot bind contracts types, 0 violations is meaningless
+        // (the scanner simply skips every assignment it cannot resolve).
+        var refs = BuildMetadataReferences();
+        AssertBindingFloor(refs);
+
         (List<string> violations, int scannedFiles) = ScanDirectory(sourceDir);
 
         Assert.True(
