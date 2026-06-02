@@ -79,7 +79,13 @@ phases:
       - The feature works through the normal runtime path, not only isolated helpers.
 
 # Final acceptance command — run by `/done` before promoting to 4-done/.
-# Must include the full test suite at minimum.
+# Must include the full test suite at minimum. The two `checkpoint lint` lines are
+# the standing omission guard: every feature's promotion gate confirms the live doc
+# surface has no raw `scripts/checkpoint/<sub>.stash` reference (it routes through the
+# facade) and that the guard still has teeth. Keep them — dropping them makes the
+# guard one-shot instead of perpetual.
 final_verify:
   - dotnet build
   - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
