@@ -50,13 +50,12 @@ public class WhoamiCommandTests
     [Fact]
     public void WhoamiDetailed_Success_ReturnsAllFields()
     {
-        const string json = """{"username":"alice","email":"alice@example.com","role":"admin"}""";
+        const string json = """{"username":"alice","role":"admin"}""";
         var client = BuildClient(new FakeHandler(HttpStatusCode.OK, json));
 
         var info = client.WhoamiDetailed();
 
         Assert.Equal("alice", info.Username);
-        Assert.Equal("alice@example.com", info.Email);
         Assert.Equal("admin", info.Role);
     }
 
@@ -73,7 +72,7 @@ public class WhoamiCommandTests
     [Fact]
     public void WhoamiDetailed_MissingUsernameField_Throws()
     {
-        const string json = """{"email":"alice@example.com"}""";
+        const string json = """{"role":"admin"}""";
         var client = BuildClient(new FakeHandler(HttpStatusCode.OK, json));
 
         var ex = Assert.Throws<InvalidOperationException>(() => client.WhoamiDetailed());
@@ -107,7 +106,6 @@ public class WhoamiCommandTests
         var info = client.WhoamiDetailed();
 
         Assert.Equal("bob", info.Username);
-        Assert.Null(info.Email);
         Assert.Null(info.Role);
     }
 }

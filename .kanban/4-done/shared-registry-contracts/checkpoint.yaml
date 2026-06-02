@@ -1,0 +1,43 @@
+schema_version: 1
+feature: shared-registry-contracts
+current: null
+updated: "2026-06-02T22:12:55Z"
+phases:
+  P1:
+    status: done
+    commit: b036d653452b6563a541dbf4df38072754ab532d
+    verified: true
+    started: "2026-06-02T19:40:19Z"
+    completed: "2026-06-02T19:55:37Z"
+    attempts: 1
+    notes: "Created Stash.Registry.Contracts (dependency-free), git-mv 7 contract files, added AuditEntryResponse DTO + inline mapping, removed stale Database.Models usings, wired ProjectReference, added ContractsAssemblyShapeTests; all builds green, 93 targeted tests pass"
+  P2:
+    status: done
+    commit: cf6f537da0f37093abdf9f060039a05fdc27f119
+    verified: true
+    started: "2026-06-02T19:58:48Z"
+    completed: "2026-06-02T20:11:13Z"
+    attempts: 1
+    notes: "PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles moved to Stash.Registry.Contracts/BoundedDomains.cs; 11 call-site files updated with using; BoundedDomainPlacementTests added; 136 tests green"
+  P3:
+    status: done
+    commit: e23c5d38ba600280b90e039b1e2d8241e471a3ad
+    verified: true
+    started: "2026-06-02T20:12:56Z"
+    completed: "2026-06-02T20:49:59Z"
+    attempts: 1
+    notes: "CLI references shared contracts; 12 duplicate DTOs deleted from CliJsonContext; bounded-domain literals replaced (2 sites); WhoamiInfo.email dropped; CliNoMagicWireStringsMetaTests live with empty exemption list + real semantic binding + fail-path/clean-path self-tests + floor guard; CliContractsConsumptionTests live; AOT publish clean (IL2026 suppressed via [UnconditionalSuppressMessage] on DeprecatePackage/VersionRequest.Message); verify-phase P3 OK"
+  P4:
+    status: done
+    commit: fad280b00456fb03d591eb3eafed9c2af1aba531
+    verified: true
+    started: "2026-06-02T20:54:10Z"
+    completed: "2026-06-02T21:17:32Z"
+    attempts: 1
+    notes: docs point at shared project; full suite green (12992 passed); AOT clean; meta-test determinism fix 10bd8e5b validated
+review:
+  status: resolved
+  started: "2026-06-02T21:32:34Z"
+  resolved: "2026-06-02T22:12:55Z"
+  findings_open: 0
+  findings_fixed: 0

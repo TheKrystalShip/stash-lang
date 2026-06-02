@@ -99,7 +99,17 @@ phases:
     files:
       - Stash.Registry.Contracts/BoundedDomains.cs
       - Stash.Registry/Auth/RegistryAuthConstants.cs
+      - Stash.Registry/Auth/Authorization/PermissionResolver.cs
+      - Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs
+      - Stash.Registry/Bootstrap/AdminBootstrapper.cs
+      - Stash.Registry/Database/Models/OrgMemberEntry.cs
+      - Stash.Registry/Database/Models/PackageRecord.cs
+      - Stash.Registry/Database/RegistryDbContext.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Services/PackageRoleService.cs
+      - Stash.Registry/Services/PackageService.cs
       - Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs
+      - Stash.Tests/Registry/Authz/FailClosedResolverTests.cs
       - Stash.Tests/Registry/Contracts/BoundedDomainPlacementTests.cs
     verify:
       - dotnet build Stash.Registry.Contracts
@@ -145,6 +155,11 @@ phases:
       - Stash.Cli/PackageManager/Commands/**
       - Stash.Tests/Cli/CliNoMagicWireStringsMetaTests.cs
       - Stash.Tests/Cli/CliContractsConsumptionTests.cs
+      - Stash.Tests/Cli/WhoamiCommandTests.cs
+      - Stash.Tests/Registry/TokenCommandTests.cs
+      # Bounded correction: [UnconditionalSuppressMessage] added to DeprecatePackageRequest/DeprecateVersionRequest
+      # to suppress IL2026 warnings from [MinLength] on AOT-publishing consumers (CLI). See P3 notes.
+      - Stash.Registry.Contracts/PackageContracts.cs
     verify:
       - dotnet build Stash.Cli
       - dotnet build Stash.Tests

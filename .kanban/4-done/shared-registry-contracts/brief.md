@@ -132,10 +132,10 @@ violated") in production code that contacts the registry.
 - `Stash.Registry.Contracts` carries the wire DTOs (all 7 existing files,
   moved by `git mv`) plus the wire-visible bounded-domain constant classes
   (`PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`,
-  `ScopeOwnerTypes`, `OrgRoles`).
+  `ScopeOwnerTypes`, `OrgRoles`, `UserRoles`).
 - `Stash.Registry` keeps `RegistryClaims`, server-internal types
   (`AuthzDenyReason`, policy names, EF config, `TokenCeilingConverter`,
-  `ReservedScopes`, `UserRoles`), and the whole controller / service /
+  `ReservedScopes`), and the whole controller / service /
   database layer. See the Decision Log for the wire-visible /
   server-internal split rationale.
 - `Stash.Cli` references the shared project; its duplicate DTOs are deleted;
@@ -232,7 +232,7 @@ recorded below using the architect's Construct / Detect / Instruct ladder.
 | Concern | Single source of truth | Omission prevented by |
 | --- | --- | --- |
 | **Dependency-freedom of the shared assembly** (no future contributor may quietly drop in a `<ProjectReference>` to `Stash.Core` / `Stash.Registry` / EF) | `Stash.Registry.Contracts.csproj` (zero `<ProjectReference>`) | **Construct (primary)** - attempting to reference an EF or `Stash.Core` type fails to compile (no such reference exists in the new project's reference graph). The end-to-end proof is P3's `dotnet publish Stash.Cli -c Release` succeeding with no new AOT/trim warnings: a hidden non-AOT-safe dependency would surface there. **Detect (backstop)** - a tiny csproj-shape meta-test asserts the contracts project has **zero** `<ProjectReference>` elements, so a future contributor adding one breaks a test, not just code review. |
-| **Bounded-domain single source of truth** for wire-visible closed sets (package roles, token scopes, visibility, principal types, scope-owner types, org roles) referenced by both the registry and the CLI | The `const string` sets in `Stash.Registry.Contracts` (moved out of `Stash.Registry/Auth/RegistryAuthConstants.cs` in P2) | **Detect (forced choice)** - the registry's existing `NoMagicAuthStringsMetaTests` (which scans known auth sinks for bare string literals) stays green across the move and continues to guard the registry. A **new** parallel CLI sink-scan (P3) guards the CLI for *its* sink set (assignments to wire-bounded DTO properties `PrincipalType`/`Role`/`Visibility`/`OwnerType`/`OrgRole` on shared-contract types), with its own pinned-list, fail-path self-test, and floor-guard. Construct (an `enum` for each domain, illegal value won't compile) was **deliberately rejected by Decision Log entry "DTO properties stay string-typed"** to keep the shared project dependency-free; the meta-tests are the forced consequence of that tradeoff. The CLI meta-test is **live during the migration**, not after - see P3 done_when. |
+| **Bounded-domain single source of truth** for wire-visible closed sets (package roles, token scopes, visibility, principal types, scope-owner types, org roles, user roles) referenced by both the registry and the CLI | The `const string` sets in `Stash.Registry.Contracts` (moved out of `Stash.Registry/Auth/RegistryAuthConstants.cs` in P2) | **Detect (forced choice)** - the registry's existing `NoMagicAuthStringsMetaTests` (which scans known auth sinks for bare string literals) stays green across the move and continues to guard the registry. A **new** parallel CLI sink-scan (P3) guards the CLI for *its* sink set (assignments to wire-bounded DTO properties `PrincipalType`/`Role`/`Visibility`/`OwnerType`/`OrgRole` on shared-contract types), with its own pinned-list, fail-path self-test, and floor-guard. Construct (an `enum` for each domain, illegal value won't compile) was **deliberately rejected by Decision Log entry "DTO properties stay string-typed"** to keep the shared project dependency-free; the meta-tests are the forced consequence of that tradeoff. The CLI meta-test is **live during the migration**, not after - see P3 done_when. |
 
 For each: prose in this brief (Instruct) is never the sole guard.
 
@@ -271,12 +271,14 @@ End-to-end behavior (the test of the feature):
 
 Error / failure path:
 
-- **The wire surface is byte-identical.** Recorded request and response
+- **The wire surface is preserved (with one intentional exception).** Recorded request and response
   shapes from before this feature (the request bodies / response JSON of
   every existing controller) deserialize cleanly against the shared DTOs
-  and re-serialize byte-identically; existing `RegistryRoutesTests`,
+  and re-serialize byte-identically for all moved types; existing `RegistryRoutesTests`,
   `RegistryAuthzMatrixTests`, and `PackageServiceTests` stay green at
-  every phase boundary.
+  every phase boundary. The sole intentional change: `AuditLogResponse.Entries` drops
+  the EF surrogate `id` field (internal database key, no documented public contract, no
+  consumer reads it); the remaining 9 audit-entry fields are byte-identical.
 - **One net-new DTO only.** Exactly one type (`AuditEntryResponse`) is
   added to the shared project. A diff of moved files shows only
   rename + minor cleanup (drop the stale `using
@@ -309,11 +311,10 @@ concrete `files`, `verify`, and `done_when` lists there.
   emerges that would *not* be a wire concern (none today), it would be
   duplicated locally. The implementer should confirm there is no
   surprising server-internal use that wants to stay private.
-- **`UserRoles` placement.** `UserRoles` (`User`/`Admin`) is a JWT *role*
-  claim, never wire-bound in a request/response body. The plan keeps it
-  server-internal in `Stash.Registry/Auth/RegistryAuthConstants.cs`. If
-  the CLI ever needs it, it would be added to the shared project then; not
-  speculatively now.
+- **`UserRoles` placement.** `UserRoles` (`User`/`Admin`) is wire-bound:
+  `CreateUserRequest.Role` and `CreateUserResponse.Role` both carry these
+  values over HTTP. It was moved to `Stash.Registry.Contracts/BoundedDomains.cs`
+  (resolved by F04 review finding).
 - **Coordination with `pkg-cli-api-parity` — file path post-merge.**
   `PackageContracts.cs` moves into `Stash.Registry.Contracts/` in P1
   *unchanged* (the derived `Owners` field stays). Parity P1 ("Drop the
@@ -330,8 +331,8 @@ concrete `files`, `verify`, and `done_when` lists there.
 | 2026-06-02 | **Move files with `git mv`, not copy** | A copy duplicates type definitions in the same namespace and fails to compile. `git mv` preserves history and avoids the dup. |
 | 2026-06-02 | **JSON strategy: shared project is POCOs only (no `JsonSerializerContext`)** | Lets the registry keep reflection-based JSON unchanged and the CLI keep its source-gen `CliJsonContext` — cross-assembly `[JsonSerializable]` is supported. Sharing a context would either force the registry to adopt source-gen (out of scope) or duplicate AOT registration in the CLI (defeats the purpose). |
 | 2026-06-02 | **DTO wire properties stay `string`-typed** (e.g. `string Role`, `string Visibility`, `string PrincipalType`); the bounded-domain `const string` sets are a separate type whose values feed those properties | Real C# enums would force a `JsonStringEnumConverter` and enum-converter dependencies into the shared project, breaking the dependency-free constraint. This is the deliberate Construct→Detect downgrade recorded in Cross-Cutting Concerns. |
-| 2026-06-02 | **Wire-visible / server-internal split:** wire-visible (`PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`) → shared project; server-internal (`RegistryClaims`, `UserRoles`, `ReservedScopes`, `AuthzDenyReason`, policy names, the `NoMagicAuthStringsMetaTests` sink list, `TokenCeilingConverter`, EF config) → stays in `Stash.Registry` | Pulling the whole `RegistryAuthConstants.cs` over would leak server internals into the CLI. The wire/internal split is the central hazard of this feature and is performed deliberately. `UserRoles` is a JWT role claim never in a wire body; `ReservedScopes` and `TokenCeilingConverter` are pure server policy. |
-| 2026-06-02 | **One net-new DTO: `AuditEntryResponse`** — `AdminController` maps `AuditEntry` (EF) → `AuditEntryResponse` (wire) inline; `AuditLogResponse.Entries` becomes `List<AuditEntryResponse>` | `AuditEntry` is an EF database entity and cannot live in a dependency-free DTO project. The wire field names match the existing JSON keys (action / package / version / user / target / ip / timestamp / decision / denyReason — verified against the EF entity), so the wire shape is unchanged. |
+| 2026-06-02 | **Wire-visible / server-internal split:** wire-visible (`PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`, `UserRoles`) → shared project; server-internal (`RegistryClaims`, `ReservedScopes`, `AuthzDenyReason`, policy names, the `NoMagicAuthStringsMetaTests` sink list, `TokenCeilingConverter`, EF config) → stays in `Stash.Registry` | Pulling the whole `RegistryAuthConstants.cs` over would leak server internals into the CLI. The wire/internal split is the central hazard of this feature and is performed deliberately. `UserRoles` IS wire-bound: `CreateUserRequest.Role` and `CreateUserResponse.Role` both carry `"user"`/`"admin"` values over HTTP — the original "never wire-bound" rationale was incorrect. `ReservedScopes` and `TokenCeilingConverter` are pure server policy and remain server-internal. |
+| 2026-06-02 | **One net-new DTO: `AuditEntryResponse`** — `AdminController` maps `AuditEntry` (EF) → `AuditEntryResponse` (wire) inline; `AuditLogResponse.Entries` becomes `List<AuditEntryResponse>` | `AuditEntry` is an EF database entity and cannot live in a dependency-free DTO project. The previous wire shape (`List<AuditEntry>`) serialized the EF surrogate `id` column; the new DTO intentionally omits it (internal database surrogate, not part of any documented public contract, no consumer reads it). The remaining 9 fields are byte-identical — action / package / version / user / target / ip / timestamp / decision / denyReason. |
 | 2026-06-02 | **Drop the stale `using Stash.Registry.Database.Models;` from `OrganizationContracts.cs`** | Verified unused in the file; clean removal during the move. |
 | 2026-06-02 | **CLI `WhoamiInfo` drops the dead `email` field** when it adopts the shared `WhoamiResponse` | `RegistryClient.WhoamiDetailed()` reads an `email` field that always returns `null`: `WhoamiResponse` carries `{username, role}` only, `UserRecord` has no `email` column, no auth provider populates it. The CLI surfaces `null` to the user today. The alternative — add `email` to the contract + server plumbing — is a larger, separate feature; this one removes the dead surface. |
 | 2026-06-02 | **CLI no-magic-strings meta-test lands at the START of P3, RED with a pinned exemption list listing every existing CLI bounded-domain literal site** | Per the architect's Cross-Cutting Omission doctrine: a meta-test scheduled as a final phase merges every prior phase with the invariant unenforced. The migration must run *under* the guard, not be retrofitted to satisfy it. The exemption list shrinks to empty as the migration completes; P3's `done_when` requires `len(exemptions) == 0`. |

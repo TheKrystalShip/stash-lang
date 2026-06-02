@@ -1,6 +1,6 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Contracts;
 
@@ -75,13 +75,57 @@ public sealed class StatsResponse
 }
 
 /// <summary>
-/// Response body returned by the <c>GET /api/v1/admin/audit</c> endpoint.
+/// Wire DTO for a single audit log entry returned by the <c>GET /api/v1/admin/audit-log</c> endpoint.
+/// Maps from the EF <c>AuditEntry</c> entity; the <c>id</c> database column is intentionally excluded
+/// from the wire shape (internal surrogate key, not part of the public API contract).
+/// </summary>
+public sealed class AuditEntryResponse
+{
+    /// <summary>The action type string, e.g. <c>"publish"</c>, <c>"unpublish"</c>, <c>"user.create"</c>.</summary>
+    [JsonPropertyName("action")]
+    public string Action { get; set; } = "";
+
+    /// <summary>The package name involved in this action, or <c>null</c> for non-package events.</summary>
+    [JsonPropertyName("package")]
+    public string? Package { get; set; }
+
+    /// <summary>The package version involved in this action, or <c>null</c> for non-version events.</summary>
+    [JsonPropertyName("version")]
+    public string? Version { get; set; }
+
+    /// <summary>The username of the actor who performed the action, or <c>null</c> if not applicable.</summary>
+    [JsonPropertyName("user")]
+    public string? User { get; set; }
+
+    /// <summary>An optional secondary target of the action (e.g. username being created or token ID), or <c>null</c>.</summary>
+    [JsonPropertyName("target")]
+    public string? Target { get; set; }
+
+    /// <summary>The IP address of the client that triggered the action, or <c>null</c> if not available.</summary>
+    [JsonPropertyName("ip")]
+    public string? Ip { get; set; }
+
+    /// <summary>The UTC timestamp at which this audit event occurred.</summary>
+    [JsonPropertyName("timestamp")]
+    public DateTime Timestamp { get; set; }
+
+    /// <summary>The authorization decision: <c>"allow"</c> or <c>"deny"</c>, or <c>null</c> for legacy entries.</summary>
+    [JsonPropertyName("decision")]
+    public string? Decision { get; set; }
+
+    /// <summary>The typed deny reason when <see cref="Decision"/> is <c>"deny"</c>, or <c>null</c> for allow entries.</summary>
+    [JsonPropertyName("denyReason")]
+    public string? DenyReason { get; set; }
+}
+
+/// <summary>
+/// Response body returned by the <c>GET /api/v1/admin/audit-log</c> endpoint.
 /// </summary>
 public sealed class AuditLogResponse
 {
     /// <summary>The list of audit log entries for the current page.</summary>
     [JsonPropertyName("entries")]
-    public required List<AuditEntry> Entries { get; set; }
+    public required List<AuditEntryResponse> Entries { get; set; }
 
     /// <summary>The total number of audit log entries across all pages.</summary>
     [JsonPropertyName("totalCount")]

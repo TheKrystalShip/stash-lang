@@ -10,6 +10,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Stash.Common;
+using Stash.Registry.Contracts;
 
 namespace Stash.Cli.PackageManager;
 
@@ -127,12 +128,12 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
 
         try
         {
-            string body = JsonSerializer.Serialize(new TokenRefreshRequest
+            string body = JsonSerializer.Serialize(new RefreshTokenRequest
             {
                 RefreshToken = _refreshToken,
                 AccessToken = _token,
                 MachineId = _machineId
-            }, CliJsonContext.Default.TokenRefreshRequest);
+            }, CliJsonContext.Default.RefreshTokenRequest);
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             var response = _http.PostAsync($"{_baseUrl}/auth/tokens/refresh", content).GetAwaiter().GetResult();
 
@@ -572,8 +573,15 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         return null;
     }
 
-    /// <summary>Holds the fields returned by <c>GET /auth/whoami</c>.</summary>
-    public sealed record WhoamiInfo(string? Username, string? Email, string? Role);
+    /// <summary>
+    /// Holds the fields returned by <c>GET /auth/whoami</c>.
+    /// </summary>
+    /// <remarks>
+    /// The <c>email</c> field has been intentionally omitted: <c>WhoamiResponse</c>
+    /// carries no <c>email</c>, <c>UserRecord</c> has no <c>email</c> column, and no
+    /// auth provider populates one — the field was always <c>null</c>. See Decision Log.
+    /// </remarks>
+    public sealed record WhoamiInfo(string? Username, string? Role);
 
     /// <summary>
     /// Returns detailed information about the authenticated user.
@@ -621,10 +629,9 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         }
 
         string? username = usernameProp.GetString();
-        string? email = root.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
         string? role = root.TryGetProperty("role", out var roleProp) ? roleProp.GetString() : null;
 
-        return new WhoamiInfo(username, email, role);
+        return new WhoamiInfo(username, role);
     }
 
     /// <summary>
@@ -711,17 +718,17 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </summary>
     /// <remarks>
     /// Issues <c>GET /search?q={query}&amp;page={page}&amp;pageSize={pageSize}</c> and
-    /// deserialises the JSON response into a <see cref="SearchResults"/> object using
+    /// deserialises the JSON response into a <see cref="SearchResponse"/> object using
     /// <see cref="CliJsonContext"/>.
     /// </remarks>
     /// <param name="query">The search query string.</param>
     /// <param name="page">The 1-based page number to retrieve (default <c>1</c>).</param>
     /// <param name="pageSize">The number of results per page (default <c>20</c>).</param>
     /// <returns>
-    /// A <see cref="SearchResults"/> object with matching packages, or <c>null</c> on
+    /// A <see cref="SearchResponse"/> object with matching packages, or <c>null</c> on
     /// failure.
     /// </returns>
-    public SearchResults? Search(string query, int page = 1, int pageSize = 20)
+    public SearchResponse? Search(string query, int page = 1, int pageSize = 20)
     {
         string url = $"{_baseUrl}/search?q={Uri.EscapeDataString(query)}&page={page}&pageSize={pageSize}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
@@ -731,7 +738,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.SearchResults);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.SearchResponse);
     }
 
     /// <summary>
@@ -817,7 +824,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     public bool AddOwner(string packageName, string username)
     {
         EnsureTokenFresh();
-        var body = JsonSerializer.Serialize(new AssignRoleRequest { PrincipalType = "user", PrincipalId = username, Role = "owner" }, CliJsonContext.Default.AssignRoleRequest);
+        var body = JsonSerializer.Serialize(new AssignRoleRequest { PrincipalType = PrincipalTypes.User, PrincipalId = username, Role = PackageRoles.Owner }, CliJsonContext.Default.AssignRoleRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/roles", content).GetAwaiter().GetResult();
         return response.IsSuccessStatusCode;
@@ -846,7 +853,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new RevokeRoleRequest { PrincipalType = "user", PrincipalId = username },
+            new RevokeRoleRequest { PrincipalType = PrincipalTypes.User, PrincipalId = username },
             CliJsonContext.Default.RevokeRoleRequest);
         var request = new HttpRequestMessage(HttpMethod.Delete, $"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/roles")
         {
@@ -865,7 +872,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <summary>
     /// Creates a new API token on the registry.
     /// </summary>
-    public TokenCreateResult? CreateToken(string? scope = null, string? description = null, string? expiresIn = null)
+    public TokenCreateResponse? CreateToken(string? scope = null, string? description = null, string? expiresIn = null)
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(new TokenCreateRequest
@@ -883,13 +890,13 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenCreateResult);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenCreateResponse);
     }
 
     /// <summary>
     /// Lists all API tokens for the authenticated user.
     /// </summary>
-    public TokenListResult? ListTokens()
+    public TokenListResponse? ListTokens()
     {
         EnsureTokenFresh();
         var response = _http.GetAsync($"{_baseUrl}/auth/tokens").GetAwaiter().GetResult();
@@ -900,7 +907,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenListResult);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenListResponse);
     }
 
     /// <summary>
@@ -938,8 +945,8 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new DeprecatePackageCliRequest { Message = message, Alternative = alternative },
-            CliJsonContext.Default.DeprecatePackageCliRequest);
+            new DeprecatePackageRequest { Message = message, Alternative = alternative },
+            CliJsonContext.Default.DeprecatePackageRequest);
         var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/deprecate")
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
@@ -994,8 +1001,8 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new DeprecateVersionCliRequest { Message = message },
-            CliJsonContext.Default.DeprecateVersionCliRequest);
+            new DeprecateVersionRequest { Message = message },
+            CliJsonContext.Default.DeprecateVersionRequest);
         var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/{version}/deprecate")
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
@@ -1095,46 +1102,3 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     }
 }
 
-/// <summary>
-/// Represents a paginated set of package search results returned by the registry
-/// search endpoint.
-/// </summary>
-/// <remarks>
-/// Deserialised from <c>GET /search?q=…</c> responses using <see cref="CliJsonContext"/>.
-/// </remarks>
-public sealed class SearchResults
-{
-    /// <summary>The list of packages matching the search query on the current page.</summary>
-    [JsonPropertyName("packages")]
-    public List<SearchResultPackage> Packages { get; set; } = new();
-
-    /// <summary>The total number of packages matching the query across all pages.</summary>
-    [JsonPropertyName("totalCount")]
-    public int TotalCount { get; set; }
-
-    /// <summary>The 1-based index of the current page.</summary>
-    [JsonPropertyName("page")]
-    public int Page { get; set; }
-
-    /// <summary>The total number of pages available for the query.</summary>
-    [JsonPropertyName("totalPages")]
-    public int TotalPages { get; set; }
-}
-
-/// <summary>
-/// Represents a single package entry within a <see cref="SearchResults"/> response.
-/// </summary>
-public sealed class SearchResultPackage
-{
-    /// <summary>The name of the package.</summary>
-    [JsonPropertyName("name")]
-    public string Name { get; set; } = "";
-
-    /// <summary>A short description of the package, or <c>null</c> if not provided.</summary>
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
-    /// <summary>The latest published version string, or <c>null</c> if unavailable.</summary>
-    [JsonPropertyName("latest")]
-    public string? Latest { get; set; }
-}

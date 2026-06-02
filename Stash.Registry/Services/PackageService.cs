@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
+using Stash.Registry.Contracts;
 using Stash.Registry.Configuration;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
+    <ProjectReference Include="..\Stash.Registry.Contracts\Stash.Registry.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>

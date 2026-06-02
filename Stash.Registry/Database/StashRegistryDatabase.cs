@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Stash.Registry.Auth;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Database;

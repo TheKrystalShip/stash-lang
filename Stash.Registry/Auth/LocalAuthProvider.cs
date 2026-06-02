@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using Konscious.Security.Cryptography;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 
 namespace Stash.Registry.Auth;
