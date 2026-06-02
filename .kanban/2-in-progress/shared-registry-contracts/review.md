@@ -12,7 +12,8 @@
 
 ## F01 — [MEDIUM] ContractsAssembly_ReferencesNoForbiddenAssemblies — assembly-name sub-check is dead for `Stash.Core`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3462af44
 **Files:** `Stash.Tests/Registry/Contracts/ContractsAssemblyShapeTests.cs:88-100`
 **Phase:** P1
 **Commit:** b036d653

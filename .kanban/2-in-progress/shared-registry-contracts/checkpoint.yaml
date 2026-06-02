@@ -1,7 +1,7 @@
 schema_version: 1
 feature: shared-registry-contracts
 current: null
-updated: "2026-06-02T21:32:34Z"
+updated: "2026-06-02T21:40:28Z"
 phases:
   P1:
     status: done
