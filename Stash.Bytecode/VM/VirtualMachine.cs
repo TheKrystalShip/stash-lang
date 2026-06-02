@@ -173,13 +173,25 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     /// </summary>
     public AliasRegistry AliasRegistry { get; } = new();
 
-    /// <summary>Standard output stream for built-in functions. Defaults to Console.Out.</summary>
+    /// <summary>
+    /// Standard output stream for built-in functions.
+    /// When <see cref="EmbeddedMode"/> is <c>false</c> (CLI default) the effective default is <see cref="Console.Out"/>.
+    /// When <see cref="EmbeddedMode"/> is <c>true</c> the effective default is <see cref="TextWriter.Null"/> — no Console fallthrough.
+    /// </summary>
     public TextWriter Output { get => _context.Output; set => _context.Output = value; }
 
-    /// <summary>Standard error stream for built-in functions. Defaults to Console.Error.</summary>
+    /// <summary>
+    /// Standard error stream for built-in functions.
+    /// When <see cref="EmbeddedMode"/> is <c>false</c> (CLI default) the effective default is <see cref="Console.Error"/>.
+    /// When <see cref="EmbeddedMode"/> is <c>true</c> the effective default is <see cref="TextWriter.Null"/> — no Console fallthrough.
+    /// </summary>
     public TextWriter ErrorOutput { get => _context.ErrorOutput; set => _context.ErrorOutput = value; }
 
-    /// <summary>Standard input stream for built-in functions. Defaults to Console.In.</summary>
+    /// <summary>
+    /// Standard input stream for built-in functions.
+    /// When <see cref="EmbeddedMode"/> is <c>false</c> (CLI default) the effective default is <see cref="Console.In"/>.
+    /// When <see cref="EmbeddedMode"/> is <c>true</c> the effective default is <see cref="TextReader.Null"/> — no Console fallthrough.
+    /// </summary>
     public TextReader Input { get => _context.Input; set => _context.Input = value; }
 
     /// <summary>Extension method registry for extend blocks on built-in types.</summary>

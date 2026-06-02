@@ -53,9 +53,48 @@ internal sealed class VMContext : IInterpreterContext
     }
 
     public string[]? ScriptArgs { get; set; }
-    public TextWriter Output { get; set; } = TextWriter.Null;
-    public TextWriter ErrorOutput { get; set; } = TextWriter.Null;
-    public TextReader Input { get; set; } = TextReader.Null;
+
+    // Nullable backing fields: null means "use the mode-default".
+    // When EmbeddedMode is true  → default is TextWriter.Null / TextReader.Null  (no Console leak).
+    // When EmbeddedMode is false → default is Console.Out / Console.Error / Console.In  (CLI default).
+    // A host that sets the property explicitly always wins, regardless of mode.
+    private TextWriter? _output;
+    private TextWriter? _errorOutput;
+    private TextReader? _input;
+
+    /// <summary>
+    /// Standard output stream. In embedded mode the default is <see cref="TextWriter.Null"/>;
+    /// in CLI mode the default falls through to <see cref="Console.Out"/>.
+    /// Assign explicitly to override the mode default.
+    /// </summary>
+    public TextWriter Output
+    {
+        get => _output ?? (EmbeddedMode ? TextWriter.Null : Console.Out);
+        set => _output = value;
+    }
+
+    /// <summary>
+    /// Standard error stream. In embedded mode the default is <see cref="TextWriter.Null"/>;
+    /// in CLI mode the default falls through to <see cref="Console.Error"/>.
+    /// Assign explicitly to override the mode default.
+    /// </summary>
+    public TextWriter ErrorOutput
+    {
+        get => _errorOutput ?? (EmbeddedMode ? TextWriter.Null : Console.Error);
+        set => _errorOutput = value;
+    }
+
+    /// <summary>
+    /// Standard input stream. In embedded mode the default is <see cref="TextReader.Null"/>;
+    /// in CLI mode the default falls through to <see cref="Console.In"/>.
+    /// Assign explicitly to override the mode default.
+    /// </summary>
+    public TextReader Input
+    {
+        get => _input ?? (EmbeddedMode ? TextReader.Null : Console.In);
+        set => _input = value;
+    }
+
     public CancellationToken CancellationToken => _ct;
     public object? Debugger { get; set; }
 

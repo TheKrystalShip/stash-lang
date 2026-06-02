@@ -486,11 +486,23 @@ public class TestBuiltInsTests : StashTestBase
     }
 
     [Fact]
-    public void InterpreterOutput_DefaultsToNull()
+    public void InterpreterOutput_DefaultsToNull_WhenEmbeddedMode()
     {
+        // When EmbeddedMode=true the VM must NOT fall through to Console.* — no console leak in embedded scenarios.
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        vm.EmbeddedMode = true;
         Assert.Same(TextWriter.Null, vm.Output);
         Assert.Same(TextWriter.Null, vm.ErrorOutput);
+    }
+
+    [Fact]
+    public void InterpreterOutput_DefaultsToConsole_WhenCliMode()
+    {
+        // When EmbeddedMode=false (the default) the effective default is Console.Out/Error.
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        // EmbeddedMode defaults to false; do NOT set it.
+        Assert.Same(Console.Out, vm.Output);
+        Assert.Same(Console.Error, vm.ErrorOutput);
     }
 
     [Fact]
