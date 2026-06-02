@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T13:29:24Z"
+updated: "2026-06-02T13:38:12Z"
 phases:
   2A-1:
     status: done
@@ -68,13 +68,13 @@ phases:
     attempts: 1
     notes: All residual env/cwd sinks migrated; GlobExpander API requires explicit cwd; path.abs/normalize/relative/archive/tpl/fs.watch use ctx.ResolveAgainstCwd; NoProcessGlobalLeakMetaTests at ZERO active stdlib exemptions; two-engine cwd isolation test green; docs regenerated
   2B-5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: db4ec3cad4091f0ac597087724e93de6ea076698
+    verified: true
+    started: "2026-06-02T13:30:45Z"
+    completed: "2026-06-02T13:38:12Z"
+    attempts: 1
+    notes: "env.* doc strings updated to per-VM overlay semantics; spec extended with async-child clone + migration note + per-VM env/cwd overlay section; ref doc regenerated; Wave2 allowlist confirmed honest (overlay writes are infallible), no new throws"
   2C-1:
     status: pending
     commit: null
