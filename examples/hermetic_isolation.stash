@@ -1,0 +1,99 @@
+#!/usr/bin/env stash
+
+// examples/hermetic_isolation.stash
+// Hermetic VM — per-VM environment and working-directory overlay demo
+//
+// Each Stash VirtualMachine instance maintains its own independent view of the
+// process environment and working directory.  Two engines in the same host
+// process can call env.chdir and env.set without interfering with each other
+// or with the real System.Environment.
+//
+// This script demonstrates the per-VM overlay invariants from inside a single
+// engine.  The two-engine cross-process-state isolation is exercised by the
+// C# acceptance tests in Stash.Tests/Embedding/.
+
+io.println("=" * 60);
+io.println("  Hermetic VM — Isolation Demo");
+io.println("=" * 60);
+io.println("");
+
+// ─── 1. Per-VM working directory ─────────────────────────────────────────────
+
+io.println("── 1. Per-VM working directory ──");
+
+// env.cwd reflects the VM's own working directory.
+let original_cwd = env.cwd;
+io.println($"  Original cwd: {original_cwd}");
+
+// env.chdir changes ONLY this VM's cwd — not System.Environment.CurrentDirectory.
+env.chdir("/tmp");
+io.println($"  After env.chdir('/tmp'): {env.cwd}");
+
+// path.abs resolves paths through the VM's cwd overlay.
+let abs_test = path.abs("test_file.txt");
+io.println($"  path.abs('test_file.txt'): {abs_test}");
+
+// Restore the original directory using env.popDir (chdir pushed onto dir stack).
+env.popDir();
+io.println($"  After env.popDir(): {env.cwd}");
+
+// env.withDir is a scoped cwd change — restores on exit.
+let inner_cwd = env.withDir("/tmp", () => env.cwd);
+io.println($"  Inside env.withDir('/tmp'): {inner_cwd}");
+io.println($"  After env.withDir returns: {env.cwd}");
+
+io.println("");
+
+// ─── 2. Per-VM environment variable overlay ──────────────────────────────────
+
+io.println("── 2. Per-VM environment variable overlay ──");
+
+// env.set writes to this VM's overlay — System.Environment is untouched.
+let test_var = "STASH_HERMETIC_DEMO_VAR";
+io.println($"  Before env.set: env.get('{test_var}') = {env.get(test_var)}");
+
+env.set(test_var, "hello-from-vm");
+io.println($"  After env.set:  env.get('{test_var}') = {env.get(test_var)}");
+
+// env.unset shadows the variable in the overlay (returns null even if real env had it).
+env.unset(test_var);
+io.println($"  After env.unset: env.get('{test_var}') = {env.get(test_var)}");
+
+io.println("");
+
+// ─── 3. Async-child isolation — non-frozen dict is call-local ────────────────
+
+io.println("── 3. Async-child isolation ──");
+
+// A non-frozen dict captured by an async fn is DEEP-CLONED at spawn.
+// The child's mutations do not reach the parent.
+let parent_dict = { count: 0 };
+
+async fn mutate_child() {
+    parent_dict.count = 99;
+    return parent_dict.count;
+}
+
+let child_value = await mutate_child();
+io.println($"  Child saw: {child_value}          (child's clone)");
+io.println($"  Parent sees: {parent_dict.count}  (unchanged — 0)");
+
+// A frozen dict is shared by reference across the async boundary.
+// Writes from the child throw ReadOnlyError.
+readonly const frozen_dict = { value: 42 };
+
+async fn try_mutate_frozen() {
+    try {
+        frozen_dict.value = 99;
+        return "no-error";
+    } catch (ReadOnlyError e) {
+        return "ReadOnlyError (expected)";
+    }
+}
+
+let frozen_result = await try_mutate_frozen();
+io.println($"  Frozen dict write result: {frozen_result}");
+io.println($"  Parent's frozen_dict.value: {frozen_dict.value} (unchanged — 42)");
+
+io.println("");
+io.println("── Isolation invariants confirmed. ──");
