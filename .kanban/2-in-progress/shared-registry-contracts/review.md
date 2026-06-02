@@ -33,7 +33,8 @@
 
 ## F06 — [MINOR] Brief's Cross-Cutting Concerns table omits `UserRoles` from the wire-visible-domain enumeration after F04
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** fa862fdf
 **Files:** `.kanban/2-in-progress/shared-registry-contracts/brief.md:235`
 **Phase:** cross-phase (doc-precision follow-up to F04 + F03/F05)
 **Commit:** `db9cfdad` (F04 fix landed `UserRoles` in the shared project but did not propagate the rename to this row); `99a634ac` (F03/F05 fix updated three of four doc spots but did not touch this one)
