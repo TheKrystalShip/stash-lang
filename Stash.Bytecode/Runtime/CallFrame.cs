@@ -43,4 +43,12 @@ internal struct CallFrame
     /// processes and other resource-holding iterators clean up reliably. Null when none.
     /// </summary>
     public List<(int Slot, IDisposable Disposable)>? ActiveIterators;
+
+    /// <summary>
+    /// Per-VM inline cache slot array for this frame's chunk.
+    /// Each VM owns a private clone of the chunk's IC-slot template so that concurrent
+    /// executions of the same chunk never race on IC state or guard fields.
+    /// Null only when the chunk has no IC slots (i.e. chunk.ICSlots is null or empty).
+    /// </summary>
+    public ICSlot[]? ICSlots;
 }

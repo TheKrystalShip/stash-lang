@@ -1,6 +1,7 @@
 namespace Stash.Runtime;
 
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
@@ -392,6 +393,276 @@ public static class RuntimeValues
             default:
                 break;
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // IsFrozen — unified frozen predicate for all reference-typed Stash values
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the <see cref="StashValue"/> is a reference-typed
+    /// mutable collection that has been frozen (i.e. <c>readonly</c> / <c>freeze</c>).
+    ///
+    /// <para>
+    /// Primitives, strings, enums, ranges, IP addresses, semvers, functions, closures, and
+    /// bound methods are inherently immutable and always return <see langword="false"/> here
+    /// (they are never "frozen" — they are simply immutable by construction; callers that need
+    /// "copy-by-value safe?" should check <c>!value.IsObj || IsFrozen(value)</c>).
+    /// </para>
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsFrozen(StashValue value)
+    {
+        if (!value.IsObj) return false;
+        return value.AsObj switch
+        {
+            StashArray arr        => arr.IsFrozen,
+            StashDictionary dict  => dict.IsFrozen,
+            StashInstance inst    => inst.IsFrozen,
+            StashTypedArray ta    => ta.IsFrozen,
+            StashNamespace ns     => ns.IsFrozen,
+            _                     => false,
+        };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // DeepClone — cycle-safe deep clone for async-child global isolation
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Produces a deep clone of a Stash runtime value for async-child global isolation.
+    ///
+    /// <para>
+    /// Sharing rules:
+    /// <list type="bullet">
+    ///   <item>Primitives (<c>int</c>, <c>float</c>, <c>bool</c>, <c>null</c>, <c>byte</c>)
+    ///   and strings are returned as-is (copy-by-value / immutable).</item>
+    ///   <item>Frozen reference values (<see cref="IsFrozen"/>) are shared by reference
+    ///   (immutable; safe across threads).</item>
+    ///   <item>Non-frozen reference values are deep-cloned.</item>
+    /// </list>
+    /// </para>
+    ///
+    /// <para>
+    /// Cycle detection: uses an <em>active-path</em> stack (add on entry, remove on exit)
+    /// rather than a permanent visited set. This correctly distinguishes:
+    /// <list type="bullet">
+    ///   <item><em>Cycles</em> (back-edges to a node still on the active path) — throws
+    ///   <see cref="ValueError"/> with the cycle path in the message.</item>
+    ///   <item><em>Diamond / shared-acyclic</em> sub-graphs (a node referenced from two
+    ///   places but not on the active path) — cloned independently (no false positive).</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    /// <param name="value">The value to clone.</param>
+    /// <param name="activePath">
+    /// The set of object references currently on the active recursion path.
+    /// Pass <see langword="null"/> at the top call; the method manages its own state.
+    /// </param>
+    /// <param name="pathBreadcrumbs">
+    /// Human-readable path segments accumulating as the walker descends.
+    /// Pass <see langword="null"/> at the top call.
+    /// </param>
+    /// <returns>A deep-cloned (or shared-frozen) value safe for independent mutation.</returns>
+    /// <exception cref="ValueError">Thrown when a cycle is detected in the object graph.</exception>
+    public static StashValue DeepClone(StashValue value,
+        HashSet<object>? activePath = null,
+        List<string>? pathBreadcrumbs = null)
+    {
+        // Primitives and strings: copy-by-value / immutable — no clone needed.
+        if (!value.IsObj) return value;
+
+        object? obj = value.AsObj;
+        if (obj is null) return value;
+
+        // Frozen: share by reference — immutable can't race.
+        if (IsFrozen(value)) return value;
+
+        // Initialise state on the top-level call.
+        activePath ??= new HashSet<object>(ReferenceEqualityComparer.Instance);
+        pathBreadcrumbs ??= new List<string> { "<root>" };
+
+        // Cycle guard: the node is already on the active path — it IS the cycle.
+        if (activePath.Contains(obj))
+        {
+            string path = string.Join(" -> ", pathBreadcrumbs);
+            throw new ValueError(
+                $"Cannot deep-clone a value that contains a cycle (path: {path}). " +
+                $"Use freeze() on one node in the cycle to share it by reference instead.");
+        }
+
+        // Push onto the active path before recursing.
+        activePath.Add(obj);
+
+        try
+        {
+            return obj switch
+            {
+                StashArray arr       => DeepCloneArray(arr, activePath, pathBreadcrumbs),
+                StashDictionary dict => DeepCloneDictionary(dict, activePath, pathBreadcrumbs),
+                StashInstance inst   => DeepCloneInstance(inst, activePath, pathBreadcrumbs),
+                StashTypedArray ta   => StashValue.FromObj(ta.Clone()),
+                // Immutable-by-construction: share by reference.
+                _ => value,
+            };
+        }
+        finally
+        {
+            // Pop off the active path on the way back up.
+            activePath.Remove(obj);
+        }
+    }
+
+    /// <summary>
+    /// Maximum retry attempts for the cross-thread snapshot loops in
+    /// <see cref="DeepCloneArray"/> and <see cref="DeepCloneDictionary"/>.
+    /// Matches the value used by <c>IsolationHelpers.SnapshotEntries</c> in
+    /// <c>Stash.Bytecode</c> so the retry discipline is consistent across both
+    /// layers.  A single-writer dictionary/array clears a structural-change
+    /// collision within an attempt or two; the 64-retry ceiling is a safety
+    /// backstop and is never approached in normal operation.
+    /// </summary>
+    private const int SnapshotMaxRetries = 64;
+
+    private static StashValue DeepCloneArray(StashArray arr, HashSet<object> activePath, List<string> pathBreadcrumbs)
+    {
+        // Snapshot the parent's live List<StashValue> into a private array BEFORE walking.
+        // This handles the cross-thread callback path (VMContext.InvokeCallbackDirect background
+        // branch) where the parent's main thread may concurrently call arr.push() / arr.pop()
+        // while this background thread is cloning.  The List<StashValue> version-checked
+        // enumerator (foreach) throws InvalidOperationException on a concurrent structural
+        // mutation (Add/Remove/resize); we catch-and-retry — the single-writer guarantee
+        // (only the owning VM thread mutates the array) ensures the retry converges.
+        //
+        // Do NOT use indexed access (arr[i] for i in 0..arr.Count) here: a concurrent Add
+        // can resize the backing array between the Count read and the indexer, producing
+        // stale/out-of-range reads that do not throw and silently tear the snapshot.
+        // Do NOT pass arr.Count as initial capacity: it may be stale from a concurrent Add,
+        // allocating a larger-than-needed (potentially OOM-inducing) initial backing array.
+        StashValue[] elements = null!;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                // Do NOT pass arr.Count as initial capacity: it may be stale from a
+                // concurrent Add, causing an arbitrarily large (and possibly OOM) allocation.
+                // Let the list grow organically from the snapshot.
+                var list = new List<StashValue>();
+                foreach (StashValue e in arr)
+                {
+                    list.Add(e);
+                }
+                elements = list.ToArray();
+                break;
+            }
+            catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
+            {
+                // Owner thread added/removed an element mid-walk — retry.
+                // Bounded at SnapshotMaxRetries (64) for consistency with SnapshotEntries
+                // and SnapshotImportStack in IsolationHelpers.  The single-writer guarantee
+                // (only the owning VM thread mutates the array via arr.push/pop/splice) means
+                // a concurrent-mutation collision clears within an attempt or two in practice;
+                // the bound is a safety backstop and is never approached during normal use.
+                System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
+            }
+        }
+
+        var clone = new StashArray(elements.Length);
+        for (int i = 0; i < elements.Length; i++)
+        {
+            StashValue elem = elements[i];
+            if (elem.IsObj)
+            {
+                pathBreadcrumbs.Add($"[{i}]");
+                elem = DeepClone(elem, activePath, pathBreadcrumbs);
+                pathBreadcrumbs.RemoveAt(pathBreadcrumbs.Count - 1);
+            }
+            clone.Add(elem);
+        }
+        return StashValue.FromObj(clone);
+    }
+
+    private static StashValue DeepCloneDictionary(StashDictionary dict, HashSet<object> activePath, List<string> pathBreadcrumbs)
+    {
+        // Snapshot the parent's live Dictionary<object,StashValue> BEFORE walking.
+        // RawEntries() uses ToList() which dispatches to ICollection.CopyTo — that does
+        // NOT check the version flag and silently produces a torn snapshot without throwing.
+        // Instead use RawEntriesEnumerable() which yields via a foreach over _entries,
+        // triggering the version-checked Dictionary struct enumerator and throwing on
+        // concurrent structural mutation (new-key Set/Remove from the parent thread).
+        // Unbounded-retry, single-writer safe — mirrors SnapshotEntries in IsolationHelpers.
+        KeyValuePair<object, StashValue>[] entries = null!;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var list = new List<KeyValuePair<object, StashValue>>(dict.Count);
+                foreach (var kv in dict.RawEntriesEnumerable())
+                {
+                    list.Add(kv);
+                }
+                entries = list.ToArray();
+                break;
+            }
+            catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
+            {
+                // Owner thread mutated the dict mid-walk — retry.
+                // Bounded at SnapshotMaxRetries (64) for consistency with SnapshotEntries.
+                System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
+            }
+        }
+
+        var clone = new StashDictionary();
+        foreach (var kv in entries)
+        {
+            StashValue val = kv.Value;
+            if (val.IsObj)
+            {
+                string keyStr = RuntimeValues.Stringify(kv.Key);
+                pathBreadcrumbs.Add($"[\"{keyStr}\"]");
+                val = DeepClone(val, activePath, pathBreadcrumbs);
+                pathBreadcrumbs.RemoveAt(pathBreadcrumbs.Count - 1);
+            }
+            clone.Set(kv.Key, val);
+        }
+        return StashValue.FromObj(clone);
+    }
+
+    private static StashValue DeepCloneInstance(StashInstance inst, HashSet<object> activePath, List<string> pathBreadcrumbs)
+    {
+        if (inst.FieldSlots is not null && inst.Struct is not null)
+        {
+            var slotsCopy = new StashValue[inst.FieldSlots.Length];
+            for (int i = 0; i < slotsCopy.Length; i++)
+            {
+                StashValue slot = inst.FieldSlots[i];
+                if (slot.IsObj)
+                {
+                    string fieldName = i < inst.Struct.Fields.Count
+                        ? inst.Struct.Fields[i]
+                        : $"[{i}]";
+                    pathBreadcrumbs.Add($".{fieldName}");
+                    slot = DeepClone(slot, activePath, pathBreadcrumbs);
+                    pathBreadcrumbs.RemoveAt(pathBreadcrumbs.Count - 1);
+                }
+                slotsCopy[i] = slot;
+            }
+            return StashValue.FromObj(new StashInstance(inst.TypeName, inst.Struct, slotsCopy));
+        }
+
+        var fieldsCopy = new Dictionary<string, StashValue>();
+        foreach (var kvp in inst.GetAllFields())
+        {
+            StashValue val = kvp.Value;
+            if (val.IsObj)
+            {
+                pathBreadcrumbs.Add($".{kvp.Key}");
+                val = DeepClone(val, activePath, pathBreadcrumbs);
+                pathBreadcrumbs.RemoveAt(pathBreadcrumbs.Count - 1);
+            }
+            fieldsCopy[kvp.Key] = val;
+        }
+        return StashValue.FromObj(new StashInstance(inst.TypeName, fieldsCopy, inst.Struct));
     }
 
     /// <summary>

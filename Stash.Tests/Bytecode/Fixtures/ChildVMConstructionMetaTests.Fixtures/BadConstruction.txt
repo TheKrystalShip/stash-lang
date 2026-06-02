@@ -1,0 +1,28 @@
+// This is a synthetic C# snippet used by ChildVMConstructionMetaTests as the fail-path
+// self-test fixture.  It must NOT be compiled as a .cs file — it is read as a text
+// embedded resource and parsed by Roslyn inside the test so the scanner can prove it
+// trips on a raw new VirtualMachine(...) that is not routed through BuildChildGlobals.
+//
+// Extension is .txt intentionally: the .cs SDK glob would otherwise compile this into
+// Stash.Tests, causing a build break (VirtualMachine is internal to Stash.Bytecode).
+
+using System.Collections.Generic;
+using Stash.Runtime;
+
+namespace Stash.Bytecode.Fixtures;
+
+/// <summary>
+/// A class that allocates a child VM by passing the parent's raw globals directly —
+/// the exact omission the ChildVMConstructionMetaTests guard exists to catch.
+/// </summary>
+internal static class BadConstructionFixture
+{
+    internal static void ForkChild(VirtualMachine parent, System.Threading.CancellationToken ct)
+    {
+        // BAD: passes parent._globals directly instead of
+        //   IsolationHelpers.BuildChildGlobals(parent._globals)
+        // This is the fail-path the scanner must flag.
+        var child = new VirtualMachine(parent._globals, ct);
+        _ = child;
+    }
+}

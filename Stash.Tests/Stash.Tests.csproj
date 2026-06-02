@@ -27,6 +27,8 @@
     <EmbeddedResource Include="Stdlib\Fixtures\path-match-bash-parity.tsv" />
     <EmbeddedResource Include="Lsp\Snapshots\*.txt" />
     <EmbeddedResource Include="Lsp\Completion\Fixtures\*.stash" />
+    <EmbeddedResource Include="Bytecode\Fixtures\ChildVMConstructionMetaTests.Fixtures\*.txt" />
+    <EmbeddedResource Include="Bytecode\Fixtures\NoProcessGlobalLeakMetaTests.Fixtures\*.txt" />
   </ItemGroup>
 
   <ItemGroup>

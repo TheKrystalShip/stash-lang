@@ -82,7 +82,7 @@ public static partial class TplBuiltIns
         {
             throw new RuntimeError($"Failed to read template file '{path}': {ex.Message}");
         }
-        string? basePath = Path.GetDirectoryName(Path.GetFullPath(expandedPath));
+        string? basePath = Path.GetDirectoryName(ctx.ResolveAgainstCwd(expandedPath));
         return StashValue.FromObject(ctx.CompileAndRenderTemplate(template, data, basePath));
     }
 

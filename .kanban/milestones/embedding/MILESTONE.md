@@ -62,32 +62,34 @@ each phase consumes the prior phase's artifacts). Detail the current phase; the 
   async-child isolation reuses. In `.kanban/4-done/readonly-modifier/`. Derived ledger:
   `done:1, in-flight:0`.
 
-- **Phase 2 — Hermetic VM · NEXT — UNBLOCKED (phase 1 landed).** The `/spec` gate ("do not spec
-  until `readonly` is in `4-done/`") is now satisfied. **Next action:** `/spec hermetic-vm`. The
-  async-child "frozen → share, else deep-clone" rule consumes phase 1's `IsFrozen`/`DeepFreeze`
-  API; the user chose strict sequencing over splitting the readonly-independent slice out early
-  (see Decisions) — so this is **one** complete spec (the architect may phase it internally,
-  e.g. 2a live-hazard fixes / 2b process-global virtualization — note §6). Design note:
-  `.kanban/0-backlog/tools/Hermetic VM — Isolation Design (Embedding Phase 2).md`. It covers:
-  - **Scope A — engine↔engine** process-global virtualization: virtual `VMContext.WorkingDirectory`
-    + `EnvVars` overlay (route all path/env stdlib through them; `process.spawn` inherits the VM
-    view), multiplexed signal registry, no `Console` fallthrough, and **per-VM IC-slot cloning**
-    on shared `Chunk`s (the *Critical* silent-corruption leak — live today under async).
-  - **Scope B — parent↔async-child** value-graph isolation: freeze-or-clone non-frozen globals
-    per async spawn + `_importStack` isolation in `SpawnAsyncFunction`.
-  - **Spec-time obligation:** the §4 leak inventory is a re-distilled 2026-05-01 audit — the
-    architect **must re-verify each leak against current source** (file paths move) before
-    writing `plan.yaml`. Sizing: large; the architect decides whether to split (note §6).
+- **Phase 2 — Hermetic VM · DONE (2026-06-02, in `4-done/` on `feature/hermetic-vm`; awaiting
+  `worktree-finish` merge to `main`).** 12 phases (2A live-hazard fixes, 2B process-global
+  virtualization, 2C multiplexed signals + no-Console-embedded, 2D acceptance suite), driven by the
+  second `/autopilot` run. Delivered: per-VM IC-slot clone, async-child freeze-or-clone
+  (`BuildChildGlobals`/`DeepClone`/`SnapshotUpvalues`), `_importStack` isolation, `VMContext`
+  cwd/env overlay SoT (`NoProcessGlobalLeak` guard at 0), multiplexed signals, two omission guards,
+  and the multi-engine isolation acceptance suite. **One design ruling** (user): background-thread
+  callbacks (`fs.watch`/signal/timer) are isolated/call-local like async spawns — the principled
+  marshaling-to-VM-thread fix is backlogged at
+  `.kanban/0-backlog/language/callback-vm-thread-marshaling.md`. Review 1C/1H/1M/1L fixed across two
+  passes (pass 2 clean). final_verify green (12954 passed / 0 failed). Derived ledger:
+  `done:2, in-flight:0`.
 
-- **Phase 3 — `Stash.Hosting` host SDK · FUTURE.** Consumes a hermetic engine. Prior analysis:
+- **Phase 3 — `Stash.Hosting` host SDK · NEXT (unblocked once phase 2 merges to `main`).** Consumes
+  a hermetic engine: `StashEngine` facade, host-objects-by-reference, marshalling hybrid,
+  `InvokeAsync` bridging `StashFuture`, `IAsyncDisposable`. **Do NOT `/spec` until `hermetic-vm`
+  is merged to `main`** (it's promoted on the branch but not yet integrated — run
+  `scripts/checkpoint/checkpoint.stash worktree-finish hermetic-vm` from main first). Prior analysis:
   `.kanban/0-backlog/tools/Stash Embedding API — Host SDK Design Analysis.md` — read through the
-  supersessions in the phase-2 note §5 (snapshot model, pool demotion, async-is-built). Don't
-  spec until phase 2 lands.
+  supersessions in the phase-2 note §5 (snapshot model, pool demotion, async-is-built). **Strong
+  candidate to fold in:** the callback-marshaling event-loop backlog item (the VM pool, if any,
+  also lives here per phase-2 note §9).
 
 ### Decisions & learnings (append as you go)
 
 | Date | Decision / learning | Why it changed the plan |
 | --- | --- | --- |
+| 2026-06-02 | **Phase 2 (hermetic VM) DONE** (promoted on `feature/hermetic-vm`, awaiting merge). **Design ruling:** background-thread callbacks (`fs.watch`/signal/timer, via `InvokeCallbackDirect`'s pool-thread branch) are **isolated/call-local** like async spawns — Stash has no event-loop to marshal them onto the VM thread, so "share freely" (JS/Lua model) isn't available without building one. The marshaling event-loop is the principled long-term fix, backlogged at `.kanban/0-backlog/language/callback-vm-thread-marshaling.md` — a strong phase-3 candidate. | The autopilot hit a question the plan didn't anticipate: isolating async-child state (2A-2/2A-3) silently changed callback semantics (callbacks can no longer mutate outer state). Resolved by ruling rather than shipping a half-isolated race. Also exposed (and fixed) a parallel-task data race in `BuildChildGlobals` and an upvalue-isolation gap on the callback path — both full-suite-only, invisible to filtered per-phase verifies. |
 | 2026-06-01 | **Phase 1 (`readonly` modifier) DONE** — driven by the first real `/autopilot` run (6 impl phases + 8 review findings across two passes), merged `--no-ff` to `main` @ `822e6146` with green final_verify. Phase 2 (hermetic VM) is now **unblocked** and `/spec`-able. | Closes the strict-sequencing gate. Phase 2's async-child freeze-or-clone rule can now consume the concrete `IsFrozen`/`DeepFreeze` API instead of guessing against types that didn't exist. |
 | 2026-06-01 | Milestone created. User chose **strict sequencing** (readonly → *full* hermetic → host SDK) over splitting the readonly-independent hermetic slice (IC-slot cloning + cwd/env/signal virtualization) out as an early standalone spec. | Keeps phase 2 a single coherent spec and honors the design note's original "wait for phase 1" guidance. Accepted trade-off: the engine↔engine spilling fix **and** the *Critical* IC-slot corruption fix wait behind `readonly`'s 6 phases. (If the async race or IC corruption starts biting before readonly lands, revisit — the Scope-A slice is genuinely readonly-independent and could be pulled forward.) |
 | 2026-05-30 | Sharing keys off **runtime frozen-ness** (`readonly`/`freeze`), NOT `const`. `const` stays JS-style binding-only, unchanged. | Stash `const` doesn't freeze *values*, so it can't carry the share-vs-clone contract. Supersedes the old embedding doc's §14.5 `const`/`let` snapshot model. |

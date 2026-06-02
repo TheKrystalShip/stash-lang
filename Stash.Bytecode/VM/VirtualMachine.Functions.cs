@@ -584,7 +584,7 @@ public sealed partial class VirtualMachine
         int icIdx = (int)frame.Chunk.Code[frame.IP++]; // read companion word
         int @base = frame.BaseSlot;
 
-        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+        ref ICSlot ic = ref frame.ICSlots![icIdx];
 
         // IC fast path: cached BuiltInFunction
         if (ic.State == 1 && _stack[@base + b].AsObj == ic.Guard)
@@ -617,7 +617,7 @@ public sealed partial class VirtualMachine
     private void ExecuteCallBuiltInSlow<TDebugMode>(ref CallFrame frame, byte a, byte b, byte argc, int icIdx) where TDebugMode : struct
     {
         int @base = frame.BaseSlot;
-        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+        ref ICSlot ic = ref frame.ICSlots![icIdx];
         string fieldName = (string)frame.Chunk.Constants[ic.ConstantIndex].AsObj!;
         StashValue objVal = _stack[@base + b];
 

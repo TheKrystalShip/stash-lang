@@ -136,7 +136,7 @@ public static partial class ArchiveBuiltIns
         try
         {
             Directory.CreateDirectory(outputDir);
-            var outputDirFull = Path.GetFullPath(outputDir);
+            var outputDirFull = ctx.ResolveAgainstCwd(outputDir);
             var extractedFiles = new List<StashValue>();
             var filterRegex = !string.IsNullOrEmpty(opts.Filter) ? GlobToRegex(opts.Filter) : null;
 
@@ -156,7 +156,7 @@ public static partial class ArchiveBuiltIns
                     : Path.Combine(outputDir, entry.Name);
 
                 // Security check — prevent path traversal
-                var destPathFull = Path.GetFullPath(destPath);
+                var destPathFull = ctx.ResolveAgainstCwd(destPath);
                 if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
                     throw new ValueError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'");
 
@@ -309,7 +309,7 @@ public static partial class ArchiveBuiltIns
         try
         {
             Directory.CreateDirectory(outputDir);
-            var outputDirFull = Path.GetFullPath(outputDir);
+            var outputDirFull = ctx.ResolveAgainstCwd(outputDir);
             var extractedFiles = new List<StashValue>();
             var filterRegex = !string.IsNullOrEmpty(options.Filter) ? GlobToRegex(options.Filter) : null;
 
@@ -345,7 +345,7 @@ public static partial class ArchiveBuiltIns
                         : Path.Combine(outputDir, Path.GetFileName(entry.Name));
 
                     // Security check — prevent path traversal
-                    var destPathFull = Path.GetFullPath(destPath);
+                    var destPathFull = ctx.ResolveAgainstCwd(destPath);
                     if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
                         throw new ValueError($"archive.untar: entry would extract outside target directory: '{entry.Name}'");
 

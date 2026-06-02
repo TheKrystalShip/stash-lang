@@ -956,7 +956,7 @@ public static partial class FsBuiltIns
         var path = SvArgs.String(args, 0, "fs.watch");
         var callback = SvArgs.Callable(args, 1, "fs.watch");
         path = ctx.ExpandTilde(path);
-        path = System.IO.Path.GetFullPath(path);
+        path = ctx.ResolveAgainstCwd(path);
 
         if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
             throw new IOError($"Cannot watch '{path}': path does not exist.");

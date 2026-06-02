@@ -1,0 +1,107 @@
+schema_version: 1
+feature: hermetic-vm
+current: null
+updated: "2026-06-02T18:53:08Z"
+phases:
+  2A-1:
+    status: done
+    commit: 94621ad6d8e6e7cc51690ba912bb12b6d4535201
+    verified: true
+    started: "2026-06-02T10:51:30Z"
+    completed: "2026-06-02T11:05:12Z"
+    attempts: 1
+    notes: "Per-VM ICSlot[] clone via frame.ICSlots; ResolveICSlots() lazily clones template; all 4 IC sites updated; 5 isolation tests green"
+  2A-2:
+    status: done
+    commit: 14321dc21c8bd3fc063a94b7a6e5d35aaf9d26eb
+    verified: true
+    started: "2026-06-02T11:06:15Z"
+    completed: "2026-06-02T11:40:13Z"
+    attempts: 1
+    notes: "DeepClone(value, visited) with active-path cycle detection; IsolationHelpers.BuildChildGlobals + SnapshotUpvalues; SpawnAsyncFunction wired with capturedModuleGlobals fix; 79 tests green including call-local and frozen-sharing scenarios"
+  2A-3:
+    status: done
+    commit: db11d30da4bc7fb02154807a40a23bd9a2b37a8e
+    verified: true
+    started: "2026-06-02T11:41:17Z"
+    completed: "2026-06-02T11:55:09Z"
+    attempts: 1
+    notes: _importStack snapshotted at SpawnAsyncFunction and InvokeCallbackDirect background-thread branch; VMContext.ImportStack wired; Modules.cs same-thread sharing preserved; 4 new ImportStackIsolationTests green
+  2A-4:
+    status: done
+    commit: 9e5ba69ca244acb34e0c4715dd8531007c93efdf
+    verified: true
+    started: "2026-06-02T11:56:15Z"
+    completed: "2026-06-02T12:06:23Z"
+    attempts: 1
+    notes: "ChildVMConstructionMetaTests: 4 tests green; 3-entry pin (Modules.cs, VMTemplateEvaluator.cs, StashEngine.cs); 2 routed sites (Async.cs, VMContext.cs) confirmed; fail-path teeth + exact-match pin tests pass"
+  2B-1:
+    status: done
+    commit: cdadacba97e21e520f3c1672c9f38b4385caa476
+    verified: true
+    started: "2026-06-02T12:07:24Z"
+    completed: "2026-06-02T12:16:33Z"
+    attempts: 1
+    notes: "VMContext cwd+env overlay SoT on IInterpreterContext; per-VM, real env never mutated"
+  2B-2:
+    status: done
+    commit: 44684cdc377293bfd929613762f325a0050cd1a3
+    verified: true
+    started: "2026-06-02T12:16:55Z"
+    completed: "2026-06-02T12:29:11Z"
+    attempts: 1
+    notes: "Roslyn scan over Stash.Stdlib + Stash.Bytecode; 4 tests pass; 37 sinks pinned across 10 files (3 permanent in VMContext, 34 to-be-migrated); fail-path fixture + identity-read allowlist documented"
+  2B-3:
+    status: done
+    commit: bc2c1712f7bbf857d8294a241d4d8273857f8158
+    verified: true
+    started: "2026-06-02T12:30:07Z"
+    completed: "2026-06-02T12:59:43Z"
+    attempts: 1
+    notes: "All env.*/cwd sinks migrated to VMContext overlay (22 sinks moved); exemption list 37→15; ApplyCwdAndEnv single funnel; process.replace chdir before execvp; StashEngine+default-VM paths verified; 4 leaky tests migrated; 26 new/updated tests green"
+  2B-4:
+    status: done
+    commit: 2dfca3db04dc857784193bead71dbe3ae8dc12d0
+    verified: true
+    started: "2026-06-02T13:00:51Z"
+    completed: "2026-06-02T13:29:24Z"
+    attempts: 1
+    notes: All residual env/cwd sinks migrated; GlobExpander API requires explicit cwd; path.abs/normalize/relative/archive/tpl/fs.watch use ctx.ResolveAgainstCwd; NoProcessGlobalLeakMetaTests at ZERO active stdlib exemptions; two-engine cwd isolation test green; docs regenerated
+  2B-5:
+    status: done
+    commit: db4ec3cad4091f0ac597087724e93de6ea076698
+    verified: true
+    started: "2026-06-02T13:30:45Z"
+    completed: "2026-06-02T13:38:12Z"
+    attempts: 1
+    notes: "env.* doc strings updated to per-VM overlay semantics; spec extended with async-child clone + migration note + per-VM env/cwd overlay section; ref doc regenerated; Wave2 allowlist confirmed honest (overlay writes are infallible), no new throws"
+  2C-1:
+    status: done
+    commit: 6aa92b2c62167df21e50afe307ddfdbc5f438c59
+    verified: true
+    started: "2026-06-02T13:38:58Z"
+    completed: "2026-06-02T13:52:59Z"
+    attempts: 1
+    notes: Multiplexed List-per-signal registry; Dispatch() snapshot+try/catch-each; signal.off by context identity; shared PosixSignalRegistration disposed on last-entry removal; 8 SignalImplTests green; plan.yaml verify corrected
+  2C-2:
+    status: done
+    commit: d88620ee32e7a8be9d9222f834bc2e9da48c5249
+    verified: true
+    started: "2026-06-02T13:53:44Z"
+    completed: "2026-06-02T14:33:14Z"
+    attempts: 1
+    notes: EmbeddedMode=true→Null defaults; EmbeddedMode=false→Console defaults; lazy nullable backing fields in VMContext; 8 EmbeddedModeTests green; TestBuiltInsTests updated; CompletionSurfaceSnapshot+Dap unchanged (toolchain audit passed)
+  2D:
+    status: done
+    commit: b26543a57ac7675bf530ea9851a65f937dd9894b
+    verified: true
+    started: "2026-06-02T17:03:42Z"
+    completed: "2026-06-02T17:20:31Z"
+    attempts: 1
+    notes: 11 tests green (10 acceptance + HermeticIsolationExample_RunsCleanly); SignalRegistry collection fix; fs.realpath corrected to path.abs (done_when spec had stale symbol)
+review:
+  status: resolved
+  started: "2026-06-02T17:33:13Z"
+  resolved: "2026-06-02T18:53:08Z"
+  findings_open: 0
+  findings_fixed: 0

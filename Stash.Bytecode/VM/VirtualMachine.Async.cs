@@ -47,10 +47,33 @@ public sealed partial class VirtualMachine
         }
 
         // Snapshot everything the child VM needs — capture before Task.Run to avoid races.
-        var capturedGlobals = new Dictionary<string, StashValue>(_globals);
+        // BuildChildGlobals applies the freeze-or-clone rule: frozen globals are shared by
+        // reference; non-frozen mutable globals are deep-cloned so the child gets a private
+        // copy (call-local mutation; no cross-task data race on the parent's values).
+        var capturedGlobals = IsolationHelpers.BuildChildGlobals(_globals);
+        // SnapshotUpvalues applies the same rule to captured (closed-over) locals: the child
+        // receives pre-closed copies of each upvalue so mutations inside the async body remain
+        // call-local and never propagate back through a shared Upvalue object.
+        var isolatedUpvalues = IsolationHelpers.SnapshotUpvalues(upvalues);
+        // Ensure the child frame's ModuleGlobals points at the isolated copy, not the parent's
+        // live _globals dict.  When moduleGlobals is null or IS the parent's own _globals (the
+        // common case for top-level scripts and inline async fns), substitute capturedGlobals
+        // so the child's ExecuteGetGlobal fast path and slow path both read from the clone.
+        // For a genuine imported-module async fn (moduleGlobals is a different, pre-existing
+        // module dict), pass it through unchanged — it is not the parent's main globals and
+        // does not need re-cloning here; that cross-module isolation case is handled elsewhere.
+        var capturedModuleGlobals = (moduleGlobals is null || ReferenceEquals(moduleGlobals, _globals))
+            ? capturedGlobals
+            : moduleGlobals;
         var capturedModuleLoader = _moduleLoader;
         var capturedModuleCache = ModuleCache;
-        var capturedImportStack = _importStack;
+        // Snapshot the import stack: the child gets an independent copy so concurrent async
+        // imports cannot race on the parent's live HashSet, and cannot produce spurious
+        // "Circular import detected" errors for paths the parent currently has open.
+        // The module-load path (VirtualMachine.Modules.cs) deliberately shares _importStack
+        // by reference — that same-thread sharing is what enables synchronous circular-import
+        // detection and must NOT be changed here.
+        var capturedImportStack = new HashSet<string>(_importStack, StringComparer.OrdinalIgnoreCase);
         var capturedModuleLocks = ModuleLocks;
         string? capturedFile = _context.CurrentFile;
         TextWriter capturedOutput = _context.Output;
@@ -67,24 +90,31 @@ public sealed partial class VirtualMachine
             {
                 _moduleLoader = capturedModuleLoader,
                 ModuleCache = capturedModuleCache,
-                _importStack = capturedImportStack,
                 ModuleLocks = capturedModuleLocks,
                 EmbeddedMode = capturedEmbedded,
             };
+            // InitImportStack sets both _importStack and _context.ImportStack in one call —
+            // single chokepoint so a future refactor cannot forget to sync the context reference.
+            childVM.InitImportStack(capturedImportStack);
             childVM._context.CurrentFile = capturedFile;
             childVM._context.Output = capturedOutput;
             childVM._context.ErrorOutput = capturedErrorOutput;
             childVM._context.Input = capturedInput;
 
             // Replicate the call-frame layout: callee slot + prepared args, then run.
-            childVM.Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues) { ModuleGlobals = moduleGlobals }));
+            // Use isolatedUpvalues (freeze-or-cloned snapshot) so the child reads its own
+            // private copy of each captured reference, not the parent's live Upvalue objects.
+            // Use capturedModuleGlobals so both the VMFunction and the frame point at the
+            // isolated globals dict, routing ExecuteGetGlobal's fast and slow paths to the
+            // cloned copy rather than the parent's live _globals dictionary.
+            childVM.Push(StashValue.FromObj(new VMFunction(fnChunk, isolatedUpvalues) { ModuleGlobals = capturedModuleGlobals }));
             for (int i = 0; i < arity; i++)
             {
                 childVM.Push(StashValue.FromObject(capturedArgs[i]));
             }
 
             int childBase = childVM._sp - arity;
-            childVM.PushFrame(fnChunk, childBase, upvalues, fnChunk.Name, moduleGlobals);
+            childVM.PushFrame(fnChunk, childBase, isolatedUpvalues, fnChunk.Name, capturedModuleGlobals);
             childVM.InitGlobalSlots(fnChunk);
             return childVM.Run();
         }, cts.Token);

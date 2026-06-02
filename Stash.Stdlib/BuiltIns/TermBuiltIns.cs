@@ -150,11 +150,11 @@ public static partial class TermBuiltIns
     /// <summary>Returns true if ANSI color output is appropriate for the current terminal. Follows the NO_COLOR convention (https://no-color.org) and checks whether stdout is redirected. Set STASH_FORCE_COLOR=1 to override and always enable colors.</summary>
     /// <returns>true if colors are enabled, false otherwise</returns>
     [StashFn(ReturnType = "bool")]
-    public static bool ColorsEnabled()
+    public static bool ColorsEnabled(IInterpreterContext ctx)
     {
-        if (Environment.GetEnvironmentVariable("STASH_FORCE_COLOR") == "1")
+        if (ctx.GetEnv("STASH_FORCE_COLOR") == "1")
             return true;
-        bool noColor = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NO_COLOR"));
+        bool noColor = !string.IsNullOrEmpty(ctx.GetEnv("NO_COLOR"));
         bool redirected = Console.IsOutputRedirected;
         return !noColor && !redirected;
     }

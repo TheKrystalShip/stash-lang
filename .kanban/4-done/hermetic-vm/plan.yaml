@@ -1,0 +1,314 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>
+
+schema_version: 1
+
+feature: hermetic-vm
+
+title: Hermetic VM — engine and async-child isolation
+
+# Tags this feature as phase 2 of the long-term `embedding` milestone.
+# milestone-status.stash reads this to derive the milestone's ledger.
+milestone: embedding
+
+brief: ./brief.md
+
+created: 2026-06-02
+architect_session: hermetic-vm-spec-2026-06-02
+
+# Default verify command run after every phase (cheap; just a build sanity check).
+default_verify:
+  - dotnet build
+
+# Subsystems this feature touches. Two-thread (cross-VM) isolation is the
+# subsystem story for 2A; process-global virtualization sweeps stdlib + a slice of
+# Bytecode/Runtime in 2B; multiplexed signals live in Stdlib + Bytecode/Runtime
+# in 2C; the acceptance suite + example live in Tests + examples in 2D.
+# The toolchain surfaces (Lsp/Dap/Playground/Analysis + tmLanguage grammar) are
+# the 2C-2 "toolchain compatibility audit" footprint — verified-unaffected, not
+# edited — but declared here so every phase's `files` stays a subset of `scope`.
+scope:
+  - Stash.Bytecode/**
+  - Stash.Stdlib/**
+  - Stash.Cli/**
+  - Stash.Core/Runtime/**
+  - Stash.Core/Common/**
+  - Stash.Tests/**
+  - Stash.Lsp/**
+  - Stash.Dap/**
+  - Stash.Playground/**
+  - Stash.Analysis/**
+  - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
+  - docs/Stash — Language Specification.md
+  - docs/Stash — Standard Library Reference.md
+  - examples/**
+
+phases:
+  # ────────────────────────────────────────────────────────────────────────
+  # Phase 2A — Live-hazard fixes
+  # ────────────────────────────────────────────────────────────────────────
+  - id: 2A-1
+    title: Per-VM IC-slot clone on chunk load (recursive through nested chunks)
+    deps: []
+    files:
+      - Stash.Bytecode/VM/VirtualMachine.cs
+      - Stash.Bytecode/VM/VirtualMachine.Collections.cs
+      - Stash.Bytecode/VM/VirtualMachine.Functions.cs
+      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+      - Stash.Bytecode/Bytecode/Chunk.cs
+      - Stash.Bytecode/Bytecode/ICSlot.cs
+      - Stash.Tests/Bytecode/**
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Bytecode|FullyQualifiedName~Stash.Tests.Interpreting.InlineCache|FullyQualifiedName~Stash.Tests.Interpreting.VirtualMachine"
+    done_when:
+      - Two VirtualMachine instances executing the same Chunk write into DIFFERENT ICSlot[] arrays — verified by a unit test that observes ICSlot State/Guard divergence between two VMs after one's IC promotes to monomorphic with guard X and the other's with guard Y.
+      - The per-VM clone reaches every nested function Chunk reachable from the top-level Chunk (closures, methods) — verified by a test whose hot path reads obj.field from inside a nested function, exercised across two VMs concurrently, with no wrong-field reads.
+      - Chunk.ICSlots remains the immutable template (ConstantIndex pre-filled by ChunkBuilder); no VM ever writes to chunk.ICSlots directly.
+      - Existing IC fast-path performance characteristics preserved (no regression in bench_namespace_calls.stash beyond noise) — sanity check, not part of the unit gate.
+    notes: |
+      Implementation choice owned by the implementer: per-Chunk Dictionary on the
+      VM vs flat-array keyed by chunk id. Either is fine; the invariant is "no
+      two VMs ever write to the same ICSlot[] array."
+
+  - id: 2A-2
+    title: Async-child freeze-or-clone globals + DeepClone walker
+    deps: [2A-1]
+    files:
+      - Stash.Core/Runtime/RuntimeValues.cs
+      - Stash.Bytecode/VM/IsolationHelpers.cs
+      - Stash.Bytecode/VM/VirtualMachine.Async.cs
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Tests/Interpreting/**
+      - Stash.Tests/Bytecode/**
+      - Stash.Tests/Core/**
+    verify:
+      - dotnet build Stash.Core/
+      - dotnet build Stash.Bytecode/
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async|FullyQualifiedName~Stash.Tests.Bytecode.Async|FullyQualifiedName~Stash.Tests.Core.Runtime.DeepClone"
+    done_when:
+      - RuntimeValues.DeepClone(value, visited) exists, mirrors DeepFreeze's cycle-safe walker shape, and throws a typed error on cycle with the cycle path in the message.
+      - IsolationHelpers.BuildChildGlobals(parentGlobals) returns a Dictionary where every entry is either a primitive (copy-by-value), a frozen reference (shared), or a deep-cloned non-frozen reference.
+      - SpawnAsyncFunction calls BuildChildGlobals — not a shallow new Dictionary copy.
+      - An async fn that mutates a non-frozen captured StashDictionary observes its writes call-local — parent's dict is unchanged after task.all.
+      - The same async fn with the dict freeze'd before spawn shares by reference; the child's set/del writes throw ReadOnlyError.
+
+  - id: 2A-3
+    title: _importStack isolation at cross-thread fork sites
+    deps: [2A-2]
+    files:
+      - Stash.Bytecode/VM/VirtualMachine.Async.cs
+      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Tests/Interpreting/**
+    verify:
+      - dotnet build Stash.Bytecode
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Modules|FullyQualifiedName~Stash.Tests.Interpreting.Async"
+    done_when:
+      - SpawnAsyncFunction passes the child VM a SNAPSHOT of _importStack (new list copy), not the parent's by-reference list.
+      - InvokeCallbackDirect's background-thread branch (VMContext.cs same shape) snapshots _importStack too.
+      - Module-load (VirtualMachine.Modules.cs:105-112) STILL shares the parent's _importStack — confirmed by a test that triggers a circular-import error via a synchronous import chain (must continue to throw "Circular import detected").
+      - A test that races N async tasks each calling `import "<path>"` concurrently does not corrupt the shared module cache or import stack — no spurious "circular import" errors.
+
+  - id: 2A-4
+    title: ChildVMConstructionMetaTests guard (cross-thread VM-fork omission)
+    deps: [2A-3]
+    files:
+      - Stash.Tests/Bytecode/ChildVMConstructionMetaTests.cs
+      - Stash.Tests/Bytecode/Fixtures/ChildVMConstructionMetaTests.Fixtures/**
+    verify:
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Bytecode.ChildVMConstructionMetaTests"
+    done_when:
+      - ChildVMConstructionMetaTests is GREEN with the pinned exemption list naming the four legitimate sites (Modules.cs same-thread, VMContext.cs same-thread inline branch, VMTemplateEvaluator.cs, StashEngine.cs engine root) — each exemption has a recorded reason in the test source.
+      - The pinned exemption list contains ZERO cross-thread sites — SpawnAsyncFunction and InvokeCallbackDirect's background branch both route through BuildChildGlobals.
+      - A fail-path self-test fixture (a `new VirtualMachine(parent._globals)` outside the exemption list) trips the scan — proves teeth.
+      - A test that adds a fixture exemption without updating the pinned list fails — proves the exemption list is a real pin (not a "hide the failure" knob).
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Phase 2B — Process-global virtualization (cwd / env / spawn)
+  # ────────────────────────────────────────────────────────────────────────
+  - id: 2B-1
+    title: VMContext virtual cwd + env overlay (the SoT for the omission guard)
+    deps: [2A-4]
+    files:
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Core/Runtime/IInterpreterContext.cs
+      - Stash.Tests/Bytecode/VMContextTests.cs
+    verify:
+      - dotnet build Stash.Core/
+      - dotnet build Stash.Bytecode/
+      - dotnet build Stash.Stdlib/
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Bytecode.VMContextTests"
+    done_when:
+      - IInterpreterContext exposes WorkingDirectory (string), GetEnv(name)/SetEnv(name,value)/UnsetEnv(name)/AllEnv(), and ResolveAgainstCwd(path) — the single source of truth named in brief Cross-Cutting Concerns.
+      - VMContext.WorkingDirectory is initialized from System.Environment.CurrentDirectory at construction once; subsequent reads return the per-VM stored value, NEVER re-read System.Environment.
+      - VMContext.EnvVars is a per-VM overlay where SetEnv writes to the overlay only — System.Environment.GetEnvironmentVariable(name) returns null after VMContext.SetEnv(name, value) from a test.
+      - A unit test constructs two VMContext instances, calls SetEnv("X","1") on one, and observes the other's GetEnv("X") returns null AND System.Environment.GetEnvironmentVariable("X") returns null.
+
+  - id: 2B-2
+    title: NoProcessGlobalLeakMetaTests guard (RED with full-exemptions floor)
+    deps: [2B-1]
+    files:
+      - Stash.Tests/Bytecode/NoProcessGlobalLeakMetaTests.cs
+      - Stash.Tests/Bytecode/Fixtures/NoProcessGlobalLeakMetaTests.Fixtures/**
+    verify:
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Bytecode.NoProcessGlobalLeakMetaTests"
+    done_when:
+      - NoProcessGlobalLeakMetaTests scans Stash.Stdlib/** and Stash.Bytecode/** for System.Environment.CurrentDirectory, GetEnvironmentVariable, SetEnvironmentVariable, GetEnvironmentVariables, and Directory.GetCurrentDirectory accesses.
+      - On first commit the guard goes up GREEN with the documented full-exemption list pinned (every today-live sink enumerated in brief Decision Log) — the failing-mode is reached by later phases shrinking the list, not by an early-phase Red.
+      - The fail-path self-test fixture (a source file in Fixtures/ that contains a raw `System.Environment.CurrentDirectory` access OUTSIDE the exemption list) trips the scan — proves teeth.
+      - Process-identity reads (env.home, env.hostname, env.user — System.Environment.GetFolderPath, MachineName, UserName) are documented as ALLOWED in the test source and never appear on the exemption list (they don't trigger the scan).
+      - CLI-only assemblies (Stash.Cli/**) are documented as out-of-scope for the scan (the scan is on Stash.Stdlib/** and Stash.Bytecode/**).
+
+  - id: 2B-3
+    title: Migrate env.* and cwd stdlib sinks to VMContext (exemption count > 0 shrinks)
+    deps: [2B-2]
+    files:
+      - Stash.Stdlib/BuiltIns/EnvBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CurrentProcessImpl.cs
+      - Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs
+      - Stash.Core/Common/UnixSignal.cs
+      - Stash.Tests/Stdlib/EnvBuiltInsTests.cs
+      - Stash.Tests/Stdlib/CurrentProcessImplTests.cs
+      - Stash.Tests/Stdlib/EnvCurrentProcessTests.cs
+      - Stash.Tests/Interpreting/InterpreterTests.cs
+      - Stash.Tests/Bytecode/NoProcessGlobalLeakMetaTests.cs
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Stdlib.EnvBuiltInsTests|FullyQualifiedName~Stash.Tests.Stdlib.CurrentProcessImplTests|FullyQualifiedName~Stash.Tests.Bytecode.NoProcessGlobalLeakMetaTests"
+    done_when:
+      - "Every env.* function (get/set/has/all/withPrefix/unset/cwd/loadFile/saveFile) reads/writes through IInterpreterContext, not System.Environment directly — diff shows the System.Environment.* lines deleted at the migrated sites."
+      - "env.chdir / env.popDir / env.withDir update VMContext.WorkingDirectory and DirStack only; System.Environment.CurrentDirectory is unchanged after a test calls env.chdir from script (verified in BOTH the default-constructed-VM path AND the CLI-mode StashEngine path — per brief Decision Log 'no general write-through in any mode')."
+      - "process.spawn / process.exec / process.pipeline / process.daemonize all flow through ApplyCwdAndEnv (the single funnel), which seeds psi.WorkingDirectory from ctx.WorkingDirectory and psi.Environment from merged overlay+real env when caller did not specify."
+      - "The NoProcessGlobalLeakMetaTests exemption list shrinks — the EnvBuiltIns / CurrentProcessImpl / ProcessBuiltIns rows are removed from the exemption set."
+      - "EXISTING-TEST MIGRATION AUDIT — implementer greps Stash.Tests/** for tests that assert System.Environment.GetEnvironmentVariable or System.Environment.CurrentDirectory AFTER a Stash-script call to env.set or env.chdir (the stale-leak assertion pattern). Each hit is classified — 'test asserted today's leaky behavior, migrate to assert via VMContext/StashEngine' vs 'test names a real regression, fix the feature'. The migrated count is recorded in the phase commit message. This audit is also the empirical validation of the no-write-through decision — anything that genuinely needs real cwd beyond process.replace's pre-execvp chdir surfaces here."
+      - "process.replace Unix branch calls a targeted chdir(ctx.WorkingDirectory) immediately before execvp (preserving today's `cd /tmp; exec ls` behavior in CLI mode without a general write-through flag)."
+
+  - id: 2B-4
+    title: Migrate residual sinks (Sys / Term / Prompt / Cli env reads) + path/fs/io
+    deps: [2B-3]
+    files:
+      - Stash.Stdlib/BuiltIns/SysBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/TermBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/PromptBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Stdlib/BuiltIns/PathBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/FsBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/IoBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/TplBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/PkgBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/ArchiveBuiltIns.cs
+      - Stash.Bytecode/Runtime/GlobExpander.cs
+      - Stash.Bytecode/VM/VirtualMachine.cs
+      - Stash.Cli/Shell/ArgExpander.cs
+      - Stash.Tests/Bytecode/NoProcessGlobalLeakMetaTests.cs
+      - Stash.Tests/Bytecode/GlobExpansionTests.cs
+      - Stash.Tests/Cli/CrossPlatformTests.cs
+      - Stash.Tests/Stdlib/**
+      - "docs/Stash — Standard Library Reference.md"
+    verify:
+      - dotnet build Stash.Stdlib
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Stdlib|FullyQualifiedName~Stash.Tests.Bytecode.NoProcessGlobalLeakMetaTests"
+    done_when:
+      - PATH lookup (SysBuiltIns.cs:225,235), NO_COLOR / STASH_FORCE_COLOR (TermBuiltIns.cs:155-157), prompt cwd/USER/STASH_SHELL (PromptBuiltIns.cs:366,373-374,396), CLI env-var binding (CliBuiltIns.Parse.cs:1137), GlobBuiltIns delegate cwd (ProcessBuiltIns.cs:1079) all route through IInterpreterContext.
+      - Every Path.GetFullPath(relativeArg) and Directory.GetCurrentDirectory call in stdlib code goes through ctx.ResolveAgainstCwd / ctx.WorkingDirectory.
+      - NoProcessGlobalLeakMetaTests exemption list is at ZERO active stdlib exemptions; the only allowed accesses are VMContext's own initializer (documented exception) and process-identity reads (out of scope by name).
+      - A test that constructs two engines, runs `fs.realpath(".")` in each after one chdir'd via env.chdir, observes the engines see DIFFERENT cwds.
+
+  - id: 2B-5
+    title: Docs + Wave2 throws audit + spec migration note
+    deps: [2B-4]
+    files:
+      - docs/Stash — Language Specification.md
+      - docs/Stash — Standard Library Reference.md
+      - Stash.Stdlib/BuiltIns/EnvBuiltIns.cs
+      - Stash.Tests/Stdlib/SourceGenerator/Wave2ThrowsCoverageTests.cs
+    verify:
+      - dotnet run --project Stash.Docs/
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Stdlib.StandardLibraryReferenceTests|FullyQualifiedName~Stash.Tests.Stdlib.SourceGenerator.Wave2ThrowsCoverageTests"
+    done_when:
+      - Language spec contains the per-VM env overlay semantics, the async-child clone semantics, and the documented migration note (mutation of a non-frozen captured global in an async body becomes call-local).
+      - Generated Standard Library Reference reflects updated `env.*` doc strings; StandardLibraryReferenceTests is green (no hand-edits to the generated file).
+      - Wave2ThrowsCoverageTests is green — any new throw shape added to env.* during migration is either tagged with <exception> referencing a registered StashError, or added to the Wave2 NoThrowAllowList.
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Phase 2C — Multiplexed signals + no-Console fallthrough + toolchain check
+  # ────────────────────────────────────────────────────────────────────────
+  - id: 2C-1
+    title: Multiplexed signal registry + per-VM signal.off
+    deps: [2B-5]
+    files:
+      - Stash.Stdlib/BuiltIns/SignalImpl.cs
+      - Stash.Stdlib/BuiltIns/SignalBuiltIns.cs
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Tests/Stdlib/SignalImplTests.cs
+    verify:
+      - dotnet build Stash.Stdlib/
+      - dotnet build Stash.Bytecode/
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Stdlib.SignalImplTests"
+    done_when:
+      - SignalImpl.SignalHandlers stores a list per signal name, not a single tuple — every entry is (IInterpreterContext, IStashCallable, PosixSignalRegistration?).
+      - When two engines register signal.on(SIGTERM, fn) and SIGTERM fires, BOTH fns are invoked (verified by a test using a synthetic signal-raise that asserts both side-effects landed).
+      - signal.off(SIGTERM) removes only the entries whose IInterpreterContext == the calling VM's _context; the other VM's handler stays registered.
+      - The PosixSignalRegistration is created on the first registration for that signal and disposed when the last entry is removed (refcount-style).
+      - An exception thrown by one signal handler does not prevent the next handler from running — each invocation is try/catch-wrapped.
+
+  - id: 2C-2
+    title: No-Console fallthrough in embedded mode + toolchain compatibility audit
+    deps: [2C-1]
+    files:
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Bytecode/VM/VirtualMachine.cs
+      - Stash.Tests/Bytecode/EmbeddedModeTests.cs
+      - Stash.Lsp/Handlers/SemanticTokensHandler.cs
+      - Stash.Lsp/Handlers/CompletionHandler.cs
+      - Stash.Dap/DebugSession.cs
+      - Stash.Playground/wwwroot/js/stash-language.js
+      - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
+      - Stash.Analysis/**
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Bytecode.EmbeddedModeTests|FullyQualifiedName~Stash.Tests.Lsp.CompletionSurfaceSnapshotTests|FullyQualifiedName~Stash.Tests.Dap"
+    done_when:
+      - When VMContext is constructed with EmbeddedMode=true and the host does not set Output/ErrorOutput/Input, the defaults are TextWriter.Null / TextReader.Null — NO Console.Out / Console.Error / Console.In fallthrough.
+      - When EmbeddedMode=false (CLI default) the defaults remain Console.Out / Console.Error / Console.In — proven by a CLI-mode test that captures stdout.
+      - CompletionSurfaceSnapshotTests is green (no LSP completion-surface change) — confirms LSP/Playground/grammar/Analysis are unaffected by this feature.
+      - A Stash.Dap test that exercises variable display through a watch expression passes — confirms DAP semantics are unaffected.
+
+  # ────────────────────────────────────────────────────────────────────────
+  # Phase 2D — Isolation acceptance suite + example + full verify
+  # ────────────────────────────────────────────────────────────────────────
+  - id: 2D
+    title: Multi-engine isolation acceptance suite + example script
+    deps: [2C-2]
+    files:
+      - Stash.Tests/Embedding/MultiEngineIsolationTests.cs
+      - Stash.Tests/Embedding/AsyncIsolationTests.cs
+      - Stash.Tests/Embedding/SignalMultiplexTests.cs
+      - examples/hermetic_isolation.stash
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding"
+    done_when:
+      - Test "TwoEngines_EnvChdir_DoesNotAffectOtherEngine" passes — engineA.env.chdir("/tmp"); engineB.fs.realpath(".") returns the original cwd.
+      - Test "TwoEngines_EnvSet_DoesNotLeakAcrossEngines" passes — engineA.env.set("X","1"); engineB.env.get("X") is null AND System.Environment.GetEnvironmentVariable("X") is null.
+      - Test "AsyncRaceStress_NonFrozenDictionary_IsCallLocal" passes — 100 concurrent async tasks each mutating a captured non-frozen dict; parent's dict is unchanged after task.all; no Dictionary corruption (no InvalidOperationException, no swallowed write).
+      - Test "AsyncRaceStress_FrozenDictionary_ThrowsOnWrite" passes — same shape with the dict freeze'd; children's writes throw ReadOnlyError; parent's view unchanged.
+      - Test "ICSlot_NestedChunk_ConcurrentDifferentShapes_NoCorruption" passes — the hot path reads obj.field from inside a NESTED FUNCTION (engineered to fail if only the top-level chunk's IC array is cloned); two engines hit it concurrently on different StashStruct shapes; no wrong-field reads.
+      - Test "SigTerm_TwoEngines_BothHandlersRun" passes — both engines' cleanup_fn fire on SIGTERM; signal.off in one engine leaves the other's handler registered.
+      - Test "ProcessSpawn_InheritsVMCwd" passes — env.chdir("/tmp") in engineA; process.spawn("/bin/pwd") reports /tmp; concurrent process.spawn in engineB reports the original cwd.
+      - examples/hermetic_isolation.stash is parse-clean (a Stash.Analysis / Stash.Format formatter-round-trip test or a Stash.Tests parse test references it) and runs cleanly when invoked from a host-driver test that constructs two StashEngine instances and demonstrates two-engine cwd/env isolation as a documented pattern. (Note: the script itself is a single-engine demo since "two engines" is a C#-host concept; the standalone-readable narrative is the cwd/env overlay invariants from inside one engine, and the C# driver test wraps it with the second engine to assert isolation.)
+
+# Final acceptance — run by /done. Full `dotnet test`, NEVER namespace-filtered.
+# Includes the two cross-cutting omission guards (NoProcessGlobalLeakMetaTests,
+# ChildVMConstructionMetaTests) and the multi-engine isolation acceptance suite.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

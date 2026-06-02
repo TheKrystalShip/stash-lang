@@ -61,7 +61,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, "b.txt"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "readme.md"), "");
 
-        var matches = GlobExpander.Expand("*.txt");
+        var matches = GlobExpander.Expand("*.txt", tmp.Path);
         Assert.Equal(new[] { "a.txt", "b.txt" }, matches.Order(StringComparer.Ordinal).ToArray());
     }
 
@@ -72,7 +72,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, ".hidden"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "visible.txt"), "");
 
-        var matches = GlobExpander.Expand("*");
+        var matches = GlobExpander.Expand("*", tmp.Path);
         Assert.DoesNotContain(".hidden", matches);
         Assert.Contains("visible.txt", matches);
     }
@@ -84,7 +84,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, ".bashrc"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "other.txt"), "");
 
-        var matches = GlobExpander.Expand(".bashrc");
+        var matches = GlobExpander.Expand(".bashrc", tmp.Path);
         Assert.Equal(new[] { ".bashrc" }, matches.ToArray());
     }
 
@@ -96,7 +96,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, "b.txt"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "ab.txt"), "");
 
-        var matches = GlobExpander.Expand("?.txt");
+        var matches = GlobExpander.Expand("?.txt", tmp.Path);
         Assert.Equal(new[] { "a.txt", "b.txt" }, matches.Order(StringComparer.Ordinal).ToArray());
         Assert.DoesNotContain("ab.txt", matches);
     }
@@ -109,7 +109,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, "b.txt"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "c.txt"), "");
 
-        var matches = GlobExpander.Expand("[ab].txt");
+        var matches = GlobExpander.Expand("[ab].txt", tmp.Path);
         Assert.Equal(new[] { "a.txt", "b.txt" }, matches.Order(StringComparer.Ordinal).ToArray());
         Assert.DoesNotContain("c.txt", matches);
     }
@@ -122,7 +122,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, "b.txt"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "c.txt"), "");
 
-        var matches = GlobExpander.Expand("[!a].txt");
+        var matches = GlobExpander.Expand("[!a].txt", tmp.Path);
         Assert.DoesNotContain("a.txt", matches);
         Assert.Contains("b.txt", matches);
         Assert.Contains("c.txt", matches);
@@ -137,7 +137,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, "src", "foo.cs"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "src", "sub", "bar.cs"), "");
 
-        var matches = GlobExpander.Expand("src/**/*.cs");
+        var matches = GlobExpander.Expand("src/**/*.cs", tmp.Path);
         var sorted = matches.Order(StringComparer.Ordinal).ToArray();
         Assert.Equal(2, sorted.Length);
         Assert.Contains("src/foo.cs", matches);
@@ -148,7 +148,7 @@ public class GlobExpansionTests : StashTestBase
     public void Expand_NoMatches_ReturnsEmptyList()
     {
         using var tmp = new TempDir();
-        var matches = GlobExpander.Expand("*.xyz");
+        var matches = GlobExpander.Expand("*.xyz", tmp.Path);
         Assert.Empty(matches);
     }
 
@@ -160,7 +160,7 @@ public class GlobExpansionTests : StashTestBase
         File.WriteAllText(Path.Combine(tmp.Path, "a.txt"), "");
         File.WriteAllText(Path.Combine(tmp.Path, "m.txt"), "");
 
-        var matches = GlobExpander.Expand("*.txt");
+        var matches = GlobExpander.Expand("*.txt", tmp.Path);
         Assert.Equal(new[] { "a.txt", "m.txt", "z.txt" }, matches.ToArray());
     }
 

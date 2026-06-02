@@ -51,19 +51,11 @@ public class ShellSugarIntegrationTests
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
-        string original = Environment.CurrentDirectory;
         var (runner, vm) = MakeRunner();
-        try
-        {
-            runner.Run("cd /tmp");
-            // env.chdir pushes onto the directory stack, so depth should be ≥ 1.
-            Assert.Equal("/tmp", Environment.CurrentDirectory,
-                StringComparer.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Environment.CurrentDirectory = original;
-        }
+        runner.Run("cd /tmp");
+        // cd updates the per-VM working directory; the real process cwd is never mutated.
+        Assert.Equal("/tmp", vm.Context.WorkingDirectory,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -86,27 +78,21 @@ public class ShellSugarIntegrationTests
 
         string original = Environment.CurrentDirectory;
         var sw = new StringWriter();
-        var (runner, _) = MakeRunner(sw);
-        try
-        {
-            // Push /tmp onto the stack.
-            runner.Run("cd /tmp");
-            Assert.Equal("/tmp", Environment.CurrentDirectory,
-                StringComparer.OrdinalIgnoreCase);
+        var (runner, vm) = MakeRunner(sw);
 
-            // cd - should restore to the original directory and print it.
-            runner.Run("cd -");
-            Assert.Equal(original, Environment.CurrentDirectory,
-                StringComparer.OrdinalIgnoreCase);
+        // Push /tmp onto the stack — cd updates the per-VM cwd, not the real process cwd.
+        runner.Run("cd /tmp");
+        Assert.Equal("/tmp", vm.Context.WorkingDirectory,
+            StringComparer.OrdinalIgnoreCase);
 
-            // The pop should have printed the restored directory.
-            string printed = sw.ToString().Trim();
-            Assert.Contains(original, printed, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Environment.CurrentDirectory = original;
-        }
+        // cd - should restore to the original directory and print it.
+        runner.Run("cd -");
+        Assert.Equal(original, vm.Context.WorkingDirectory,
+            StringComparer.OrdinalIgnoreCase);
+
+        // The pop should have printed the restored directory.
+        string printed = sw.ToString().Trim();
+        Assert.Contains(original, printed, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

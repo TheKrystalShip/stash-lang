@@ -16,7 +16,7 @@ public static partial class PathBuiltIns
     /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The absolute path</returns>
     [StashFn]
-    public static string Abs(string p) => System.IO.Path.GetFullPath(p);
+    public static string Abs(IInterpreterContext ctx, string p) => ctx.ResolveAgainstCwd(p);
 
     /// <summary>Returns the directory component of the path.</summary>
     /// <param name="p">The path</param>
@@ -70,7 +70,7 @@ public static partial class PathBuiltIns
     /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The normalized path</returns>
     [StashFn]
-    public static string Normalize(string p) => System.IO.Path.GetFullPath(p);
+    public static string Normalize(IInterpreterContext ctx, string p) => ctx.ResolveAgainstCwd(p);
 
     /// <summary>Returns true if the path is absolute, false otherwise.</summary>
     /// <param name="p">The path</param>
@@ -85,10 +85,10 @@ public static partial class PathBuiltIns
     /// <exception cref="TypeError">if any argument has the wrong type</exception>
     /// <returns>The relative path</returns>
     [StashFn]
-    public static string Relative(string from, string to)
+    public static string Relative(IInterpreterContext ctx, string from, string to)
     {
-        var fromUri = new System.Uri(System.IO.Path.GetFullPath(from + System.IO.Path.DirectorySeparatorChar));
-        var toUri = new System.Uri(System.IO.Path.GetFullPath(to));
+        var fromUri = new System.Uri(ctx.ResolveAgainstCwd(from + System.IO.Path.DirectorySeparatorChar));
+        var toUri = new System.Uri(ctx.ResolveAgainstCwd(to));
         var relativeUri = fromUri.MakeRelativeUri(toUri);
         return System.Uri.UnescapeDataString(relativeUri.ToString());
     }

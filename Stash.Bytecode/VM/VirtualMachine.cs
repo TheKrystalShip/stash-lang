@@ -65,6 +65,14 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     private readonly VMContext _context;
     private readonly ExtensionRegistry _extensionRegistry = new();
 
+    /// <summary>
+    /// Per-VM inline cache slot arrays, keyed by chunk identity.
+    /// Each entry is a private clone of <see cref="Chunk.ICSlots"/> (the immutable template
+    /// pre-filled by <see cref="ChunkBuilder"/>). Created lazily on first frame push for a
+    /// given chunk so that two VMs executing the same chunk never share mutable IC state.
+    /// </summary>
+    private readonly Dictionary<Chunk, ICSlot[]> _vmICSlots = new(ReferenceEqualityComparer.Instance);
+
     private Func<string, string?, Chunk>? _moduleLoader;
     internal ConcurrentDictionary<string, Dictionary<string, StashValue>> ModuleCache = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
@@ -89,8 +97,8 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     // apply glob expansion to unquoted StashLiteralArg tokens emitted by Phase B.
     static VirtualMachine()
     {
-        Stash.Runtime.ShellExpansion.GlobExpandHandler = static (pattern, _) =>
-            GlobExpander.Expand(pattern);
+        Stash.Runtime.ShellExpansion.GlobExpandHandler = static (pattern, cwd) =>
+            GlobExpander.Expand(pattern, cwd);
     }
 
     public VirtualMachine(Dictionary<string, StashValue>? globals = null, CancellationToken ct = default)
@@ -106,7 +114,10 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
             ActiveVM = this,
             MainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId,
             ModuleCache = ModuleCache,
-            ModuleLocks = ModuleLocks
+            ModuleLocks = ModuleLocks,
+            // Wire up the VM's import stack so InvokeCallbackDirect can snapshot it
+            // when creating a cross-thread child VM (background-thread branch).
+            ImportStack = _importStack
         };
     }
 
@@ -115,6 +126,18 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     {
         _registeredTypeNames[typeof(T)] = vmTypeName;
         _context.TypeNameResolver = ResolveRegisteredTypeName;
+    }
+
+    /// <summary>
+    /// Test-only helper: sets <c>MainThreadId</c> to -1 so that no real thread ID ever
+    /// matches, forcing <c>VMContext.InvokeCallbackDirect</c> to always take the
+    /// background-thread (child-VM fork) branch regardless of which thread fires the callback.
+    /// This lets regression tests exercise the cross-thread path without needing a real
+    /// background-thread caller.
+    /// </summary>
+    internal void TestForceBackgroundBranch()
+    {
+        _context.MainThreadId = -1;
     }
 
     public void RegisterTypeCheck(string vmTypeName, Func<object, bool> predicate)
@@ -162,13 +185,25 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     /// </summary>
     public AliasRegistry AliasRegistry { get; } = new();
 
-    /// <summary>Standard output stream for built-in functions. Defaults to Console.Out.</summary>
+    /// <summary>
+    /// Standard output stream for built-in functions.
+    /// When <see cref="EmbeddedMode"/> is <c>false</c> (CLI default) the effective default is <see cref="Console.Out"/>.
+    /// When <see cref="EmbeddedMode"/> is <c>true</c> the effective default is <see cref="TextWriter.Null"/> — no Console fallthrough.
+    /// </summary>
     public TextWriter Output { get => _context.Output; set => _context.Output = value; }
 
-    /// <summary>Standard error stream for built-in functions. Defaults to Console.Error.</summary>
+    /// <summary>
+    /// Standard error stream for built-in functions.
+    /// When <see cref="EmbeddedMode"/> is <c>false</c> (CLI default) the effective default is <see cref="Console.Error"/>.
+    /// When <see cref="EmbeddedMode"/> is <c>true</c> the effective default is <see cref="TextWriter.Null"/> — no Console fallthrough.
+    /// </summary>
     public TextWriter ErrorOutput { get => _context.ErrorOutput; set => _context.ErrorOutput = value; }
 
-    /// <summary>Standard input stream for built-in functions. Defaults to Console.In.</summary>
+    /// <summary>
+    /// Standard input stream for built-in functions.
+    /// When <see cref="EmbeddedMode"/> is <c>false</c> (CLI default) the effective default is <see cref="Console.In"/>.
+    /// When <see cref="EmbeddedMode"/> is <c>true</c> the effective default is <see cref="TextReader.Null"/> — no Console fallthrough.
+    /// </summary>
     public TextReader Input { get => _context.Input; set => _context.Input = value; }
 
     /// <summary>Extension method registry for extend blocks on built-in types.</summary>
@@ -391,6 +426,27 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         }
     }
 
+    /// <summary>
+    /// Initialises this VM's <c>_importStack</c> from a snapshot produced at a cross-thread
+    /// fork site. Called by <see cref="VMContext.InvokeCallbackDirect"/> (background-thread
+    /// branch) so that a child VM starts with an independent copy of the parent's in-progress
+    /// import set, not a reference to the parent's live set.
+    ///
+    /// <para>
+    /// This is NOT called by the module-load path (<c>VirtualMachine.Modules.cs</c>), which
+    /// deliberately keeps sharing the parent's <c>_importStack</c> by reference for synchronous
+    /// circular-import detection.
+    /// </para>
+    /// </summary>
+    /// <param name="snapshot">A pre-copied snapshot of the parent's import stack.</param>
+    internal void InitImportStack(HashSet<string> snapshot)
+    {
+        _importStack = new HashSet<string>(snapshot, StringComparer.OrdinalIgnoreCase);
+        // Keep the context's import-stack reference in sync so that InvokeCallbackDirect
+        // on this child VM can also take a correct snapshot for any further nesting.
+        _context.ImportStack = _importStack;
+    }
+
     private void ValidateStdlibManifest(Chunk chunk)
     {
         if (chunk.StdlibManifest is not { } manifest)
@@ -437,6 +493,7 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         frame.ModuleGlobals = moduleGlobals;
         frame.Defers = null;
         frame.ActiveIterators = null;
+        frame.ICSlots = ResolveICSlots(chunk);
 
         // Ensure the shared stack has room for this frame's entire register window.
         int needed = baseSlot + chunk.MaxRegs;
@@ -445,6 +502,38 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         if (needed > _sp)
             _sp = needed;
     }
+
+    // ---- Per-VM IC Slot Management ----
+
+    /// <summary>
+    /// Returns this VM's private <see cref="ICSlot"/> array for <paramref name="chunk"/>,
+    /// cloning the chunk's immutable template on first access so that no two VM instances
+    /// ever write to the same IC array.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ICSlot[]? ResolveICSlots(Chunk chunk)
+    {
+        ICSlot[]? template = chunk.ICSlots;
+        if (template is null || template.Length == 0)
+            return null;
+
+        if (!_vmICSlots.TryGetValue(chunk, out ICSlot[]? slots))
+        {
+            // Clone preserves ConstantIndex (pre-filled by ChunkBuilder) but gives
+            // fresh zero State / null Guard so this VM's IC starts uninitialized.
+            slots = (ICSlot[])template.Clone();
+            _vmICSlots[chunk] = slots;
+        }
+        return slots;
+    }
+
+    /// <summary>
+    /// Returns this VM's private IC slot array for the given chunk, or null if the chunk
+    /// has no IC slots or has not yet been executed by this VM.
+    /// Used only by unit tests to observe per-VM IC state.
+    /// </summary>
+    internal ICSlot[]? GetICSlotsForChunk(Chunk chunk)
+        => _vmICSlots.TryGetValue(chunk, out ICSlot[]? slots) ? slots : null;
 
     // ---- Stack Operations ----
 

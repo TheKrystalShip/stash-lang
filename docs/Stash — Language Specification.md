@@ -1451,6 +1451,74 @@ value.
 
 If a future fails with an error, `await` produces that error.
 
+#### Async-child global isolation
+
+When an `async fn` body is invoked, the runtime forks a child VM on a thread-pool thread.
+Each captured global that the child might access is handled at fork time based on whether
+the value is frozen:
+
+- **Frozen values** (`readonly` declarations or values passed through `freeze`) are shared
+  by reference across the fork. Frozen graphs are immutable and cannot be racily mutated,
+  so sharing is safe.
+- **Non-frozen reference-typed values** (mutable arrays, dicts, instances) are **deep-cloned**
+  into the child at fork time. Each task gets its own independent copy.
+
+This means mutations to a captured, non-frozen value inside an `async fn` body are
+**call-local** — they affect only the child's clone, not the parent's original.
+
+#### Migration note — call-local mutation
+
+Prior to the hermetic-VM isolation release, a non-frozen captured global mutated inside an
+`async fn` body would (racily) write through the shared reference and affect the parent. This
+was an unsafe data race with undefined behavior under concurrent mutation.
+
+After this change, such mutation is call-local: the child's writes never reach the parent.
+
+**Recommended pattern:** communicate results via return values and `await` / `task.all`.
+
+```stash
+async fn compute(input) {
+    // safe: returns a new value rather than mutating a captured global
+    return input * 2;
+}
+
+let results = await task.all([compute(1), compute(2), compute(3)]);
+// results = [2, 4, 6]
+```
+
+If shared read-only access across async tasks is needed, `freeze` the value before spawning.
+Frozen values share by reference; any attempt to write throws `ReadOnlyError`.
+
+```stash
+readonly let config = { host: "localhost", port: 8080 };
+
+async fn handler(req) {
+    // config is frozen — reads are safe, writes throw ReadOnlyError
+    return config.host + ":" + conv.str(config.port);
+}
+```
+
+If a non-frozen value to be captured contains a cycle, the deep-clone at fork time throws
+`ValueError` with the cycle path in the message. Fix: `freeze` one node on the cycle (which
+makes the entire reachable graph frozen and eligible for reference-sharing).
+
+#### Background-thread callback isolation
+
+Callbacks registered with `fs.watch`, `signal.on`, and timer functions are invoked on
+background threads (OS file-system event threads or the .NET thread pool). Like `async fn`
+bodies, each such callback runs in an **isolated child VM**: its writes to captured globals
+are **call-local** and are never visible to the parent VM. The callback can still
+communicate with the outside world through side effects — writing files, spawning processes,
+or any other I/O — but it cannot mutate the parent VM's variable state.
+
+**Same-thread callbacks** (`arr.map`, sort comparators, `assert` body functions, and other
+synchronous higher-order functions) are unaffected. They run inline on the same VM thread
+and share the same variable state as their caller.
+
+A principled marshal-onto-VM-thread mechanism (event loop) is planned but not yet
+available. Until then, structure background callbacks as fire-and-forget workers that
+communicate via I/O, not by mutating captured state.
+
 ### Methods
 
 Struct declarations and extension blocks may define methods. A method call binds
@@ -2036,6 +2104,35 @@ this document. DAP wire behavior is specified in the
 Host applications may embed the Stash runtime. Embedded hosts may restrict process
 execution, file access, privilege elevation, networking, or other side effects. A
 restricted side effect must produce a runtime error or documented host diagnostic.
+
+#### Per-VM environment and working-directory overlay
+
+Each `VirtualMachine` instance maintains its own **per-VM view** of the process environment
+and working directory, independent of other VM instances and the real host process state:
+
+- **Working directory.** `env.cwd` reads, and `env.chdir` / `env.popDir` / `env.withDir`
+  write, a per-VM `WorkingDirectory` field. The real `System.Environment.CurrentDirectory`
+  is read once at VM construction to seed the initial value and is never modified thereafter.
+  Two VMs in the same process can have different working directories; neither's `env.chdir`
+  affects the other.
+
+- **Environment variables.** `env.get` / `env.has` / `env.all` / `env.withPrefix` read from
+  a per-VM overlay first, then fall back to the real process environment for variables not
+  in the overlay. `env.set` / `env.unset` / `env.loadFile` write only to the overlay.
+  `System.Environment` is never mutated by any of these calls. Variables explicitly unset via
+  `env.unset` remain shadowed even if they exist in the real process environment.
+
+- **Spawned processes** (`process.spawn`, `process.exec`, `process.pipeline`, etc.) inherit
+  the VM's view: `ProcessStartInfo.WorkingDirectory` is seeded from the per-VM working
+  directory, and the process environment is seeded from the merged overlay-over-real-env
+  view. Per-call `cwd` / `env` options continue to override the per-VM defaults.
+
+- **Process-identity reads** (`env.home`, `env.hostname`, `env.user`) are not overlayable.
+  They reflect the host process identity, are stable for the process lifetime, and are never
+  influenced by the per-VM overlay.
+
+This isolation means that in an embedding scenario two `StashEngine` instances can safely
+call `env.chdir` and `env.set` concurrently without affecting each other or the host process.
 
 ## Appendix A: Grammar
 

@@ -24,6 +24,12 @@ internal sealed class VMContext : IInterpreterContext
     public VMContext(CancellationToken ct)
     {
         _ct = ct;
+        // Capture the real process cwd exactly once at construction. All subsequent
+        // reads of WorkingDirectory return this per-VM value — System.Environment is
+        // never consulted again after this line. DirStack is seeded from the same
+        // snapshot so both views are consistent from the start.
+        WorkingDirectory = System.Environment.CurrentDirectory;
+        DirStack = new List<string> { WorkingDirectory };
     }
 
     internal void SetCancellationToken(CancellationToken ct) => _ct = ct;
@@ -47,9 +53,48 @@ internal sealed class VMContext : IInterpreterContext
     }
 
     public string[]? ScriptArgs { get; set; }
-    public TextWriter Output { get; set; } = TextWriter.Null;
-    public TextWriter ErrorOutput { get; set; } = TextWriter.Null;
-    public TextReader Input { get; set; } = TextReader.Null;
+
+    // Nullable backing fields: null means "use the mode-default".
+    // When EmbeddedMode is true  → default is TextWriter.Null / TextReader.Null  (no Console leak).
+    // When EmbeddedMode is false → default is Console.Out / Console.Error / Console.In  (CLI default).
+    // A host that sets the property explicitly always wins, regardless of mode.
+    private TextWriter? _output;
+    private TextWriter? _errorOutput;
+    private TextReader? _input;
+
+    /// <summary>
+    /// Standard output stream. In embedded mode the default is <see cref="TextWriter.Null"/>;
+    /// in CLI mode the default falls through to <see cref="Console.Out"/>.
+    /// Assign explicitly to override the mode default.
+    /// </summary>
+    public TextWriter Output
+    {
+        get => _output ?? (EmbeddedMode ? TextWriter.Null : Console.Out);
+        set => _output = value;
+    }
+
+    /// <summary>
+    /// Standard error stream. In embedded mode the default is <see cref="TextWriter.Null"/>;
+    /// in CLI mode the default falls through to <see cref="Console.Error"/>.
+    /// Assign explicitly to override the mode default.
+    /// </summary>
+    public TextWriter ErrorOutput
+    {
+        get => _errorOutput ?? (EmbeddedMode ? TextWriter.Null : Console.Error);
+        set => _errorOutput = value;
+    }
+
+    /// <summary>
+    /// Standard input stream. In embedded mode the default is <see cref="TextReader.Null"/>;
+    /// in CLI mode the default falls through to <see cref="Console.In"/>.
+    /// Assign explicitly to override the mode default.
+    /// </summary>
+    public TextReader Input
+    {
+        get => _input ?? (EmbeddedMode ? TextReader.Null : Console.In);
+        set => _input = value;
+    }
+
     public CancellationToken CancellationToken => _ct;
     public object? Debugger { get; set; }
 
@@ -65,13 +110,68 @@ internal sealed class VMContext : IInterpreterContext
     /// <summary>Stack of active file lock handles held by this VM instance. LIFO; LockEnd pops the top.</summary>
     public Stack<FileLockHandle> ActiveLocks { get; } = new();
 
+    // --- Per-VM virtual process state ---
+
+    /// <summary>
+    /// Per-VM working directory. Initialized from <see cref="System.Environment.CurrentDirectory"/>
+    /// at construction (single read); never re-reads the real process cwd after that.
+    /// Implements <see cref="IInterpreterContext.WorkingDirectory"/>.
+    /// </summary>
+    public string WorkingDirectory { get; set; } = string.Empty; // Set in ctor after single cwd read
+
+    /// <summary>
+    /// Per-VM environment overlay. Key present with non-null value = overridden.
+    /// Key present with null value = explicitly unset (shadows real process env).
+    /// Key absent = fall back to <see cref="System.Environment.GetEnvironmentVariable"/>.
+    /// Never mutate <see cref="System.Environment"/> — writes go here only.
+    /// </summary>
+    internal Dictionary<string, string?> EnvVars { get; } = new(StringComparer.Ordinal);
+
+    /// <inheritdoc cref="IInterpreterContext.GetEnv"/>
+    public string? GetEnv(string name)
+    {
+        if (EnvVars.TryGetValue(name, out string? overlayValue))
+            return overlayValue; // null here = explicitly unset; return null without checking real env
+        return System.Environment.GetEnvironmentVariable(name);
+    }
+
+    /// <inheritdoc cref="IInterpreterContext.SetEnv"/>
+    public void SetEnv(string name, string value) => EnvVars[name] = value;
+
+    /// <inheritdoc cref="IInterpreterContext.UnsetEnv"/>
+    public void UnsetEnv(string name) => EnvVars[name] = null;
+
+    /// <inheritdoc cref="IInterpreterContext.AllEnv"/>
+    public Dictionary<string, string> AllEnv()
+    {
+        // Start with the real process env as the base, then layer the overlay on top.
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+        {
+            if (entry.Key is string k && entry.Value is string v)
+                result[k] = v;
+        }
+        // Apply overlay: non-null values override, null values mean "explicitly unset" → remove.
+        foreach (var (k, v) in EnvVars)
+        {
+            if (v is null)
+                result.Remove(k);
+            else
+                result[k] = v;
+        }
+        return result;
+    }
+
+    /// <inheritdoc cref="IInterpreterContext.ResolveAgainstCwd"/>
+    public string ResolveAgainstCwd(string path) => Path.GetFullPath(path, WorkingDirectory);
+
     // --- Directory Stack ---
     /// <summary>
     /// Navigation history. Last entry is the current working directory.
-    /// Initialized with the cwd inherited from the parent process.
+    /// Initialized with the cwd captured at construction (see <see cref="WorkingDirectory"/>).
     /// Capped at 256 entries; oldest is dropped when full.
     /// </summary>
-    public List<string> DirStack { get; } = new() { System.Environment.CurrentDirectory };
+    public List<string> DirStack { get; private set; }
 
     private bool _lockCleanupRegistered;
 
@@ -243,7 +343,7 @@ internal sealed class VMContext : IInterpreterContext
     /// <summary>
     /// Creates a child context for async/parallel execution.
     /// Shared (by reference): <see cref="Output"/>, <see cref="ErrorOutput"/>, <see cref="Input"/>, <see cref="Globals"/>, <see cref="ModuleCache"/>, <see cref="ModuleLocks"/>, <see cref="ModuleLoader"/>, <see cref="TestHarness"/>.
-    /// Copied (by value): <see cref="CurrentFile"/>, <see cref="ScriptArgs"/>, <see cref="ElevationActive"/>, <see cref="ElevationCommand"/>, <see cref="EmbeddedMode"/>.
+    /// Copied (by value): <see cref="CurrentFile"/>, <see cref="ScriptArgs"/>, <see cref="ElevationActive"/>, <see cref="ElevationCommand"/>, <see cref="EmbeddedMode"/>, <see cref="WorkingDirectory"/>, <see cref="EnvVars"/> (snapshot).
     /// Writers are upgraded to <see cref="SynchronizedTextWriter"/> on first fork to prevent interleaved output.
     /// </summary>
     public IInterpreterContext Fork(CancellationToken cancellationToken = default)
@@ -260,7 +360,7 @@ internal sealed class VMContext : IInterpreterContext
             ErrorOutput = new SynchronizedTextWriter(ErrorOutput);
         }
 
-        return new VMContext(cancellationToken)
+        var child = new VMContext(cancellationToken)
         {
             Output = Output,
             ErrorOutput = ErrorOutput,
@@ -279,7 +379,19 @@ internal sealed class VMContext : IInterpreterContext
             ModuleCache = ModuleCache,
             ModuleLocks = ModuleLocks,
             LoggerState = LoggerState,
+            // Propagate the per-VM virtual cwd — the child inherits the parent's view,
+            // not the real process cwd (the constructor already set it from real env,
+            // but we override here so forked contexts share the parent's virtual state).
+            WorkingDirectory = WorkingDirectory,
         };
+
+        // Propagate env overlay snapshot — child inherits parent's overlay entries.
+        // The child owns its own dict (from EnvVars property initializer) so mutations
+        // don't bleed back to the parent.
+        foreach (var (k, v) in EnvVars)
+            child.EnvVars[k] = v;
+
+        return child;
     }
 
     /// <summary>
@@ -287,6 +399,21 @@ internal sealed class VMContext : IInterpreterContext
     /// <see cref="InvokeCallback"/> can create a child VM for <c>VMFunction</c> closures.
     /// </summary>
     internal Dictionary<string, StashValue>? Globals { get; set; }
+
+    /// <summary>
+    /// The import stack for the VM that owns this context. Set by <see cref="VirtualMachine"/>
+    /// at construction and updated to the child's own independent snapshot when a child VM is
+    /// spawned. Used by <see cref="InvokeCallbackDirect"/>'s background-thread branch to take
+    /// a snapshot of the current in-progress import set before constructing a child VM, so
+    /// the child starts with an independent copy and cannot race with the parent.
+    ///
+    /// <para>
+    /// The module-load path (<c>VirtualMachine.Modules.cs</c>) deliberately does NOT update
+    /// this field — it shares the parent's <c>_importStack</c> by reference for synchronous
+    /// circular-import detection. Only cross-thread fork sites snapshot and propagate this.
+    /// </para>
+    /// </summary>
+    internal HashSet<string>? ImportStack { get; set; }
 
     /// <summary>Module loading callback, propagated from the parent <see cref="VirtualMachine"/>.</summary>
     internal Func<string, string?, Chunk>? ModuleLoader { get; set; }
@@ -322,7 +449,24 @@ internal sealed class VMContext : IInterpreterContext
 
             if (Globals != null)
             {
-                var childVm = new VirtualMachine(Globals, CancellationToken);
+                // Cross-thread path: apply freeze-or-clone to globals so the child gets a
+                // private copy of any non-frozen mutable values (no cross-thread data races).
+                var childGlobals = IsolationHelpers.BuildChildGlobals(Globals);
+                // Snapshot upvalues so the child gets private copies of every reference-typed
+                // captured local.  Without this, the child's frame would share the parent's
+                // live Upvalue objects, letting a background-thread write race on a captured
+                // dict / array / struct.  Mirrors what SpawnAsyncFunction does for async forks.
+                var isolatedUpvalues = IsolationHelpers.SnapshotUpvalues(vmFn.Upvalues);
+                // Ensure ModuleGlobals on the isolated VMFunction points at the child-local
+                // globals copy when the callback was defined in the main module (i.e. when
+                // vmFn.ModuleGlobals is the parent's live _globals or null).  For callbacks
+                // imported from a separate module, keep the original module dict — same logic
+                // as SpawnAsyncFunction's capturedModuleGlobals computation.
+                var isolatedModuleGlobals = (vmFn.ModuleGlobals is null || ReferenceEquals(vmFn.ModuleGlobals, Globals))
+                    ? childGlobals
+                    : vmFn.ModuleGlobals;
+                var isolatedFn = new VMFunction(vmFn.Chunk, isolatedUpvalues) { ModuleGlobals = isolatedModuleGlobals };
+                var childVm = new VirtualMachine(childGlobals, CancellationToken);
                 childVm.Output = Output;
                 childVm.ErrorOutput = ErrorOutput;
                 childVm.Input = Input;
@@ -332,14 +476,26 @@ internal sealed class VMContext : IInterpreterContext
                 if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
                 if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
                 if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
+                // Pass a snapshot of the parent's import stack so the child starts with an
+                // independent copy of any in-progress imports, not the parent's live set.
+                // This prevents spurious "circular import" errors from the parent's in-flight
+                // imports racing with the child's import calls on a background thread.
+                //
+                // MUST use IsolationHelpers.SnapshotImportStack (explicit foreach with version-
+                // checked enumerator) and NOT pass the live reference directly.  Passing the live
+                // ref enumerates the parent's HashSet on the background thread while Modules.cs
+                // may be calling _importStack.Add/Remove on the parent's main thread, causing a
+                // silent torn-snapshot or InvalidOperationException (swallowed by the callback's
+                // try/catch → silent callback loss).  The bounded-retry snapshot mirrors the
+                // SnapshotEntries guard added for globals in commit 224c52e3.
+                if (ImportStack != null)
+                    childVm.InitImportStack(IsolationHelpers.SnapshotImportStack(ImportStack));
 
                 childVm.InitGlobalSlots(vmFn.Chunk);
                 StashValue[] argsCopy = args.ToArray();
-                StashValue result = childVm.CallClosureDirect(vmFn, argsCopy);
-                // Sync any globals modified by the child back to the parent VM's slot array.
-                // The child writes through to the shared _globals dict; refresh the parent's slots.
-                ActiveVM?.RefreshGlobalSlots();
-                return result;
+                return childVm.CallClosureDirect(isolatedFn, argsCopy);
+                // Note: we no longer call ActiveVM?.RefreshGlobalSlots() because the child
+                // now has its own isolated globals dict — writes are call-local, not shared.
             }
         }
         return callable.CallDirect(Fork(), args);

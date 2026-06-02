@@ -42,6 +42,16 @@ public static partial class UnixSignal
     }
 
     /// <summary>
+    /// Changes the working directory of the current process.
+    /// Only call this on Unix platforms — used by <c>process.replace</c> to align
+    /// the real process cwd with the VM's virtual cwd immediately before <c>execvp</c>.
+    /// </summary>
+    /// <param name="path">The absolute path to change to.</param>
+    /// <returns>0 on success; -1 on failure with <c>errno</c> set.</returns>
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    public static partial int chdir(string path);
+
+    /// <summary>
     /// Replaces the current process with the specified program.
     /// On success, this call does not return.
     /// On failure, returns -1 with errno set.

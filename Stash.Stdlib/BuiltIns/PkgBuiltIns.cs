@@ -204,11 +204,11 @@ public static partial class PkgBuiltIns
         string startDir;
         if (ctx.CurrentFile != null)
         {
-            startDir = Path.GetDirectoryName(ctx.CurrentFile) ?? Directory.GetCurrentDirectory();
+            startDir = Path.GetDirectoryName(ctx.CurrentFile) ?? ctx.WorkingDirectory;
         }
         else
         {
-            startDir = Directory.GetCurrentDirectory();
+            startDir = ctx.WorkingDirectory;
         }
         return ModuleResolver.FindProjectRoot(startDir);
     }

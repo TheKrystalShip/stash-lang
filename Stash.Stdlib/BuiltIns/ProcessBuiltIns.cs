@@ -148,7 +148,17 @@ public static partial class ProcessBuiltIns
         }
         else
         {
-            // Unix: true exec — replaces the current process image
+            // Unix: true exec — replaces the current process image.
+            // chdir to the VM's virtual cwd immediately before execvp: execvp inherits the
+            // host process cwd (no WorkingDirectory argument exists for execvp), and the VM's
+            // WorkingDirectory may differ from System.Environment.CurrentDirectory (the real
+            // process cwd) because env.chdir no longer writes through to the real cwd.
+            // process.replace is embedded-forbidden (checked above), so this targeted real-cwd
+            // write is the one permitted carve-out (Decision Log 2026-06-02-Q2).
+            string vmCwd = ctx.WorkingDirectory;
+            if (!string.IsNullOrEmpty(vmCwd))
+                UnixSignal.chdir(vmCwd); // best-effort; if it fails execvp will use the real cwd
+
             int result = UnixSignal.Exec(program, arguments.ToArray());
 
             // If we get here, execvp failed
@@ -199,7 +209,7 @@ public static partial class ProcessBuiltIns
             throw new TypeError("process.exec: 'args' must be an array.");
 
         var rawArgs = (List<StashValue>)args[1].AsObj!;
-        var argv = ResolveArgv(rawArgs, "process.exec");
+        var argv = ResolveArgv(ctx, rawArgs, "process.exec");
 
         if (extraLeading.Count > 0)
         {
@@ -247,7 +257,7 @@ public static partial class ProcessBuiltIns
         var commandBuf = new System.Text.StringBuilder();
         for (int i = 0; i < rawStages.Count; i++)
         {
-            var (stageProgram, stageArgv) = ParsePipelineStage(rawStages[i], i, "process.pipeline");
+            var (stageProgram, stageArgv) = ParsePipelineStage(ctx, rawStages[i], i, "process.pipeline");
             stages.Add((stageProgram, stageArgv));
             if (commandBuf.Length > 0) commandBuf.Append(" | ");
             commandBuf.Append(stageProgram);
@@ -280,6 +290,7 @@ public static partial class ProcessBuiltIns
         {
             psi.ArgumentList.Add(arg);
         }
+        ApplyCwdAndEnv(psi, ctx, null, null);
 
         var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new IOError("Failed to start process.");
         var fields = new Dictionary<string, StashValue>
@@ -660,6 +671,7 @@ public static partial class ProcessBuiltIns
         {
             psi.ArgumentList.Add(arg);
         }
+        ApplyCwdAndEnv(psi, ctx, null, null);
 
         var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new IOError("Failed to daemonize process.");
 
@@ -875,37 +887,16 @@ public static partial class ProcessBuiltIns
     /// <param name="path">The directory path to change to</param>
     /// <exception cref="CommandError">if the specified directory does not exist</exception>
     /// <returns>null</returns>
-    [StashFn, StashDeprecated("env.chdir")]
-    private static void Chdir(IInterpreterContext ctx, string path)
-    {
-        string expanded = ctx.ExpandTilde(path);
-        string resolved = System.IO.Path.GetFullPath(expanded);
-        if (!System.IO.Directory.Exists(resolved))
-            throw new CommandError($"no such directory: {resolved}", exitCode: -1);
-
-        var stack = ctx.DirStack;
-        if (stack.Count >= 256)
-            stack.RemoveAt(0);
-
-        System.Environment.CurrentDirectory = resolved;
-        stack.Add(resolved);
-    }
+    [StashFn(Raw = true), StashDeprecated("env.chdir")]
+    private static StashValue Chdir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.Chdir(ctx, args, "process.chdir");
 
     /// <summary>Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.</summary>
     /// <exception cref="CommandError">if the directory stack is at its root entry and cannot be popped further</exception>
     /// <returns>The directory path that was popped</returns>
-    [StashFn, StashDeprecated("env.popDir")]
-    private static string PopDir(IInterpreterContext ctx)
-    {
-        var stack = ctx.DirStack;
-        if (stack.Count <= 1)
-            throw new CommandError("directory stack is at root", exitCode: -1);
-
-        string popped = stack[^1];
-        stack.RemoveAt(stack.Count - 1);
-        System.Environment.CurrentDirectory = stack[^1];
-        return popped;
-    }
+    [StashFn(Raw = true), StashDeprecated("env.popDir")]
+    private static StashValue PopDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.PopDir(ctx, args, "process.popDir");
 
     /// <summary>Returns a copy of the directory stack, oldest entry first.</summary>
     /// <returns>An array of directory path strings</returns>
@@ -930,24 +921,9 @@ public static partial class ProcessBuiltIns
     /// <param name="fn">The function to execute in the new directory</param>
     /// <exception cref="IOError">if the specified directory does not exist</exception>
     /// <returns>The return value of fn</returns>
-    [StashFn, StashDeprecated("env.withDir")]
-    private static StashValue WithDir(IInterpreterContext ctx, string path, IStashCallable fn)
-    {
-        string resolved = System.IO.Path.GetFullPath(path);
-        if (!System.IO.Directory.Exists(resolved))
-            throw new IOError($"process.withDir: directory does not exist: '{resolved}'.");
-
-        string previous = System.Environment.CurrentDirectory;
-        System.Environment.CurrentDirectory = resolved;
-        try
-        {
-            return ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
-        }
-        finally
-        {
-            System.Environment.CurrentDirectory = previous;
-        }
-    }
+    [StashFn(Raw = true), StashDeprecated("env.withDir")]
+    private static StashValue WithDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+        => CurrentProcessImpl.WithDir(ctx, args, "process.withDir");
 
     /// <summary>Returns the exit code of the most recently executed bare command pipeline. Defaults to 0 until any command has run.</summary>
     /// <returns>The exit code as an integer</returns>
@@ -1053,15 +1029,15 @@ public static partial class ProcessBuiltIns
     ///   <item>scalar → stringify</item>
     /// </list>
     /// </summary>
-    private static List<string> ResolveArgv(List<StashValue> rawArgs, string callerName)
+    private static List<string> ResolveArgv(IInterpreterContext ctx, List<StashValue> rawArgs, string callerName)
     {
         var argv = new List<string>(rawArgs.Count);
         foreach (var arg in rawArgs)
-            ResolveArgvElement(arg, argv, callerName, depth: 0);
+            ResolveArgvElement(ctx, arg, argv, callerName, depth: 0);
         return argv;
     }
 
-    private static void ResolveArgvElement(StashValue arg, List<string> argv, string callerName, int depth)
+    private static void ResolveArgvElement(IInterpreterContext ctx, StashValue arg, List<string> argv, string callerName, int depth)
     {
         if (arg.IsNull)
             throw new TypeError($"{callerName}: argv element cannot be null.");
@@ -1076,7 +1052,7 @@ public static partial class ProcessBuiltIns
             // For Phase A: fallback to literal text (no glob matching from API layer).
             if (litArg.ShouldExpand && Stash.Runtime.ShellExpansion.GlobExpandHandler is { } globHandler)
             {
-                var matches = globHandler(text, System.Environment.CurrentDirectory);
+                var matches = globHandler(text, ctx.WorkingDirectory);
                 if (matches.Count == 0)
                     argv.Add(text); // no match — keep literal (same as bash nullglob off)
                 else
@@ -1093,7 +1069,7 @@ public static partial class ProcessBuiltIns
         {
             // One level of array splat.
             foreach (var elem in nested)
-                ResolveArgvElement(elem, argv, callerName, depth: 1);
+                ResolveArgvElement(ctx, elem, argv, callerName, depth: 1);
             return;
         }
 
@@ -1117,16 +1093,33 @@ public static partial class ProcessBuiltIns
         };
     }
 
-    private static void ApplyCwdAndEnv(ProcessStartInfo psi, string? cwd, Dictionary<string, string>? env)
+    /// <summary>
+    /// Seeds <paramref name="psi"/> with cwd and env from the per-VM context.
+    /// Per-call <paramref name="cwd"/> / <paramref name="env"/> overrides take precedence
+    /// when provided.  When they are null, the VM's <c>WorkingDirectory</c> and the merged
+    /// overlay+real env (<c>ctx.AllEnv()</c>) are used — this is the single chokepoint that
+    /// makes <c>env.set</c> / <c>env.chdir</c> visible to all spawned child processes.
+    /// </summary>
+    private static void ApplyCwdAndEnv(ProcessStartInfo psi, IInterpreterContext ctx, string? cwd, Dictionary<string, string>? env)
     {
-        if (cwd is not null)
-            psi.WorkingDirectory = cwd;
+        // cwd: per-call override wins; otherwise use the VM's virtual cwd.
+        psi.WorkingDirectory = cwd ?? ctx.WorkingDirectory;
 
+        // env: per-call override (full replacement) wins; otherwise seed child env from VM's
+        // merged view (overlay wins over real process env, explicit-unsets excluded).
         if (env is not null)
         {
-            // Replace, do not merge — caller is expected to dict.merge(env.all(), ...) if they want inheritance.
+            // Caller supplied an explicit env dict — full replacement (existing behaviour).
             psi.Environment.Clear();
             foreach (var kvp in env)
+                psi.Environment[kvp.Key] = kvp.Value;
+        }
+        else
+        {
+            // No explicit env override: replace child env with the VM's merged view so the child
+            // sees exactly what this VM sees (overlay wins, explicit-unset keys absent).
+            psi.Environment.Clear();
+            foreach (var kvp in ctx.AllEnv())
                 psi.Environment[kvp.Key] = kvp.Value;
         }
     }
@@ -1309,7 +1302,7 @@ public static partial class ProcessBuiltIns
         return result;
     }
 
-    private static (string Program, List<string> Argv) ParsePipelineStage(StashValue raw, int index, string callerName)
+    private static (string Program, List<string> Argv) ParsePipelineStage(IInterpreterContext ctx, StashValue raw, int index, string callerName)
     {
         string program = "";
         List<StashValue> rawArgs = new();
@@ -1335,7 +1328,7 @@ public static partial class ProcessBuiltIns
         if (string.IsNullOrEmpty(program))
             throw new ValueError($"{callerName}: stage[{index}] 'program' must be a non-empty string.");
 
-        return (program, ResolveArgv(rawArgs, callerName));
+        return (program, ResolveArgv(ctx, rawArgs, callerName));
     }
 
     /// <summary>Core dispatcher for process.exec — applies opts and chooses the execution path.</summary>
@@ -1354,14 +1347,14 @@ public static partial class ProcessBuiltIns
             }
             case ExecModeEnum.Passthrough:
             {
-                var (_, _, exitCode) = ExecPassthroughDirect(program, argv, ctx.CancellationToken, opts.Cwd, opts.Env);
+                var (_, _, exitCode) = ExecPassthroughDirect(program, argv, ctx, opts.Cwd, opts.Env);
                 if (opts.Strict && exitCode != 0)
                     ThrowCommandError(commandLabel, exitCode, "", "");
                 return StashValue.FromObj(RuntimeValues.CreateCommandResult("", "", exitCode));
             }
             default: // Capture
             {
-                var (stdout, stderr, exitCode) = ExecCapturedDirect(program, argv, ctx.CancellationToken, opts.Cwd, opts.Env);
+                var (stdout, stderr, exitCode) = ExecCapturedDirect(program, argv, ctx, opts.Cwd, opts.Env);
                 if (opts.Strict && exitCode != 0)
                     ThrowCommandError(commandLabel, exitCode, stderr, stdout);
 
@@ -1389,7 +1382,7 @@ public static partial class ProcessBuiltIns
         }
 
         // Capture mode (Passthrough rejected by caller)
-        var (stdout, stderr, exitCode) = ExecPipelineCaptured(stages, ctx.CancellationToken, opts.Cwd, opts.Env);
+        var (stdout, stderr, exitCode) = ExecPipelineCaptured(stages, ctx, opts.Cwd, opts.Env);
         if (opts.Strict && exitCode != 0)
             ThrowCommandError(commandLabel, exitCode, stderr, stdout);
 
@@ -1401,7 +1394,7 @@ public static partial class ProcessBuiltIns
     }
 
     private static (string Stdout, string Stderr, long ExitCode) ExecCapturedDirect(
-        string program, List<string> arguments, CancellationToken ct,
+        string program, List<string> arguments, IInterpreterContext ctx,
         string? cwd = null, Dictionary<string, string>? env = null)
     {
         var psi = new ProcessStartInfo
@@ -1415,7 +1408,7 @@ public static partial class ProcessBuiltIns
         };
         foreach (string arg in arguments)
             psi.ArgumentList.Add(arg);
-        ApplyCwdAndEnv(psi, cwd, env);
+        ApplyCwdAndEnv(psi, ctx, cwd, env);
 
         System.Diagnostics.Process process;
         try
@@ -1429,6 +1422,7 @@ public static partial class ProcessBuiltIns
             throw new CommandError($"process.exec: failed to start '{program}': {ex.Message}", exitCode: -1);
         }
 
+        var ct = ctx.CancellationToken;
         using (process)
         {
             var stdoutTask = System.Threading.Tasks.Task.Run(() => process.StandardOutput.ReadToEnd());
@@ -1451,7 +1445,7 @@ public static partial class ProcessBuiltIns
     }
 
     private static (string Stdout, string Stderr, long ExitCode) ExecPassthroughDirect(
-        string program, List<string> arguments, CancellationToken ct,
+        string program, List<string> arguments, IInterpreterContext ctx,
         string? cwd = null, Dictionary<string, string>? env = null)
     {
         var psi = new ProcessStartInfo
@@ -1465,7 +1459,7 @@ public static partial class ProcessBuiltIns
         };
         foreach (string arg in arguments)
             psi.ArgumentList.Add(arg);
-        ApplyCwdAndEnv(psi, cwd, env);
+        ApplyCwdAndEnv(psi, ctx, cwd, env);
 
         System.Diagnostics.Process process;
         try
@@ -1479,6 +1473,7 @@ public static partial class ProcessBuiltIns
             throw new CommandError($"process.exec: failed to start '{program}': {ex.Message}", exitCode: -1);
         }
 
+        var ct = ctx.CancellationToken;
         using (process)
         {
             try
@@ -1509,7 +1504,7 @@ public static partial class ProcessBuiltIns
         };
         foreach (string arg in arguments)
             psi.ArgumentList.Add(arg);
-        ApplyCwdAndEnv(psi, cwd, env);
+        ApplyCwdAndEnv(psi, ctx, cwd, env);
 
         System.Diagnostics.Process process;
         try
@@ -1529,9 +1524,10 @@ public static partial class ProcessBuiltIns
     }
 
     private static (string Stdout, string Stderr, long ExitCode) ExecPipelineCaptured(
-        List<(string Program, List<string> Argv)> stages, CancellationToken ct,
+        List<(string Program, List<string> Argv)> stages, IInterpreterContext ctx,
         string? cwd = null, Dictionary<string, string>? env = null)
     {
+        var ct = ctx.CancellationToken;
         int n = stages.Count;
         var processes = new System.Diagnostics.Process[n];
         int started = 0;
@@ -1553,7 +1549,7 @@ public static partial class ProcessBuiltIns
                 };
                 foreach (string arg in argv)
                     psi.ArgumentList.Add(arg);
-                ApplyCwdAndEnv(psi, cwd, env);
+                ApplyCwdAndEnv(psi, ctx, cwd, env);
 
                 try
                 {
@@ -1689,7 +1685,7 @@ public static partial class ProcessBuiltIns
                 };
                 foreach (string arg in argv)
                     psi.ArgumentList.Add(arg);
-                ApplyCwdAndEnv(psi, cwd, env);
+                ApplyCwdAndEnv(psi, ctx, cwd, env);
 
                 try
                 {

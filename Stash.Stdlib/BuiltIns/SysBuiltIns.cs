@@ -186,7 +186,7 @@ public static partial class SysBuiltIns
     /// <returns>Full path to the executable (or null), or an array of paths when all=true</returns>
     // Raw: return type is polymorphic — string|null when all=false, array when all=true
     [StashFn(Raw = true, ReturnType = "string")]
-    private static StashValue Which(IInterpreterContext _, ReadOnlySpan<StashValue> args)
+    private static StashValue Which(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
         if (args.Length < 1 || args.Length > 2)
             throw new RuntimeError("'sys.which' requires 1 or 2 arguments.");
@@ -222,7 +222,7 @@ public static partial class SysBuiltIns
             return all ? StashValue.FromObj(new List<StashValue>()) : StashValue.Null;
         }
 
-        string? pathEnv = System.Environment.GetEnvironmentVariable("PATH");
+        string? pathEnv = ctx.GetEnv("PATH");
         if (string.IsNullOrEmpty(pathEnv))
             return all ? StashValue.FromObj(new List<StashValue>()) : StashValue.Null;
 
@@ -232,7 +232,7 @@ public static partial class SysBuiltIns
         string[] extensions;
         if (OperatingSystem.IsWindows())
         {
-            string pathExt = System.Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD";
+            string pathExt = ctx.GetEnv("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD";
             extensions = ["", .. pathExt.Split(';', StringSplitOptions.RemoveEmptyEntries)];
         }
         else
