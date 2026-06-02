@@ -238,4 +238,42 @@ public class CurrentProcessImplTests
             Directory.Delete(dir, true);
         }
     }
+
+    // =========================================================================
+    // StashEngine path (CLI-mode EmbeddedMode=true) — done_when #2 second half
+    // =========================================================================
+
+    /// <summary>
+    /// Verifies the "no general write-through" invariant via the StashEngine API path
+    /// (done_when #2 second bullet: "verified in BOTH the default-constructed-VM path AND
+    /// the CLI-mode StashEngine path").  <c>StashEngine</c> constructs the VM with
+    /// <c>EmbeddedMode=true</c> and shares one VM across successive Execute/Evaluate calls.
+    /// </summary>
+    [Fact]
+    public void StashEngine_Chdir_UpdatesVmCwd_DoesNotMutateRealCwd()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+        string dir = CreateTempDir();
+        string realCwdBefore = System.Environment.CurrentDirectory;
+        try
+        {
+            var engine = new StashEngine();
+            // Run env.chdir via StashEngine (same VM persists across calls)
+            var runResult = engine.Run($"env.chdir(\"{dir}\");");
+            Assert.True(runResult.Success, $"env.chdir failed: {string.Join(", ", runResult.Errors)}");
+
+            // Evaluate env.cwd — must reflect the VM's new cwd
+            var evalResult = engine.Evaluate("env.cwd");
+            Assert.True(evalResult.Success, $"env.cwd eval failed: {string.Join(", ", evalResult.Errors)}");
+            Assert.Equal(Path.GetFullPath(dir), evalResult.Value);
+
+            // Real process cwd must be unchanged
+            Assert.Equal(realCwdBefore, System.Environment.CurrentDirectory);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
 }
