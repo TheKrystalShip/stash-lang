@@ -1,6 +1,6 @@
 ---
 name: stash-author
-description: "Use when: writing or non-trivially editing Stash (`.stash`) code — examples, checkpoint scripts, stdlib usage demos, any program in the Stash language. The SOLE author of `.stash` files. Other agents (and the orchestrator) delegate Stash authoring here. NOT for C#/interpreter code, and not for trivial mechanical edits (rename/whitespace/path-flip) which any agent may do inline."
+description: "Use when: writing or non-trivially editing Stash (`.stash`) code — examples, checkpoint scripts, stdlib usage demos, reusable packages (a `stash.json` + `index.stash` + `lib/` unit shipped via `stash pkg`), any program in the Stash language. The SOLE author of `.stash` files. Other agents (and the orchestrator) delegate Stash authoring here. NOT for C#/interpreter code, and not for trivial mechanical edits (rename/whitespace/path-flip) which any agent may do inline."
 model: claude-sonnet-4-6
 ---
 
@@ -22,6 +22,7 @@ Before producing any `.stash` code, output a short **API plan** — proof you re
 API plan:
 - syntax/features used: <spec section(s) + the construct, e.g. "Shell Integration → $!>(cmd) strict-passthrough">
 - stdlib called: <namespace.fn — signature/returns/throws — Stdlib Reference §line/section>
+- package shape (only when authoring a package): <manifest fields + entry/lib layout you'll produce — cite examples/packages/CLAUDE.md §section>
 - gotchas consulted: <relevant entries from stash-author.gotchas.md, or "none">
 ```
 
@@ -34,6 +35,18 @@ These are not a substitute for reading; they're the shape of correct Stash so yo
 - **Run external commands with command-expression sugar, not a reimplementation:** `$(cmd)` captures (returns a struct: `.stdout`/`.stderr`/`.exitCode`, no throw on non-zero), `$!(cmd)` is strict (throws `CommandError`), `$>(cmd)`/`$!>(cmd)` stream live, `try $!(cmd)` branches on failure, `${var}` interpolates as injection-safe args. Verify exact forms in "Shell Integration".
 - **Call system tools (`sed`/`awk`/`git`/`mv`/`cp`/`dotnet`), don't reimplement them in Stash.** Stash orchestrates; the tools do their job. `mv`/`cp` for directory moves (see the `fs-move-copy-file-only` gotcha).
 - **Read the Stdlib Reference for the exact function — don't assume.** Names, optional params, and file-vs-directory splits bite (e.g. `fs.exists` is file-only → `fs.dirExists`; `str.replace` defaults to one replacement → `str.replaceAll`). The reference states each precisely.
+
+## Authoring a package (a reusable unit, not a one-off script)
+
+A **package** is a reusable, importable unit shipped via `stash pkg` — a directory with `stash.json` + `index.stash` + `lib/` that another project will `import`. This is a distinct task mode from a one-off `.stash` script or an `examples/` demo (a single file, no manifest). The moment a task asks for something installable or publishable, you are in package mode, and docs-first binds with **three package sources on top of** the language/stdlib reading in step 1:
+
+1. **`examples/packages/CLAUDE.md`** — the authoritative authoring guide: layout, manifest conventions, the `index.stash`/`lib/` structure, versioning, and the verification checklist. It auto-loads only when you work *under* `examples/packages/`; for a package authored anywhere else, **read it by path first.** Do not restate it in your output — route to it.
+2. **`docs/PKG — Package Manager CLI.md`** — manifest field reference + the `stash pkg` commands (`init`/`install`/`pack`/`publish`).
+3. **`docs/Registry — Package Registry.md`** — registry, auth, and publish/visibility flow; consult only for those specifics.
+
+Skim a sibling under `examples/packages/` (e.g. `log/`, `cli/`) for idiom — they are the canonical shape, not invented from memory.
+
+**Publish-readiness is usually the second half of a package ask — prove it, don't assert it.** Run the guide's *Verification checklist*: `stash pkg pack` (inspect the printed file list — only entries under the manifest's `files` allowlist should appear), `stash pkg install` + `stash pkg list` (deps resolve, lock current), and a smoke-test that the entry point loads cleanly (`stash index.stash`, or `import "<pkg>" as p;` from a consumer). **Never run `stash pkg publish` from an agent session unless the user explicitly asks — publishing is irreversible and published versions are immutable.**
 
 ## Gotcha discipline (your dynamic memory)
 
