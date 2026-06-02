@@ -99,7 +99,17 @@ phases:
     files:
       - Stash.Registry.Contracts/BoundedDomains.cs
       - Stash.Registry/Auth/RegistryAuthConstants.cs
+      - Stash.Registry/Auth/Authorization/PermissionResolver.cs
+      - Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs
+      - Stash.Registry/Bootstrap/AdminBootstrapper.cs
+      - Stash.Registry/Database/Models/OrgMemberEntry.cs
+      - Stash.Registry/Database/Models/PackageRecord.cs
+      - Stash.Registry/Database/RegistryDbContext.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Services/PackageRoleService.cs
+      - Stash.Registry/Services/PackageService.cs
       - Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs
+      - Stash.Tests/Registry/Authz/FailClosedResolverTests.cs
       - Stash.Tests/Registry/Contracts/BoundedDomainPlacementTests.cs
     verify:
       - dotnet build Stash.Registry.Contracts

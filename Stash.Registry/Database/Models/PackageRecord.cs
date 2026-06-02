@@ -1,5 +1,6 @@
 using System;
 using Stash.Registry.Auth;
+using Stash.Registry.Contracts;
 
 namespace Stash.Registry.Database.Models;
 

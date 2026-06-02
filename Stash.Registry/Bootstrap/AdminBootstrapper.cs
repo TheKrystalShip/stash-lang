@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Stash.Registry.Auth;
 using Stash.Registry.Configuration;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 
 namespace Stash.Registry.Bootstrap;
