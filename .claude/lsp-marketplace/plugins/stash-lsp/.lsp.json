@@ -1,0 +1,8 @@
+{
+  "stash": {
+    "command": "stash-lsp",
+    "extensionToLanguage": {
+      ".stash": "stash"
+    }
+  }
+}

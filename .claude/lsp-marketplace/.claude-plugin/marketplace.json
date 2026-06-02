@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "stash-local",
+  "description": "Local marketplace for Stash language development tooling (dogfooded in stash-lang)",
+  "owner": {
+    "name": "Cristian Moraru",
+    "email": "cristian.moraru@live.com"
+  },
+  "plugins": [
+    {
+      "name": "stash-lsp",
+      "description": "Stash language server for .stash files (pre-alpha)",
+      "source": "./plugins/stash-lsp"
+    }
+  ]
+}

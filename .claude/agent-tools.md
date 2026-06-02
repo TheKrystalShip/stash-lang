@@ -1,113 +1,77 @@
-# Agent Tools — LSP & Debugging
+# Code Navigation & Search Tools
 
-> **Availability:** These tools require the Stash VS Code extension (`stash-lang`) to be active in the current VS Code workspace. They are available when Claude Code is running as a VS Code extension and the language server is running. They are **not available** in terminal-only Claude Code sessions. Fall back to `grep`/`find`/`Read` when not in VS Code context.
+How an agent should navigate and search this codebase, and which tool to reach for. There are **two
+contexts** with different toolsets:
 
-Two VS Code extensions expose language server and debugging capabilities as Language Model Tools for AI agents. These tools are **always preferred** over manual file reading or terminal-based workarounds when the information they provide is sufficient.
+- **Terminal / CLI Claude Code (the common case here):** the native **`LSP` tool** (below) plus
+  `grep`/`rg`/`Read`. No debugger tool.
+- **Claude Code running *inside* VS Code:** additionally exposes the project-built `lsp-agent-tools`
+  and `debug-agent-tools` extensions (see the last section). These do **not** exist in a terminal
+  session — don't assume them.
 
-## LSP Tools (lsp-agent-tools)
+## Choosing a tool: grep vs Read vs LSP
 
-Seven tools wrapping VS Code's LSP integration. Work with **any language that has an active language server** — Stash, TypeScript, Python, C#, etc.
+The deciding question is **"am I matching text, or asking about a symbol's meaning?"**
 
-### When to Use LSP Tools Instead of File Reading
+| Need | Reach for | Why |
+| ---- | --------- | --- |
+| *Where does this **text/pattern** appear?* (literal, config key, TODO, concept, name when location unknown) | **`grep` / `rg`** | Broad, fast, language-agnostic; works on comments, strings, markdown, config, and file types with no language server. |
+| *Understand the logic/flow of a file I've already located* | **`Read`** | Comprehension in context — not search. |
+| *A **semantic** question about a specific symbol* — where is **this** defined, who really references this binding, its type/signature/doc, a file's outline, the call graph | **`LSP`** | Understands scopes, bindings, and types, so it excludes the false positives a text search can't (`grep deploy` also hits a comment, the string `"deployed"`, and an unrelated `deploy`). |
 
-| Need                               | Use This                       | Not This                                         |
-| ---------------------------------- | ------------------------------ | ------------------------------------------------ |
-| Function signature or type         | `lsp_hover`                    | Reading the file and scanning for the definition |
-| File structure / outline           | `lsp_documentSymbols`          | Reading the entire file                          |
-| What calls a function              | `lsp_callHierarchy` (incoming) | `grep_search` for the function name              |
-| What a function calls              | `lsp_callHierarchy` (outgoing) | Reading the function body                        |
-| Find a symbol across the workspace | `lsp_workspaceSymbols`         | `file_search` + `grep_search`                    |
-| How to call a function             | `lsp_signatureHelp`            | Reading the function definition                  |
-| Navigate to a type's definition    | `lsp_typeDefinition`           | `grep_search` for the type name                  |
-| Available quick fixes for an error | `lsp_codeActions`              | Inventing a fix manually                         |
+These **compose**: `grep` to find an unknown thing by name → `LSP` for its precise definition/references
+→ `Read` to understand the surrounding logic.
 
-### Tool Reference
+**This is a heuristic, not a mandate.** Use the cheapest tool that actually answers the question.
+Don't force `LSP` when a text sweep is the real need; don't `grep` for a symbol's definition when `LSP`
+gives it precisely. The bias to add (vs. pure habit): for **definition / references / type / file-outline
+of a known symbol in a `.cs` or `.stash` file**, prefer `LSP` — that's where it's strictly better, and
+for `.stash` it's the only semantic option that exists.
 
-| Tool                   | Purpose                                       | Required Params      | Key Optional Params                                                                                      |
-| ---------------------- | --------------------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `lsp_hover`            | Type info, docs, signatures for a symbol      | `filePath`, `symbol` | `lineContent`, `line` (disambiguation)                                                                   |
-| `lsp_documentSymbols`  | Structured outline of all symbols in a file   | `filePath`           | `kind` filter: function, class, method, variable, constant, struct, enum, interface, namespace, property |
-| `lsp_callHierarchy`    | Incoming callers / outgoing callees           | `filePath`, `symbol` | `direction` (incoming/outgoing/both), `depth` (1-3), `lineContent`                                       |
-| `lsp_workspaceSymbols` | Search symbols by name across workspace       | `query`              | `kind` filter, `maxResults` (1-50)                                                                       |
-| `lsp_codeActions`      | Quick fixes, refactorings at a line           | `filePath`, `line`   | `kind` (quickfix/refactor/source/all), `apply` (execute by title), `diagnosticMessage`                   |
-| `lsp_signatureHelp`    | Parameter names, types, order at a call site  | `filePath`, `symbol` | `lineContent` (must match a **call site**, not a definition)                                             |
-| `lsp_typeDefinition`   | Navigate from variable to its type definition | `filePath`, `symbol` | `lineContent`                                                                                            |
+## The native `LSP` tool (terminal / CLI)
 
-### Position Resolution
+**Deferred tool.** Each session it appears only as the name `LSP` in a `<system-reminder>` listing
+deferred tools. Load its schema once with `ToolSearch` (`select:LSP`) before the first call, then invoke
+it like any tool. It is gated behind `ENABLE_LSP_TOOL=1` in `~/.claude/settings.json` plus enabled LSP
+plugins — already configured on this machine (see [[csharp-lsp-not-in-cli]] in agent memory for the full
+setup story).
 
-Tools that accept `symbol` use word-boundary matching to find the symbol in the file. Resolution priority:
+**Operations** (`operation` + `filePath` + `line` + `character`, both 1-based as shown in an editor):
 
-1. **`lineContent`** — scans for a matching line, then finds symbol within it (most precise)
-2. **`line`** — uses the 1-based line number directly
-3. **Fallback** — scans the entire file for the first match
+`goToDefinition`, `findReferences`, `hover`, `documentSymbol`, `workspaceSymbol`, `goToImplementation`,
+`prepareCallHierarchy`, `incomingCalls`, `outgoingCalls`.
 
-For dotted symbols like `arr.push` or `io.println`, the cursor is placed on the **member** part (after the dot), not the namespace prefix.
+**Language coverage:**
 
-**Tip:** When a symbol appears multiple times in a file, always provide `lineContent` or `line` to disambiguate.
+| File type | Server | Plugin |
+| --------- | ------ | ------ |
+| `.cs` | `csharp-ls` | `csharp-lsp@claude-plugins-official` |
+| `.stash` | `stash-lsp` | `stash-lsp@stash-local` (local marketplace at `.claude/lsp-marketplace/`) |
 
-### Limitations
+Any other extension returns `No LSP server available for file type`.
 
-- **`lsp_signatureHelp`** requires the cursor at a **call site** (where the function is called with parentheses), not at the function definition. Point it to the file containing the call.
-- **`lsp_callHierarchy`** depends on the language server's call hierarchy provider. Some language servers (e.g., C# in certain configurations) may not register one — the tool will report this.
-- **`lsp_codeActions`** results depend on what the language server offers. Use `kind` to filter (e.g., `quickfix` to see only fixes, not refactorings).
+**Two limits to know:**
 
-## Debug Tools (debug-agent-tools)
+- **No diagnostics.** The `LSP` tool has no diagnostics operation, and this CLI build does **not**
+  auto-surface "red squiggles" after edits. For errors/warnings use the compiler: **`dotnet build`** for
+  C#, and `dotnet test` / running the script for Stash. The `LSP` tool is for *navigation*, not linting.
+- **Lazy + cold start.** A server launches on the first touch of a matching file. `csharp-ls` loads the
+  whole `Stash.sln` (~11 projects, up to a minute) before whole-program results like cross-project
+  `findReferences` are complete; `documentSymbol`/`hover` answer almost immediately.
 
-Eight tools for interactive debugging via VS Code's Debug Adapter Protocol. Work with **any language that has a debug adapter** — Stash, Python, Node.js, etc.
+## When running inside VS Code (not the terminal CLI)
 
-### Typical Debug Workflow
+This project ships two VS Code extensions (`.vscode/extensions/…`, specs in `.kanban/4-done/`) that expose
+*additional* Language Model tools **only** when Claude Code runs as the VS Code extension with a live
+language server:
 
-```
-1. debug_setBreakpoints  → Set breakpoints in the file(s) of interest
-2. debug_startSession    → Launch the program (optionally with stopOnEntry)
-3. debug_getSnapshot     → Inspect current state (file, line, locals, stack)
-4. debug_step            → Step over/in/out to advance execution
-5. debug_evaluate        → Evaluate expressions in the current frame
-6. debug_continue        → Resume to next breakpoint or completion
-7. debug_stopSession     → End session and get summary
-```
+- **`lsp-agent-tools`** — `lsp_hover`, `lsp_documentSymbols`, `lsp_callHierarchy`, `lsp_workspaceSymbols`,
+  `lsp_codeActions`, `lsp_signatureHelp`, `lsp_typeDefinition`. (Note `lsp_codeActions` *can* surface
+  quick-fix diagnostics — a capability the terminal `LSP` tool lacks.)
+- **`debug-agent-tools`** — `debug_setBreakpoints`, `debug_startSession`, `debug_getSnapshot`,
+  `debug_step`, `debug_evaluate`, `debug_continue`, `debug_stopSession`, `debug_removeBreakpoints` (DAP).
 
-### Tool Reference
-
-| Tool                      | Purpose                                       | Required Params         | Key Optional Params                                                                                                                      |
-| ------------------------- | --------------------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `debug_startSession`      | Launch a debug session                        | `program`               | `debugType` (auto-detected), `args`, `cwd`, `env`, `stopOnEntry`, `exceptionBreakpoints` (none/uncaught/all), `noDebug`, `configuration` |
-| `debug_setBreakpoints`    | Set breakpoints in a file (replace semantics) | `file`, `breakpoints[]` | Each breakpoint: `line` (required), `condition`, `hitCondition`, `logMessage`                                                            |
-| `debug_removeBreakpoints` | Remove agent breakpoints                      | —                       | `file` (if omitted, removes all)                                                                                                         |
-| `debug_continue`          | Resume until next pause or exit               | —                       | `threadId`, `timeout` (default: 10s)                                                                                                     |
-| `debug_step`              | Step over/in/out                              | `action` (over/in/out)  | `threadId`, `count` (1-20)                                                                                                               |
-| `debug_getSnapshot`       | Read current debug state                      | —                       | `variableDepth` (0-3), `stackDepth` (1-20), `includeGlobals`                                                                             |
-| `debug_evaluate`          | Evaluate expression in frame context          | `expression`            | `frameIndex` (0 = top), `context` (watch/repl/hover)                                                                                     |
-| `debug_stopSession`       | End session, get summary                      | —                       | `captureOutput` (default: true)                                                                                                          |
-
-### Key Behaviors
-
-- **One session at a time** — starting a new session terminates the previous one.
-- **Replace semantics for breakpoints** — `debug_setBreakpoints` replaces all agent breakpoints in the specified file. Pass an empty array to clear.
-- **Agent vs. user breakpoints** — agent tools never affect user-set breakpoints. Cleanup is automatic on `debug_stopSession`.
-- **Blocking calls** — `debug_continue` and `debug_step` block until the program pauses, exits, or times out.
-- **Snapshots** — `debug_getSnapshot`, `debug_continue`, and `debug_step` all return the current state: file, line, source context, call stack, locals, and captured output.
-
-### Breakpoint Types
-
-```
-Simple:       { "line": 42 }
-Conditional:  { "line": 42, "condition": "x > 5" }
-Hit count:    { "line": 42, "hitCondition": ">= 10" }
-Logpoint:     { "line": 42, "logMessage": "x = {x}, y = {y}" }
-```
-
-### Stash-Specific Debug Configuration
-
-For Stash files, the debug type is `stash` and uses the Stash DAP server. Example:
-
-```
-debug_startSession({
-  program: "/path/to/script.stash",
-  stopOnEntry: true,
-  args: ["--verbose"],
-  exceptionBreakpoints: "all"
-})
-```
-
-The Stash DAP supports all standard features: breakpoints, stepping, variable inspection (including struct fields, dict entries, array elements), closure variables, and expression evaluation.
+The same heuristic applies: prefer these over manual file reading for the information they provide. Full
+reference (parameters, position-resolution rules, limitations) lives in
+`.github/instructions/agent-tools.instructions.md`. If `VSCODE_PID` is unset / `CLAUDE_CODE_ENTRYPOINT=cli`,
+you are **not** in VS Code — use the native `LSP` tool and `grep`/`Read` instead.

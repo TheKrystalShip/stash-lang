@@ -1,0 +1,10 @@
+{
+  "name": "stash-lsp",
+  "description": "Stash language server for .stash files (pre-alpha, dogfooded in stash-lang)",
+  "version": "0.1.0",
+  "author": {
+    "name": "Cristian Moraru",
+    "email": "cristian.moraru@live.com"
+  },
+  "license": "MIT"
+}
