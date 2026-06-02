@@ -114,3 +114,45 @@ These are good practice regardless and are **not** on this feature's critical pa
 - Bounded-domain rule + meta-test pattern: `CLAUDE.md`, `Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs`
 - Current CLI client: `Stash.Cli/PackageManager/RegistryClient.cs`, `Stash.Cli/PackageManager/CliJsonContext.cs`
 - Registry contracts: `Stash.Registry/Contracts/`, `Stash.Registry/Auth/RegistryAuthConstants.cs`
+
+---
+
+## Investigation Addendum — 2026-06-02 (orchestrator, pre-spec)
+
+A pre-spec investigation verified this doc against the current `main` and surfaced concrete details to fold into `plan.yaml` when this is promoted via `/spec`. The design below is unchanged; this addendum adds verified specifics and the coordination with `pkg-cli-api-parity`.
+
+> **Sequencing (superseded — read latest):** An initial 2026-06-02 call deferred this until `pkg-cli-api-parity` landed (parity was about to reshape the wire surface). **Reversed later the same day:** the parity spec was re-specced to match the *current* registry API contract (it adds **no new server DTOs** — every role/scope/org/visibility DTO already exists in `Stash.Registry/Contracts/`). The wire surface is therefore settled, so this feature is being **specced and built FIRST** as the foundation; the parity spec is then updated to **consume** the shared project instead of declaring CLI "mirror DTOs."
+
+### Coordination with `pkg-cli-api-parity`
+
+`pkg-cli-api-parity` is now a downstream **consumer**, not a blocker. Its re-specced plan (`.kanban/2-in-progress/pkg-cli-api-parity/`) is a CLI-surface feature whose P2 currently plans to hand-declare CLI mirror DTOs (`PackageRoleResponse`, `PackageRolesListResponse`, `ScopeDetailResponse`, `ScopeChallengeBody`, `CreateOrgResponse`, `OrgDetailResponse`, `CreateTeamResponse`, `ClaimScopeRequest`, `CreateOrgRequest`, `AddOrgMemberRequest`, `CreateTeamRequest`, `AddTeamMemberRequest`) and register them in `CliJsonContext` — **exactly the duplication this project removes**. After this lands, the parity session updates that plan to consume the shared types.
+
+Two concrete coordination points:
+
+1. **`PackageContracts.cs` is shared between both features.** This feature **moves** `PackageContracts.cs` into the shared project unchanged (it keeps the derived `Owners` field). Parity P1 ("Drop owners field from `PackageDetailResponse`") then edits the file **in its new location** (`Stash.Registry.Contracts/`). This feature does **not** drop `Owners` (out of scope — that's parity's contract cleanup). Whoever lands second adjusts the file path.
+2. **Implementation serializes on the CLI files.** Both touch `RegistryClient.cs` and `CliJsonContext.cs`. This feature lands first (creates the project, migrates the CLI's *existing* duplicates to shared types, re-points `CliJsonContext`); parity rebases onto the shared types for its *new* methods/commands. A CLI no-magic-strings meta-test landed here (see scope decision) then enforces the regime over parity's new CLI code from day one.
+
+Upstream deps (from "Dependencies and Sequencing" above): `registry-authz-pipeline` is **DONE** (`.kanban/4-done/registry-authz-pipeline`); `registry-web-api-readiness` is still backlog and additive (a *soft* dep — its future DTOs are added to the shared project when they land).
+
+### Verified extraction blockers (handle in the migration phase)
+
+1. **`AdminContracts.AuditLogResponse` embeds `AuditEntry`, an EF database entity** (`Stash.Registry/Database/Models/AuditEntry.cs`). A dependency-free DTO project cannot carry it. Add a net-new `AuditEntryResponse` DTO (wire fields: action, package, version, user, target, ip, timestamp, decision, denyReason) and map DB→DTO in `AdminController`. Expected to be the **only** net-new DTO (no speculative Razor DTOs — move what exists).
+2. **`OrganizationContracts.cs` carries a stale `using Stash.Registry.Database.Models`** (no DB type actually used). Drop it during the move.
+
+### Verified CLI duplicate map (CLI re-declares ↔ registry owns) + drift
+
+- `LoginRequest`↔`LoginRequest` (nullability differs); `AssignRoleRequest`/`RevokeRoleRequest` identical; `TokenRefreshRequest`↔`RefreshTokenRequest` (same shape, different name); `DeprecatePackageCliRequest`↔`DeprecatePackageRequest` and `DeprecateVersionCliRequest`↔`DeprecateVersionRequest` (renamed; CLI dropped `[MinLength(1)]` validation); `TokenCreateRequest`↔`TokenCreateRequest` (CLI **missing** `name` + `capabilities`); `TokenCreateResult`↔`TokenCreateResponse`; `TokenListResult`/`TokenListItemResult`↔`TokenListResponse`/`TokenListItem`; `SearchResults`/`SearchResultPackage`↔`SearchResponse`/`PackageSummaryResponse` (CLI missing `pageSize`/`keywords`). Adopting shared names = renaming CLI call sites.
+- CLI-only projections that **stay CLI-side** (not wire DTOs): `LoginResult` (client-side `MachineId`), `WhoamiInfo`, `UserConfig`/`RegistryEntry`.
+- **Honest tiering:** sharing the *request* DTOs (Tier 1) does **not** fix the runtime drifts above — those live in the CLI's raw `JsonDocument` response parsing (`Login`, `Whoami`, `GetManifest`, versions/latest, integrity, deprecation). Typing those against shared response DTOs is a separable **Tier 2** phase. The brief must not claim Tier 1 "eliminates drift."
+
+### Behavior decision to resolve at spec time
+
+**whoami `email` is dead code.** `RegistryClient.WhoamiDetailed()` reads an `email` field, but `WhoamiResponse` returns only `{username, role}` and `UserRecord` has no email column — it is always null today. Recommended: the CLI **drops** the field when it adopts shared `WhoamiResponse`. Alternative (larger, likely a separate feature): add `email` to the contract + the server plumbing (UserRecord column + auth provider) to populate it.
+
+### Scope decision (reconciled with this doc)
+
+Take this doc's **fuller** scope — extract the wire-visible bounded-domain **constant sets** too and bring the CLI under the no-magic-strings regime (the project's #1 doctrine, "absolute failure if violated") — **not** a minimal DTO-only extraction. This does not violate the dependency-free constraint: `const string` sets carry no dependencies and DTO properties stay `string`. Phase it so pure extraction lands first; the CLI no-magic-strings meta-test arrives as a **later** phase that goes **RED with an exemption list** as the shared constants land, shrinking to empty as call sites migrate (per `.claude/agents/architect.md` — never schedule a meta-test as the final phase).
+
+### Locked architecture (confirmed against `main`)
+
+Namespace stays `Stash.Registry.Contracts` (zero churn across ~6 controllers that `using` it); **`git mv`, not copy** (a copy duplicates type defs in the same namespace and won't compile); new `Stash.Registry.Contracts.csproj` with **zero project references** (BCL + `System.Text.Json` + `System.ComponentModel.DataAnnotations` only — verified: no contract references a `Stash.Core` type); CLI keeps its source-gen `CliJsonContext` pointed at the shared types (cross-assembly `[JsonSerializable]` is supported); registry serialization stays reflection-based / untouched. Add the project to `Stash.sln`; confirm `Stash.Tests` recompiles via its transitive `Stash.Registry` reference.

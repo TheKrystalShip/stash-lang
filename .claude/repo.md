@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - pkg-cli-api-parity — Stash pkg CLI parity with scoped registry API | .kanban/2-in-progress/pkg-cli-api-parity/ | 8 phases | started 2026-05-30
+- shared-registry-contracts — Shared registry contracts project (Stash.Registry.Contracts) | .kanban/2-in-progress/shared-registry-contracts/ | 4 phases | started 2026-06-02
 
 ---
 

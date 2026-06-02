@@ -1,0 +1,233 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec shared-registry-contracts
+
+schema_version: 1
+
+feature: shared-registry-contracts
+title: Shared registry contracts project (Stash.Registry.Contracts)
+brief: ./brief.md
+
+created: 2026-06-02
+architect_session: shared-registry-contracts-spec-2026-06-02
+
+# Cheap default that every phase runs after its own verify.
+default_verify:
+  - dotnet build
+
+# Broad scope rail. Implementers may stray slightly when discovery is stale,
+# but should keep changes to these areas.
+scope:
+  - Stash.Registry.Contracts/**
+  - Stash.Registry/Contracts/**
+  - Stash.Registry/Auth/RegistryAuthConstants.cs
+  - Stash.Registry/Controllers/AdminController.cs
+  - Stash.Registry/Stash.Registry.csproj
+  - Stash.Cli/Stash.Cli.csproj
+  - Stash.Cli/PackageManager/**
+  - Stash.Tests/Registry/**
+  - Stash.Tests/Cli/**
+  - Stash.sln
+  - Stash.Registry/CLAUDE.md
+  - docs/PKG — Package Manager CLI.md
+  - .claude/repo.md
+
+phases:
+  - id: P1
+    title: Create Stash.Registry.Contracts project; git-mv all 7 contract files; add AuditEntryResponse
+    deps: []
+    files:
+      - Stash.Registry.Contracts/Stash.Registry.Contracts.csproj
+      - Stash.Registry.Contracts/PackageContracts.cs
+      - Stash.Registry.Contracts/AuthContracts.cs
+      - Stash.Registry.Contracts/CommonContracts.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry.Contracts/OrganizationContracts.cs
+      - Stash.Registry.Contracts/ScopeContracts.cs
+      - Stash.Registry.Contracts/SearchContracts.cs
+      - Stash.Registry/Contracts/PackageContracts.cs
+      - Stash.Registry/Contracts/AuthContracts.cs
+      - Stash.Registry/Contracts/CommonContracts.cs
+      - Stash.Registry/Contracts/AdminContracts.cs
+      - Stash.Registry/Contracts/OrganizationContracts.cs
+      - Stash.Registry/Contracts/ScopeContracts.cs
+      - Stash.Registry/Contracts/SearchContracts.cs
+      - Stash.Registry/Stash.Registry.csproj
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.sln
+      - Stash.Tests/Registry/Contracts/ContractsAssemblyShapeTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts
+      - dotnet build Stash.Registry
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~ContractsAssemblyShapeTests|FullyQualifiedName~RegistryRoutesTests|FullyQualifiedName~RegistryAuthzMatrixTests"
+    done_when:
+      - A new Stash.Registry.Contracts.csproj exists (net10.0 class library, namespace Stash.Registry.Contracts) with ZERO <ProjectReference> elements and no PackageReference beyond what System.Text.Json + System.ComponentModel.DataAnnotations require; the project is listed in Stash.sln.
+      - All 7 contract files were moved with `git mv` (git history shows R-status renames, not adds + deletes) from Stash.Registry/Contracts/ into Stash.Registry.Contracts/, preserving the public namespace `Stash.Registry.Contracts`; the Stash.Registry/Contracts/ directory is empty (and removed) on disk.
+      - Stash.Registry references Stash.Registry.Contracts via <ProjectReference>; every existing `using Stash.Registry.Contracts;` line across the ~6 controllers still resolves and the registry compiles green.
+      - The two extraction blockers are handled, both proven by green builds and contract tests - (a) a net-new `AuditEntryResponse` DTO lives in Stash.Registry.Contracts (wire fields action/package/version/user/target/ip/timestamp/decision/denyReason matching the existing AuditEntry JSON shape); `AuditLogResponse.Entries` is now `List<AuditEntryResponse>`; AdminController.GetAuditLog maps AuditEntry (EF) -> AuditEntryResponse inline; (b) the stale `using Stash.Registry.Database.Models;` is removed from OrganizationContracts.cs after the move (verified absent).
+      - Stash.Tests recompiles via its existing transitive Stash.Registry reference (no explicit add to Stash.Tests.csproj is required) and RegistryRoutesTests + RegistryAuthzMatrixTests stay green - the wire surface is byte-identical.
+      - A new ContractsAssemblyShapeTests asserts (1) Stash.Registry.Contracts.csproj contains zero `<ProjectReference>` elements, (2) every public type in the Stash.Registry.Contracts assembly resides in namespace `Stash.Registry.Contracts`, (3) no type in that assembly references any `Stash.Registry.Database.Models.*` or `Stash.Core.*` type (reflected via assembly metadata) - the dependency-free backstop guard.
+    notes: |
+      Locked architecture (confirmed against `main`, see Investigation Addendum in
+      .kanban/0-backlog/registry/Registry Consumer Client - Shared Contracts and OpenAPI Strategy.md):
+      Namespace stays `Stash.Registry.Contracts`; move with `git mv` (NOT copy - a
+      copy duplicates type defs in the same namespace and fails to compile);
+      Stash.Registry.Contracts.csproj has zero <ProjectReference>. AuditEntryResponse
+      is the ONLY net-new DTO this feature ships; everything else is a move.
+
+      ContractsAssemblyShapeTests is the dependency-free backstop guard
+      (Cross-Cutting Concern #1, Detect-level): a future contributor who quietly
+      adds a <ProjectReference> to Stash.Registry.Contracts will fail this test.
+      The primary guard is Construct (the type doesn't exist in the reference
+      graph so it won't compile); the test is the long-lived enforcement.
+
+      Do NOT add a JsonSerializerContext to Stash.Registry.Contracts (POCOs only
+      per Decision Log). The CLI's CliJsonContext is updated in P3, not here.
+
+      The bounded-domain const classes (PackageRoles, TokenScopes, Visibilities,
+      PrincipalTypes, ScopeOwnerTypes, OrgRoles) STAY in
+      Stash.Registry/Auth/RegistryAuthConstants.cs in P1 - they move in P2.
+      This keeps P1's blast radius small (just file moves + one mapping +
+      one csproj) and lets the registry compile green at every commit.
+
+  - id: P2
+    title: Move wire-visible bounded-domain const classes into Stash.Registry.Contracts
+    deps: [P1]
+    files:
+      - Stash.Registry.Contracts/BoundedDomains.cs
+      - Stash.Registry/Auth/RegistryAuthConstants.cs
+      - Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs
+      - Stash.Tests/Registry/Contracts/BoundedDomainPlacementTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts
+      - dotnet build Stash.Registry
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~BoundedDomainPlacementTests|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~PackageServiceTests"
+    done_when:
+      - The wire-visible bounded-domain const classes PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles are defined exactly ONCE in the codebase - in Stash.Registry.Contracts (e.g. Stash.Registry.Contracts/BoundedDomains.cs) - and are removed from Stash.Registry/Auth/RegistryAuthConstants.cs.
+      - The server-internal types stay in Stash.Registry/Auth/RegistryAuthConstants.cs - RegistryClaims, UserRoles, ReservedScopes, and TokenCeilingConverter remain defined there (verified by reading the file post-move).
+      - Every registry call site that used a moved constant (`PackageRoles.Owner`, `Visibilities.Public`, `PrincipalTypes.User`, `ScopeOwnerTypes.Org`, `TokenScopes.Publish`, `OrgRoles.Member`, ...) compiles unchanged - the constant resolves to the new home via the existing `using Stash.Registry.Contracts;` (or an added `using` where needed). The registry build is green.
+      - EF column defaults that reference moved consts (e.g. `PackageRecord.Visibility = Visibilities.Public` field initializer, any `RegistryDbContext.HasDefaultValue(...)` calls using `Visibilities.Public`) keep compiling - the moved consts remain `const string` (compile-time constants, inlined across assemblies).
+      - NoMagicAuthStringsMetaTests is GREEN - its sink set, whitelisted file, and floor guard (`MinScannedFiles >= 6`) are unchanged; the scan continues to find zero violations across Stash.Registry/. If the test's reference-finder needed an update to acknowledge the new constant home, that update is in this commit and the self-tests (Scanner_BadSnippet_FlagsLiterals, Scanner_GoodSnippet_NoViolations) still pass.
+      - A new BoundedDomainPlacementTests asserts each moved constant class lives in `Stash.Registry.Contracts` (via reflection on a representative published type from each class - `PackageRoles.Owner`, `Visibilities.Public`, etc.) and that the constants are `const string` (not `static readonly`) - the EF-default invariant.
+    notes: |
+      This phase is a pure constant-relocation refactor inside the C# type
+      system. NO behavior change. Watch out for:
+        - C# `const string` values are inlined across assemblies, so EF
+          `HasDefaultValue(Visibilities.Public)` and field initializers
+          `Visibility = Visibilities.Public` keep their compile-time-constant
+          property after the move. Verify by building Stash.Registry green
+          (the constant moved AND the registry still uses it).
+        - NoMagicAuthStringsMetaTests scans `Stash.Registry/**/*.cs` for bare
+          string literals at auth sinks (IsInRole/FindFirst/etc.). Because the
+          test inspects literal *syntax*, not the namespace of named refs,
+          moving the const classes is transparent to it. Re-running the
+          self-tests (Scanner_BadSnippet_FlagsLiterals,
+          Scanner_GoodSnippet_NoViolations) is the proof.
+
+      OrgRoles is wire-visible (AddOrgMemberRequest.OrgRole field) so it
+      belongs in the shared project. If a surprise server-internal-only use
+      surfaces, leave OrgRoles in the shared project AND mirror a local
+      const where the server-internal call site lives - never duplicate
+      across the wire / internal split.
+
+  - id: P3
+    title: CLI references shared project + CLI no-magic-strings meta-test (RED on arrival, empty by end) + migrate CLI duplicates and literals
+    deps: [P1, P2]
+    files:
+      - Stash.Cli/Stash.Cli.csproj
+      - Stash.Cli/PackageManager/CliJsonContext.cs
+      - Stash.Cli/PackageManager/RegistryClient.cs
+      - Stash.Cli/PackageManager/UserConfig.cs
+      - Stash.Cli/PackageManager/Commands/**
+      - Stash.Tests/Cli/CliNoMagicWireStringsMetaTests.cs
+      - Stash.Tests/Cli/CliContractsConsumptionTests.cs
+    verify:
+      - dotnet build Stash.Cli
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~CliNoMagicWireStringsMetaTests|FullyQualifiedName~CliContractsConsumptionTests"
+      - dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-p3
+    done_when:
+      - Stash.Cli.csproj references Stash.Registry.Contracts via <ProjectReference>; Stash.Cli does NOT reference Stash.Registry (the CLI is a wire consumer, not a server consumer).
+      - Every CLI-side hand-declared duplicate request / response DTO that mirrors a Stash.Registry.Contracts type is removed from CliJsonContext.cs (LoginRequest, AssignRoleRequest, RevokeRoleRequest, TokenCreateRequest, TokenCreateResult, TokenListResult, TokenListItemResult, TokenRefreshRequest, DeprecatePackageCliRequest, DeprecateVersionCliRequest, SearchResults, SearchResultPackage); the CLI's `[JsonSerializable]` registrations point at the corresponding shared `Stash.Registry.Contracts` types and the file compiles with the source-generator producing no new warnings.
+      - CLI-only projections that are NOT wire DTOs (LoginResult, WhoamiInfo, UserConfig, RegistryEntry) STAY CLI-side; they are not moved.
+      - Every inline bounded-domain literal in RegistryClient.cs (and any other CLI file constructing a wire DTO) is replaced with the shared const reference - `PrincipalType = "user"` becomes `PrincipalType = PrincipalTypes.User`; `Role = "owner"` becomes `Role = PackageRoles.Owner`; same for `Visibilities.*`, `ScopeOwnerTypes.*`, `TokenScopes.*`, `OrgRoles.*` at every wire DTO assignment site.
+      - WhoamiInfo no longer carries an `email` field (it was always null - WhoamiResponse has no email; documented in brief.md Decision Log). Anywhere the CLI printed or read it is updated.
+      - The AOT publish stays clean - `dotnet publish Stash.Cli -c Release` succeeds with ZERO new trim or AOT warnings vs the pre-feature baseline (cross-assembly source-gen and the dependency-free contracts assembly together preserve AOT cleanliness).
+      - A new CliNoMagicWireStringsMetaTests Roslyn meta-test is live in this commit, scanning `Stash.Cli/**/*.cs` for bare string literals reaching the wire-bounded sink set (assignment expressions where the left-hand side is a property `PrincipalType`/`Role`/`Visibility`/`OwnerType`/`OrgRole` of a type declared in the `Stash.Registry.Contracts` namespace). It ships - a fail-path self-test (Scanner_BadSnippet_FlagsLiterals) proving teeth; a clean-path self-test (Scanner_GoodSnippet_NoViolations); and a floor guard `MinScannedFiles` preventing a vacuous pass against an empty tree.
+      - The test's pinned exemption list is the EMPTY set in the commit that closes the phase. (During the phase the implementer is expected to land the test FIRST with the full pre-migration exemption list, then commit the literal-replacement diff that shrinks the list to empty; final state for done_when is `exemptions.Count == 0`.)
+      - A new CliContractsConsumptionTests asserts the Roslyn type-symbol the CLI resolves for `Stash.Registry.Contracts.PackageRoleResponse` is identical (same MetadataName, same Assembly) to the one the Registry tests resolve - the "one definition, two consumers" invariant.
+    notes: |
+      ORDERING WITHIN THIS PHASE IS LOAD-BEARING.
+      Per the architect Cross-Cutting Omission doctrine and advisor input:
+      the CLI no-magic-strings meta-test MUST be live at the START of P3 with
+      a pinned exemption list listing every existing CLI literal site, and
+      shrink to empty AS the migration completes. It MUST NOT be deferred
+      until after the migration - that path lets the migration land with the
+      invariant unenforced (the exact anti-pattern in architect.md).
+
+      Concretely, the implementer's commit sequence inside this phase is:
+        1) Add Stash.Registry.Contracts <ProjectReference> to Stash.Cli.
+        2) Land CliNoMagicWireStringsMetaTests with the full pre-migration
+           exemption list (test RED on uncovered new code, but every existing
+           site is listed in the pin so the test is green on this commit -
+           the pin documents the debt).
+        3) Migrate CliJsonContext duplicates -> shared types; re-point
+           [JsonSerializable]; drop WhoamiInfo.email; replace inline
+           bounded-domain literals with shared const refs; shrink the
+           exemption list to empty as each site migrates.
+        4) Verify dotnet publish Stash.Cli -c Release is clean.
+
+      The CLI sink set is wire-bounded DTO property assignments (LHS is
+      a property of a Stash.Registry.Contracts type whose name is one of
+      `PrincipalType`/`Role`/`Visibility`/`OwnerType`/`OrgRole`). This is
+      LOAD-BEARING - per advisor, do NOT assert a weaker proxy like "any
+      role-shaped string exists" (the registry's original auth gap passed a
+      proxy-shaped test - same anti-pattern).
+
+      CLI-only projections (LoginResult, WhoamiInfo, UserConfig,
+      RegistryEntry) are NOT wire DTOs and STAY CLI-side per Decision Log.
+
+  - id: P4
+    title: Docs + repo.md pointer + final verification
+    deps: [P3]
+    files:
+      - Stash.Registry/CLAUDE.md
+      - Stash.Cli/CLAUDE.md
+      - docs/PKG — Package Manager CLI.md
+      - .claude/repo.md
+    verify:
+      - dotnet build
+      - dotnet test
+      - dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-p4
+    done_when:
+      - Stash.Registry/CLAUDE.md Contracts/ section is updated to point at the new Stash.Registry.Contracts project as the single home of wire DTOs and wire-visible bounded-domain const sets; the wire-visible / server-internal split is documented next to the bounded-domain bullet.
+      - Any CLI doc that referenced DTO locations under Stash.Cli/PackageManager/ (e.g. Stash.Cli/CLAUDE.md, docs/PKG - Package Manager CLI.md if it mentions DTOs) is updated to refer to Stash.Registry.Contracts.
+      - .claude/repo.md "Active Multi-Phase Work" no longer lists shared-registry-contracts (it has been moved to done by `/done`, or the pointer is removed at promotion); the implementer ensures no stale pointer lingers post-promotion. (During in-flight phases the pointer stays - this done_when is for the closing commit of P4.)
+      - The full `dotnet test` suite is green on `main` (no namespace exclusions), including NoMagicAuthStringsMetaTests, CliNoMagicWireStringsMetaTests, ContractsAssemblyShapeTests, BoundedDomainPlacementTests, CliContractsConsumptionTests, RegistryRoutesTests, RegistryAuthzMatrixTests, PackageServiceTests, and the CompletionSurfaceSnapshotTests / Wave1/Wave2ThrowsCoverageTests / StandardLibraryReferenceTests stdlib gates.
+      - The AOT publish stays clean - `dotnet publish Stash.Cli -c Release` succeeds with zero new trim or AOT warnings - end-to-end proof of the dependency-free + AOT-clean invariant.
+    notes: |
+      P4 is docs + the perpetual omission-guard `checkpoint lint` lines in
+      final_verify (already present). The `.claude/repo.md` pointer cleanup
+      lives inside the `/done` promotion step, not the P4 feat commit -
+      but the implementer adds the entry under "Active Multi-Phase Work"
+      during /spec (this turn) and removes it when the feature is promoted.
+
+      No language/stdlib metadata changes are needed - this is registry +
+      CLI infra. `.claude/language-changes.md`'s Stash.Docs regeneration and
+      the throws-coverage / completion-snapshot meta-tests are stdlib-scoped
+      and unaffected by this feature.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Runs the full dotnet test suite (per CLAUDE.md "final_verify runs the full suite -
+# trust it") plus the AOT publish gate (the end-to-end proof of dependency-free +
+# AOT-clean) plus the checkpoint lint lines (the perpetual omission guard).
+final_verify:
+  - dotnet build
+  - dotnet test
+  - dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-final
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
