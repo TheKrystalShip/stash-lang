@@ -70,7 +70,8 @@ A small fail-path self-test that adds a fake `Stash.Core` referenced-assembly en
 
 ## F02 — [LOW] `[UnconditionalSuppressMessage("Trimming","IL2026")]` is a consumer concern leaking into the shared contract
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 5581e0f0
 **Files:** `Stash.Registry.Contracts/PackageContracts.cs:151-154`, `Stash.Registry.Contracts/PackageContracts.cs:170-173`
 **Phase:** P3
 **Commit:** e23c5d38
