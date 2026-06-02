@@ -65,6 +65,14 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     private readonly VMContext _context;
     private readonly ExtensionRegistry _extensionRegistry = new();
 
+    /// <summary>
+    /// Per-VM inline cache slot arrays, keyed by chunk identity.
+    /// Each entry is a private clone of <see cref="Chunk.ICSlots"/> (the immutable template
+    /// pre-filled by <see cref="ChunkBuilder"/>). Created lazily on first frame push for a
+    /// given chunk so that two VMs executing the same chunk never share mutable IC state.
+    /// </summary>
+    private readonly Dictionary<Chunk, ICSlot[]> _vmICSlots = new(ReferenceEqualityComparer.Instance);
+
     private Func<string, string?, Chunk>? _moduleLoader;
     internal ConcurrentDictionary<string, Dictionary<string, StashValue>> ModuleCache = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
@@ -437,6 +445,7 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         frame.ModuleGlobals = moduleGlobals;
         frame.Defers = null;
         frame.ActiveIterators = null;
+        frame.ICSlots = ResolveICSlots(chunk);
 
         // Ensure the shared stack has room for this frame's entire register window.
         int needed = baseSlot + chunk.MaxRegs;
@@ -445,6 +454,38 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         if (needed > _sp)
             _sp = needed;
     }
+
+    // ---- Per-VM IC Slot Management ----
+
+    /// <summary>
+    /// Returns this VM's private <see cref="ICSlot"/> array for <paramref name="chunk"/>,
+    /// cloning the chunk's immutable template on first access so that no two VM instances
+    /// ever write to the same IC array.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private ICSlot[]? ResolveICSlots(Chunk chunk)
+    {
+        ICSlot[]? template = chunk.ICSlots;
+        if (template is null || template.Length == 0)
+            return null;
+
+        if (!_vmICSlots.TryGetValue(chunk, out ICSlot[]? slots))
+        {
+            // Clone preserves ConstantIndex (pre-filled by ChunkBuilder) but gives
+            // fresh zero State / null Guard so this VM's IC starts uninitialized.
+            slots = (ICSlot[])template.Clone();
+            _vmICSlots[chunk] = slots;
+        }
+        return slots;
+    }
+
+    /// <summary>
+    /// Returns this VM's private IC slot array for the given chunk, or null if the chunk
+    /// has no IC slots or has not yet been executed by this VM.
+    /// Used only by unit tests to observe per-VM IC state.
+    /// </summary>
+    internal ICSlot[]? GetICSlotsForChunk(Chunk chunk)
+        => _vmICSlots.TryGetValue(chunk, out ICSlot[]? slots) ? slots : null;
 
     // ---- Stack Operations ----
 

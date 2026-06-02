@@ -263,7 +263,7 @@ public sealed partial class VirtualMachine
         int icIdx = (int)frame.Chunk.Code[frame.IP++]; // read companion word
         int @base = frame.BaseSlot;
 
-        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+        ref ICSlot ic = ref frame.ICSlots![icIdx];
         StashValue objVal = _stack[@base + b];
 
         // IC fast path: monomorphic hit
@@ -293,7 +293,7 @@ public sealed partial class VirtualMachine
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteGetFieldICSlow(ref CallFrame frame, byte a, byte b, byte c, int icIdx, int @base, StashValue objVal)
     {
-        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+        ref ICSlot ic = ref frame.ICSlots![icIdx];
 
         // IC slow path: full lookup + populate/transition
         string fieldName = (string)frame.Chunk.Constants[c].AsObj!;
