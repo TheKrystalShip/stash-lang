@@ -117,9 +117,20 @@ internal static class IsolationHelpers
     internal static Dictionary<string, StashValue> BuildChildGlobals(
         Dictionary<string, StashValue> parentGlobals)
     {
-        var childGlobals = new Dictionary<string, StashValue>(parentGlobals.Count);
+        // The parent's globals dict is single-writer (only the owning VM's thread mutates it,
+        // at the global define/assign sites in VirtualMachine.Variables.cs) but is read here on a
+        // *different* thread when a cross-thread fork — task.run, fs.watch / signal callbacks via
+        // VMContext.InvokeCallbackDirect's background branch — clones the parent's state. Walking
+        // the live dict directly while the owner thread adds a global throws "Collection was
+        // modified". Take a fast, consistent snapshot first (a structural-change-free enumeration,
+        // bounded-retried — the single writer always makes progress, so a collision clears within
+        // an attempt or two), then do the slow per-entry freeze-or-clone against the private
+        // snapshot, never touching the parent's live dict again. This adds no synchronization to
+        // the hot global-write path.
+        KeyValuePair<string, StashValue>[] snapshot = SnapshotEntries(parentGlobals);
 
-        foreach (var (name, value) in parentGlobals)
+        var childGlobals = new Dictionary<string, StashValue>(snapshot.Length);
+        foreach (var (name, value) in snapshot)
         {
             if (!value.IsObj)
             {
@@ -140,5 +151,43 @@ internal static class IsolationHelpers
         }
 
         return childGlobals;
+    }
+
+    /// <summary>
+    /// Maximum bounded retries for <see cref="SnapshotEntries"/>. A single-writer dictionary
+    /// clears a structural-change collision within an attempt or two; this ceiling exists only as a
+    /// safety backstop and is never approached in practice.
+    /// </summary>
+    private const int SnapshotMaxRetries = 64;
+
+    /// <summary>
+    /// Returns a consistent point-in-time snapshot of a <b>single-writer</b> dictionary that may be
+    /// read from a different thread. Uses the version-checked enumerator: a concurrent structural
+    /// mutation (key add/remove) on the owner thread throws <see cref="System.InvalidOperationException"/>
+    /// mid-walk, which we catch and retry — so the returned array is always from an uninterrupted
+    /// enumeration (no torn reads). Concurrent value updates to existing keys do not bump the
+    /// enumerator version and are harmless (either pre- or post-update value is a valid snapshot
+    /// entry). Safe because there is exactly one writer, guaranteeing retries converge.
+    /// </summary>
+    private static KeyValuePair<string, StashValue>[] SnapshotEntries(
+        Dictionary<string, StashValue> source)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var entries = new List<KeyValuePair<string, StashValue>>(source.Count);
+                foreach (var kv in source)
+                {
+                    entries.Add(kv);
+                }
+                return entries.ToArray();
+            }
+            catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
+            {
+                // Owner thread added/removed a global mid-walk — back off briefly and retry.
+                System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
+            }
+        }
     }
 }
