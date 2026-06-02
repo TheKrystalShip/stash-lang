@@ -154,8 +154,8 @@ internal static class IsolationHelpers
     }
 
     /// <summary>
-    /// Maximum bounded retries for <see cref="SnapshotEntries"/>. A single-writer dictionary
-    /// clears a structural-change collision within an attempt or two; this ceiling exists only as a
+    /// Maximum bounded retries for snapshot helpers. A single-writer collection clears a
+    /// structural-change collision within an attempt or two; this ceiling exists only as a
     /// safety backstop and is never approached in practice.
     /// </summary>
     private const int SnapshotMaxRetries = 64;
@@ -186,6 +186,49 @@ internal static class IsolationHelpers
             catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
             {
                 // Owner thread added/removed a global mid-walk — back off briefly and retry.
+                System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Returns a consistent point-in-time snapshot of a <b>single-writer</b>
+    /// <see cref="System.Collections.Generic.HashSet{T}"/> that may be read from a different
+    /// thread. Mirrors the bounded-retry/version-check shape of <see cref="SnapshotEntries"/>.
+    ///
+    /// <para>
+    /// The snapshot uses an explicit <c>foreach</c> (not <c>new HashSet(source, comparer)</c>
+    /// or <c>CopyTo</c>) so the version-checked struct enumerator throws
+    /// <see cref="System.InvalidOperationException"/> on a concurrent structural mutation
+    /// (Add/Remove), letting us catch and retry rather than producing a silently-torn copy.
+    /// Single-writer guarantee: only the owning VM's thread calls <c>Add</c>/<c>Remove</c>
+    /// on <c>_importStack</c> inside <c>VirtualMachine.Modules.cs</c> — retries converge.
+    /// </para>
+    /// </summary>
+    /// <param name="source">The parent VM's live import-stack HashSet.</param>
+    /// <returns>
+    /// A fresh <see cref="System.Collections.Generic.HashSet{T}"/> (OrdinalIgnoreCase) whose
+    /// contents are a consistent snapshot of <paramref name="source"/> at the moment of the
+    /// successful enumeration.
+    /// </returns>
+    internal static System.Collections.Generic.HashSet<string> SnapshotImportStack(
+        System.Collections.Generic.HashSet<string> source)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var snapshot = new System.Collections.Generic.HashSet<string>(
+                    System.StringComparer.OrdinalIgnoreCase);
+                foreach (string s in source)
+                {
+                    snapshot.Add(s);
+                }
+                return snapshot;
+            }
+            catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
+            {
+                // Owner thread added/removed an in-progress import mid-walk — retry.
                 System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
             }
         }

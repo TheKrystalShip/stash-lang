@@ -480,8 +480,16 @@ internal sealed class VMContext : IInterpreterContext
                 // independent copy of any in-progress imports, not the parent's live set.
                 // This prevents spurious "circular import" errors from the parent's in-flight
                 // imports racing with the child's import calls on a background thread.
+                //
+                // MUST use IsolationHelpers.SnapshotImportStack (explicit foreach with version-
+                // checked enumerator) and NOT pass the live reference directly.  Passing the live
+                // ref enumerates the parent's HashSet on the background thread while Modules.cs
+                // may be calling _importStack.Add/Remove on the parent's main thread, causing a
+                // silent torn-snapshot or InvalidOperationException (swallowed by the callback's
+                // try/catch → silent callback loss).  The bounded-retry snapshot mirrors the
+                // SnapshotEntries guard added for globals in commit 224c52e3.
                 if (ImportStack != null)
-                    childVm.InitImportStack(ImportStack);
+                    childVm.InitImportStack(IsolationHelpers.SnapshotImportStack(ImportStack));
 
                 childVm.InitGlobalSlots(vmFn.Chunk);
                 StashValue[] argsCopy = args.ToArray();

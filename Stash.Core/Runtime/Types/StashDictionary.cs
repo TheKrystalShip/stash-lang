@@ -107,6 +107,28 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         return _entries.ToList();
     }
 
+    /// <summary>
+    /// Yields the raw entries using the Dictionary's version-checked struct enumerator
+    /// (not <c>ToList()</c> / <c>CopyTo</c>). This is the safe form to use when the
+    /// enumeration must detect a concurrent structural mutation (Add/Remove on the owner
+    /// thread) and throw <see cref="System.InvalidOperationException"/> rather than
+    /// silently producing a torn snapshot.
+    ///
+    /// <para>
+    /// Use this method inside bounded-retry snapshot loops (e.g.
+    /// <c>RuntimeValues.DeepCloneDictionary</c>) that need cross-thread read safety
+    /// for single-writer dictionaries.  Do not use it on the hot same-thread path —
+    /// <c>RawEntries()</c> materialises eagerly and is simpler there.
+    /// </para>
+    /// </summary>
+    public IEnumerable<KeyValuePair<object, StashValue>> RawEntriesEnumerable()
+    {
+        foreach (var kv in _entries)
+        {
+            yield return kv;
+        }
+    }
+
     public IEnumerable<KeyValuePair<object, StashValue>> GetAllEntries()
     {
         return _entries.ToList();

@@ -128,6 +128,18 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         _context.TypeNameResolver = ResolveRegisteredTypeName;
     }
 
+    /// <summary>
+    /// Test-only helper: sets <c>MainThreadId</c> to -1 so that no real thread ID ever
+    /// matches, forcing <c>VMContext.InvokeCallbackDirect</c> to always take the
+    /// background-thread (child-VM fork) branch regardless of which thread fires the callback.
+    /// This lets regression tests exercise the cross-thread path without needing a real
+    /// background-thread caller.
+    /// </summary>
+    internal void TestForceBackgroundBranch()
+    {
+        _context.MainThreadId = -1;
+    }
+
     public void RegisterTypeCheck(string vmTypeName, Func<object, bool> predicate)
     {
         _registeredTypeChecks[vmTypeName] = predicate;

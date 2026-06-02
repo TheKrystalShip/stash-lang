@@ -515,10 +515,46 @@ public static class RuntimeValues
 
     private static StashValue DeepCloneArray(StashArray arr, HashSet<object> activePath, List<string> pathBreadcrumbs)
     {
-        var clone = new StashArray(arr.Count);
-        for (int i = 0; i < arr.Count; i++)
+        // Snapshot the parent's live List<StashValue> into a private array BEFORE walking.
+        // This handles the cross-thread callback path (VMContext.InvokeCallbackDirect background
+        // branch) where the parent's main thread may concurrently call arr.push() / arr.pop()
+        // while this background thread is cloning.  The List<StashValue> version-checked
+        // enumerator (foreach) throws InvalidOperationException on a concurrent structural
+        // mutation (Add/Remove/resize); we catch-and-retry with unbounded spin — the single-
+        // writer guarantee (only the owning VM thread mutates the array) ensures convergence.
+        //
+        // Do NOT use indexed access (arr[i] for i in 0..arr.Count) here: a concurrent Add
+        // can resize the backing array between the Count read and the indexer, producing
+        // stale/out-of-range reads that do not throw and silently tear the snapshot.
+        StashValue[] elements = null!;
+        for (int attempt = 0; ; attempt++)
         {
-            StashValue elem = arr[i];
+            try
+            {
+                // Do NOT pass arr.Count as initial capacity: it may be stale from a
+                // concurrent Add, causing an arbitrarily large (and possibly OOM) allocation.
+                // Let the list grow organically from the snapshot.
+                var list = new List<StashValue>();
+                foreach (StashValue e in arr)
+                {
+                    list.Add(e);
+                }
+                elements = list.ToArray();
+                break;
+            }
+            catch (System.InvalidOperationException)
+            {
+                // Owner thread added/removed an element mid-walk — retry.
+                // No upper bound: single-writer guarantees the walk will eventually
+                // complete uninterrupted.
+                System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
+            }
+        }
+
+        var clone = new StashArray(elements.Length);
+        for (int i = 0; i < elements.Length; i++)
+        {
+            StashValue elem = elements[i];
             if (elem.IsObj)
             {
                 pathBreadcrumbs.Add($"[{i}]");
@@ -532,8 +568,36 @@ public static class RuntimeValues
 
     private static StashValue DeepCloneDictionary(StashDictionary dict, HashSet<object> activePath, List<string> pathBreadcrumbs)
     {
+        // Snapshot the parent's live Dictionary<object,StashValue> BEFORE walking.
+        // RawEntries() uses ToList() which dispatches to ICollection.CopyTo — that does
+        // NOT check the version flag and silently produces a torn snapshot without throwing.
+        // Instead use RawEntriesEnumerable() which yields via a foreach over _entries,
+        // triggering the version-checked Dictionary struct enumerator and throwing on
+        // concurrent structural mutation (new-key Set/Remove from the parent thread).
+        // Unbounded-retry, single-writer safe — mirrors SnapshotEntries in IsolationHelpers.
+        KeyValuePair<object, StashValue>[] entries = null!;
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var list = new List<KeyValuePair<object, StashValue>>(dict.Count);
+                foreach (var kv in dict.RawEntriesEnumerable())
+                {
+                    list.Add(kv);
+                }
+                entries = list.ToArray();
+                break;
+            }
+            catch (System.InvalidOperationException)
+            {
+                // Owner thread mutated the dict mid-walk — retry.
+                // No upper bound: single-writer guarantees convergence.
+                System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
+            }
+        }
+
         var clone = new StashDictionary();
-        foreach (var kv in dict.RawEntries())
+        foreach (var kv in entries)
         {
             StashValue val = kv.Value;
             if (val.IsObj)
