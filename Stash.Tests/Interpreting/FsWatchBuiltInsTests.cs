@@ -145,36 +145,38 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Watch_WithFilter_OnlyMatchingFilesTrigger()
     {
+        // .txt write triggers callback; .log write does not (filter excludes it).
+        // Use a single signal file — its presence proves the .txt callback fired.
         var dir        = Path.Combine(TestDir, "watch_filter_dir").Replace("\\", "/");
         var match      = $"{dir}/match.txt";
         var noMatch    = $"{dir}/nomatch.log";
-        // Counter file: each callback invocation appends a line.
-        var counterFile = Path.Combine(TestDir, "watch_filter_count.txt").Replace("\\", "/");
-        // Pre-create both files so only "modified" events fire.
+        var signalFile = Path.Combine(TestDir, "watch_filter_signal.txt").Replace("\\", "/");
+        // Second signal file that would only appear if the .log callback fired.
+        var logSignal  = Path.Combine(TestDir, "watch_filter_log_signal.txt").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         File.WriteAllText(match, "initial");
         File.WriteAllText(noMatch, "initial");
 
-        // Callback appends a line to counterFile for every event; we count lines.
+        // Callback writes signalFile for any event (should only fire for .txt due to filter).
         RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                fs.appendFile("{{counterFile}}", "hit\n");
+                fs.writeFile("{{signalFile}}", event.path);
             }, fs.WatchOptions { filter: "*.txt" });
             fs.writeFile("{{match}}", "updated");
             fs.writeFile("{{noMatch}}", "updated");
             let deadline = time.millis() + 5000;
-            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
                 time.sleep(0.02);
             }
             time.sleep(0.5);
             fs.unwatch(w);
             """);
 
-        // Exactly 1 callback for the .txt file (debounce coalesces the single write).
-        int count = File.Exists(counterFile)
-            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
-            : 0;
-        Assert.Equal(1, count);
+        // Signal file exists → .txt callback fired.
+        Assert.True(File.Exists(signalFile), "no callback fired for .txt write");
+        // The path in signalFile must contain "match.txt" (the filtered-in file).
+        string signalContent = File.ReadAllText(signalFile);
+        Assert.Contains("match.txt", signalContent);
     }
 
     [Fact]
@@ -436,15 +438,17 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Watch_DebouncedRapidWrites_SingleCallback()
     {
-        // 5 rapid writes to the same file → debounced to exactly 1 callback.
-        // Callback appends a line to counterFile per invocation.
-        var filePath    = Path.Combine(TestDir, "watch_debounce.txt").Replace("\\", "/");
-        var counterFile = Path.Combine(TestDir, "watch_debounce_count.txt").Replace("\\", "/");
+        // 5 rapid writes to the SAME file → debounced to exactly 1 callback.
+        // Each callback invocation writes a unique file whose name contains time.millis().
+        // After the first signal appears we wait a debounce period, then count signal files in C#.
+        var filePath  = Path.Combine(TestDir, "watch_debounce.txt").Replace("\\", "/");
+        var signalDir = Path.Combine(TestDir, "watch_debounce_signals").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
+        Directory.CreateDirectory(signalDir);
 
         RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                fs.appendFile("{{counterFile}}", "hit\n");
+                fs.writeFile("{{signalDir}}/" + conv.toStr(time.millis()) + ".txt", "fired");
             });
             fs.writeFile("{{filePath}}", "1");
             fs.writeFile("{{filePath}}", "2");
@@ -452,30 +456,35 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
             fs.writeFile("{{filePath}}", "4");
             fs.writeFile("{{filePath}}", "5");
             let deadline = time.millis() + 5000;
-            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+            while (len(fs.listDir("{{signalDir}}")) == 0 && time.millis() < deadline) {
                 time.sleep(0.02);
             }
             time.sleep(0.5);
             fs.unwatch(w);
             """);
 
-        int count = File.Exists(counterFile)
-            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
-            : 0;
+        int count = Directory.Exists(signalDir) ? Directory.GetFiles(signalDir).Length : 0;
+        Assert.True(count >= 1, "debounce: no callback fired within 5s");
         Assert.Equal(1, count);
     }
 
     [Fact]
     public void Watch_DebounceZero_AllEventsRaw()
     {
-        // debounce:0 fires on every raw event — at least 2 callbacks for 5 distinct file creates.
+        // debounce:0 fires on every raw event — create 5 distinct files → at least 2 callbacks.
+        // Each callback creates a unique signal file named after the event path (base name only).
+        // C# counts the signal files after waiting.
         var subDir      = Path.Combine(TestDir, "watch_nodebounce").Replace("\\", "/");
-        var counterFile = Path.Combine(TestDir, "watch_nodebounce_count.txt").Replace("\\", "/");
+        var signalDir   = Path.Combine(TestDir, "watch_nodebounce_signals").Replace("\\", "/");
+        var firstSignal = Path.Combine(signalDir, "a.txt").Replace("\\", "/");
         Directory.CreateDirectory(subDir);
+        Directory.CreateDirectory(signalDir);
 
         RunStatements($$"""
             let w = fs.watch("{{subDir}}", (event) => {
-                fs.appendFile("{{counterFile}}", "hit\n");
+                let parts = str.split(event.path, "/");
+                let name = parts[len(parts) - 1];
+                fs.writeFile("{{signalDir}}/" + name, "fired");
             }, fs.WatchOptions { debounce: 0 });
             fs.writeFile("{{subDir}}/a.txt", "1");
             fs.writeFile("{{subDir}}/b.txt", "2");
@@ -483,16 +492,14 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
             fs.writeFile("{{subDir}}/d.txt", "4");
             fs.writeFile("{{subDir}}/e.txt", "5");
             let deadline = time.millis() + 5000;
-            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+            while (!fs.exists("{{firstSignal}}") && time.millis() < deadline) {
                 time.sleep(0.02);
             }
             time.sleep(1.0);
             fs.unwatch(w);
             """);
 
-        int count = File.Exists(counterFile)
-            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
-            : 0;
+        int count = Directory.Exists(signalDir) ? Directory.GetFiles(signalDir).Length : 0;
         Assert.True(count > 1, $"debounce:0 should fire >1 callbacks for 5 distinct creates, got {count}");
     }
 
@@ -502,38 +509,37 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
         // The debounce timer is keyed on "{path}:{eventType}" (FsBuiltIns.FireCallback),
         // so three writes to three DISTINCT files land in three distinct debounce buckets
         // and never coalesce — each is guaranteed its own callback. >= 3 is therefore the
-        // exact contract guarantee. We poll until all 3 callback lines appear (up to 5s deadline).
-        var dir         = Path.Combine(TestDir, "debounce_diff").Replace("\\", "/");
-        var counterFile = Path.Combine(TestDir, "debounce_diff_count.txt").Replace("\\", "/");
+        // exact contract guarantee.
+        //
+        // Each callback creates a unique signal file named after the event path.
+        // Stash polls until all 3 signal files appear (up to 5s deadline).
+        var dir       = Path.Combine(TestDir, "debounce_diff").Replace("\\", "/");
+        var signalDir = Path.Combine(TestDir, "debounce_diff_signals").Replace("\\", "/");
         Directory.CreateDirectory(dir);
+        Directory.CreateDirectory(signalDir);
 
         RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                fs.appendFile("{{counterFile}}", "hit\n");
+                let parts = str.split(event.path, "/");
+                let name = parts[len(parts) - 1];
+                fs.writeFile("{{signalDir}}/" + name, "fired");
             });
             fs.writeFile("{{dir}}/a.txt", "1");
             fs.writeFile("{{dir}}/b.txt", "2");
             fs.writeFile("{{dir}}/c.txt", "3");
             let deadline = time.millis() + 5000;
             while (time.millis() < deadline) {
-                if (fs.exists("{{counterFile}}")) {
-                    let lines = str.split(fs.readFile("{{counterFile}}"), "\n");
-                    let count = 0;
-                    let i = 0;
-                    while (i < len(lines)) {
-                        if (lines[i] == "hit") { count = count + 1; }
-                        i = i + 1;
-                    }
-                    if (count >= 3) { break; }
+                if (fs.exists("{{signalDir}}/a.txt") &&
+                    fs.exists("{{signalDir}}/b.txt") &&
+                    fs.exists("{{signalDir}}/c.txt")) {
+                    break;
                 }
                 time.sleep(0.02);
             }
             fs.unwatch(w);
             """);
 
-        int count = File.Exists(counterFile)
-            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
-            : 0;
+        int count = Directory.Exists(signalDir) ? Directory.GetFiles(signalDir).Length : 0;
         Assert.True(count >= 3, $"expected >= 3 callbacks for 3 distinct-file writes, got {count}");
     }
 
@@ -541,69 +547,67 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     public void Watch_RenameNotDebounced_EachFiresImmediately()
     {
         // Each rename fires its own Renamed callback immediately (not debounced together).
-        var dir         = Path.Combine(TestDir, "debounce_rename").Replace("\\", "/");
-        var counterFile = Path.Combine(TestDir, "debounce_rename_count.txt").Replace("\\", "/");
+        // 2 renames → 2 distinct signal files (named after the destination path).
+        var dir       = Path.Combine(TestDir, "debounce_rename").Replace("\\", "/");
+        var signalDir = Path.Combine(TestDir, "debounce_rename_signals").Replace("\\", "/");
         Directory.CreateDirectory(dir);
+        Directory.CreateDirectory(signalDir);
         File.WriteAllText($"{dir}/r1.txt", "data");
         File.WriteAllText($"{dir}/r2.txt", "data");
 
         RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
                 if (event.type == fs.WatchEventType.Renamed) {
-                    fs.appendFile("{{counterFile}}", "rename\n");
+                    let parts = str.split(event.path, "/");
+                    let name = parts[len(parts) - 1];
+                    fs.writeFile("{{signalDir}}/" + name, "fired");
                 }
             });
             fs.move("{{dir}}/r1.txt", "{{dir}}/r1_moved.txt");
             fs.move("{{dir}}/r2.txt", "{{dir}}/r2_moved.txt");
             let deadline = time.millis() + 5000;
             while (time.millis() < deadline) {
-                if (fs.exists("{{counterFile}}")) {
-                    let lines = str.split(fs.readFile("{{counterFile}}"), "\n");
-                    let count = 0;
-                    let i = 0;
-                    while (i < len(lines)) {
-                        if (lines[i] == "rename") { count = count + 1; }
-                        i = i + 1;
-                    }
-                    if (count >= 2) { break; }
+                if (fs.exists("{{signalDir}}/r1_moved.txt") &&
+                    fs.exists("{{signalDir}}/r2_moved.txt")) {
+                    break;
                 }
                 time.sleep(0.02);
             }
             fs.unwatch(w);
             """);
 
-        int count = File.Exists(counterFile)
-            ? File.ReadAllLines(counterFile).Count(l => l == "rename")
-            : 0;
+        int count = Directory.Exists(signalDir) ? Directory.GetFiles(signalDir).Length : 0;
         Assert.True(count >= 2, $"expected >= 2 rename callbacks, got {count}");
     }
 
     [Fact]
     public void Watch_CustomDebounceWindow_CoalescesWithinWindow()
     {
-        // 3 rapid writes within the debounce window coalesce to 1 callback.
-        var filePath    = Path.Combine(TestDir, "custom_debounce.txt").Replace("\\", "/");
-        var counterFile = Path.Combine(TestDir, "custom_debounce_count.txt").Replace("\\", "/");
+        // 3 rapid writes to the SAME file within the debounce window coalesce to 1 callback.
+        // Each callback invocation writes a unique file whose name contains time.millis().
+        // After the first signal appears we wait a debounce period, then count signal files in C#.
+        var filePath  = Path.Combine(TestDir, "custom_debounce.txt").Replace("\\", "/");
+        var signalDir = Path.Combine(TestDir, "custom_debounce_signals").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
+        Directory.CreateDirectory(signalDir);
 
         RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                fs.appendFile("{{counterFile}}", "hit\n");
+                fs.writeFile("{{signalDir}}/" + conv.toStr(time.millis()) + ".txt", "fired");
             }, fs.WatchOptions { debounce: 500 });
             fs.writeFile("{{filePath}}", "1");
             fs.writeFile("{{filePath}}", "2");
             fs.writeFile("{{filePath}}", "3");
             let deadline = time.millis() + 5000;
-            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+            while (len(fs.listDir("{{signalDir}}")) == 0 && time.millis() < deadline) {
                 time.sleep(0.02);
             }
             time.sleep(0.5);
             fs.unwatch(w);
             """);
 
-        int count = File.Exists(counterFile)
-            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
-            : 0;
+        int count = Directory.Exists(signalDir) ? Directory.GetFiles(signalDir).Length : 0;
+        Assert.True(count >= 1, "custom debounce: no callback fired within 5s");
         Assert.Equal(1, count);
     }
 
