@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T14:33:14Z"
+updated: "2026-06-02T17:14:45Z"
 phases:
   2A-1:
     status: done
@@ -92,13 +92,13 @@ phases:
     attempts: 1
     notes: EmbeddedMode=true→Null defaults; EmbeddedMode=false→Console defaults; lazy nullable backing fields in VMContext; 8 EmbeddedModeTests green; TestBuiltInsTests updated; CompletionSurfaceSnapshot+Dap unchanged (toolchain audit passed)
   2D:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 75381e7b2949a00328bb59c7cbd883fd02546746
+    verified: true
+    started: "2026-06-02T17:03:42Z"
+    completed: "2026-06-02T17:14:45Z"
+    attempts: 1
+    notes: "10 acceptance tests green (cwd/env isolation, IC nested-chunk, async race stress x100 non-frozen+frozen, SIGTERM multiplex, process.spawn VM cwd); hermetic_isolation.stash example parse-clean"
 review:
   status: not_started
   started: null
