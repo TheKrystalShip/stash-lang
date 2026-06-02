@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T13:52:59Z"
+updated: "2026-06-02T14:33:14Z"
 phases:
   2A-1:
     status: done
@@ -84,13 +84,13 @@ phases:
     attempts: 1
     notes: Multiplexed List-per-signal registry; Dispatch() snapshot+try/catch-each; signal.off by context identity; shared PosixSignalRegistration disposed on last-entry removal; 8 SignalImplTests green; plan.yaml verify corrected
   2C-2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d88620ee32e7a8be9d9222f834bc2e9da48c5249
+    verified: true
+    started: "2026-06-02T13:53:44Z"
+    completed: "2026-06-02T14:33:14Z"
+    attempts: 1
+    notes: EmbeddedMode=true→Null defaults; EmbeddedMode=false→Console defaults; lazy nullable backing fields in VMContext; 8 EmbeddedModeTests green; TestBuiltInsTests updated; CompletionSurfaceSnapshot+Dap unchanged (toolchain audit passed)
   2D:
     status: pending
     commit: null
