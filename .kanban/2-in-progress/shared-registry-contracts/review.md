@@ -163,7 +163,8 @@ dotnet test --filter "FullyQualifiedName~AdminController|FullyQualifiedName~Audi
 
 ## F04 — [LOW] Wire-visible `Role` domain split: `CreateUserRequest/Response.Role` carries `user`/`admin` but `UserRoles` is server-internal
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** db9cfdad
 **Files:** `Stash.Registry.Contracts/AdminContracts.cs:22`, `Stash.Registry.Contracts/AdminContracts.cs:40`, `Stash.Registry/Auth/RegistryAuthConstants.cs` (defines `UserRoles` server-internally)
 **Phase:** P2
 **Commit:** cf6f537d
