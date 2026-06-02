@@ -137,7 +137,9 @@ phases:
       - Stash.Core/Runtime/IInterpreterContext.cs
       - Stash.Tests/Bytecode/VMContextTests.cs
     verify:
-      - dotnet build Stash.Bytecode Stash.Core Stash.Stdlib
+      - dotnet build Stash.Core/
+      - dotnet build Stash.Bytecode/
+      - dotnet build Stash.Stdlib/
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Bytecode.VMContextTests"
     done_when:
       - IInterpreterContext exposes WorkingDirectory (string), GetEnv(name)/SetEnv(name,value)/UnsetEnv(name)/AllEnv(), and ResolveAgainstCwd(path) — the single source of truth named in brief Cross-Cutting Concerns.
