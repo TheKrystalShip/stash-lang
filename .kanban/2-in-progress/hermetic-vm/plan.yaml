@@ -248,7 +248,8 @@ phases:
       - Stash.Bytecode/Runtime/VMContext.cs
       - Stash.Tests/Stdlib/SignalImplTests.cs
     verify:
-      - dotnet build Stash.Stdlib Stash.Bytecode
+      - dotnet build Stash.Stdlib/
+      - dotnet build Stash.Bytecode/
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Stdlib.SignalImplTests"
     done_when:
       - SignalImpl.SignalHandlers stores a list per signal name, not a single tuple — every entry is (IInterpreterContext, IStashCallable, PosixSignalRegistration?).
