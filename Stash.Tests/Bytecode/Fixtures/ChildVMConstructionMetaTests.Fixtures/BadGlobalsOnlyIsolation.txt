@@ -1,0 +1,34 @@
+// Synthetic C# snippet used by ChildVMConstructionMetaTests as the fail-path proof
+// for the SnapshotUpvalues guard.  This snippet correctly routes globals through
+// BuildChildGlobals but OMITS the SnapshotUpvalues call — the exact gap the guard
+// was strengthened to catch (upvalue-captured reference types would otherwise be
+// shared across threads, producing a data race on background callbacks).
+//
+// Extension is .txt intentionally: the .cs SDK glob would compile this into
+// Stash.Tests and cause a build break (internals are not accessible there).
+
+using System.Collections.Generic;
+using Stash.Runtime;
+
+namespace Stash.Bytecode.Fixtures;
+
+/// <summary>
+/// A class that isolates globals but forgets to snapshot upvalues —
+/// the exact omission the SnapshotUpvalues guard exists to catch.
+/// </summary>
+internal static class BadGlobalsOnlyIsolationFixture
+{
+    internal static void ForkCallback(
+        VMFunction vmFn,
+        Dictionary<string, StashValue> parentGlobals,
+        System.Threading.CancellationToken ct)
+    {
+        // Globals isolated — correct.
+        var childGlobals = IsolationHelpers.BuildChildGlobals(parentGlobals);
+        // BAD: constructs the child with the ORIGINAL vmFn whose Upvalues are the
+        // parent's live objects — SnapshotUpvalues is never called.
+        // Any non-frozen reference captured in vmFn.Upvalues is now shared across threads.
+        var child = new VirtualMachine(childGlobals, ct);
+        child.CallClosureDirect(vmFn, System.ReadOnlySpan<StashValue>.Empty);
+    }
+}

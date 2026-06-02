@@ -11,179 +11,215 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Watch_FileModified_CallbackFires()
     {
-        var filePath = Path.Combine(TestDir, "watch_modified.txt").Replace("\\", "/");
+        // Callback fires with Modified event type — prove via file side-effect channel.
+        var filePath   = Path.Combine(TestDir, "watch_modified.txt").Replace("\\", "/");
+        var signalFile = Path.Combine(TestDir, "watch_modified_signal.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {fired: false, matched: false};
+        // Callback writes the event type string to signalFile; parent polls until it appears.
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.fired = true;
-                state.matched = event.type == fs.WatchEventType.Modified;
+                if (event.type == fs.WatchEventType.Modified) {
+                    fs.writeFile("{{signalFile}}", "Modified");
+                }
             });
             fs.writeFile("{{filePath}}", "modified content");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.matched;
             """);
 
-        Assert.Equal(true, result);
+        Assert.True(File.Exists(signalFile), "callback did not fire: signal file not written within 5s");
+        Assert.Equal("Modified", File.ReadAllText(signalFile));
     }
 
     [Fact]
     public void Watch_DirectoryFileCreated_CallbackFires()
     {
-        var dir = Path.Combine(TestDir, "watch_created_dir").Replace("\\", "/");
+        var dir        = Path.Combine(TestDir, "watch_created_dir").Replace("\\", "/");
+        var newFile    = $"{dir}/newfile.txt";
+        var signalFile = Path.Combine(TestDir, "watch_created_signal.txt").Replace("\\", "/");
         Directory.CreateDirectory(dir);
-        var newFile = $"{dir}/newfile.txt";
 
-        // Poll for the Created callback up to a 5s deadline instead of a fixed sleep:
-        // a slow watcher gets the time it needs, a fast one isn't delayed.
-        var result = Run($$"""
-            let state = {matched: false};
+        // Poll for the Created callback up to a 5s deadline instead of a fixed sleep.
+        // Callback writes to signalFile when a Created event fires; parent polls that file.
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
                 if (event.type == fs.WatchEventType.Created) {
-                    state.matched = true;
+                    fs.writeFile("{{signalFile}}", "Created");
                 }
             });
             fs.writeFile("{{newFile}}", "hello");
             let deadline = time.millis() + 5000;
-            while (!state.matched && time.millis() < deadline) {
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
                 time.sleep(0.02);
             }
             fs.unwatch(w);
-            let result = state.matched;
             """);
 
-        Assert.Equal(true, result);
+        Assert.True(File.Exists(signalFile), "callback did not fire: signal file not written within 5s");
+        Assert.Equal("Created", File.ReadAllText(signalFile));
     }
 
     [Fact]
     public void Watch_DirectoryFileDeleted_CallbackFires()
     {
-        var dir = Path.Combine(TestDir, "watch_deleted_dir").Replace("\\", "/");
+        var dir        = Path.Combine(TestDir, "watch_deleted_dir").Replace("\\", "/");
+        var target     = $"{dir}/todelete.txt";
+        var signalFile = Path.Combine(TestDir, "watch_deleted_signal.txt").Replace("\\", "/");
         Directory.CreateDirectory(dir);
-        var target = $"{dir}/todelete.txt";
         File.WriteAllText(target, "data");
 
-        var result = Run($$"""
-            let state = {matched: false};
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.matched = event.type == fs.WatchEventType.Deleted;
+                if (event.type == fs.WatchEventType.Deleted) {
+                    fs.writeFile("{{signalFile}}", "Deleted");
+                }
             });
             fs.delete("{{target}}");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.matched;
             """);
 
-        Assert.Equal(true, result);
+        Assert.True(File.Exists(signalFile), "callback did not fire: signal file not written within 5s");
+        Assert.Equal("Deleted", File.ReadAllText(signalFile));
     }
 
     [Fact]
     public void Watch_DirectoryFileRenamed_CallbackFires()
     {
-        var dir = Path.Combine(TestDir, "watch_renamed_dir").Replace("\\", "/");
+        var dir         = Path.Combine(TestDir, "watch_renamed_dir").Replace("\\", "/");
+        var oldFile     = $"{dir}/before.txt";
+        var newFile     = $"{dir}/after.txt";
+        var signalFile  = Path.Combine(TestDir, "watch_renamed_signal.txt").Replace("\\", "/");
+        var oldPathFile = Path.Combine(TestDir, "watch_renamed_oldpath.txt").Replace("\\", "/");
         Directory.CreateDirectory(dir);
-        var oldFile = $"{dir}/before.txt";
-        var newFile = $"{dir}/after.txt";
         File.WriteAllText(oldFile, "data");
 
-        var eventType = Run($$"""
-            let state = {matched: false};
+        // First: confirm Renamed event type fires.
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.matched = event.type == fs.WatchEventType.Renamed;
+                if (event.type == fs.WatchEventType.Renamed) {
+                    fs.writeFile("{{signalFile}}", "Renamed");
+                }
             });
             fs.move("{{oldFile}}", "{{newFile}}");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.matched;
             """);
 
-        Assert.Equal(true, eventType);
+        Assert.True(File.Exists(signalFile), "Renamed callback did not fire: signal file not written within 5s");
+        Assert.Equal("Renamed", File.ReadAllText(signalFile));
 
+        // Second: confirm oldPath is non-null on a rename event.
         File.WriteAllText(oldFile, "data");
         if (File.Exists(newFile)) File.Delete(newFile);
+        if (File.Exists(oldPathFile)) File.Delete(oldPathFile);
 
-        var hasOldPath = Run($$"""
-            let state = {hasOldPath: false};
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.hasOldPath = event.oldPath != null;
+                if (event.oldPath != null) {
+                    fs.writeFile("{{oldPathFile}}", "has-old-path");
+                }
             });
             fs.move("{{oldFile}}", "{{newFile}}");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{oldPathFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.hasOldPath;
             """);
 
-        Assert.Equal(true, hasOldPath);
+        Assert.True(File.Exists(oldPathFile), "oldPath callback did not fire: old-path file not written within 5s");
+        Assert.Equal("has-old-path", File.ReadAllText(oldPathFile));
     }
 
     [Fact]
     public void Watch_WithFilter_OnlyMatchingFilesTrigger()
     {
-        var dir = Path.Combine(TestDir, "watch_filter_dir").Replace("\\", "/");
+        var dir        = Path.Combine(TestDir, "watch_filter_dir").Replace("\\", "/");
+        var match      = $"{dir}/match.txt";
+        var noMatch    = $"{dir}/nomatch.log";
+        // Counter file: each callback invocation appends a line.
+        var counterFile = Path.Combine(TestDir, "watch_filter_count.txt").Replace("\\", "/");
+        // Pre-create both files so only "modified" events fire.
         Directory.CreateDirectory(dir);
-        var match = $"{dir}/match.txt";
-        var noMatch = $"{dir}/nomatch.log";
-        // Pre-create both files so only "modified" events fire (avoids created+modified double-count)
         File.WriteAllText(match, "initial");
         File.WriteAllText(noMatch, "initial");
 
-        var result = Run($$"""
-            let state = {count: 0};
+        // Callback appends a line to counterFile for every event; we count lines.
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.count = state.count + 1;
+                fs.appendFile("{{counterFile}}", "hit\n");
             }, fs.WatchOptions { filter: "*.txt" });
             fs.writeFile("{{match}}", "updated");
             fs.writeFile("{{noMatch}}", "updated");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
+            time.sleep(0.5);
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.Equal(1L, result);
+        // Exactly 1 callback for the .txt file (debounce coalesces the single write).
+        int count = File.Exists(counterFile)
+            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
+            : 0;
+        Assert.Equal(1, count);
     }
 
     [Fact]
     public void Watch_Recursive_SubdirChangesDetected()
     {
-        var dir = Path.Combine(TestDir, "watch_recursive_dir").Replace("\\", "/");
-        var subdir = $"{dir}/sub";
+        var dir        = Path.Combine(TestDir, "watch_recursive_dir").Replace("\\", "/");
+        var subdir     = $"{dir}/sub";
+        var deepFile   = $"{subdir}/deep.txt";
+        var signalFile = Path.Combine(TestDir, "watch_recursive_signal.txt").Replace("\\", "/");
         Directory.CreateDirectory(subdir);
-        var deepFile = $"{subdir}/deep.txt";
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.count = state.count + 1;
+                fs.writeFile("{{signalFile}}", "fired");
             }, fs.WatchOptions { recursive: true });
             fs.writeFile("{{deepFile}}", "hello");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.True((long)result! >= 1);
+        Assert.True(File.Exists(signalFile), "recursive callback did not fire within 5s");
     }
 
     [Fact]
     public void Unwatch_StopsCallbacks()
     {
-        var filePath = Path.Combine(TestDir, "watch_stopped.txt").Replace("\\", "/");
+        // After unwatch, no callback fires — the counter file should remain absent.
+        var filePath    = Path.Combine(TestDir, "watch_stopped.txt").Replace("\\", "/");
+        var counterFile = Path.Combine(TestDir, "watch_stopped_count.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.count = state.count + 1;
+                fs.writeFile("{{counterFile}}", "fired");
             });
             fs.unwatch(w);
             fs.writeFile("{{filePath}}", "after unwatch");
             time.sleep(0.8);
-            let result = state.count;
             """);
 
-        Assert.Equal(0L, result);
+        // Counter file should NOT exist — unwatch stopped the callbacks.
+        Assert.False(File.Exists(counterFile), "callback fired after unwatch");
     }
 
     // ── Edge cases ───────────────────────────────────────────────────────────
@@ -225,78 +261,103 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Watch_CallbackError_WatcherContinues()
     {
-        var filePath = Path.Combine(TestDir, "watch_cb_error.txt").Replace("\\", "/");
+        // The watcher continues firing after a callback throws.
+        // First invocation: throw an error (no signal file written).
+        // Second invocation: write to signalFile.
+        // The parent waits for signalFile to appear — proving the watcher survived the first error.
+        var filePath   = Path.Combine(TestDir, "watch_cb_error.txt").Replace("\\", "/");
+        var errorFile  = Path.Combine(TestDir, "watch_cb_error_first.txt").Replace("\\", "/");
+        var signalFile = Path.Combine(TestDir, "watch_cb_error_signal.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {called: 0, count: 0};
+        // The callback appends a line to errorFile on each invocation (before the throw on call 1),
+        // and writes to signalFile on the second (non-throwing) invocation.
+        // We can't share a counter via upvalue (isolation), so we track "first time" by whether
+        // errorFile already exists: if missing → first call → write errorFile then throw;
+        //                                         if present → second call → write signalFile.
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.called = state.called + 1;
-                if (state.called == 1) {
+                if (!fs.exists("{{errorFile}}")) {
+                    fs.writeFile("{{errorFile}}", "first");
                     throw "intentional error";
                 }
-                state.count = state.count + 1;
+                fs.writeFile("{{signalFile}}", "second");
             });
             fs.writeFile("{{filePath}}", "first");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{errorFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.writeFile("{{filePath}}", "second");
-            time.sleep(0.8);
+            let deadline2 = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline2) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.Equal(1L, result);
+        Assert.True(File.Exists(signalFile),
+            "watcher did not continue after callback error: second signal file was not written within 5s");
     }
 
     [Fact]
     public void Watch_SamePathTwice_BothFire()
     {
-        var filePath = Path.Combine(TestDir, "watch_two.txt").Replace("\\", "/");
+        // Two watchers on the same path — both callbacks fire at least once.
+        var filePath    = Path.Combine(TestDir, "watch_two.txt").Replace("\\", "/");
+        var signalFile1 = Path.Combine(TestDir, "watch_two_signal1.txt").Replace("\\", "/");
+        var signalFile2 = Path.Combine(TestDir, "watch_two_signal2.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w1 = fs.watch("{{filePath}}", (event) => {
-                state.count = state.count + 1;
+                fs.writeFile("{{signalFile1}}", "w1");
             });
             let w2 = fs.watch("{{filePath}}", (event) => {
-                state.count = state.count + 1;
+                fs.writeFile("{{signalFile2}}", "w2");
             });
             fs.writeFile("{{filePath}}", "changed");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while ((!fs.exists("{{signalFile1}}") || !fs.exists("{{signalFile2}}")) && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w1);
             fs.unwatch(w2);
-            let result = state.count;
             """);
 
-        Assert.True((long)result! >= 1);
+        Assert.True(File.Exists(signalFile1), "watcher 1 did not fire within 5s");
+        Assert.True(File.Exists(signalFile2), "watcher 2 did not fire within 5s");
     }
 
     [Fact]
     public void Watch_MultipleWatchersDifferentPaths_IndependentFiring()
     {
-        var dir1 = Path.Combine(TestDir, "multi_watch_a").Replace("\\", "/");
-        var dir2 = Path.Combine(TestDir, "multi_watch_b").Replace("\\", "/");
+        var dir1        = Path.Combine(TestDir, "multi_watch_a").Replace("\\", "/");
+        var dir2        = Path.Combine(TestDir, "multi_watch_b").Replace("\\", "/");
+        var signalFileA = Path.Combine(TestDir, "multi_watch_signal_a.txt").Replace("\\", "/");
+        var signalFileB = Path.Combine(TestDir, "multi_watch_signal_b.txt").Replace("\\", "/");
         Directory.CreateDirectory(dir1);
         Directory.CreateDirectory(dir2);
 
-        var result = Run($$"""
-            let state = {a: 0, b: 0};
+        RunStatements($$"""
             let w1 = fs.watch("{{dir1}}", (event) => {
-                state.a = state.a + 1;
+                fs.writeFile("{{signalFileA}}", "fired");
             });
             let w2 = fs.watch("{{dir2}}", (event) => {
-                state.b = state.b + 1;
+                fs.writeFile("{{signalFileB}}", "fired");
             });
             fs.writeFile("{{dir1}}/file.txt", "hello");
             fs.writeFile("{{dir2}}/file.txt", "world");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while ((!fs.exists("{{signalFileA}}") || !fs.exists("{{signalFileB}}")) && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w1);
             fs.unwatch(w2);
-            let result = state.a >= 1 && state.b >= 1;
             """);
 
-        Assert.Equal(true, result);
+        Assert.True(File.Exists(signalFileA), "watcher for dir1 did not fire within 5s");
+        Assert.True(File.Exists(signalFileB), "watcher for dir2 did not fire within 5s");
     }
 
     // ── Options tests ────────────────────────────────────────────────────────
@@ -304,63 +365,70 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Watch_DefaultOptions_Works()
     {
-        var filePath = Path.Combine(TestDir, "watch_default.txt").Replace("\\", "/");
+        var filePath   = Path.Combine(TestDir, "watch_default.txt").Replace("\\", "/");
+        var signalFile = Path.Combine(TestDir, "watch_default_signal.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {matched: false};
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.matched = event.type == fs.WatchEventType.Modified;
+                if (event.type == fs.WatchEventType.Modified) {
+                    fs.writeFile("{{signalFile}}", "Modified");
+                }
             });
             fs.writeFile("{{filePath}}", "updated");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.matched;
             """);
 
-        Assert.Equal(true, result);
+        Assert.True(File.Exists(signalFile), "default-options callback did not fire within 5s");
+        Assert.Equal("Modified", File.ReadAllText(signalFile));
     }
 
     [Fact]
     public void Watch_RecursiveFalse_SubdirIgnored()
     {
-        var dir = Path.Combine(TestDir, "watch_nonrecursive").Replace("\\", "/");
-        var subdir = $"{dir}/sub";
-        Directory.CreateDirectory(subdir);
+        var dir         = Path.Combine(TestDir, "watch_nonrecursive").Replace("\\", "/");
+        var subdir      = $"{dir}/sub";
         var ignoredFile = $"{subdir}/ignored.txt";
+        var counterFile = Path.Combine(TestDir, "watch_nonrecursive_count.txt").Replace("\\", "/");
+        Directory.CreateDirectory(subdir);
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.count = state.count + 1;
+                fs.writeFile("{{counterFile}}", "fired");
             }, fs.WatchOptions { recursive: false });
             fs.writeFile("{{ignoredFile}}", "hello");
             time.sleep(0.8);
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.Equal(0L, result);
+        // Counter file should NOT exist — subdir change was not watched.
+        Assert.False(File.Exists(counterFile), "recursive:false should not fire for subdirectory changes");
     }
 
     [Fact]
     public void Watch_CustomBufferSize_AcceptedWithoutError()
     {
-        var filePath = Path.Combine(TestDir, "watch_bufsize.txt").Replace("\\", "/");
+        var filePath   = Path.Combine(TestDir, "watch_bufsize.txt").Replace("\\", "/");
+        var signalFile = Path.Combine(TestDir, "watch_bufsize_signal.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {matched: false};
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.matched = true;
+                fs.writeFile("{{signalFile}}", "fired");
             }, fs.WatchOptions { bufferSize: 16384 });
             fs.writeFile("{{filePath}}", "updated");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.matched;
             """);
 
-        Assert.Equal(true, result);
+        Assert.True(File.Exists(signalFile), "bufferSize callback did not fire within 5s");
     }
 
     // ── Debounce tests ───────────────────────────────────────────────────────
@@ -368,127 +436,175 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     [Fact]
     public void Watch_DebouncedRapidWrites_SingleCallback()
     {
-        var filePath = Path.Combine(TestDir, "watch_debounce.txt").Replace("\\", "/");
+        // 5 rapid writes to the same file → debounced to exactly 1 callback.
+        // Callback appends a line to counterFile per invocation.
+        var filePath    = Path.Combine(TestDir, "watch_debounce.txt").Replace("\\", "/");
+        var counterFile = Path.Combine(TestDir, "watch_debounce_count.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.count = state.count + 1;
+                fs.appendFile("{{counterFile}}", "hit\n");
             });
             fs.writeFile("{{filePath}}", "1");
             fs.writeFile("{{filePath}}", "2");
             fs.writeFile("{{filePath}}", "3");
             fs.writeFile("{{filePath}}", "4");
             fs.writeFile("{{filePath}}", "5");
-            time.sleep(1.0);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
+            time.sleep(0.5);
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.Equal(1L, result);
+        int count = File.Exists(counterFile)
+            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
+            : 0;
+        Assert.Equal(1, count);
     }
 
     [Fact]
     public void Watch_DebounceZero_AllEventsRaw()
     {
-        var subDir = Path.Combine(TestDir, "watch_nodebounce").Replace("\\", "/");
+        // debounce:0 fires on every raw event — at least 2 callbacks for 5 distinct file creates.
+        var subDir      = Path.Combine(TestDir, "watch_nodebounce").Replace("\\", "/");
+        var counterFile = Path.Combine(TestDir, "watch_nodebounce_count.txt").Replace("\\", "/");
         Directory.CreateDirectory(subDir);
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w = fs.watch("{{subDir}}", (event) => {
-                state.count = state.count + 1;
+                fs.appendFile("{{counterFile}}", "hit\n");
             }, fs.WatchOptions { debounce: 0 });
             fs.writeFile("{{subDir}}/a.txt", "1");
             fs.writeFile("{{subDir}}/b.txt", "2");
             fs.writeFile("{{subDir}}/c.txt", "3");
             fs.writeFile("{{subDir}}/d.txt", "4");
             fs.writeFile("{{subDir}}/e.txt", "5");
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             time.sleep(1.0);
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.True((long)result! > 1);
+        int count = File.Exists(counterFile)
+            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
+            : 0;
+        Assert.True(count > 1, $"debounce:0 should fire >1 callbacks for 5 distinct creates, got {count}");
     }
 
     [Fact]
     public void Watch_DebounceDifferentFiles_NoCoalescing()
     {
-        var dir = Path.Combine(TestDir, "debounce_diff").Replace("\\", "/");
-        Directory.CreateDirectory(dir);
-
         // The debounce timer is keyed on "{path}:{eventType}" (FsBuiltIns.FireCallback),
         // so three writes to three DISTINCT files land in three distinct debounce buckets
         // and never coalesce — each is guaranteed its own callback. >= 3 is therefore the
-        // exact contract guarantee, not a brittle heuristic. We poll until the three
-        // callbacks have fired (up to a 5s deadline) rather than sleeping a fixed window,
-        // so the default 100ms debounce delay plus any watcher latency is tolerated.
-        var result = Run($$"""
-            let state = {count: 0};
+        // exact contract guarantee. We poll until all 3 callback lines appear (up to 5s deadline).
+        var dir         = Path.Combine(TestDir, "debounce_diff").Replace("\\", "/");
+        var counterFile = Path.Combine(TestDir, "debounce_diff_count.txt").Replace("\\", "/");
+        Directory.CreateDirectory(dir);
+
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
-                state.count = state.count + 1;
+                fs.appendFile("{{counterFile}}", "hit\n");
             });
             fs.writeFile("{{dir}}/a.txt", "1");
             fs.writeFile("{{dir}}/b.txt", "2");
             fs.writeFile("{{dir}}/c.txt", "3");
             let deadline = time.millis() + 5000;
-            while (state.count < 3 && time.millis() < deadline) {
+            while (time.millis() < deadline) {
+                if (fs.exists("{{counterFile}}")) {
+                    let lines = str.split(fs.readFile("{{counterFile}}"), "\n");
+                    let count = 0;
+                    let i = 0;
+                    while (i < len(lines)) {
+                        if (lines[i] == "hit") { count = count + 1; }
+                        i = i + 1;
+                    }
+                    if (count >= 3) { break; }
+                }
                 time.sleep(0.02);
             }
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.True((long)result! >= 3);
+        int count = File.Exists(counterFile)
+            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
+            : 0;
+        Assert.True(count >= 3, $"expected >= 3 callbacks for 3 distinct-file writes, got {count}");
     }
 
     [Fact]
     public void Watch_RenameNotDebounced_EachFiresImmediately()
     {
-        var dir = Path.Combine(TestDir, "debounce_rename").Replace("\\", "/");
+        // Each rename fires its own Renamed callback immediately (not debounced together).
+        var dir         = Path.Combine(TestDir, "debounce_rename").Replace("\\", "/");
+        var counterFile = Path.Combine(TestDir, "debounce_rename_count.txt").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         File.WriteAllText($"{dir}/r1.txt", "data");
         File.WriteAllText($"{dir}/r2.txt", "data");
 
-        var result = Run($$"""
-            let state = {renames: 0};
+        RunStatements($$"""
             let w = fs.watch("{{dir}}", (event) => {
                 if (event.type == fs.WatchEventType.Renamed) {
-                    state.renames = state.renames + 1;
+                    fs.appendFile("{{counterFile}}", "rename\n");
                 }
             });
             fs.move("{{dir}}/r1.txt", "{{dir}}/r1_moved.txt");
             fs.move("{{dir}}/r2.txt", "{{dir}}/r2_moved.txt");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (time.millis() < deadline) {
+                if (fs.exists("{{counterFile}}")) {
+                    let lines = str.split(fs.readFile("{{counterFile}}"), "\n");
+                    let count = 0;
+                    let i = 0;
+                    while (i < len(lines)) {
+                        if (lines[i] == "rename") { count = count + 1; }
+                        i = i + 1;
+                    }
+                    if (count >= 2) { break; }
+                }
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
-            let result = state.renames;
             """);
 
-        Assert.True((long)result! >= 2);
+        int count = File.Exists(counterFile)
+            ? File.ReadAllLines(counterFile).Count(l => l == "rename")
+            : 0;
+        Assert.True(count >= 2, $"expected >= 2 rename callbacks, got {count}");
     }
 
     [Fact]
     public void Watch_CustomDebounceWindow_CoalescesWithinWindow()
     {
-        var filePath = Path.Combine(TestDir, "custom_debounce.txt").Replace("\\", "/");
+        // 3 rapid writes within the debounce window coalesce to 1 callback.
+        var filePath    = Path.Combine(TestDir, "custom_debounce.txt").Replace("\\", "/");
+        var counterFile = Path.Combine(TestDir, "custom_debounce_count.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        var result = Run($$"""
-            let state = {count: 0};
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {
-                state.count = state.count + 1;
+                fs.appendFile("{{counterFile}}", "hit\n");
             }, fs.WatchOptions { debounce: 500 });
             fs.writeFile("{{filePath}}", "1");
             fs.writeFile("{{filePath}}", "2");
             fs.writeFile("{{filePath}}", "3");
-            time.sleep(1.0);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{counterFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
+            time.sleep(0.5);
             fs.unwatch(w);
-            let result = state.count;
             """);
 
-        Assert.Equal(1L, result);
+        int count = File.Exists(counterFile)
+            ? File.ReadAllLines(counterFile).Count(l => l == "hit")
+            : 0;
+        Assert.Equal(1, count);
     }
 
     // ── Scope isolation tests ─────────────────────────────────────────────────
@@ -533,23 +649,41 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     }
 
     [Fact]
-    public void Watch_ReferenceTypeShared_DictMutation()
+    public void Watch_UpvalueRefType_DictMutationIsCallLocal()
     {
-        var filePath = Path.Combine(TestDir, "watch_shared.txt").Replace("\\", "/");
+        // Background-thread callbacks (fs.watch) run in an isolated child VM whose
+        // upvalues are snapshotted via IsolationHelpers.SnapshotUpvalues.  A mutation
+        // of a reference-typed captured local (dict) inside the callback is call-local:
+        // the child gets its own deep-cloned copy of the dict, so the parent's dict is
+        // unchanged after the callback fires.
+        //
+        // Prove the callback fired via a side-effect channel (signalFile write), then
+        // assert the parent's captured dict is unchanged — mirroring the primitive test
+        // Watch_Callback_FiresOnChange_MutationIsCallLocal.
+        var filePath   = Path.Combine(TestDir, "watch_upvalue_ref.txt").Replace("\\", "/");
+        var signalFile = Path.Combine(TestDir, "watch_upvalue_ref_signal.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
             let state = {value: 0};
             let w = fs.watch("{{filePath}}", (event) => {
                 state.value = 42;
+                fs.writeFile("{{signalFile}}", "fired");
             });
             fs.writeFile("{{filePath}}", "trigger");
-            time.sleep(0.8);
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
             let result = state.value;
             """);
 
-        Assert.Equal(42L, result);
+        // Callback fired — signal file was written by the child VM.
+        Assert.True(File.Exists(signalFile), "callback did not fire: signal file was not written within 5s");
+        Assert.Equal("fired", File.ReadAllText(signalFile));
+
+        // Parent's captured dict is unchanged — upvalue snapshot makes mutation call-local.
+        Assert.Equal(0L, result);
     }
 }
-

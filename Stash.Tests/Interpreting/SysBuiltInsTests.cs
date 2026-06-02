@@ -496,29 +496,31 @@ let result = true;
         string marker = Path.Combine(Path.GetTempPath(), $"stash_signal_test_{Guid.NewGuid():N}");
         try
         {
-            // The handler writes the marker when SIGUSR1 is delivered. We send the signal
-            // to our own PID, then poll (inside Stash) for the marker up to a 5s deadline
+            // The handler writes the marker when SIGUSR1 is delivered.  We send the signal
+            // to our own PID, then poll (inside Stash) for the marker FILE up to a 5s deadline
             // instead of a fixed sleep — robust to signal-delivery latency under load.
+            //
+            // Signal handlers run in an isolated child VM (cross-thread dispatch via
+            // InvokeCallbackDirect), so upvalue-captured dict mutations (e.g. state.handled = true)
+            // are call-local and never propagate back to the parent.  The canonical cross-boundary
+            // signal channel is a file I/O side-effect, so we poll fs.exists(marker) here and
+            // assert File.Exists(marker) in C# — exactly what the handler writes.
+            //
             // SIGUSR1 is registered process-globally, so the script unregisters it before
             // returning, and the C# finally re-runs offSignal as a belt-and-suspenders
-            // cleanup so a mid-script failure can't leak the handler into a sibling test
-            // (OnSignal_AllSignalEnumMembers_CanRegister also touches SIGUSR1).
-            var result = Run($@"
-let state = {{handled: false}};
+            // cleanup so a mid-script failure can't leak the handler into a sibling test.
+            RunStatements($@"
 sys.onSignal(sys.Signal.SIGUSR1, () => {{
     fs.writeFile(""{marker.Replace("\\", "\\\\")}"", ""handled"");
-    state.handled = true;
 }});
 let pid = sys.pid();
 $(kill -USR1 ${{pid}});
 let deadline = time.millis() + 5000;
-while (!state.handled && time.millis() < deadline) {{
+while (!fs.exists(""{marker.Replace("\\", "\\\\")}"") && time.millis() < deadline) {{
     let _ = try $(sleep 0.02);
 }}
 sys.offSignal(sys.Signal.SIGUSR1);
-let result = state.handled;
 ");
-            Assert.Equal(true, result);
             Assert.True(File.Exists(marker), "Signal handler should have created the marker file");
             Assert.Equal("handled", File.ReadAllText(marker));
         }

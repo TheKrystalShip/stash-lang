@@ -12,15 +12,24 @@ namespace Stash.Tests.Bytecode;
 
 /// <summary>
 /// Roslyn-based meta-test that guards against cross-thread child-VM construction
-/// sites that bypass <c>IsolationHelpers.BuildChildGlobals</c>.
+/// sites that bypass <c>IsolationHelpers.BuildChildGlobals</c> <em>or</em> that isolate
+/// globals but forget to snapshot upvalues via <c>IsolationHelpers.SnapshotUpvalues</c>.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <b>The problem:</b> every <c>new VirtualMachine(...)</c> on a cross-thread fork path
 /// must pass globals through <c>IsolationHelpers.BuildChildGlobals</c> (the freeze-or-clone
 /// chokepoint) to prevent data races on mutable reference-typed globals.  Passing raw
-/// parent globals directly (<c>new VirtualMachine(parent._globals, ct)</c>) is the exact
-/// omission this guard exists to catch.
+/// parent globals directly (<c>new VirtualMachine(parent._globals, ct)</c>) is one form
+/// of the omission this guard exists to catch.
+/// </para>
+/// <para>
+/// A second, subtler omission: isolating globals but <em>not</em> snapshotting the
+/// upvalues of the <see cref="Stash.Bytecode.VMFunction"/> being handed to the child VM.
+/// Upvalue-captured reference types (dict / array / struct) would then be shared by
+/// reference across threads — the same data-race hazard the globals guard eliminates for
+/// globals.  Both <c>BuildChildGlobals</c> <em>and</em> <c>SnapshotUpvalues</c> must be
+/// present at every routed (cross-thread) construction site.
 /// </para>
 /// <para>
 /// <b>The approach:</b> scan all <c>.cs</c> files under <c>Stash.Bytecode/</c> for
@@ -36,25 +45,29 @@ namespace Stash.Tests.Bytecode;
 /// </list>
 /// </para>
 /// <para>
-/// <b>Routed sites (as of 2026-06-02, phases 2A-2/2A-3):</b>
+/// <b>Routed sites (as of 2026-06-02, phases 2A-2/2A-3 + upvalue-isolation fix):</b>
 /// <list type="bullet">
 ///   <item><c>VirtualMachine.Async.cs</c> — <c>SpawnAsyncFunction</c>: cross-thread async
-///     fork.  Globals pass through <c>BuildChildGlobals</c>.</item>
+///     fork.  Globals pass through <c>BuildChildGlobals</c>; upvalues snapshotted via
+///     <c>SnapshotUpvalues</c>.</item>
 ///   <item><c>VMContext.cs</c> — <c>InvokeCallbackDirect</c> background-thread branch:
-///     cross-thread callback dispatch.  Globals pass through <c>BuildChildGlobals</c>.
+///     cross-thread callback dispatch.  Globals pass through <c>BuildChildGlobals</c>;
+///     upvalues snapshotted via <c>SnapshotUpvalues</c>.
 ///     Note: the same-thread branch of <c>InvokeCallbackDirect</c> executes inline via
 ///     <c>ExecuteVMFunctionInlineDirect</c> — it constructs <b>no</b> child VM and therefore
 ///     does not appear in this scan at all.</item>
 /// </list>
 /// </para>
 /// <para>
-/// <b>Three assertions prove correctness:</b>
+/// <b>Four assertions prove correctness:</b>
 /// <list type="number">
-///   <item><b>Production compliance</b> — every construction in <c>Stash.Bytecode/</c> is
-///     either routed or pinned.</item>
-///   <item><b>Fail-path (teeth)</b> — a synthetic fixture snippet containing a raw
-///     <c>new VirtualMachine(parent._globals, ct)</c> is detected as a violation, proving
-///     the scan catches the exact omission we care about.</item>
+///   <item><b>Production compliance (globals)</b> — every construction in <c>Stash.Bytecode/</c>
+///     is either routed or pinned.</item>
+///   <item><b>Production compliance (upvalues)</b> — every routed construction site also calls
+///     <c>SnapshotUpvalues</c> in its enclosing method, so globals isolation and upvalue
+///     isolation cannot diverge again.</item>
+///   <item><b>Fail-paths (teeth)</b> — synthetic fixture snippets demonstrate that both
+///     missing <c>BuildChildGlobals</c> and missing <c>SnapshotUpvalues</c> are caught.</item>
 ///   <item><b>Exemption pin</b> — the exact set of pinned construction sites matches
 ///     <see cref="PinnedExemptions"/>.  Adding an exemption without updating the pin, or
 ///     removing a construction without updating the pin, causes this assertion to fail —
@@ -335,6 +348,128 @@ public sealed class ChildVMConstructionMetaTests
             "Update PinnedExemptions in ChildVMConstructionMetaTests and document the rationale.");
     }
 
+    // ── Upvalue isolation compliance ──────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <see langword="true"/> when the method that contains a
+    /// <c>new VirtualMachine(...)</c> expression also invokes
+    /// <c>IsolationHelpers.SnapshotUpvalues</c>.
+    ///
+    /// <para>
+    /// We walk upward from the construction node to the nearest enclosing method
+    /// (or local function) declaration and check whether any descendant of that
+    /// method body contains a call to a method named <c>SnapshotUpvalues</c>.
+    /// </para>
+    /// </summary>
+    private static bool EnclosingMethodCallsSnapshotUpvalues(
+        BaseObjectCreationExpressionSyntax creation)
+    {
+        // Walk up to the nearest enclosing method / local function declaration.
+        SyntaxNode? node = creation.Parent;
+        while (node is not null
+               && node is not MethodDeclarationSyntax
+               && node is not LocalFunctionStatementSyntax)
+        {
+            node = node.Parent;
+        }
+
+        if (node is null) return false;
+
+        return node.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(inv =>
+            {
+                string? methodName = inv.Expression switch
+                {
+                    MemberAccessExpressionSyntax ma => ma.Name.Identifier.Text,
+                    IdentifierNameSyntax id         => id.Identifier.Text,
+                    _ => null
+                };
+                return methodName == "SnapshotUpvalues";
+            });
+    }
+
+    /// <summary>
+    /// Asserts that every <b>routed</b> (cross-thread) <c>new VirtualMachine(...)</c>
+    /// construction in <c>Stash.Bytecode/</c> also calls
+    /// <c>IsolationHelpers.SnapshotUpvalues</c> in its enclosing method.
+    ///
+    /// <para>
+    /// Globals isolation (<c>BuildChildGlobals</c>) and upvalue isolation
+    /// (<c>SnapshotUpvalues</c>) must both be present at cross-thread fork sites.
+    /// A site that handles globals but forgets upvalues allows reference-typed captured
+    /// locals to be shared across threads — a data race with the same severity as the
+    /// globals race.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AllRoutedVMConstructions_AlsoCallSnapshotUpvalues()
+    {
+        string sourceDir = FindBytecodeSourceDir();
+        var sites = ScanDirectory(sourceDir);
+
+        // Only routed (cross-thread) sites must also snapshot upvalues.
+        // Pinned (same-thread / engine-root) sites are exempt — they carry no upvalue
+        // from a parent VMFunction and therefore have nothing to snapshot.
+        var csFiles = Directory.EnumerateFiles(sourceDir, "*.cs", SearchOption.AllDirectories)
+            .Where(f =>
+            {
+                string rel = f.Substring(sourceDir.Length).TrimStart(Path.DirectorySeparatorChar, '/');
+                return !rel.StartsWith("bin" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                    && !rel.StartsWith("obj" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            })
+            .ToDictionary(
+                f => f.Substring(sourceDir.Length)
+                       .TrimStart(Path.DirectorySeparatorChar, '/')
+                       .Replace(Path.DirectorySeparatorChar, '/'),
+                f => f,
+                StringComparer.OrdinalIgnoreCase);
+
+        // Build a per-file lookup of routed construction nodes (we need the syntax node,
+        // not just the line number, to walk up to the enclosing method).
+        var violations = new List<string>();
+
+        foreach (var site in sites.Where(s => s.IsRouted))
+        {
+            // Re-parse the source file to get the syntax tree (cheap — files are small).
+            if (!csFiles.TryGetValue(site.RelativePath, out string? filePath)) continue;
+            string source = File.ReadAllText(filePath);
+            var tree = CSharpSyntaxTree.ParseText(source);
+            var root = tree.GetCompilationUnitRoot();
+
+            // Find the specific construction node at the recorded line.
+            var constructionAtLine = root.DescendantNodes()
+                .OfType<BaseObjectCreationExpressionSyntax>()
+                .FirstOrDefault(c =>
+                {
+                    var lineSpan = c.GetLocation().GetLineSpan();
+                    int line = lineSpan.StartLinePosition.Line + 1;
+                    string? typeName = c switch
+                    {
+                        ObjectCreationExpressionSyntax oc =>
+                            (oc.Type as IdentifierNameSyntax)?.Identifier.Text
+                            ?? (oc.Type as QualifiedNameSyntax)?.Right.Identifier.Text,
+                        _ => null
+                    };
+                    return typeName == "VirtualMachine" && line == site.Line;
+                });
+
+            if (constructionAtLine is null) continue;
+
+            if (!EnclosingMethodCallsSnapshotUpvalues(constructionAtLine))
+            {
+                violations.Add($"  {site.RelativePath}:{site.Line} — routed through BuildChildGlobals but SnapshotUpvalues is absent from the enclosing method");
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            $"{violations.Count} routed cross-thread fork site(s) do not call SnapshotUpvalues. " +
+            "Every cross-thread VMFunction invocation must snapshot upvalues (via IsolationHelpers.SnapshotUpvalues) " +
+            "so reference-typed captured locals are isolated, mirroring the globals isolation:\n" +
+            string.Join("\n", violations));
+    }
+
     // ── Self-tests (scanner has teeth) ───────────────────────────────────────
 
     /// <summary>
@@ -408,6 +543,69 @@ internal static class GoodRoutedFixture
             violations.Count == 0,
             $"Expected zero violations in the routed snippet, but found {violations.Count}:\n" +
             string.Join("\n", violations.Select(v => $"  line {v.Line}")));
+    }
+
+    /// <summary>
+    /// Verifies the upvalue-isolation guard flags a construction site that routes globals
+    /// through <c>BuildChildGlobals</c> but does NOT call <c>SnapshotUpvalues</c> — the
+    /// exact gap the guard was extended to catch (upvalue-captured reference types remain
+    /// shared across threads if snapshotting is omitted).
+    /// </summary>
+    /// <remarks>
+    /// The fixture source is <c>BadGlobalsOnlyIsolation.txt</c>: it correctly routes globals
+    /// (so the globals guard passes) but omits <c>SnapshotUpvalues</c> (so the upvalue guard
+    /// must trip).  This proves the two guards are independent and the upvalue guard has teeth.
+    /// </remarks>
+    [Fact]
+    public void UpvalueGuard_RoutedWithoutSnapshotUpvalues_IsFlagged()
+    {
+        string fixtureSource = LoadFixtureText("BadGlobalsOnlyIsolation.txt");
+
+        var sites = new List<ConstructionSite>();
+        ScanSource(fixtureSource, "BadGlobalsOnlyIsolation.txt", sites);
+
+        // The fixture has exactly one VirtualMachine construction — assert the scanner found it.
+        Assert.True(
+            sites.Count > 0,
+            "Scanner found no VirtualMachine constructions in BadGlobalsOnlyIsolation.txt. " +
+            "Ensure the fixture still contains 'new VirtualMachine(...)'.");
+
+        // It is ROUTED (has BuildChildGlobals) — the globals guard passes for this fixture.
+        var routedSites = sites.Where(s => s.IsRouted).ToList();
+        Assert.True(
+            routedSites.Count > 0,
+            "Expected the construction in BadGlobalsOnlyIsolation.txt to be classified as " +
+            "'routed' (globals go through BuildChildGlobals). " +
+            "Ensure the fixture still contains a BuildChildGlobals call.");
+
+        // Now check the upvalue guard: parse and walk the fixture.
+        var tree = CSharpSyntaxTree.ParseText(fixtureSource);
+        var root = tree.GetCompilationUnitRoot();
+
+        var violations = root.DescendantNodes()
+            .OfType<BaseObjectCreationExpressionSyntax>()
+            .Where(c =>
+            {
+                string? typeName = c switch
+                {
+                    ObjectCreationExpressionSyntax oc =>
+                        (oc.Type as IdentifierNameSyntax)?.Identifier.Text
+                        ?? (oc.Type as QualifiedNameSyntax)?.Right.Identifier.Text,
+                    _ => null
+                };
+                if (typeName != "VirtualMachine") return false;
+                // Routed but no SnapshotUpvalues = upvalue-guard violation.
+                return FirstArgIsRoutedThroughBuildChildGlobals(c, root)
+                    && !EnclosingMethodCallsSnapshotUpvalues(c);
+            })
+            .ToList();
+
+        Assert.True(
+            violations.Count > 0,
+            "Expected the upvalue guard to flag BadGlobalsOnlyIsolation.txt as a violation " +
+            "(BuildChildGlobals present, SnapshotUpvalues absent), but no violation was detected. " +
+            "Ensure the fixture does not contain a SnapshotUpvalues call and the " +
+            "EnclosingMethodCallsSnapshotUpvalues check is working correctly.");
     }
 
     // ── Fixture loader ────────────────────────────────────────────────────────

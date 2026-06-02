@@ -452,6 +452,20 @@ internal sealed class VMContext : IInterpreterContext
                 // Cross-thread path: apply freeze-or-clone to globals so the child gets a
                 // private copy of any non-frozen mutable values (no cross-thread data races).
                 var childGlobals = IsolationHelpers.BuildChildGlobals(Globals);
+                // Snapshot upvalues so the child gets private copies of every reference-typed
+                // captured local.  Without this, the child's frame would share the parent's
+                // live Upvalue objects, letting a background-thread write race on a captured
+                // dict / array / struct.  Mirrors what SpawnAsyncFunction does for async forks.
+                var isolatedUpvalues = IsolationHelpers.SnapshotUpvalues(vmFn.Upvalues);
+                // Ensure ModuleGlobals on the isolated VMFunction points at the child-local
+                // globals copy when the callback was defined in the main module (i.e. when
+                // vmFn.ModuleGlobals is the parent's live _globals or null).  For callbacks
+                // imported from a separate module, keep the original module dict — same logic
+                // as SpawnAsyncFunction's capturedModuleGlobals computation.
+                var isolatedModuleGlobals = (vmFn.ModuleGlobals is null || ReferenceEquals(vmFn.ModuleGlobals, Globals))
+                    ? childGlobals
+                    : vmFn.ModuleGlobals;
+                var isolatedFn = new VMFunction(vmFn.Chunk, isolatedUpvalues) { ModuleGlobals = isolatedModuleGlobals };
                 var childVm = new VirtualMachine(childGlobals, CancellationToken);
                 childVm.Output = Output;
                 childVm.ErrorOutput = ErrorOutput;
@@ -471,7 +485,7 @@ internal sealed class VMContext : IInterpreterContext
 
                 childVm.InitGlobalSlots(vmFn.Chunk);
                 StashValue[] argsCopy = args.ToArray();
-                return childVm.CallClosureDirect(vmFn, argsCopy);
+                return childVm.CallClosureDirect(isolatedFn, argsCopy);
                 // Note: we no longer call ActiveVM?.RefreshGlobalSlots() because the child
                 // now has its own isolated globals dict — writes are call-local, not shared.
             }
