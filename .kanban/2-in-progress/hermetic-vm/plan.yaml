@@ -82,8 +82,10 @@ phases:
       - Stash.Bytecode/Runtime/VMContext.cs
       - Stash.Tests/Interpreting/**
       - Stash.Tests/Bytecode/**
+      - Stash.Tests/Core/**
     verify:
-      - dotnet build Stash.Bytecode Stash.Core
+      - dotnet build Stash.Core/
+      - dotnet build Stash.Bytecode/
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async|FullyQualifiedName~Stash.Tests.Bytecode.Async|FullyQualifiedName~Stash.Tests.Core.Runtime.DeepClone"
     done_when:
       - RuntimeValues.DeepClone(value, visited) exists, mirrors DeepFreeze's cycle-safe walker shape, and throws a typed error on cycle with the cycle path in the message.
