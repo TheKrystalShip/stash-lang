@@ -31,12 +31,19 @@ Stash.Registry/
 │   ├── ScopesController.cs       → Scope resolution and claims
 │   ├── SearchController.cs       → Search with pagination
 │   └── AdminController.cs        → Stats, user mgmt, package role override, audit log
-├── Contracts/                    → DTO classes
+│   (Contracts/ removed — all wire DTOs live in Stash.Registry.Contracts/)
+│
+│   Stash.Registry.Contracts/     → Shared wire-contract assembly (dependency-free)
 │   ├── AuthContracts.cs          → Login/Register/Token request/response
 │   ├── PackageContracts.cs       → Package/version detail, publish/unpublish, roles, visibility
+│   ├── OrganizationContracts.cs  → Org/team/member request/response
+│   ├── ScopeContracts.cs         → Scope detail/claim request/response
 │   ├── SearchContracts.cs        → Search results, pagination
 │   ├── AdminContracts.cs         → User management, stats, audit
-│   └── CommonContracts.cs        → ErrorResponse, SuccessResponse, HealthCheck
+│   ├── CommonContracts.cs        → ErrorResponse, SuccessResponse, HealthCheck
+│   └── BoundedDomains.cs         → Wire-visible bounded-domain const sets (PackageRoles,
+│                                    TokenScopes, Visibilities, PrincipalTypes,
+│                                    ScopeOwnerTypes, OrgRoles)
 ├── Database/                     → EF Core data layer
 │   ├── RegistryDbContext.cs      → DbContext with 12 DbSets
 │   ├── IRegistryDatabase.cs      → 40+ CRUD methods
@@ -95,7 +102,7 @@ Client (stash pkg CLI / HTTP)
 
 ## Controller Pattern
 
-Controllers use constructor injection and return DTOs from `Contracts/`:
+Controllers use constructor injection and return DTOs from `Stash.Registry.Contracts` (the shared project):
 
 ```csharp
 [ApiController]
@@ -172,7 +179,10 @@ The three formerly-imperative endpoints now folded into the shared filter (via `
 - Publish/unpublish require a token with `publish` or `admin` coarse ceiling; the PDP checks the ceiling first, then the package role
 - Admin endpoints require `admin` ceiling AND `admin` role; the admin short-circuit resolves the resource-side dimension to effective `owner` but does NOT bypass the ceiling check
 - Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. The shared `RegistryAuthorizeFilter` performs this dispatch for the ~36 clean endpoints; one `[ImperativeAuthz]` endpoint (`ScopesController.ClaimScope`) still calls the PDP inline.
-- **No unbounded magic strings for auth domains.** Every bounded value — claim names, token scopes, user/package/org roles, principal & scope-owner types, reserved scope names — comes from `Auth/RegistryAuthConstants.cs` (`RegistryClaims`, `TokenScopes`, `UserRoles`, `PackageRoles`, `OrgRoles`, `PrincipalTypes`, `ScopeOwnerTypes`, `ReservedScopes`, `Visibilities`) and wire strings are parsed into enums at the boundary (`IRegistryAuthzPrincipalFactory` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
+- **No unbounded magic strings for auth domains.** Every bounded value comes from a named definition — never inlined. The closed sets are split across two homes by a deliberate **wire-visible / server-internal** boundary:
+  - **Wire-visible sets** (appear in request/response bodies; shared with `Stash.Cli` and future UIs) live in `Stash.Registry.Contracts/BoundedDomains.cs` as `const string` sets: `PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`. Single source of truth for registry + CLI; dependency-free so any consumer can reference it.
+  - **Server-internal sets** (JWT machinery, policy names, server-only identifiers) stay in `Auth/RegistryAuthConstants.cs`: `RegistryClaims`, `UserRoles`, `ReservedScopes`, `TokenCeilingConverter`. These must never move to the shared project.
+  - Wire strings are parsed into enums at the boundary (`IRegistryAuthzPrincipalFactory` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
 - Centralized bounded values used as EF column defaults must be `const string`, not `static readonly` — `RegistryDbContext` `.HasDefaultValue(...)` and C# field initializers (e.g. `PackageRecord.Visibility = Visibilities.Public`) both require a compile-time constant
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
 - Success responses use `SuccessResponse` or typed DTOs
