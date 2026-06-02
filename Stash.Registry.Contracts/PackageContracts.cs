@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Stash.Registry.Contracts;
@@ -147,6 +148,10 @@ public sealed class DeprecatePackageRequest
 {
     /// <summary>A human-readable deprecation message explaining why the package is deprecated.</summary>
     [MinLength(1)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "[MinLength] is server-side ASP.NET Core model-binding validation; " +
+                        "AOT consumers (e.g. the CLI) serialise this DTO but never invoke " +
+                        "the reflection-based validation path.")]
     [JsonPropertyName("message")]
     public required string Message { get; set; }
 
@@ -162,6 +167,10 @@ public sealed class DeprecateVersionRequest
 {
     /// <summary>A human-readable deprecation message explaining why this version is deprecated.</summary>
     [MinLength(1)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "[MinLength] is server-side ASP.NET Core model-binding validation; " +
+                        "AOT consumers (e.g. the CLI) serialise this DTO but never invoke " +
+                        "the reflection-based validation path.")]
     [JsonPropertyName("message")]
     public required string Message { get; set; }
 }

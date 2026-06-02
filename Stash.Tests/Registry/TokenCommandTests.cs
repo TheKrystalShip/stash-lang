@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Stash.Cli.PackageManager;
+using Stash.Registry.Contracts;
+using Xunit;
 
 namespace Stash.Tests.Registry;
 
@@ -25,11 +27,11 @@ public sealed class TokenCommandTests
     }
 
     [Fact]
-    public void TokenCreateResult_Deserialization_ParsesAllFields()
+    public void TokenCreateResponse_Deserialization_ParsesAllFields()
     {
         string json = """{"token":"jwt.value","tokenId":"abc-123","scope":"publish","expiresAt":"2026-06-01T00:00:00Z","description":"test"}""";
 
-        var result = JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenCreateResult);
+        var result = JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenCreateResponse);
 
         Assert.NotNull(result);
         Assert.Equal("jwt.value", result.Token);
@@ -39,11 +41,11 @@ public sealed class TokenCommandTests
     }
 
     [Fact]
-    public void TokenListResult_Deserialization_ParsesTokenList()
+    public void TokenListResponse_Deserialization_ParsesTokenList()
     {
         string json = """{"tokens":[{"tokenId":"id1","scope":"publish","createdAt":"2026-01-01T00:00:00Z","expiresAt":"2026-04-01T00:00:00Z","description":"CI"}]}""";
 
-        var result = JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenListResult);
+        var result = JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenListResponse);
 
         Assert.NotNull(result);
         Assert.Single(result.Tokens);

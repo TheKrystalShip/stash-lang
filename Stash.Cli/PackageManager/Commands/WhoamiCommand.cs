@@ -54,7 +54,6 @@ public static class WhoamiCommand
         }
 
         Console.WriteLine(info.Username);
-        Console.WriteLine($"email: {info.Email ?? "(none)"}");
         Console.WriteLine($"role: {info.Role ?? "(none)"}");
         Console.WriteLine($"registry: {registryUrl}");
     }
