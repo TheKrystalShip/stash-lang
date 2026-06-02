@@ -174,4 +174,49 @@ public class AsyncIsolationTests : StashTestBase
 
         Assert.Equal("42,42", result);
     }
+
+    // ── Upvalue isolation: captured-by-closure reference types ────────────────
+
+    /// <summary>
+    /// Behavioral test for the async path's upvalue isolation.
+    ///
+    /// <para>
+    /// An inner function that captures a non-frozen dict via closure is spawned as an
+    /// async task.  The child receives a deep-cloned copy of the upvalue via
+    /// <c>IsolationHelpers.SnapshotUpvalues</c>, so its mutation of the dict is
+    /// call-local: the parent's upvalue-captured dict is unchanged after the task
+    /// completes.  This mirrors the globals isolation tested in
+    /// <see cref="AsyncChild_MutatesNonFrozenDict_ParentDictUnchanged"/> but through
+    /// the upvalue path rather than the globals path.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void AsyncChild_MutatesUpvalueCapturedDict_ParentDictUnchanged()
+    {
+        // Create a closure that captures `local` as an upvalue (not a global).
+        // The async fn is defined INSIDE another fn so `local` is an upvalue, not a global.
+        var result = Run("""
+            fn makeTask() {
+                let local = { value: 0 };
+
+                async fn task() {
+                    // `local` is captured via upvalue.
+                    local.value = 99;
+                    return local.value;
+                }
+
+                let childFuture = task();
+                let childValue = await childFuture;
+
+                // Parent's upvalue-captured `local` must be unchanged.
+                let result = conv.toStr(childValue) + "," + conv.toStr(local.value);
+                return result;
+            }
+
+            let result = makeTask();
+            """);
+
+        // Child sees its own write (99); parent's upvalue-captured local stays at 0.
+        Assert.Equal("99,0", result);
+    }
 }
