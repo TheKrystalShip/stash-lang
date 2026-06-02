@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T12:59:43Z"
+updated: "2026-06-02T13:29:24Z"
 phases:
   2A-1:
     status: done
@@ -60,13 +60,13 @@ phases:
     attempts: 1
     notes: "All env.*/cwd sinks migrated to VMContext overlay (22 sinks moved); exemption list 37→15; ApplyCwdAndEnv single funnel; process.replace chdir before execvp; StashEngine+default-VM paths verified; 4 leaky tests migrated; 26 new/updated tests green"
   2B-4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 2dfca3db04dc857784193bead71dbe3ae8dc12d0
+    verified: true
+    started: "2026-06-02T13:00:51Z"
+    completed: "2026-06-02T13:29:24Z"
+    attempts: 1
+    notes: All residual env/cwd sinks migrated; GlobExpander API requires explicit cwd; path.abs/normalize/relative/archive/tpl/fs.watch use ctx.ResolveAgainstCwd; NoProcessGlobalLeakMetaTests at ZERO active stdlib exemptions; two-engine cwd isolation test green; docs regenerated
   2B-5:
     status: pending
     commit: null
