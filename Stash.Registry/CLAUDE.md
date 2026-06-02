@@ -32,18 +32,6 @@ Stash.Registry/
 │   ├── SearchController.cs       → Search with pagination
 │   └── AdminController.cs        → Stats, user mgmt, package role override, audit log
 │   (Contracts/ removed — all wire DTOs live in Stash.Registry.Contracts/)
-│
-│   Stash.Registry.Contracts/     → Shared wire-contract assembly (dependency-free)
-│   ├── AuthContracts.cs          → Login/Register/Token request/response
-│   ├── PackageContracts.cs       → Package/version detail, publish/unpublish, roles, visibility
-│   ├── OrganizationContracts.cs  → Org/team/member request/response
-│   ├── ScopeContracts.cs         → Scope detail/claim request/response
-│   ├── SearchContracts.cs        → Search results, pagination
-│   ├── AdminContracts.cs         → User management, stats, audit
-│   ├── CommonContracts.cs        → ErrorResponse, SuccessResponse, HealthCheck
-│   └── BoundedDomains.cs         → Wire-visible bounded-domain const sets (PackageRoles,
-│                                    TokenScopes, Visibilities, PrincipalTypes,
-│                                    ScopeOwnerTypes, OrgRoles)
 ├── Database/                     → EF Core data layer
 │   ├── RegistryDbContext.cs      → DbContext with 12 DbSets
 │   ├── IRegistryDatabase.cs      → 40+ CRUD methods
@@ -61,6 +49,18 @@ Stash.Registry/
 │   └── RateLimitingMiddleware.cs → Per-category rate limiting
 └── Endpoints/
     └── AuthHelper.cs             → Shared auth utilities
+
+Stash.Registry.Contracts/         → Shared wire-contract assembly (dependency-free; sibling project at repo root)
+├── AuthContracts.cs              → Login/Register/Token request/response
+├── PackageContracts.cs           → Package/version detail, publish/unpublish, roles, visibility
+├── OrganizationContracts.cs      → Org/team/member request/response
+├── ScopeContracts.cs             → Scope detail/claim request/response
+├── SearchContracts.cs            → Search results, pagination
+├── AdminContracts.cs             → User management, stats, audit
+├── CommonContracts.cs            → ErrorResponse, SuccessResponse, HealthCheck
+└── BoundedDomains.cs             → Wire-visible bounded-domain const sets (PackageRoles,
+                                    TokenScopes, Visibilities, PrincipalTypes,
+                                    ScopeOwnerTypes, OrgRoles, UserRoles)
 ```
 
 **Dependencies:** ASP.NET Core (.NET 10), EF Core, `Stash.Core` (project reference — not interpreter, only core types).
