@@ -1,16 +1,16 @@
 schema_version: 1
 feature: shared-registry-contracts
 current: null
-updated: "2026-06-02T18:48:19Z"
+updated: "2026-06-02T19:55:37Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b036d653452b6563a541dbf4df38072754ab532d
+    verified: true
+    started: "2026-06-02T19:40:19Z"
+    completed: "2026-06-02T19:55:37Z"
+    attempts: 1
+    notes: "Created Stash.Registry.Contracts (dependency-free), git-mv 7 contract files, added AuditEntryResponse DTO + inline mapping, removed stale Database.Models usings, wired ProjectReference, added ContractsAssemblyShapeTests; all builds green, 93 targeted tests pass"
   P2:
     status: pending
     commit: null
