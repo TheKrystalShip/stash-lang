@@ -68,12 +68,15 @@ internal static class ArgExpander
         }
 
         // Apply glob expansion to unquoted words.
+        // Use the VM's per-VM working directory so that env.chdir within a script
+        // is reflected in glob expansion without mutating the real process cwd.
+        string globCwd = vm.Context.WorkingDirectory;
         var result = new List<string>(braceExpanded.Count);
         foreach (var (text, anyQuoted) in braceExpanded)
         {
             if (!anyQuoted && GlobExpander.HasGlobChars(text))
             {
-                var matches = GlobExpander.Expand(text);
+                var matches = GlobExpander.Expand(text, globCwd);
                 if (matches.Count == 0)
                     throw new CommandError($"glob pattern '{text}' did not match any files", exitCode: 1, span: span);
                 result.AddRange(matches);

@@ -33,6 +33,7 @@ default_verify:
 scope:
   - Stash.Bytecode/**
   - Stash.Stdlib/**
+  - Stash.Cli/**
   - Stash.Core/Runtime/**
   - Stash.Core/Common/**
   - Stash.Tests/**
@@ -202,8 +203,14 @@ phases:
       - Stash.Stdlib/BuiltIns/TplBuiltIns.cs
       - Stash.Stdlib/BuiltIns/PkgBuiltIns.cs
       - Stash.Stdlib/BuiltIns/ArchiveBuiltIns.cs
+      - Stash.Bytecode/Runtime/GlobExpander.cs
+      - Stash.Bytecode/VM/VirtualMachine.cs
+      - Stash.Cli/Shell/ArgExpander.cs
       - Stash.Tests/Bytecode/NoProcessGlobalLeakMetaTests.cs
+      - Stash.Tests/Bytecode/GlobExpansionTests.cs
+      - Stash.Tests/Cli/CrossPlatformTests.cs
       - Stash.Tests/Stdlib/**
+      - "docs/Stash — Standard Library Reference.md"
     verify:
       - dotnet build Stash.Stdlib
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Stdlib|FullyQualifiedName~Stash.Tests.Bytecode.NoProcessGlobalLeakMetaTests"

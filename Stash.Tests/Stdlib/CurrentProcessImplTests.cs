@@ -276,4 +276,54 @@ public class CurrentProcessImplTests
             Directory.Delete(dir, true);
         }
     }
+
+    // =========================================================================
+    // Two-engine cwd isolation — done_when 2B-4 item 4
+    // =========================================================================
+
+    /// <summary>
+    /// Two independent <see cref="StashEngine"/> instances must have independent per-VM
+    /// cwds.  Calling <c>env.chdir</c> in engine A must not affect engine B's cwd,
+    /// and <c>path.abs(".")</c> (which resolves via <c>ctx.ResolveAgainstCwd</c>)
+    /// must return different directories in each engine after the chdir.
+    /// The real <c>System.Environment.CurrentDirectory</c> must also remain unchanged
+    /// (no write-through in any mode).
+    /// </summary>
+    [Fact]
+    public void TwoEngines_Chdir_InEngineA_DoesNotAffectEngineB()
+    {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+        string dirA = CreateTempDir();
+        string realCwdBefore = System.Environment.CurrentDirectory;
+        try
+        {
+            var engineA = new StashEngine();
+            var engineB = new StashEngine();
+
+            // Engine A changes its VM cwd to dirA
+            var chdirResult = engineA.Run($"env.chdir(\"{dirA}\");");
+            Assert.True(chdirResult.Success, $"engineA env.chdir failed: {string.Join(", ", chdirResult.Errors)}");
+
+            // Engine A should see dirA via path.abs(".")
+            var absA = engineA.Evaluate("path.abs(\".\")");
+            Assert.True(absA.Success, $"engineA path.abs failed: {string.Join(", ", absA.Errors)}");
+            Assert.Equal(Path.GetFullPath(dirA), absA.Value as string);
+
+            // Engine B should still see the original process cwd (not dirA)
+            var absB = engineB.Evaluate("path.abs(\".\")");
+            Assert.True(absB.Success, $"engineB path.abs failed: {string.Join(", ", absB.Errors)}");
+            Assert.Equal(realCwdBefore, absB.Value as string);
+
+            // The two engines must see different cwds
+            Assert.NotEqual(absA.Value as string, absB.Value as string);
+
+            // The real process cwd must be unchanged
+            Assert.Equal(realCwdBefore, System.Environment.CurrentDirectory);
+        }
+        finally
+        {
+            Directory.Delete(dirA, true);
+        }
+    }
 }

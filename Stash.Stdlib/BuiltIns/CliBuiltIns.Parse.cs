@@ -1134,7 +1134,7 @@ public static partial class CliBuiltIns
             string? envVar = GetStringFieldNullable(spec, "env");
             if (envVar is null) continue;
 
-            string? envVal = System.Environment.GetEnvironmentVariable(envVar);
+            string? envVal = ctx.GetEnv(envVar);
             if (envVal is null) continue;
 
             string typeTag = GetStringFieldOrEmpty(spec, "typeTag");

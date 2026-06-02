@@ -88,17 +88,14 @@ public class CrossPlatformTests
 
         string tmpDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tmpDir);
-        string prev = Directory.GetCurrentDirectory();
         try
         {
-            Directory.SetCurrentDirectory(tmpDir);
             File.WriteAllText(Path.Combine(tmpDir, "Foo.txt"), "");
-            var matches = GlobExpander.Expand("f*.txt");
+            var matches = GlobExpander.Expand("f*.txt", tmpDir);
             Assert.Empty(matches); // 'f' does NOT match 'F' on a case-sensitive FS
         }
         finally
         {
-            Directory.SetCurrentDirectory(prev);
             try { Directory.Delete(tmpDir, recursive: true); } catch { }
         }
     }
@@ -110,17 +107,14 @@ public class CrossPlatformTests
 
         string tmpDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tmpDir);
-        string prev = Directory.GetCurrentDirectory();
         try
         {
-            Directory.SetCurrentDirectory(tmpDir);
             File.WriteAllText(Path.Combine(tmpDir, "Foo.txt"), "");
-            var matches = GlobExpander.Expand("f*.txt");
+            var matches = GlobExpander.Expand("f*.txt", tmpDir);
             Assert.Contains("Foo.txt", matches); // 'f' matches 'F' on Windows
         }
         finally
         {
-            Directory.SetCurrentDirectory(prev);
             try { Directory.Delete(tmpDir, recursive: true); } catch { }
         }
     }

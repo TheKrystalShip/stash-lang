@@ -98,15 +98,16 @@ public sealed partial class VirtualMachine
         }
     }
 
-    private static void ApplyGlobExpansion(List<string> arguments, List<bool> wasQuoted, SourceSpan? span)
+    private void ApplyGlobExpansion(List<string> arguments, List<bool> wasQuoted, SourceSpan? span)
     {
+        string cwd = _context.WorkingDirectory;
         // Iterate backwards so insertions don't invalidate earlier indices
         for (int i = arguments.Count - 1; i >= 0; i--)
         {
             if (wasQuoted[i]) continue;
             if (!GlobExpander.HasGlobChars(arguments[i])) continue;
 
-            var matches = GlobExpander.Expand(arguments[i]);
+            var matches = GlobExpander.Expand(arguments[i], cwd);
             if (matches.Count == 0)
                 throw new CommandError(
                     $"glob pattern '{arguments[i]}' did not match any files",

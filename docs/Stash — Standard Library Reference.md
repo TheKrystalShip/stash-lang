@@ -6832,8 +6832,8 @@ A handle to a spawned child process.
 | `process.exists` | `bool` | — | Returns true if an OS process with the given PID is currently running. |
 | `process.waitAll` | `any` | `TypeError` | Waits for all processes in the array to exit. |
 | `process.waitAny` | `any` | `ValueError`, `TypeError` | Waits until any process in the array exits. |
-| `process.chdir` | `null` | `CommandError` | Changes the current working directory to the given path and pushes it onto the directory stack. _Deprecated — use `env.chdir`._ |
-| `process.popDir` | `string` | `CommandError` | Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. _Deprecated — use `env.popDir`._ |
+| `process.chdir` | `any` | `CommandError` | Changes the current working directory to the given path and pushes it onto the directory stack. _Deprecated — use `env.chdir`._ |
+| `process.popDir` | `any` | `CommandError` | Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. _Deprecated — use `env.popDir`._ |
 | `process.dirStack` | `array` | — | Returns a copy of the directory stack, oldest entry first. _Deprecated — use `env.dirStack`._ |
 | `process.dirStackDepth` | `int` | — | Returns the number of entries in the directory stack. _Deprecated — use `env.dirStackDepth`._ |
 | `process.withDir` | `any` | `IOError` | Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. _Deprecated — use `env.withDir`._ |
@@ -7140,7 +7140,7 @@ Waits until any process in the array exits. Returns the CommandResult of the fir
 - `ValueError` — if the array is empty
 - `TypeError` — if any element in the array is not a Process
 
-#### `process.chdir(path: string) -> null`
+#### `process.chdir(...path: any) -> any`
 
 > _Deprecated — use `env.chdir` instead._
 
@@ -7148,21 +7148,21 @@ Changes the current working directory to the given path and pushes it onto the d
 
 **Parameters:**
 
-- `path`: `string` — The directory path to change to
+- `path`: `any` — The directory path to change to
 
-**Returns:** `null` — null
+**Returns:** `any` — null
 
 **Throws:**
 
 - `CommandError` — if the specified directory does not exist
 
-#### `process.popDir() -> string`
+#### `process.popDir() -> any`
 
 > _Deprecated — use `env.popDir` instead._
 
 Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.
 
-**Returns:** `string` — The directory path that was popped
+**Returns:** `any` — The directory path that was popped
 
 **Throws:**
 
@@ -7184,7 +7184,7 @@ Returns the number of entries in the directory stack.
 
 **Returns:** `int` — The depth as an integer
 
-#### `process.withDir(path: string, fn: function) -> any`
+#### `process.withDir(path: any, ...fn: any) -> any`
 
 > _Deprecated — use `env.withDir` instead._
 
@@ -7192,8 +7192,8 @@ Temporarily changes the working directory to the given path, calls fn(), then re
 
 **Parameters:**
 
-- `path`: `string` — The directory to temporarily change to
-- `fn`: `function` — The function to execute in the new directory
+- `path`: `any` — The directory to temporarily change to
+- `fn`: `any` — The function to execute in the new directory
 
 **Returns:** `any` — The return value of fn
 

@@ -97,8 +97,8 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     // apply glob expansion to unquoted StashLiteralArg tokens emitted by Phase B.
     static VirtualMachine()
     {
-        Stash.Runtime.ShellExpansion.GlobExpandHandler = static (pattern, _) =>
-            GlobExpander.Expand(pattern);
+        Stash.Runtime.ShellExpansion.GlobExpandHandler = static (pattern, cwd) =>
+            GlobExpander.Expand(pattern, cwd);
     }
 
     public VirtualMachine(Dictionary<string, StashValue>? globals = null, CancellationToken ct = default)

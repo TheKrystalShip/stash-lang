@@ -363,15 +363,15 @@ public static partial class PromptBuiltIns
     public static StashInstance BuildPromptContext(IInterpreterContext ctx, Dictionary<string, StashValue>? extraFields = null)
     {
         // Working directory with tilde compression
-        string cwdAbs = Environment.CurrentDirectory;
+        string cwdAbs = ctx.WorkingDirectory;
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string cwd = (!string.IsNullOrEmpty(home) && cwdAbs.StartsWith(home, StringComparison.Ordinal))
             ? "~" + cwdAbs.Substring(home.Length)
             : cwdAbs;
 
         // User
-        string user = Environment.GetEnvironmentVariable("USER")
-            ?? Environment.GetEnvironmentVariable("USERNAME")
+        string user = ctx.GetEnv("USER")
+            ?? ctx.GetEnv("USERNAME")
             ?? "unknown";
 
         // Hostname (short form = first DNS label)
@@ -393,7 +393,7 @@ public static partial class PromptBuiltIns
         // or RC file presence). The CLI sets ShellModeActive at startup; falls back to the
         // STASH_SHELL env var when unset (e.g. in unit tests without a REPL).
         string mode = (ShellModeActive ||
-                       Environment.GetEnvironmentVariable("STASH_SHELL") == "1")
+                       ctx.GetEnv("STASH_SHELL") == "1")
             ? "shell" : "stash";
 
         // Host color — FNV-1a 32-bit hash, then map to 256-color ANSI fragment

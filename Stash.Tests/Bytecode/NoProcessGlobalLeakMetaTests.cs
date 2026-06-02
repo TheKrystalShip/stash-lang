@@ -86,8 +86,9 @@ namespace Stash.Tests.Bytecode;
 /// overlay implementation).
 /// </para>
 /// <para>
-/// <b>Pinned sinks (as of 2026-06-02, phase 2B-2 initial state — full pre-migration set):</b>
+/// <b>Pinned sinks (as of 2026-06-02, phase 2B-4 final state — ZERO active stdlib exemptions):</b>
 /// See <see cref="PinnedExemptions"/> for the per-file counts and recorded rationales.
+/// Only <c>VMContext.cs</c>'s three permanent chokepoint sinks remain.
 /// </para>
 /// </remarks>
 public sealed class NoProcessGlobalLeakMetaTests
@@ -148,81 +149,25 @@ public sealed class NoProcessGlobalLeakMetaTests
     /// </para>
     ///
     /// <para>
-    /// <b>Bytecode/Runtime/GlobExpander.cs (1) — to-be-migrated (phase 2B-4).</b>
-    /// <c>Directory.GetCurrentDirectory()</c> used as a base for glob pattern expansion.
-    /// Must route through <c>ctx.WorkingDirectory</c> after migration.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/EnvBuiltIns.cs — MIGRATED in phase 2B-3.</b>
-    /// All env read/write/list sinks now route through <c>ctx.GetEnv</c> / <c>ctx.SetEnv</c>
-    /// / <c>ctx.UnsetEnv</c> / <c>ctx.AllEnv</c> / <c>ctx.WorkingDirectory</c>.
-    /// Row removed from exemption list.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/CurrentProcessImpl.cs — MIGRATED in phase 2B-3.</b>
-    /// All <c>System.Environment.CurrentDirectory</c> reads/writes now update
-    /// <c>ctx.WorkingDirectory</c> instead; <c>Path.GetFullPath</c> uses
-    /// <c>ctx.ResolveAgainstCwd</c>.  Row removed from exemption list.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/ProcessBuiltIns.cs — MIGRATED in phase 2B-3.</b>
-    /// Deprecated dir-stack aliases delegate to the hermetic <c>CurrentProcessImpl</c>;
-    /// glob handler uses <c>ctx.WorkingDirectory</c>; <c>ApplyCwdAndEnv</c> now seeds
-    /// <c>psi.WorkingDirectory</c> and env from the VM's virtual view.
-    /// Row removed from exemption list.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/SysBuiltIns.cs (2) — to-be-migrated (phase 2B-4).</b>
-    /// Two <c>GetEnvironmentVariable</c> reads for PATH and PATHEXT used during
-    /// executable lookup.  Must route through <c>ctx.GetEnv</c> after migration.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/TermBuiltIns.cs (2) — to-be-migrated (phase 2B-4).</b>
-    /// <c>GetEnvironmentVariable("STASH_FORCE_COLOR")</c> and
-    /// <c>GetEnvironmentVariable("NO_COLOR")</c> used for terminal color detection.
-    /// Must route through <c>ctx.GetEnv</c> after migration.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/PromptBuiltIns.cs (4) — to-be-migrated (phase 2B-4).</b>
-    /// One <c>Environment.CurrentDirectory</c> read for prompt cwd display, plus three
-    /// <c>GetEnvironmentVariable</c> reads for USER/USERNAME/STASH_SHELL.  Must route
-    /// through <c>ctx.WorkingDirectory</c> / <c>ctx.GetEnv</c> after migration.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/CliBuiltIns.Parse.cs (1) — to-be-migrated (phase 2B-4).</b>
-    /// One <c>GetEnvironmentVariable</c> read for env-var CLI argument binding.
-    /// Must route through <c>ctx.GetEnv</c> after migration.
-    /// </para>
-    ///
-    /// <para>
-    /// <b>Stdlib/BuiltIns/PkgBuiltIns.cs (2) — to-be-migrated (phase 2B-4).</b>
-    /// Two <c>Directory.GetCurrentDirectory()</c> calls used to locate the package
-    /// manifest when no explicit path is given.  Must route through
-    /// <c>ctx.WorkingDirectory</c> after migration.
+    /// <b>All other files — MIGRATED in phases 2B-3 and 2B-4.</b>
+    /// <list type="bullet">
+    ///   <item><c>EnvBuiltIns.cs</c> (11), <c>CurrentProcessImpl.cs</c> (5),
+    ///     <c>ProcessBuiltIns.cs</c> (6) — migrated in phase 2B-3.</item>
+    ///   <item><c>GlobExpander.cs</c> (1), <c>SysBuiltIns.cs</c> (2),
+    ///     <c>TermBuiltIns.cs</c> (2), <c>PromptBuiltIns.cs</c> (4),
+    ///     <c>CliBuiltIns.Parse.cs</c> (1), <c>PkgBuiltIns.cs</c> (2) — migrated in
+    ///     phase 2B-4.</item>
+    /// </list>
+    /// All rows removed from exemption list; ZERO active stdlib/bytecode exemptions remain.
     /// </para>
     /// </summary>
     private static readonly IReadOnlyDictionary<string, int> PinnedExemptions =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
             // Bytecode/ — permanent chokepoint (3 sinks, never migrated away)
+            // These are VMContext's own fallback reads to real process env/cwd;
+            // they ARE the per-VM overlay implementation, not bypasses of it.
             ["Runtime/VMContext.cs"] = 3,
-            // Bytecode/ — to-be-migrated (phase 2B-4)
-            ["Runtime/GlobExpander.cs"] = 1,
-            // Stdlib/ — to-be-migrated (phase 2B-4)
-            ["BuiltIns/SysBuiltIns.cs"] = 2,
-            ["BuiltIns/TermBuiltIns.cs"] = 2,
-            ["BuiltIns/PromptBuiltIns.cs"] = 4,
-            ["BuiltIns/CliBuiltIns.Parse.cs"] = 1,
-            ["BuiltIns/PkgBuiltIns.cs"] = 2,
-            // EnvBuiltIns.cs (11), CurrentProcessImpl.cs (5), ProcessBuiltIns.cs (6) —
-            // migrated in phase 2B-3; rows removed from exemption list.
         };
 
     // ── Source-directory discovery ────────────────────────────────────────────

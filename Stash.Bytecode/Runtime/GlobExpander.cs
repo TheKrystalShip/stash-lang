@@ -24,19 +24,19 @@ internal static class GlobExpander
 
     /// <summary>
     /// Expand <paramref name="pattern"/> against the filesystem.
-    /// Relative patterns are resolved from the current working directory.
+    /// Relative patterns are resolved from <paramref name="workingDirectory"/>.
     /// Absolute patterns (starting with <c>/</c>) are resolved from the root.
     /// Returns matched paths sorted in deterministic order.
     /// Excludes dotfiles unless the pattern component itself starts with <c>.</c>.
     /// Returns an empty list when nothing matches — the caller decides whether to throw.
     /// </summary>
-    internal static List<string> Expand(string pattern)
+    internal static List<string> Expand(string pattern, string workingDirectory)
     {
         // Normalise to forward slashes for component splitting
         string normalized = pattern.Replace('\\', '/');
 
         bool isAbsolute = normalized.StartsWith('/');
-        string baseDir = isAbsolute ? "/" : Directory.GetCurrentDirectory();
+        string baseDir = isAbsolute ? "/" : workingDirectory;
         string relativePart = isAbsolute ? normalized.TrimStart('/') : normalized;
 
         string[] components = relativePart.Split('/', StringSplitOptions.RemoveEmptyEntries);
