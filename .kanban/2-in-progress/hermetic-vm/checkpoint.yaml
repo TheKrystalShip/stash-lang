@@ -1,16 +1,16 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T10:13:02Z"
+updated: "2026-06-02T11:05:12Z"
 phases:
   2A-1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 94621ad6d8e6e7cc51690ba912bb12b6d4535201
+    verified: true
+    started: "2026-06-02T10:51:30Z"
+    completed: "2026-06-02T11:05:12Z"
+    attempts: 1
+    notes: "Per-VM ICSlot[] clone via frame.ICSlots; ResolveICSlots() lazily clones template; all 4 IC sites updated; 5 isolation tests green"
   2A-2:
     status: pending
     commit: null
