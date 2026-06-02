@@ -27,11 +27,19 @@ default_verify:
 # subsystem story for 2A; process-global virtualization sweeps stdlib + a slice of
 # Bytecode/Runtime in 2B; multiplexed signals live in Stdlib + Bytecode/Runtime
 # in 2C; the acceptance suite + example live in Tests + examples in 2D.
+# The toolchain surfaces (Lsp/Dap/Playground/Analysis + tmLanguage grammar) are
+# the 2C-2 "toolchain compatibility audit" footprint — verified-unaffected, not
+# edited — but declared here so every phase's `files` stays a subset of `scope`.
 scope:
   - Stash.Bytecode/**
   - Stash.Stdlib/**
   - Stash.Core/Runtime/**
   - Stash.Tests/**
+  - Stash.Lsp/**
+  - Stash.Dap/**
+  - Stash.Playground/**
+  - Stash.Analysis/**
+  - .vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json
   - docs/Stash — Language Specification.md
   - docs/Stash — Standard Library Reference.md
   - examples/**
