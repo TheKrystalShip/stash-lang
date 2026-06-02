@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Stash.Registry.Contracts;
 using static Stash.Registry.Auth.TokenCeilingConverter;
 
 namespace Stash.Registry.Auth.Authorization;

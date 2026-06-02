@@ -126,6 +126,27 @@ public static class ScopeOwnerTypes
     public const string System = "system";
 }
 
+// ── User role wire values ─────────────────────────────────────────────────────
+
+/// <summary>
+/// Wire values for the <c>role</c> JWT claim (stored in <see cref="System.Security.Claims.ClaimTypes.Role"/>)
+/// and for the <c>role</c> field in <c>CreateUserRequest</c> / <c>CreateUserResponse</c>.
+/// </summary>
+/// <remarks>
+/// Although <c>UserRoles</c> values are embedded in JWT tokens (as the <c>role</c> claim),
+/// they are also wire-bound: <c>POST /api/v1/admin/users</c> accepts a <c>role</c> field in
+/// its request body and echoes it in the response. Shared with <c>Stash.Cli</c> and any
+/// future Razor UI that needs to present or validate user roles.
+/// </remarks>
+public static class UserRoles
+{
+    /// <summary>Standard user with publish access.</summary>
+    public const string User = "user";
+
+    /// <summary>Administrator with full access to all registry operations.</summary>
+    public const string Admin = "admin";
+}
+
 // ── Package visibility wire values ────────────────────────────────────────────
 
 /// <summary>

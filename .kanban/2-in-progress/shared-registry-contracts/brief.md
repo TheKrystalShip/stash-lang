@@ -132,10 +132,10 @@ violated") in production code that contacts the registry.
 - `Stash.Registry.Contracts` carries the wire DTOs (all 7 existing files,
   moved by `git mv`) plus the wire-visible bounded-domain constant classes
   (`PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`,
-  `ScopeOwnerTypes`, `OrgRoles`).
+  `ScopeOwnerTypes`, `OrgRoles`, `UserRoles`).
 - `Stash.Registry` keeps `RegistryClaims`, server-internal types
   (`AuthzDenyReason`, policy names, EF config, `TokenCeilingConverter`,
-  `ReservedScopes`, `UserRoles`), and the whole controller / service /
+  `ReservedScopes`), and the whole controller / service /
   database layer. See the Decision Log for the wire-visible /
   server-internal split rationale.
 - `Stash.Cli` references the shared project; its duplicate DTOs are deleted;
@@ -309,11 +309,10 @@ concrete `files`, `verify`, and `done_when` lists there.
   emerges that would *not* be a wire concern (none today), it would be
   duplicated locally. The implementer should confirm there is no
   surprising server-internal use that wants to stay private.
-- **`UserRoles` placement.** `UserRoles` (`User`/`Admin`) is a JWT *role*
-  claim, never wire-bound in a request/response body. The plan keeps it
-  server-internal in `Stash.Registry/Auth/RegistryAuthConstants.cs`. If
-  the CLI ever needs it, it would be added to the shared project then; not
-  speculatively now.
+- **`UserRoles` placement.** `UserRoles` (`User`/`Admin`) is wire-bound:
+  `CreateUserRequest.Role` and `CreateUserResponse.Role` both carry these
+  values over HTTP. It was moved to `Stash.Registry.Contracts/BoundedDomains.cs`
+  (resolved by F04 review finding).
 - **Coordination with `pkg-cli-api-parity` — file path post-merge.**
   `PackageContracts.cs` moves into `Stash.Registry.Contracts/` in P1
   *unchanged* (the derived `Owners` field stays). Parity P1 ("Drop the
@@ -330,7 +329,7 @@ concrete `files`, `verify`, and `done_when` lists there.
 | 2026-06-02 | **Move files with `git mv`, not copy** | A copy duplicates type definitions in the same namespace and fails to compile. `git mv` preserves history and avoids the dup. |
 | 2026-06-02 | **JSON strategy: shared project is POCOs only (no `JsonSerializerContext`)** | Lets the registry keep reflection-based JSON unchanged and the CLI keep its source-gen `CliJsonContext` — cross-assembly `[JsonSerializable]` is supported. Sharing a context would either force the registry to adopt source-gen (out of scope) or duplicate AOT registration in the CLI (defeats the purpose). |
 | 2026-06-02 | **DTO wire properties stay `string`-typed** (e.g. `string Role`, `string Visibility`, `string PrincipalType`); the bounded-domain `const string` sets are a separate type whose values feed those properties | Real C# enums would force a `JsonStringEnumConverter` and enum-converter dependencies into the shared project, breaking the dependency-free constraint. This is the deliberate Construct→Detect downgrade recorded in Cross-Cutting Concerns. |
-| 2026-06-02 | **Wire-visible / server-internal split:** wire-visible (`PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`) → shared project; server-internal (`RegistryClaims`, `UserRoles`, `ReservedScopes`, `AuthzDenyReason`, policy names, the `NoMagicAuthStringsMetaTests` sink list, `TokenCeilingConverter`, EF config) → stays in `Stash.Registry` | Pulling the whole `RegistryAuthConstants.cs` over would leak server internals into the CLI. The wire/internal split is the central hazard of this feature and is performed deliberately. `UserRoles` is a JWT role claim never in a wire body; `ReservedScopes` and `TokenCeilingConverter` are pure server policy. |
+| 2026-06-02 | **Wire-visible / server-internal split:** wire-visible (`PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`, `UserRoles`) → shared project; server-internal (`RegistryClaims`, `ReservedScopes`, `AuthzDenyReason`, policy names, the `NoMagicAuthStringsMetaTests` sink list, `TokenCeilingConverter`, EF config) → stays in `Stash.Registry` | Pulling the whole `RegistryAuthConstants.cs` over would leak server internals into the CLI. The wire/internal split is the central hazard of this feature and is performed deliberately. `UserRoles` IS wire-bound: `CreateUserRequest.Role` and `CreateUserResponse.Role` both carry `"user"`/`"admin"` values over HTTP — the original "never wire-bound" rationale was incorrect. `ReservedScopes` and `TokenCeilingConverter` are pure server policy and remain server-internal. |
 | 2026-06-02 | **One net-new DTO: `AuditEntryResponse`** — `AdminController` maps `AuditEntry` (EF) → `AuditEntryResponse` (wire) inline; `AuditLogResponse.Entries` becomes `List<AuditEntryResponse>` | `AuditEntry` is an EF database entity and cannot live in a dependency-free DTO project. The wire field names match the existing JSON keys (action / package / version / user / target / ip / timestamp / decision / denyReason — verified against the EF entity), so the wire shape is unchanged. |
 | 2026-06-02 | **Drop the stale `using Stash.Registry.Database.Models;` from `OrganizationContracts.cs`** | Verified unused in the file; clean removal during the move. |
 | 2026-06-02 | **CLI `WhoamiInfo` drops the dead `email` field** when it adopts the shared `WhoamiResponse` | `RegistryClient.WhoamiDetailed()` reads an `email` field that always returns `null`: `WhoamiResponse` carries `{username, role}` only, `UserRecord` has no `email` column, no auth provider populates it. The CLI surfaces `null` to the user today. The alternative — add `email` to the contract + server plumbing — is a larger, separate feature; this one removes the dead surface. |

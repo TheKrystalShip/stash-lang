@@ -22,20 +22,6 @@ public static class RegistryClaims
     public const string MachineId = "machine_id";
 }
 
-// ── User role wire values ─────────────────────────────────────────────────────
-
-/// <summary>
-/// Wire values for the <c>role</c> JWT claim (stored in <see cref="System.Security.Claims.ClaimTypes.Role"/>).
-/// </summary>
-public static class UserRoles
-{
-    /// <summary>Standard user with publish access.</summary>
-    public const string User = "user";
-
-    /// <summary>Administrator with full access to all registry operations.</summary>
-    public const string Admin = "admin";
-}
-
 // ── Reserved system scope names ───────────────────────────────────────────────
 
 /// <summary>

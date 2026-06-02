@@ -6,9 +6,9 @@ using Xunit;
 namespace Stash.Tests.Registry.Contracts;
 
 /// <summary>
-/// Verifies that the six wire-visible bounded-domain constant classes
+/// Verifies that the seven wire-visible bounded-domain constant classes
 /// (<c>PackageRoles</c>, <c>OrgRoles</c>, <c>PrincipalTypes</c>,
-/// <c>ScopeOwnerTypes</c>, <c>TokenScopes</c>, <c>Visibilities</c>)
+/// <c>ScopeOwnerTypes</c>, <c>TokenScopes</c>, <c>Visibilities</c>, <c>UserRoles</c>)
 /// live in <c>Stash.Registry.Contracts</c> (not in <c>Stash.Registry.Auth</c>),
 /// and that each representative member is a <c>const string</c>
 /// (compile-time constant) rather than a <c>static readonly</c> field —
@@ -240,5 +240,30 @@ public sealed class BoundedDomainPlacementTests
         Assert.Equal("public", Visibilities.Public);
         Assert.Equal("private", Visibilities.Private);
         Assert.Equal("internal", Visibilities.Internal);
+    }
+
+    [Fact]
+    public void UserRoles_LivesInContractsAssembly()
+    {
+        AssertInContractsAssembly(typeof(UserRoles));
+    }
+
+    [Fact]
+    public void UserRoles_User_IsConstString()
+    {
+        AssertIsConstString(typeof(UserRoles), nameof(UserRoles.User));
+    }
+
+    [Fact]
+    public void UserRoles_Admin_IsConstString()
+    {
+        AssertIsConstString(typeof(UserRoles), nameof(UserRoles.Admin));
+    }
+
+    [Fact]
+    public void UserRoles_WireValues_Unchanged()
+    {
+        Assert.Equal("user", UserRoles.User);
+        Assert.Equal("admin", UserRoles.Admin);
     }
 }
