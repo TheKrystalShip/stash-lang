@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T12:06:23Z"
+updated: "2026-06-02T12:16:33Z"
 phases:
   2A-1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "ChildVMConstructionMetaTests: 4 tests green; 3-entry pin (Modules.cs, VMTemplateEvaluator.cs, StashEngine.cs); 2 routed sites (Async.cs, VMContext.cs) confirmed; fail-path teeth + exact-match pin tests pass"
   2B-1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: cdadacba97e21e520f3c1672c9f38b4385caa476
+    verified: true
+    started: "2026-06-02T12:07:24Z"
+    completed: "2026-06-02T12:16:33Z"
+    attempts: 1
+    notes: "VMContext cwd+env overlay SoT on IInterpreterContext; per-VM, real env never mutated"
   2B-2:
     status: pending
     commit: null
