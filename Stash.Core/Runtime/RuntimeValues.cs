@@ -513,6 +513,17 @@ public static class RuntimeValues
         }
     }
 
+    /// <summary>
+    /// Maximum retry attempts for the cross-thread snapshot loops in
+    /// <see cref="DeepCloneArray"/> and <see cref="DeepCloneDictionary"/>.
+    /// Matches the value used by <c>IsolationHelpers.SnapshotEntries</c> in
+    /// <c>Stash.Bytecode</c> so the retry discipline is consistent across both
+    /// layers.  A single-writer dictionary/array clears a structural-change
+    /// collision within an attempt or two; the 64-retry ceiling is a safety
+    /// backstop and is never approached in normal operation.
+    /// </summary>
+    private const int SnapshotMaxRetries = 64;
+
     private static StashValue DeepCloneArray(StashArray arr, HashSet<object> activePath, List<string> pathBreadcrumbs)
     {
         // Snapshot the parent's live List<StashValue> into a private array BEFORE walking.
@@ -520,12 +531,14 @@ public static class RuntimeValues
         // branch) where the parent's main thread may concurrently call arr.push() / arr.pop()
         // while this background thread is cloning.  The List<StashValue> version-checked
         // enumerator (foreach) throws InvalidOperationException on a concurrent structural
-        // mutation (Add/Remove/resize); we catch-and-retry with unbounded spin — the single-
-        // writer guarantee (only the owning VM thread mutates the array) ensures convergence.
+        // mutation (Add/Remove/resize); we catch-and-retry — the single-writer guarantee
+        // (only the owning VM thread mutates the array) ensures the retry converges.
         //
         // Do NOT use indexed access (arr[i] for i in 0..arr.Count) here: a concurrent Add
         // can resize the backing array between the Count read and the indexer, producing
         // stale/out-of-range reads that do not throw and silently tear the snapshot.
+        // Do NOT pass arr.Count as initial capacity: it may be stale from a concurrent Add,
+        // allocating a larger-than-needed (potentially OOM-inducing) initial backing array.
         StashValue[] elements = null!;
         for (int attempt = 0; ; attempt++)
         {
@@ -542,11 +555,14 @@ public static class RuntimeValues
                 elements = list.ToArray();
                 break;
             }
-            catch (System.InvalidOperationException)
+            catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
             {
                 // Owner thread added/removed an element mid-walk — retry.
-                // No upper bound: single-writer guarantees the walk will eventually
-                // complete uninterrupted.
+                // Bounded at SnapshotMaxRetries (64) for consistency with SnapshotEntries
+                // and SnapshotImportStack in IsolationHelpers.  The single-writer guarantee
+                // (only the owning VM thread mutates the array via arr.push/pop/splice) means
+                // a concurrent-mutation collision clears within an attempt or two in practice;
+                // the bound is a safety backstop and is never approached during normal use.
                 System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
             }
         }
@@ -588,10 +604,10 @@ public static class RuntimeValues
                 entries = list.ToArray();
                 break;
             }
-            catch (System.InvalidOperationException)
+            catch (System.InvalidOperationException) when (attempt < SnapshotMaxRetries)
             {
                 // Owner thread mutated the dict mid-walk — retry.
-                // No upper bound: single-writer guarantees convergence.
+                // Bounded at SnapshotMaxRetries (64) for consistency with SnapshotEntries.
                 System.Threading.Thread.SpinWait(4 << System.Math.Min(attempt, 10));
             }
         }
