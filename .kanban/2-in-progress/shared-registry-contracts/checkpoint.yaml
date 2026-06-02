@@ -1,7 +1,7 @@
 schema_version: 1
 feature: shared-registry-contracts
 current: null
-updated: "2026-06-02T19:55:37Z"
+updated: "2026-06-02T20:11:13Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "Created Stash.Registry.Contracts (dependency-free), git-mv 7 contract files, added AuditEntryResponse DTO + inline mapping, removed stale Database.Models usings, wired ProjectReference, added ContractsAssemblyShapeTests; all builds green, 93 targeted tests pass"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: cf6f537da0f37093abdf9f060039a05fdc27f119
+    verified: true
+    started: "2026-06-02T19:58:48Z"
+    completed: "2026-06-02T20:11:13Z"
+    attempts: 1
+    notes: "PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles moved to Stash.Registry.Contracts/BoundedDomains.cs; 11 call-site files updated with using; BoundedDomainPlacementTests added; 136 tests green"
   P3:
     status: pending
     commit: null
