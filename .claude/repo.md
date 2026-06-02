@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - pkg-cli-api-parity — Stash pkg CLI parity with scoped registry API | .kanban/2-in-progress/pkg-cli-api-parity/ | 8 phases | started 2026-05-30
+- hermetic-vm — Hermetic VM — engine and async-child isolation | .kanban/2-in-progress/hermetic-vm/ | 12 phases | started 2026-06-02
 
 ---
 
