@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T12:16:33Z"
+updated: "2026-06-02T12:29:11Z"
 phases:
   2A-1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "VMContext cwd+env overlay SoT on IInterpreterContext; per-VM, real env never mutated"
   2B-2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 44684cdc377293bfd929613762f325a0050cd1a3
+    verified: true
+    started: "2026-06-02T12:16:55Z"
+    completed: "2026-06-02T12:29:11Z"
+    attempts: 1
+    notes: "Roslyn scan over Stash.Stdlib + Stash.Bytecode; 4 tests pass; 37 sinks pinned across 10 files (3 permanent in VMContext, 34 to-be-migrated); fail-path fixture + identity-read allowlist documented"
   2B-3:
     status: pending
     commit: null
