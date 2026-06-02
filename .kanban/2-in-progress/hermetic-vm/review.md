@@ -27,7 +27,8 @@ Setting review status: **in_progress** (4 findings: 1 CRITICAL, 1 HIGH, 1 MEDIUM
 
 ## F01 — [CRITICAL] Cross-thread enumeration of parent `_importStack` HashSet races with parent `Modules.cs` mutations
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 68ff47ac
 **Files:** `Stash.Bytecode/Runtime/VMContext.cs:484`, `Stash.Bytecode/VM/VirtualMachine.cs:430-436`, racing against `Stash.Bytecode/VM/VirtualMachine.Modules.cs:82,135`
 **Phase:** 2A-3 (callback-path), cross-phase with 2A-2's globals fix
 **Commit:** db11d30d (introduced), 224c52e3 (analogous globals fix not extended here)
@@ -75,7 +76,8 @@ dotnet test --filter "FullyQualifiedName~CallbackImportRaceStressTests" --no-bui
 
 ## F02 — [HIGH] Deep-clone walker enumerates parent's live `StashDictionary` / `StashArray` on background thread
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 68ff47ac
 **Files:** `Stash.Core/Runtime/RuntimeValues.cs:533-548` (`DeepCloneDictionary`), `:516-531` (`DeepCloneArray`); reached from `Stash.Bytecode/VM/IsolationHelpers.cs:149` (`BuildChildGlobals` → `DeepClone`)
 **Phase:** 2A-2
 **Commit:** 14321dc2 (introduced), 224c52e3 (outer fix incomplete)
