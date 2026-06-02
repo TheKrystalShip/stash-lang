@@ -494,25 +494,42 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     // ── Scope isolation tests ─────────────────────────────────────────────────
 
     [Fact]
-    public void Watch_GlobalVariableShared_ChildVMWritesBack()
+    public void Watch_Callback_FiresOnChange_MutationIsCallLocal()
     {
-        var filePath = Path.Combine(TestDir, "watch_fork.txt").Replace("\\", "/");
-        File.WriteAllText(filePath, "initial");
+        // Background-thread callbacks (fs.watch) run in an isolated child VM.
+        // They CANNOT mutate outer/parent globals — primitive rebinds (x = 99) are
+        // call-local: the child has its own copy of the global slot, and the parent
+        // never sees the write.  The callback can communicate via I/O side effects.
+        var watchedFile = Path.Combine(TestDir, "watch_fork.txt").Replace("\\", "/");
+        var signalFile  = Path.Combine(TestDir, "watch_fork_signal.txt").Replace("\\", "/");
+        File.WriteAllText(watchedFile, "initial");
 
-        // Globals are shared between parent and child VM. The child VM writes to the same
-        // global dictionary and RefreshGlobalSlots() syncs modifications back to the parent.
+        // (a) Prove the callback fired via a side-effect channel: the callback writes
+        //     to signalFile.  The parent polls until the file appears (up to 5s deadline)
+        //     so slow FSW latency is tolerated without a fixed sleep.
+        // (b) x remains 0 in the parent — documents call-local primitive mutation.
         var result = Run($$"""
             let x = 0;
-            let w = fs.watch("{{filePath}}", (event) => {
+            let w = fs.watch("{{watchedFile}}", (event) => {
                 x = 99;
+                fs.writeFile("{{signalFile}}", "fired");
             });
-            fs.writeFile("{{filePath}}", "trigger");
-            time.sleep(0.8);
+            fs.writeFile("{{watchedFile}}", "trigger");
+            let deadline = time.millis() + 5000;
+            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
+                time.sleep(0.02);
+            }
             fs.unwatch(w);
             let result = x;
             """);
 
-        Assert.Equal(99L, result);
+        // (a) Callback fired — signal file was written by the child VM.
+        Assert.True(File.Exists(signalFile), "callback did not fire: signal file was not written within 5s");
+        Assert.Equal("fired", File.ReadAllText(signalFile));
+
+        // (b) Parent's global x is still 0 — primitive rebind inside the background-thread
+        //     callback is call-local and never propagates to the parent VM.
+        Assert.Equal(0L, result);
     }
 
     [Fact]
