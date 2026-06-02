@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T11:05:12Z"
+updated: "2026-06-02T11:40:13Z"
 phases:
   2A-1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "Per-VM ICSlot[] clone via frame.ICSlots; ResolveICSlots() lazily clones template; all 4 IC sites updated; 5 isolation tests green"
   2A-2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 14321dc21c8bd3fc063a94b7a6e5d35aaf9d26eb
+    verified: true
+    started: "2026-06-02T11:06:15Z"
+    completed: "2026-06-02T11:40:13Z"
+    attempts: 1
+    notes: "DeepClone(value, visited) with active-path cycle detection; IsolationHelpers.BuildChildGlobals + SnapshotUpvalues; SpawnAsyncFunction wired with capturedModuleGlobals fix; 79 tests green including call-local and frozen-sharing scenarios"
   2A-3:
     status: pending
     commit: null
