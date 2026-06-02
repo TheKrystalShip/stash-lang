@@ -1,7 +1,7 @@
 schema_version: 1
 feature: shared-registry-contracts
 current: null
-updated: "2026-06-02T20:49:59Z"
+updated: "2026-06-02T21:17:32Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "CLI references shared contracts; 12 duplicate DTOs deleted from CliJsonContext; bounded-domain literals replaced (2 sites); WhoamiInfo.email dropped; CliNoMagicWireStringsMetaTests live with empty exemption list + real semantic binding + fail-path/clean-path self-tests + floor guard; CliContractsConsumptionTests live; AOT publish clean (IL2026 suppressed via [UnconditionalSuppressMessage] on DeprecatePackage/VersionRequest.Message); verify-phase P3 OK"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: fad280b00456fb03d591eb3eafed9c2af1aba531
+    verified: true
+    started: "2026-06-02T20:54:10Z"
+    completed: "2026-06-02T21:17:32Z"
+    attempts: 1
+    notes: docs point at shared project; full suite green (12992 passed); AOT clean; meta-test determinism fix 10bd8e5b validated
 review:
   status: not_started
   started: null
