@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -86,15 +87,17 @@ public sealed class ContractsAssemblyShapeTests
         var assembly = typeof(Stash.Registry.Contracts.LoginRequest).Assembly;
 
         var forbiddenPrefixes = new[] { "Stash.Registry.Database.Models", "Stash.Core" };
-        var forbiddenAssemblyNames = new[] { "StashRegistry", "StashCore" };
 
         // Check referenced assemblies (compile-time references)
+        // Exact, case-sensitive match against actual assembly names:
+        //   "StashRegistry"  — Stash.Registry overrides <AssemblyName>StashRegistry</AssemblyName>
+        //   "Stash.Core"     — Stash.Core uses the default dotted assembly name (no override)
         var referencedNames = assembly.GetReferencedAssemblies()
             .Select(a => a.Name ?? "")
             .ToList();
 
         var forbiddenRefs = referencedNames
-            .Where(name => forbiddenAssemblyNames.Any(f => name.Contains(f, StringComparison.OrdinalIgnoreCase)))
+            .Where(IsForbiddenAssemblyName)
             .ToList();
 
         Assert.Empty(forbiddenRefs);
@@ -117,4 +120,38 @@ public sealed class ContractsAssemblyShapeTests
 
         Assert.Empty(typeViolations);
     }
+
+    /// <summary>
+    /// Fail-path self-test: proves the <see cref="IsForbiddenAssemblyName"/> predicate has real teeth.
+    /// The old substring-based check missed <c>Stash.Core</c> (dot breaks <c>"Stash.Core".Contains("StashCore")</c>).
+    /// This self-test plants both forbidden names and a safe name to confirm the predicate is exact-match correct.
+    /// </summary>
+    [Fact]
+    public void IsForbiddenAssemblyName_TeethTest()
+    {
+        // Both real forbidden assembly names must be caught.
+        Assert.True(IsForbiddenAssemblyName("Stash.Core"),
+            "IsForbiddenAssemblyName must catch the default Stash.Core assembly name (dot-separated).");
+        Assert.True(IsForbiddenAssemblyName("StashRegistry"),
+            "IsForbiddenAssemblyName must catch the StashRegistry assembly name override.");
+
+        // A safe name must not be flagged.
+        Assert.False(IsForbiddenAssemblyName("System.Text.Json"),
+            "IsForbiddenAssemblyName must not flag unrelated assemblies.");
+    }
+
+    // ── Predicate ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Exact, case-sensitive match against assembly names that must never appear in
+    /// <c>Stash.Registry.Contracts</c>'s referenced-assembly list.
+    /// </summary>
+    private static readonly HashSet<string> s_forbiddenAssemblyNames = new(StringComparer.Ordinal)
+    {
+        "StashRegistry",   // Stash.Registry/Stash.Registry.csproj overrides <AssemblyName>
+        "Stash.Core",      // default assembly name (no <AssemblyName> override in Stash.Core.csproj)
+    };
+
+    private static bool IsForbiddenAssemblyName(string name) =>
+        s_forbiddenAssemblyNames.Contains(name);
 }
