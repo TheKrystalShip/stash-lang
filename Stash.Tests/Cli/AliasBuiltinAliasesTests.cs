@@ -101,22 +101,15 @@ public sealed class AliasBuiltinAliasesTests : IDisposable
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
-        string original = Environment.CurrentDirectory;
-        try
-        {
-            _runner.Run("cd /tmp");
-            Assert.Equal("/tmp", Environment.CurrentDirectory,
-                StringComparer.OrdinalIgnoreCase);
+        _runner.Run("cd /tmp");
+        // cd updates the per-VM working directory; the real process cwd is never mutated.
+        Assert.Equal("/tmp", _vm.Context.WorkingDirectory,
+            StringComparer.OrdinalIgnoreCase);
 
-            _output.GetStringBuilder().Clear();
-            _runner.Run("pwd");
-            Assert.Equal("/tmp", _output.ToString().Trim(),
-                StringComparer.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Environment.CurrentDirectory = original;
-        }
+        _output.GetStringBuilder().Clear();
+        _runner.Run("pwd");
+        Assert.Equal("/tmp", _output.ToString().Trim(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     // ── 5. alias.define without override=true → AliasError ───────────────────

@@ -1502,6 +1502,23 @@ If a non-frozen value to be captured contains a cycle, the deep-clone at fork ti
 `ValueError` with the cycle path in the message. Fix: `freeze` one node on the cycle (which
 makes the entire reachable graph frozen and eligible for reference-sharing).
 
+#### Background-thread callback isolation
+
+Callbacks registered with `fs.watch`, `signal.on`, and timer functions are invoked on
+background threads (OS file-system event threads or the .NET thread pool). Like `async fn`
+bodies, each such callback runs in an **isolated child VM**: its writes to captured globals
+are **call-local** and are never visible to the parent VM. The callback can still
+communicate with the outside world through side effects — writing files, spawning processes,
+or any other I/O — but it cannot mutate the parent VM's variable state.
+
+**Same-thread callbacks** (`arr.map`, sort comparators, `assert` body functions, and other
+synchronous higher-order functions) are unaffected. They run inline on the same VM thread
+and share the same variable state as their caller.
+
+A principled marshal-onto-VM-thread mechanism (event loop) is planned but not yet
+available. Until then, structure background callbacks as fire-and-forget workers that
+communicate via I/O, not by mutating captured state.
+
 ### Methods
 
 Struct declarations and extension blocks may define methods. A method call binds

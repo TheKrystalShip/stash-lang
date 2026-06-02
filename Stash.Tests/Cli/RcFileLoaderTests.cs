@@ -301,20 +301,13 @@ public sealed class RcFileLoaderTests : IDisposable
             !RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             return;
 
-        string original = Environment.CurrentDirectory;
         string rcPath = WriteFile(".stashrc", "cd /tmp\n");
         var vm = MakeVm();
 
-        try
-        {
-            RcFileLoader.Load(rcPath, vm, shellEnabled: true);
-            Assert.Equal("/tmp", Environment.CurrentDirectory,
-                StringComparer.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            Environment.CurrentDirectory = original;
-        }
+        RcFileLoader.Load(rcPath, vm, shellEnabled: true);
+        // cd updates the per-VM working directory; the real process cwd is never mutated.
+        Assert.Equal("/tmp", vm.Context.WorkingDirectory,
+            StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
