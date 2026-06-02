@@ -1,0 +1,28 @@
+// This is a synthetic C# snippet used by NoProcessGlobalLeakMetaTests as the fail-path
+// self-test fixture.  It must NOT be compiled as a .cs file — it is read as a text
+// embedded resource and parsed by Roslyn inside the test so the scanner can prove it
+// trips on a raw System.Environment.CurrentDirectory access that is outside the exemption list.
+//
+// Extension is .txt intentionally: the .cs SDK glob would otherwise compile this into
+// Stash.Tests, causing a build break (it references Stash.Bytecode/Stash.Stdlib internals).
+
+using System.IO;
+
+namespace Stash.Stdlib.Fixtures;
+
+/// <summary>
+/// A class that reads System.Environment.CurrentDirectory directly — the exact
+/// omission the NoProcessGlobalLeakMetaTests guard exists to catch.
+/// All stdlib path/env sinks must route through ctx.WorkingDirectory or ctx.GetEnv()
+/// instead; raw System.Environment access is the violation.
+/// </summary>
+internal static class BadEnvAccessFixture
+{
+    internal static string GetBadCwd()
+    {
+        // BAD: directly reads System.Environment.CurrentDirectory instead of
+        //   ctx.WorkingDirectory  (the per-VM virtualized cwd)
+        // This is the fail-path the scanner must flag as a leak.
+        return System.Environment.CurrentDirectory;
+    }
+}
