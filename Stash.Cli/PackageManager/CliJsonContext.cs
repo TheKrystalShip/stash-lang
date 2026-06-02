@@ -33,6 +33,7 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(List<SearchResultPackage>))]
 [JsonSerializable(typeof(LoginRequest))]
 [JsonSerializable(typeof(AssignRoleRequest))]
+[JsonSerializable(typeof(RevokeRoleRequest))]
 [JsonSerializable(typeof(TokenCreateRequest))]
 [JsonSerializable(typeof(TokenCreateResult))]
 [JsonSerializable(typeof(TokenListResult))]
@@ -79,6 +80,22 @@ internal sealed class AssignRoleRequest
     /// <summary>The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</summary>
     [JsonPropertyName("role")]
     public required string Role { get; set; }
+}
+
+/// <summary>
+/// Request body sent to <c>DELETE /admin/packages/{scope}/{name}/roles</c> to revoke a
+/// principal's role on a package. Carries no <c>role</c> field — the revoke targets
+/// whatever role the principal currently holds.
+/// </summary>
+internal sealed class RevokeRoleRequest
+{
+    /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
+    [JsonPropertyName("principal_type")]
+    public required string PrincipalType { get; set; }
+
+    /// <summary>The principal identifier — username, team ID, or org name.</summary>
+    [JsonPropertyName("principal_id")]
+    public required string PrincipalId { get; set; }
 }
 
 /// <summary>

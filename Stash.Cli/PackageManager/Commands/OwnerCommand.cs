@@ -135,14 +135,12 @@ public static class OwnerCommand
                             "Not logged in. Run 'stash pkg login', set the STASH_TOKEN environment variable, or use --token.");
                     }
 
-                    bool ok = client.RemoveOwner(packageName, username);
-                    if (ok)
+                    // RemoveOwner returns true on success and throws (with the server's
+                    // message — e.g. last-owner 409 or no-such-role 404) otherwise, so a
+                    // failure surfaces through the command's top-level error handler.
+                    if (client.RemoveOwner(packageName, username))
                     {
                         Console.WriteLine($"Removed {username} from owners of {packageName}.");
-                    }
-                    else
-                    {
-                        Console.Error.WriteLine("Failed to remove owner.");
                     }
 
                     break;

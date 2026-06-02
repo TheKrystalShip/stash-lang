@@ -199,6 +199,7 @@ The three formerly-imperative endpoints now folded into the shared filter (via `
 | DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope | PackagesController       |
 | GET    | `/api/v1/packages/{scope}/{name}/roles`                | admin         | PackagesController       |
 | PUT    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope | PackagesController       |
+| DELETE | `/api/v1/packages/{scope}/{name}/roles`                | publish scope | PackagesController       |
 | PATCH  | `/api/v1/packages/{scope}/{name}/visibility`           | publish scope | PackagesController       |
 | GET    | `/api/v1/search?q=...`                                 | None          | SearchController         |
 | POST   | `/api/v1/orgs`                                         | publish scope | OrganizationsController  |
@@ -213,6 +214,7 @@ The three formerly-imperative endpoints now folded into the shared filter (via `
 | POST   | `/api/v1/admin/users`                                  | admin         | AdminController          |
 | DELETE | `/api/v1/admin/users/{username}`                       | admin         | AdminController          |
 | PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin         | AdminController          |
+| DELETE | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin         | AdminController          |
 | GET    | `/api/v1/admin/audit-log`                              | admin         | AdminController          |
 
 ## Database Layer

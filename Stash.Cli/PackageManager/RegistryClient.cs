@@ -824,27 +824,42 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     }
 
     /// <summary>
-    /// Role revocation is not yet exposed over HTTP in this registry version.
+    /// Revokes a user's ownership of a package by removing their <c>owner</c> role.
     /// </summary>
     /// <remarks>
-    /// The database layer has <c>RevokePackageRoleAsync</c> but no DELETE/revoke route
-    /// exists on the registry API. This method always throws so the caller surfaces a
-    /// clear, honest error rather than silently hitting a 404 or silently succeeding
-    /// with a misleading re-assignment. Tracked in
-    /// <c>.kanban/0-backlog/bugs/Package role revocation not exposed over HTTP.md</c>.
+    /// Issues <c>DELETE /admin/packages/{scope}/{name}/roles</c> with a
+    /// <see cref="RevokeRoleRequest"/> body setting <c>principal_type = "user"</c> and
+    /// <c>principal_id = username</c>. This mirrors <see cref="AddOwner"/>'s admin route,
+    /// so ownership grant and revoke share the same admin privilege model. The server
+    /// enforces the last-owner invariant: a revoke that would leave the package with zero
+    /// owners is refused with <c>409 Conflict</c>, surfaced here as an exception.
     /// </remarks>
-    /// <param name="packageName">Unused — no request is issued.</param>
-    /// <param name="username">Unused — no request is issued.</param>
-    /// <returns>Never returns — always throws.</returns>
+    /// <param name="packageName">The name of the package to update ownership for.</param>
+    /// <param name="username">The username whose owner role is being revoked.</param>
+    /// <returns><c>true</c> when the server confirms the revocation (<c>204 No Content</c>).</returns>
     /// <exception cref="InvalidOperationException">
-    /// Always thrown; role revocation is not available in this registry version.
+    /// Thrown when the server returns a non-success response — e.g. <c>404</c> (the package
+    /// does not exist or the user holds no role) or <c>409</c> (cannot remove the last owner).
+    /// The server's error message is included so the caller can surface the reason.
     /// </exception>
     public bool RemoveOwner(string packageName, string username)
     {
-        throw new InvalidOperationException(
-            "Role revocation is not yet supported by this registry version. " +
-            "The server has no HTTP endpoint to revoke a package role. " +
-            "See .kanban/0-backlog/bugs/ for the tracked follow-up.");
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new RevokeRoleRequest { PrincipalType = "user", PrincipalId = username },
+            CliJsonContext.Default.RevokeRoleRequest);
+        var request = new HttpRequestMessage(HttpMethod.Delete, $"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/roles")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        throw new InvalidOperationException($"Remove owner failed ({response.StatusCode}): {error}");
     }
 
     /// <summary>
