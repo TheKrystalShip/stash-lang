@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T18:12:51Z"
+updated: "2026-06-02T18:43:00Z"
 phases:
   2A-1:
     status: done
@@ -100,8 +100,8 @@ phases:
     attempts: 1
     notes: 11 tests green (10 acceptance + HermeticIsolationExample_RunsCleanly); SignalRegistry collection fix; fs.realpath corrected to path.abs (done_when spec had stale symbol)
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-02T17:33:13Z"
-  resolved: null
+  resolved: "2026-06-02T18:43:00Z"
   findings_open: 0
   findings_fixed: 0

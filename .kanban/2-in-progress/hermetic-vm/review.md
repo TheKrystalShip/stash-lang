@@ -120,7 +120,8 @@ dotnet test --filter "FullyQualifiedName~CallbackDeepCloneRaceStressTests"
 
 ## F03 — [MEDIUM] `ChildVMConstructionMetaTests` exemption matcher uses `EndsWith` — silently admits a future construction at a same-named file in a different directory
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 51d57a12
 **Files:** `Stash.Tests/Bytecode/ChildVMConstructionMetaTests.cs:303,336-337`
 **Phase:** 2A-4
 **Commit:** 9e5ba69c
@@ -156,7 +157,8 @@ dotnet test --filter "FullyQualifiedName~ChildVMConstructionMetaTests"
 
 ## F04 — [LOW] `_context.Globals` not re-pointed to child's globals after child VM construction — recursive callback fork would re-clone grandparent's globals
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 51d57a12
 **Files:** `Stash.Bytecode/VM/VirtualMachine.Async.cs:89-104`, `Stash.Bytecode/Runtime/VMContext.cs:469-478` (`InvokeCallbackDirect`)
 **Phase:** 2A-2, 2A-3
 **Commit:** 14321dc2, db11d30d
