@@ -13,7 +13,12 @@ using Stash.Runtime.Errors;
 [StashNamespace(Capability = StashCapabilities.Environment)]
 public static partial class EnvBuiltIns
 {
-    /// <summary>Returns the value of an environment variable, or null if not set. If a default is provided it is returned instead of null.</summary>
+    /// <summary>
+    /// Returns the value of an environment variable from the VM's per-VM overlay (set via
+    /// <c>env.set</c>), falling back to the real process environment if the variable has not
+    /// been overridden in this VM. Returns null if neither overlay nor process environment has
+    /// the variable. If a default is provided it is returned instead of null.
+    /// </summary>
     /// <param name="name">The environment variable name</param>
     /// <param name="default">Optional default value when the variable is not set</param>
     /// <exception cref="TypeError">if the variable name is not a string</exception>
@@ -32,7 +37,12 @@ public static partial class EnvBuiltIns
         return StashValue.FromObj(value);
     }
 
-    /// <summary>Sets an environment variable to the given value.</summary>
+    /// <summary>
+    /// Sets an environment variable in this VM's per-VM overlay. The change is local to this
+    /// VM instance — other VM instances and the real process environment are unaffected.
+    /// Processes spawned via <c>process.spawn</c> / <c>process.exec</c> inherit this VM's
+    /// merged overlay (overlay wins over the real process env).
+    /// </summary>
     /// <param name="name">The environment variable name</param>
     /// <param name="value">The value to assign</param>
     [StashFn]
@@ -41,14 +51,22 @@ public static partial class EnvBuiltIns
         ctx.SetEnv(name, value);
     }
 
-    /// <summary>Returns true if the environment variable is set.</summary>
+    /// <summary>
+    /// Returns true if the environment variable is set in either this VM's overlay or the real
+    /// process environment. A variable that was explicitly unset via <c>env.unset</c> returns
+    /// false even if it exists in the real process environment.
+    /// </summary>
     /// <param name="name">The environment variable name</param>
     /// <returns>True if the variable exists</returns>
     [StashFn]
     public static bool Has(IInterpreterContext ctx, string name) =>
         ctx.GetEnv(name) != null;
 
-    /// <summary>Returns a dictionary of all current environment variables.</summary>
+    /// <summary>
+    /// Returns a dictionary of all current environment variables as seen by this VM: the real
+    /// process environment merged with this VM's per-VM overlay (overlay wins). Variables that
+    /// were explicitly unset via <c>env.unset</c> are excluded from the result.
+    /// </summary>
     /// <returns>A dictionary mapping variable names to their values</returns>
     [StashFn]
     public static StashDictionary All(IInterpreterContext ctx)
@@ -61,7 +79,10 @@ public static partial class EnvBuiltIns
         return dict;
     }
 
-    /// <summary>Returns a dictionary of all environment variables whose names start with the given prefix.</summary>
+    /// <summary>
+    /// Returns a dictionary of all environment variables whose names start with the given prefix,
+    /// using the same merged view as <c>env.all</c> (VM overlay over real process env).
+    /// </summary>
     /// <param name="prefix">The prefix to filter by</param>
     /// <returns>A dictionary of matching environment variables</returns>
     [StashFn]
@@ -78,7 +99,11 @@ public static partial class EnvBuiltIns
         return dict;
     }
 
-    /// <summary>Removes an environment variable.</summary>
+    /// <summary>
+    /// Removes an environment variable from this VM's overlay. If the variable exists in the
+    /// real process environment, it becomes shadowed by this explicit unset — subsequent reads
+    /// via <c>env.get</c> or <c>env.has</c> will return null / false.
+    /// </summary>
     /// <param name="name">The environment variable name to remove</param>
     [StashFn]
     public static void Remove(IInterpreterContext ctx, string name)
@@ -86,7 +111,11 @@ public static partial class EnvBuiltIns
         ctx.UnsetEnv(name);
     }
 
-    /// <summary>Removes the environment variable 'name'. Returns true if the variable existed, false otherwise.</summary>
+    /// <summary>
+    /// Removes the environment variable 'name' from this VM's per-VM overlay, shadowing the
+    /// real process environment. Returns true if the variable was visible (either in the overlay
+    /// or the real process env) before the removal, false otherwise.
+    /// </summary>
     /// <param name="name">The environment variable name to remove</param>
     /// <exception cref="ValueError">if `name` is empty, contains '=', or contains a null character</exception>
     /// <returns>True if the variable was set, false if it was not set</returns>
@@ -106,8 +135,10 @@ public static partial class EnvBuiltIns
     }
 
     /// <summary>
-    /// The current working directory path. Re-read on every access because
-    /// <c>env.chdir</c> can change it at runtime.
+    /// The current working directory for this VM instance. Re-read on every access because
+    /// <c>env.chdir</c> can change it at runtime. The value is per-VM: changing it with
+    /// <c>env.chdir</c> does not affect other VM instances or the real process cwd.
+    /// Initialized from the real process cwd when the VM is constructed.
     /// </summary>
     /// <exception cref="IOError">if the current directory cannot be determined</exception>
     [StashMember(Stability = Stability.Live, Capability = StashCapabilities.Environment,
@@ -135,7 +166,11 @@ public static partial class EnvBuiltIns
     [StashMember(Capability = StashCapabilities.Environment, ReturnType = "string")]
     public static string User(IInterpreterContext ctx) => System.Environment.UserName;
 
-    /// <summary>Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.</summary>
+    /// <summary>
+    /// Loads environment variables from a .env file into this VM's per-VM overlay. Optionally
+    /// prefixes all variable names. The real process environment is not mutated. Returns the
+    /// number of variables loaded.
+    /// </summary>
     /// <param name="path">Path to the .env file</param>
     /// <param name="prefix">Optional prefix to prepend to all variable names</param>
     /// <exception cref="IOError">if the .env file cannot be read</exception>
@@ -195,7 +230,10 @@ public static partial class EnvBuiltIns
         return count;
     }
 
-    /// <summary>Saves all current environment variables to a .env file at the given path.</summary>
+    /// <summary>
+    /// Saves all current environment variables to a .env file at the given path. The saved view
+    /// is the merged overlay-over-real-process-env (the same view returned by <c>env.all</c>).
+    /// </summary>
     /// <param name="path">Path to write the .env file</param>
     /// <exception cref="IOError">if the file cannot be written</exception>
     [StashFn]
@@ -237,7 +275,12 @@ public static partial class EnvBuiltIns
 
     }
 
-    /// <summary>Changes the current working directory to the given path and pushes it onto the directory stack.</summary>
+    /// <summary>
+    /// Changes this VM's current working directory to the given path and pushes it onto the
+    /// per-VM directory stack. The change is local to this VM instance — the real process cwd
+    /// (<c>System.Environment.CurrentDirectory</c>) is not mutated. Spawned processes inherit
+    /// this VM's working directory via <c>ProcessStartInfo.WorkingDirectory</c>.
+    /// </summary>
     /// <param name="path">The directory path to change to</param>
     /// <exception cref="CommandError">if the directory does not exist</exception>
     /// <exception cref="TypeError">if `path` is not a string</exception>
@@ -247,7 +290,11 @@ public static partial class EnvBuiltIns
     private static StashValue Chdir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.Chdir(ctx, args, "env.chdir");
 
-    /// <summary>Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.</summary>
+    /// <summary>
+    /// Pops the top directory from this VM's per-VM directory stack, changes the VM's working
+    /// directory back to the new top, and returns the popped path. The real process cwd is not
+    /// mutated. Throws CommandError if the stack is at its root entry.
+    /// </summary>
     /// <exception cref="CommandError">if the directory stack is already at its root entry</exception>
     /// <returns>The directory path that was popped</returns>
     // Raw: delegates to CurrentProcessImpl.PopDir which takes raw ReadOnlySpan<StashValue>
@@ -255,7 +302,7 @@ public static partial class EnvBuiltIns
     private static StashValue PopDir(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.PopDir(ctx, args, "env.popDir");
 
-    /// <summary>Returns a copy of the directory stack, oldest entry first.</summary>
+    /// <summary>Returns a copy of this VM's per-VM directory stack, oldest entry first.</summary>
     /// <returns>An array of directory path strings</returns>
     // Raw: delegates to CurrentProcessImpl.DirStack which takes raw ReadOnlySpan<StashValue>
     [StashFn(Raw = true, ReturnType = "array")]
@@ -269,7 +316,11 @@ public static partial class EnvBuiltIns
     private static StashValue DirStackDepth(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
         => CurrentProcessImpl.DirStackDepth(ctx, args, "env.dirStackDepth");
 
-    /// <summary>Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.</summary>
+    /// <summary>
+    /// Temporarily changes this VM's working directory to the given path, calls fn(), then
+    /// restores the original directory via a try/finally. The real process cwd is not mutated.
+    /// Returns fn's return value.
+    /// </summary>
     /// <param name="path">The directory to temporarily change to</param>
     /// <param name="fn">The function to execute in the new directory</param>
     /// <exception cref="IOError">if the directory does not exist</exception>

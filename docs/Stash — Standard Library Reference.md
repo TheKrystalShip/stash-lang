@@ -4008,7 +4008,7 @@ Decodes a hexadecimal string to a byte array.
 
 | Member | Type | Stability | Throws | Description |
 | ------ | ---- | --------- | ------ | ----------- |
-| `env.cwd` | `string` | `live` | `IOError` | The current working directory path. |
+| `env.cwd` | `string` | `live` | `IOError` | The current working directory for this VM instance. |
 | `env.home` | `string` | `cached` | — | The current user's home directory path. |
 | `env.hostname` | `string` | `cached` | — | The machine's hostname. |
 | `env.user` | `string` | `cached` | — | The current user's login name. |
@@ -4017,27 +4017,27 @@ Decodes a hexadecimal string to a byte array.
 
 | Function | Returns | Throws | Description |
 | -------- | ------- | ------ | ----------- |
-| `env.get` | `any` | `TypeError` | Returns the value of an environment variable, or null if not set. |
-| `env.set` | `null` | — | Sets an environment variable to the given value. |
-| `env.has` | `bool` | — | Returns true if the environment variable is set. |
-| `env.all` | `dict` | — | Returns a dictionary of all current environment variables. |
-| `env.withPrefix` | `dict` | — | Returns a dictionary of all environment variables whose names start with the given prefix. |
-| `env.remove` | `null` | — | Removes an environment variable. |
-| `env.unset` | `bool` | `ValueError` | Removes the environment variable 'name'. |
-| `env.loadFile` | `int` | `IOError` | Loads environment variables from a .env file. |
+| `env.get` | `any` | `TypeError` | Returns the value of an environment variable from the VM's per-VM overlay (set via env.set), falling back to the real process environment if the variable has not been overridden in this VM. |
+| `env.set` | `null` | — | Sets an environment variable in this VM's per-VM overlay. |
+| `env.has` | `bool` | — | Returns true if the environment variable is set in either this VM's overlay or the real process environment. |
+| `env.all` | `dict` | — | Returns a dictionary of all current environment variables as seen by this VM: the real process environment merged with this VM's per-VM overlay (overlay wins). |
+| `env.withPrefix` | `dict` | — | Returns a dictionary of all environment variables whose names start with the given prefix, using the same merged view as env.all (VM overlay over real process env). |
+| `env.remove` | `null` | — | Removes an environment variable from this VM's overlay. |
+| `env.unset` | `bool` | `ValueError` | Removes the environment variable 'name' from this VM's per-VM overlay, shadowing the real process environment. |
+| `env.loadFile` | `int` | `IOError` | Loads environment variables from a .env file into this VM's per-VM overlay. |
 | `env.saveFile` | `null` | `IOError` | Saves all current environment variables to a .env file at the given path. |
-| `env.chdir` | `null` | `CommandError`, `TypeError` | Changes the current working directory to the given path and pushes it onto the directory stack. |
-| `env.popDir` | `string` | `CommandError` | Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. |
-| `env.dirStack` | `array` | — | Returns a copy of the directory stack, oldest entry first. |
+| `env.chdir` | `null` | `CommandError`, `TypeError` | Changes this VM's current working directory to the given path and pushes it onto the per-VM directory stack. |
+| `env.popDir` | `string` | `CommandError` | Pops the top directory from this VM's per-VM directory stack, changes the VM's working directory back to the new top, and returns the popped path. |
+| `env.dirStack` | `array` | — | Returns a copy of this VM's per-VM directory stack, oldest entry first. |
 | `env.dirStackDepth` | `int` | — | Returns the number of entries in the directory stack. |
-| `env.withDir` | `any` | `IOError`, `TypeError` | Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. |
+| `env.withDir` | `any` | `IOError`, `TypeError` | Temporarily changes this VM's working directory to the given path, calls fn(), then restores the original directory via a try/finally. |
 | `env.exit` | `null` | — | Exits the current process with the given integer exit code (default 0). |
 
 ### Function Details
 
 #### `env.get(name: any, ...default: any) -> any`
 
-Returns the value of an environment variable, or null if not set. If a default is provided it is returned instead of null.
+Returns the value of an environment variable from the VM's per-VM overlay (set via env.set), falling back to the real process environment if the variable has not been overridden in this VM. Returns null if neither overlay nor process environment has the variable. If a default is provided it is returned instead of null.
 
 **Parameters:**
 
@@ -4052,7 +4052,7 @@ Returns the value of an environment variable, or null if not set. If a default i
 
 #### `env.set(name: string, value: string) -> null`
 
-Sets an environment variable to the given value.
+Sets an environment variable in this VM's per-VM overlay. The change is local to this VM instance — other VM instances and the real process environment are unaffected. Processes spawned via process.spawn / process.exec inherit this VM's merged overlay (overlay wins over the real process env).
 
 **Parameters:**
 
@@ -4063,7 +4063,7 @@ Sets an environment variable to the given value.
 
 #### `env.has(name: string) -> bool`
 
-Returns true if the environment variable is set.
+Returns true if the environment variable is set in either this VM's overlay or the real process environment. A variable that was explicitly unset via env.unset returns false even if it exists in the real process environment.
 
 **Parameters:**
 
@@ -4073,13 +4073,13 @@ Returns true if the environment variable is set.
 
 #### `env.all() -> dict`
 
-Returns a dictionary of all current environment variables.
+Returns a dictionary of all current environment variables as seen by this VM: the real process environment merged with this VM's per-VM overlay (overlay wins). Variables that were explicitly unset via env.unset are excluded from the result.
 
 **Returns:** `dict` — A dictionary mapping variable names to their values
 
 #### `env.withPrefix(prefix: string) -> dict`
 
-Returns a dictionary of all environment variables whose names start with the given prefix.
+Returns a dictionary of all environment variables whose names start with the given prefix, using the same merged view as env.all (VM overlay over real process env).
 
 **Parameters:**
 
@@ -4089,7 +4089,7 @@ Returns a dictionary of all environment variables whose names start with the giv
 
 #### `env.remove(name: string) -> null`
 
-Removes an environment variable.
+Removes an environment variable from this VM's overlay. If the variable exists in the real process environment, it becomes shadowed by this explicit unset — subsequent reads via env.get or env.has will return null / false.
 
 **Parameters:**
 
@@ -4099,7 +4099,7 @@ Removes an environment variable.
 
 #### `env.unset(name: string) -> bool`
 
-Removes the environment variable 'name'. Returns true if the variable existed, false otherwise.
+Removes the environment variable 'name' from this VM's per-VM overlay, shadowing the real process environment. Returns true if the variable was visible (either in the overlay or the real process env) before the removal, false otherwise.
 
 **Parameters:**
 
@@ -4113,7 +4113,7 @@ Removes the environment variable 'name'. Returns true if the variable existed, f
 
 #### `env.loadFile(path: string, ...prefix: string) -> int`
 
-Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.
+Loads environment variables from a .env file into this VM's per-VM overlay. Optionally prefixes all variable names. The real process environment is not mutated. Returns the number of variables loaded.
 
 **Parameters:**
 
@@ -4128,7 +4128,7 @@ Loads environment variables from a .env file. Optionally prefixes all variable n
 
 #### `env.saveFile(path: string) -> null`
 
-Saves all current environment variables to a .env file at the given path.
+Saves all current environment variables to a .env file at the given path. The saved view is the merged overlay-over-real-process-env (the same view returned by env.all).
 
 **Parameters:**
 
@@ -4142,7 +4142,7 @@ Saves all current environment variables to a .env file at the given path.
 
 #### `env.chdir(...path: any) -> null`
 
-Changes the current working directory to the given path and pushes it onto the directory stack.
+Changes this VM's current working directory to the given path and pushes it onto the per-VM directory stack. The change is local to this VM instance — the real process cwd (System.Environment.CurrentDirectory) is not mutated. Spawned processes inherit this VM's working directory via ProcessStartInfo.WorkingDirectory.
 
 **Parameters:**
 
@@ -4157,7 +4157,7 @@ Changes the current working directory to the given path and pushes it onto the d
 
 #### `env.popDir() -> string`
 
-Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. Throws CommandError if the stack is at its root entry.
+Pops the top directory from this VM's per-VM directory stack, changes the VM's working directory back to the new top, and returns the popped path. The real process cwd is not mutated. Throws CommandError if the stack is at its root entry.
 
 **Returns:** `string` — The directory path that was popped
 
@@ -4167,7 +4167,7 @@ Pops the top directory from the stack, changes cwd back to the new top, and retu
 
 #### `env.dirStack() -> array`
 
-Returns a copy of the directory stack, oldest entry first.
+Returns a copy of this VM's per-VM directory stack, oldest entry first.
 
 **Returns:** `array` — An array of directory path strings
 
@@ -4179,7 +4179,7 @@ Returns the number of entries in the directory stack.
 
 #### `env.withDir(path: any, ...fn: any) -> any`
 
-Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.
+Temporarily changes this VM's working directory to the given path, calls fn(), then restores the original directory via a try/finally. The real process cwd is not mutated. Returns fn's return value.
 
 **Parameters:**
 
