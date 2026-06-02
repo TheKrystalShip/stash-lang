@@ -16,6 +16,12 @@ namespace Stash.Tests.Stdlib;
 /// <summary>
 /// Tests for the multiplexed signal registry introduced in phase 2C-1.
 ///
+/// <b>Collection note:</b> <c>SignalImpl.SignalHandlers</c> is a process-global static.
+/// Both this class and <c>Stash.Tests.Embedding.SignalMultiplexTests</c> manipulate it,
+/// so xUnit must serialize them.  Both are placed in the <c>"SignalRegistry"</c> collection.
+/// </summary>
+[Collection("SignalRegistry")]
+///
 /// The global Signal enum in Stash uses short member names: Hup, Int, Quit, Kill, Usr1, Usr2, Term.
 /// So Signal.Term registers under the dict key "Term" (MemberName), not "SIGTERM".
 /// The "SIGTERM" keys come from the deprecated sys.* shim which has its own Signal enum

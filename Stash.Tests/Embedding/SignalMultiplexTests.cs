@@ -14,6 +14,13 @@ namespace Stash.Tests.Embedding;
 /// <summary>
 /// Acceptance test for signal multiplexing across two engines.
 ///
+/// <b>Collection note:</b> <c>SignalImpl.SignalHandlers</c> is a process-global static.
+/// Both this class and <c>Stash.Tests.Stdlib.SignalImplTests</c> manipulate it, so xUnit
+/// must serialize them to prevent cross-class interference.  Both are placed in the
+/// <c>"SignalRegistry"</c> collection for that purpose.
+/// </summary>
+[Collection("SignalRegistry")]
+///
 /// done_when coverage:
 ///   #6 — SigTerm_TwoEngines_BothHandlersRun
 ///

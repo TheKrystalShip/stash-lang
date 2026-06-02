@@ -274,4 +274,45 @@ public class MultiEngineIsolationTests
                 Directory.Delete(dirA, true);
         }
     }
+
+    // ── example script host-driver test ───────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that <c>examples/hermetic_isolation.stash</c> parses and executes cleanly
+    /// via a <see cref="StashEngine"/> host-driver.  This is the "runs cleanly" gate from
+    /// done_when #8 — proves the example is not just formatter-idempotent but also
+    /// runtime-correct.
+    /// </summary>
+    [Fact]
+    public void HermeticIsolationExample_RunsCleanly()
+    {
+        string examplePath = FindExamplePath("hermetic_isolation.stash");
+        Assert.True(File.Exists(examplePath), $"Example not found: {examplePath}");
+
+        var captureOutput = new StringWriter { NewLine = "\n" };
+        var engine = new StashEngine();
+        engine.Output = captureOutput;  // capture output; suppress console
+
+        ExecutionResult result = engine.RunFile(examplePath);
+        Assert.True(result.Success,
+            $"hermetic_isolation.stash failed: {string.Join("; ", result.Errors)}");
+
+        // The output must contain the isolation confirmation message.
+        string output = captureOutput.ToString();
+        Assert.Contains("Isolation invariants confirmed", output);
+    }
+
+    // ── repo root + path helpers ──────────────────────────────────────────────
+
+    private static string FindExamplePath(string fileName)
+    {
+        string dir = AppDomain.CurrentDomain.BaseDirectory;
+        while (dir != null!)
+        {
+            if (File.Exists(Path.Combine(dir, "Stash.sln")))
+                return Path.Combine(dir, "examples", fileName);
+            dir = Directory.GetParent(dir)?.FullName!;
+        }
+        throw new InvalidOperationException("Could not find repo root (Stash.sln not found)");
+    }
 }
