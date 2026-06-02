@@ -114,7 +114,10 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
             ActiveVM = this,
             MainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId,
             ModuleCache = ModuleCache,
-            ModuleLocks = ModuleLocks
+            ModuleLocks = ModuleLocks,
+            // Wire up the VM's import stack so InvokeCallbackDirect can snapshot it
+            // when creating a cross-thread child VM (background-thread branch).
+            ImportStack = _importStack
         };
     }
 
@@ -397,6 +400,27 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
                 _globalSlots[i] = value;
             }
         }
+    }
+
+    /// <summary>
+    /// Initialises this VM's <c>_importStack</c> from a snapshot produced at a cross-thread
+    /// fork site. Called by <see cref="VMContext.InvokeCallbackDirect"/> (background-thread
+    /// branch) so that a child VM starts with an independent copy of the parent's in-progress
+    /// import set, not a reference to the parent's live set.
+    ///
+    /// <para>
+    /// This is NOT called by the module-load path (<c>VirtualMachine.Modules.cs</c>), which
+    /// deliberately keeps sharing the parent's <c>_importStack</c> by reference for synchronous
+    /// circular-import detection.
+    /// </para>
+    /// </summary>
+    /// <param name="snapshot">A pre-copied snapshot of the parent's import stack.</param>
+    internal void InitImportStack(HashSet<string> snapshot)
+    {
+        _importStack = new HashSet<string>(snapshot, StringComparer.OrdinalIgnoreCase);
+        // Keep the context's import-stack reference in sync so that InvokeCallbackDirect
+        // on this child VM can also take a correct snapshot for any further nesting.
+        _context.ImportStack = _importStack;
     }
 
     private void ValidateStdlibManifest(Chunk chunk)

@@ -288,6 +288,21 @@ internal sealed class VMContext : IInterpreterContext
     /// </summary>
     internal Dictionary<string, StashValue>? Globals { get; set; }
 
+    /// <summary>
+    /// The import stack for the VM that owns this context. Set by <see cref="VirtualMachine"/>
+    /// at construction and updated to the child's own independent snapshot when a child VM is
+    /// spawned. Used by <see cref="InvokeCallbackDirect"/>'s background-thread branch to take
+    /// a snapshot of the current in-progress import set before constructing a child VM, so
+    /// the child starts with an independent copy and cannot race with the parent.
+    ///
+    /// <para>
+    /// The module-load path (<c>VirtualMachine.Modules.cs</c>) deliberately does NOT update
+    /// this field — it shares the parent's <c>_importStack</c> by reference for synchronous
+    /// circular-import detection. Only cross-thread fork sites snapshot and propagate this.
+    /// </para>
+    /// </summary>
+    internal HashSet<string>? ImportStack { get; set; }
+
     /// <summary>Module loading callback, propagated from the parent <see cref="VirtualMachine"/>.</summary>
     internal Func<string, string?, Chunk>? ModuleLoader { get; set; }
 
@@ -322,7 +337,10 @@ internal sealed class VMContext : IInterpreterContext
 
             if (Globals != null)
             {
-                var childVm = new VirtualMachine(Globals, CancellationToken);
+                // Cross-thread path: apply freeze-or-clone to globals so the child gets a
+                // private copy of any non-frozen mutable values (no cross-thread data races).
+                var childGlobals = IsolationHelpers.BuildChildGlobals(Globals);
+                var childVm = new VirtualMachine(childGlobals, CancellationToken);
                 childVm.Output = Output;
                 childVm.ErrorOutput = ErrorOutput;
                 childVm.Input = Input;
@@ -332,14 +350,18 @@ internal sealed class VMContext : IInterpreterContext
                 if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
                 if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
                 if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
+                // Pass a snapshot of the parent's import stack so the child starts with an
+                // independent copy of any in-progress imports, not the parent's live set.
+                // This prevents spurious "circular import" errors from the parent's in-flight
+                // imports racing with the child's import calls on a background thread.
+                if (ImportStack != null)
+                    childVm.InitImportStack(ImportStack);
 
                 childVm.InitGlobalSlots(vmFn.Chunk);
                 StashValue[] argsCopy = args.ToArray();
-                StashValue result = childVm.CallClosureDirect(vmFn, argsCopy);
-                // Sync any globals modified by the child back to the parent VM's slot array.
-                // The child writes through to the shared _globals dict; refresh the parent's slots.
-                ActiveVM?.RefreshGlobalSlots();
-                return result;
+                return childVm.CallClosureDirect(vmFn, argsCopy);
+                // Note: we no longer call ActiveVM?.RefreshGlobalSlots() because the child
+                // now has its own isolated globals dict — writes are call-local, not shared.
             }
         }
         return callable.CallDirect(Fork(), args);

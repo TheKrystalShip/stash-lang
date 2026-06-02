@@ -67,7 +67,13 @@ public sealed partial class VirtualMachine
             : moduleGlobals;
         var capturedModuleLoader = _moduleLoader;
         var capturedModuleCache = ModuleCache;
-        var capturedImportStack = _importStack;
+        // Snapshot the import stack: the child gets an independent copy so concurrent async
+        // imports cannot race on the parent's live HashSet, and cannot produce spurious
+        // "Circular import detected" errors for paths the parent currently has open.
+        // The module-load path (VirtualMachine.Modules.cs) deliberately shares _importStack
+        // by reference — that same-thread sharing is what enables synchronous circular-import
+        // detection and must NOT be changed here.
+        var capturedImportStack = new HashSet<string>(_importStack, StringComparer.OrdinalIgnoreCase);
         var capturedModuleLocks = ModuleLocks;
         string? capturedFile = _context.CurrentFile;
         TextWriter capturedOutput = _context.Output;
@@ -88,6 +94,10 @@ public sealed partial class VirtualMachine
                 ModuleLocks = capturedModuleLocks,
                 EmbeddedMode = capturedEmbedded,
             };
+            // Propagate the import-stack snapshot into the child's context so that any
+            // InvokeCallbackDirect call from within this child also starts child-of-child
+            // VMs from an independent copy of the import set.
+            childVM._context.ImportStack = capturedImportStack;
             childVM._context.CurrentFile = capturedFile;
             childVM._context.Output = capturedOutput;
             childVM._context.ErrorOutput = capturedErrorOutput;
