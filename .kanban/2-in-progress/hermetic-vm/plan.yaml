@@ -34,6 +34,7 @@ scope:
   - Stash.Bytecode/**
   - Stash.Stdlib/**
   - Stash.Core/Runtime/**
+  - Stash.Core/Common/**
   - Stash.Tests/**
   - Stash.Lsp/**
   - Stash.Dap/**
@@ -170,8 +171,11 @@ phases:
       - Stash.Stdlib/BuiltIns/EnvBuiltIns.cs
       - Stash.Stdlib/BuiltIns/CurrentProcessImpl.cs
       - Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs
+      - Stash.Core/Common/UnixSignal.cs
       - Stash.Tests/Stdlib/EnvBuiltInsTests.cs
       - Stash.Tests/Stdlib/CurrentProcessImplTests.cs
+      - Stash.Tests/Stdlib/EnvCurrentProcessTests.cs
+      - Stash.Tests/Interpreting/InterpreterTests.cs
       - Stash.Tests/Bytecode/NoProcessGlobalLeakMetaTests.cs
     verify:
       - dotnet build Stash.Stdlib

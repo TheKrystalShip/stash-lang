@@ -7980,19 +7980,31 @@ let result = labels;
     [Fact]
     public void EnvLoadFile_LoadsVariables()
     {
+        // After 2B-3 migration: env.loadFile writes to the per-VM overlay only.
+        // Assert by reading back via env.get in the same script (same VM).
         string tmp = System.IO.Path.GetTempFileName();
         try
         {
             System.IO.File.WriteAllText(tmp, "MY_TEST_VAR_1=hello\nMY_TEST_VAR_2=world\n");
-            var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
-            Assert.Equal(2L, result);
-            Assert.Equal("hello", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_1"));
-            Assert.Equal("world", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_2"));
+            var count = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
+            Assert.Equal(2L, count);
+            // Verify the vars are readable via env.get in the same script (same VM overlay)
+            var v1 = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}");
+                let result = env.get("MY_TEST_VAR_1");
+                """);
+            Assert.Equal("hello", v1);
+            var v2 = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}");
+                let result = env.get("MY_TEST_VAR_2");
+                """);
+            Assert.Equal("world", v2);
+            // Real process env must NOT be mutated
+            Assert.Null(System.Environment.GetEnvironmentVariable("MY_TEST_VAR_1"));
+            Assert.Null(System.Environment.GetEnvironmentVariable("MY_TEST_VAR_2"));
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_1", null);
-            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_2", null);
             System.IO.File.Delete(tmp);
         }
     }
@@ -8000,17 +8012,22 @@ let result = labels;
     [Fact]
     public void EnvLoadFile_SkipsCommentsAndBlankLines()
     {
+        // After 2B-3 migration: env.loadFile writes to the per-VM overlay only.
         string tmp = System.IO.Path.GetTempFileName();
         try
         {
             System.IO.File.WriteAllText(tmp, "# This is a comment\n\nMY_TEST_VAR_3=value\n# Another comment\n");
             var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
             Assert.Equal(1L, result);
-            Assert.Equal("value", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_3"));
+            var v3 = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}");
+                let result = env.get("MY_TEST_VAR_3");
+                """);
+            Assert.Equal("value", v3);
+            Assert.Null(System.Environment.GetEnvironmentVariable("MY_TEST_VAR_3"));
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_3", null);
             System.IO.File.Delete(tmp);
         }
     }
@@ -8018,19 +8035,28 @@ let result = labels;
     [Fact]
     public void EnvLoadFile_StripsQuotes()
     {
+        // After 2B-3 migration: env.loadFile writes to the per-VM overlay only.
         string tmp = System.IO.Path.GetTempFileName();
         try
         {
             System.IO.File.WriteAllText(tmp, "MY_TEST_VAR_4=\"quoted value\"\nMY_TEST_VAR_5='single quoted'\n");
             var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
             Assert.Equal(2L, result);
-            Assert.Equal("quoted value", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_4"));
-            Assert.Equal("single quoted", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_5"));
+            var v4 = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}");
+                let result = env.get("MY_TEST_VAR_4");
+                """);
+            var v5 = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}");
+                let result = env.get("MY_TEST_VAR_5");
+                """);
+            Assert.Equal("quoted value", v4);
+            Assert.Equal("single quoted", v5);
+            Assert.Null(System.Environment.GetEnvironmentVariable("MY_TEST_VAR_4"));
+            Assert.Null(System.Environment.GetEnvironmentVariable("MY_TEST_VAR_5"));
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_4", null);
-            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_5", null);
             System.IO.File.Delete(tmp);
         }
     }
@@ -8070,6 +8096,8 @@ let result = labels;
     [Fact]
     public void EnvWithPrefix_ReturnsMatchingVars()
     {
+        // After 2B-3 migration: env.set writes to the per-VM overlay only.
+        // No cleanup of real env needed — real env is never mutated.
         var result = Run(@"
             env.set(""STASH_PFX_A"", ""alpha"");
             env.set(""STASH_PFX_B"", ""bravo"");
@@ -8077,16 +8105,7 @@ let result = labels;
             let d = env.withPrefix(""STASH_PFX_"");
             let result = dict.has(d, ""STASH_PFX_A"") && dict.has(d, ""STASH_PFX_B"") && !dict.has(d, ""STASH_OTHER_C"");
         ");
-        try
-        {
-            Assert.Equal(true, result);
-        }
-        finally
-        {
-            System.Environment.SetEnvironmentVariable("STASH_PFX_A", null);
-            System.Environment.SetEnvironmentVariable("STASH_PFX_B", null);
-            System.Environment.SetEnvironmentVariable("STASH_OTHER_C", null);
-        }
+        Assert.Equal(true, result);
     }
 
     [Fact]
@@ -8127,19 +8146,29 @@ let result = labels;
     [Fact]
     public void EnvLoadFile_WithPrefix_AddsPrefix()
     {
+        // After 2B-3 migration: env.loadFile writes to the per-VM overlay only.
         string tmp = System.IO.Path.GetTempFileName();
         try
         {
             System.IO.File.WriteAllText(tmp, "HOST=localhost\nPORT=8080\n");
             var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\", \"MYAPP_\");");
             Assert.Equal(2L, result);
-            Assert.Equal("localhost", System.Environment.GetEnvironmentVariable("MYAPP_HOST"));
-            Assert.Equal("8080", System.Environment.GetEnvironmentVariable("MYAPP_PORT"));
+            var host = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}", "MYAPP_");
+                let result = env.get("MYAPP_HOST");
+                """);
+            var port = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}", "MYAPP_");
+                let result = env.get("MYAPP_PORT");
+                """);
+            Assert.Equal("localhost", host);
+            Assert.Equal("8080", port);
+            // Real env must not be mutated
+            Assert.Null(System.Environment.GetEnvironmentVariable("MYAPP_HOST"));
+            Assert.Null(System.Environment.GetEnvironmentVariable("MYAPP_PORT"));
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable("MYAPP_HOST", null);
-            System.Environment.SetEnvironmentVariable("MYAPP_PORT", null);
             System.IO.File.Delete(tmp);
         }
     }
@@ -8147,17 +8176,22 @@ let result = labels;
     [Fact]
     public void EnvLoadFile_WithoutPrefix_WorksAsDefault()
     {
+        // After 2B-3 migration: env.loadFile writes to the per-VM overlay only.
         string tmp = System.IO.Path.GetTempFileName();
         try
         {
             System.IO.File.WriteAllText(tmp, "STASH_LF_NOPREFIX=value123\n");
             var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
             Assert.Equal(1L, result);
-            Assert.Equal("value123", System.Environment.GetEnvironmentVariable("STASH_LF_NOPREFIX"));
+            var val = Run($"""
+                env.loadFile("{tmp.Replace("\\", "\\\\")}");
+                let result = env.get("STASH_LF_NOPREFIX");
+                """);
+            Assert.Equal("value123", val);
+            Assert.Null(System.Environment.GetEnvironmentVariable("STASH_LF_NOPREFIX"));
         }
         finally
         {
-            System.Environment.SetEnvironmentVariable("STASH_LF_NOPREFIX", null);
             System.IO.File.Delete(tmp);
         }
     }

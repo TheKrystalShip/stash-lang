@@ -148,33 +148,31 @@ public sealed class NoProcessGlobalLeakMetaTests
     /// </para>
     ///
     /// <para>
-    /// <b>Bytecode/Runtime/GlobExpander.cs (1) — to-be-migrated (phase 2B-3 / 2B-4).</b>
+    /// <b>Bytecode/Runtime/GlobExpander.cs (1) — to-be-migrated (phase 2B-4).</b>
     /// <c>Directory.GetCurrentDirectory()</c> used as a base for glob pattern expansion.
     /// Must route through <c>ctx.WorkingDirectory</c> after migration.
     /// </para>
     ///
     /// <para>
-    /// <b>Stdlib/BuiltIns/EnvBuiltIns.cs (11) — to-be-migrated (phase 2B-4).</b>
-    /// All env read/write/list sinks (<c>GetEnvironmentVariable</c>,
-    /// <c>SetEnvironmentVariable</c>, <c>GetEnvironmentVariables</c>) and the cwd read
-    /// (<c>CurrentDirectory</c>).  After migration each will route through
-    /// <c>ctx.GetEnv</c> / <c>ctx.SetEnv</c> / <c>ctx.UnsetEnv</c> / <c>ctx.AllEnv</c>
-    /// / <c>ctx.WorkingDirectory</c>.
+    /// <b>Stdlib/BuiltIns/EnvBuiltIns.cs — MIGRATED in phase 2B-3.</b>
+    /// All env read/write/list sinks now route through <c>ctx.GetEnv</c> / <c>ctx.SetEnv</c>
+    /// / <c>ctx.UnsetEnv</c> / <c>ctx.AllEnv</c> / <c>ctx.WorkingDirectory</c>.
+    /// Row removed from exemption list.
     /// </para>
     ///
     /// <para>
-    /// <b>Stdlib/BuiltIns/CurrentProcessImpl.cs (5) — to-be-migrated (phase 2B-3).</b>
-    /// All five sinks are <c>System.Environment.CurrentDirectory</c> reads/writes that
-    /// implement <c>env.chdir</c>, <c>env.popDir</c>, and <c>env.withDir</c>.  After
-    /// migration they will update <c>ctx.WorkingDirectory</c> instead.
+    /// <b>Stdlib/BuiltIns/CurrentProcessImpl.cs — MIGRATED in phase 2B-3.</b>
+    /// All <c>System.Environment.CurrentDirectory</c> reads/writes now update
+    /// <c>ctx.WorkingDirectory</c> instead; <c>Path.GetFullPath</c> uses
+    /// <c>ctx.ResolveAgainstCwd</c>.  Row removed from exemption list.
     /// </para>
     ///
     /// <para>
-    /// <b>Stdlib/BuiltIns/ProcessBuiltIns.cs (6) — to-be-migrated (phase 2B-3).</b>
-    /// Five <c>System.Environment.CurrentDirectory</c> read/writes that implement cwd
-    /// management for <c>process.replace</c> and associated dir-stack operations, plus
-    /// one <c>CurrentDirectory</c> read passed to the glob handler in the spawn path.
-    /// After migration they route through <c>ctx.WorkingDirectory</c>.
+    /// <b>Stdlib/BuiltIns/ProcessBuiltIns.cs — MIGRATED in phase 2B-3.</b>
+    /// Deprecated dir-stack aliases delegate to the hermetic <c>CurrentProcessImpl</c>;
+    /// glob handler uses <c>ctx.WorkingDirectory</c>; <c>ApplyCwdAndEnv</c> now seeds
+    /// <c>psi.WorkingDirectory</c> and env from the VM's virtual view.
+    /// Row removed from exemption list.
     /// </para>
     ///
     /// <para>
@@ -191,10 +189,10 @@ public sealed class NoProcessGlobalLeakMetaTests
     /// </para>
     ///
     /// <para>
-    /// <b>Stdlib/BuiltIns/PromptBuiltIns.cs (4) — to-be-migrated (phase 2B-3 / 2B-4).</b>
-    /// One <c>Environment.CurrentDirectory</c> read for prompt cwd display (phase 2B-3),
-    /// plus three <c>GetEnvironmentVariable</c> reads for USER/USERNAME/STASH_SHELL
-    /// (phase 2B-4).
+    /// <b>Stdlib/BuiltIns/PromptBuiltIns.cs (4) — to-be-migrated (phase 2B-4).</b>
+    /// One <c>Environment.CurrentDirectory</c> read for prompt cwd display, plus three
+    /// <c>GetEnvironmentVariable</c> reads for USER/USERNAME/STASH_SHELL.  Must route
+    /// through <c>ctx.WorkingDirectory</c> / <c>ctx.GetEnv</c> after migration.
     /// </para>
     ///
     /// <para>
@@ -204,7 +202,7 @@ public sealed class NoProcessGlobalLeakMetaTests
     /// </para>
     ///
     /// <para>
-    /// <b>Stdlib/BuiltIns/PkgBuiltIns.cs (2) — to-be-migrated (phase 2B-3).</b>
+    /// <b>Stdlib/BuiltIns/PkgBuiltIns.cs (2) — to-be-migrated (phase 2B-4).</b>
     /// Two <c>Directory.GetCurrentDirectory()</c> calls used to locate the package
     /// manifest when no explicit path is given.  Must route through
     /// <c>ctx.WorkingDirectory</c> after migration.
@@ -215,17 +213,16 @@ public sealed class NoProcessGlobalLeakMetaTests
         {
             // Bytecode/ — permanent chokepoint (3 sinks, never migrated away)
             ["Runtime/VMContext.cs"] = 3,
-            // Bytecode/ — to-be-migrated
+            // Bytecode/ — to-be-migrated (phase 2B-4)
             ["Runtime/GlobExpander.cs"] = 1,
-            // Stdlib/ — to-be-migrated
-            ["BuiltIns/EnvBuiltIns.cs"] = 11,
-            ["BuiltIns/CurrentProcessImpl.cs"] = 5,
-            ["BuiltIns/ProcessBuiltIns.cs"] = 6,
+            // Stdlib/ — to-be-migrated (phase 2B-4)
             ["BuiltIns/SysBuiltIns.cs"] = 2,
             ["BuiltIns/TermBuiltIns.cs"] = 2,
             ["BuiltIns/PromptBuiltIns.cs"] = 4,
             ["BuiltIns/CliBuiltIns.Parse.cs"] = 1,
             ["BuiltIns/PkgBuiltIns.cs"] = 2,
+            // EnvBuiltIns.cs (11), CurrentProcessImpl.cs (5), ProcessBuiltIns.cs (6) —
+            // migrated in phase 2B-3; rows removed from exemption list.
         };
 
     // ── Source-directory discovery ────────────────────────────────────────────

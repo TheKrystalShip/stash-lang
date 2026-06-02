@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Stash.Bytecode;
 using Stash.Lexing;
@@ -49,7 +51,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
         string dir = CreateTempDir();
-        string original = System.Environment.CurrentDirectory;
         string resolved = Path.GetFullPath(dir);
         try
         {
@@ -59,10 +60,11 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
                 """);
             var result = vm.Execute(chunk);
             Assert.Equal(resolved, result);
+            // env.chdir no longer mutates real process cwd
+            Assert.NotEqual(resolved, System.Environment.CurrentDirectory);
         }
         finally
         {
-            System.Environment.CurrentDirectory = original;
             Directory.Delete(dir, true);
         }
     }
@@ -85,24 +87,28 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
     public void Env_PopDir_RestoresPrevious()
     {
         string dir = CreateTempDir();
-        string original = System.Environment.CurrentDirectory;
         string resolved = Path.GetFullPath(dir);
+        string realCwdBefore = System.Environment.CurrentDirectory;
         try
         {
             var (chunk, vm) = BuildVM($$"""
+                let before = env.cwd;
                 env.chdir("{{dir}}");
                 let popped = env.popDir();
-                return popped;
+                let afterPop = env.cwd;
+                return [popped, afterPop == before];
                 """);
-            var result = vm.Execute(chunk);
-            Assert.Equal(resolved, result);
-            // cwd should be back to original
-            Assert.Equal(original, System.Environment.CurrentDirectory,
-                StringComparer.OrdinalIgnoreCase);
+            var rawResult = vm.Execute(chunk) as List<StashValue>;
+            var items = rawResult!.Select(sv => sv.ToObject()).ToList();
+            // popped value should be the dir we pushed
+            Assert.Equal(resolved, items[0]);
+            // env.cwd after popDir should equal the value before chdir
+            Assert.Equal(true, items[1]);
+            // Real process cwd must be unchanged
+            Assert.Equal(realCwdBefore, System.Environment.CurrentDirectory);
         }
         finally
         {
-            System.Environment.CurrentDirectory = original;
             Directory.Delete(dir, true);
         }
     }
@@ -110,19 +116,11 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
     [Fact]
     public void Env_PopDir_AtRoot_ThrowsCommandError()
     {
-        string original = System.Environment.CurrentDirectory;
-        try
-        {
-            var (chunk, vm) = BuildVM("""
-                env.popDir();
-                """);
-            var ex = Assert.ThrowsAny<CommandError>(() => vm.Execute(chunk));
-            Assert.Contains("root", ex.Message, StringComparison.OrdinalIgnoreCase);
-        }
-        finally
-        {
-            System.Environment.CurrentDirectory = original;
-        }
+        var (chunk, vm) = BuildVM("""
+            env.popDir();
+            """);
+        var ex = Assert.ThrowsAny<CommandError>(() => vm.Execute(chunk));
+        Assert.Contains("root", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     // =========================================================================
@@ -133,7 +131,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
     public void Env_DirStack_ReturnsCopy()
     {
         string dir = CreateTempDir();
-        string original = System.Environment.CurrentDirectory;
         try
         {
             var (chunk, vm) = BuildVM($$"""
@@ -147,7 +144,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         }
         finally
         {
-            System.Environment.CurrentDirectory = original;
             Directory.Delete(dir, true);
         }
     }
@@ -160,7 +156,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
     public void Env_DirStackDepth_ReturnsCount()
     {
         string dir = CreateTempDir();
-        string original = System.Environment.CurrentDirectory;
         try
         {
             var (chunk, vm) = BuildVM($$"""
@@ -177,7 +172,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         }
         finally
         {
-            System.Environment.CurrentDirectory = original;
             Directory.Delete(dir, true);
         }
     }
@@ -192,7 +186,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
         string dir = CreateTempDir();
-        string original = System.Environment.CurrentDirectory;
         try
         {
             var (chunk, vm) = BuildVM($$"""
@@ -205,7 +198,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         }
         finally
         {
-            System.Environment.CurrentDirectory = original;
             Directory.Delete(dir, true);
         }
     }
@@ -216,7 +208,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
 
         string dir = CreateTempDir();
-        string original = System.Environment.CurrentDirectory;
         try
         {
             var (chunk, vm) = BuildVM($$"""
@@ -233,7 +224,6 @@ public class EnvCurrentProcessTests : Stash.Tests.Interpreting.StashTestBase
         }
         finally
         {
-            System.Environment.CurrentDirectory = original;
             Directory.Delete(dir, true);
         }
     }

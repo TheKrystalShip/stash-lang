@@ -17,7 +17,7 @@ internal static class CurrentProcessImpl
         var path = SvArgs.String(args, 0, callerQualified);
 
         string expanded = ctx.ExpandTilde(path);
-        string resolved = System.IO.Path.GetFullPath(expanded);
+        string resolved = ctx.ResolveAgainstCwd(expanded);
         if (!System.IO.Directory.Exists(resolved))
         {
             throw new CommandError($"no such directory: {resolved}", exitCode: -1);
@@ -30,8 +30,9 @@ internal static class CurrentProcessImpl
             stack.RemoveAt(0);
         }
 
-        // Atomic: change cwd first; only push to the stack if the change succeeds.
-        System.Environment.CurrentDirectory = resolved;
+        // Atomic: update per-VM WorkingDirectory; only push to the stack if the change succeeds.
+        // System.Environment.CurrentDirectory is never mutated — each VM has its own overlay.
+        ctx.WorkingDirectory = resolved;
         stack.Add(resolved);
         return StashValue.Null;
     }
@@ -47,7 +48,8 @@ internal static class CurrentProcessImpl
         string popped = stack[^1];
         stack.RemoveAt(stack.Count - 1);
         string newTop = stack[^1];
-        System.Environment.CurrentDirectory = newTop;
+        // Update per-VM WorkingDirectory only — real process cwd is never mutated.
+        ctx.WorkingDirectory = newTop;
         return StashValue.FromObj(popped);
     }
 
@@ -72,21 +74,22 @@ internal static class CurrentProcessImpl
         var path = SvArgs.String(args, 0, callerQualified);
         var fn = SvArgs.Callable(args, 1, callerQualified);
 
-        string resolved = System.IO.Path.GetFullPath(path);
+        string resolved = ctx.ResolveAgainstCwd(path);
         if (!System.IO.Directory.Exists(resolved))
         {
             throw new IOError($"{callerQualified}: directory does not exist: '{resolved}'.");
         }
 
-        string previous = System.Environment.CurrentDirectory;
-        System.Environment.CurrentDirectory = resolved;
+        string previous = ctx.WorkingDirectory;
+        // Update per-VM WorkingDirectory only — real process cwd is never mutated.
+        ctx.WorkingDirectory = resolved;
         try
         {
             return ctx.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty);
         }
         finally
         {
-            System.Environment.CurrentDirectory = previous;
+            ctx.WorkingDirectory = previous;
         }
     }
 }

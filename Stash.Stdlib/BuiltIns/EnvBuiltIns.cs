@@ -26,7 +26,7 @@ public static partial class EnvBuiltIns
             throw new RuntimeError("'env.get' requires 1 or 2 arguments.");
         var name = SvArgs.String(args, 0, "env.get");
 
-        var value = System.Environment.GetEnvironmentVariable(name);
+        var value = ctx.GetEnv(name);
         if (value is null)
             return args.Length == 2 ? args[1] : StashValue.Null;
         return StashValue.FromObj(value);
@@ -36,27 +36,27 @@ public static partial class EnvBuiltIns
     /// <param name="name">The environment variable name</param>
     /// <param name="value">The value to assign</param>
     [StashFn]
-    public static void Set(string name, string value)
+    public static void Set(IInterpreterContext ctx, string name, string value)
     {
-        System.Environment.SetEnvironmentVariable(name, value);
+        ctx.SetEnv(name, value);
     }
 
     /// <summary>Returns true if the environment variable is set.</summary>
     /// <param name="name">The environment variable name</param>
     /// <returns>True if the variable exists</returns>
     [StashFn]
-    public static bool Has(string name) =>
-        System.Environment.GetEnvironmentVariable(name) != null;
+    public static bool Has(IInterpreterContext ctx, string name) =>
+        ctx.GetEnv(name) != null;
 
     /// <summary>Returns a dictionary of all current environment variables.</summary>
     /// <returns>A dictionary mapping variable names to their values</returns>
     [StashFn]
-    public static StashDictionary All()
+    public static StashDictionary All(IInterpreterContext ctx)
     {
         var dict = new StashDictionary();
-        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+        foreach (var kvp in ctx.AllEnv())
         {
-            dict.Set(entry.Key.ToString()!, StashValue.FromObject(entry.Value?.ToString()));
+            dict.Set(kvp.Key, StashValue.FromObj(kvp.Value));
         }
         return dict;
     }
@@ -65,15 +65,14 @@ public static partial class EnvBuiltIns
     /// <param name="prefix">The prefix to filter by</param>
     /// <returns>A dictionary of matching environment variables</returns>
     [StashFn]
-    public static StashDictionary WithPrefix(string prefix)
+    public static StashDictionary WithPrefix(IInterpreterContext ctx, string prefix)
     {
         var dict = new StashDictionary();
-        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+        foreach (var kvp in ctx.AllEnv())
         {
-            var key = entry.Key.ToString()!;
-            if (key.StartsWith(prefix, System.StringComparison.Ordinal))
+            if (kvp.Key.StartsWith(prefix, System.StringComparison.Ordinal))
             {
-                dict.Set(key, StashValue.FromObject(entry.Value?.ToString()));
+                dict.Set(kvp.Key, StashValue.FromObj(kvp.Value));
             }
         }
         return dict;
@@ -82,9 +81,9 @@ public static partial class EnvBuiltIns
     /// <summary>Removes an environment variable.</summary>
     /// <param name="name">The environment variable name to remove</param>
     [StashFn]
-    public static void Remove(string name)
+    public static void Remove(IInterpreterContext ctx, string name)
     {
-        System.Environment.SetEnvironmentVariable(name, null);
+        ctx.UnsetEnv(name);
     }
 
     /// <summary>Removes the environment variable 'name'. Returns true if the variable existed, false otherwise.</summary>
@@ -92,7 +91,7 @@ public static partial class EnvBuiltIns
     /// <exception cref="ValueError">if `name` is empty, contains '=', or contains a null character</exception>
     /// <returns>True if the variable was set, false if it was not set</returns>
     [StashFn]
-    public static bool Unset(string name)
+    public static bool Unset(IInterpreterContext ctx, string name)
     {
         if (name.Length == 0)
             throw new ValueError("'env.unset': name must not be empty.");
@@ -101,8 +100,8 @@ public static partial class EnvBuiltIns
         if (name.Contains('\0'))
             throw new ValueError("'env.unset': name must not contain null characters.");
 
-        bool existed = System.Environment.GetEnvironmentVariable(name) is not null;
-        System.Environment.SetEnvironmentVariable(name, null);
+        bool existed = ctx.GetEnv(name) is not null;
+        ctx.UnsetEnv(name);
         return existed;
     }
 
@@ -113,7 +112,7 @@ public static partial class EnvBuiltIns
     /// <exception cref="IOError">if the current directory cannot be determined</exception>
     [StashMember(Stability = Stability.Live, Capability = StashCapabilities.Environment,
         ReturnType = "string", Throws = new[] { typeof(IOError) })]
-    public static string Cwd(IInterpreterContext ctx) => System.Environment.CurrentDirectory;
+    public static string Cwd(IInterpreterContext ctx) => ctx.WorkingDirectory;
 
     /// <summary>
     /// The current user's home directory path. Cached on first access; stable for the
@@ -189,7 +188,7 @@ public static partial class EnvBuiltIns
                 }
             }
 
-            System.Environment.SetEnvironmentVariable(prefix + key, value);
+            ctx.SetEnv(prefix + key, value);
             count++;
         }
 
@@ -206,11 +205,9 @@ public static partial class EnvBuiltIns
 
         var sb = new StringBuilder();
         var entries = new System.Collections.Generic.SortedDictionary<string, string>();
-        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+        foreach (var kvp in ctx.AllEnv())
         {
-            var key = entry.Key.ToString()!;
-            var val = entry.Value?.ToString() ?? "";
-            entries[key] = val;
+            entries[kvp.Key] = kvp.Value;
         }
 
         foreach (var kvp in entries)
