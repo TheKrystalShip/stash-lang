@@ -120,7 +120,8 @@ dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-verify
 
 ## F03 — [LOW] Brief's "wire shape is unchanged" claim contradicts the dropped `AuditEntry.Id` wire field
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 99a634ac
 **Files:** `Stash.Registry.Contracts/AdminContracts.cs:80-119`, `Stash.Registry/Controllers/AdminController.cs:249-260`, `.kanban/2-in-progress/shared-registry-contracts/brief.md:334` (Decision Log row "One net-new DTO")
 **Phase:** P1
 **Commit:** b036d653
@@ -212,7 +213,8 @@ After the move, the registry's existing `RegistryAuthConstants.UserRoles` caller
 
 ## F05 — [LOW] `Stash.Registry/CLAUDE.md` directory tree visually nests `Stash.Registry.Contracts/` inside `Stash.Registry/`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 99a634ac
 **Files:** `Stash.Registry/CLAUDE.md:34-46`
 **Phase:** P4
 **Commit:** fad280b0

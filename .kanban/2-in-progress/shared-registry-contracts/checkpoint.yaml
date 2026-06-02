@@ -1,7 +1,7 @@
 schema_version: 1
 feature: shared-registry-contracts
 current: null
-updated: "2026-06-02T21:58:26Z"
+updated: "2026-06-02T22:01:11Z"
 phases:
   P1:
     status: done
@@ -36,8 +36,8 @@ phases:
     attempts: 1
     notes: docs point at shared project; full suite green (12992 passed); AOT clean; meta-test determinism fix 10bd8e5b validated
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-02T21:32:34Z"
-  resolved: null
+  resolved: "2026-06-02T22:01:11Z"
   findings_open: 0
   findings_fixed: 0
