@@ -246,7 +246,18 @@ public class AdminController : ControllerBase
 
         return Ok(new AuditLogResponse
         {
-            Entries = result.Items,
+            Entries = result.Items.Select(e => new AuditEntryResponse
+            {
+                Action = e.Action,
+                Package = e.Package,
+                Version = e.Version,
+                User = e.User,
+                Target = e.Target,
+                Ip = e.Ip,
+                Timestamp = e.Timestamp,
+                Decision = e.Decision,
+                DenyReason = e.DenyReason
+            }).ToList(),
             TotalCount = result.TotalCount,
             Page = page,
             PageSize = pageSize,
