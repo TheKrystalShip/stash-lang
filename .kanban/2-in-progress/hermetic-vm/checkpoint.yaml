@@ -1,7 +1,7 @@
 schema_version: 1
 feature: hermetic-vm
 current: null
-updated: "2026-06-02T18:43:00Z"
+updated: "2026-06-02T18:53:08Z"
 phases:
   2A-1:
     status: done
@@ -102,6 +102,6 @@ phases:
 review:
   status: resolved
   started: "2026-06-02T17:33:13Z"
-  resolved: "2026-06-02T18:43:00Z"
+  resolved: "2026-06-02T18:53:08Z"
   findings_open: 0
   findings_fixed: 0
