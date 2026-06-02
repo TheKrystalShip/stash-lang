@@ -118,6 +118,22 @@ public sealed class ChildVMConstructionMetaTests
             "StashEngine.cs",
         };
 
+    // ── Pin matching ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="relativePath"/> is present in
+    /// <see cref="PinnedExemptions"/> by exact (case-insensitive) equality.
+    ///
+    /// <para>
+    /// Uses exact-match rather than <c>EndsWith</c> so that a future file at
+    /// <c>Some/Other/StashEngine.cs</c> (same basename, different directory) is NOT silently
+    /// exempted.  Callers that used to call <c>EndsWith</c> must go through this helper so
+    /// the tighter predicate is enforced consistently.
+    /// </para>
+    /// </summary>
+    private static bool IsPinned(string relativePath) =>
+        PinnedExemptions.Contains(relativePath);
+
     // ── Scan implementation ───────────────────────────────────────────────────
 
     /// <summary>
@@ -300,7 +316,7 @@ public sealed class ChildVMConstructionMetaTests
             "Path discovery may have regressed — the scan is not reaching the source tree.");
 
         var violations = sites
-            .Where(s => !s.IsRouted && !PinnedExemptions.Any(pin => s.RelativePath.EndsWith(pin, StringComparison.OrdinalIgnoreCase)))
+            .Where(s => !s.IsRouted && !IsPinned(s.RelativePath))
             .ToList();
 
         Assert.True(
@@ -331,10 +347,13 @@ public sealed class ChildVMConstructionMetaTests
         string sourceDir = FindBytecodeSourceDir();
         var sites = ScanDirectory(sourceDir);
 
-        // The "actual pinned" set: non-routed constructions that appear on the list.
+        // The "actual pinned" set: non-routed constructions whose relative path appears exactly
+        // in PinnedExemptions.  Using IsPinned (exact match) here mirrors the production guard in
+        // AllVMConstructions_AreRoutedOrPinned — if the two predicates ever diverged the pin
+        // would only enforce in one direction.
         var actualPinned = sites
-            .Where(s => !s.IsRouted && PinnedExemptions.Any(pin => s.RelativePath.EndsWith(pin, StringComparison.OrdinalIgnoreCase)))
-            .Select(s => PinnedExemptions.First(pin => s.RelativePath.EndsWith(pin, StringComparison.OrdinalIgnoreCase)))
+            .Where(s => !s.IsRouted && IsPinned(s.RelativePath))
+            .Select(s => s.RelativePath)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var extra = PinnedExemptions.Except(actualPinned, StringComparer.OrdinalIgnoreCase).OrderBy(s => s).ToList();
@@ -543,6 +562,42 @@ internal static class GoodRoutedFixture
             violations.Count == 0,
             $"Expected zero violations in the routed snippet, but found {violations.Count}:\n" +
             string.Join("\n", violations.Select(v => $"  line {v.Line}")));
+    }
+
+    /// <summary>
+    /// Verifies that <see cref="IsPinned"/> uses <em>exact</em> relative-path equality —
+    /// not a suffix / <c>EndsWith</c> match — so a future file at a <em>different</em>
+    /// directory but with a <em>colliding basename</em> is NOT silently admitted as exempt.
+    ///
+    /// <para>
+    /// This is the load-bearing teeth for the F03 fix: the predicate was previously
+    /// <c>EndsWith</c>, which would have silently exempted <c>Some/Other/StashEngine.cs</c>
+    /// because it ends with the pinned entry <c>"StashEngine.cs"</c>.  After the fix only
+    /// the exact path is matched; a file in any other directory is flagged.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void IsPinned_CollidingBasenameInDifferentDirectory_IsNotExempt()
+    {
+        // Exact pin entries must be recognized.
+        Assert.True(IsPinned("StashEngine.cs"),
+            "The exact pin 'StashEngine.cs' must be recognized.");
+        Assert.True(IsPinned("VM/VirtualMachine.Modules.cs"),
+            "The exact pin 'VM/VirtualMachine.Modules.cs' must be recognized.");
+        Assert.True(IsPinned("Runtime/VMTemplateEvaluator.cs"),
+            "The exact pin 'Runtime/VMTemplateEvaluator.cs' must be recognized.");
+
+        // Colliding basenames in a different directory must NOT be exempt —
+        // previously EndsWith would have silently admitted these.
+        Assert.False(IsPinned("Some/Other/StashEngine.cs"),
+            "'Some/Other/StashEngine.cs' shares only a basename with the pin " +
+            "'StashEngine.cs'; exact-match must flag it, not silently exempt it.");
+        Assert.False(IsPinned("WeirdNamespace/VirtualMachine.Modules.cs"),
+            "'WeirdNamespace/VirtualMachine.Modules.cs' shares only a basename with the pin " +
+            "'VM/VirtualMachine.Modules.cs'; exact-match must flag it.");
+        Assert.False(IsPinned("AltRuntime/VMTemplateEvaluator.cs"),
+            "'AltRuntime/VMTemplateEvaluator.cs' shares only a basename with the pin " +
+            "'Runtime/VMTemplateEvaluator.cs'; exact-match must flag it.");
     }
 
     /// <summary>

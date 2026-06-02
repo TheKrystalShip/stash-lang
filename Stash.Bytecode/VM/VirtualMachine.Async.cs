@@ -90,14 +90,12 @@ public sealed partial class VirtualMachine
             {
                 _moduleLoader = capturedModuleLoader,
                 ModuleCache = capturedModuleCache,
-                _importStack = capturedImportStack,
                 ModuleLocks = capturedModuleLocks,
                 EmbeddedMode = capturedEmbedded,
             };
-            // Propagate the import-stack snapshot into the child's context so that any
-            // InvokeCallbackDirect call from within this child also starts child-of-child
-            // VMs from an independent copy of the import set.
-            childVM._context.ImportStack = capturedImportStack;
+            // InitImportStack sets both _importStack and _context.ImportStack in one call —
+            // single chokepoint so a future refactor cannot forget to sync the context reference.
+            childVM.InitImportStack(capturedImportStack);
             childVM._context.CurrentFile = capturedFile;
             childVM._context.Output = capturedOutput;
             childVM._context.ErrorOutput = capturedErrorOutput;
