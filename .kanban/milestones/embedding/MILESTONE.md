@@ -57,15 +57,17 @@ above) must be green — isolation is the deliverable, so it must be *tested*, n
 A fixed dependency chain (unlike a rolling-wave milestone, the order here is a real contract —
 each phase consumes the prior phase's artifacts). Detail the current phase; the rest is sketched.
 
-- **Phase 1 — `readonly` modifier · IN FLIGHT.** Specced; 6 implementation phases (P1–P6), all
-  `pending`, in `.kanban/2-in-progress/readonly-modifier/`. **Next action:**
-  `/next-phase readonly-modifier`. Produces the freeze primitive (`IsFrozen` / `DeepFreeze`,
-  cycle-safe traversal) that phase 2's async-child isolation reuses.
+- **Phase 1 — `readonly` modifier · DONE (2026-06-01, merged to `main` @ `822e6146`).** Shipped
+  the freeze primitive (`IsFrozen` / `DeepFreeze`, cycle-safe traversal) that phase 2's
+  async-child isolation reuses. In `.kanban/4-done/readonly-modifier/`. Derived ledger:
+  `done:1, in-flight:0`.
 
-- **Phase 2 — Hermetic VM · BLOCKED on phase 1 (design note ready).** **Do NOT `/spec` until
-  `readonly` lands in `4-done/`.** The async-child "frozen → share, else deep-clone" rule needs
-  phase 1's `IsFrozen`/`DeepFreeze` API; the user chose strict sequencing over splitting the
-  readonly-independent slice out early (see Decisions). Design note:
+- **Phase 2 — Hermetic VM · NEXT — UNBLOCKED (phase 1 landed).** The `/spec` gate ("do not spec
+  until `readonly` is in `4-done/`") is now satisfied. **Next action:** `/spec hermetic-vm`. The
+  async-child "frozen → share, else deep-clone" rule consumes phase 1's `IsFrozen`/`DeepFreeze`
+  API; the user chose strict sequencing over splitting the readonly-independent slice out early
+  (see Decisions) — so this is **one** complete spec (the architect may phase it internally,
+  e.g. 2a live-hazard fixes / 2b process-global virtualization — note §6). Design note:
   `.kanban/0-backlog/tools/Hermetic VM — Isolation Design (Embedding Phase 2).md`. It covers:
   - **Scope A — engine↔engine** process-global virtualization: virtual `VMContext.WorkingDirectory`
     + `EnvVars` overlay (route all path/env stdlib through them; `process.spawn` inherits the VM
@@ -86,6 +88,7 @@ each phase consumes the prior phase's artifacts). Detail the current phase; the 
 
 | Date | Decision / learning | Why it changed the plan |
 | --- | --- | --- |
+| 2026-06-01 | **Phase 1 (`readonly` modifier) DONE** — driven by the first real `/autopilot` run (6 impl phases + 8 review findings across two passes), merged `--no-ff` to `main` @ `822e6146` with green final_verify. Phase 2 (hermetic VM) is now **unblocked** and `/spec`-able. | Closes the strict-sequencing gate. Phase 2's async-child freeze-or-clone rule can now consume the concrete `IsFrozen`/`DeepFreeze` API instead of guessing against types that didn't exist. |
 | 2026-06-01 | Milestone created. User chose **strict sequencing** (readonly → *full* hermetic → host SDK) over splitting the readonly-independent hermetic slice (IC-slot cloning + cwd/env/signal virtualization) out as an early standalone spec. | Keeps phase 2 a single coherent spec and honors the design note's original "wait for phase 1" guidance. Accepted trade-off: the engine↔engine spilling fix **and** the *Critical* IC-slot corruption fix wait behind `readonly`'s 6 phases. (If the async race or IC corruption starts biting before readonly lands, revisit — the Scope-A slice is genuinely readonly-independent and could be pulled forward.) |
 | 2026-05-30 | Sharing keys off **runtime frozen-ness** (`readonly`/`freeze`), NOT `const`. `const` stays JS-style binding-only, unchanged. | Stash `const` doesn't freeze *values*, so it can't carry the share-vs-clone contract. Supersedes the old embedding doc's §14.5 `const`/`let` snapshot model. |
 | 2026-05-30 | Async is **fully built** and genuinely threaded (`StashFuture` wraps `Task<object?>`; `await` blocks the VM thread). Phase 2 **isolates** it, does not build it. | Corrects the old embedding doc, which called the `await` infrastructure "unfinished." |
@@ -120,6 +123,6 @@ stash scripts/checkpoint/checkpoint.stash milestone-status embedding
 - **Done** = features in `.kanban/4-done/` tagged with this milestone.
 - **In-flight** = features in `.kanban/2-in-progress/` tagged with this milestone.
 
-Currently tagged: `readonly-modifier` (phase 1, in flight). Phases 2 and 3 are not yet specced
-— they appear here once their `/spec` runs and tags their `plan.yaml`. If anything written
-elsewhere in this doc disagrees with the command above, the command wins.
+Currently tagged: `readonly-modifier` (phase 1, **done** in `4-done/`). Phases 2 and 3 are not
+yet specced — they appear here once their `/spec` runs and tags their `plan.yaml`. If anything
+written elsewhere in this doc disagrees with the command above, the command wins.
