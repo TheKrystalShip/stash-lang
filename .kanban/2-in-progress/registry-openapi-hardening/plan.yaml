@@ -49,7 +49,7 @@ phases:
     done_when:
       - GET /openapi/v1.json returns 200 in BOTH Production and Development environments (integration test asserts both — reuses the existing registry test-host fixture, do not introduce a new WebApplicationFactory shape).
       - GET /openapi/v1.json returns 200 when the request carries a revoked JWT (JTI bypass for the /openapi/ path prefix in the existing inline middleware at Startup.cs:276-311 — integration test asserts the bypass).
-      - The in-process-fetched openapi.json has document-level info.title, info.description, info.version, info.license, info.contact, and a non-empty servers array (parsed by the integration test).
+      - The in-process-fetched openapi.json has document-level info.title, info.description, info.version, info.license, info.contact, and a servers array whose url is DERIVED FROM THE INCOMING REQUEST (scheme + host + BasePath, honoring X-Forwarded-Proto/X-Forwarded-Host) — not a static placeholder. The integration test asserts servers[0].url reflects the test request's host (proving it is request-derived), and a second assertion with an X-Forwarded-Host header set confirms the forwarded host wins. Requires AddHttpContextAccessor() in Startup; the document transformer resolves IHttpContextAccessor from OpenApiDocumentTransformerContext.ApplicationServices.
       - 'The minimal-API health endpoint GET / is converted to a typed minimal-API form (TypedResults.Ok<HealthCheckResponse>(...) with .WithName("Health_Check")) so it carries an operationId AND a $ref schema for HealthCheckResponse in the generated doc — owned by P1 explicitly so it does not become an un-classified minimal-API operation that escapes both halves of the coverage machinery.'
       - 'Every operation in the in-process-fetched openapi.json carries a non-null operationId — {Controller}_{Action} for controller actions (applied by an IOpenApiOperationTransformer that fills OperationId unconditionally when null), Health_Check for the converted health endpoint. The coverage meta-test exemption list does NOT exempt operationIds; the transformer is the Construct.'
       - 'The OpenApiCoverageMetaTests class lands RED-with-exemption-list and is GREEN against the in-process-fetched doc with: (a) every controller action on the "not yet migrated" list except Packages_DownloadVersion, (b) Packages_DownloadVersion on the permanent-pin list, (c) the binding floor (parsed doc has > 30 operations), (d) a fail-path self-test fixture (a test-only stub action that returns IActionResult, asserts the scanner flags it). The P1 form asserts (operationId present) AND (every declared response code resolves to a $ref schema) — but NOT yet "every enum domain appears as an OpenAPI enum schema" (that assertion is added in P4 when the enums exist).'
@@ -77,6 +77,15 @@ phases:
       first-class and discoverable by both the operationId transformer (already named) and the coverage
       meta-test (now schema-typed). Do NOT pin it as a permanent exemption — converting is cleaner since
       it returns a real DTO.
+
+      DYNAMIC servers (locked 2026-06-03): the document metadata transformer populates document.Servers
+      from the live request at serve time, NOT a static value. Register AddHttpContextAccessor(); the
+      transformer resolves IHttpContextAccessor from context.ApplicationServices and builds the URL from
+      Request.Scheme/Host/PathBase, preferring X-Forwarded-Proto/X-Forwarded-Host when present (so a
+      reverse-proxied deployment advertises its public URL). This makes the served doc self-describing
+      per deployment. NOTE the downstream coupling: the P5 snapshot test MUST normalize servers[].url to
+      a fixed placeholder before its byte comparison, or the request-derived URL makes the snapshot
+      host/port-dependent and flaky.
 
   - id: P2
     title: Typed Results refactor — Packages + Auth controllers
@@ -152,7 +161,7 @@ phases:
       - dotnet test --filter "FullyQualifiedName~Registry"
       - dotnet test --filter "FullyQualifiedName~NoMagicAuthStringsMetaTests"
     done_when:
-      - 'BoundedDomains.cs declares seven public enum types (PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles, UserRoles) with [JsonConverter(typeof(JsonStringEnumConverter<T>))] (or equivalent verified mechanism) and per-member name attributes that produce byte-identical lowercase wire strings; no public const string remains in the file.'
+      - 'BoundedDomains.cs declares seven public enum types (PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles, UserRoles), each with [JsonConverter(typeof(JsonStringEnumConverter<T>))] to activate string serialization AND an explicit [JsonStringEnumMemberName("...")] on EVERY member (the locked mechanism — NOT a naming policy) producing byte-identical lowercase wire strings; no public const string remains in the file.'
       - 'Every DTO property in Stash.Registry.Contracts that previously typed a bounded value as string now types it as the corresponding enum.'
       - 'RegistryDbContext uses .HasConversion<string>() + .HasDefaultValue(MyEnum.X) for every bounded-domain EF property; the generated SQLite column defaults still emit the lowercase wire string (verified by a unit test reading the EF model metadata).'
       - 'POST /api/v1/admin/users with a body {"role":"owner"} (an illegal UserRoles wire value) returns 400 with ErrorResponse — the deserializer rejects at the boundary (integration test).'
@@ -160,11 +169,15 @@ phases:
       - 'The in-process-fetched openapi.json surfaces each of the seven domains as a named enum schema in components.schemas with its full lowercase value list — OpenApiCoverageMetaTests is extended in P4 to add this third assertion (it had only operationId-present and response-$ref assertions in P1–P3); the assertion ships GREEN at P4 close.'
       - 'RegistryAuthzMatrixTests is GREEN; NoMagicAuthStringsMetaTests is GREEN.'
     notes: |
-      Verify empirically (DURING the phase, not afterwards) which wire-string mechanism works under BOTH:
+      Mechanism is LOCKED (2026-06-03): explicit [JsonStringEnumMemberName("...")] per member +
+      [JsonConverter(typeof(JsonStringEnumConverter<T>))] for string activation. A lowercase naming policy
+      was rejected (would mangle a future multi-word value; less deterministic across serializers).
+      What is verified empirically DURING the phase (not the mechanism choice — the ROUND-TRIP) is that
+      this mechanism produces byte-identical wire strings under BOTH:
         (1) the registry's reflection-based JsonSerializer (Microsoft.AspNetCore.Mvc JSON pipeline), and
-        (2) the CLI's source-gen JsonSerializerContext under Native AOT.
-      .NET 10 supports both the generic JsonStringEnumConverter<T> and per-member [JsonStringEnumMemberName("...")] attributes;
-      if they diverge between contexts, document the workaround in the brief and proceed.
+        (2) the CLI's source-gen JsonSerializerContext under Native AOT (the harder context).
+      If the two contexts diverge on output, that is an AOT bug to document and work around in the brief —
+      not a reason to switch mechanisms.
       The EF default DDL emission ("public" stored as the literal default in the SQLite table) is a known sharp edge — confirm by
       reading sqlite_master after a fresh Initialize().
 
@@ -193,7 +206,7 @@ phases:
       - The CLI's Commands/* string-equality checks (RoleCommand, OrgCommand, VisibilityCommand) compare enum values, not strings; bare wire strings at these sites would be a compile error.
       - The in-process EnumRoundTripTests serializes each enum value through CliJsonContext and asserts the resulting JSON literal equals the documented wire string byte-for-byte; deserializes each wire string and asserts round-trip; includes a fail-path fixture (a deliberately mis-attributed enum) proving the test catches the bug it's named for.
       - Stash.Cli has a `--self-test enums` invocation that prints PASS/FAIL after running the same round-trip; AotPublishedBinaryEnumRoundTripTests publishes the AOT binary (dotnet publish -c Release) and exec's it with that flag, asserting exit 0 and "PASS" output. (Closes the shared-contracts residual gap.)
-      - Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json is the baselined snapshot of the generated openapi.json at this stabilization point; OpenApiSnapshotTests asserts the live doc matches byte-for-byte (re-baseline gate: STASH_SNAPSHOT_REGEN=1).
+      - Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json is the baselined snapshot of the generated openapi.json at this stabilization point; OpenApiSnapshotTests NORMALIZES the request-derived servers[].url to a fixed placeholder (e.g. "https://registry.invalid") before comparison (servers is dynamic per P1 — comparing it raw would couple the snapshot to the test host/port), then asserts the rest of the doc matches byte-for-byte (re-baseline gate: STASH_SNAPSHOT_REGEN=1).
 
   - id: P6
     title: Documentation — public OpenAPI endpoint + enum schemas
