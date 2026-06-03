@@ -3,13 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Stash.Cli.Completion;
+using Xunit;
 
 namespace Stash.Tests.Cli.Completion;
 
 /// <summary>
 /// Unit tests for <see cref="CompletionMenu"/> covering spec §7.1–§7.2.
 /// Captures <c>Console.Out</c> to verify multi-column layout and pager threshold.
+/// Serialized under "CliTests" because <c>Console.SetOut</c> is a process-global mutation
+/// that races other tests that write to <c>Console.Out</c> (e.g. EF Core log output from
+/// registry integration tests running in parallel).
 /// </summary>
+[Collection("CliTests")]
 public class CompletionMenuTests
 {
     // ── Helper ────────────────────────────────────────────────────────────────

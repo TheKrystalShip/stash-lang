@@ -1449,3 +1449,86 @@ Changes to the registry must preserve these rules:
 - **New audit actions** must be added to [Section 13](#13-audit-log) and the schema must remain append-only.
 - **New database tables or columns** require an EF Core migration; existing columns must not be renamed or repurposed.
 - Implementation details (controller plumbing, DI registration, service internals, deployment topology) belong in source comments or engineering notes, not in this reference.
+
+## 22. Published OpenAPI Contract
+
+The registry serves a machine-readable OpenAPI 3.x document at `GET /openapi/v1.json`. This endpoint is available in every environment, including production, without authentication.
+
+### 22.1 Public Endpoint
+
+| Property       | Value                                                                                   |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Path           | `GET /openapi/v1.json`                                                                  |
+| Authentication | None required                                                                           |
+| Environments   | All (Development and Production)                                                        |
+| JTI check      | Bypassed — a caller presenting a revoked or expired `Authorization` header still gets 200 |
+| Content-Type   | `application/json`                                                                      |
+
+The JTI bypass is intentional: the document exposes API shape only, no package data. A client library or code-generator that accidentally sets an `Authorization` header with a stale token should not be blocked from fetching the contract.
+
+### 22.2 Dynamic `servers[]`
+
+The `servers` array in the returned document is populated **per request** from the incoming HTTP request:
+
+- The server URL is constructed as `{scheme}://{host}{basePath}`.
+- `X-Forwarded-Proto` and `X-Forwarded-Host` headers are honored so a reverse-proxied deployment advertises its real public URL rather than Kestrel's internal address.
+- `basePath` reflects the configured `Server.BasePath` value (see [Section 10](#10-configuration)).
+
+This means the served document is self-describing on any deployment with zero operator configuration — no static URL substitution is required.
+
+### 22.3 Operation IDs
+
+Every operation in the document carries a stable `operationId` following the convention `{Controller}_{Action}`. Examples from the published document:
+
+| Endpoint                                               | `operationId`                  |
+| ------------------------------------------------------ | ------------------------------ |
+| `GET /`                                                | `Health_Check`                 |
+| `GET /api/v1/packages/{scope}/{name}`                  | `Packages_GetPackage`          |
+| `PUT /api/v1/packages/{scope}/{name}`                  | `Packages_PublishPackage`      |
+| `DELETE /api/v1/packages/{scope}/{name}/{version}`     | `Packages_UnpublishVersion`    |
+| `GET /api/v1/packages/{scope}/{name}/{version}/download` | `Packages_DownloadVersion`   |
+| `PATCH /api/v1/packages/{scope}/{name}/visibility`     | `Packages_SetVisibility`       |
+| `GET /api/v1/auth/whoami`                              | `Auth_Whoami`                  |
+| `POST /api/v1/auth/tokens`                             | `Auth_CreateToken`             |
+| `GET /api/v1/orgs/{org}`                               | `Organizations_GetOrg`         |
+| `POST /api/v1/orgs/{org}/members`                      | `Organizations_AddMember`      |
+| `GET /api/v1/scopes/{scope}`                           | `Scopes_GetScope`              |
+| `POST /api/v1/scopes`                                  | `Scopes_ClaimScope`            |
+| `GET /api/v1/search`                                   | `Search_Search`                |
+| `GET /api/v1/admin/stats`                              | `Admin_GetStats`               |
+| `POST /api/v1/admin/users`                             | `Admin_CreateUser`             |
+
+The `Health_Check` operationId is set explicitly via `.WithName("Health_Check")` on the minimal-API health endpoint; all controller actions receive their operationId from the `{Controller}_{Action}` transformer applied at document-serve time.
+
+These operationIds are stable enough for client code-generation tooling and are snapshot-tested so any unintended drift is caught at CI time.
+
+### 22.4 Response Schema Coverage
+
+Every operation in the document (except `Packages_DownloadVersion`) declares its response bodies as typed `$ref` schemas pointing to named component schemas in `components.schemas`. This means a generated client sees the precise response DTO type for each status code rather than a bare untyped `200 OK`.
+
+The one permanent exemption is `Packages_DownloadVersion` (`GET /api/v1/packages/{scope}/{name}/{version}/download`): it streams a binary tarball (`application/octet-stream`) with an `X-Integrity` SHA-256 header and carries no JSON response body.
+
+### 22.5 Stability Guarantees
+
+External client generators can rely on:
+
+- **operationIds** — the `{Controller}_{Action}` convention is stable; a rename of a controller or action is a breaking change requiring a new API version.
+- **Enum schemas** — all seven bounded-domain enums surface as named component schemas with their complete lowercase wire-value lists (see [Section 22.6](#226-bounded-domain-enum-schemas)). Unknown wire values submitted in requests are rejected at the boundary with `400 Bad Request`.
+- **Response schemas** — every non-binary response code maps to a typed component schema via `$ref`. Adding a new response code or response field is non-breaking; removing or renaming a field is a breaking change.
+- **Drift detection** — the published document is snapshot-tested; any change to the document shape triggers a test failure requiring an explicit re-baseline (`STASH_SNAPSHOT_REGEN=1`).
+
+### 22.6 Bounded-Domain Enum Schemas
+
+Seven closed value sets surface as OpenAPI `enum` schemas in the published document. Each is a named component in `components.schemas`. All wire values are lowercase strings.
+
+| Schema name      | Wire values                                         | Used by                                                       |
+| ---------------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| `PackageRoles`   | `owner`, `maintainer`, `publisher`, `reader`        | Package role assignments (`/packages/.../roles`)              |
+| `TokenScopes`    | `read`, `publish`, `admin`                          | Token `token_scope` JWT claim; API token creation request     |
+| `Visibilities`   | `public`, `private`, `internal`                     | Package `visibility` field                                    |
+| `PrincipalTypes` | `user`, `team`, `org`                               | Package role principal type (`/packages/.../roles`)           |
+| `ScopeOwnerTypes`| `user`, `org`, `system`                             | Scope `owner_type` field (`/scopes/{scope}`)                  |
+| `OrgRoles`       | `member`, `owner`                                   | Organization member role (`/orgs/{org}/members`)              |
+| `UserRoles`      | `user`, `admin`                                     | User `role` JWT claim; admin user creation request            |
+
+All wire values listed above are exact byte-for-byte strings. Submitting any other value for a field typed to one of these schemas yields `400 Bad Request` with an `ErrorResponse` body.
