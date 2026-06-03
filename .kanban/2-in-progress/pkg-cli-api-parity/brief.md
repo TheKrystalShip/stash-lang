@@ -127,6 +127,12 @@ point of shipping the scoped registry.
 
 ## Design
 
+All wire DTOs (request/response types crossing the HTTP boundary) live in the
+dependency-free `Stash.Registry.Contracts` assembly — the single shared home for
+the registry server, the CLI, and the future Razor UI. The CLI is already
+migrated to consume those types directly; this feature authors no CLI-local
+mirrors.
+
 ### Surface
 
 New `stash pkg` grammar. Verbs marked **new** are added; the `owner` verb is
@@ -214,8 +220,9 @@ no DTO is added server-side **except** the P1 cleanup below.
 
 #### `RegistryClient` additions
 
-New methods (all AOT-clean; every new request/response DTO registered in
-`CliJsonContext`). Routes are the **self-service publish** variants:
+New methods (all AOT-clean; every wire DTO they consume is the shared type from
+`Stash.Registry.Contracts` and is registered in `CliJsonContext`). Routes are the
+**self-service publish** variants:
 
 - `SetVisibility(packageName, visibility) → bool` — `PATCH /packages/{scope}/{name}/visibility`.
 - `GetRoles(packageName) → PackageRolesListResponse?` — `GET /packages/{scope}/{name}/roles` (publish).
@@ -230,29 +237,35 @@ New methods (all AOT-clean; every new request/response DTO registered in
 - `CreateTeam(org, team) → CreateTeamResponse?` — `POST /orgs/{org}/teams`.
 - `AddTeamMember(org, team, username) → bool` — `POST /orgs/{org}/teams/{team}/members`.
 
-**Already present (reuse / generalize, do not duplicate):** the CLI `AssignRoleRequest`
-and `RevokeRoleRequest` DTOs already exist in `CliJsonContext` (used by the legacy
-owner helpers). `RevokeRole`/`AssignRole` generalize `RemoveOwner`/`AddOwner` from
-hard-coded `user`/`owner` on the **admin** route to principal-typed arguments on the
+**Already present (reuse / generalize, do not duplicate):** `AssignRoleRequest`
+and `RevokeRoleRequest` come from `Stash.Registry.Contracts` and are already
+registered in `CliJsonContext` (used by the legacy owner helpers).
+`RevokeRole`/`AssignRole` generalize `RemoveOwner`/`AddOwner` from hard-coded
+`user`/`owner` on the **admin** route to principal-typed arguments on the
 **self-service** route.
 
 **Deleted (clean break):** `AddOwner`, `RemoveOwner`, `GetOwners`. The CLI no longer
 reads owners as a flat string array — `role list` reads `PackageRolesListResponse`.
-New CLI mirror response DTOs to add and register: `PackageRoleResponse`,
-`PackageRolesListResponse`, `ScopeDetailResponse` (+ `ScopeChallengeBody`),
-`CreateOrgResponse`, `OrgDetailResponse`, `CreateTeamResponse`, and any request DTOs
-(`ClaimScopeRequest`, `CreateOrgRequest`, `AddOrgMemberRequest`, `CreateTeamRequest`,
-`AddTeamMemberRequest`) — mirroring the server's snake_case JSON keys.
+**No CLI-local DTOs are authored.** The wire DTOs `PackageRoleResponse`,
+`PackageRolesListResponse`, `SetVisibilityRequest`, `SetVisibilityResponse`,
+`ScopeDetailResponse` (+ `ScopeChallengeBody`), `ClaimScopeRequest`,
+`CreateOrgRequest`, `CreateOrgResponse`, `OrgDetailResponse`, `AddOrgMemberRequest`,
+`CreateTeamRequest`, `CreateTeamResponse`, and `AddTeamMemberRequest` already exist
+in `Stash.Registry.Contracts` (shipped 2026-06-03 via `shared-registry-contracts`,
+merge `953d799f`) and are consumed directly — they are the canonical shared types,
+not copies. P2 only adds `[JsonSerializable]` entries in `CliJsonContext` for the
+still-unregistered ones; `AssignRoleRequest` and `RevokeRoleRequest` are already
+registered.
 
 #### Clean-break: drop `owners` from `PackageDetailResponse`
 
-`PackageDetailResponse.Owners` (`PackageContracts.cs:20-22`, `required`) carries a
-server-derived `List<string>` of usernames materialized from `package_roles` where
-`role = owner` and `principal_type = user` (built in `PackagesController.GetPackage`,
-lines 100-105). With `role list` available this duplicates state and silently hides
-team/org owners. Drop the `owners` field from `PackageDetailResponse`, stop deriving
-it in `GetPackage`, and remove the `Owners:` block from `InfoCommand.Render`
-(`InfoCommand.cs:107-122`).
+`PackageDetailResponse.Owners` (`Stash.Registry.Contracts/PackageContracts.cs:21-23`,
+`required`) carries a server-derived `List<string>` of usernames materialized from
+`package_roles` where `role = owner` and `principal_type = user` (built in
+`PackagesController.GetPackage`, lines 100-105). With `role list` available this
+duplicates state and silently hides team/org owners. Drop the `owners` field from
+`PackageDetailResponse`, stop deriving it in `GetPackage`, and remove the `Owners:`
+block from `InfoCommand.Render` (`InfoCommand.cs:107-122`).
 
 **`stash pkg info` consequence.** `info` is anonymous; `role list` requires a
 publish token. So after this change, *anonymous* callers no longer see any owner
@@ -272,9 +285,11 @@ phase ends with an observable, test-observable behavior. (Phase IDs below match
    `InfoCommand.Render`, update server + CLI tests. After P1 the package-detail
    JSON has no `owners` key and `stash pkg info` prints no owners section.
 2. **P2 — `RegistryClient` parity additions + AOT registration.** Add every method
-   above (self-service routes); add + register every new mirror DTO in
-   `CliJsonContext`; delete `AddOwner`/`RemoveOwner`/`GetOwners`. Fake-handler unit
-   tests assert each method's URL, verb, and body shape; AOT publish stays clean.
+   above (self-service routes); the wire DTOs they consume are the shared types in
+   `Stash.Registry.Contracts` (already shipped) — P2 only registers the
+   still-unregistered ones in `CliJsonContext`, it authors no DTO classes. Delete
+   `AddOwner`/`RemoveOwner`/`GetOwners`. Fake-handler unit tests assert each
+   method's URL, verb, and body shape; AOT publish stays clean.
 3. **P3 — `stash pkg role` (replaces `owner`).** Add `RoleCommand`
    (`list`/`assign`/`revoke`); delete `OwnerCommand.cs`; remove `owner` from
    dispatch + help. Integration test runs a full assign → list → revoke round-trip
@@ -370,3 +385,4 @@ concrete `done_when` list there.
 | 2026-06-02 | **`org info` shows flat metadata only (no members/teams)** | `OrgDetailResponse` carries no membership; no read route exists. Deferred to the backlog bug. |
 | 2026-06-02 | **`scope claim` sends `owner_type`/`owner` and handles the Verified-mode DNS-TXT challenge** | `ClaimScopeRequest` requires the owner pair, and Verified mode returns a `pending` state + challenge the user must act on. |
 | 2026-05-30 | No `stash pkg` tab-completion subsystem to update | Verified: `Stash.Cli/Completion/` is generic infrastructure with no `pkg` subcommand list; the surface lives only in `PackageCommands.cs` help text. |
+| 2026-06-03 | **Re-point P1/P2 at the shared `Stash.Registry.Contracts` assembly (shipped `953d799f`)** | The CLI DTO migration is already complete — there are no CLI-local request/response duplicates left to delete. P1's path moves from `Stash.Registry/Contracts/PackageContracts.cs` to `Stash.Registry.Contracts/PackageContracts.cs` (the old path no longer exists). P2 consumes the shared DTOs (every parity DTO already lives in `Stash.Registry.Contracts`) and only registers the still-unregistered ones in `CliJsonContext`, rather than authoring CLI mirrors. P3..P7 unchanged. |

@@ -13,6 +13,16 @@
 #     publish ceiling (RegistryAuthorizer.cs:115-119), not the admin routes.
 #   - visibility get + org membership display deferred to backlog (no server read
 #     path); see .kanban/0-backlog/bugs/.
+#
+# Re-pointed 2026-06-03 onto the shared Stash.Registry.Contracts assembly
+# (shipped 2026-06-03 via shared-registry-contracts, merge 953d799f):
+#   - P1 scope path updated: Stash.Registry/Contracts/PackageContracts.cs ->
+#     Stash.Registry.Contracts/PackageContracts.cs (the old path no longer exists).
+#   - P2 re-pointed: consume the wire DTOs from Stash.Registry.Contracts (they
+#     all already exist there) and register the still-unregistered ones in
+#     CliJsonContext. The CLI authors no mirror DTO classes — the CLI->shared
+#     migration is already complete (zero CLI-local request/response DTOs remain).
+#   - P3..P7 unchanged.
 
 schema_version: 1
 
@@ -33,7 +43,7 @@ default_verify:
 # PackageDetailResponse cleanup.)
 scope:
   - Stash.Cli/PackageManager/**
-  - Stash.Registry/Contracts/PackageContracts.cs
+  - Stash.Registry.Contracts/PackageContracts.cs
   - Stash.Registry/Controllers/PackagesController.cs
   - Stash.Tests/**
   - docs/PKG — Package Manager CLI.md
@@ -45,7 +55,7 @@ phases:
     title: Drop owners field from PackageDetailResponse
     deps: []
     files:
-      - Stash.Registry/Contracts/PackageContracts.cs
+      - Stash.Registry.Contracts/PackageContracts.cs
       - Stash.Registry/Controllers/PackagesController.cs
       - Stash.Cli/PackageManager/Commands/InfoCommand.cs
       - Stash.Tests/Registry/PackageDetailResponseTests.cs
@@ -68,7 +78,7 @@ phases:
       OwnerCommand (their only caller), to keep every phase boundary compilable.
 
   - id: P2
-    title: RegistryClient parity additions (additive) + AOT serializer registration
+    title: RegistryClient parity methods consuming Stash.Registry.Contracts + AOT serializer registration
     deps: [P1]
     files:
       - Stash.Cli/PackageManager/RegistryClient.cs
@@ -81,14 +91,19 @@ phases:
     done_when:
       - RegistryClient exposes SetVisibility, GetRoles, AssignRole, RevokeRole, ClaimScope, GetScope, CreateOrg, GetOrg, AddOrgMember, RemoveOrgMember, CreateTeam, AddTeamMember — each targeting the self-service publish route documented in brief.md (roles/visibility on /packages/..., NOT /admin/...).
       - RevokeRole and AssignRole are principal-typed (user|team|org + role) and RevokeRole throws carrying the server ErrorResponse message on 404 (no such role) and 409 (last owner).
-      - Every new request and response mirror DTO (PackageRoleResponse, PackageRolesListResponse, ScopeDetailResponse, ScopeChallengeBody, CreateOrgResponse, OrgDetailResponse, CreateTeamResponse, ClaimScopeRequest, CreateOrgRequest, AddOrgMemberRequest, CreateTeamRequest, AddTeamMemberRequest) has a [JsonSerializable] entry in CliJsonContext; dotnet publish for Stash.Cli completes with no new AOT trim warnings.
-      - Fake-HttpMessageHandler unit tests confirm each new method targets the correct URL, HTTP verb, and request body shape (snake_case keys matching the server contracts).
+      - Every wire DTO consumed by the new methods (PackageRoleResponse, PackageRolesListResponse, SetVisibilityRequest, SetVisibilityResponse, ScopeDetailResponse, ScopeChallengeBody, CreateOrgRequest, CreateOrgResponse, OrgDetailResponse, AddOrgMemberRequest, CreateTeamRequest, CreateTeamResponse, AddTeamMemberRequest, ClaimScopeRequest) is the shared type from Stash.Registry.Contracts and has a [JsonSerializable] entry in CliJsonContext — AssignRoleRequest and RevokeRoleRequest are already registered; the rest are added here. No CLI-local mirror DTO is authored.
+      - dotnet publish for Stash.Cli completes with no new AOT trim warnings.
+      - Fake-HttpMessageHandler unit tests confirm each new method targets the correct URL, HTTP verb, and request body shape (snake_case keys matching the shared Stash.Registry.Contracts types).
     notes: |
       This phase is ADDITIVE only — it does not delete the legacy AddOwner/
       RemoveOwner/GetOwners (those go in P3 with OwnerCommand). AssignRole/RevokeRole
       generalize the legacy helpers (principal-typed, self-service route) and will
-      replace them once OwnerCommand is gone. The CLI AssignRoleRequest and
-      RevokeRoleRequest DTOs already exist in CliJsonContext — reuse them.
+      replace them once OwnerCommand is gone. All wire DTOs already live in
+      Stash.Registry.Contracts (shipped 2026-06-03 via shared-registry-contracts,
+      merge 953d799f) and are consumed directly — the CLI authors no DTO classes
+      here. CliJsonContext already `using Stash.Registry.Contracts;` and already
+      registers AssignRoleRequest + RevokeRoleRequest; P2 adds [JsonSerializable]
+      entries for the still-unregistered shared types listed above.
 
   - id: P3
     title: stash pkg role command replaces stash pkg owner
