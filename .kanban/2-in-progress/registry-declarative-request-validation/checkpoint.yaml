@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T17:46:53Z"
+updated: "2026-06-03T18:17:35Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 82627ac357d7546aed739e8d058e284d476797cf
+    verified: true
+    started: "2026-06-03T18:06:30Z"
+    completed: "2026-06-03T18:17:35Z"
+    attempts: 1
+    notes: "RequestModelBindingMetaTests: 4 tests green, 12-entry pin matches live violation set, all three sinks detected"
   P2:
     status: pending
     commit: null
