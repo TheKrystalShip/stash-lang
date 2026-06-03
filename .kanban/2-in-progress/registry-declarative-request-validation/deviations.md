@@ -1,5 +1,25 @@
 # Implementer deviations — for the reviewer to adjudicate
 
+## ✅ DECISION (user, 2026-06-03) — review pass 1 findings
+
+**F01 → (A) ACCEPT the stricter validation.** Request-body grammar fields are validated as-sent
+(no Trim/lowercase normalization before validation); mixed-case/whitespace inputs that were
+previously normalized-and-accepted now return 400. No code revert — document the behaviour.
+
+**F02 → (A) KEEP `[ScopeGrammar]` on `CreateTeam.Name`.** Team names are now grammar-validated like
+org/scope names (a new, intended restriction). Document it.
+
+**Rationale (user-endorsed):** the registry is pre-release — no deployed instance, no existing
+clients, the in-repo CLI is the only consumer and already sends canonical values — so the
+compatibility cost of the stricter behaviour is ≈ zero, and the cleaner declarative contract wins.
+
+**F03 = clean regression** (not one of the two decisions): restore `AuditLogQuery.PageSize` default
+to 50 (preserve), matching the P6 docs. The remaining findings resolve in the (A) direction (e.g.
+F06 tests assert 400 for normalizable-but-raw-invalid input; F08 deletes the now-truly-dead guard).
+
+---
+
+
 This file accumulates **plan deviations and ratification requests** reported by the implementer
 agents during the phase loop. The reviewer reads only the diff + `brief.md`; these deviations
 otherwise live only in the driver's context. They are surfaced here (and in the `/feature-review`
