@@ -206,11 +206,7 @@ public static class RoleCommand
 
     private static void ValidatePrincipalType(string principalType)
     {
-        bool valid = string.Equals(principalType, PrincipalTypes.User.ToWire(), StringComparison.Ordinal)
-            || string.Equals(principalType, PrincipalTypes.Team.ToWire(), StringComparison.Ordinal)
-            || string.Equals(principalType, PrincipalTypes.Org.ToWire(), StringComparison.Ordinal);
-
-        if (!valid)
+        if (!principalType.TryToPrincipalType(out _))
         {
             throw new ArgumentException(
                 $"Unknown principal type: '{principalType}'. Valid types: {PrincipalTypes.User.ToWire()}, {PrincipalTypes.Team.ToWire()}, {PrincipalTypes.Org.ToWire()}.");
@@ -219,12 +215,7 @@ public static class RoleCommand
 
     private static void ValidatePackageRole(string role)
     {
-        bool valid = string.Equals(role, PackageRoles.Owner.ToWire(), StringComparison.Ordinal)
-            || string.Equals(role, PackageRoles.Maintainer.ToWire(), StringComparison.Ordinal)
-            || string.Equals(role, PackageRoles.Publisher.ToWire(), StringComparison.Ordinal)
-            || string.Equals(role, PackageRoles.Reader.ToWire(), StringComparison.Ordinal);
-
-        if (!valid)
+        if (!role.TryToPackageRole(out _))
         {
             throw new ArgumentException(
                 $"Unknown role: '{role}'. Valid roles: {PackageRoles.Owner.ToWire()}, {PackageRoles.Maintainer.ToWire()}, {PackageRoles.Publisher.ToWire()}, {PackageRoles.Reader.ToWire()}.");

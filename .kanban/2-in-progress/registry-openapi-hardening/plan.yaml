@@ -197,12 +197,14 @@ phases:
     title: CLI AOT verification + OpenAPI snapshot baseline
     deps: [P4]
     files:
+      - Stash.Registry.Contracts/BoundedDomains.cs
       - Stash.Cli/PackageManager/CliJsonContext.cs
       - Stash.Cli/PackageManager/Commands/RoleCommand.cs
       - Stash.Cli/PackageManager/Commands/OrgCommand.cs
       - Stash.Cli/PackageManager/Commands/VisibilityCommand.cs
       - Stash.Cli/PackageManager/Commands/ScopeCommand.cs
       - Stash.Cli/Program.cs
+      - Stash.Tests/Stash.Tests.csproj
       - Stash.Tests/Cli/EnumRoundTripTests.cs
       - Stash.Tests/Cli/AotPublishedBinaryEnumRoundTripTests.cs
       - Stash.Tests/Registry/OpenApi/OpenApiSnapshotTests.cs

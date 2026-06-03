@@ -257,6 +257,41 @@ public static class BoundedDomainWire
         }
     }
 
+    /// <summary>Tries to parse a lowercase wire string to an <see cref="OrgRoles"/> value. Returns false if unknown.</summary>
+    public static bool TryToOrgRole(this string wire, out OrgRoles role)
+    {
+        switch (wire)
+        {
+            case "owner": role = OrgRoles.Owner; return true;
+            case "member": role = OrgRoles.Member; return true;
+            default: role = default; return false;
+        }
+    }
+
+    /// <summary>Tries to parse a lowercase wire string to a <see cref="PrincipalTypes"/> value. Returns false if unknown.</summary>
+    public static bool TryToPrincipalType(this string wire, out PrincipalTypes pt)
+    {
+        switch (wire)
+        {
+            case "user": pt = PrincipalTypes.User; return true;
+            case "team": pt = PrincipalTypes.Team; return true;
+            case "org": pt = PrincipalTypes.Org; return true;
+            default: pt = default; return false;
+        }
+    }
+
+    /// <summary>Tries to parse a lowercase wire string to a <see cref="Visibilities"/> value. Returns false if unknown.</summary>
+    public static bool TryToVisibility(this string wire, out Visibilities vis)
+    {
+        switch (wire)
+        {
+            case "public": vis = Visibilities.Public; return true;
+            case "private": vis = Visibilities.Private; return true;
+            case "internal": vis = Visibilities.Internal; return true;
+            default: vis = default; return false;
+        }
+    }
+
     /// <summary>Returns the lowercase wire string for a <see cref="OrgRoles"/> value.</summary>
     public static string ToWire(this OrgRoles role) => role switch
     {

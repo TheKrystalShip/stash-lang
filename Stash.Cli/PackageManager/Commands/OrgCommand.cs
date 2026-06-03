@@ -432,10 +432,7 @@ public static class OrgCommand
 
     private static void ValidateOrgRole(string role)
     {
-        bool valid = string.Equals(role, OrgRoles.Owner.ToWire(), StringComparison.Ordinal)
-            || string.Equals(role, OrgRoles.Member.ToWire(), StringComparison.Ordinal);
-
-        if (!valid)
+        if (!role.TryToOrgRole(out _))
         {
             throw new ArgumentException(
                 $"Unknown org role: '{role}'. Valid roles: {OrgRoles.Owner.ToWire()}, {OrgRoles.Member.ToWire()}.");

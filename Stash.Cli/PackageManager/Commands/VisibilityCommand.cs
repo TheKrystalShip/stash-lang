@@ -123,10 +123,10 @@ public static class VisibilityCommand
 
     private static void ValidateVisibilityTier(string tier)
     {
-        if (!VisibilityHelpers.IsValid(tier))
+        if (!tier.TryToVisibility(out _))
         {
             throw new ArgumentException(
-                $"Unknown visibility tier: '{tier}'. Valid tiers: public, private, internal.");
+                $"Unknown visibility tier: '{tier}'. Valid tiers: {Visibilities.Public.ToWire()}, {Visibilities.Private.ToWire()}, {Visibilities.Internal.ToWire()}.");
         }
     }
 
