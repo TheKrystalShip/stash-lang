@@ -44,7 +44,7 @@ public sealed class AdminBootstrapper
         var existing = await _db.GetUserAsync(username);
         if (existing is not null)
         {
-            if (existing.Role == "admin")
+            if (existing.Role == UserRoles.Admin)
             {
                 _logger.LogDebug("Bootstrap admin '{User}' already present, skipping.", username);
             }

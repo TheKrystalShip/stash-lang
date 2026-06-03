@@ -36,7 +36,7 @@ public sealed class TokenCommandTests
         Assert.NotNull(result);
         Assert.Equal("jwt.value", result.Token);
         Assert.Equal("abc-123", result.TokenId);
-        Assert.Equal("publish", result.Scope);
+        Assert.Equal(TokenScopes.Publish, result.Scope);
         Assert.Equal("test", result.Description);
     }
 
@@ -50,7 +50,7 @@ public sealed class TokenCommandTests
         Assert.NotNull(result);
         Assert.Single(result.Tokens);
         Assert.Equal("id1", result.Tokens[0].TokenId);
-        Assert.Equal("publish", result.Tokens[0].Scope);
+        Assert.Equal(TokenScopes.Publish, result.Tokens[0].Scope);
         Assert.Equal("CI", result.Tokens[0].Description);
     }
 

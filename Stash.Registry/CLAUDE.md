@@ -58,7 +58,7 @@ Stash.Registry.Contracts/         → Shared wire-contract assembly (dependency-
 ├── SearchContracts.cs            → Search results, pagination
 ├── AdminContracts.cs             → User management, stats, audit
 ├── CommonContracts.cs            → ErrorResponse, SuccessResponse, HealthCheck
-└── BoundedDomains.cs             → Wire-visible bounded-domain const sets (PackageRoles,
+└── BoundedDomains.cs             → Wire-visible bounded-domain enum types (PackageRoles,
                                     TokenScopes, Visibilities, PrincipalTypes,
                                     ScopeOwnerTypes, OrgRoles, UserRoles)
 ```
@@ -180,10 +180,10 @@ The three formerly-imperative endpoints now folded into the shared filter (via `
 - Admin endpoints require `admin` ceiling AND `admin` role; the admin short-circuit resolves the resource-side dimension to effective `owner` but does NOT bypass the ceiling check
 - Authorization is a **two-step PDP** (`IRegistryAuthorizer` in `Auth/Authorization/`): (1) token ceiling check, (2) resource-side check (package role / scope ownership / org membership / visibility). Both must pass. The shared `RegistryAuthorizeFilter` performs this dispatch for the ~36 clean endpoints; one `[ImperativeAuthz]` endpoint (`ScopesController.ClaimScope`) still calls the PDP inline.
 - **No unbounded magic strings for auth domains.** Every bounded value comes from a named definition — never inlined. The closed sets are split across two homes by a deliberate **wire-visible / server-internal** boundary:
-  - **Wire-visible sets** (appear in request/response bodies; shared with `Stash.Cli` and future UIs) live in `Stash.Registry.Contracts/BoundedDomains.cs` as `const string` sets: `PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`, `UserRoles`. Single source of truth for registry + CLI; dependency-free so any consumer can reference it.
+  - **Wire-visible sets** (appear in request/response bodies; shared with `Stash.Cli` and future UIs) live in `Stash.Registry.Contracts/BoundedDomains.cs` as C# `enum` types: `PackageRoles`, `TokenScopes`, `Visibilities`, `PrincipalTypes`, `ScopeOwnerTypes`, `OrgRoles`, `UserRoles`. Each enum carries `[JsonConverter(typeof(JsonStringEnumConverter<T>))]` and explicit `[JsonStringEnumMemberName("wire_value")]` attributes on every member to pin the lowercase wire strings byte-for-byte. Single source of truth for registry + CLI; dependency-free so any consumer can reference it.
   - **Server-internal sets** (JWT machinery, policy names, server-only identifiers) stay in `Auth/RegistryAuthConstants.cs`: `RegistryClaims`, `ReservedScopes`, `TokenCeilingConverter`. These must never move to the shared project.
   - Wire strings are parsed into enums at the boundary (`IRegistryAuthzPrincipalFactory` → `TokenCeilingConverter`). `NoMagicAuthStringsMetaTests` fails the build if a bare string literal reaches an auth sink (`IsInRole`/`FindFirstValue`/`FindFirst`/`HasClaim`/`RequireClaim`/`RequireRole`)
-- Centralized bounded values used as EF column defaults must be `const string`, not `static readonly` — `RegistryDbContext` `.HasDefaultValue(...)` and C# field initializers (e.g. `PackageRecord.Visibility = Visibilities.Public`) both require a compile-time constant
+- Bounded enum values stored as EF columns use explicit `.HasConversion(v => v.ToWire(), v => v.ToXxx())` value converters (via `BoundedDomainWire` extension methods) plus `.HasDefaultValueSql("'wire_value'")` raw SQL literals. The SQL literal must match the CLR-default enum member's wire string — for `OrgRoles` this means `Member = 0` (the CLR default) is ordered first in the enum declaration so that EF's omit-default-from-INSERT behavior stores the right value. C# field initializers (e.g. `PackageRecord.Visibility = Visibilities.Public`) use the enum value directly; no `const string` is needed.
 - Error responses use `ErrorResponse` from `CommonContracts.cs`
 - Success responses use `SuccessResponse` or typed DTOs
 

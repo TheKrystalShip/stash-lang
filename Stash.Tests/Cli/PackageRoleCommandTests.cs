@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Stash.Cli.PackageManager;
 using Stash.Cli.PackageManager.Commands;
+using Stash.Registry.Contracts;
 using Stash.Tests.Registry.Authz;
 using Xunit;
 
@@ -58,7 +59,7 @@ public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
             cli);
 
         var rolesAfterAssign = await GetPackageRolesAsync(factory, "@roleowner/pkg");
-        Assert.Contains(rolesAfterAssign, r => r.PrincipalId == "rolebob" && r.Role == "maintainer");
+        Assert.Contains(rolesAfterAssign, r => r.PrincipalId == "rolebob" && r.Role == PackageRoles.Maintainer);
 
         // ── list: exercise the command code path (writes to stdout, not captured) ──
         // The command must run without throwing against the real package+role data.
@@ -67,7 +68,7 @@ public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
         // Also verify the content via the client directly (no stdout capture needed).
         var listResult = cli.GetRoles("@roleowner/pkg");
         Assert.NotNull(listResult);
-        Assert.Contains(listResult!.Roles, r => r.PrincipalId == "rolebob" && r.Role == "maintainer");
+        Assert.Contains(listResult!.Roles, r => r.PrincipalId == "rolebob" && r.Role == PackageRoles.Maintainer);
 
         // ── revoke: remove rolebob's role ──────────────────────────────────────
         RoleCommand.ExecuteCore(
@@ -78,7 +79,7 @@ public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
         var rolesAfterRevoke = await GetPackageRolesAsync(factory, "@roleowner/pkg");
         Assert.DoesNotContain(rolesAfterRevoke, r => r.PrincipalId == "rolebob");
         // owner row survives
-        Assert.Contains(rolesAfterRevoke, r => r.PrincipalId == "roleowner" && r.Role == "owner");
+        Assert.Contains(rolesAfterRevoke, r => r.PrincipalId == "roleowner" && r.Role == PackageRoles.Owner);
     }
 
     // ── assign: unknown principal-type rejects with non-zero exit ─────────────

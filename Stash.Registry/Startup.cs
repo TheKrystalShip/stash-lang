@@ -1,9 +1,11 @@
 using System;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -16,6 +18,7 @@ using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Middleware;
 using Stash.Registry.Services;
+using Stash.Registry.OpenApi;
 using Stash.Registry.Storage;
 
 namespace Stash.Registry;
@@ -75,7 +78,25 @@ public sealed class Startup
     /// <param name="services">The <see cref="IServiceCollection"/> to register services into.</param>
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddControllers();
+        services.AddControllers()
+            .ConfigureApiBehaviorOptions(options =>
+            {
+                // Normalize [ApiController] + [FromBody] deserialization failures (malformed JSON,
+                // illegal enum wire values) to the same ErrorResponse shape that business-logic
+                // 400s return.  Without this override the framework emits ValidationProblemDetails
+                // (RFC 7807) — a different shape that contradicts the published OpenAPI contract.
+                options.InvalidModelStateResponseFactory = ctx =>
+                {
+                    var first = ctx.ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .FirstOrDefault();
+                    return new BadRequestObjectResult(new ErrorResponse
+                    {
+                        Error = "InvalidRequest",
+                        Message = first?.ErrorMessage ?? "Request body is invalid.",
+                    });
+                };
+            });
 
         var jwtService = new JwtTokenService(_config);
         services.AddSingleton(jwtService);
@@ -186,7 +207,13 @@ public sealed class Startup
         // Shared principal factory — Singleton (pure function, no scoped state).
         services.AddSingleton<IRegistryAuthzPrincipalFactory, RegistryAuthzPrincipalFactory>();
 
-        services.AddOpenApi();
+        services.AddHttpContextAccessor();
+
+        services.AddOpenApi(options =>
+        {
+            options.AddOperationTransformer<OpenApiOperationIdTransformer>();
+            options.AddDocumentTransformer<OpenApiDocumentMetadataTransformer>();
+        });
     }
 
     /// <summary>
@@ -200,7 +227,7 @@ public sealed class Startup
     ///   <item><description>Database initialisation — calls <see cref="Database.IRegistryDatabase.Initialize"/> in a transient scope.</description></item>
     ///   <item><description><see cref="Microsoft.AspNetCore.Builder.UsePathBaseExtensions.UsePathBase"/> — applied only when <see cref="Configuration.ServerConfig.BasePath"/> is non-empty.</description></item>
     ///   <item><description><see cref="Middleware.RateLimitingMiddleware"/> — inserted only when <see cref="Configuration.RateLimitingConfig.Enabled"/> is <see langword="true"/>.</description></item>
-    ///   <item><description>OpenAPI endpoint (<c>GET /openapi/v1.json</c>) — mapped only in the <c>Development</c> environment.</description></item>
+    ///   <item><description>OpenAPI endpoint (<c>GET /openapi/v1.json</c>) — public in every environment (P1: <c>IsDevelopment()</c> gate removed).</description></item>
     ///   <item><description>Routing, Authentication (JWT Bearer), Authorization.</description></item>
     ///   <item><description>Health-check endpoint at <c>GET /</c> returning a <see cref="Contracts.HealthCheckResponse"/> JSON payload.</description></item>
     ///   <item><description>MVC controller endpoints.</description></item>
@@ -261,10 +288,8 @@ public sealed class Startup
             app.UseMiddleware<RateLimitingMiddleware>(_config.RateLimiting);
         }
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.MapOpenApi();
-        }
+        // P1: OpenAPI endpoint is public in every environment (drop the IsDevelopment() gate).
+        app.MapOpenApi();
 
         app.UseRouting();
         app.UseAuthentication();
@@ -275,6 +300,15 @@ public sealed class Startup
         // (before the PDP), surfacing as TokenRevoked in the audit log.
         app.Use(async (context, next) =>
         {
+            // P1: The OpenAPI document is public in every environment; bypass the JTI
+            // revocation check entirely for /openapi/* paths so a caller presenting a stale
+            // or revoked token can still fetch the API contract.
+            if (context.Request.Path.StartsWithSegments("/openapi"))
+            {
+                await next();
+                return;
+            }
+
             if (context.Items.ContainsKey("TokenRevoked"))
             {
                 // Audit the revoked-token presentation before terminating.
@@ -312,7 +346,11 @@ public sealed class Startup
 
         app.UseAuthorization();
 
-        app.MapGet("/", () => Results.Json(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }));
+        // P1: Typed result so the health endpoint carries an operationId and a $ref schema
+        // in the generated OpenAPI document. TypedResults.Ok<T> makes ApiExplorer emit the
+        // component schema; .WithName gives it a stable operationId.
+        app.MapGet("/", () => TypedResults.Ok(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }))
+            .WithName("Health_Check");
 
         app.MapControllers();
     }

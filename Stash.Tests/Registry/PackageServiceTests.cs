@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Stash.Registry.Configuration;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Services;
 using Stash.Registry.Storage;
@@ -516,7 +517,7 @@ public sealed class PackageServiceTests : IDisposable
         // Package defaults to public visibility regardless of the manifest flag.
         PackageRecord? pkg = await _db.GetPackageAsync("@test/private-pkg");
         Assert.NotNull(pkg);
-        Assert.Equal("public", pkg.Visibility);
+        Assert.Equal(Visibilities.Public, pkg.Visibility);
     }
 
     [Fact]

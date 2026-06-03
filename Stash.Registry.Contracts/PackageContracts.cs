@@ -182,7 +182,7 @@ public sealed class SetVisibilityRequest
 {
     /// <summary>The new visibility value: <c>public</c>, <c>private</c>, or <c>internal</c>.</summary>
     [JsonPropertyName("visibility")]
-    public required string Visibility { get; set; }
+    public required Visibilities Visibility { get; set; }
 }
 
 /// <summary>
@@ -200,7 +200,7 @@ public sealed class SetVisibilityResponse
 
     /// <summary>The new visibility value that was applied.</summary>
     [JsonPropertyName("visibility")]
-    public required string Visibility { get; set; }
+    public required Visibilities Visibility { get; set; }
 }
 
 /// <summary>
@@ -211,7 +211,7 @@ public sealed class RevokeRoleRequest
 {
     /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
     [JsonPropertyName("principal_type")]
-    public required string PrincipalType { get; set; }
+    public required PrincipalTypes PrincipalType { get; set; }
 
     /// <summary>The principal identifier — username, team ID, or org ID.</summary>
     [JsonPropertyName("principal_id")]
@@ -225,7 +225,7 @@ public sealed class AssignRoleRequest
 {
     /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
     [JsonPropertyName("principal_type")]
-    public required string PrincipalType { get; set; }
+    public required PrincipalTypes PrincipalType { get; set; }
 
     /// <summary>The principal identifier — username, team ID, or org name.</summary>
     [JsonPropertyName("principal_id")]
@@ -233,7 +233,7 @@ public sealed class AssignRoleRequest
 
     /// <summary>The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</summary>
     [JsonPropertyName("role")]
-    public required string Role { get; set; }
+    public required PackageRoles Role { get; set; }
 }
 
 /// <summary>
@@ -243,7 +243,7 @@ public sealed class PackageRoleResponse
 {
     /// <summary>The type of principal: <c>user</c>, <c>team</c>, or <c>org</c>.</summary>
     [JsonPropertyName("principal_type")]
-    public required string PrincipalType { get; set; }
+    public required PrincipalTypes PrincipalType { get; set; }
 
     /// <summary>The principal identifier.</summary>
     [JsonPropertyName("principal_id")]
@@ -251,7 +251,7 @@ public sealed class PackageRoleResponse
 
     /// <summary>The assigned role.</summary>
     [JsonPropertyName("role")]
-    public required string Role { get; set; }
+    public required PackageRoles Role { get; set; }
 }
 
 /// <summary>

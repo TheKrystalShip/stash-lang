@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Stash.Analysis;
+using Stash.Registry.Contracts;
 using Stash.Bytecode;
 using Stash.Cli.Completion;
 using Stash.Cli.Shell;
@@ -55,6 +56,14 @@ public class Program
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
     {
+        // Self-test: --self-test enums
+        // Runs before every other dispatch — exits immediately with PASS/FAIL.
+        if (args.Length >= 2 && args[0] == "--self-test" && args[1] == "enums")
+        {
+            System.Environment.Exit(RunEnumSelfTest());
+            return;
+        }
+
         // Package manager subcommand
         if (args.Length > 0 && args[0] is "pkg" or "p")
         {
@@ -420,6 +429,97 @@ public class Program
         Console.WriteLine("Documentation: https://stash-lang.dev/docs");
     }
 
+    /// <summary>
+    /// Runs a round-trip serialization self-test for every bounded-domain enum in
+    /// <see cref="Stash.Cli.PackageManager.CliJsonContext"/>. Prints "PASS" and returns 0 on
+    /// success; prints "FAIL: &lt;detail&gt;" and returns 1 on the first mismatch.
+    /// </summary>
+    /// <remarks>
+    /// Invoked via <c>stash --self-test enums</c>. This code runs through the source-gen
+    /// <see cref="Stash.Cli.PackageManager.CliJsonContext.Default"/> instance and therefore
+    /// exercises the exact serializer path taken by the published Native-AOT binary.
+    /// </remarks>
+    internal static int RunEnumSelfTest()
+    {
+        var ctx = Stash.Cli.PackageManager.CliJsonContext.Default;
+
+        // For each enum value: serialize via the typed CliJsonContext overload (AOT-safe) →
+        // compare the bare wire string to the canonical value returned by ToWire().
+        // Using the typed JsonTypeInfo overload avoids reflection and exercises the
+        // actual source-gen path that the Native-AOT binary will use.
+        //
+        // RoundTrips: a delegate that deserializes the already-serialized JSON back to the original
+        // enum value using the typed JsonTypeInfo (AOT-safe, no reflection). This is the direction
+        // most likely to fail under trim/AOT when [JsonSerializable] source-gen metadata is missing.
+        (string Label, string Json, string Expected, Func<string, bool> RoundTrips)[] cases =
+        [
+            // PackageRoles
+            ("PackageRoles.Owner",      System.Text.Json.JsonSerializer.Serialize(PackageRoles.Owner,      ctx.PackageRoles),      PackageRoles.Owner.ToWire(),      j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Owner),
+            ("PackageRoles.Maintainer", System.Text.Json.JsonSerializer.Serialize(PackageRoles.Maintainer, ctx.PackageRoles),      PackageRoles.Maintainer.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Maintainer),
+            ("PackageRoles.Publisher",  System.Text.Json.JsonSerializer.Serialize(PackageRoles.Publisher,  ctx.PackageRoles),      PackageRoles.Publisher.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Publisher),
+            ("PackageRoles.Reader",     System.Text.Json.JsonSerializer.Serialize(PackageRoles.Reader,     ctx.PackageRoles),      PackageRoles.Reader.ToWire(),     j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Reader),
+            // TokenScopes
+            ("TokenScopes.Read",    System.Text.Json.JsonSerializer.Serialize(TokenScopes.Read,    ctx.TokenScopes), TokenScopes.Read.ToWire(),    j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.TokenScopes) == TokenScopes.Read),
+            ("TokenScopes.Publish", System.Text.Json.JsonSerializer.Serialize(TokenScopes.Publish, ctx.TokenScopes), TokenScopes.Publish.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.TokenScopes) == TokenScopes.Publish),
+            ("TokenScopes.Admin",   System.Text.Json.JsonSerializer.Serialize(TokenScopes.Admin,   ctx.TokenScopes), TokenScopes.Admin.ToWire(),   j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.TokenScopes) == TokenScopes.Admin),
+            // Visibilities
+            ("Visibilities.Public",   System.Text.Json.JsonSerializer.Serialize(Visibilities.Public,   ctx.Visibilities), Visibilities.Public.ToWire(),   j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.Visibilities) == Visibilities.Public),
+            ("Visibilities.Private",  System.Text.Json.JsonSerializer.Serialize(Visibilities.Private,  ctx.Visibilities), Visibilities.Private.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.Visibilities) == Visibilities.Private),
+            ("Visibilities.Internal", System.Text.Json.JsonSerializer.Serialize(Visibilities.Internal, ctx.Visibilities), Visibilities.Internal.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.Visibilities) == Visibilities.Internal),
+            // PrincipalTypes
+            ("PrincipalTypes.User", System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.User, ctx.PrincipalTypes), PrincipalTypes.User.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PrincipalTypes) == PrincipalTypes.User),
+            ("PrincipalTypes.Team", System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.Team, ctx.PrincipalTypes), PrincipalTypes.Team.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PrincipalTypes) == PrincipalTypes.Team),
+            ("PrincipalTypes.Org",  System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.Org,  ctx.PrincipalTypes), PrincipalTypes.Org.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PrincipalTypes) == PrincipalTypes.Org),
+            // ScopeOwnerTypes
+            ("ScopeOwnerTypes.User",   System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.User,   ctx.ScopeOwnerTypes), ScopeOwnerTypes.User.ToWire(),   j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.ScopeOwnerTypes) == ScopeOwnerTypes.User),
+            ("ScopeOwnerTypes.Org",    System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.Org,    ctx.ScopeOwnerTypes), ScopeOwnerTypes.Org.ToWire(),    j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.ScopeOwnerTypes) == ScopeOwnerTypes.Org),
+            ("ScopeOwnerTypes.System", System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.System, ctx.ScopeOwnerTypes), ScopeOwnerTypes.System.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.ScopeOwnerTypes) == ScopeOwnerTypes.System),
+            // OrgRoles
+            ("OrgRoles.Member", System.Text.Json.JsonSerializer.Serialize(OrgRoles.Member, ctx.OrgRoles), OrgRoles.Member.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.OrgRoles) == OrgRoles.Member),
+            ("OrgRoles.Owner",  System.Text.Json.JsonSerializer.Serialize(OrgRoles.Owner,  ctx.OrgRoles), OrgRoles.Owner.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.OrgRoles) == OrgRoles.Owner),
+            // UserRoles
+            ("UserRoles.User",  System.Text.Json.JsonSerializer.Serialize(UserRoles.User,  ctx.UserRoles), UserRoles.User.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.UserRoles) == UserRoles.User),
+            ("UserRoles.Admin", System.Text.Json.JsonSerializer.Serialize(UserRoles.Admin, ctx.UserRoles), UserRoles.Admin.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.UserRoles) == UserRoles.Admin),
+        ];
+
+        var failures = new List<string>();
+
+        // Serialize pass: compare the serialized bare string to the canonical ToWire() value.
+        foreach (var (label, json, expected, _) in cases)
+        {
+            // json is the JSON literal including quotes, e.g. "\"owner\""
+            // expected is the bare wire string, e.g. "owner"
+            // Strip the surrounding JSON quotes before comparing.
+            string bare = json.Trim('"');
+            if (!string.Equals(bare, expected, StringComparison.Ordinal))
+                failures.Add($"{label} [serialize]: got \"{bare}\", expected \"{expected}\"");
+        }
+
+        // Deserialize pass: round-trip the JSON literal back to the original enum value.
+        // This is the load-bearing AOT check — if [JsonSerializable] source-gen metadata is
+        // absent for a type, deserialization fails or returns the wrong value under trim/AOT,
+        // whereas serialize-only coverage cannot catch that regression.
+        foreach (var (label, json, _, roundTrips) in cases)
+        {
+            if (!roundTrips(json))
+                failures.Add($"{label} [deserialize]: round-trip failed for JSON {json}");
+        }
+
+        if (failures.Count == 0)
+        {
+            Console.WriteLine("PASS");
+            return 0;
+        }
+
+        foreach (string f in failures)
+            Console.WriteLine($"FAIL: {f}");
+        return 1;
+    }
+
+    /// <summary>Executes Stash source code from a string (used by -c and stdin piping).</summary>
+    /// <param name="source">The source code to execute.</param>
+    /// <param name="sourceName">Diagnostic name for the source (e.g., "&lt;command&gt;" or "&lt;stdin&gt;").</param>
+    /// <param name="scriptArgs">Arguments to pass to the script.</param>
     private static void RunSource(string source, string sourceName, string[] scriptArgs, bool disassemble = false)
     {
         // Stage 1: Lex

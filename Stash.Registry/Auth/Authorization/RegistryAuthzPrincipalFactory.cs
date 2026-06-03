@@ -22,7 +22,7 @@ public sealed class RegistryAuthzPrincipalFactory : IRegistryAuthzPrincipalFacto
             return new AnonymousPrincipal();
 
         string username = user.Identity!.Name!;
-        bool isAdmin    = user.IsInRole(UserRoles.Admin);
+        bool isAdmin    = user.IsInRole(UserRoles.Admin.ToWire());
         TokenCeiling ceiling = FromClaimValue(user.FindFirst(RegistryClaims.TokenScope)?.Value);
         UserRole role   = isAdmin ? UserRole.Admin : UserRole.User;
         string tokenId  = user.FindFirst(JwtRegisteredClaimNames.Jti)?.Value ?? "";

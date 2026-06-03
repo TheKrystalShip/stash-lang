@@ -15,6 +15,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Configuration;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
@@ -64,11 +65,11 @@ public sealed class RegistryVisibilityTests : IDisposable
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private static PackageRecord MakePackage(string name, string visibility = "public") => new()
+    private static PackageRecord MakePackage(string name, string visibilityWire = "public") => new()
     {
         Name = name,
         Latest = "1.0.0",
-        Visibility = visibility,
+        Visibility = visibilityWire.ToVisibility(),
         CreatedAt = DateTime.UtcNow,
         UpdatedAt = DateTime.UtcNow
     };
@@ -118,7 +119,7 @@ public sealed class RegistryVisibilityTests : IDisposable
 
         PackageRecord? pkg = await _db.GetPackageAsync("@test/vis-default-pub");
         Assert.NotNull(pkg);
-        Assert.Equal("public", pkg.Visibility);
+        Assert.Equal(Visibilities.Public, pkg.Visibility);
     }
 
     // ── SetPackageVisibilityAsync ────────────────────────────────────────────────
@@ -132,7 +133,7 @@ public sealed class RegistryVisibilityTests : IDisposable
 
         PackageRecord? pkg = await _db.GetPackageAsync("set-vis-pkg");
         Assert.NotNull(pkg);
-        Assert.Equal("private", pkg.Visibility);
+        Assert.Equal(Visibilities.Private, pkg.Visibility);
     }
 
     [Fact]
@@ -144,7 +145,7 @@ public sealed class RegistryVisibilityTests : IDisposable
 
         PackageRecord? pkg = await _db.GetPackageAsync("int-vis-pkg");
         Assert.NotNull(pkg);
-        Assert.Equal("internal", pkg.Visibility);
+        Assert.Equal(Visibilities.Internal, pkg.Visibility);
     }
 
     [Fact]
@@ -156,7 +157,7 @@ public sealed class RegistryVisibilityTests : IDisposable
 
         PackageRecord? pkg = await _db.GetPackageAsync("back-to-pub");
         Assert.NotNull(pkg);
-        Assert.Equal("public", pkg.Visibility);
+        Assert.Equal(Visibilities.Public, pkg.Visibility);
     }
 
     [Fact]
@@ -289,7 +290,7 @@ public sealed class RegistryVisibilityTests : IDisposable
 
         PackageRecord? fetched = await _db.GetPackageAsync("default-vis-test");
         Assert.NotNull(fetched);
-        Assert.Equal("public", fetched.Visibility);
+        Assert.Equal(Visibilities.Public, fetched.Visibility);
     }
 }
 
@@ -368,11 +369,11 @@ public sealed class RegistryInternalVisibilityEndpointTests : IDisposable
         return tokenDoc.RootElement.GetProperty("token").GetString()!;
     }
 
-    private static PackageRecord MakePackage(string name, string visibility) => new()
+    private static PackageRecord MakePackage(string name, string visibilityWire) => new()
     {
         Name = name,
         Latest = "1.0.0",
-        Visibility = visibility,
+        Visibility = visibilityWire.ToVisibility(),
         CreatedAt = DateTime.UtcNow,
         UpdatedAt = DateTime.UtcNow
     };

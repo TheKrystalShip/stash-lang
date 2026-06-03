@@ -1,4 +1,6 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 
@@ -265,7 +267,7 @@ public sealed class SqliteDatabaseTests
         Assert.NotNull(result);
         Assert.Equal("alice", result.Username);
         Assert.Equal("hash123", result.PasswordHash);
-        Assert.Equal("user", result.Role);
+        Assert.Equal(UserRoles.User, result.Role);
     }
 
     [Fact]
@@ -420,8 +422,8 @@ public sealed class SqliteDatabaseTests
         List<PackageRoleEntry> roles = await db.GetPackageRolesAsync("@alice/widget");
 
         Assert.Equal(2, roles.Count);
-        Assert.Contains(roles, r => r.PrincipalId == "alice" && r.Role == "owner");
-        Assert.Contains(roles, r => r.PrincipalId == "bob" && r.Role == "publisher");
+        Assert.Contains(roles, r => r.PrincipalId == "alice" && r.Role == PackageRoles.Owner);
+        Assert.Contains(roles, r => r.PrincipalId == "bob" && r.Role == PackageRoles.Publisher);
     }
 
     [Fact]
@@ -435,7 +437,7 @@ public sealed class SqliteDatabaseTests
         List<PackageRoleEntry> roles = await db.GetPackageRolesAsync("@alice/tool");
 
         Assert.Single(roles);
-        Assert.Equal("owner", roles[0].Role);
+        Assert.Equal(PackageRoles.Owner, roles[0].Role);
     }
 
     [Fact]
@@ -868,5 +870,96 @@ public sealed class SqliteDatabaseTests
         Assert.Null(await db.GetRefreshTokenByHashAsync("hash-d1"));
         Assert.Null(await db.GetRefreshTokenByHashAsync("hash-d2"));
         Assert.NotNull(await db.GetRefreshTokenByHashAsync("hash-d3"));
+    }
+
+    // ── P4 bounded-domain DDL defaults (sqlite_master load-bearing gate) ─────
+
+    /// <summary>
+    /// After Initialize(), reads sqlite_master to verify the DDL column defaults for
+    /// bounded-domain enum properties emit the correct lowercase wire strings.
+    /// This is the load-bearing gate from P4 done_when — the EF model metadata can
+    /// report the intended default while the emitted column default stores the wrong
+    /// value (PascalCase enum name or int) due to HasConversion vs HasDefaultValue ordering.
+    /// The sqlite_master SQL is the ground truth.
+    /// </summary>
+    [Fact]
+    public void Initialize_BoundedDomainColumnDefaults_AreLowercaseWireStrings()
+    {
+        var options = new DbContextOptionsBuilder<RegistryDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .Options;
+        var context = new RegistryDbContext(options);
+        context.Database.OpenConnection();
+        var db = new StashRegistryDatabase(context);
+        db.Initialize();
+
+        // Read the raw DDL from sqlite_master so we can assert the emitted DEFAULT literals.
+        var ddlMap = new System.Collections.Generic.Dictionary<string, string>();
+        using (var conn = (SqliteConnection)context.Database.GetDbConnection())
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT name, sql FROM sqlite_master WHERE type='table'";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                string tableName = reader.GetString(0);
+                string? sql = reader.IsDBNull(1) ? null : reader.GetString(1);
+                if (sql != null)
+                    ddlMap[tableName] = sql;
+            }
+        }
+
+        // (table, column, expected-default-literal) — the DDL must contain "DEFAULT '<value>'"
+        var assertions = new (string Table, string Column, string ExpectedDefault)[]
+        {
+            ("packages",     "visibility", "'public'"),
+            ("users",        "role",       "'user'"),
+            ("org_members",  "org_role",   "'member'"),
+        };
+
+        var violations = new System.Collections.Generic.List<string>();
+        foreach (var (table, column, expected) in assertions)
+        {
+            if (!ddlMap.TryGetValue(table, out string? ddl))
+            {
+                violations.Add($"Table '{table}' not found in sqlite_master.");
+                continue;
+            }
+
+            // SQLite can emit DEFAULT either as: DEFAULT 'value' or DEFAULT ('value')
+            // Both are semantically equivalent and both prove the lowercase wire string is the default.
+            string expectedBare = $"DEFAULT {expected}";
+            string expectedParens = $"DEFAULT ({expected})";
+            if (!ddl.Contains(expectedBare, StringComparison.OrdinalIgnoreCase) &&
+                !ddl.Contains(expectedParens, StringComparison.OrdinalIgnoreCase))
+            {
+                violations.Add(
+                    $"Table '{table}', column '{column}': expected DEFAULT {expected} (or DEFAULT ({expected.Trim('\'')}) form) in DDL " +
+                    $"but it was not found. DDL snippet: {ddl[..Math.Min(ddl.Length, 800)]}");
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            $"{violations.Count} bounded-domain column default violation(s):\n" +
+            string.Join("\n", violations.Select(v => $"  {v}")) +
+            "\n\nThe EF value converter must emit lowercase wire strings as DEFAULT values in DDL. " +
+            "Use .HasDefaultValueSql(\"'<wire-value>'\") to ensure the correct literal.");
+    }
+
+    /// <summary>
+    /// Guards the INSERT-side correctness invariant: the CLR default value (value = 0) of each
+    /// bounded-domain enum must round-trip to the wire string that matches the SQL DEFAULT literal
+    /// in <c>HasDefaultValueSql("'X'")</c>. EF omits columns whose CLR value equals the type's CLR
+    /// default (zero for enums), so the DB-level default fills in — that literal must match
+    /// <c>default(T).ToWire()</c>. A future contributor reordering enum members silently corrupts
+    /// every default-valued INSERT without this guard.
+    /// </summary>
+    [Fact]
+    public void BoundedDomain_CLRDefault_MatchesDDLDefaultLiteral()
+    {
+        Assert.Equal("public", default(Visibilities).ToWire()); // packages.visibility DEFAULT 'public'
+        Assert.Equal("user",   default(UserRoles).ToWire());    // users.role         DEFAULT 'user'
+        Assert.Equal("member", default(OrgRoles).ToWire());     // org_members.org_role DEFAULT 'member'
     }
 }

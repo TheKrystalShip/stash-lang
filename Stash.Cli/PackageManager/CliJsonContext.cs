@@ -26,6 +26,14 @@ namespace Stash.Cli.PackageManager;
 /// </list>
 /// </para>
 /// </remarks>
+// Bounded-domain enum types — explicitly registered for source-gen AOT reachability
+[JsonSerializable(typeof(PackageRoles))]
+[JsonSerializable(typeof(PrincipalTypes))]
+[JsonSerializable(typeof(OrgRoles))]
+[JsonSerializable(typeof(UserRoles))]
+[JsonSerializable(typeof(TokenScopes))]
+[JsonSerializable(typeof(Visibilities))]
+[JsonSerializable(typeof(ScopeOwnerTypes))]
 [JsonSerializable(typeof(UserConfig))]
 [JsonSerializable(typeof(RegistryEntry))]
 [JsonSerializable(typeof(Dictionary<string, RegistryEntry>))]

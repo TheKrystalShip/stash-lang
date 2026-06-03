@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Registry.Auth;
 using Stash.Registry.Bootstrap;
 using Stash.Registry.Configuration;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 
 namespace Stash.Tests.Registry;
@@ -84,7 +85,7 @@ public sealed class AdminBootstrapTests : IDisposable
 
             var user = await _db.GetUserAsync("bootstrapadmin");
             Assert.NotNull(user);
-            Assert.Equal("admin", user.Role);
+            Assert.Equal(UserRoles.Admin, user.Role);
         }
         finally
         {
@@ -137,7 +138,7 @@ public sealed class AdminBootstrapTests : IDisposable
 
             var user = await _db.GetUserAsync("regularuser");
             Assert.NotNull(user);
-            Assert.Equal("user", user.Role); // NOT promoted
+            Assert.Equal(UserRoles.User, user.Role); // NOT promoted
             Assert.Equal(0, await _db.GetAdminCountAsync());
         }
         finally

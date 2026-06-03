@@ -80,7 +80,7 @@ public sealed class AddOrgMemberRequest
 
     /// <summary>The role to assign: <c>owner</c> or <c>member</c>. Defaults to <c>member</c>.</summary>
     [JsonPropertyName("org_role")]
-    public string? OrgRole { get; set; }
+    public OrgRoles? OrgRole { get; set; }
 }
 
 /// <summary>

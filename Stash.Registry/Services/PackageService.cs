@@ -183,7 +183,7 @@ public sealed class PackageService
             bool created = await _db.TryCreatePackageAsync(packageRecord);
             if (created)
             {
-                await _db.AssignPackageRoleAsync(packageName, PrincipalTypes.User, username, PackageRoles.Owner);
+                await _db.AssignPackageRoleAsync(packageName, PrincipalTypes.User.ToWire(), username, PackageRoles.Owner.ToWire());
                 isNewPackage = true;
             }
             else

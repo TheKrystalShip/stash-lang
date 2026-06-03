@@ -163,7 +163,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             // internal and private are treated identically here (matching today's controller);
             // the internal-specific shortcut is tracked in F04.
             queryable = queryable.Where(p =>
-                p.Visibility == "public" ||
+                p.Visibility == Visibilities.Public ||
                 // Branch 1: direct user role
                 _context.PackageRoles.Any(r =>
                     r.PackageName == p.Name &&
@@ -189,7 +189,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                         r.PrincipalType == PrincipalTypes.Org &&
                         r.PrincipalId == s.OwnerOrgId))) ||
                 // Branch 4: internal + user-owned scope: caller is the scope owner (brief branch (b))
-                (p.Visibility == "internal" &&
+                (p.Visibility == Visibilities.Internal &&
                     _context.Scopes.Any(s =>
                         s.OwnerType == ScopeOwnerTypes.User &&
                         s.OwnerUsername == callerUsername &&
@@ -213,7 +213,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         var package = await _context.Packages.FindAsync(name);
         if (package != null)
         {
-            package.Visibility = visibility;
+            package.Visibility = visibility.ToVisibility();
             package.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
@@ -338,7 +338,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         {
             Username = username,
             PasswordHash = passwordHash,
-            Role = role,
+            Role = role.ToUserRole(),
             CreatedAt = DateTime.UtcNow
         };
         _context.Users.Add(user);
@@ -351,7 +351,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         var user = await _context.Users.FindAsync(username);
         if (user != null)
         {
-            user.Role = role;
+            user.Role = role.ToUserRole();
             await _context.SaveChangesAsync();
         }
     }
@@ -394,23 +394,23 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             throw new InvalidOperationException($"User '{username}' already exists.");
 
         long count = await _context.Users.LongCountAsync();
-        string role = count == 0 ? "admin" : "user";
+        UserRoles roleEnum = count == 0 ? UserRoles.Admin : UserRoles.User;
         _context.Users.Add(new UserRecord
         {
             Username = username,
             PasswordHash = passwordHash,
-            Role = role,
+            Role = roleEnum,
             CreatedAt = DateTime.UtcNow
         });
         await _context.SaveChangesAsync();
         await tx.CommitAsync();
-        return role;
+        return roleEnum.ToWire();
     }
 
     /// <inheritdoc/>
     public async Task<long> GetAdminCountAsync()
     {
-        return await _context.Users.LongCountAsync(u => u.Role == "admin");
+        return await _context.Users.LongCountAsync(u => u.Role == UserRoles.Admin);
     }
 
     // ── Token operations ──────────────────────────────────────────────────────
@@ -617,13 +617,13 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
 
         // First user becomes admin
         long count = await _context.Users.LongCountAsync();
-        string role = count == 0 ? "admin" : "user";
+        UserRoles roleEnum = count == 0 ? UserRoles.Admin : UserRoles.User;
 
         _context.Users.Add(new UserRecord
         {
             Username = username,
             PasswordHash = passwordHash,
-            Role = role,
+            Role = roleEnum,
             CreatedAt = DateTime.UtcNow
         });
 
@@ -638,7 +638,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
 
         await _context.SaveChangesAsync();
         await tx.CommitAsync();
-        return role;
+        return roleEnum.ToWire();
     }
 
     // ── Package role operations ───────────────────────────────────────────────
@@ -647,20 +647,22 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     public async Task AssignPackageRoleAsync(
         string packageName, string principalType, string principalId, string role)
     {
+        var ptEnum = principalType.ToPrincipalType();
+        var roleEnum = role.ToPackageRole();
         var existing = await _context.PackageRoles
-            .FindAsync(packageName, principalType, principalId);
+            .FindAsync(packageName, ptEnum, principalId);
         if (existing != null)
         {
-            existing.Role = role;
+            existing.Role = roleEnum;
         }
         else
         {
             _context.PackageRoles.Add(new PackageRoleEntry
             {
                 PackageName = packageName,
-                PrincipalType = principalType,
+                PrincipalType = ptEnum,
                 PrincipalId = principalId,
-                Role = role
+                Role = roleEnum
             });
         }
         await _context.SaveChangesAsync();
@@ -669,7 +671,8 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     /// <inheritdoc/>
     public async Task RevokePackageRoleAsync(string packageName, string principalType, string principalId)
     {
-        var entry = await _context.PackageRoles.FindAsync(packageName, principalType, principalId);
+        var ptEnum = principalType.ToPrincipalType();
+        var entry = await _context.PackageRoles.FindAsync(packageName, ptEnum, principalId);
         if (entry != null)
         {
             _context.PackageRoles.Remove(entry);
@@ -794,7 +797,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         {
             OrgId = orgId,
             Username = username,
-            OrgRole = orgRole,
+            OrgRole = orgRole.ToOrgRole(),
             JoinedAt = DateTime.UtcNow
         });
         await _context.SaveChangesAsync();

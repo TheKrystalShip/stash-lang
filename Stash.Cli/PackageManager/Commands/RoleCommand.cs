@@ -125,7 +125,7 @@ public static class RoleCommand
         Console.WriteLine($"Roles on {packageName}:");
         foreach (var roleEntry in result.Roles)
         {
-            Console.WriteLine($"  {roleEntry.PrincipalType}/{roleEntry.PrincipalId}: {roleEntry.Role}");
+            Console.WriteLine($"  {roleEntry.PrincipalType.ToWire()}/{roleEntry.PrincipalId}: {roleEntry.Role.ToWire()}");
         }
     }
 
@@ -206,28 +206,19 @@ public static class RoleCommand
 
     private static void ValidatePrincipalType(string principalType)
     {
-        bool valid = string.Equals(principalType, PrincipalTypes.User, StringComparison.Ordinal)
-            || string.Equals(principalType, PrincipalTypes.Team, StringComparison.Ordinal)
-            || string.Equals(principalType, PrincipalTypes.Org, StringComparison.Ordinal);
-
-        if (!valid)
+        if (!principalType.TryToPrincipalType(out _))
         {
             throw new ArgumentException(
-                $"Unknown principal type: '{principalType}'. Valid types: {PrincipalTypes.User}, {PrincipalTypes.Team}, {PrincipalTypes.Org}.");
+                $"Unknown principal type: '{principalType}'. Valid types: {PrincipalTypes.User.ToWire()}, {PrincipalTypes.Team.ToWire()}, {PrincipalTypes.Org.ToWire()}.");
         }
     }
 
     private static void ValidatePackageRole(string role)
     {
-        bool valid = string.Equals(role, PackageRoles.Owner, StringComparison.Ordinal)
-            || string.Equals(role, PackageRoles.Maintainer, StringComparison.Ordinal)
-            || string.Equals(role, PackageRoles.Publisher, StringComparison.Ordinal)
-            || string.Equals(role, PackageRoles.Reader, StringComparison.Ordinal);
-
-        if (!valid)
+        if (!role.TryToPackageRole(out _))
         {
             throw new ArgumentException(
-                $"Unknown role: '{role}'. Valid roles: {PackageRoles.Owner}, {PackageRoles.Maintainer}, {PackageRoles.Publisher}, {PackageRoles.Reader}.");
+                $"Unknown role: '{role}'. Valid roles: {PackageRoles.Owner.ToWire()}, {PackageRoles.Maintainer.ToWire()}, {PackageRoles.Publisher.ToWire()}, {PackageRoles.Reader.ToWire()}.");
         }
     }
 

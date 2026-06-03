@@ -8,6 +8,8 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -19,6 +21,7 @@ using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Endpoints;
+using Stash.Registry.OpenApi;
 using Stash.Registry.Services;
 
 namespace Stash.Registry.Controllers;
@@ -86,7 +89,7 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpPost("login")]
     [PublicEndpoint("login does not require a prior session — credentials are the authenticator")]
-    public async Task<IActionResult> Login()
+    public async Task<Results<Ok<LoginResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> Login()
     {
         LoginRequest? body;
         try
@@ -95,7 +98,7 @@ public class AuthController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? username = body?.Username?.Trim();
@@ -103,30 +106,30 @@ public class AuthController : ControllerBase
 
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return BadRequest(new ErrorResponse { Error = "Username and password are required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
         }
 
         if (!await _authProvider.AuthenticateAsync(username, password))
         {
-            return Unauthorized(new ErrorResponse { Error = "Invalid username or password." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid username or password." });
         }
 
         var user = await _db.GetUserAsync(username);
-        string role = user?.Role ?? UserRoles.User;
+        string role = (user?.Role ?? UserRoles.User).ToWire();
         string? machineId = Request.Headers["X-Machine-Id"].FirstOrDefault();
 
         // Create short-lived access token — read-ceiling by default (least privilege).
         // Callers who need publish must issue a separate token via POST /auth/tokens.
         string accessTokenId = Guid.NewGuid().ToString();
         DateTime accessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
-        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Read, accessExpiresAt, accessTokenId, machineId);
+        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Read.ToWire(), accessExpiresAt, accessTokenId, machineId);
 
         await _db.CreateTokenAsync(new TokenRecord
         {
             Id = accessTokenId,
             Username = username,
             TokenHash = "",
-            Scope = TokenScopes.Read,
+            Scope = TokenScopes.Read.ToWire(),
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = accessExpiresAt
         });
@@ -148,13 +151,13 @@ public class AuthController : ControllerBase
                 AccessTokenId = accessTokenId,
                 FamilyId = accessTokenId,
                 MachineId = machineId,
-                Scope = TokenScopes.Read,
+                Scope = TokenScopes.Read.ToWire(),
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = refreshExpiresAt.Value
             });
         }
 
-        return Ok(new LoginResponse
+        return TypedResults.Ok(new LoginResponse
         {
             AccessToken = accessJwt,
             ExpiresAt = accessExpiresAt,
@@ -181,11 +184,11 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpPost("register")]
     [PublicEndpoint("self-service registration requires no prior account")]
-    public async Task<IActionResult> Register()
+    public async Task<Results<Created<RegisterResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>, Conflict<ErrorResponse>>> Register()
     {
         if (!_config.Auth.RegistrationEnabled)
         {
-            return StatusCode(403, new ErrorResponse { Error = "registration_disabled", Message = "User registration is disabled on this registry." });
+            return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "registration_disabled", Message = "User registration is disabled on this registry." });
         }
 
         RegisterRequest? body;
@@ -195,7 +198,7 @@ public class AuthController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? username = body?.Username?.Trim();
@@ -203,23 +206,23 @@ public class AuthController : ControllerBase
 
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
-            return BadRequest(new ErrorResponse { Error = "Username and password are required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
         }
 
         if (!PackageManifest.IsValidScopeName(username))
         {
-            return BadRequest(new ErrorResponse { Error = "Username must match the scope grammar: a lowercase letter followed by up to 38 lowercase letters, digits, or hyphens (max 39 characters)." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username must match the scope grammar: a lowercase letter followed by up to 38 lowercase letters, digits, or hyphens (max 39 characters)." });
         }
 
         if (password.Length < 8)
         {
-            return BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
         }
 
         try
         {
             string role = await _authProvider.CreateUserWithScopeAsync(username, password);
-            if (role == UserRoles.Admin)
+            if (role == UserRoles.Admin.ToWire())
             {
                 _logger.LogInformation(
                     "User '{User}' is the first registered user and was created as admin.",
@@ -228,13 +231,13 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogUserCreateAsync(username, ip);
 
-        return StatusCode(201, new RegisterResponse { Username = username });
+        return TypedResults.Created((string?)null, new RegisterResponse { Username = username });
     }
 
     /// <summary>
@@ -251,12 +254,13 @@ public class AuthController : ControllerBase
     [HttpGet("whoami")]
     [Authorize]
     [RegistryAuthorize(RegistryAction.Whoami)]
-    public IActionResult Whoami()
+    public Ok<WhoamiResponse> Whoami()
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        string rawRole = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User.ToWire();
+        UserRoles role = rawRole.ToUserRole();
 
-        return Ok(new WhoamiResponse { Username = username, Role = role });
+        return TypedResults.Ok(new WhoamiResponse { Username = username, Role = role });
     }
 
     /// <summary>
@@ -269,7 +273,7 @@ public class AuthController : ControllerBase
     [HttpGet("tokens")]
     [Authorize]
     [RegistryAuthorize(RegistryAction.ListOwnTokens)]
-    public async Task<IActionResult> ListTokens()
+    public async Task<Ok<TokenListResponse>> ListTokens()
     {
         string username = User.Identity!.Name!;
 
@@ -281,14 +285,14 @@ public class AuthController : ControllerBase
                 .Select(t => new TokenListItem
             {
                 TokenId = t.Id,
-                Scope = t.Scope,
+                Scope = t.Scope.ToTokenScope(),
                 Description = t.Description,
                 CreatedAt = t.CreatedAt,
                 ExpiresAt = t.ExpiresAt
             }).ToList()
         };
 
-        return Ok(response);
+        return TypedResults.Ok(response);
     }
 
     /// <summary>
@@ -314,10 +318,10 @@ public class AuthController : ControllerBase
     [HttpPost("tokens")]
     [Authorize]
     [RegistryAuthorize(RegistryAction.IssueToken)]
-    public async Task<IActionResult> CreateToken()
+    public async Task<Results<Created<TokenCreateResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>>> CreateToken()
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User.ToWire();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenCreateRequest? body;
@@ -327,13 +331,13 @@ public class AuthController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         // Guard against the deferred fine-grained token capability shape leaking in.
         if (body?.Capabilities != null)
         {
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "capabilities_not_supported",
                 Message = "Fine-grained token capabilities are not supported in this version. Remove the 'capabilities' field from your request."
@@ -344,7 +348,7 @@ public class AuthController : ControllerBase
         string? rawCeiling = body?.Ceiling;
         if (string.IsNullOrEmpty(rawCeiling))
         {
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "ceiling_required",
                 Message = "ceiling is required. Set it to 'read', 'publish', or 'admin'."
@@ -353,23 +357,23 @@ public class AuthController : ControllerBase
 
         string scope = rawCeiling;
 
-        if (!string.Equals(scope, TokenScopes.Read, StringComparison.Ordinal)
-            && !string.Equals(scope, TokenScopes.Publish, StringComparison.Ordinal)
-            && !string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal))
+        if (!string.Equals(scope, TokenScopes.Read.ToWire(), StringComparison.Ordinal)
+            && !string.Equals(scope, TokenScopes.Publish.ToWire(), StringComparison.Ordinal)
+            && !string.Equals(scope, TokenScopes.Admin.ToWire(), StringComparison.Ordinal))
         {
-            return BadRequest(new ErrorResponse { Error = "ceiling must be 'read', 'publish', or 'admin'." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "ceiling must be 'read', 'publish', or 'admin'." });
         }
 
-        if (string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal)
-            && !string.Equals(role, UserRoles.Admin, StringComparison.Ordinal))
+        if (string.Equals(scope, TokenScopes.Admin.ToWire(), StringComparison.Ordinal)
+            && !string.Equals(role, UserRoles.Admin.ToWire(), StringComparison.Ordinal))
         {
-            return StatusCode(403, new ErrorResponse { Error = "Only admin users can create admin-ceiling tokens." });
+            return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "Only admin users can create admin-ceiling tokens." });
         }
 
         // expires_in is mandatory — absent or blank is a 400.
         if (string.IsNullOrWhiteSpace(body?.ExpiresIn))
         {
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "expires_in_required",
                 Message = "expires_in is required. Use formats like '30d', '12h', or '90m'."
@@ -383,21 +387,21 @@ public class AuthController : ControllerBase
         }
         catch (Exception)
         {
-            return BadRequest(new ErrorResponse { Error = $"Invalid expires_in format: '{body.ExpiresIn}'. Use formats like '30d', '12h', or '90m'." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid expires_in format: '{body.ExpiresIn}'. Use formats like '30d', '12h', or '90m'." });
         }
 
         TimeSpan duration = expiresAt - DateTime.UtcNow;
 
         if (duration < TimeSpan.FromHours(1))
         {
-            return BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour." });
         }
 
         TimeSpan maxLifetime = _config.Security.MaxTokenLifetime;
         if (duration > maxLifetime)
         {
             string capDisplay = $"{(int)maxLifetime.TotalDays}d";
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "TokenLifetimeExceeded",
                 Message = $"Requested lifetime exceeds the server's maximum token lifetime of {capDisplay}."
@@ -421,11 +425,11 @@ public class AuthController : ControllerBase
 
         await _auditService.LogTokenCreateAsync(username, ip);
 
-        return StatusCode(201, new TokenCreateResponse
+        return TypedResults.Created((string?)null, new TokenCreateResponse
         {
             Token = jwt,
             TokenId = tokenId,
-            Scope = scope,
+            Scope = scope.ToTokenScope(),
             ExpiresAt = expiresAt,
             Description = string.IsNullOrEmpty(description) ? null : description
         });
@@ -450,14 +454,14 @@ public class AuthController : ControllerBase
     [HttpPost("tokens/{id}/revoke")]
     [Authorize]
     [RegistryAuthorize(RegistryAction.RevokeOwnToken)]
-    public async Task<IActionResult> RevokeToken(string id)
+    public async Task<Results<Ok<SuccessResponse>, NotFound<ErrorResponse>>> RevokeToken(string id)
     {
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
         if (record == null)
         {
-            return NotFound(new ErrorResponse { Error = "Token not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = "Token not found." });
         }
 
         string username = User.Identity!.Name!;
@@ -465,7 +469,7 @@ public class AuthController : ControllerBase
 
         await _auditService.LogTokenRevokeAsync(username, record.Id, ip);
 
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 
     /// <summary>
@@ -485,14 +489,14 @@ public class AuthController : ControllerBase
     [HttpDelete("tokens/{id}")]
     [Authorize]
     [RegistryAuthorize(RegistryAction.RevokeOwnToken)]
-    public async Task<IActionResult> DeleteToken(string id)
+    public async Task<Results<Ok<SuccessResponse>, NotFound<ErrorResponse>>> DeleteToken(string id)
     {
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenRecord? record = await _db.GetTokenByIdAsync(id);
         if (record == null)
         {
-            return NotFound(new ErrorResponse { Error = "Token not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = "Token not found." });
         }
 
         string username = User.Identity!.Name!;
@@ -500,7 +504,7 @@ public class AuthController : ControllerBase
 
         await _auditService.LogTokenRevokeAsync(username, record.Id, ip);
 
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 
     /// <summary>
@@ -514,7 +518,7 @@ public class AuthController : ControllerBase
     /// </remarks>
     [HttpPost("tokens/refresh")]
     [PublicEndpoint("token refresh validates the refresh-token credential itself — no bearer session required")]
-    public async Task<IActionResult> RefreshToken()
+    public async Task<Results<Ok<RefreshTokenResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> RefreshToken()
     {
         RefreshTokenRequest? body;
         try
@@ -523,12 +527,12 @@ public class AuthController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         if (string.IsNullOrEmpty(body?.RefreshToken) || string.IsNullOrEmpty(body?.AccessToken) || string.IsNullOrEmpty(body?.MachineId))
         {
-            return BadRequest(new ErrorResponse { Error = "refreshToken, accessToken, and machineId are required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "refreshToken, accessToken, and machineId are required." });
         }
 
         // Validate the expired access token's signature (but not lifetime)
@@ -540,21 +544,21 @@ public class AuthController : ControllerBase
         }
         catch (SecurityTokenException)
         {
-            return Unauthorized(new ErrorResponse { Error = "Invalid access token." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid access token." });
         }
 
         string? tokenUsername = principal.Identity?.Name;
         string? tokenJti = principal.FindFirstValue(JwtRegisteredClaimNames.Jti);
         if (string.IsNullOrEmpty(tokenUsername) || string.IsNullOrEmpty(tokenJti))
         {
-            return Unauthorized(new ErrorResponse { Error = "Invalid access token claims." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid access token claims." });
         }
 
         // Cross-validate machine_id claim from the JWT against the request body
         string? tokenMachineId = principal.FindFirstValue(RegistryClaims.MachineId);
         if (!string.Equals(tokenMachineId, body.MachineId, StringComparison.Ordinal))
         {
-            return Unauthorized(new ErrorResponse { Error = "Machine fingerprint mismatch." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Machine fingerprint mismatch." });
         }
 
         // Look up the refresh token by hash
@@ -562,38 +566,38 @@ public class AuthController : ControllerBase
         var refreshRecord = await _db.GetRefreshTokenByHashAsync(refreshTokenHash);
         if (refreshRecord == null)
         {
-            return Unauthorized(new ErrorResponse { Error = "Invalid refresh token." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid refresh token." });
         }
 
         // Verify the access token is the one paired with this refresh token
         if (!string.Equals(tokenJti, refreshRecord.AccessTokenId, StringComparison.Ordinal))
         {
-            return Unauthorized(new ErrorResponse { Error = "Token pair mismatch." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Token pair mismatch." });
         }
 
         // Check if refresh token has been consumed (possible token theft)
         if (refreshRecord.Consumed)
         {
             await RevokeTokenFamilyAsync(refreshRecord.FamilyId, refreshRecord.Username);
-            return Unauthorized(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
         }
 
         // Validate refresh token belongs to the right user
         if (!string.Equals(refreshRecord.Username, tokenUsername, StringComparison.Ordinal))
         {
-            return Unauthorized(new ErrorResponse { Error = "Token mismatch." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Token mismatch." });
         }
 
         // Validate machine fingerprint matches
         if (!string.Equals(refreshRecord.MachineId, body.MachineId, StringComparison.Ordinal))
         {
-            return Unauthorized(new ErrorResponse { Error = "Machine fingerprint mismatch. Please log in again." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Machine fingerprint mismatch. Please log in again." });
         }
 
         // Check refresh token hasn't expired
         if (refreshRecord.ExpiresAt < DateTime.UtcNow)
         {
-            return Unauthorized(new ErrorResponse { Error = "Refresh token has expired. Please log in again." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Refresh token has expired. Please log in again." });
         }
 
         // Atomically consume the old refresh token (rotation)
@@ -601,12 +605,12 @@ public class AuthController : ControllerBase
         if (!consumed)
         {
             await RevokeTokenFamilyAsync(refreshRecord.FamilyId, refreshRecord.Username);
-            return Unauthorized(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
+            return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
         }
 
         // Look up the user to get current role
         var user = await _db.GetUserAsync(tokenUsername);
-        string role = user?.Role ?? UserRoles.User;
+        string role = (user?.Role ?? UserRoles.User).ToWire();
 
         // Delete the old access token record
         await _db.DeleteTokenAsync(tokenJti);
@@ -647,7 +651,7 @@ public class AuthController : ControllerBase
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogTokenRefreshAsync(tokenUsername, ip);
 
-        return Ok(new RefreshTokenResponse
+        return TypedResults.Ok(new RefreshTokenResponse
         {
             AccessToken = newAccessJwt,
             RefreshToken = newRefreshTokenString,

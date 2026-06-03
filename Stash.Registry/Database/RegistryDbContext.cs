@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Stash.Registry.Auth;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database.Models;
@@ -90,7 +91,10 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.Visibility)
                 .HasColumnName("visibility")
                 .IsRequired()
-                .HasDefaultValue(Visibilities.Public);
+                .HasConversion(
+                    v => v.ToWire(),
+                    v => v.ToVisibility())
+                .HasDefaultValueSql("'public'");
             entity.ToTable("packages", t => t.HasCheckConstraint(
                 "CK_packages_visibility",
                 "visibility IN ('public', 'private', 'internal')"));
@@ -123,7 +127,13 @@ public sealed class RegistryDbContext : DbContext
             entity.HasKey(e => e.Username);
             entity.Property(e => e.Username).HasColumnName("username");
             entity.Property(e => e.PasswordHash).HasColumnName("password_hash").IsRequired();
-            entity.Property(e => e.Role).HasColumnName("role").IsRequired().HasDefaultValue(UserRoles.User);
+            entity.Property(e => e.Role)
+                .HasColumnName("role")
+                .IsRequired()
+                .HasConversion(
+                    v => v.ToWire(),
+                    v => v.ToUserRole())
+                .HasDefaultValueSql("'user'");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
         });
 
@@ -204,7 +214,13 @@ public sealed class RegistryDbContext : DbContext
             entity.HasKey(e => new { e.OrgId, e.Username });
             entity.Property(e => e.OrgId).HasColumnName("org_id");
             entity.Property(e => e.Username).HasColumnName("username");
-            entity.Property(e => e.OrgRole).HasColumnName("org_role").IsRequired().HasDefaultValue(OrgRoles.Member);
+            entity.Property(e => e.OrgRole)
+                .HasColumnName("org_role")
+                .IsRequired()
+                .HasConversion(
+                    v => v.ToWire(),
+                    v => v.ToOrgRole())
+                .HasDefaultValueSql("'member'");
             entity.Property(e => e.JoinedAt).HasColumnName("joined_at");
             entity.ToTable("org_members", t => t.HasCheckConstraint(
                 "CK_org_members_org_role",
@@ -251,7 +267,12 @@ public sealed class RegistryDbContext : DbContext
             entity.ToTable("scopes");
             entity.HasKey(e => e.Name);
             entity.Property(e => e.Name).HasColumnName("name");
-            entity.Property(e => e.OwnerType).HasColumnName("owner_type").IsRequired();
+            entity.Property(e => e.OwnerType)
+                .HasColumnName("owner_type")
+                .IsRequired()
+                .HasConversion(
+                    v => v.ToWire(),
+                    v => v.ToScopeOwnerType());
             entity.Property(e => e.OwnerUsername).HasColumnName("owner_username");
             entity.Property(e => e.OwnerOrgId).HasColumnName("owner_org_id");
             entity.Property(e => e.State).HasColumnName("state").IsRequired()
@@ -279,9 +300,18 @@ public sealed class RegistryDbContext : DbContext
             entity.ToTable("package_roles");
             entity.HasKey(e => new { e.PackageName, e.PrincipalType, e.PrincipalId });
             entity.Property(e => e.PackageName).HasColumnName("package_name");
-            entity.Property(e => e.PrincipalType).HasColumnName("principal_type");
+            entity.Property(e => e.PrincipalType)
+                .HasColumnName("principal_type")
+                .HasConversion(
+                    v => v.ToWire(),
+                    v => v.ToPrincipalType());
             entity.Property(e => e.PrincipalId).HasColumnName("principal_id");
-            entity.Property(e => e.Role).HasColumnName("role").IsRequired();
+            entity.Property(e => e.Role)
+                .HasColumnName("role")
+                .IsRequired()
+                .HasConversion(
+                    v => v.ToWire(),
+                    v => v.ToPackageRole());
             entity.ToTable("package_roles", t =>
             {
                 t.HasCheckConstraint(

@@ -14,7 +14,7 @@ public sealed class ClaimScopeRequest
 
     /// <summary>The owner type: <c>user</c> or <c>org</c>.</summary>
     [JsonPropertyName("owner_type")]
-    public string? OwnerType { get; set; }
+    public ScopeOwnerTypes? OwnerType { get; set; }
 
     /// <summary>The owner identifier — a username for <c>user</c> scopes, an org name for <c>org</c> scopes.</summary>
     [JsonPropertyName("owner")]
@@ -39,7 +39,7 @@ public sealed class ScopeDetailResponse
 
     /// <summary>The type of owner: <c>system</c>, <c>user</c>, or <c>org</c>.</summary>
     [JsonPropertyName("owner_type")]
-    public required string OwnerType { get; set; }
+    public required ScopeOwnerTypes OwnerType { get; set; }
 
     /// <summary>The owner identifier (username, org name, or <c>null</c> for system scopes).</summary>
     [JsonPropertyName("owner")]

@@ -311,7 +311,7 @@ public static class OrgCommand
         if (positional.Count < 2)
         {
             throw new ArgumentException(
-                $"Usage: stash pkg org member add <org> <username> [--role {OrgRoles.Owner}|{OrgRoles.Member}]");
+                $"Usage: stash pkg org member add <org> <username> [--role {OrgRoles.Owner.ToWire()}|{OrgRoles.Member.ToWire()}]");
         }
 
         string orgName = positional[0];
@@ -325,7 +325,7 @@ public static class OrgCommand
 
         // AddOrgMember throws on any non-2xx with the server's ErrorResponse surfaced.
         client.AddOrgMember(orgName, username, role);
-        string assignedRole = role ?? OrgRoles.Member;
+        string assignedRole = role ?? OrgRoles.Member.ToWire();
         Console.WriteLine($"Added '{username}' to organization '{orgName}' with role '{assignedRole}'.");
     }
 
@@ -432,13 +432,10 @@ public static class OrgCommand
 
     private static void ValidateOrgRole(string role)
     {
-        bool valid = string.Equals(role, OrgRoles.Owner, StringComparison.Ordinal)
-            || string.Equals(role, OrgRoles.Member, StringComparison.Ordinal);
-
-        if (!valid)
+        if (!role.TryToOrgRole(out _))
         {
             throw new ArgumentException(
-                $"Unknown org role: '{role}'. Valid roles: {OrgRoles.Owner}, {OrgRoles.Member}.");
+                $"Unknown org role: '{role}'. Valid roles: {OrgRoles.Owner.ToWire()}, {OrgRoles.Member.ToWire()}.");
         }
     }
 
@@ -493,7 +490,7 @@ public static class OrgCommand
         Console.WriteLine("  team   add    <org> <team>                    Create a new team within the org");
         Console.WriteLine("  team   member add <org> <team> <username>     Add a user to a team");
         Console.WriteLine();
-        Console.WriteLine($"  --role <{OrgRoles.Owner}|{OrgRoles.Member}>   Org role for member add (default: {OrgRoles.Member})");
+        Console.WriteLine($"  --role <{OrgRoles.Owner.ToWire()}|{OrgRoles.Member.ToWire()}>   Org role for member add (default: {OrgRoles.Member.ToWire()})");
         Console.WriteLine();
         Console.WriteLine("Note: 'org info' shows flat metadata only. Member and team listing is not available —");
         Console.WriteLine("OrgDetailResponse has no membership fields and there is no GET .../members route.");

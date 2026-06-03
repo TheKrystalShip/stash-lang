@@ -144,6 +144,8 @@ phases:
       - Stash.Registry/Auth/RegistryAuthConstants.cs
       - Stash.Registry/Auth/Authorization/RegistryAuthzPrincipalFactory.cs
       - Stash.Registry/Auth/Authorization/PermissionResolver.cs
+      - Stash.Registry/Auth/Authorization/ScopeChallengeService.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
       - Stash.Registry/Controllers/PackagesController.cs
       - Stash.Registry/Controllers/AuthController.cs
       - Stash.Registry/Controllers/AdminController.cs
@@ -153,7 +155,17 @@ phases:
       - Stash.Registry/Services/PackageRoleService.cs
       - Stash.Registry/Bootstrap/AdminBootstrapper.cs
       - Stash.Registry/Auth/LocalAuthProvider.cs
+      - Stash.Cli/PackageManager/CliJsonContext.cs
+      - Stash.Cli/PackageManager/RegistryClient.cs
+      - Stash.Cli/PackageManager/Commands/RoleCommand.cs
+      - Stash.Cli/PackageManager/Commands/OrgCommand.cs
+      - Stash.Cli/PackageManager/Commands/VisibilityCommand.cs
+      - Stash.Cli/PackageManager/Commands/ScopeCommand.cs
+      - Stash.Cli/PackageManager/Commands/TokenCommand.cs
       - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+      - Stash.Tests/Registry/SqliteDatabaseTests.cs
+      - Stash.Tests/Registry/Authz/BoundedDomainBoundaryTests.cs
+      - Stash.Tests/Registry/Contracts/BoundedDomainPlacementTests.cs
     verify:
       - dotnet build Stash.Registry.Contracts/Stash.Registry.Contracts.csproj
       - dotnet build Stash.Registry/Stash.Registry.csproj
@@ -185,12 +197,14 @@ phases:
     title: CLI AOT verification + OpenAPI snapshot baseline
     deps: [P4]
     files:
+      - Stash.Registry.Contracts/BoundedDomains.cs
       - Stash.Cli/PackageManager/CliJsonContext.cs
       - Stash.Cli/PackageManager/Commands/RoleCommand.cs
       - Stash.Cli/PackageManager/Commands/OrgCommand.cs
       - Stash.Cli/PackageManager/Commands/VisibilityCommand.cs
       - Stash.Cli/PackageManager/Commands/ScopeCommand.cs
       - Stash.Cli/Program.cs
+      - Stash.Tests/Stash.Tests.csproj
       - Stash.Tests/Cli/EnumRoundTripTests.cs
       - Stash.Tests/Cli/AotPublishedBinaryEnumRoundTripTests.cs
       - Stash.Tests/Registry/OpenApi/OpenApiSnapshotTests.cs

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 
@@ -105,7 +106,7 @@ public sealed class RegistryScopeAndOrgTests
         PackageRecord? pkg = await db.GetPackageAsync("@alice/pub-pkg");
 
         Assert.NotNull(pkg);
-        Assert.Equal("public", pkg.Visibility);
+        Assert.Equal(Visibilities.Public, pkg.Visibility);
     }
 
     [Fact]
@@ -334,12 +335,12 @@ public sealed class RegistryScopeAndOrgTests
         ScopeRecord? adminScope = await db.GetScopeAsync("admin");
 
         Assert.NotNull(stashScope);
-        Assert.Equal("system", stashScope.OwnerType);
+        Assert.Equal(ScopeOwnerTypes.System, stashScope.OwnerType);
         Assert.Null(stashScope.OwnerUsername);
         Assert.Null(stashScope.OwnerOrgId);
 
         Assert.NotNull(adminScope);
-        Assert.Equal("system", adminScope.OwnerType);
+        Assert.Equal(ScopeOwnerTypes.System, adminScope.OwnerType);
         Assert.Null(adminScope.OwnerUsername);
         Assert.Null(adminScope.OwnerOrgId);
     }
@@ -371,7 +372,7 @@ public sealed class RegistryScopeAndOrgTests
 
         ScopeRecord? scope = await db.GetScopeAsync("alice");
         Assert.NotNull(scope);
-        Assert.Equal("user", scope.OwnerType);
+        Assert.Equal(ScopeOwnerTypes.User, scope.OwnerType);
         Assert.Equal("alice", scope.OwnerUsername);
         Assert.Null(scope.OwnerOrgId);
     }
@@ -497,7 +498,7 @@ public sealed class RegistryScopeAndOrgTests
         // The scope should have been provisioned
         var scope = await db.GetScopeAsync("acme");
         Assert.NotNull(scope);
-        Assert.Equal("org", scope.OwnerType);
+        Assert.Equal(ScopeOwnerTypes.Org, scope.OwnerType);
         Assert.Equal(org.Id, scope.OwnerOrgId);
         Assert.Null(scope.OwnerUsername);
     }
@@ -569,7 +570,7 @@ public sealed class RegistryScopeAndOrgTests
         await db.AddOrgMemberAsync(org.Id, "bob", "member");
 
         var members = await db.GetOrgMembersAsync(org.Id);
-        Assert.Contains(members, m => m.Username == "bob" && m.OrgRole == "member");
+        Assert.Contains(members, m => m.Username == "bob" && m.OrgRole == OrgRoles.Member);
     }
 
     [Fact]
@@ -691,7 +692,7 @@ public sealed class RegistryScopeAndOrgTests
         var org = await db.CreateOrgAsync("acme", null, "alice");
 
         var pkg = MakePackage("@acme/widget");
-        pkg.Visibility = "private";
+        pkg.Visibility = Visibilities.Private;
         await db.CreatePackageAsync(pkg);
         // No direct package_roles row for alice on @acme/widget
 
@@ -714,7 +715,7 @@ public sealed class RegistryScopeAndOrgTests
         // bob is NOT an org member — only a team member
 
         var pkg = MakePackage("@acme/lib");
-        pkg.Visibility = "private";
+        pkg.Visibility = Visibilities.Private;
         await db.CreatePackageAsync(pkg);
         await db.AssignPackageRoleAsync("@acme/lib", "team", team.Id, "reader");
 
@@ -735,7 +736,7 @@ public sealed class RegistryScopeAndOrgTests
         await db.AddOrgMemberAsync(org.Id, "bob", "member");
 
         var pkg = MakePackage("@acme/internal-pkg");
-        pkg.Visibility = "private";
+        pkg.Visibility = Visibilities.Private;
         await db.CreatePackageAsync(pkg);
         // No direct package_roles row for bob
 
@@ -755,7 +756,7 @@ public sealed class RegistryScopeAndOrgTests
         var org = await db.CreateOrgAsync("acme", null, "alice");
 
         var pkg = MakePackage("@acme/secret");
-        pkg.Visibility = "private";
+        pkg.Visibility = Visibilities.Private;
         await db.CreatePackageAsync(pkg);
 
         SearchResult result = await db.SearchPackagesAsync("secret", 1, 20, "charlie");

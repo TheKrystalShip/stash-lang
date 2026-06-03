@@ -1,0 +1,59 @@
+schema_version: 1
+feature: registry-openapi-hardening
+current: null
+updated: "2026-06-03T16:12:30Z"
+phases:
+  P1:
+    status: done
+    commit: 6d012a4c5432866fbf82e2d82e04cefeb1656930
+    verified: true
+    started: "2026-06-03T11:43:47Z"
+    completed: "2026-06-03T12:02:58Z"
+    attempts: 1
+    notes: "OpenAPI public endpoint + transformers (operationId + metadata + dynamic servers) + JTI bypass + health endpoint typed + coverage meta-test (38 in NotYetMigrated, Packages_DownloadVersion permanently exempt)"
+  P2:
+    status: done
+    commit: 8c573d638591d272e29b00e18b4d416b73128ba6
+    verified: true
+    started: "2026-06-03T12:06:30Z"
+    completed: "2026-06-03T12:32:25Z"
+    attempts: 1
+    notes: "Converted 12 Packages + 8 Auth actions to typed Results<>; added JsonUnauthorized<T>/JsonForbidden<T> for 401/403 with body; shrunk NotYetMigrated by 20 entries; all verify gates green"
+  P3:
+    status: done
+    commit: aeb9a6f8d922c3144a50c3ba04aad5a7f010bffd
+    verified: true
+    started: "2026-06-03T12:38:12Z"
+    completed: "2026-06-03T12:48:17Z"
+    attempts: 1
+    notes: "Converted 18 actions across 4 controllers to typed Results<>; NotYetMigratedOperations emptied; OpenApiCoverageMetaTests GREEN with empty migration list; all 75 authz matrix rows preserved"
+  P4:
+    status: done
+    commit: 4ec47470b54ba6511ba55d0abb6cd6e55d14da9f
+    verified: true
+    started: "2026-06-03T12:53:13Z"
+    completed: "2026-06-03T14:00:08Z"
+    attempts: 1
+    notes: "Seven const-string bounded domains converted to enums end-to-end: contracts, EF models, registry, CLI, tests all green. EF sentinel fix (OrgRoles reorder), OrganizationsController.AddMember switched to [FromBody] for OrgRoles OpenAPI schema. verify-phase OK."
+  P5:
+    status: done
+    commit: 3d55967407079ad760909bce13179595518ccec9
+    verified: true
+    started: "2026-06-03T14:02:05Z"
+    completed: "2026-06-03T14:34:03Z"
+    attempts: 1
+    notes: "AOT round-trip tests (in-process + published binary), parse-or-reject validation in Commands, OpenAPI snapshot baselined with servers-normalization"
+  P6:
+    status: done
+    commit: aadb6d1bc6bb82b3d9f1ad4b4b5d05f832153c65
+    verified: true
+    started: "2026-06-03T15:04:34Z"
+    completed: "2026-06-03T15:14:29Z"
+    attempts: 1
+    notes: "docs: Section 22 (public OpenAPI endpoint, dynamic servers, operationId convention, 7 enum schemas table); CLAUDE.md 3 stale const-string spots updated to enum types + HasConversion pattern; CompletionMenuTests flake fixed"
+review:
+  status: resolved
+  started: "2026-06-03T15:30:26Z"
+  resolved: "2026-06-03T16:12:30Z"
+  findings_open: 0
+  findings_fixed: 0
