@@ -97,6 +97,9 @@ public static class PackageCommands
                 case "visibility":
                     VisibilityCommand.Execute(subArgs);
                     break;
+                case "scope":
+                    ScopeCommand.Execute(subArgs);
+                    break;
                 case "unpublish":
                     UnpublishCommand.Execute(subArgs);
                     break;
@@ -172,6 +175,7 @@ public static class PackageCommands
         Console.WriteLine("  whoami            Show the username for the configured registry.");
         Console.WriteLine("  role              Manage package roles (list/assign/revoke)");
         Console.WriteLine("  visibility        Change package visibility (set only; get deferred — no server read path)");
+        Console.WriteLine("  scope             Claim and inspect namespace scopes (claim/info)");
         Console.WriteLine("  unpublish         Remove a published version");
         Console.WriteLine("  deprecate         Deprecate a package or version");
         Console.WriteLine("  undeprecate       Remove deprecation status");
