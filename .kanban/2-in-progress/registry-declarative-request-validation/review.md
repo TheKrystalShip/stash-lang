@@ -426,7 +426,8 @@ dotnet test --filter "FullyQualifiedName~ContractsValidationAttributesTests"
 
 ## F06 — [MEDIUM] Validation tests have a coverage hole: no test sends a normalizable-but-raw-invalid body
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 8dd34a23
 **Files:** `Stash.Tests/Registry/Validation/AuthControllerValidationTests.cs`, `Stash.Tests/Registry/Validation/OrganizationsControllerValidationTests.cs`, `Stash.Tests/Registry/Validation/ScopesControllerValidationTests.cs`, `Stash.Tests/Registry/Validation/ContractsValidationAttributesTests.cs`
 **Phase:** P3 / P4 / P5
 **Commit:** c9344b47, 8db697ca, d628db5b
@@ -486,7 +487,8 @@ dotnet test --filter "FullyQualifiedName~ScopesControllerValidationTests"
 
 ## F07 — [MEDIUM] ClaimScopeRequest.Validate() rejects OwnerType = System but has no test coverage (P5-D2 gap)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 8dd34a23
 **Files:** `Stash.Registry.Contracts/ScopeContracts.cs:52-66`, `Stash.Tests/Registry/Validation/ContractsValidationAttributesTests.cs`
 **Phase:** P5
 **Commit:** d628db5b
@@ -559,7 +561,8 @@ dotnet test --filter "FullyQualifiedName~ContractsValidationAttributesTests"
 
 ## F08 — [LOW] Dead inline IsValidScopeName guard in ScopesController.ClaimScope (P5-D4)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 8dd34a23
 **Files:** `Stash.Registry/Controllers/ScopesController.cs:95-102`
 **Phase:** P5
 **Commit:** d628db5b
