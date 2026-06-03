@@ -14,7 +14,8 @@ Baseline at review entry: full `dotnet test` is **green** (failed=0 passed=13103
 
 ## F01 — [HIGH] `[FromBody]` endpoints return `ValidationProblemDetails`, not `ErrorResponse`, on malformed bodies — contract lies about 400 shape
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9055f12b
 **Files:** `Stash.Registry/Controllers/OrganizationsController.cs:159`, `Stash.Registry/Controllers/PackagesController.cs:283,341,428,456,490`, `Stash.Registry/Controllers/AdminController.cs:190`, `Stash.Registry/Startup.cs:79`, `docs/Registry — Package Registry.md:1534`
 **Phase:** P4 (regression cross-cuts P4 docs + P2/P3 controller refactor)
 **Commit:** 4ec47470 (P4 enum conversion that introduced `[FromBody]` on `AddMember`); `[FromBody]` also present on six other endpoints from P2/P3.
