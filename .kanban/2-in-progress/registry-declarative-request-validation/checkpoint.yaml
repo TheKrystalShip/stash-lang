@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T19:28:06Z"
+updated: "2026-06-03T19:39:31Z"
 phases:
   P1:
     status: done
@@ -21,12 +21,12 @@ phases:
     notes: DataAnnotations on 8 request DTOs + ScopeGrammarAttribute + TokenExpiryAttribute + IValidatableObject on ClaimScopeRequest + SearchQuery/AuditLogQuery + factory aggregation; OpenAPI snapshot updated for AddOrgMemberRequest.username
   P3:
     status: done
-    commit: c9344b4719da4504a616a674a3928fc060dfa234
+    commit: 4d812e13f9647123a4ad1b66725dd55c1eb1e543
     verified: true
     started: "2026-06-03T19:07:45Z"
-    completed: "2026-06-03T19:28:06Z"
+    completed: "2026-06-03T19:39:31Z"
     attempts: 1
-    notes: "AuthController 4 actions + SearchController.Search migrated to [FromBody]/[FromQuery]; KnownExemptions shrunk by 5; LoginRequest ErrorMessage added; SearchQuery.Query renamed to Q for ?q= binding; OpenAPI snapshot updated"
+    notes: "P3 fully green: 802/802 Registry tests pass. AuthController+SearchController migrated; 5 exemptions removed; LoginRequest ErrorMessage; TokenCreateRequest ceiling/expires_in ErrorMessage; ContractsAssemblyShapeTests updated for Validation sub-namespace"
   P4:
     status: pending
     commit: null
