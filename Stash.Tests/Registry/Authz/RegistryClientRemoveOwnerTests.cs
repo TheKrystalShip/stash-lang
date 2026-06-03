@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Stash.Cli.PackageManager;
+using Stash.Registry.Contracts;
 using Xunit;
 
 namespace Stash.Tests.Registry.Authz;
@@ -50,7 +51,7 @@ public sealed class RegistryClientRemoveOwnerTests : RegistryAuthzTestBase
         Assert.True(result);
         var roles = await GetPackageRolesAsync(factory, "@adminro/widgets");
         Assert.DoesNotContain(roles, r => r.PrincipalId == "bobro");
-        Assert.Contains(roles, r => r.PrincipalId == "adminro" && r.Role == "owner");
+        Assert.Contains(roles, r => r.PrincipalId == "adminro" && r.Role == PackageRoles.Owner);
     }
 
     [Fact]
@@ -74,7 +75,7 @@ public sealed class RegistryClientRemoveOwnerTests : RegistryAuthzTestBase
 
         // The owner row survives the refused revoke.
         var roles = await GetPackageRolesAsync(factory, "@adminro2/widgets");
-        Assert.Contains(roles, r => r.PrincipalId == "adminro2" && r.Role == "owner");
+        Assert.Contains(roles, r => r.PrincipalId == "adminro2" && r.Role == PackageRoles.Owner);
     }
 
     [Fact]

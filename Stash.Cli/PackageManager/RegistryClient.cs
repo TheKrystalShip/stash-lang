@@ -959,7 +959,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new SetVisibilityRequest { Visibility = visibility },
+            new SetVisibilityRequest { Visibility = visibility.ToVisibility() },
             CliJsonContext.Default.SetVisibilityRequest);
         var request = new HttpRequestMessage(new HttpMethod("PATCH"),
             $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/visibility")
@@ -1024,7 +1024,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new AssignRoleRequest { PrincipalType = principalType, PrincipalId = principalId, Role = role },
+            new AssignRoleRequest { PrincipalType = principalType.ToPrincipalType(), PrincipalId = principalId, Role = role.ToPackageRole() },
             CliJsonContext.Default.AssignRoleRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = _http.PutAsync(
@@ -1060,7 +1060,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new RevokeRoleRequest { PrincipalType = principalType, PrincipalId = principalId },
+            new RevokeRoleRequest { PrincipalType = principalType.ToPrincipalType(), PrincipalId = principalId },
             CliJsonContext.Default.RevokeRoleRequest);
         var request = new HttpRequestMessage(HttpMethod.Delete,
             $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles")
@@ -1096,7 +1096,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new ClaimScopeRequest { Scope = scope, OwnerType = ownerType, Owner = owner },
+            new ClaimScopeRequest { Scope = scope, OwnerType = ownerType.ToScopeOwnerType(), Owner = owner },
             CliJsonContext.Default.ClaimScopeRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = _http.PostAsync($"{_baseUrl}/scopes", content).GetAwaiter().GetResult();
@@ -1220,7 +1220,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
-            new AddOrgMemberRequest { Username = username, OrgRole = orgRole },
+            new AddOrgMemberRequest { Username = username, OrgRole = orgRole != null ? orgRole.ToOrgRole() : null },
             CliJsonContext.Default.AddOrgMemberRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = _http.PostAsync(

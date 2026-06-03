@@ -89,7 +89,7 @@ public sealed class PackageScopeCommandTests : RegistryAuthzTestBase
 
         string infoOutput = infoOut.ToString();
         Assert.Contains("scowner1-products", infoOutput);
-        Assert.Contains(ScopeOwnerTypes.User, infoOutput);
+        Assert.Contains(ScopeOwnerTypes.User.ToWire(), infoOutput);
         Assert.Contains("scowner1", infoOutput); // owner field (the username)
     }
 
@@ -181,7 +181,7 @@ public sealed class PackageScopeCommandTests : RegistryAuthzTestBase
         }
 
         string infoOutput = infoOut.ToString();
-        Assert.Contains(ScopeOwnerTypes.Org, infoOutput);
+        Assert.Contains(ScopeOwnerTypes.Org.ToWire(), infoOutput);
         Assert.Contains("sc-acme", infoOutput);
     }
 

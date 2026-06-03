@@ -62,8 +62,8 @@ public static class TokenCeilingConverter
     /// </summary>
     public static Authorization.TokenCeiling FromClaimValue(string? value) => value switch
     {
-        TokenScopes.Admin => Authorization.TokenCeiling.Admin,
-        TokenScopes.Publish => Authorization.TokenCeiling.Publish,
+        "admin" => Authorization.TokenCeiling.Admin,
+        "publish" => Authorization.TokenCeiling.Publish,
         _ => Authorization.TokenCeiling.Read
     };
 
@@ -72,8 +72,8 @@ public static class TokenCeilingConverter
     /// </summary>
     public static string ToClaimValue(this Authorization.TokenCeiling ceiling) => ceiling switch
     {
-        Authorization.TokenCeiling.Admin => TokenScopes.Admin,
-        Authorization.TokenCeiling.Publish => TokenScopes.Publish,
-        _ => TokenScopes.Read
+        Authorization.TokenCeiling.Admin => "admin",
+        Authorization.TokenCeiling.Publish => "publish",
+        _ => "read"
     };
 }

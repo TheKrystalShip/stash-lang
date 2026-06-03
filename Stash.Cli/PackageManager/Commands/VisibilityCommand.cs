@@ -106,7 +106,7 @@ public static class VisibilityCommand
         if (positional.Count < 2)
         {
             throw new ArgumentException(
-                $"Usage: stash pkg visibility set <package> <{string.Join("|", Visibilities.All)}>");
+                "Usage: stash pkg visibility set <package> <public|private|internal>");
         }
 
         string packageName = positional[0];
@@ -123,10 +123,10 @@ public static class VisibilityCommand
 
     private static void ValidateVisibilityTier(string tier)
     {
-        if (!Visibilities.IsValid(tier))
+        if (!VisibilityHelpers.IsValid(tier))
         {
             throw new ArgumentException(
-                $"Unknown visibility tier: '{tier}'. Valid tiers: {string.Join(", ", Visibilities.All)}.");
+                $"Unknown visibility tier: '{tier}'. Valid tiers: public, private, internal.");
         }
     }
 
@@ -174,7 +174,7 @@ public static class VisibilityCommand
         Console.WriteLine("Usage: stash pkg visibility <subcommand> [options]");
         Console.WriteLine();
         Console.WriteLine("Subcommands:");
-        Console.WriteLine($"  set <package> <{string.Join("|", Visibilities.All)}>    Change package visibility");
+        Console.WriteLine($"  set <package> <public|private|internal>    Change package visibility");
         Console.WriteLine();
         Console.WriteLine("Note: 'visibility get' is not available — PackageDetailResponse has no visibility");
         Console.WriteLine("field and there is no GET .../visibility route. See the deferred backlog bug:");

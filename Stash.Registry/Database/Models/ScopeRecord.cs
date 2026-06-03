@@ -1,3 +1,5 @@
+using Stash.Registry.Contracts;
+
 namespace Stash.Registry.Database.Models;
 
 /// <summary>
@@ -36,8 +38,8 @@ public sealed class ScopeRecord
     /// <summary>The scope name without the leading <c>@</c> (primary key).</summary>
     public string Name { get; set; } = "";
 
-    /// <summary>The type of owner: <c>user</c>, <c>org</c>, or <c>system</c>.</summary>
-    public string OwnerType { get; set; } = "";
+    /// <summary>The type of owner: <c>user</c>, <c>org</c>, or <c>system</c>. EF value converter maps to the lowercase wire string.</summary>
+    public ScopeOwnerTypes OwnerType { get; set; }
 
     /// <summary>
     /// The username of the owning user when <see cref="OwnerType"/> is <c>user</c>;

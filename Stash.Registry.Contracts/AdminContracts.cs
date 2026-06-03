@@ -17,9 +17,9 @@ public sealed class CreateUserRequest
     [JsonPropertyName("password")]
     public string? Password { get; set; }
 
-    /// <summary>The role to assign to the new account (e.g. <c>"user"</c> or <c>"admin"</c>).</summary>
+    /// <summary>The role to assign to the new account (<c>"user"</c> or <c>"admin"</c>). Defaults to <c>"user"</c> if absent.</summary>
     [JsonPropertyName("role")]
-    public string? Role { get; set; }
+    public UserRoles? Role { get; set; }
 }
 
 /// <summary>
@@ -37,7 +37,7 @@ public sealed class CreateUserResponse
 
     /// <summary>The role assigned to the newly created account.</summary>
     [JsonPropertyName("role")]
-    public required string Role { get; set; }
+    public required UserRoles Role { get; set; }
 }
 
 /// <summary>

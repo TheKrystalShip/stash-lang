@@ -1,4 +1,5 @@
 using System;
+using Stash.Registry.Contracts;
 
 namespace Stash.Cli.PackageManager.Commands;
 
@@ -96,7 +97,7 @@ public static class TokenCommand
 
         Console.WriteLine("Token created.");
         Console.WriteLine($"  Token ID:    {result.TokenId}");
-        Console.WriteLine($"  Scope:       {result.Scope}");
+        Console.WriteLine($"  Scope:       {result.Scope.ToWire()}");
         Console.WriteLine($"  Expires:     {result.ExpiresAt:u}");
         if (result.Description != null)
         {
@@ -141,7 +142,7 @@ public static class TokenCommand
         foreach (var token in result.Tokens)
         {
             string desc = token.Description ?? "";
-            Console.WriteLine($"{token.TokenId,-38} {token.Scope,-10} {token.ExpiresAt.ToString("u"),-22} {desc}");
+            Console.WriteLine($"{token.TokenId,-38} {token.Scope.ToWire(),-10} {token.ExpiresAt.ToString("u"),-22} {desc}");
         }
     }
 

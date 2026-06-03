@@ -29,11 +29,11 @@ public sealed class PermissionResolver : IPermissionResolver
 {
     private readonly RegistryDbContext _ctx;
 
-    private static int RoleRank(string role) => PackageRoles.Rank(role);
+    private static int RoleRank(PackageRoles role) => PackageRoleHelpers.Rank(role);
 
     /// <summary>Returns the role with the higher privilege (lower rank), or <paramref name="b"/> when <paramref name="a"/> is null.</summary>
-    private static string BestRole(string? a, string b) =>
-        a == null ? b : (RoleRank(a) <= RoleRank(b) ? a : b);
+    private static PackageRoles BestRole(PackageRoles? a, PackageRoles b) =>
+        a == null ? b : (RoleRank(a.Value) <= RoleRank(b) ? a.Value : b);
 
     /// <summary>Extracts the bare scope name from <c>@scope/name</c>, or <c>null</c>.</summary>
     private static string? ExtractScope(string packageName)
@@ -54,7 +54,7 @@ public sealed class PermissionResolver : IPermissionResolver
     /// <inheritdoc/>
     public async Task<string?> GetEffectiveRoleAsync(string username, string packageName)
     {
-        string? bestRole = null;
+        PackageRoles? bestRole = null;
 
         // 1. Direct user-principal role
         var directEntry = await _ctx.PackageRoles
@@ -123,7 +123,7 @@ public sealed class PermissionResolver : IPermissionResolver
                     if (orgMember != null)
                     {
                         // Org owners inherit package owner; org members inherit reader.
-                        string inheritedRole = orgMember.OrgRole == OrgRoles.Owner ? PackageRoles.Owner : PackageRoles.Reader;
+                        PackageRoles inheritedRole = orgMember.OrgRole == OrgRoles.Owner ? PackageRoles.Owner : PackageRoles.Reader;
                         bestRole = BestRole(bestRole, inheritedRole);
                     }
 
@@ -140,7 +140,7 @@ public sealed class PermissionResolver : IPermissionResolver
             }
         }
 
-        return bestRole;
+        return bestRole?.ToWire();
     }
 
     /// <inheritdoc/>

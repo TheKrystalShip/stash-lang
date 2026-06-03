@@ -89,7 +89,7 @@ public class AdminController : ControllerBase
 
         string? newUsername = body?.Username?.Trim();
         string? password = body?.Password;
-        string newRole = string.IsNullOrEmpty(body?.Role) ? UserRoles.User : body.Role;
+        UserRoles newRole = body?.Role ?? UserRoles.User;
 
         if (string.IsNullOrEmpty(newUsername) || string.IsNullOrEmpty(password))
             return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
@@ -109,8 +109,8 @@ public class AdminController : ControllerBase
             return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
 
-        if (string.Equals(newRole, UserRoles.Admin, StringComparison.Ordinal))
-            await _db.UpdateUserRoleAsync(newUsername, UserRoles.Admin);
+        if (newRole == UserRoles.Admin)
+            await _db.UpdateUserRoleAsync(newUsername, UserRoles.Admin.ToWire());
 
         await _auditService.LogUserCreateAsync(newUsername, ip);
 
@@ -169,13 +169,8 @@ public class AdminController : ControllerBase
         if (body == null)
             return TypedResults.BadRequest(new ErrorResponse { Error = "Request body is required." });
 
-        if (!Array.Exists(PrincipalTypes.All, p => p == body.PrincipalType))
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
-
-        if (!Array.Exists(PackageRoles.RankOrder, r => r == body.Role))
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid role '{body.Role}'. Must be one of: owner, maintainer, publisher, reader." });
-
-        await _db.AssignPackageRoleAsync(packageName, body.PrincipalType, body.PrincipalId, body.Role);
+        // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
+        await _db.AssignPackageRoleAsync(packageName, body.PrincipalType.ToWire(), body.PrincipalId, body.Role.ToWire());
         await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, body.PrincipalId, ip);
 
         return TypedResults.Ok(new SuccessResponse());
@@ -205,13 +200,13 @@ public class AdminController : ControllerBase
 
         try
         {
-            await _roleService.RevokeRoleAsync(packageName, request.PrincipalType, request.PrincipalId);
+            await _roleService.RevokeRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId);
             await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
             return TypedResults.NoContent();
         }
         catch (RoleNotFoundException)
         {
-            return TypedResults.NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Not found: Principal '{request.PrincipalType.ToWire()}:{request.PrincipalId}' holds no role on '{packageName}'." });
         }
         catch (LastOwnerException ex)
         {

@@ -223,7 +223,7 @@ public sealed class PackageOrgCommandTests : RegistryAuthzTestBase
         try
         {
             OrgCommand.ExecuteCore("member",
-                ["add", "org-member-add-test2", "org-member-user2", "--role", OrgRoles.Owner], cli);
+                ["add", "org-member-add-test2", "org-member-user2", "--role", OrgRoles.Owner.ToWire()], cli);
         }
         finally
         {
@@ -232,7 +232,7 @@ public sealed class PackageOrgCommandTests : RegistryAuthzTestBase
 
         string output = stdout.ToString();
         Assert.Contains("org-member-user2", output);
-        Assert.Contains(OrgRoles.Owner, output);
+        Assert.Contains(OrgRoles.Owner.ToWire(), output);
     }
 
     // ── org member remove ──────────────────────────────────────────────────────

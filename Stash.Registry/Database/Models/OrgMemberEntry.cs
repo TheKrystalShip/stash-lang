@@ -1,5 +1,4 @@
 using System;
-using Stash.Registry.Auth;
 using Stash.Registry.Contracts;
 
 namespace Stash.Registry.Database.Models;
@@ -11,6 +10,7 @@ namespace Stash.Registry.Database.Models;
 /// The composite primary key is (<see cref="OrgId"/>, <see cref="Username"/>).
 /// The <see cref="OrgRole"/> column is constrained to <c>owner</c> or <c>member</c>.
 /// Column names use <c>snake_case</c> in the database.
+/// EF value converter maps <see cref="OrgRole"/> to the lowercase wire string.
 /// </remarks>
 public sealed class OrgMemberEntry
 {
@@ -21,7 +21,7 @@ public sealed class OrgMemberEntry
     public string Username { get; set; } = "";
 
     /// <summary>The role of this member in the organization: <c>owner</c> or <c>member</c>.</summary>
-    public string OrgRole { get; set; } = OrgRoles.Member;
+    public OrgRoles OrgRole { get; set; } = OrgRoles.Member;
 
     /// <summary>The UTC timestamp at which the user joined the organization.</summary>
     public DateTime JoinedAt { get; set; }

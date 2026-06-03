@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Stash.Registry.Auth.Authorization;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Xunit;
@@ -62,7 +63,7 @@ public sealed class RegistryAuthorizerTests : IDisposable
         {
             Name = fullName,
             Latest = "1.0.0",
-            Visibility = visibility,
+            Visibility = visibility.ToVisibility(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         });
@@ -81,7 +82,7 @@ public sealed class RegistryAuthorizerTests : IDisposable
             _ctx.Scopes.Add(new ScopeRecord
             {
                 Name = username,
-                OwnerType = "user",
+                OwnerType = ScopeOwnerTypes.User,
                 OwnerUsername = username
             });
             await _ctx.SaveChangesAsync();
@@ -448,9 +449,9 @@ public sealed class RegistryAuthorizerTests : IDisposable
         await _ctx.PackageRoles.AddAsync(new PackageRoleEntry
         {
             PackageName = "@alice/existing-lib",
-            PrincipalType = "user",
+            PrincipalType = PrincipalTypes.User,
             PrincipalId = "alice",
-            Role = "publisher"
+            Role = PackageRoles.Publisher
         });
         await _ctx.SaveChangesAsync();
 

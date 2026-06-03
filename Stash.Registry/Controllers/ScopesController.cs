@@ -136,9 +136,11 @@ public class ScopesController : ControllerBase
         if (string.IsNullOrEmpty(scopeName))
             return TypedResults.BadRequest(new ErrorResponse { Error = "scope is required." });
 
-        string? ownerType = body?.OwnerType?.Trim().ToLowerInvariant();
-        if (ownerType != ScopeOwnerTypes.User && ownerType != ScopeOwnerTypes.Org)
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"owner_type must be '{ScopeOwnerTypes.User}' or '{ScopeOwnerTypes.Org}'." });
+        // owner_type must be user or org (system is not user-claimable)
+        ScopeOwnerTypes? ownerTypeRaw = body?.OwnerType;
+        if (ownerTypeRaw == null || (ownerTypeRaw != ScopeOwnerTypes.User && ownerTypeRaw != ScopeOwnerTypes.Org))
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"owner_type must be '{ScopeOwnerTypes.User.ToWire()}' or '{ScopeOwnerTypes.Org.ToWire()}'." });
+        ScopeOwnerTypes ownerType = ownerTypeRaw.Value;
 
         string? owner = body?.Owner?.Trim();
         if (string.IsNullOrEmpty(owner))
@@ -169,20 +171,20 @@ public class ScopesController : ControllerBase
         string ownerDisplayName;
         if (ownerType == ScopeOwnerTypes.User)
         {
-            if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole(UserRoles.Admin))
+            if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole(UserRoles.Admin.ToWire()))
                 return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "You may only claim a user scope for your own account." });
 
             ownerId = owner;
             ownerDisplayName = owner;
         }
-        else // ownerType == "org"
+        else // ownerType == ScopeOwnerTypes.Org
         {
             var orgRecord = await _db.GetOrgAsync(owner);
             if (orgRecord == null)
                 return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{owner}' not found." });
 
             bool isOrgOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
-            bool isAdmin = User.IsInRole(UserRoles.Admin);
+            bool isAdmin = User.IsInRole(UserRoles.Admin.ToWire());
             if (!isOrgOwner && !isAdmin)
                 return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{owner}'." });
 
@@ -199,7 +201,7 @@ public class ScopesController : ControllerBase
 
         // Atomic claim via insert-then-handle-unique-violation
         var (succeeded, response) = await _scopeChallenge.TryClaimAsync(
-            scopeName, ownerType, ownerId, ownerDisplayName);
+            scopeName, ownerType.ToWire(), ownerId, ownerDisplayName);
 
         if (!succeeded)
             return TypedResults.Conflict(new ErrorResponse { Error = $"Scope '@{scopeName}' already exists." });

@@ -1,4 +1,5 @@
 using System;
+using Stash.Registry.Contracts;
 
 namespace Stash.Registry.Database.Models;
 
@@ -10,6 +11,7 @@ namespace Stash.Registry.Database.Models;
 /// the plaintext password is never persisted. The <see cref="Role"/> field controls
 /// access level: <c>"user"</c> for standard publish access, <c>"admin"</c> for
 /// administrative endpoints. Column names use <c>snake_case</c>.
+/// EF value converter maps <see cref="Role"/> to the lowercase wire string.
 /// </remarks>
 public sealed class UserRecord
 {
@@ -22,8 +24,9 @@ public sealed class UserRecord
     /// <summary>
     /// The user's role: <c>"user"</c> (default) or <c>"admin"</c>.
     /// Controls which authorization policies the user satisfies.
+    /// EF value converter maps to the lowercase wire string.
     /// </summary>
-    public string Role { get; set; } = "user"; // "user" or "admin"
+    public UserRoles Role { get; set; } = UserRoles.User;
 
     /// <summary>The UTC timestamp at which the account was created.</summary>
     public DateTime CreatedAt { get; set; }

@@ -12,6 +12,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Auth;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Xunit;
 
@@ -82,7 +83,7 @@ public sealed class FirstRegistrationAdminTests : IDisposable
         var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
         var user = await db.GetUserAsync("firstuser");
         Assert.NotNull(user);
-        Assert.Equal("admin", user!.Role);
+        Assert.Equal(UserRoles.Admin, user!.Role);
     }
 
     [Fact]
@@ -102,8 +103,8 @@ public sealed class FirstRegistrationAdminTests : IDisposable
 
         var first = await db.GetUserAsync("firstuser");
         var second = await db.GetUserAsync("seconduser");
-        Assert.Equal("admin", first!.Role);
-        Assert.Equal("user", second!.Role);
+        Assert.Equal(UserRoles.Admin, first!.Role);
+        Assert.Equal(UserRoles.User, second!.Role);
     }
 
     [Fact]
@@ -127,7 +128,7 @@ public sealed class FirstRegistrationAdminTests : IDisposable
         using var scope2 = factory.Services.CreateScope();
         var db2 = scope2.ServiceProvider.GetRequiredService<IRegistryDatabase>();
         var lateUser = await db2.GetUserAsync("lateuser");
-        Assert.Equal("user", lateUser!.Role);
+        Assert.Equal(UserRoles.User, lateUser!.Role);
     }
 }
 

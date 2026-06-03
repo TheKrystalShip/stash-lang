@@ -15,6 +15,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 
@@ -248,7 +249,7 @@ public abstract class RegistryAuthzTestBase
             await db.CreateScopeAsync(new ScopeRecord
             {
                 Name = scopeName,
-                OwnerType = "user",
+                OwnerType = ScopeOwnerTypes.User,
                 OwnerUsername = ownerUsername
             });
         }
@@ -270,14 +271,14 @@ public abstract class RegistryAuthzTestBase
             {
                 Name = packageName,
                 Latest = version,
-                Visibility = visibility,
+                Visibility = visibility.ToVisibility(),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             });
         }
 
         var roles = await db.GetPackageRolesAsync(packageName);
-        bool creatorIsOwner = roles.Exists(r => r.PrincipalId == creatorUsername && r.Role == "owner");
+        bool creatorIsOwner = roles.Exists(r => r.PrincipalId == creatorUsername && r.Role == PackageRoles.Owner);
         if (!creatorIsOwner)
             await db.AssignPackageRoleAsync(packageName, "user", creatorUsername, "owner");
     }

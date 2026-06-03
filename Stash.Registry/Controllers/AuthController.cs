@@ -170,21 +170,21 @@ public class AuthController : ControllerBase
         }
 
         var user = await _db.GetUserAsync(username);
-        string role = user?.Role ?? UserRoles.User;
+        string role = (user?.Role ?? UserRoles.User).ToWire();
         string? machineId = Request.Headers["X-Machine-Id"].FirstOrDefault();
 
         // Create short-lived access token — read-ceiling by default (least privilege).
         // Callers who need publish must issue a separate token via POST /auth/tokens.
         string accessTokenId = Guid.NewGuid().ToString();
         DateTime accessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
-        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Read, accessExpiresAt, accessTokenId, machineId);
+        string accessJwt = _jwtService.CreateToken(username, role, TokenScopes.Read.ToWire(), accessExpiresAt, accessTokenId, machineId);
 
         await _db.CreateTokenAsync(new TokenRecord
         {
             Id = accessTokenId,
             Username = username,
             TokenHash = "",
-            Scope = TokenScopes.Read,
+            Scope = TokenScopes.Read.ToWire(),
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = accessExpiresAt
         });
@@ -206,7 +206,7 @@ public class AuthController : ControllerBase
                 AccessTokenId = accessTokenId,
                 FamilyId = accessTokenId,
                 MachineId = machineId,
-                Scope = TokenScopes.Read,
+                Scope = TokenScopes.Read.ToWire(),
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = refreshExpiresAt.Value
             });
@@ -277,7 +277,7 @@ public class AuthController : ControllerBase
         try
         {
             string role = await _authProvider.CreateUserWithScopeAsync(username, password);
-            if (role == UserRoles.Admin)
+            if (role == UserRoles.Admin.ToWire())
             {
                 _logger.LogInformation(
                     "User '{User}' is the first registered user and was created as admin.",
@@ -312,7 +312,8 @@ public class AuthController : ControllerBase
     public Ok<WhoamiResponse> Whoami()
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        string rawRole = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User.ToWire();
+        UserRoles role = rawRole.ToUserRole();
 
         return TypedResults.Ok(new WhoamiResponse { Username = username, Role = role });
     }
@@ -339,7 +340,7 @@ public class AuthController : ControllerBase
                 .Select(t => new TokenListItem
             {
                 TokenId = t.Id,
-                Scope = t.Scope,
+                Scope = t.Scope.ToTokenScope(),
                 Description = t.Description,
                 CreatedAt = t.CreatedAt,
                 ExpiresAt = t.ExpiresAt
@@ -375,7 +376,7 @@ public class AuthController : ControllerBase
     public async Task<Results<Created<TokenCreateResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>>> CreateToken()
     {
         string username = User.Identity!.Name!;
-        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User;
+        string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User.ToWire();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         TokenCreateRequest? body;
@@ -411,15 +412,15 @@ public class AuthController : ControllerBase
 
         string scope = rawCeiling;
 
-        if (!string.Equals(scope, TokenScopes.Read, StringComparison.Ordinal)
-            && !string.Equals(scope, TokenScopes.Publish, StringComparison.Ordinal)
-            && !string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal))
+        if (!string.Equals(scope, TokenScopes.Read.ToWire(), StringComparison.Ordinal)
+            && !string.Equals(scope, TokenScopes.Publish.ToWire(), StringComparison.Ordinal)
+            && !string.Equals(scope, TokenScopes.Admin.ToWire(), StringComparison.Ordinal))
         {
             return TypedResults.BadRequest(new ErrorResponse { Error = "ceiling must be 'read', 'publish', or 'admin'." });
         }
 
-        if (string.Equals(scope, TokenScopes.Admin, StringComparison.Ordinal)
-            && !string.Equals(role, UserRoles.Admin, StringComparison.Ordinal))
+        if (string.Equals(scope, TokenScopes.Admin.ToWire(), StringComparison.Ordinal)
+            && !string.Equals(role, UserRoles.Admin.ToWire(), StringComparison.Ordinal))
         {
             return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "Only admin users can create admin-ceiling tokens." });
         }
@@ -483,7 +484,7 @@ public class AuthController : ControllerBase
         {
             Token = jwt,
             TokenId = tokenId,
-            Scope = scope,
+            Scope = scope.ToTokenScope(),
             ExpiresAt = expiresAt,
             Description = string.IsNullOrEmpty(description) ? null : description
         });
@@ -664,7 +665,7 @@ public class AuthController : ControllerBase
 
         // Look up the user to get current role
         var user = await _db.GetUserAsync(tokenUsername);
-        string role = user?.Role ?? UserRoles.User;
+        string role = (user?.Role ?? UserRoles.User).ToWire();
 
         // Delete the old access token record
         await _db.DeleteTokenAsync(tokenJti);

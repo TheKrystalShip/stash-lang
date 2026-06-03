@@ -45,7 +45,7 @@ public sealed class FailClosedResolverTests : RegistryAuthzTestBase
             {
                 Name = "@alice/pkg",
                 Latest = "1.0.0",
-                Visibility = "private",
+                Visibility = Visibilities.Private,
                 CreatedAt = System.DateTime.UtcNow,
                 UpdatedAt = System.DateTime.UtcNow
             });
@@ -137,7 +137,7 @@ public sealed class FailClosedResolverTests : RegistryAuthzTestBase
             {
                 Name = "@acme/lib",
                 Latest = "1.0.0",
-                Visibility = "private",
+                Visibility = Visibilities.Private,
                 CreatedAt = System.DateTime.UtcNow,
                 UpdatedAt = System.DateTime.UtcNow
             });

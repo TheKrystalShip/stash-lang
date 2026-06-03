@@ -330,6 +330,98 @@ public sealed class OpenApiCoverageMetaTests
             $"operationId violations have NO exemption — the OpenApiOperationIdTransformer is the Construct.");
     }
 
+    // ─── Assertion 6: Every bounded-domain enum appears as a named OpenAPI enum schema (P4) ──
+
+    /// <summary>
+    /// The seven bounded-domain enum types must appear as named schemas in <c>components.schemas</c>
+    /// with their full lowercase value list. This assertion is added in P4 (the enum conversion phase)
+    /// and ships GREEN at P4 close.
+    /// </summary>
+    [Fact]
+    public async Task AllBoundedDomainEnums_AppearAsNamedEnumSchemas()
+    {
+        using var doc = await FetchOpenApiDocAsync();
+        var root = doc.RootElement;
+
+        // Each entry: (schemaName, expected lowercase wire values)
+        var expectedSchemas = new (string Name, string[] Values)[]
+        {
+            ("PackageRoles", ["owner", "maintainer", "publisher", "reader"]),
+            ("TokenScopes", ["read", "publish", "admin"]),
+            ("Visibilities", ["public", "private", "internal"]),
+            ("PrincipalTypes", ["user", "team", "org"]),
+            ("ScopeOwnerTypes", ["user", "org", "system"]),
+            ("OrgRoles", ["owner", "member"]),
+            ("UserRoles", ["user", "admin"]),
+        };
+
+        var violations = new System.Collections.Generic.List<string>();
+
+        if (!root.TryGetProperty("components", out var components) ||
+            !components.TryGetProperty("schemas", out var schemas))
+        {
+            violations.Add("No components.schemas found in the OpenAPI document.");
+            Assert.True(violations.Count == 0,
+                $"Enum schema violations:\n{string.Join("\n", violations.Select(v => $"  {v}"))}");
+            return;
+        }
+
+        foreach (var (name, expectedValues) in expectedSchemas)
+        {
+            if (!schemas.TryGetProperty(name, out var schema))
+            {
+                violations.Add($"{name}: schema not found in components.schemas.");
+                continue;
+            }
+
+            // Check that the schema has an "enum" property (not just "type": "string")
+            if (!schema.TryGetProperty("enum", out var enumProp))
+            {
+                // It may be wrapped under "oneOf" or "anyOf" by .NET 10 — check nested
+                if (schema.TryGetProperty("oneOf", out var oneOf))
+                {
+                    bool foundEnum = false;
+                    foreach (var variant in oneOf.EnumerateArray())
+                    {
+                        if (variant.TryGetProperty("enum", out enumProp)) { foundEnum = true; break; }
+                    }
+                    if (!foundEnum)
+                    {
+                        violations.Add($"{name}: schema found but has no 'enum' array (neither top-level nor in oneOf).");
+                        continue;
+                    }
+                }
+                else
+                {
+                    violations.Add($"{name}: schema found but has no 'enum' array.");
+                    continue;
+                }
+            }
+
+            // Extract enum values
+            var actualValues = enumProp.EnumerateArray()
+                .Select(v => v.GetString() ?? "")
+                .ToArray();
+
+            // Check all expected values are present
+            foreach (var expected in expectedValues)
+            {
+                if (!actualValues.Contains(expected))
+                    violations.Add($"{name}: missing expected enum value '{expected}'. Actual: [{string.Join(", ", actualValues)}]");
+            }
+        }
+
+        Assert.True(
+            violations.Count == 0,
+            $"{violations.Count} bounded-domain enum schema violation(s) in the OpenAPI document.\n" +
+            $"Violations:\n{string.Join("\n", violations.Select(v => $"  {v}"))}\n\n" +
+            $"Each of the seven bounded-domain enums must appear as a named schema in " +
+            $"components.schemas with a full 'enum' value list containing all lowercase wire strings. " +
+            $"Ensure BoundedDomains.cs uses [JsonConverter(typeof(JsonStringEnumConverter<T>))] and " +
+            $"[JsonStringEnumMemberName] on every member, and that the enum types are registered in " +
+            $"the controllers' response DTOs so ApiExplorer picks them up.");
+    }
+
     // ─── Fail-path self-test (proves the scanner has teeth) ──────────────────
 
     /// <summary>

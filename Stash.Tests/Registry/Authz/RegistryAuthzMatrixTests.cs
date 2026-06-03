@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Xunit;
@@ -202,7 +203,7 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
             {
                 Name = $"@{orgName}/internal-pkg",
                 Latest = "1.0.0",
-                Visibility = "internal",
+                Visibility = Visibilities.Internal,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             });
@@ -222,7 +223,7 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
         {
             Name = packageName,
             Latest = "1.0.0",
-            Visibility = visibility,
+            Visibility = visibility.ToVisibility(),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         });
@@ -733,7 +734,7 @@ public sealed class RegistryAuthzMatrixTests : RegistryAuthzTestBase
                     dbCtx.PackageRoles.Add(new PackageRoleEntry
                     {
                         PackageName = $"@{ownerUser}/pkg",
-                        PrincipalType = "team", PrincipalId = teamId, Role = "publisher"
+                        PrincipalType = PrincipalTypes.Team, PrincipalId = teamId, Role = PackageRoles.Publisher
                     });
                     dbCtx.TeamMembers.Add(new TeamMemberEntry
                     {

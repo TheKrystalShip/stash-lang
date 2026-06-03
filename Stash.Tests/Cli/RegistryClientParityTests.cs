@@ -115,7 +115,7 @@ public class RegistryClientParityTests
         Assert.Equal($"{Base}/packages/alice/widget/roles", handler.CapturedUri!.ToString());
         Assert.Single(result!.Roles);
         Assert.Equal("alice", result.Roles[0].PrincipalId);
-        Assert.Equal("owner", result.Roles[0].Role);
+        Assert.Equal(PackageRoles.Owner, result.Roles[0].Role);
     }
 
     [Fact]
@@ -273,7 +273,7 @@ public class RegistryClientParityTests
         Assert.Equal(HttpMethod.Get, handler.CapturedMethod);
         Assert.Equal($"{Base}/scopes/acme", handler.CapturedUri!.ToString());
         Assert.Equal("acme", result!.Scope);
-        Assert.Equal("org", result.OwnerType);
+        Assert.Equal(ScopeOwnerTypes.Org, result.OwnerType);
     }
 
     [Fact]

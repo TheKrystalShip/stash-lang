@@ -47,7 +47,7 @@ public sealed class PackageVisibilityCommandTests : RegistryAuthzTestBase
         string ownerToken = await RegisterAndGetTokenAsync(serverClient, "visowner");
 
         await SeedScopeAsync(factory, "visowner", "visowner");
-        await SeedPackageAsync(factory, "@visowner/widget", "visowner", visibility: Visibilities.Public);
+        await SeedPackageAsync(factory, "@visowner/widget", "visowner", visibility: Visibilities.Public.ToWire());
 
         var cli = new RegistryClient(ApiBase, serverClient, token: ownerToken);
 
@@ -58,7 +58,7 @@ public sealed class PackageVisibilityCommandTests : RegistryAuthzTestBase
             $"Expected anonymous GET to succeed on public package, got {(int)beforeResp.StatusCode}.");
 
         // Flip visibility to private via the command
-        VisibilityCommand.ExecuteCore("set", ["@visowner/widget", Visibilities.Private], cli);
+        VisibilityCommand.ExecuteCore("set", ["@visowner/widget", Visibilities.Private.ToWire()], cli);
 
         // After the flip: anonymous GET must fail (visibility policy hides the package)
         using var anonClientAfter = factory.CreateClient();
@@ -79,12 +79,12 @@ public sealed class PackageVisibilityCommandTests : RegistryAuthzTestBase
         string ownerToken = await RegisterAndGetTokenAsync(serverClient, "visidem");
 
         await SeedScopeAsync(factory, "visidem", "visidem");
-        await SeedPackageAsync(factory, "@visidem/pkg", "visidem", visibility: Visibilities.Public);
+        await SeedPackageAsync(factory, "@visidem/pkg", "visidem", visibility: Visibilities.Public.ToWire());
 
         var cli = new RegistryClient(ApiBase, serverClient, token: ownerToken);
 
         // Setting public on an already-public package must not throw
-        VisibilityCommand.ExecuteCore("set", ["@visidem/pkg", Visibilities.Public], cli);
+        VisibilityCommand.ExecuteCore("set", ["@visidem/pkg", Visibilities.Public.ToWire()], cli);
     }
 
     // ── visibility set: unknown tier is rejected with a clear message ─────────
@@ -110,10 +110,9 @@ public sealed class PackageVisibilityCommandTests : RegistryAuthzTestBase
         Assert.Contains("unlisted", ex.Message);
         Assert.Contains("Unknown visibility tier", ex.Message);
         // The message must list the valid tiers (bounded-domain guidance)
-        foreach (string tier in Visibilities.All)
-        {
-            Assert.Contains(tier, ex.Message);
-        }
+        Assert.Contains("public", ex.Message);
+        Assert.Contains("private", ex.Message);
+        Assert.Contains("internal", ex.Message);
     }
 
     // ── visibility: 'get' subverb is rejected (not implemented) ──────────────

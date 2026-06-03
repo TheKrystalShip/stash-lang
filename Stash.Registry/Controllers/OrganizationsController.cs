@@ -156,7 +156,7 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.AddOrgMember)]
     [HttpPost("{org}/members")]
-    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AddMember(string org)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AddMember(string org, [FromBody] AddOrgMemberRequest? body)
     {
         string username = User.Identity!.Name!;
 
@@ -164,24 +164,14 @@ public class OrganizationsController : ControllerBase
         if (orgRecord == null)
             return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        AddOrgMemberRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<AddOrgMemberRequest>(
-                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
+        // With [FromBody], validation at deserialization boundary (JsonStringEnumConverter) returns 400 automatically.
         string? newMember = body?.Username?.Trim();
         if (string.IsNullOrEmpty(newMember))
             return TypedResults.BadRequest(new ErrorResponse { Error = "Username is required." });
 
-        string orgRole = string.IsNullOrEmpty(body?.OrgRole) ? OrgRoles.Member : body.OrgRole;
-        if (orgRole != OrgRoles.Owner && orgRole != OrgRoles.Member)
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"org_role must be '{OrgRoles.Owner}' or '{OrgRoles.Member}'." });
+        OrgRoles orgRole = body?.OrgRole ?? OrgRoles.Member;
+        // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
+        // orgRole is already valid since deserialization succeeded.
 
         // Verify the target user exists
         var targetUser = await _db.GetUserAsync(newMember);
@@ -190,7 +180,7 @@ public class OrganizationsController : ControllerBase
 
         try
         {
-            await _db.AddOrgMemberAsync(orgRecord.Id, newMember, orgRole);
+            await _db.AddOrgMemberAsync(orgRecord.Id, newMember, orgRole.ToWire());
             return TypedResults.Ok(new SuccessResponse());
         }
         catch (InvalidOperationException ex)

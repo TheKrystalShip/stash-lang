@@ -85,9 +85,9 @@ public sealed class WhoamiResponse
     [JsonPropertyName("username")]
     public required string Username { get; set; }
 
-    /// <summary>The role assigned to the authenticated user (e.g. <c>"user"</c> or <c>"admin"</c>).</summary>
+    /// <summary>The role assigned to the authenticated user.</summary>
     [JsonPropertyName("role")]
-    public required string Role { get; set; }
+    public required UserRoles Role { get; set; }
 }
 
 /// <summary>
@@ -141,7 +141,7 @@ public sealed class TokenCreateResponse
 
     /// <summary>The permission scope granted to this token.</summary>
     [JsonPropertyName("scope")]
-    public required string Scope { get; set; }
+    public required TokenScopes Scope { get; set; }
 
     /// <summary>The UTC date and time at which this token expires.</summary>
     [JsonPropertyName("expiresAt")]
@@ -162,7 +162,7 @@ public sealed class TokenListItem
     public string TokenId { get; set; } = "";
 
     [JsonPropertyName("scope")]
-    public string Scope { get; set; } = "";
+    public TokenScopes Scope { get; set; } = TokenScopes.Publish;
 
     [JsonPropertyName("description")]
     public string? Description { get; set; }

@@ -20,11 +20,15 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     private readonly ScopeChallengeService _scopeChallenge;
     private readonly ScopeOwnershipPolicyKind _scopePolicy;
 
-    private static int RoleRank(string role) => PackageRoles.Rank(role);
+    private static int RoleRank(PackageRoles role) => PackageRoleHelpers.Rank(role);
 
-    /// <summary>Returns true when <paramref name="effective"/> satisfies <paramref name="required"/>.</summary>
-    private static bool HasRole(string? effective, string required) =>
-        effective != null && RoleRank(effective) <= RoleRank(required);
+    /// <summary>Returns true when <paramref name="effective"/> (wire string) satisfies <paramref name="required"/>.</summary>
+    private static bool HasRole(string? effectiveWire, PackageRoles required)
+    {
+        if (effectiveWire == null) return false;
+        if (!effectiveWire.TryToPackageRole(out var effective)) return false;
+        return RoleRank(effective) <= RoleRank(required);
+    }
 
     /// <summary>
     /// Initialises the authorizer with its dependencies.
@@ -266,7 +270,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
         if (packageRecord == null)
             return AuthzDecision.Deny(AuthzDenyReason.PackageNotFound);
 
-        string visibility = packageRecord.Visibility;
+        Visibilities visibility = packageRecord.Visibility;
 
         if (visibility == Visibilities.Public)
             return AuthzDecision.Allow();
@@ -281,7 +285,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
 
         // Check effective role
         string? effectiveRole = await _resolver.GetEffectiveRoleAsync(username, pkg.FullName);
-        if (effectiveRole != null && HasRole(effectiveRole, PackageRoles.Reader))
+        if (HasRole(effectiveRole, PackageRoles.Reader))
             return AuthzDecision.Allow();
 
         // Internal packages: org members of the owning org can read
@@ -309,7 +313,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     }
 
     private async Task<AuthzDecision> AuthorizePackageRoleAsync(
-        string? username, bool isAdmin, ResourceRef resource, string requiredRole)
+        string? username, bool isAdmin, ResourceRef resource, PackageRoles requiredRole)
     {
         if (resource is not PackageResource pkg)
             return AuthzDecision.Deny(AuthzDenyReason.PolicyDenied, "Expected PackageResource.");
@@ -322,7 +326,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
             return AuthzDecision.Allow();
 
         string? effectiveRole = await _resolver.GetEffectiveRoleAsync(username, pkg.FullName);
-        if (effectiveRole != null && HasRole(effectiveRole, requiredRole))
+        if (HasRole(effectiveRole, requiredRole))
             return AuthzDecision.Allow();
 
         return AuthzDecision.Deny(AuthzDenyReason.PackageRoleInsufficient);
@@ -390,7 +394,7 @@ public sealed class RegistryAuthorizer : IRegistryAuthorizer
     private async Task<AuthzDecision> AutoClaimScopeAsync(string username, string scope)
     {
         var (succeeded, _) = await _scopeChallenge.TryClaimAsync(
-            scope, ScopeOwnerTypes.User, username, username);
+            scope, ScopeOwnerTypes.User.ToWire(), username, username);
 
         if (succeeded)
             return AuthzDecision.Allow();

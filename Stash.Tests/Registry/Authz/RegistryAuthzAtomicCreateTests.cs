@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Xunit;
@@ -146,7 +147,7 @@ public sealed class RegistryAuthzAtomicCreateTests : RegistryAuthzTestBase
         Assert.True(await PackageExistsAsync(factory, "@alice-ac2/new-pkg"));
 
         var roles = await GetPackageRolesAsync(factory, "@alice-ac2/new-pkg");
-        Assert.Contains(roles, r => r.PrincipalId == "alice-ac2" && r.Role == "owner");
+        Assert.Contains(roles, r => r.PrincipalId == "alice-ac2" && r.Role == PackageRoles.Owner);
     }
 
     [Fact]

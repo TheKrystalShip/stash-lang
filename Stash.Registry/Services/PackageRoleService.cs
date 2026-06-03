@@ -51,10 +51,13 @@ public sealed class PackageRoleService
     /// </exception>
     public async Task RevokeRoleAsync(string packageName, string principalType, string principalId)
     {
+        // Parse the wire string to enum for comparison
+        var principalTypeEnum = principalType.ToPrincipalType();
+
         // Verify the role actually exists.
         List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
         var target = roles.FirstOrDefault(r =>
-            r.PrincipalType == principalType &&
+            r.PrincipalType == principalTypeEnum &&
             r.PrincipalId == principalId);
 
         if (target == null)

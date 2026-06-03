@@ -435,14 +435,10 @@ public class PackagesController : ControllerBase
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        if (!Array.Exists(PrincipalTypes.All, p => p == request.PrincipalType))
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
-
-        if (!Array.Exists(PackageRoles.RankOrder, r => r == request.Role))
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
-
+        // Validation is now handled by the deserializer (JsonStringEnumConverter) — invalid values return 400 before reaching here.
+        // The request.PrincipalType and request.Role are already the correct enum values if deserialization succeeded.
         string username = User.Identity!.Name!;
-        await _db.AssignPackageRoleAsync(packageName, request.PrincipalType, request.PrincipalId, request.Role);
+        await _db.AssignPackageRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId, request.Role.ToWire());
         await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, request.PrincipalId, ip);
         return TypedResults.Ok(new SuccessResponse());
     }
@@ -469,13 +465,13 @@ public class PackagesController : ControllerBase
         string username = User.Identity!.Name!;
         try
         {
-            await _roleService.RevokeRoleAsync(packageName, request.PrincipalType, request.PrincipalId);
+            await _roleService.RevokeRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId);
             await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
             return TypedResults.NoContent();
         }
         catch (RoleNotFoundException)
         {
-            return TypedResults.NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Not found: Principal '{request.PrincipalType.ToWire()}:{request.PrincipalId}' holds no role on '{packageName}'." });
         }
         catch (LastOwnerException ex)
         {
@@ -501,13 +497,9 @@ public class PackagesController : ControllerBase
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        if (string.IsNullOrEmpty(request.Visibility) || !Visibilities.IsValid(request.Visibility))
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
-        }
-
+        // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
         string username = User.Identity!.Name!;
-        await _db.SetPackageVisibilityAsync(packageName, request.Visibility);
+        await _db.SetPackageVisibilityAsync(packageName, request.Visibility.ToWire());
         await _auditService.LogMutationAllowAsync("package.visibility_change", username, packageName, ip);
         return TypedResults.Ok(new SetVisibilityResponse { Package = packageName, Visibility = request.Visibility });
     }

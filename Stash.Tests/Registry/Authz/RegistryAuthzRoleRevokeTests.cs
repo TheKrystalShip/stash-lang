@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Stash.Registry.Contracts;
 using Xunit;
 
 namespace Stash.Tests.Registry.Authz;
@@ -122,7 +123,7 @@ public sealed class RegistryAuthzRoleRevokeTests : RegistryAuthzTestBase
         Assert.Contains("cannot remove the last owner of a package", body);
 
         var roles = await GetPackageRolesAsync(factory, "@alice-rr5/pkg");
-        Assert.Contains(roles, r => r.PrincipalId == "alice-rr5" && r.Role == "owner");
+        Assert.Contains(roles, r => r.PrincipalId == "alice-rr5" && r.Role == PackageRoles.Owner);
     }
 
     [Fact]
@@ -146,8 +147,8 @@ public sealed class RegistryAuthzRoleRevokeTests : RegistryAuthzTestBase
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
 
         var roles = await GetPackageRolesAsync(factory, "@alice-rr6/pkg");
-        Assert.DoesNotContain(roles, r => r.PrincipalId == "alice-rr6" && r.Role == "owner");
-        Assert.Contains(roles, r => r.PrincipalId == "bob-rr6" && r.Role == "owner");
+        Assert.DoesNotContain(roles, r => r.PrincipalId == "alice-rr6" && r.Role == PackageRoles.Owner);
+        Assert.Contains(roles, r => r.PrincipalId == "bob-rr6" && r.Role == PackageRoles.Owner);
     }
 
     [Fact]

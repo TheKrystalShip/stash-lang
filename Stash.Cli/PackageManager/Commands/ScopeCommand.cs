@@ -141,12 +141,12 @@ public static class ScopeCommand
 
         if (orgName != null)
         {
-            ownerType = ScopeOwnerTypes.Org;
+            ownerType = ScopeOwnerTypes.Org.ToWire();
             owner = orgName;
         }
         else
         {
-            ownerType = ScopeOwnerTypes.User;
+            ownerType = ScopeOwnerTypes.User.ToWire();
             // Resolve authenticated user — throws clearly if not logged in.
             var info = client.WhoamiDetailed();
             if (string.IsNullOrEmpty(info.Username))
@@ -180,7 +180,7 @@ public static class ScopeCommand
 
         // Normal (Claim/Open policy): claim completed.
         Console.WriteLine($"Scope '{scopeName}' claimed successfully.");
-        Console.WriteLine($"  Owner type: {result.OwnerType}");
+        Console.WriteLine($"  Owner type: {result.OwnerType.ToWire()}");
         Console.WriteLine($"  Owner     : {result.Owner}");
     }
 
@@ -221,7 +221,7 @@ public static class ScopeCommand
         }
 
         Console.WriteLine($"Scope: @{result.Scope}");
-        Console.WriteLine($"  Owner type: {result.OwnerType}");
+        Console.WriteLine($"  Owner type: {result.OwnerType.ToWire()}");
         Console.WriteLine($"  Owner     : {result.Owner ?? "(none)"}");
 
         if (!string.IsNullOrEmpty(result.State))

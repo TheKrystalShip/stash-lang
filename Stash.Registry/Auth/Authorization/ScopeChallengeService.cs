@@ -53,7 +53,8 @@ public sealed class ScopeChallengeService
         bool isVerifiedMode = _config.Security.ScopeOwnershipPolicy == ScopeOwnershipPolicyKind.Verified;
         string state = isVerifiedMode ? ScopeStates.Pending : ScopeStates.Claimed;
 
-        ScopeRecord newScope = ownerType == ScopeOwnerTypes.User
+        ScopeOwnerTypes ownerTypeEnum = ownerType.ToScopeOwnerType();
+        ScopeRecord newScope = ownerTypeEnum == ScopeOwnerTypes.User
             ? new ScopeRecord
             {
                 Name = scopeName,
@@ -78,7 +79,7 @@ public sealed class ScopeChallengeService
         var response = new ScopeDetailResponse
         {
             Scope = scopeName,
-            OwnerType = ownerType,
+            OwnerType = ownerTypeEnum,
             Owner = ownerDisplayName,
             State = isVerifiedMode ? ScopeStates.Pending : null
         };
