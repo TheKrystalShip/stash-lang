@@ -141,6 +141,38 @@ public sealed class ScopesControllerValidationTests
         Assert.Equal("InvalidRequest", error!.Error);
     }
 
+    // ── Non-canonical scope (uppercase) returns 400 ──────────────────────────
+
+    /// <summary>
+    /// POST /api/v1/scopes with a non-canonical (uppercase) scope value returns 400
+    /// <c>InvalidRequest</c>. Under the (A)-accept-strict behaviour, <c>[ScopeGrammar]</c>
+    /// validates the raw bound value before the action body runs. Clients must send
+    /// canonical lowercase strings without surrounding whitespace.
+    /// </summary>
+    [Fact]
+    public async Task ClaimScope_UppercaseScope_Returns400InvalidRequest()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string username = "scope-cs-upper";
+        string token = await RegisterAndGetPublishTokenAsync(client, username);
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        // "MyOrg" is not a valid scope grammar value — uppercase rejected on the raw value.
+        var response = await client.PostAsync("/api/v1/scopes",
+            Json(new { scope = "MyOrg", owner_type = "user", owner = username }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var error = await ReadErrorResponseAsync(response);
+        Assert.NotNull(error);
+        Assert.Equal("InvalidRequest", error!.Error);
+    }
+
     // ── Valid body reaches the inline PDP ────────────────────────────────────
 
     /// <summary>

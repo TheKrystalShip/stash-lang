@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
@@ -92,14 +91,7 @@ public class ScopesController : ControllerBase
         ScopeOwnerTypes ownerType = request.OwnerType!.Value;
         string owner = request.Owner!.Trim();
 
-        // Validate scope name grammar: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
-        if (!PackageManifest.IsValidScopeName(scopeName))
-        {
-            return TypedResults.BadRequest(new ErrorResponse
-            {
-                Error = "Scope name must be 1-39 characters, start with a lowercase letter, and contain only [a-z0-9-]."
-            });
-        }
+        // Scope grammar is enforced declaratively by [ScopeGrammar] on ClaimScopeRequest.Scope (runs before this action).
 
         // Run PDP for ClaimScope
         var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ClaimScope, new ScopeResource(scopeName));

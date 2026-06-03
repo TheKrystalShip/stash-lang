@@ -255,6 +255,52 @@ public sealed class ContractsValidationAttributesTests
             e.ErrorMessage.Contains("org", System.StringComparison.OrdinalIgnoreCase));
     }
 
+    // F06: normalizable-but-raw-invalid inputs must be rejected under the (A)-accept strict behaviour.
+    // [ScopeGrammar] validates the raw bound value before any Trim()/ToLowerInvariant() normalization.
+
+    [Theory]
+    [InlineData("MyOrg")]       // uppercase — fails [ScopeGrammar] on raw value
+    [InlineData(" myorg ")]     // surrounding whitespace — fails [ScopeGrammar] on raw value
+    [InlineData("My-Org")]      // mixed case — fails [ScopeGrammar] on raw value
+    public void ClaimScopeRequest_ScopeWithCaseOrWhitespace_FailsScopeGrammar(string scope)
+        => AssertInvalid(
+            new ClaimScopeRequest { Scope = scope, Owner = "alice", OwnerType = ScopeOwnerTypes.User },
+            "lowercase");
+
+    [Theory]
+    [InlineData("Alice")]       // uppercase username — fails [ScopeGrammar] on raw value
+    [InlineData(" alice ")]     // surrounding whitespace — fails [ScopeGrammar] on raw value
+    public void RegisterRequest_UsernameWithCaseOrWhitespace_FailsScopeGrammar(string username)
+        => AssertInvalid(
+            new RegisterRequest { Username = username, Password = "password123" },
+            "lowercase");
+
+    [Theory]
+    [InlineData("MyOrg")]       // uppercase — fails [ScopeGrammar] on raw value
+    [InlineData(" myorg ")]     // surrounding whitespace — fails [ScopeGrammar] on raw value
+    public void CreateOrgRequest_NameWithCaseOrWhitespace_FailsScopeGrammar(string name)
+        => AssertInvalid(new CreateOrgRequest { Name = name }, "lowercase");
+
+    // F07: ClaimScopeRequest.Validate() must reject OwnerType = null and OwnerType = System.
+
+    [Fact]
+    public void ClaimScopeRequest_OwnerTypeNull_FailsCrossFieldRule()
+    {
+        var model = new ClaimScopeRequest { Scope = "alice", Owner = "alice", OwnerType = null };
+        var errors = model.Validate(new ValidationContext(model)).ToList();
+        Assert.Contains(errors, e => e.ErrorMessage?.Contains("owner_type") == true);
+    }
+
+    [Fact]
+    public void ClaimScopeRequest_OwnerTypeSystem_FailsCrossFieldRule()
+    {
+        var model = new ClaimScopeRequest { Scope = "alice", Owner = "alice", OwnerType = ScopeOwnerTypes.System };
+        var errors = model.Validate(new ValidationContext(model)).ToList();
+        Assert.Contains(errors, e =>
+            e.ErrorMessage?.Contains("user", System.StringComparison.OrdinalIgnoreCase) == true &&
+            e.ErrorMessage?.Contains("org", System.StringComparison.OrdinalIgnoreCase) == true);
+    }
+
     // ── SearchQuery ───────────────────────────────────────────────────────────
 
     [Fact]
