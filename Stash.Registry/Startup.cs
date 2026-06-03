@@ -1,9 +1,11 @@
 using System;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -76,7 +78,25 @@ public sealed class Startup
     /// <param name="services">The <see cref="IServiceCollection"/> to register services into.</param>
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddControllers();
+        services.AddControllers()
+            .ConfigureApiBehaviorOptions(options =>
+            {
+                // Normalize [ApiController] + [FromBody] deserialization failures (malformed JSON,
+                // illegal enum wire values) to the same ErrorResponse shape that business-logic
+                // 400s return.  Without this override the framework emits ValidationProblemDetails
+                // (RFC 7807) — a different shape that contradicts the published OpenAPI contract.
+                options.InvalidModelStateResponseFactory = ctx =>
+                {
+                    var first = ctx.ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .FirstOrDefault();
+                    return new BadRequestObjectResult(new ErrorResponse
+                    {
+                        Error = "InvalidRequest",
+                        Message = first?.ErrorMessage ?? "Request body is invalid.",
+                    });
+                };
+            });
 
         var jwtService = new JwtTokenService(_config);
         services.AddSingleton(jwtService);
