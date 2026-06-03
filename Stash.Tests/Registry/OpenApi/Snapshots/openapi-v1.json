@@ -1993,6 +1993,9 @@
   "components": {
     "schemas": {
       "AddOrgMemberRequest": {
+        "required": [
+          "username"
+        ],
         "type": "object",
         "properties": {
           "username": {

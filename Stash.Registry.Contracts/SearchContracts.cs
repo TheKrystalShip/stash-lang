@@ -1,7 +1,41 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Stash.Registry.Contracts;
+
+/// <summary>
+/// Query-string parameters for the <c>GET /api/v1/search</c> endpoint.
+/// Bound via <c>[FromQuery]</c> — page and pageSize are validated via <c>[Range]</c>
+/// to reject out-of-range values rather than silently clamping them.
+/// </summary>
+public sealed class SearchQuery
+{
+    /// <summary>The free-text search query string.</summary>
+    [JsonPropertyName("q")]
+    public string? Query { get; set; }
+
+    /// <summary>The 1-based page index (minimum 1).</summary>
+    [Range(1, int.MaxValue)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
+                        "IComparable/type-conversion reflection paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
+    [JsonPropertyName("page")]
+    public int Page { get; set; } = 1;
+
+    /// <summary>The number of results per page (1–100).</summary>
+    [Range(1, 100)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
+                        "IComparable/type-conversion reflection paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
+    [JsonPropertyName("pageSize")]
+    public int PageSize { get; set; } = 20;
+}
 
 /// <summary>
 /// A lightweight package summary included in search result listings.

@@ -1,14 +1,26 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Stash.Registry.Contracts.Validation;
 
 namespace Stash.Registry.Contracts;
 
 /// <summary>
 /// Request body for the <c>POST /api/v1/scopes</c> endpoint.
 /// </summary>
-public sealed class ClaimScopeRequest
+/// <remarks>
+/// Implements <see cref="IValidatableObject"/> for the cross-field rule: <c>owner</c> is
+/// required for both <c>user</c> and <c>org</c> owner types. The <c>[Required]</c> attribute
+/// on <see cref="Owner"/> ensures the field is structurally present; <see cref="Validate"/>
+/// adds an explicit error tied to the owner-type context. The business-logic check ("caller
+/// matches owner") remains in the controller's <c>[ImperativeAuthz]</c> action body.
+/// </remarks>
+public sealed class ClaimScopeRequest : IValidatableObject
 {
-    /// <summary>The bare scope name to claim (without the leading <c>@</c>).</summary>
+    /// <summary>The bare scope name to claim (without the leading <c>@</c>; scope grammar: 1–39 chars).</summary>
+    [Required]
+    [ScopeGrammar]
     [JsonPropertyName("scope")]
     public string? Scope { get; set; }
 
@@ -17,6 +29,7 @@ public sealed class ClaimScopeRequest
     public ScopeOwnerTypes? OwnerType { get; set; }
 
     /// <summary>The owner identifier — a username for <c>user</c> scopes, an org name for <c>org</c> scopes.</summary>
+    [Required]
     [JsonPropertyName("owner")]
     public string? Owner { get; set; }
 
@@ -26,6 +39,26 @@ public sealed class ClaimScopeRequest
     /// </summary>
     [JsonPropertyName("verification_method")]
     public string? VerificationMethod { get; set; }
+
+    /// <summary>
+    /// Cross-field validation: <c>owner</c> is required for both <c>user</c> and <c>org</c> owner
+    /// types when <see cref="OwnerType"/> is set. The "caller matches owner" business check
+    /// (i.e. verifying the authenticated user has the right to claim on behalf of the named owner)
+    /// stays in the controller's <c>[ImperativeAuthz]</c> action body and is not expressed here.
+    /// </summary>
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        // If OwnerType is set to a user-claimable type, Owner must be provided.
+        if (OwnerType == ScopeOwnerTypes.User || OwnerType == ScopeOwnerTypes.Org)
+        {
+            if (string.IsNullOrWhiteSpace(Owner))
+            {
+                yield return new ValidationResult(
+                    $"The owner field is required when owner_type is '{OwnerType.Value.ToWire()}'.",
+                    [nameof(Owner)]);
+            }
+        }
+    }
 }
 
 /// <summary>
