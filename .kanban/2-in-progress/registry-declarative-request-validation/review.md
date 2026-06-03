@@ -260,7 +260,8 @@ dotnet test --filter "FullyQualifiedName~AdminControllerValidationTests"
 
 ## F04 — [MEDIUM] OpenAPI query parameter names are PascalCase ("Q", "Page", "PageSize") but docs / SDK contract are lowercase
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** f7c9ea9b
 **Files:** `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json` (added `Q`, `Page`, `PageSize`, `Package`, `Action` parameter names), `Stash.Registry.Contracts/SearchContracts.cs:14-37`, `Stash.Registry.Contracts/AdminContracts.cs:57-83`
 **Phase:** P3 / P5
 **Commit:** c9344b47, d628db5b
