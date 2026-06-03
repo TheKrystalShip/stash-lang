@@ -1,10 +1,19 @@
-# pkg-cli-api-parity — Review
+# pkg-cli-api-parity — Review (Pass 2)
 
 > Produced by `/feature-review`. One finding per H2 section.
 > Each finding header MUST be parseable: `## Fxx — [SEVERITY] short title`.
 > `/resolve <feature> Fxx [Fyy...]` reads the selected section(s) and dispatches a Resolver.
+>
+> **Finding `**Status:**` lifecycle** (the promotion gate enforces this — see `promote-gate.stash`):
+> - `open` — not yet addressed. **Blocks `/done`.**
+> - `fixed` — resolved in code; carries a `**Fixed in:** <sha>` line. Set by `/resolve`.
+> - `accepted` — a deliberate, human-recorded decision to ship without fixing. Set ONLY by a human
+>   via `/accept <feature> <Fxx> <reason>`. Requires an `**Accepted because:** <reason>` line, and a
+>   backlog stub for any deferred work. **CRITICAL findings can NEVER be `accepted`** — they must be
+>   fixed or the run stops. The autopilot never self-accepts.
+> - Any other value (typos, `wontfix`, …) is rejected by the gate — it fails closed.
 
-**Scope reviewed:** commits `44be3591..4fe44892` on branch `feature/pkg-cli-api-parity`
+**Scope reviewed:** commits `44be3591..c3f10160` on branch `feature/pkg-cli-api-parity` (pass 2 focuses on the F01/F02/F03 resolution commits `9ea494f8` and `0fb55794`)
 **Brief:** ../brief.md
 **Generated:** 2026-06-03
 
@@ -12,156 +21,177 @@
 
 ## Summary
 
-A clean feature. P1's `owners` drop is surgical (contract, controller, render, and tests all line up); P2's wire-layer additions consume the shared `Stash.Registry.Contracts` types without authoring a single CLI-local mirror DTO and ship 26 capturing-handler tests pinning verb/URL/snake_case body shape; P3 deletes `OwnerCommand` + the three legacy helpers + migrates `RegistryClientRemoveOwnerTests` to the self-service `RevokeRole` route in one atomic phase boundary; P4–P6 honour the brief's set-only / flat-info constraints and route writes through the self-service publish endpoints; P7's docs and `examples/package_roles.stash` faithfully document the new grammar. The PDP ceilings match the brief (`Stash.Registry/Auth/Authorization/RegistryAuthorizer.cs:115-124`), the controller routes match the new methods (`PackagesController.cs:393/420/452/486`, `ScopesController.cs:60/82`, `OrganizationsController.cs:49/107/156/208/226/273`), every consumed wire DTO is registered in `CliJsonContext`, and there are zero residual references to the deleted owner surface in production code. The solution-wide `dotnet build` is **0 Warning(s)** — the prompt's CS8019/CS8933 theme is no longer present (dismissed).
+Pass-1 findings have all landed and three of them check out cleanly: F01's misleading `stash pkg scope verify` instruction is replaced with honest "501 stub, tracked separately" language and `Scope_Claim_VerifiedMode_PrintsDnsTxtChallenge` now carries `Assert.DoesNotContain("stash pkg scope verify", output)` so a regression fails the gate (`PackageScopeCommandTests.cs:235`); F03's dead `if (ok)` in `RoleCommand.Revoke` and the orphan `[JsonSerializable(typeof(SetVisibilityResponse))]` registration are both gone; signature changes from nullable to non-nullable on `ClaimScope`/`CreateOrg`/`CreateTeam` are consistent across callers (`ScopeCommand.Claim`/`OrgCommand.Create`/`OrgCommand.TeamAdd` no longer null-check the result — the throw paths cover that contract). The new `HandleNonSuccess` helper is throw-safe across the relevant edge cases (empty body, non-JSON body, missing-`required` member all caught by `catch (JsonException)`; `string.IsNullOrWhiteSpace` fallback to `ReasonPhrase`), `ErrorResponse` is registered in `CliJsonContext` for AOT, and every wire DTO consumed by the new helper-routed methods is registered. `GetRoles`/`GetScope`/`GetOrg` correctly preserve the legitimate `404 → null` signal while routing other non-success through the helper.
 
-Two MEDIUM findings: a Verified-mode print instruction points to a CLI command that doesn't exist and a server endpoint that is 501; CLI failure messaging for the new commands silently drops the server's `ErrorResponse` and, in one place, misattributes the cause. One LOW for two minor polish items.
+Pass 2 surfaces two issues with the F02 resolution itself.
 
-Counts: **CRITICAL=0, IMPORTANT/HIGH=0, MEDIUM=2, LOW=1.**
+The F02 fix added `HandleNonSuccess` and routed eight wire methods through it (`SetVisibility`, `AssignRole`, `ClaimScope`, `CreateOrg`, `AddOrgMember`, `RemoveOrgMember`, `CreateTeam`, `AddTeamMember`, plus the `Get*` non-404 paths) — but `RevokeRole` was left out. It still throws `"Revoke role failed ({StatusCode}): {raw_json_body}"` instead of the brief's prescribed `404 → "Not found: <…>."` / `409 → "Cannot revoke: <…>."` / `401 → "Not logged in. Run 'stash pkg login'."` / `403 → "Forbidden (<…>)."` mapping. The brief's Semantics §`role revoke` (lines 191–195 of `brief.md`) names this mapping explicitly as the D18 surface; the F02 commit message describes the helper as "all failure paths now route through" — which is empirically not the case for `RevokeRole`. The existing revoke tests assert on substrings that already appear inside the StatusCode enum name and raw body, so the deviation survives the gate. Flagging as MEDIUM (F01).
+
+The new helper itself takes an `action` parameter that every call site passes (e.g. `"set visibility of '{packageName}'"`, `"claim scope '{scope}'"`) and the helper silently discards — the doc comment on `RegistryClient.cs:1351` claims it's "used as fallback in the 'Not found' prefix" but the switch (lines 1377–1384) only ever references `serverMessage`, never `action`. Dead parameter + lying doc, LOW (F02).
+
+Note: I relied on the baseline test summary (pass=13066/skip=6/fail=0) and the `dotnet build` warning-clean status reported by pass 1; I did not re-run a full build/AOT-publish post-fix. The F02 fix adds one `[JsonSerializable]` entry for an existing shared `ErrorResponse` type and F03 removes one entry — no new reflection, no new types — so the risk is near-zero, but it is unverified here.
+
+Counts: **CRITICAL=0, IMPORTANT/HIGH=0, MEDIUM=1, LOW=1.**
 
 ---
 
-## F01 — [MEDIUM] `scope claim` Verified-mode points users at a non-existent CLI verb (and a 501 server route)
+## F01 — [MEDIUM] `RevokeRole` skipped by the F02 helper convergence — brief's revoke error mapping not implemented
 
-**Status:** fixed
-**Fixed in:** 9ea494f8
-**Files:** `Stash.Cli/PackageManager/Commands/ScopeCommand.cs:180`
-**Phase:** P5
-**Commit:** 74daa2f7
+**Status:** open
+**Files:** `Stash.Cli/PackageManager/RegistryClient.cs:1059-1078`; `Stash.Tests/Cli/PackageRoleCommandTests.cs:157,183`; `Stash.Tests/Cli/RegistryClientParityTests.cs:192-219`
+**Phase:** cross-phase (P2/P3 / F02 follow-up)
+**Commit:** `9ea494f8` (the F02 fix that converged the other methods but missed `RevokeRole`)
 
 ### Observation
 
-When the registry runs in **Verified** ownership mode `ScopeCommand.Claim` prints a DNS-TXT challenge and then tells the user:
+The F02 resolution introduced a wire-layer `HandleNonSuccess` helper (`RegistryClient.cs:1353-1387`) and routed eight new methods through it so the brief's status-prefix mapping (`401 → "Not logged in. Run 'stash pkg login'."` / `403 → "Forbidden (…)."` / `404 → "Not found: …"` / `409 → "Conflict: …"`) is uniformly applied. `RevokeRole` was not converted:
 
 ```csharp
-// ScopeCommand.cs:180
-Console.WriteLine("Once the record is in place, run 'stash pkg scope verify' to complete the claim.");
+// RegistryClient.cs:1070-1077
+var response = _http.SendAsync(request).GetAwaiter().GetResult();
+if (response.IsSuccessStatusCode)
+{
+    return true;
+}
+
+string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+throw new InvalidOperationException($"Revoke role failed ({response.StatusCode}): {error}");
 ```
 
-But `stash pkg scope verify` is **not implemented** — `ScopeCommand.ExecuteCore` (lines 78–94) only dispatches `claim` and `info`; there is no `verify` case, no `RegistryClient.VerifyScope` method, and `PackageCommands.cs` does not route to one. Worse, the brief's Open Questions explicitly note that the server's `POST /scopes/{scope}/verify` is a **501 stub** ("DNS-TXT verification not implemented") and is *correctly omitted* from this feature. So the printed instruction names a command that does not exist *and* would hit a 501 even if it did.
+That string is what a user sees end-to-end (it propagates through `PackageCommands.Run`'s `catch (InvalidOperationException)`). For the four failure modes the brief Semantics §`role revoke` (`brief.md:191-195`) names explicitly:
 
-The integration test `PackageScopeCommandTests.Scope_Claim_VerifiedMode_PrintsDnsTxtChallenge` (lines 217–229) asserts the challenge labels appear but does not assert anything about the next-step instruction line, so the typo survives the test gate.
+| Status | Brief prescribes | Today's actual output |
+| --- | --- | --- |
+| `401` | `Not logged in. Run 'stash pkg login'.` | `Revoke role failed (Unauthorized): {…raw body…}` |
+| `403` | `Forbidden (<reason>).` | `Revoke role failed (Forbidden): {…raw body…}` |
+| `404` | `Not found: <principal> holds no role on <pkg>.` | `Revoke role failed (NotFound): {"error":"RoleNotFoundException","message":"…"}` |
+| `409` | `Cannot revoke: that would leave <pkg> with no owner.` | `Revoke role failed (Conflict): {"error":"LastOwnerException","message":"cannot remove the last owner of a package"}` |
+
+The 401 case is the most user-visible regression-shape: an unauthenticated `role assign` now produces the actionable `"Not logged in. Run 'stash pkg login'."` (per the helper), while an unauthenticated `role revoke` on the same package produces `"Revoke role failed (Unauthorized): …"` — no actionable guidance. For 404 and 409 the server message is present but wrapped in the raw JSON envelope (`{"error":"…","message":"…"}`) instead of being unwrapped through `err.Message ?? err.Error` the way the helper does for every other failure path.
+
+The masking is at the test layer:
+
+- `Role_Revoke_LastOwner_ThrowsWithServerMessage` (`PackageRoleCommandTests.cs:157`) asserts `Contains("cannot remove the last owner of a package")` — passes off the raw `message` substring inside the JSON envelope, not the brief's `"Cannot revoke:"` prefix.
+- `Role_Revoke_NoSuchRole_ThrowsNotFound` (`PackageRoleCommandTests.cs:183`) asserts `Contains("NotFound")` — passes off the `HttpStatusCode` enum name in the wrapper, not the brief's `"Not found:"` prefix.
+- `RevokeRole_Server404_ThrowsWithServerMessage` / `RevokeRole_Server409LastOwner_ThrowsWithServerMessage` (`RegistryClientParityTests.cs:192-219`) assert `Contains("NotFound")`/`Contains("Conflict")` for the same reason.
+
+So the brief's revoke mapping is unverified by the gate, and the F02 fix's stated invariant ("all failure paths now route through" `HandleNonSuccess` — per commit message `9ea494f8`) is empirically false for `RevokeRole`.
 
 ### Why this matters
 
-The brief commits to "the CLI prints those instructions instead of reporting a completed claim" (Semantics §`scope claim`) — i.e. the user must be able to act on the printed guidance. Pointing them at a non-existent verb makes the Verified-mode happy path dead-end at the only step that requires user action; the user then types `stash pkg scope verify ...`, gets an "unknown command" error, and has no path forward in this CLI release. This is the single behavior the Verified branch ships and it does not connect to anything.
+This is a brief-parity gap, not a security or correctness defect — the user does still see the server's reason inside the wrapped envelope. Calibrated MEDIUM rather than LOW because: (a) the 401 case actively loses the actionable `"Run 'stash pkg login'."` instruction that the analogous failure on `role assign` already produces (so two adjacent CLI verbs report the same root cause inconsistently); (b) the brief's Semantics §`role revoke` calls out the four-status mapping by name, with the explicit `D18` cross-reference, as one of the feature's defining behaviors; and (c) the inconsistency now stands out — every other failure surface in the new parity surface follows the helper convention except this one. Pass 1's F02 adjudicated message-dropping ("only `RevokeRole` surfaces the server message" — true, it doesn't drop) but did not evaluate `RevokeRole` against the brief's prefix mapping, so this is a dimension pass 1 did not check rather than an overturn of a pass-1 decision.
 
 ### Suggested fix
 
-Replace the line with guidance that matches what this CLI actually offers, e.g.
+Route `RevokeRole` through `HandleNonSuccess` like the other failure paths:
 
 ```csharp
-Console.WriteLine("Once the DNS TXT record propagates, ask the registry administrator to");
-Console.WriteLine("verify the scope (server-side `POST /scopes/{scope}/verify` is a 501 stub");
-Console.WriteLine("this release — tracked separately).");
+// RegistryClient.cs:1059
+public bool RevokeRole(string packageName, string principalType, string principalId)
+{
+    EnsureTokenFresh();
+    string body = JsonSerializer.Serialize(
+        new RevokeRoleRequest { PrincipalType = principalType, PrincipalId = principalId },
+        CliJsonContext.Default.RevokeRoleRequest);
+    var request = new HttpRequestMessage(HttpMethod.Delete,
+        $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles")
+    {
+        Content = new StringContent(body, Encoding.UTF8, "application/json")
+    };
+    var response = _http.SendAsync(request).GetAwaiter().GetResult();
+    if (!response.IsSuccessStatusCode)
+    {
+        throw HandleNonSuccess(response, $"revoke role on '{packageName}'");
+    }
+    return true;
+}
 ```
 
-…or some other phrasing that does not invent a `verify` subcommand. Extend `Scope_Claim_VerifiedMode_PrintsDnsTxtChallenge` with one negative assertion — `Assert.DoesNotContain("stash pkg scope verify", output)` — so a future re-introduction of the broken phrasing fails the gate. Optionally, file a backlog stub linking the absent `scope verify` subcommand to the 501 server route so the gap is tracked.
+Then tighten the test assertions so the brief's prefix mapping is actually enforced:
+
+- `Role_Revoke_LastOwner_ThrowsWithServerMessage`: `Assert.Contains("Conflict:", ex.Message)` and `Assert.Contains("cannot remove the last owner", ex.Message)` (substring of the server `message` field, NOT the raw `"LastOwnerException"` error code).
+- `Role_Revoke_NoSuchRole_ThrowsNotFound`: `Assert.Contains("Not found:", ex.Message)` and `Assert.Contains("holds no role", ex.Message)`.
+- `RegistryClientParityTests.RevokeRole_Server404_ThrowsWithServerMessage`: same `Contains("Not found:")` / `Contains("principal holds no role on this package")` change.
+- `RegistryClientParityTests.RevokeRole_Server409LastOwner_ThrowsWithServerMessage`: same `Contains("Conflict:")` change.
+
+Without the test tightening, a future regression that reverts the helper routing on `RevokeRole` will not fail the gate (the StatusCode enum name and raw body substrings both appear in either form of the message).
 
 ### Verify
 
 ```
-dotnet test --filter "FullyQualifiedName~PackageScopeCommandTests"
+dotnet test --filter "FullyQualifiedName~PackageRoleCommandTests|FullyQualifiedName~RegistryClientParityTests"
 ```
 
 ---
 
-## F02 — [MEDIUM] New CLI failure paths drop the server's `ErrorResponse` message; `scope claim` mis-attributes every failure to "already owned"
+## F02 — [LOW] `HandleNonSuccess` `action` parameter is dead — passed at every call site, never used, docstring lies
 
-**Status:** fixed
-**Fixed in:** 9ea494f8
-**Files:** `Stash.Cli/PackageManager/Commands/ScopeCommand.cs:160-167`, `Stash.Cli/PackageManager/Commands/RoleCommand.cs:166-174`, `Stash.Cli/PackageManager/Commands/VisibilityCommand.cs:117-125`, `Stash.Cli/PackageManager/Commands/OrgCommand.cs:231-237`, `:332-343`, `:373-383`, `:413-419`, `:454-464`; `Stash.Cli/PackageManager/RegistryClient.cs:944-957` (`SetVisibility`), `:1007-1019` (`AssignRole`), `:1074-1087` (`ClaimScope`), `:1133-1146` (`CreateOrg`), `:1185-1196` (`AddOrgMember`), `:1201-1207` (`RemoveOrgMember`), `:1213-1228` (`CreateTeam`), `:1235-1246` (`AddTeamMember`); `Stash.Cli/PackageManager/Commands/PackageCommands.cs:151-155` (HttpRequestException leak)
-**Phase:** cross-phase (P2/P4/P5/P6)
-**Commit:** d46c883a, 1dcfffb9, 74daa2f7, 197e914c
-
-### Observation
-
-The brief's Semantics §"General error mapping" promises:
-
-> `401 → "Not logged in. Run 'stash pkg login'."`, `403 → "Forbidden (<reason>)."`, `404 → "Not found: <resource>."`, `409 → "Conflict: <reason>."` — **always surfacing the server's `ErrorResponse` message where present**.
-
-The new wire methods do not honor that contract — only `RevokeRole` surfaces the server message. Every other failure path collapses to either a bare boolean or a hand-written generic string:
-
-1. **`ScopeCommand.Claim` mis-attributes every failure to "already owned"** (`ScopeCommand.cs:160-167`). `RegistryClient.ClaimScope` (`:1074-1087`) returns `null` on any non-2xx, dropping the server's body; the command then throws:
-
-   ```csharp
-   throw new InvalidOperationException(
-       $"Failed to claim scope '{scopeName}'. " +
-       "It may already be owned by another user or org. " +
-       "Use 'stash pkg scope info <scope>' to check the current owner.");
-   ```
-
-   A 401 ("not logged in"), 403 ("publish ceiling required"), or a 5xx is reported to the user as an ownership conflict — wrong cause, wrong remediation. The test `Scope_Claim_AlreadyOwned_ByDifferentUser_ThrowsWithMessage` only asserts the scope name appears, so the mis-attribution survives.
-
-2. **`AssignRole`, `SetVisibility`, `CreateOrg`, `AddOrgMember`, `RemoveOrgMember`, `CreateTeam`, `AddTeamMember`** all return bare `bool`/`null` from `IsSuccessStatusCode` and the command wrappers throw a hand-written generic message ("Failed to assign role.", "Failed to create organization 'X'. The name may already be taken or the token lacks sufficient permissions.", etc.). The server's `ErrorResponse.error` / `.message` — present on every error path — is read off the wire and discarded.
-
-3. **`GetRoles`, `GetScope`, `GetOrg` leak raw `HttpRequestException`** for any non-404 error. They call `EnsureSuccessStatusCode()`, which produces `Response status code does not indicate success: 403 (Forbidden).`. `PackageCommands.Run`'s top-level catch (`PackageCommands.cs:151-155`) prints `ex.Message` verbatim — so a read-token user running `stash pkg role list @x/y` sees the raw .NET phrase rather than the brief's "Not logged in. Run 'stash pkg login'." / "Forbidden (...)."
-
-### Why this matters
-
-This is a parity gap against the brief's Semantics §General error mapping, not against an explicit `done_when` (P3's done_when does require surfacing the server message for **revoke**, and that is met). Severity is calibrated MEDIUM rather than HIGH on that basis. The user-visible effect is real though: the most common new failure modes (read-token holder hits an `assign`/`set`/`create`, second claimant on a scope, malformed org name) all surface as either a generic shrug or a raw .NET diagnostic, and the `ScopeCommand` case actively misleads the user about *why* the operation failed.
-
-### Suggested fix
-
-The cleanest single-place fix is at the wire layer: extract one `HandleNonSuccess(HttpResponseMessage, string action) → InvalidOperationException` helper that parses the response body as `ErrorResponse` (or falls back to the raw body), maps the HTTP status to the brief's prefix, and surfaces a message of the form
-
-```
-401 → "Not logged in. Run 'stash pkg login'."
-403 → "Forbidden (<server message or "no reason">)."
-404 → "Not found: <server message or resource>."
-409 → "Conflict: <server message>."
-other → "Error: HTTP <code> — <server message or status phrase>."
-```
-
-Then have each non-`Get*` method `throw` it (instead of returning `false`/`null`) on a non-success status; have each `Get*` method translate `EnsureSuccessStatusCode()` to the same helper (so 401/403 don't leak as raw `HttpRequestException`). At the command layer, delete the hand-written generic strings — the exception's `Message` is now the user-facing string. Update the `Claim`, `Assign`, etc. tests to assert the server's specific message is present (e.g. `Scope_Claim_AlreadyOwned_ByDifferentUser` should `Assert.Contains` the server's actual conflict phrase, not just the scope name).
-
-Lower-effort alternative: at minimum fix the `ScopeCommand.Claim` misattribution — read the response body and include it in the thrown exception so a 401 doesn't masquerade as an ownership conflict.
-
-### Verify
-
-```
-dotnet test --filter "FullyQualifiedName~PackageScopeCommandTests|FullyQualifiedName~PackageRoleCommandTests|FullyQualifiedName~PackageVisibilityCommandTests|FullyQualifiedName~PackageOrgCommandTests|FullyQualifiedName~RegistryClientParityTests"
-```
-
----
-
-## F03 — [LOW] Dead `if (ok)` branch in `RoleCommand.Revoke` + registered-but-unused `SetVisibilityResponse`
-
-**Status:** fixed
-**Fixed in:** 0fb55794
-**Files:** `Stash.Cli/PackageManager/Commands/RoleCommand.cs:209-213`, `Stash.Cli/PackageManager/CliJsonContext.cs:48`
-**Phase:** P3, P2
-**Commit:** a41ac1d8, d46c883a
+**Status:** open
+**Files:** `Stash.Cli/PackageManager/RegistryClient.cs:1351,1353,1377-1384` (helper); `RegistryClient.cs:972,1000,1035,1107,1136,1169,1199,1233,1259,1292,1327` (call sites)
+**Phase:** P2 / F02 follow-up
+**Commit:** `9ea494f8`
 
 ### Observation
 
-Two small polish items spotted while tracing the wire layer; neither materially affects behavior.
+`HandleNonSuccess(HttpResponseMessage resp, string action)` (`RegistryClient.cs:1353`) is invoked by 11 call sites that each pass a contextual phrase — `"set visibility of '{packageName}'"`, `"assign role on '{packageName}'"`, `"claim scope '{scope}'"`, `"create organization '{name}'"`, `"add member '{username}' to organization '{org}'"`, etc. The helper's switch (lines 1377–1384) and the empty-body fallback (lines 1372–1375) only reference `serverMessage`:
 
-1. `RoleCommand.Revoke` (lines 209–213) treats `client.RevokeRole(...)` as if it could return `false`:
+```csharp
+if (string.IsNullOrWhiteSpace(serverMessage))
+{
+    serverMessage = resp.ReasonPhrase ?? resp.StatusCode.ToString();
+}
 
-   ```csharp
-   bool ok = client.RevokeRole(packageName, principalType, principalId);
-   if (ok)
-   {
-       Console.WriteLine($"Revoked {principalType}/{principalId}'s role on {packageName}.");
-   }
-   ```
+string message = (int)resp.StatusCode switch
+{
+    401 => "Not logged in. Run 'stash pkg login'.",
+    403 => $"Forbidden ({serverMessage}).",
+    404 => $"Not found: {serverMessage}",
+    409 => $"Conflict: {serverMessage}",
+    _   => $"Error: HTTP {(int)resp.StatusCode} — {serverMessage}"
+};
+```
 
-   But `RevokeRole` (`RegistryClient.cs:1039-1058`) only has two outcomes: `return true` on success or `throw InvalidOperationException` on failure. The `if (ok)` is therefore always true, and the implicit "else do nothing" branch is unreachable. Read as written it implies a third silent-failure outcome that doesn't exist.
+`action` is never read. The XML doc on line 1351 claims it is "used as fallback in the 'Not found' prefix" — which is false; the actual fallback is `ReasonPhrase ?? StatusCode.ToString()`. The doc comment on lines 1342–1346 also says `404 → "Not found: <server message or action>."` — same misrepresentation.
 
-2. `[JsonSerializable(typeof(SetVisibilityResponse))]` (`CliJsonContext.cs:48`) is registered but no consumer ever deserializes it — `RegistryClient.SetVisibility` (`:944-957`) only checks `IsSuccessStatusCode` and discards the body. The registration is dead.
+Concrete consequence: a 404 with an empty response body on, say, `RemoveOrgMember("acme", "nobody")` produces `"Not found: Not Found"` (the `ReasonPhrase` echoing the prefix) instead of `"Not found: remove member 'nobody' from organization 'acme'"` that the docstring promises. This is not a runtime defect — empty 404 bodies are uncommon and the user still sees something — but it is the doc-vs-code drift the helper was meant to avoid.
 
 ### Why this matters
 
-LOW: both are cosmetic and don't affect correctness today; flagged because they're both clean five-character deletes. If F02 is taken in the "wire-layer helper" form, `SetVisibility` will likely start consuming `SetVisibilityResponse` (the server returns the new tier, useful for the success message), so the registration may become live — note that case before deleting.
+LOW because the helper's "happy paths" (server returns an `ErrorResponse` body with a non-empty `Message` or `Error`) work correctly and that is the path every test exercises; the dead-parameter case only surfaces on a server that returns an empty body on a non-success status, which the registry does not currently do. Flagged because (a) dead parameters that lie in their XML doc are a maintenance trap — a future engineer reading the doc will write tests that fail, or rely on context that does not propagate; and (b) this is a freshly-introduced helper, so it costs nothing to make it match its docstring now versus removing the param after it has fanned out further.
 
 ### Suggested fix
 
-In `RoleCommand.Revoke`, drop the `if (ok)` and write the success line unconditionally (the throw on failure already prevents us from reaching it on the non-success path). Delete the `[JsonSerializable(typeof(SetVisibilityResponse))]` line **only if** F02 is not adopted in a form that consumes the response body.
+Pick one of two cheap edits.
+
+Option A — actually use the parameter (matches the docstring's promise):
+
+```csharp
+// RegistryClient.cs:1372-1384
+if (string.IsNullOrWhiteSpace(serverMessage))
+{
+    serverMessage = !string.IsNullOrWhiteSpace(action)
+        ? action
+        : resp.ReasonPhrase ?? resp.StatusCode.ToString();
+}
+// (switch unchanged)
+```
+
+Option B — drop the parameter and the docstring claim, since the eleven call sites already pass it but get no benefit:
+
+```csharp
+private static InvalidOperationException HandleNonSuccess(HttpResponseMessage resp)
+{
+    // …same body, no action…
+}
+```
+
+…and at every call site replace `throw HandleNonSuccess(response, "…")` with `throw HandleNonSuccess(response)`. Then remove the `<param name="action">` and `<list>` `or action` clauses from the docstring.
+
+Option A is the smaller diff and lines up with what the doc already says; Option B is more honest about what the helper actually does today. Either is fine; not both.
 
 ### Verify
 
 ```
 dotnet build Stash.Cli
-dotnet test --filter "FullyQualifiedName~PackageRoleCommandTests|FullyQualifiedName~RegistryClientParityTests"
-dotnet publish Stash.Cli -c Release -o /tmp/stash-cli-aot-f03
+dotnet test --filter "FullyQualifiedName~RegistryClientParityTests"
 ```

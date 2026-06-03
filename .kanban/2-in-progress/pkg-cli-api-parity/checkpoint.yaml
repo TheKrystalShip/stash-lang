@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T02:17:25Z"
+updated: "2026-06-03T02:29:12Z"
 phases:
   P1:
     status: done
@@ -60,7 +60,7 @@ phases:
     attempts: 1
     notes: docs (PKG+Registry) + package_roles.stash example; help text already correct from P3-P6
 review:
-  status: resolved
+  status: in_progress
   started: "2026-06-03T01:59:32Z"
   resolved: "2026-06-03T02:17:25Z"
   findings_open: 0
