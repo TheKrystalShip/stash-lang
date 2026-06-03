@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T20:47:30Z"
+updated: "2026-06-03T20:55:15Z"
 phases:
   P1:
     status: done
@@ -37,12 +37,12 @@ phases:
     notes: "OrganizationsController: CreateOrg/CreateTeam/AddTeamMember migrated to [FromBody]; AddMember nullable→non-nullable; KnownExemptions 7→4; OrganizationsControllerValidationTests green; OpenAPI snapshot updated"
   P5:
     status: done
-    commit: d628db5b6bf5c7afccf8885fbcbaa1b8f2f9acdf
+    commit: df69e2cd8bf7764890772ba4057b6219e05503ed
     verified: true
     started: "2026-06-03T20:30:10Z"
-    completed: "2026-06-03T20:47:30Z"
+    completed: "2026-06-03T20:55:15Z"
     attempts: 1
-    notes: "AdminController (CreateUser/AdminAssignRole/GetAuditLog) + ScopesController.ClaimScope migrated; KnownExemptions emptied; AdminControllerValidationTests + ScopesControllerValidationTests added; OpenAPI snapshot updated; IValidatableObject patched for null owner_type; 810 passed, 0 failed"
+    notes: "AdminController (CreateUser/AdminAssignRole/GetAuditLog) + ScopesController.ClaimScope migrated; KnownExemptions emptied; AdminControllerValidationTests + ScopesControllerValidationTests added; OpenAPI snapshot updated; IValidatableObject patched for null owner_type; [RegularExpression] added to CreateUserRequest.Username; 810 passed, 0 failed"
   P6:
     status: pending
     commit: null
