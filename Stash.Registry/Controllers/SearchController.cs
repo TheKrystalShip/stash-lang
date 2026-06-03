@@ -63,7 +63,7 @@ public sealed class SearchController : ControllerBase
     [HttpGet]
     public async Task<Results<Ok<SearchResponse>, BadRequest<ErrorResponse>>> Search([FromQuery] SearchQuery query)
     {
-        // [Range] on SearchQuery.Page and SearchQuery.PageSize ensures valid values.
+        // [Range] on SearchQuery.page and SearchQuery.pageSize ensures valid values.
         // Out-of-range values return 400 InvalidRequest (replaces the previous silent clamp).
 
         // Pass the caller's username so that visibility filtering can include private/internal
