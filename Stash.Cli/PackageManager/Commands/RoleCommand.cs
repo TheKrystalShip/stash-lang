@@ -197,13 +197,9 @@ public static class RoleCommand
 
         ValidatePrincipalType(principalType);
 
-        // RevokeRole throws on 404/409 with the server's message; let the exception
-        // surface through PackageCommands.Run's top-level catch → non-zero exit.
-        bool ok = client.RevokeRole(packageName, principalType, principalId);
-        if (ok)
-        {
-            Console.WriteLine($"Revoked {principalType}/{principalId}'s role on {packageName}.");
-        }
+        // RevokeRole throws on failure; success is the only way to reach this line.
+        client.RevokeRole(packageName, principalType, principalId);
+        Console.WriteLine($"Revoked {principalType}/{principalId}'s role on {packageName}.");
     }
 
     // ── Validation helpers ─────────────────────────────────────────────────────

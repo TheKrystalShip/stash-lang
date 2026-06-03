@@ -50,7 +50,6 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(PackageRolesListResponse))]
 [JsonSerializable(typeof(List<PackageRoleResponse>))]
 [JsonSerializable(typeof(SetVisibilityRequest))]
-[JsonSerializable(typeof(SetVisibilityResponse))]
 // Scope DTOs
 [JsonSerializable(typeof(ClaimScopeRequest))]
 [JsonSerializable(typeof(ScopeDetailResponse))]
