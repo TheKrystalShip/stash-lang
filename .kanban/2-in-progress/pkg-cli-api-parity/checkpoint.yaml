@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T01:18:30Z"
+updated: "2026-06-03T01:32:26Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "Added ScopeCommand (claim/info), ScopeOwnerTypes constants for owner_type, challenge-print for Verified mode, 6 integration tests pass"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 197e914cd29386d43bda2fc0e9b77ec1a58da0d7
+    verified: true
+    started: "2026-06-03T01:20:19Z"
+    completed: "2026-06-03T01:32:26Z"
+    attempts: 1
+    notes: Two-level nested org dispatch (create/info/member add-remove/team add/team member add); OrgRoles bounded constants; 17 tests green
   P7:
     status: pending
     commit: null
