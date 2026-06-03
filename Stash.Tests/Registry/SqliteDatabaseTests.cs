@@ -946,4 +946,20 @@ public sealed class SqliteDatabaseTests
             "\n\nThe EF value converter must emit lowercase wire strings as DEFAULT values in DDL. " +
             "Use .HasDefaultValueSql(\"'<wire-value>'\") to ensure the correct literal.");
     }
+
+    /// <summary>
+    /// Guards the INSERT-side correctness invariant: the CLR default value (value = 0) of each
+    /// bounded-domain enum must round-trip to the wire string that matches the SQL DEFAULT literal
+    /// in <c>HasDefaultValueSql("'X'")</c>. EF omits columns whose CLR value equals the type's CLR
+    /// default (zero for enums), so the DB-level default fills in — that literal must match
+    /// <c>default(T).ToWire()</c>. A future contributor reordering enum members silently corrupts
+    /// every default-valued INSERT without this guard.
+    /// </summary>
+    [Fact]
+    public void BoundedDomain_CLRDefault_MatchesDDLDefaultLiteral()
+    {
+        Assert.Equal("public", default(Visibilities).ToWire()); // packages.visibility DEFAULT 'public'
+        Assert.Equal("user",   default(UserRoles).ToWire());    // users.role         DEFAULT 'user'
+        Assert.Equal("member", default(OrgRoles).ToWire());     // org_members.org_role DEFAULT 'member'
+    }
 }

@@ -447,47 +447,62 @@ public class Program
         // compare the bare wire string to the canonical value returned by ToWire().
         // Using the typed JsonTypeInfo overload avoids reflection and exercises the
         // actual source-gen path that the Native-AOT binary will use.
-        (string Label, string Json, string Expected)[] cases =
+        //
+        // RoundTrips: a delegate that deserializes the already-serialized JSON back to the original
+        // enum value using the typed JsonTypeInfo (AOT-safe, no reflection). This is the direction
+        // most likely to fail under trim/AOT when [JsonSerializable] source-gen metadata is missing.
+        (string Label, string Json, string Expected, Func<string, bool> RoundTrips)[] cases =
         [
             // PackageRoles
-            ("PackageRoles.Owner",      System.Text.Json.JsonSerializer.Serialize(PackageRoles.Owner,      ctx.PackageRoles),      PackageRoles.Owner.ToWire()),
-            ("PackageRoles.Maintainer", System.Text.Json.JsonSerializer.Serialize(PackageRoles.Maintainer, ctx.PackageRoles),      PackageRoles.Maintainer.ToWire()),
-            ("PackageRoles.Publisher",  System.Text.Json.JsonSerializer.Serialize(PackageRoles.Publisher,  ctx.PackageRoles),      PackageRoles.Publisher.ToWire()),
-            ("PackageRoles.Reader",     System.Text.Json.JsonSerializer.Serialize(PackageRoles.Reader,     ctx.PackageRoles),      PackageRoles.Reader.ToWire()),
+            ("PackageRoles.Owner",      System.Text.Json.JsonSerializer.Serialize(PackageRoles.Owner,      ctx.PackageRoles),      PackageRoles.Owner.ToWire(),      j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Owner),
+            ("PackageRoles.Maintainer", System.Text.Json.JsonSerializer.Serialize(PackageRoles.Maintainer, ctx.PackageRoles),      PackageRoles.Maintainer.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Maintainer),
+            ("PackageRoles.Publisher",  System.Text.Json.JsonSerializer.Serialize(PackageRoles.Publisher,  ctx.PackageRoles),      PackageRoles.Publisher.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Publisher),
+            ("PackageRoles.Reader",     System.Text.Json.JsonSerializer.Serialize(PackageRoles.Reader,     ctx.PackageRoles),      PackageRoles.Reader.ToWire(),     j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PackageRoles) == PackageRoles.Reader),
             // TokenScopes
-            ("TokenScopes.Read",    System.Text.Json.JsonSerializer.Serialize(TokenScopes.Read,    ctx.TokenScopes), TokenScopes.Read.ToWire()),
-            ("TokenScopes.Publish", System.Text.Json.JsonSerializer.Serialize(TokenScopes.Publish, ctx.TokenScopes), TokenScopes.Publish.ToWire()),
-            ("TokenScopes.Admin",   System.Text.Json.JsonSerializer.Serialize(TokenScopes.Admin,   ctx.TokenScopes), TokenScopes.Admin.ToWire()),
+            ("TokenScopes.Read",    System.Text.Json.JsonSerializer.Serialize(TokenScopes.Read,    ctx.TokenScopes), TokenScopes.Read.ToWire(),    j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.TokenScopes) == TokenScopes.Read),
+            ("TokenScopes.Publish", System.Text.Json.JsonSerializer.Serialize(TokenScopes.Publish, ctx.TokenScopes), TokenScopes.Publish.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.TokenScopes) == TokenScopes.Publish),
+            ("TokenScopes.Admin",   System.Text.Json.JsonSerializer.Serialize(TokenScopes.Admin,   ctx.TokenScopes), TokenScopes.Admin.ToWire(),   j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.TokenScopes) == TokenScopes.Admin),
             // Visibilities
-            ("Visibilities.Public",   System.Text.Json.JsonSerializer.Serialize(Visibilities.Public,   ctx.Visibilities), Visibilities.Public.ToWire()),
-            ("Visibilities.Private",  System.Text.Json.JsonSerializer.Serialize(Visibilities.Private,  ctx.Visibilities), Visibilities.Private.ToWire()),
-            ("Visibilities.Internal", System.Text.Json.JsonSerializer.Serialize(Visibilities.Internal, ctx.Visibilities), Visibilities.Internal.ToWire()),
+            ("Visibilities.Public",   System.Text.Json.JsonSerializer.Serialize(Visibilities.Public,   ctx.Visibilities), Visibilities.Public.ToWire(),   j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.Visibilities) == Visibilities.Public),
+            ("Visibilities.Private",  System.Text.Json.JsonSerializer.Serialize(Visibilities.Private,  ctx.Visibilities), Visibilities.Private.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.Visibilities) == Visibilities.Private),
+            ("Visibilities.Internal", System.Text.Json.JsonSerializer.Serialize(Visibilities.Internal, ctx.Visibilities), Visibilities.Internal.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.Visibilities) == Visibilities.Internal),
             // PrincipalTypes
-            ("PrincipalTypes.User", System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.User, ctx.PrincipalTypes), PrincipalTypes.User.ToWire()),
-            ("PrincipalTypes.Team", System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.Team, ctx.PrincipalTypes), PrincipalTypes.Team.ToWire()),
-            ("PrincipalTypes.Org",  System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.Org,  ctx.PrincipalTypes), PrincipalTypes.Org.ToWire()),
+            ("PrincipalTypes.User", System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.User, ctx.PrincipalTypes), PrincipalTypes.User.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PrincipalTypes) == PrincipalTypes.User),
+            ("PrincipalTypes.Team", System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.Team, ctx.PrincipalTypes), PrincipalTypes.Team.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PrincipalTypes) == PrincipalTypes.Team),
+            ("PrincipalTypes.Org",  System.Text.Json.JsonSerializer.Serialize(PrincipalTypes.Org,  ctx.PrincipalTypes), PrincipalTypes.Org.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.PrincipalTypes) == PrincipalTypes.Org),
             // ScopeOwnerTypes
-            ("ScopeOwnerTypes.User",   System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.User,   ctx.ScopeOwnerTypes), ScopeOwnerTypes.User.ToWire()),
-            ("ScopeOwnerTypes.Org",    System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.Org,    ctx.ScopeOwnerTypes), ScopeOwnerTypes.Org.ToWire()),
-            ("ScopeOwnerTypes.System", System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.System, ctx.ScopeOwnerTypes), ScopeOwnerTypes.System.ToWire()),
+            ("ScopeOwnerTypes.User",   System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.User,   ctx.ScopeOwnerTypes), ScopeOwnerTypes.User.ToWire(),   j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.ScopeOwnerTypes) == ScopeOwnerTypes.User),
+            ("ScopeOwnerTypes.Org",    System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.Org,    ctx.ScopeOwnerTypes), ScopeOwnerTypes.Org.ToWire(),    j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.ScopeOwnerTypes) == ScopeOwnerTypes.Org),
+            ("ScopeOwnerTypes.System", System.Text.Json.JsonSerializer.Serialize(ScopeOwnerTypes.System, ctx.ScopeOwnerTypes), ScopeOwnerTypes.System.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.ScopeOwnerTypes) == ScopeOwnerTypes.System),
             // OrgRoles
-            ("OrgRoles.Member", System.Text.Json.JsonSerializer.Serialize(OrgRoles.Member, ctx.OrgRoles), OrgRoles.Member.ToWire()),
-            ("OrgRoles.Owner",  System.Text.Json.JsonSerializer.Serialize(OrgRoles.Owner,  ctx.OrgRoles), OrgRoles.Owner.ToWire()),
+            ("OrgRoles.Member", System.Text.Json.JsonSerializer.Serialize(OrgRoles.Member, ctx.OrgRoles), OrgRoles.Member.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.OrgRoles) == OrgRoles.Member),
+            ("OrgRoles.Owner",  System.Text.Json.JsonSerializer.Serialize(OrgRoles.Owner,  ctx.OrgRoles), OrgRoles.Owner.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.OrgRoles) == OrgRoles.Owner),
             // UserRoles
-            ("UserRoles.User",  System.Text.Json.JsonSerializer.Serialize(UserRoles.User,  ctx.UserRoles), UserRoles.User.ToWire()),
-            ("UserRoles.Admin", System.Text.Json.JsonSerializer.Serialize(UserRoles.Admin, ctx.UserRoles), UserRoles.Admin.ToWire()),
+            ("UserRoles.User",  System.Text.Json.JsonSerializer.Serialize(UserRoles.User,  ctx.UserRoles), UserRoles.User.ToWire(),  j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.UserRoles) == UserRoles.User),
+            ("UserRoles.Admin", System.Text.Json.JsonSerializer.Serialize(UserRoles.Admin, ctx.UserRoles), UserRoles.Admin.ToWire(), j => System.Text.Json.JsonSerializer.Deserialize(j, ctx.UserRoles) == UserRoles.Admin),
         ];
 
         var failures = new List<string>();
 
-        foreach (var (label, json, expected) in cases)
+        // Serialize pass: compare the serialized bare string to the canonical ToWire() value.
+        foreach (var (label, json, expected, _) in cases)
         {
             // json is the JSON literal including quotes, e.g. "\"owner\""
             // expected is the bare wire string, e.g. "owner"
             // Strip the surrounding JSON quotes before comparing.
             string bare = json.Trim('"');
             if (!string.Equals(bare, expected, StringComparison.Ordinal))
-                failures.Add($"{label}: got \"{bare}\", expected \"{expected}\"");
+                failures.Add($"{label} [serialize]: got \"{bare}\", expected \"{expected}\"");
+        }
+
+        // Deserialize pass: round-trip the JSON literal back to the original enum value.
+        // This is the load-bearing AOT check — if [JsonSerializable] source-gen metadata is
+        // absent for a type, deserialization fails or returns the wrong value under trim/AOT,
+        // whereas serialize-only coverage cannot catch that regression.
+        foreach (var (label, json, _, roundTrips) in cases)
+        {
+            if (!roundTrips(json))
+                failures.Add($"{label} [deserialize]: round-trip failed for JSON {json}");
         }
 
         if (failures.Count == 0)
