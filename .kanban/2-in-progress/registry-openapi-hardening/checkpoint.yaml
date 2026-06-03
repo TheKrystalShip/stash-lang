@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-openapi-hardening
 current: null
-updated: "2026-06-03T15:14:29Z"
+updated: "2026-06-03T15:30:26Z"
 phases:
   P1:
     status: done
@@ -52,8 +52,8 @@ phases:
     attempts: 1
     notes: "docs: Section 22 (public OpenAPI endpoint, dynamic servers, operationId convention, 7 enum schemas table); CLAUDE.md 3 stale const-string spots updated to enum types + HasConversion pattern; CompletionMenuTests flake fixed"
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: "2026-06-03T15:30:26Z"
   resolved: null
   findings_open: 0
   findings_fixed: 0
