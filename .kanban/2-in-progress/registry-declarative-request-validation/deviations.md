@@ -107,3 +107,18 @@ not as a justified decision.
   (multi-project, which `dotnet build` rejects) to `dotnet build`, matching the P2/P3 self-heals.
   Mechanical; prevents the next two implementers re-discovering the same stale command. Committed by
   the driver as a chore.
+
+## P4 — OrganizationsController migrates; AddMember non-nullable; exemption -3 (commit 8db697ca)
+
+- **P4-D1 — OpenAPI snapshot regenerated** (recurring): `[FromBody]` on CreateOrg/CreateTeam/
+  AddTeamMember adds 3 requestBody blocks + 3 DTO schemas; `AddMember`'s `oneOf:[null,$ref]` became
+  `$ref` + `required:true` (the non-nullable flip). Expected migration surface. Confirm no unrelated
+  drift.
+- **P4-D2 — validation test helper corrected to a publish-ceiling token.** The new
+  `OrganizationsControllerValidationTests` helper initially minted a read-ceiling token; CreateOrg/
+  AddMember/CreateTeam require `publish`, so it was changed to the `RegistryAuthzTestBase` pattern
+  (login → explicit publish-ceiling token). Test-fixture correctness fix, not production behaviour.
+- **Guard-deletion executed cleanly:** deleted the JSON try/catch + empty/grammar guards now covered
+  by attributes; KEPT normalization (Trim/ToLowerInvariant), `ReservedScopes.IsReserved` → 409, the
+  `InvalidOperationException` → 409 conflict path, and DB 404 lookups. Reviewer: spot-check that no
+  *validation* guard was kept (dead code) and no *business* guard was deleted (behaviour loss).
