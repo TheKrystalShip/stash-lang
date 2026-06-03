@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T01:32:26Z"
+updated: "2026-06-03T01:46:31Z"
 phases:
   P1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: Two-level nested org dispatch (create/info/member add-remove/team add/team member add); OrgRoles bounded constants; 17 tests green
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: bfafaa632a14ed4e17ce3b65915fd9d45588e5e6
+    verified: true
+    started: "2026-06-03T01:35:44Z"
+    completed: "2026-06-03T01:46:31Z"
+    attempts: 1
+    notes: docs (PKG+Registry) + package_roles.stash example; help text already correct from P3-P6
 review:
   status: not_started
   started: null
