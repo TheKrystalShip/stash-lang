@@ -122,3 +122,64 @@ not as a justified decision.
   by attributes; KEPT normalization (Trim/ToLowerInvariant), `ReservedScopes.IsReserved` → 409, the
   `InvalidOperationException` → 409 conflict path, and DB 404 lookups. Reviewer: spot-check that no
   *validation* guard was kept (dead code) and no *business* guard was deleted (behaviour loss).
+
+## P5 — AdminController + ScopesController migrate; exemption empty (commit df69e2cd, feat d628db5b)
+
+### ⚑ P5-D1 — TOP REVIEW ITEM: validate-then-normalize ordering flipped (systemic, test-invisible behaviour change)
+
+**Confirmed by diff against base 5ff66c16.** The pre-feature controllers normalized THEN validated:
+```csharp
+string? name = body?.Name?.Trim().ToLowerInvariant();   // normalize first
+if (!PackageManifest.IsValidScopeName(name)) return 400; // validate the NORMALIZED value
+```
+Declarative validation runs on the RAW bound value BEFORE the action body, so the order is now
+`validate(raw) → action normalizes`. **Consequence:** inputs that differ from a valid scope name
+ONLY by uppercase or surrounding whitespace flip from *silently normalized + accepted* to *400
+InvalidRequest*. Example: `CreateOrg` with `name:"MyOrg"` → was accepted (stored as `myorg`), now 400.
+
+**Affected (reviewer: enumerate the full set):** every field carrying `[ScopeGrammar]` that the
+action previously `Trim().ToLowerInvariant()`-normalized before validating — at least
+`CreateOrgRequest.Name`, `CreateTeamRequest.Name`, `ClaimScopeRequest.Scope`,
+`RegisterRequest.Username`.
+
+**Why it's invisible:** `RegistryAuthzMatrixTests` uses well-formed lowercase bodies; the new
+validation tests assert empty/missing-field cases. No test sends a normalizable-but-raw-invalid
+body, so the suite is green despite the change.
+
+**This was NOT an authorised break.** Only the `pageSize` reject (P3/P5) was an explicit
+open-question decision. This normalization-strictness change was never surfaced to the user.
+
+**Decision required (do NOT auto-resolve — escalate to the human merge handoff):**
+- **(A) Accept** the stricter behaviour — document it in `docs/Registry` + CLAUDE.md as a second
+  intended break, alongside `pageSize`.
+- **(B) Preserve** old behaviour — normalize before the grammar check, e.g. normalize in the DTO
+  property setter so the bound value is already trimmed/lowercased when DataAnnotations run (keeps
+  declarative validation while restoring normalize-then-validate). More work; touches Contracts DTOs.
+
+Per the scope-authorization principle, the safe default is **(B) preserve** unless the user
+explicitly opts into the stricter behaviour. Flag in review.md; surface at handoff.
+
+### P5-D2 — `ClaimScopeRequest.Validate()` extended (P2 GAP fix, ScopeContracts.cs)
+P2's `IValidatableObject` only validated `Owner` when `OwnerType != null` — it did NOT reject an
+absent or `System` owner_type, so the brief's "IValidatableObject covers the owner_type==null guard"
+was inaccurate as P2 shipped. P5 extended `Validate()` to reject null / `System` owner_type.
+**Reviewer: confirm** the extended rule matches the original controller's owner_type handling, and
+note that P2's `ContractsValidationAttributesTests` had a coverage hole (the gap existed but wasn't
+caught until P5's done_when exercised it).
+
+### P5-D3 — `[RegularExpression(@"^[a-zA-Z0-9_-]+$")]` added to `CreateUserRequest.Username` (P2 GAP fix, AdminContracts.cs)
+The original admin `CreateUser` validated `^[a-zA-Z0-9_-]+$` (allows UPPERCASE + underscore — a
+DIFFERENT grammar from the lowercase-only `[ScopeGrammar]` used for self-`Register`). P2 added only
+`[Required]`+`[StringLength(64)]`, dropping the char-set check; P5 restored it. **Reviewer: confirm**
+the admin-vs-register username dual-grammar is intentional/pre-existing (it is — preserved, not
+introduced), and that using a bare `[RegularExpression]` here (not `[ScopeGrammar]`) is correct.
+Note: this is NOT subject to P5-D1's ordering issue — admin usernames were never lowercased.
+
+### P5-D4 — `ScopesController` inline `IsValidScopeName()` now DEAD CODE (kept, flagged)
+`[ScopeGrammar]` on `ClaimScopeRequest.Scope` covers the grammar; the inline check is unreachable
+for failures. Implementer kept it (done_when didn't list it for deletion) and flagged it. **Note the
+interaction with P5-D1:** the inline check runs POST-normalization, `[ScopeGrammar]` runs PRE — so
+they are NOT equivalent for mixed-case/whitespace input (see P5-D1). If the team chooses (B) preserve,
+this inline check may become the normalization safety net; if (A) accept, delete it as dead code.
+
+### P5-D5 — OpenAPI snapshot re-baselined twice (migration + the new `[RegularExpression]`). Routine.
