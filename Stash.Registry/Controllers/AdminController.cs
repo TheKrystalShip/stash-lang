@@ -187,7 +187,7 @@ public class AdminController : ControllerBase
     /// </remarks>
     [RegistryAuthorize(RegistryAction.AdminRevokePackageRole)]
     [HttpDelete("packages/{scope}/{name}/roles")]
-    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AdminRevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
+    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>, BadRequest<ErrorResponse>>> AdminRevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;

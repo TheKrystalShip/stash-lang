@@ -114,4 +114,50 @@ public sealed class BoundedDomainBoundaryTests : RegistryAuthzTestBase
             doc.RootElement.TryGetProperty("type", out _),
             $"Got ValidationProblemDetails instead of ErrorResponse: {responseBody}");
     }
+
+    /// <summary>
+    /// DELETE /api/v1/packages/{scope}/{name}/roles with an illegal PrincipalTypes wire value must
+    /// return 400 with an <c>ErrorResponse</c> body — verifying the model-binding failure path is
+    /// declared in the <c>RevokeRole</c> contract (the union now includes <c>BadRequest&lt;ErrorResponse&gt;</c>).
+    /// </summary>
+    [Fact]
+    public async Task RevokeRole_WithInvalidPrincipalType_Returns400WithErrorResponse()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        var factory = ctx.Factory;
+        using var client = factory.CreateClient();
+
+        // alice-rv registers first and becomes the package owner.
+        string aliceToken = await RegisterAndGetTokenAsync(client, "alice-rv");
+
+        await SeedScopeAsync(factory, "alice-rv", "alice-rv");
+        await SeedPackageAsync(factory, "@alice-rv/core", "alice-rv");
+
+        // alice-rv (owner) sends a RevokeRole request with an illegal PrincipalTypes value.
+        // "NOT_A_REAL_TYPE" is not a member of PrincipalTypes so JsonStringEnumConverter will
+        // reject it during model binding, triggering the InvalidModelStateResponseFactory.
+        SetBearer(client, aliceToken);
+        var body = new { principalType = "NOT_A_REAL_TYPE", principalId = "bob" };
+        var content = new StringContent(
+            JsonSerializer.Serialize(body),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Delete,
+            "/api/v1/packages/alice-rv/core/roles") { Content = content });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        string responseBody = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(responseBody);
+
+        // Must be an ErrorResponse shape (has "error" field), NOT a ValidationProblemDetails
+        // shape (which would have a "type" field with "https://tools.ietf.org/html/rfc7807").
+        Assert.True(
+            doc.RootElement.TryGetProperty("error", out _),
+            $"Expected ErrorResponse with 'error' field, but got: {responseBody}");
+        Assert.False(
+            doc.RootElement.TryGetProperty("type", out _),
+            $"Got ValidationProblemDetails instead of ErrorResponse: {responseBody}");
+    }
 }

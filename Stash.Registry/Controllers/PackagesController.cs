@@ -453,7 +453,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.RevokePackageRole)]
     [HttpDelete("{scope}/{name}/roles")]
-    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> RevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
+    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>, BadRequest<ErrorResponse>>> RevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
