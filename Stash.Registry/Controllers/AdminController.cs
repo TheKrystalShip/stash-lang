@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
@@ -60,10 +62,10 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.ReadAdminStats)]
     [HttpGet("stats")]
-    public async Task<IActionResult> GetStats()
+    public async Task<Ok<StatsResponse>> GetStats()
     {
         int users = (await _db.ListUsersAsync()).Count;
-        return Ok(new StatsResponse { Users = users });
+        return TypedResults.Ok(new StatsResponse { Users = users });
     }
 
     /// <summary>
@@ -71,7 +73,7 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.ManageUser)]
     [HttpPost("users")]
-    public async Task<IActionResult> CreateUser()
+    public async Task<Results<Created<CreateUserResponse>, BadRequest<ErrorResponse>, Conflict<ErrorResponse>>> CreateUser()
     {
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
@@ -82,7 +84,7 @@ public class AdminController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? newUsername = body?.Username?.Trim();
@@ -90,13 +92,13 @@ public class AdminController : ControllerBase
         string newRole = string.IsNullOrEmpty(body?.Role) ? UserRoles.User : body.Role;
 
         if (string.IsNullOrEmpty(newUsername) || string.IsNullOrEmpty(password))
-            return BadRequest(new ErrorResponse { Error = "Username and password are required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
 
         if (newUsername.Length > 64 || !System.Text.RegularExpressions.Regex.IsMatch(newUsername, @"^[a-zA-Z0-9_-]+$"))
-            return BadRequest(new ErrorResponse { Error = "Username must be 1-64 characters and contain only letters, digits, hyphens, or underscores." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username must be 1-64 characters and contain only letters, digits, hyphens, or underscores." });
 
         if (password.Length < 8)
-            return BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
 
         try
         {
@@ -104,7 +106,7 @@ public class AdminController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
 
         if (string.Equals(newRole, UserRoles.Admin, StringComparison.Ordinal))
@@ -112,7 +114,7 @@ public class AdminController : ControllerBase
 
         await _auditService.LogUserCreateAsync(newUsername, ip);
 
-        return StatusCode(201, new CreateUserResponse { Username = newUsername, Role = newRole });
+        return TypedResults.Created((string?)null, new CreateUserResponse { Username = newUsername, Role = newRole });
     }
 
     /// <summary>
@@ -120,21 +122,21 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.ManageUser)]
     [HttpDelete("users/{username}")]
-    public async Task<IActionResult> DeleteUser(string username)
+    public async Task<Results<Ok<SuccessResponse>, NotFound<ErrorResponse>>> DeleteUser(string username)
     {
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         string decodedUsername = Uri.UnescapeDataString(username);
         UserRecord? user = await _db.GetUserAsync(decodedUsername);
         if (user == null)
-            return NotFound(new ErrorResponse { Error = $"User '{decodedUsername}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"User '{decodedUsername}' not found." });
 
         await _db.DeleteUserAsync(decodedUsername);
 
         string actingUser = User.Identity!.Name!;
         await _auditService.LogUserDisableAsync(actingUser, decodedUsername, ip);
 
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 
     /// <summary>
@@ -142,14 +144,14 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.AdminAssignPackageRole)]
     [HttpPut("packages/{scope}/{name}/roles")]
-    public async Task<IActionResult> AdminAssignRole(string scope, string name)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>>> AdminAssignRole(string scope, string name)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
         string username = User.Identity!.Name!;
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
@@ -161,22 +163,22 @@ public class AdminController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         if (body == null)
-            return BadRequest(new ErrorResponse { Error = "Request body is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Request body is required." });
 
         if (!Array.Exists(PrincipalTypes.All, p => p == body.PrincipalType))
-            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{body.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
 
         if (!Array.Exists(PackageRoles.RankOrder, r => r == body.Role))
-            return BadRequest(new ErrorResponse { Error = $"Invalid role '{body.Role}'. Must be one of: owner, maintainer, publisher, reader." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid role '{body.Role}'. Must be one of: owner, maintainer, publisher, reader." });
 
         await _db.AssignPackageRoleAsync(packageName, body.PrincipalType, body.PrincipalId, body.Role);
         await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, body.PrincipalId, ip);
 
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 
     /// <summary>
@@ -190,13 +192,13 @@ public class AdminController : ControllerBase
     /// </remarks>
     [RegistryAuthorize(RegistryAction.AdminRevokePackageRole)]
     [HttpDelete("packages/{scope}/{name}/roles")]
-    public async Task<IActionResult> AdminRevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
+    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AdminRevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         string username = User.Identity!.Name!;
@@ -205,15 +207,15 @@ public class AdminController : ControllerBase
         {
             await _roleService.RevokeRoleAsync(packageName, request.PrincipalType, request.PrincipalId);
             await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
-            return StatusCode(204);
+            return TypedResults.NoContent();
         }
         catch (RoleNotFoundException)
         {
-            return NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
         }
         catch (LastOwnerException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -222,7 +224,7 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.ReadAuditLog)]
     [HttpGet("audit-log")]
-    public async Task<IActionResult> GetAuditLog()
+    public async Task<Ok<AuditLogResponse>> GetAuditLog()
     {
         int page = 1;
         int pageSize = 50;
@@ -244,7 +246,7 @@ public class AdminController : ControllerBase
         var result = await _auditService.GetAuditLogAsync(page, pageSize, packageFilter, actionFilter);
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)pageSize);
 
-        return Ok(new AuditLogResponse
+        return TypedResults.Ok(new AuditLogResponse
         {
             Entries = result.Items.Select(e => new AuditEntryResponse
             {

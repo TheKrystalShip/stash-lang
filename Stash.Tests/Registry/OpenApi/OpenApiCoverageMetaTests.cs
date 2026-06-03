@@ -72,32 +72,10 @@ public sealed class OpenApiCoverageMetaTests
     {
         // Auth controller — migrated in P2 (all 8 actions removed from this list)
         // Packages controller — migrated in P2 (all 12 actions removed from this list)
-
-        // Organizations controller (7 actions)
-        "Organizations_CreateOrg",
-        "Organizations_GetOrg",
-        "Organizations_DeleteOrg",
-        "Organizations_AddMember",
-        "Organizations_RemoveMember",
-        "Organizations_CreateTeam",
-        "Organizations_AddTeamMember",
-
-        // Scopes controller (4 actions)
-        "Scopes_GetScope",
-        "Scopes_ClaimScope",
-        "Scopes_VerifyScope",
-        "Scopes_DeleteScope",
-
-        // Search controller (1 action)
-        "Search_Search",
-
-        // Admin controller (6 actions)
-        "Admin_GetStats",
-        "Admin_CreateUser",
-        "Admin_DeleteUser",
-        "Admin_AdminAssignRole",
-        "Admin_AdminRevokeRole",
-        "Admin_GetAuditLog",
+        // Organizations controller — migrated in P3 (all 7 actions removed from this list)
+        // Scopes controller — migrated in P3 (all 4 actions removed from this list)
+        // Search controller — migrated in P3 (1 action removed from this list)
+        // Admin controller — migrated in P3 (all 6 actions removed from this list)
     };
 
     /// <summary>

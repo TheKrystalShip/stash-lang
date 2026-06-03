@@ -2,6 +2,8 @@ using System;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
@@ -47,7 +49,7 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.CreateOrg)]
     [HttpPost]
-    public async Task<IActionResult> CreateOrg()
+    public async Task<Results<Created<CreateOrgResponse>, BadRequest<ErrorResponse>, Conflict<ErrorResponse>>> CreateOrg()
     {
         string username = User.Identity!.Name!;
 
@@ -59,17 +61,17 @@ public class OrganizationsController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? name = body?.Name?.Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(name))
-            return BadRequest(new ErrorResponse { Error = "Organization name is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Organization name is required." });
 
         // Validate org name: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
         if (!PackageManifest.IsValidScopeName(name))
         {
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "Organization name must be 1-39 characters, start with a lowercase letter, and contain only [a-z0-9-]."
             });
@@ -77,12 +79,12 @@ public class OrganizationsController : ControllerBase
 
         // Reserved system scopes may not be claimed as org names
         if (ReservedScopes.IsReserved(name))
-            return Conflict(new ErrorResponse { Error = $"The name '{name}' is reserved and cannot be used as an organization name." });
+            return TypedResults.Conflict(new ErrorResponse { Error = $"The name '{name}' is reserved and cannot be used as an organization name." });
 
         try
         {
             var org = await _db.CreateOrgAsync(name, body?.DisplayName, username);
-            return StatusCode(201, new CreateOrgResponse
+            return TypedResults.Created((string?)null, new CreateOrgResponse
             {
                 Id = org.Id,
                 Name = org.Name,
@@ -93,7 +95,7 @@ public class OrganizationsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -105,13 +107,13 @@ public class OrganizationsController : ControllerBase
     [PublicEndpoint("org public metadata is available without authentication")]
     [RegistryAuthorize(RegistryAction.ReadOrg)]
     [HttpGet("{org}")]
-    public async Task<IActionResult> GetOrg(string org)
+    public async Task<Results<Ok<OrgDetailResponse>, NotFound<ErrorResponse>>> GetOrg(string org)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        return Ok(new OrgDetailResponse
+        return TypedResults.Ok(new OrgDetailResponse
         {
             Id = orgRecord.Id,
             Name = orgRecord.Name,
@@ -129,20 +131,20 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.DeleteOrg)]
     [HttpDelete("{org}")]
-    public async Task<IActionResult> DeleteOrg(string org)
+    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> DeleteOrg(string org)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         try
         {
             await _db.DeleteOrgAsync(org);
-            return StatusCode(204);
+            return TypedResults.NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = "OrgNotEmpty", Message = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = "OrgNotEmpty", Message = ex.Message });
         }
     }
 
@@ -154,13 +156,13 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.AddOrgMember)]
     [HttpPost("{org}/members")]
-    public async Task<IActionResult> AddMember(string org)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AddMember(string org)
     {
         string username = User.Identity!.Name!;
 
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         AddOrgMemberRequest? body;
         try
@@ -170,30 +172,30 @@ public class OrganizationsController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? newMember = body?.Username?.Trim();
         if (string.IsNullOrEmpty(newMember))
-            return BadRequest(new ErrorResponse { Error = "Username is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username is required." });
 
         string orgRole = string.IsNullOrEmpty(body?.OrgRole) ? OrgRoles.Member : body.OrgRole;
         if (orgRole != OrgRoles.Owner && orgRole != OrgRoles.Member)
-            return BadRequest(new ErrorResponse { Error = $"org_role must be '{OrgRoles.Owner}' or '{OrgRoles.Member}'." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"org_role must be '{OrgRoles.Owner}' or '{OrgRoles.Member}'." });
 
         // Verify the target user exists
         var targetUser = await _db.GetUserAsync(newMember);
         if (targetUser == null)
-            return NotFound(new ErrorResponse { Error = $"User '{newMember}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"User '{newMember}' not found." });
 
         try
         {
             await _db.AddOrgMemberAsync(orgRecord.Id, newMember, orgRole);
-            return Ok(new SuccessResponse());
+            return TypedResults.Ok(new SuccessResponse());
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -206,14 +208,14 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.RemoveOrgMember)]
     [HttpDelete("{org}/members/{username}")]
-    public async Task<IActionResult> RemoveMember(string org, string username)
+    public async Task<Results<Ok<SuccessResponse>, NotFound<ErrorResponse>>> RemoveMember(string org, string username)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         await _db.RemoveOrgMemberAsync(orgRecord.Id, username);
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 
     /// <summary>
@@ -224,11 +226,11 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.CreateTeam)]
     [HttpPost("{org}/teams")]
-    public async Task<IActionResult> CreateTeam(string org)
+    public async Task<Results<Created<CreateTeamResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> CreateTeam(string org)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         CreateTeamRequest? body;
         try
@@ -238,17 +240,17 @@ public class OrganizationsController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? teamName = body?.Name?.Trim();
         if (string.IsNullOrEmpty(teamName))
-            return BadRequest(new ErrorResponse { Error = "Team name is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Team name is required." });
 
         try
         {
             var team = await _db.CreateTeamAsync(orgRecord.Id, teamName);
-            return StatusCode(201, new CreateTeamResponse
+            return TypedResults.Created((string?)null, new CreateTeamResponse
             {
                 Id = team.Id,
                 Name = team.Name,
@@ -258,7 +260,7 @@ public class OrganizationsController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -271,15 +273,15 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.AddTeamMember)]
     [HttpPost("{org}/teams/{team}/members")]
-    public async Task<IActionResult> AddTeamMember(string org, string team)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>>> AddTeamMember(string org, string team)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
         var teamRecord = await _db.GetTeamByNameAsync(orgRecord.Id, team);
         if (teamRecord == null)
-            return NotFound(new ErrorResponse { Error = $"Team '{team}' not found in organization '{org}'." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Team '{team}' not found in organization '{org}'." });
 
         AddTeamMemberRequest? body;
         try
@@ -289,14 +291,14 @@ public class OrganizationsController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? newMember = body?.Username?.Trim();
         if (string.IsNullOrEmpty(newMember))
-            return BadRequest(new ErrorResponse { Error = "Username is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Username is required." });
 
         await _db.AddTeamMemberAsync(teamRecord.Id, newMember);
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 }

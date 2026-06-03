@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
@@ -59,7 +61,7 @@ public sealed class SearchController : ControllerBase
     [PublicEndpoint("package search is a public discovery endpoint — unauthenticated callers see only public packages")]
     [RegistryAuthorize(RegistryAction.Search)]
     [HttpGet]
-    public async Task<IActionResult> Search()
+    public async Task<Ok<SearchResponse>> Search()
     {
         string query = Request.Query.TryGetValue("q", out var q) ? q.ToString() : "";
 
@@ -104,7 +106,7 @@ public sealed class SearchController : ControllerBase
 
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)pageSize);
 
-        return Ok(new SearchResponse
+        return TypedResults.Ok(new SearchResponse
         {
             Packages = packages,
             TotalCount = result.TotalCount,

@@ -1,7 +1,12 @@
 using System;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
@@ -12,6 +17,37 @@ using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
 
 namespace Stash.Registry.Controllers;
+
+// ── Custom typed result helper for 501 with body ──────────────────────────────
+//
+// TypedResults has no typed-501-with-body variant.  To preserve the ScopeVerifyResponse
+// wire body on this status code while still advertising the schema to ApiExplorer (so the
+// coverage meta-test sees a $ref for the 501 response), we define an internal
+// IResult + IEndpointMetadataProvider implementation here, mirroring the JsonUnauthorized<T>
+// / JsonForbidden<T> helpers in AuthController.cs.
+
+/// <summary>
+/// Returns HTTP 501 with a JSON-serialised body, advertising the body type to ApiExplorer.
+/// </summary>
+public sealed class JsonNotImplemented<T> : IResult, IEndpointMetadataProvider
+{
+    private readonly T _body;
+    public JsonNotImplemented(T body) => _body = body;
+
+    public Task ExecuteAsync(HttpContext httpContext)
+    {
+        httpContext.Response.StatusCode = StatusCodes.Status501NotImplemented;
+        httpContext.Response.ContentType = "application/json";
+        return httpContext.Response.WriteAsJsonAsync(_body);
+    }
+
+    static void IEndpointMetadataProvider.PopulateMetadata(MethodInfo method, EndpointBuilder builder)
+    {
+        builder.Metadata.Add(new ProducesResponseTypeMetadata(StatusCodes.Status501NotImplemented, typeof(T), ["application/json"]));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
 /// REST API controller for scope operations.
@@ -58,13 +94,13 @@ public class ScopesController : ControllerBase
     [PublicEndpoint("scope ownership metadata is public — used to discover who owns @scope before publishing")]
     [RegistryAuthorize(RegistryAction.ResolveScope)]
     [HttpGet("{scope}")]
-    public async Task<IActionResult> GetScope(string scope)
+    public async Task<Results<Ok<ScopeDetailResponse>, NotFound<ErrorResponse>>> GetScope(string scope)
     {
         var record = await _db.GetScopeAsync(scope);
         if (record == null)
-            return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
 
-        return Ok(BuildScopeDetailResponse(record));
+        return TypedResults.Ok(BuildScopeDetailResponse(record));
     }
 
     /// <summary>
@@ -80,7 +116,7 @@ public class ScopesController : ControllerBase
     [Authorize]
     [ImperativeAuthz("scope/owner/ownerType fields come from the JSON request body (not route values), so the shared filter's pure-route resolver cannot build a ScopeResource before the PDP call; the bespoke 409 status mapping (ScopeReserved/ScopeNotOwned → 409 instead of 403) also requires inline coordination. Folding requires the body-resolver refactor tracked in .kanban/0-backlog/registry/Body-resolver authz filter.md")]
     [HttpPost]
-    public async Task<IActionResult> ClaimScope()
+    public async Task<Results<Created<ScopeDetailResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>, JsonUnauthorized<ErrorResponse>, JsonForbidden<ErrorResponse>>> ClaimScope()
     {
         string callerUsername = User.Identity!.Name!;
         var principal = _principalFactory.Build(User);
@@ -93,25 +129,25 @@ public class ScopesController : ControllerBase
         }
         catch (JsonException)
         {
-            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
         }
 
         string? scopeName = body?.Scope?.Trim().ToLowerInvariant();
         if (string.IsNullOrEmpty(scopeName))
-            return BadRequest(new ErrorResponse { Error = "scope is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "scope is required." });
 
         string? ownerType = body?.OwnerType?.Trim().ToLowerInvariant();
         if (ownerType != ScopeOwnerTypes.User && ownerType != ScopeOwnerTypes.Org)
-            return BadRequest(new ErrorResponse { Error = $"owner_type must be '{ScopeOwnerTypes.User}' or '{ScopeOwnerTypes.Org}'." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"owner_type must be '{ScopeOwnerTypes.User}' or '{ScopeOwnerTypes.Org}'." });
 
         string? owner = body?.Owner?.Trim();
         if (string.IsNullOrEmpty(owner))
-            return BadRequest(new ErrorResponse { Error = "owner is required." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = "owner is required." });
 
         // Validate scope name grammar: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
         if (!PackageManifest.IsValidScopeName(scopeName))
         {
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "Scope name must be 1-39 characters, start with a lowercase letter, and contain only [a-z0-9-]."
             });
@@ -121,14 +157,11 @@ public class ScopesController : ControllerBase
         var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ClaimScope, new ScopeResource(scopeName));
         if (!decision.Allowed)
         {
-            int status = decision.Reason switch
-            {
-                AuthzDenyReason.ScopeReserved => 409,
-                AuthzDenyReason.ScopeNotOwned => 409,
-                AuthzDenyReason.NotAuthenticated => 401,
-                _ => 403
-            };
-            return StatusCode(status, new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+            if (decision.Reason == AuthzDenyReason.ScopeReserved || decision.Reason == AuthzDenyReason.ScopeNotOwned)
+                return TypedResults.Conflict(new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+            if (decision.Reason == AuthzDenyReason.NotAuthenticated)
+                return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
+            return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = decision.Reason.ToString(), Message = decision.Detail });
         }
 
         // Owner-type-specific validation (user: caller matches owner; org: caller is org owner)
@@ -137,7 +170,7 @@ public class ScopesController : ControllerBase
         if (ownerType == ScopeOwnerTypes.User)
         {
             if (!string.Equals(owner, callerUsername, StringComparison.Ordinal) && !User.IsInRole(UserRoles.Admin))
-                return StatusCode(403, new ErrorResponse { Error = "You may only claim a user scope for your own account." });
+                return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "You may only claim a user scope for your own account." });
 
             ownerId = owner;
             ownerDisplayName = owner;
@@ -146,12 +179,12 @@ public class ScopesController : ControllerBase
         {
             var orgRecord = await _db.GetOrgAsync(owner);
             if (orgRecord == null)
-                return NotFound(new ErrorResponse { Error = $"Organization '{owner}' not found." });
+                return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{owner}' not found." });
 
             bool isOrgOwner = await _db.IsOrgOwnerAsync(orgRecord.Id, callerUsername);
             bool isAdmin = User.IsInRole(UserRoles.Admin);
             if (!isOrgOwner && !isAdmin)
-                return StatusCode(403, new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{owner}'." });
+                return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = $"User '{callerUsername}' is not an owner of organization '{owner}'." });
 
             ownerId = orgRecord.Id;
             ownerDisplayName = orgRecord.Name;
@@ -159,19 +192,19 @@ public class ScopesController : ControllerBase
 
         // Namespace-pool collision checks (username, org-name)
         if (await _db.GetUserAsync(scopeName) is not null)
-            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by a user account." });
+            return TypedResults.Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by a user account." });
 
         if (await _db.GetOrgAsync(scopeName) is not null)
-            return Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by an organization." });
+            return TypedResults.Conflict(new ErrorResponse { Error = $"The name '{scopeName}' is already taken by an organization." });
 
         // Atomic claim via insert-then-handle-unique-violation
         var (succeeded, response) = await _scopeChallenge.TryClaimAsync(
             scopeName, ownerType, ownerId, ownerDisplayName);
 
         if (!succeeded)
-            return Conflict(new ErrorResponse { Error = $"Scope '@{scopeName}' already exists." });
+            return TypedResults.Conflict(new ErrorResponse { Error = $"Scope '@{scopeName}' already exists." });
 
-        return StatusCode(201, response);
+        return TypedResults.Created((string?)null, response!);
     }
 
     /// <summary>
@@ -182,10 +215,11 @@ public class ScopesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.VerifyScope)]
     [HttpPost("{scope}/verify")]
-    public async Task<IActionResult> VerifyScope(string scope)
+    public async Task<JsonNotImplemented<ScopeVerifyResponse>> VerifyScope(string scope)
     {
         // Resolver is stubbed 501 this phase (Q4 deferred).
-        return StatusCode(501, new ScopeVerifyResponse
+        await Task.CompletedTask;
+        return new JsonNotImplemented<ScopeVerifyResponse>(new ScopeVerifyResponse
         {
             Scope = scope,
             Method = "dns-txt",
@@ -201,20 +235,20 @@ public class ScopesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.DeleteScope)]
     [HttpDelete("{scope}")]
-    public async Task<IActionResult> DeleteScope(string scope)
+    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> DeleteScope(string scope)
     {
         var record = await _db.GetScopeAsync(scope);
         if (record == null)
-            return NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Scope '@{scope}' not found." });
 
         try
         {
             await _db.DeleteScopeAsync(scope);
-            return StatusCode(204);
+            return TypedResults.NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            return Conflict(new ErrorResponse { Error = "ScopeNotEmpty", Message = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = "ScopeNotEmpty", Message = ex.Message });
         }
     }
 
