@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-openapi-hardening
 current: null
-updated: "2026-06-03T12:48:17Z"
+updated: "2026-06-03T14:00:08Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "Converted 18 actions across 4 controllers to typed Results<>; NotYetMigratedOperations emptied; OpenApiCoverageMetaTests GREEN with empty migration list; all 75 authz matrix rows preserved"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4ec47470b54ba6511ba55d0abb6cd6e55d14da9f
+    verified: true
+    started: "2026-06-03T12:53:13Z"
+    completed: "2026-06-03T14:00:08Z"
+    attempts: 1
+    notes: "Seven const-string bounded domains converted to enums end-to-end: contracts, EF models, registry, CLI, tests all green. EF sentinel fix (OrgRoles reorder), OrganizationsController.AddMember switched to [FromBody] for OrgRoles OpenAPI schema. verify-phase OK."
   P5:
     status: pending
     commit: null
