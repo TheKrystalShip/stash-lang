@@ -417,24 +417,17 @@ public sealed class RequestModelBindingMetaTests
             if (hasBindingAttr) continue;
 
             // Check whether the parameter's type is in the Contracts namespace.
+            // GetSymbolInfo works for concrete types; GetTypeInfo fallback handles nullable
+            // annotated reference types (T?) and cases where the symbol is not directly resolved.
             if (param.Type == null) continue;
             var typeSymbol = model.GetSymbolInfo(param.Type).Symbol as INamedTypeSymbol;
             if (typeSymbol == null)
                 typeSymbol = model.GetTypeInfo(param.Type).Type as INamedTypeSymbol;
             if (typeSymbol == null) continue;
 
-            // Unwrap nullable: T? → T
-            if (typeSymbol.IsValueType && typeSymbol.OriginalDefinition.SpecialType == SpecialType.None
-                && typeSymbol.Name.EndsWith("?", StringComparison.Ordinal))
-            {
-                // This path is unlikely for class types; handle the normal nullable case below.
-            }
-
+            // For nullable reference types (T?), GetTypeInfo returns the underlying T with
+            // NullableAnnotation.Annotated; its ContainingNamespace is still the right namespace.
             string paramNs = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
-
-            // Also handle nullable reference types: the underlying type's namespace
-            if (typeSymbol.IsReferenceType && typeSymbol.NullableAnnotation == NullableAnnotation.Annotated)
-                paramNs = typeSymbol.ContainingNamespace?.ToDisplayString() ?? string.Empty;
 
             if (string.Equals(paramNs, ContractsNamespace, StringComparison.Ordinal))
                 return true;
@@ -601,6 +594,54 @@ public class TestController : ControllerBase
         Assert.False(
             violations.Contains("Test.GoodQueryAction"),
             $"'Test.GoodQueryAction' should NOT be flagged: {string.Join(", ", violations)}");
+    }
+
+    /// <summary>
+    /// Positive self-test for sink (b): a public controller action that accepts a
+    /// <c>Stash.Registry.Contracts</c>-typed parameter <em>without</em> any binding-source
+    /// attribute is flagged. The parameter is deliberately nullable (<c>T?</c>) to exercise
+    /// the nullable-reference-type resolution path in <see cref="HasUnboundContractsParameter"/>,
+    /// which is the realistic regression shape (e.g. a half-migrated endpoint like
+    /// <c>AddMember(string org, AddOrgMemberRequest? body)</c> with no attribute).
+    /// </summary>
+    [Fact]
+    public void Scanner_ContractsTypedParamWithoutBindingAttr_IsFlagged()
+    {
+        const string source = @"
+using Microsoft.AspNetCore.Mvc;
+using Stash.Registry.Contracts;
+
+namespace Stash.Registry.Controllers;
+
+[ApiController]
+public class TestController : ControllerBase
+{
+    // Sink (b): flagged — Contracts-typed param with NO binding-source attribute
+    public string BadUnboundAction(AddOrgMemberRequest? body)
+    {
+        return body?.Username ?? string.Empty;
+    }
+
+    // NOT flagged — same type but carries [FromBody]
+    public string GoodBoundAction([FromBody] AddOrgMemberRequest? body)
+    {
+        return body?.Username ?? string.Empty;
+    }
+}";
+
+        var refs = BuildMetadataReferences();
+        var violations = new HashSet<string>(StringComparer.Ordinal);
+        ScanFile(source, "sink-b-fixture", refs, violations);
+
+        Assert.True(
+            violations.Contains("Test.BadUnboundAction"),
+            $"Expected 'Test.BadUnboundAction' in violations (Contracts-typed param without [FromBody]) " +
+            $"but got: {string.Join(", ", violations)}");
+
+        Assert.False(
+            violations.Contains("Test.GoodBoundAction"),
+            $"'Test.GoodBoundAction' should NOT be flagged (it carries [FromBody]): " +
+            $"{string.Join(", ", violations)}");
     }
 
     /// <summary>
