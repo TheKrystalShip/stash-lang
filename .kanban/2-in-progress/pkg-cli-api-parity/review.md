@@ -126,7 +126,8 @@ dotnet test --filter "FullyQualifiedName~PackageScopeCommandTests|FullyQualified
 
 ## F03 — [LOW] Dead `if (ok)` branch in `RoleCommand.Revoke` + registered-but-unused `SetVisibilityResponse`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0fb55794
 **Files:** `Stash.Cli/PackageManager/Commands/RoleCommand.cs:209-213`, `Stash.Cli/PackageManager/CliJsonContext.cs:48`
 **Phase:** P3, P2
 **Commit:** a41ac1d8, d46c883a
