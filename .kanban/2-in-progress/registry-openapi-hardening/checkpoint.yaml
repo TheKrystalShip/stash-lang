@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-openapi-hardening
 current: null
-updated: "2026-06-03T14:34:03Z"
+updated: "2026-06-03T15:14:29Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "AOT round-trip tests (in-process + published binary), parse-or-reject validation in Commands, OpenAPI snapshot baselined with servers-normalization"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: aadb6d1bc6bb82b3d9f1ad4b4b5d05f832153c65
+    verified: true
+    started: "2026-06-03T15:04:34Z"
+    completed: "2026-06-03T15:14:29Z"
+    attempts: 1
+    notes: "docs: Section 22 (public OpenAPI endpoint, dynamic servers, operationId convention, 7 enum schemas table); CLAUDE.md 3 stale const-string spots updated to enum types + HasConversion pattern; CompletionMenuTests flake fixed"
 review:
   status: not_started
   started: null
