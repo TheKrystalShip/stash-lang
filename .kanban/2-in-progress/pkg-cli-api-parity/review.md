@@ -37,7 +37,8 @@ Counts: **CRITICAL=0, IMPORTANT/HIGH=0, MEDIUM=1, LOW=1.**
 
 ## F01 — [MEDIUM] `RevokeRole` skipped by the F02 helper convergence — brief's revoke error mapping not implemented
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ef160a19
 **Files:** `Stash.Cli/PackageManager/RegistryClient.cs:1059-1078`; `Stash.Tests/Cli/PackageRoleCommandTests.cs:157,183`; `Stash.Tests/Cli/RegistryClientParityTests.cs:192-219`
 **Phase:** cross-phase (P2/P3 / F02 follow-up)
 **Commit:** `9ea494f8` (the F02 fix that converged the other methods but missed `RevokeRole`)
@@ -126,7 +127,8 @@ dotnet test --filter "FullyQualifiedName~PackageRoleCommandTests|FullyQualifiedN
 
 ## F02 — [LOW] `HandleNonSuccess` `action` parameter is dead — passed at every call site, never used, docstring lies
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ef160a19
 **Files:** `Stash.Cli/PackageManager/RegistryClient.cs:1351,1353,1377-1384` (helper); `RegistryClient.cs:972,1000,1035,1107,1136,1169,1199,1233,1259,1292,1327` (call sites)
 **Phase:** P2 / F02 follow-up
 **Commit:** `9ea494f8`
