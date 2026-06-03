@@ -27,7 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
-_(none in flight)_
+- registry-openapi-hardening — Registry OpenAPI Hardening | .kanban/2-in-progress/registry-openapi-hardening/ | 6 phases | started 2026-06-03
 
 ---
 

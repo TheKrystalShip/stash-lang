@@ -1,0 +1,223 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec registry-openapi-hardening
+
+schema_version: 1
+
+feature: registry-openapi-hardening
+title: Registry OpenAPI Hardening
+
+brief: ./brief.md
+
+created: 2026-06-03
+architect_session: opus-4.7-2026-06-03
+
+# Cheap build check after every phase. Heavier per-phase suites live under
+# each phase's verify: list.
+default_verify:
+  - dotnet build
+
+# Safety rail: the feature touches the registry, contracts, CLI's source-gen
+# JSON context, and the tests that guard them. Implementers may make small
+# documented corrections when discovery was stale.
+scope:
+  - Stash.Registry/**
+  - Stash.Registry.Contracts/**
+  - Stash.Cli/PackageManager/CliJsonContext.cs
+  - Stash.Cli/PackageManager/Commands/**
+  - Stash.Cli/Program.cs
+  - Stash.Tests/Registry/**
+  - Stash.Tests/Cli/**
+  - docs/Registry — Package Registry.md
+
+phases:
+  - id: P1
+    title: OpenAPI foundation — transformers, metadata, public endpoint, coverage meta-test (RED)
+    deps: []
+    files:
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/OpenApi/OpenApiOperationIdTransformer.cs
+      - Stash.Registry/OpenApi/OpenApiDocumentMetadataTransformer.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiPublicEndpointTests.cs
+    verify:
+      - dotnet build Stash.Registry/Stash.Registry.csproj
+      - dotnet test --filter "FullyQualifiedName~Registry.OpenApi"
+      - dotnet test --filter "FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests"
+    done_when:
+      - GET /openapi/v1.json returns 200 in BOTH Production and Development environments (integration test asserts both — reuses the existing registry test-host fixture, do not introduce a new WebApplicationFactory shape).
+      - GET /openapi/v1.json returns 200 when the request carries a revoked JWT (JTI bypass for the /openapi/ path prefix in the existing inline middleware at Startup.cs:276-311 — integration test asserts the bypass).
+      - The in-process-fetched openapi.json has document-level info.title, info.description, info.version, info.license, info.contact, and a non-empty servers array (parsed by the integration test).
+      - 'The minimal-API health endpoint GET / is converted to a typed minimal-API form (TypedResults.Ok<HealthCheckResponse>(...) with .WithName("Health_Check")) so it carries an operationId AND a $ref schema for HealthCheckResponse in the generated doc — owned by P1 explicitly so it does not become an un-classified minimal-API operation that escapes both halves of the coverage machinery.'
+      - 'Every operation in the in-process-fetched openapi.json carries a non-null operationId — {Controller}_{Action} for controller actions (applied by an IOpenApiOperationTransformer that fills OperationId unconditionally when null), Health_Check for the converted health endpoint. The coverage meta-test exemption list does NOT exempt operationIds; the transformer is the Construct.'
+      - 'The OpenApiCoverageMetaTests class lands RED-with-exemption-list and is GREEN against the in-process-fetched doc with: (a) every controller action on the "not yet migrated" list except Packages_DownloadVersion, (b) Packages_DownloadVersion on the permanent-pin list, (c) the binding floor (parsed doc has > 30 operations), (d) a fail-path self-test fixture (a test-only stub action that returns IActionResult, asserts the scanner flags it). The P1 form asserts (operationId present) AND (every declared response code resolves to a $ref schema) — but NOT yet "every enum domain appears as an OpenAPI enum schema" (that assertion is added in P4 when the enums exist).'
+    notes: |
+      The coverage meta-test reads the GENERATED openapi.json IN-PROCESS — reuse the existing registry
+      test-host fixture used by RegistryAuthzMatrixTests and RegistryRoutesTests; do not assume a specific
+      WebApplicationFactory shape. The load-bearing property is "operation has schemas in the published doc";
+      a source-level proxy is exactly the failure shape the AuthController cautionary tale warned about.
+
+      Ship with:
+        - A binding floor (assert the parsed doc has > 30 operations; fails loudly if fetch returned an
+          empty/error doc — prevents vacuous pass).
+        - A fail-path self-test fixture (a test-only stub action that returns IActionResult; asserts the
+          scanner flags it).
+        - Two exemption categories — NotYetMigrated (every controller action in the initial set) and
+          PermanentlyExempt (pinned: { "Packages_DownloadVersion" }). The pin uses the same shape as
+          AuthzDispatchCoverageMetaTests's ImperativeAuthz pin: a new permanent exemption forces a test edit.
+
+      P1 assertions are scoped to (operationId present) AND (every declared response code resolves to a
+      $ref schema). The "every enum domain appears as an OpenAPI enum schema" assertion is added in P4
+      when the enums actually exist; do not assert it earlier.
+
+      The health endpoint GET / is currently a minimal-API call (Startup.cs:315) and IS in the generated
+      doc. Convert it to TypedResults.Ok<HealthCheckResponse>(...) + .WithName("Health_Check") so it is
+      first-class and discoverable by both the operationId transformer (already named) and the coverage
+      meta-test (now schema-typed). Do NOT pin it as a permanent exemption — converting is cleaner since
+      it returns a real DTO.
+
+  - id: P2
+    title: Typed Results refactor — Packages + Auth controllers
+    deps: [P1]
+    files:
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry/Stash.Registry.csproj
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests"
+      - dotnet test --filter "FullyQualifiedName~PackagesController|FullyQualifiedName~AuthController"
+      - dotnet test --filter "FullyQualifiedName~Registry.OpenApi"
+    done_when:
+      - 'Every action on PackagesController and AuthController EXCEPT Packages_DownloadVersion declares a typed Results<...> return (source-level Construct: the type system carries the invariant — IActionResult is a different type, so a forgotten conversion is structurally visible in the diff).'
+      - 'The in-process-fetched openapi.json has a $ref-typed schema for every declared response code on every Packages_* and Auth_* operation (doc-level Detect, asserted by OpenApiCoverageMetaTests against the live doc).'
+      - 'The OpenApiCoverageMetaTests NotYetMigrated exemption list has been shrunk to exclude every Packages_* and Auth_* action; the permanent pin (Packages_DownloadVersion) is unchanged; the test is GREEN.'
+      - 'RegistryAuthzMatrixTests is GREEN — every (action × principal) row still produces the documented HTTP status and ErrorResponse body. This is the behaviour-preservation gate.'
+
+  - id: P3
+    title: Typed Results refactor — Orgs + Scopes + Search + Admin controllers
+    deps: [P2]
+    files:
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Registry/Controllers/SearchController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry/Stash.Registry.csproj
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests"
+      - dotnet test --filter "FullyQualifiedName~OrganizationsController|FullyQualifiedName~ScopesController|FullyQualifiedName~SearchController|FullyQualifiedName~AdminController"
+      - dotnet test --filter "FullyQualifiedName~Registry.OpenApi"
+    done_when:
+      - Every action on OrganizationsController, ScopesController, SearchController, and AdminController returns a typed Results<...> union.
+      - The OpenApiCoverageMetaTests "not yet migrated" exemption list is EMPTY; only the permanent pin (Packages_DownloadVersion) remains. The coverage meta-test is GREEN with the empty migration list.
+      - The generated openapi.json has a $ref-typed schema for every declared response code on every operation across all six controllers (verified by the coverage meta-test against the live doc).
+      - RegistryAuthzMatrixTests is GREEN.
+
+  - id: P4
+    title: Bounded-domain enum conversion — contracts + registry + EF + boundary parsers
+    deps: [P3]
+    files:
+      - Stash.Registry.Contracts/BoundedDomains.cs
+      - Stash.Registry.Contracts/AuthContracts.cs
+      - Stash.Registry.Contracts/PackageContracts.cs
+      - Stash.Registry.Contracts/OrganizationContracts.cs
+      - Stash.Registry.Contracts/ScopeContracts.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry/Database/RegistryDbContext.cs
+      - Stash.Registry/Database/Models/PackageRecord.cs
+      - Stash.Registry/Database/Models/OrgMemberEntry.cs
+      - Stash.Registry/Database/Models/UserRecord.cs
+      - Stash.Registry/Database/Models/PackageRoleEntry.cs
+      - Stash.Registry/Database/Models/ScopeRecord.cs
+      - Stash.Registry/Auth/RegistryAuthConstants.cs
+      - Stash.Registry/Auth/Authorization/RegistryAuthzPrincipalFactory.cs
+      - Stash.Registry/Auth/Authorization/PermissionResolver.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Registry/Services/PackageService.cs
+      - Stash.Registry/Services/PackageRoleService.cs
+      - Stash.Registry/Bootstrap/AdminBootstrapper.cs
+      - Stash.Registry/Auth/LocalAuthProvider.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts/Stash.Registry.Contracts.csproj
+      - dotnet build Stash.Registry/Stash.Registry.csproj
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests"
+      - dotnet test --filter "FullyQualifiedName~Registry"
+      - dotnet test --filter "FullyQualifiedName~NoMagicAuthStringsMetaTests"
+    done_when:
+      - 'BoundedDomains.cs declares seven public enum types (PackageRoles, TokenScopes, Visibilities, PrincipalTypes, ScopeOwnerTypes, OrgRoles, UserRoles) with [JsonConverter(typeof(JsonStringEnumConverter<T>))] (or equivalent verified mechanism) and per-member name attributes that produce byte-identical lowercase wire strings; no public const string remains in the file.'
+      - 'Every DTO property in Stash.Registry.Contracts that previously typed a bounded value as string now types it as the corresponding enum.'
+      - 'RegistryDbContext uses .HasConversion<string>() + .HasDefaultValue(MyEnum.X) for every bounded-domain EF property; the generated SQLite column defaults still emit the lowercase wire string (verified by a unit test reading the EF model metadata).'
+      - 'POST /api/v1/admin/users with a body {"role":"owner"} (an illegal UserRoles wire value) returns 400 with ErrorResponse — the deserializer rejects at the boundary (integration test).'
+      - 'Every previously-string call site in Stash.Registry (PackageService, PackageRoleService, AdminBootstrapper, PermissionResolver, RegistryAuthzPrincipalFactory, all five controllers) compiles with the enum types; bare string literals at bounded-domain assignment sites would now be a compile error.'
+      - 'The in-process-fetched openapi.json surfaces each of the seven domains as a named enum schema in components.schemas with its full lowercase value list — OpenApiCoverageMetaTests is extended in P4 to add this third assertion (it had only operationId-present and response-$ref assertions in P1–P3); the assertion ships GREEN at P4 close.'
+      - 'RegistryAuthzMatrixTests is GREEN; NoMagicAuthStringsMetaTests is GREEN.'
+    notes: |
+      Verify empirically (DURING the phase, not afterwards) which wire-string mechanism works under BOTH:
+        (1) the registry's reflection-based JsonSerializer (Microsoft.AspNetCore.Mvc JSON pipeline), and
+        (2) the CLI's source-gen JsonSerializerContext under Native AOT.
+      .NET 10 supports both the generic JsonStringEnumConverter<T> and per-member [JsonStringEnumMemberName("...")] attributes;
+      if they diverge between contexts, document the workaround in the brief and proceed.
+      The EF default DDL emission ("public" stored as the literal default in the SQLite table) is a known sharp edge — confirm by
+      reading sqlite_master after a fresh Initialize().
+
+  - id: P5
+    title: CLI AOT verification + OpenAPI snapshot baseline
+    deps: [P4]
+    files:
+      - Stash.Cli/PackageManager/CliJsonContext.cs
+      - Stash.Cli/PackageManager/Commands/RoleCommand.cs
+      - Stash.Cli/PackageManager/Commands/OrgCommand.cs
+      - Stash.Cli/PackageManager/Commands/VisibilityCommand.cs
+      - Stash.Cli/PackageManager/Commands/ScopeCommand.cs
+      - Stash.Cli/Program.cs
+      - Stash.Tests/Cli/EnumRoundTripTests.cs
+      - Stash.Tests/Cli/AotPublishedBinaryEnumRoundTripTests.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiSnapshotTests.cs
+      - Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json
+    verify:
+      - dotnet build Stash.Cli/Stash.Cli.csproj
+      - dotnet test --filter "FullyQualifiedName~Cli.EnumRoundTrip"
+      - dotnet test --filter "FullyQualifiedName~Registry.OpenApi"
+      - dotnet publish Stash.Cli/Stash.Cli.csproj -c Release -o .bench-bin
+      - dotnet test --filter "FullyQualifiedName~AotPublishedBinaryEnumRoundTripTests"
+    done_when:
+      - CliJsonContext registers every one of the seven enum types via [JsonSerializable(typeof(EnumT))] (a binding floor in the in-process round-trip test asserts every enum is present, fails loudly on a missing registration).
+      - The CLI's Commands/* string-equality checks (RoleCommand, OrgCommand, VisibilityCommand) compare enum values, not strings; bare wire strings at these sites would be a compile error.
+      - The in-process EnumRoundTripTests serializes each enum value through CliJsonContext and asserts the resulting JSON literal equals the documented wire string byte-for-byte; deserializes each wire string and asserts round-trip; includes a fail-path fixture (a deliberately mis-attributed enum) proving the test catches the bug it's named for.
+      - Stash.Cli has a `--self-test enums` invocation that prints PASS/FAIL after running the same round-trip; AotPublishedBinaryEnumRoundTripTests publishes the AOT binary (dotnet publish -c Release) and exec's it with that flag, asserting exit 0 and "PASS" output. (Closes the shared-contracts residual gap.)
+      - Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json is the baselined snapshot of the generated openapi.json at this stabilization point; OpenApiSnapshotTests asserts the live doc matches byte-for-byte (re-baseline gate: STASH_SNAPSHOT_REGEN=1).
+
+  - id: P6
+    title: Documentation — public OpenAPI endpoint + enum schemas
+    deps: [P5]
+    files:
+      - docs/Registry — Package Registry.md
+      - Stash.Registry/CLAUDE.md
+    verify:
+      - dotnet build
+      - dotnet test
+    done_when:
+      - docs/Registry — Package Registry.md has a "Published OpenAPI Contract" section documenting the GET /openapi/v1.json public endpoint, its stability guarantees, the operationId convention, and a table of the seven bounded-domain enum schemas with their lowercase wire values.
+      - Stash.Registry/CLAUDE.md's bounded-domain section updated to point at the enum types (not const string sets), with the EF-default note replaced by the .HasConversion<string>() pattern.
+      - Full dotnet test green.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The two `checkpoint lint` lines are
+# the standing omission guard: every feature's promotion gate confirms the live doc
+# surface has no raw `scripts/checkpoint/<sub>.stash` reference (it routes through the
+# facade) and that the guard still has teeth. Keep them — dropping them makes the
+# guard one-shot instead of perpetual.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - dotnet publish Stash.Cli/Stash.Cli.csproj -c Release -o .bench-bin
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
