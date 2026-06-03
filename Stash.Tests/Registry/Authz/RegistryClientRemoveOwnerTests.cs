@@ -90,9 +90,11 @@ public sealed class RegistryClientRemoveOwnerTests : RegistryAuthzTestBase
 
         var cli = new RegistryClient(ApiBase, serverClient, token: publishToken);
 
-        // "nobody" holds no role on the package → 404 → surfaced as an exception.
+        // "nobody" holds no role on the package → 404 → surfaced through HandleNonSuccess
+        // with the brief's "Not found:" prefix and the server's specific message.
         var ex = Assert.Throws<InvalidOperationException>(
             () => cli.RevokeRole("@adminro3/widgets", "user", "nobody"));
-        Assert.Contains("NotFound", ex.Message);
+        Assert.Contains("Not found:", ex.Message);
+        Assert.Contains("holds no role", ex.Message);
     }
 }
