@@ -41,7 +41,8 @@ deliberate human accept.
 
 ## F01 — [HIGH] Validate-then-normalize ordering: stricter than pre-feature behaviour on multiple fields (P5-D1)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 15252ae476fc3f6ad033fcc7389ead8c6e115f89
 **Files:** `Stash.Registry.Contracts/AuthContracts.cs:62-64`, `Stash.Registry.Contracts/OrganizationContracts.cs:14-17`, `Stash.Registry.Contracts/ScopeContracts.cs:22-25`, `Stash.Registry/Controllers/AuthController.cs:91`, `Stash.Registry/Controllers/OrganizationsController.cs:55`, `Stash.Registry/Controllers/ScopesController.cs:91`
 **Phase:** P3 / P4 / P5 (cross-phase, headline of `deviations.md` P5-D1)
 **Commit:** c9344b47, 8db697ca, d628db5b
@@ -132,7 +133,8 @@ dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests"
 
 ## F02 — [HIGH] CreateTeam.Name: new ScopeGrammar validation, no equivalent pre-feature check
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 15252ae476fc3f6ad033fcc7389ead8c6e115f89
 **Files:** `Stash.Registry.Contracts/OrganizationContracts.cs:96-100`, `Stash.Registry/Controllers/OrganizationsController.cs:197`
 **Phase:** P4
 **Commit:** 8db697ca
