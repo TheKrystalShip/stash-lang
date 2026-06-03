@@ -198,9 +198,9 @@ public class RegistryClientParityTests
         var ex = Assert.Throws<InvalidOperationException>(
             () => client.RevokeRole("@alice/widget", "user", "nobody"));
 
-        // The exception carries the HTTP status name and the server's error body
-        Assert.Contains("NotFound", ex.Message);
-        Assert.Contains("RoleNotFoundException", ex.Message);
+        // The helper unwraps the ErrorResponse and applies the brief's prefix mapping
+        Assert.Contains("Not found:", ex.Message);
+        Assert.Contains("principal holds no role on this package", ex.Message);
     }
 
     [Fact]
@@ -213,9 +213,9 @@ public class RegistryClientParityTests
         var ex = Assert.Throws<InvalidOperationException>(
             () => client.RevokeRole("@alice/widget", "user", "alice"));
 
-        // The exception carries the HTTP status name and the server's error body
-        Assert.Contains("Conflict", ex.Message);
-        Assert.Contains("LastOwnerException", ex.Message);
+        // The helper unwraps the ErrorResponse and applies the brief's prefix mapping
+        Assert.Contains("Conflict:", ex.Message);
+        Assert.Contains("cannot remove the last owner of a package", ex.Message);
     }
 
     // ---------------------------------------------------------------------------

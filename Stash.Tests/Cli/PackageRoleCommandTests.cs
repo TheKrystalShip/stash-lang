@@ -154,7 +154,8 @@ public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
                 ["@rpt3/pkg", "user", "rpt3"],
                 cli));
 
-        Assert.Contains("cannot remove the last owner of a package", ex.Message);
+        Assert.Contains("Conflict:", ex.Message);
+        Assert.Contains("cannot remove the last owner", ex.Message);
     }
 
     // ── revoke: 404 no-such-role surfaces server message ──────────────────────
@@ -180,6 +181,7 @@ public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
                 ["@rpt4/pkg", "user", "rpt4nobody"],
                 cli));
 
-        Assert.Contains("NotFound", ex.Message);
+        Assert.Contains("Not found:", ex.Message);
+        Assert.Contains("holds no role", ex.Message);
     }
 }

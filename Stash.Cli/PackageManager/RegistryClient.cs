@@ -1068,13 +1068,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
         var response = _http.SendAsync(request).GetAwaiter().GetResult();
-        if (response.IsSuccessStatusCode)
+        if (!response.IsSuccessStatusCode)
         {
-            return true;
+            throw HandleNonSuccess(response, $"revoke role on '{packageName}'");
         }
-
-        string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        throw new InvalidOperationException($"Revoke role failed ({response.StatusCode}): {error}");
+        return true;
     }
 
     /// <summary>
@@ -1340,15 +1338,15 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// Status mapping (per Semantics §"General error mapping"):
     /// <list type="bullet">
     ///   <item><c>401</c> → "Not logged in. Run 'stash pkg login'."</item>
-    ///   <item><c>403</c> → "Forbidden (&lt;server message or 'no reason'&gt;)."</item>
-    ///   <item><c>404</c> → "Not found: &lt;server message or action&gt;."</item>
+    ///   <item><c>403</c> → "Forbidden (&lt;server message, or action if body is empty&gt;)."</item>
+    ///   <item><c>404</c> → "Not found: &lt;server message, or action if body is empty&gt;."</item>
     ///   <item><c>409</c> → "Conflict: &lt;server message&gt;."</item>
     ///   <item>other → "Error: HTTP &lt;code&gt; — &lt;server message or status phrase&gt;."</item>
     /// </list>
     /// The server's <c>message</c> field is preferred; <c>error</c> is used as fallback.
     /// </remarks>
     /// <param name="resp">The non-success HTTP response.</param>
-    /// <param name="action">A short action description used as fallback in the "Not found" prefix.</param>
+    /// <param name="action">A short action description used as fallback when the server returns an empty body (substituted for the status phrase in all prefix mappings).</param>
     /// <returns>An <see cref="InvalidOperationException"/> ready to be thrown.</returns>
     private static InvalidOperationException HandleNonSuccess(HttpResponseMessage resp, string action)
     {
@@ -1371,7 +1369,9 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
 
         if (string.IsNullOrWhiteSpace(serverMessage))
         {
-            serverMessage = resp.ReasonPhrase ?? resp.StatusCode.ToString();
+            serverMessage = !string.IsNullOrWhiteSpace(action)
+                ? action
+                : resp.ReasonPhrase ?? resp.StatusCode.ToString();
         }
 
         string message = (int)resp.StatusCode switch
