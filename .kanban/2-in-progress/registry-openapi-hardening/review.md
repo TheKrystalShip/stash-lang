@@ -23,7 +23,8 @@ Fresh adversarial pass surfaces ONE new finding (a residual contract gap exposed
 
 ## F01 — [MINOR] Two `[FromBody]` endpoints can emit an undocumented `400 ErrorResponse` after the F01 fix — `Results<...>` unions omit `BadRequest<ErrorResponse>`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** b0061a8a
 **Files:** `Stash.Registry/Controllers/PackagesController.cs:456` (`RevokeRole`), `Stash.Registry/Controllers/AdminController.cs:190` (`AdminRevokeRole`), `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json:241-265` (`Admin_AdminRevokeRole`), `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json:1666-1690` (`Packages_RevokeRole`)
 **Phase:** Cross-phase — exposed by the F01 fix (`9055f12b`) on top of P2/P3 (typed `Results<...>` refactor) and P5 (snapshot baseline).
 **Commit:** `9055f12b` (the fix that surfaces the gap)
