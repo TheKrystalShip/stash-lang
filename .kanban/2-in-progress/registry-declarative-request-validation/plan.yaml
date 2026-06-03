@@ -121,7 +121,7 @@ phases:
       - Stash.Tests/Registry/Validation/RequestModelBindingMetaTests.cs
       - Stash.Tests/Registry/Validation/OrganizationsControllerValidationTests.cs
     verify:
-      - dotnet build Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry.Validation|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName~OrgAndAdminAuthzTests"
     done_when:
       - OrganizationsController.CreateOrg, CreateTeam, AddTeamMember take [FromBody] T request parameters; every try-catch (JsonException) is gone in those three methods; inline guards covered by attributes are deleted.
@@ -144,7 +144,7 @@ phases:
       - Stash.Tests/Registry/Validation/AdminControllerValidationTests.cs
       - Stash.Tests/Registry/Validation/ScopesControllerValidationTests.cs
     verify:
-      - dotnet build Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry"
     done_when:
       - AdminController.CreateUser, AdminAssignRole take [FromBody] T request parameters; every try-catch (JsonException) is gone in those two methods; inline guards covered by attributes are deleted.

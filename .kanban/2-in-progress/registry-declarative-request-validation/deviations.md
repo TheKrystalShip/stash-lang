@@ -70,3 +70,40 @@ not as a justified decision.
   `dotnet test`, NOT the AOT publish — so trim cleanliness of the new attributes is NOT gated by
   `/done`. The AOT enum self-test lives in `build.stash` (manual). Reviewer: confirm whether an AOT
   publish smoke is warranted before merge, or accept the precedent-mirroring as sufficient.
+
+## P3 — AuthController + SearchController migrate; exemption -5 (commit 4d812e13, feat c9344b47)
+
+- **P3-D1 — `SearchQuery.Query` renamed to `SearchQuery.Q` (wire-binding deviation).** ASP.NET
+  `[FromQuery]` binds by property name (case-insensitive), not `[JsonPropertyName]`; and Contracts is
+  dependency-free so `[FromQuery(Name="q")]` cannot be applied to the DTO property. Implementer
+  renamed the property `Query` → `Q` so `?q=` binds. **Driver verdict: pragmatic but the ugliest
+  surviving artifact** — `Q` is a poor public property name. Reviewer: decide whether `Q` is
+  acceptable, or whether a controller-side binding shim (a thin `[FromQuery(Name="q")]` parameter in
+  `Stash.Registry`, which CAN reference MVC) is the cleaner home for the wire-name mapping. Confirm
+  the wire contract `?q=` is unchanged (the REST table documents `/api/v1/search?q=...`).
+- **P3-D2 — recorded behaviour change: out-of-range `pageSize` now 400, was silent clamp.** This is
+  the deliberate open-question #4 resolution from brief.md (reject via `[Range]`). Any client today
+  sending `pageSize=500` got a clamped 200; now gets 400 InvalidRequest. Reviewer: confirm this is
+  the intended, documented break (it is per the brief) and that docs/CLAUDE.md reflect it (P6).
+- **P3-D3 — three PRE-EXISTING tests edited to match new behaviour.** `ContractsAssemblyShapeTests`
+  (P2 gap: the new `Stash.Registry.Contracts.Validation` sub-namespace wasn't in the allowed shape),
+  and `LoginReadDefaultTests.CreateToken_WithScopeFieldOnly_Returns400CeilingRequired` +
+  `TokenLifetimeCapTests.CreateToken_ExpiresInAbsent_Returns400` (inline guard removal moved the 400
+  from a hand-thrown message to the validation filter, so the expected `ErrorMessage` text changed).
+  **Reviewer: scrutinise these edits** — changing an existing test to match new behaviour is exactly
+  where a real regression can be masked. Confirm each still asserts the same *semantics* (400 +
+  ceiling/expiry-required + body-not-entered), only the message-source changed.
+- **P3-D4 — OpenAPI snapshot regenerated** (Auth endpoints gain requestBody schemas; Search gains
+  Q/Page/PageSize query params + a 400 response). Expected consequence of the migration. Confirm the
+  diff is exactly the migrated surface, no unrelated drift.
+- **P3-D5 — `ErrorMessage` strings added to existing P2 `[Required]` attributes** on `LoginRequest`
+  / `TokenCreateRequest` to preserve specific assertion text ("Username is required." etc.). Benign
+  — these are user-facing prose (exempt from no-magic-strings), but they ARE the strings the
+  aggregation test asserts on; confirm message ↔ test stay in sync.
+
+## Driver-applied fixes (not implementer deviations)
+
+- **plan.yaml P4 + P5 verify commands** changed from `dotnet build Stash.Registry Stash.Tests`
+  (multi-project, which `dotnet build` rejects) to `dotnet build`, matching the P2/P3 self-heals.
+  Mechanical; prevents the next two implementers re-discovering the same stale command. Committed by
+  the driver as a chore.
