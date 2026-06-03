@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T22:35:27Z"
+updated: "2026-06-03T22:47:03Z"
 phases:
   P1:
     status: done
