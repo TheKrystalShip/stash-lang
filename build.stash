@@ -51,6 +51,25 @@ fn deploy() {
   io.println("Deployment complete.");
 }
 
+/// Verify the freshly-built Native-AOT interpreter passes its own self-test.
+/// This proves that source-gen JSON enum converters are emitted under AOT —
+/// something a JIT unit test cannot prove (it false-greens via reflection fallback).
+fn verifyInterpreterSelfTest() {
+  io.println("Running AOT enum round-trip self-test...");
+  if (!fs.exists(INTERPRETER_SOURCE)) {
+    io.println($"Error: interpreter binary not found at {INTERPRETER_SOURCE}; run cleanBuildStash() first");
+    env.exit(1);
+  }
+  const result = $(${INTERPRETER_SOURCE} --self-test enums);
+  if (result.exitCode != 0 || !str.contains(result.stdout, "PASS")) {
+    io.println($"AOT enum round-trip self-test FAILED (exit code {result.exitCode}):");
+    io.println($"  stdout: {result.stdout}");
+    io.println($"  stderr: {result.stderr}");
+    env.exit(1);
+  }
+  io.println("AOT enum round-trip self-test OK.");
+}
+
 /// Build the stash-lang vscode extension.
 /// Sometimes, changes affect the extension and we always want to keep the latest version available.
 fn buildExtension() {
@@ -66,5 +85,6 @@ fn buildExtension() {
 }
 
 cleanBuildStash();
+verifyInterpreterSelfTest();
 deploy();
 buildExtension();

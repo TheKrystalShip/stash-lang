@@ -16,12 +16,13 @@ namespace Stash.Tests.Cli;
 /// <remarks>
 /// <para>
 /// This test class exercises the source-gen <see cref="CliJsonContext.Default"/> instance —
-/// the same context the CLI uses at runtime. It is the fast complement to
-/// <see cref="AotPublishedBinaryEnumRoundTripTests"/>, which runs the full Native-AOT published
-/// binary as a subprocess. A passing in-process test plus a passing AOT subprocess test together
-/// close the shared-contracts residual gap: the type system cannot express "this enum value's
-/// wire string matches its documented spelling under source-gen + AOT", so the runtime tests
-/// are the only sound verification.
+/// the same context the CLI uses at runtime. It runs under JIT, where a missing source-gen
+/// registration can be masked by the reflection fallback; the Native-AOT guarantee (that the
+/// source-gen converters are actually emitted) is verified separately by the
+/// <c>stash --self-test enums</c> smoke step in <c>build.stash</c>, run against the freshly
+/// published AOT binary at release time. Together they close the shared-contracts residual gap:
+/// the type system cannot express "this enum value's wire string matches its documented spelling
+/// under source-gen + AOT", so these runtime checks are the only sound verification.
 /// </para>
 /// <para>
 /// <b>Binding floor.</b> The test asserts that all seven enum types are registered in
