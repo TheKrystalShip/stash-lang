@@ -52,9 +52,12 @@ Any other extension returns `No LSP server available for file type`.
 
 **Two limits to know:**
 
-- **No diagnostics.** The `LSP` tool has no diagnostics operation, and this CLI build does **not**
-  auto-surface "red squiggles" after edits. For errors/warnings use the compiler: **`dotnet build`** for
-  C#, and `dotnet test` / running the script for Stash. The `LSP` tool is for *navigation*, not linting.
+- **Diagnostics are unreliable — trust the compiler.** The `LSP` tool has no diagnostics operation. The
+  harness *does* auto-surface a `<new-diagnostics>` block after edits, but in a terminal session these are
+  frequently **cold-`csharp-ls` false positives** — the server hasn't loaded the project's NuGet/reference
+  graph yet, so it reports spurious `Xunit` / `Microsoft.AspNetCore` / `Assert` / `Stash.Registry.Contracts`
+  "not found" on code that compiles cleanly. Confirm against the compiler before acting: **`dotnet build`**
+  for C#, and `dotnet test` / running the script for Stash. The `LSP` tool is for *navigation*, not linting.
 - **Lazy + cold start.** A server launches on the first touch of a matching file. `csharp-ls` loads the
   whole `Stash.sln` (~11 projects, up to a minute) before whole-program results like cross-project
   `findReferences` are complete; `documentSymbol`/`hover` answer almost immediately.

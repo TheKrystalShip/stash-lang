@@ -91,6 +91,10 @@ private static void RunExpectingError(string source, string? messageContains = n
 - `FullAnalyze(source)` → `AnalysisResult` — full pipeline including diagnostics
 - `GetDiagnostics(source)` → `IEnumerable<SemanticDiagnostic>` — extract diagnostics
 
+## Parallelization — serialize process-global state
+
+xUnit runs test classes in parallel by default. A test that **captures or mutates process-global state** will flake the *full suite* non-deterministically (green in isolation, red under load) while a sibling races it. The classic case: capturing `Console.Out`/`Console.Error` to assert CLI command output — another test's `Console.WriteLine` lands in your capture buffer. Fix: join a `[Collection(...)]` whose `[CollectionDefinition]` sets `DisableParallelization = true`. **CLI command tests that print to the console (e.g. via a command's `ExecuteCore`) must use `[Collection("CliTests")]`** (defined in `Interpreting/CliPackageCommandsTests.cs`). Other process-global collections: `SystemConsoleTests`, `SystemCwdTests`, `RegistryConcurrency`.
+
 ## Adding Tests for a New Feature
 
 1. **Find the right file** — match the feature to its namespace test file (e.g., `ArrBuiltInsTests.cs` for `arr.*`)
