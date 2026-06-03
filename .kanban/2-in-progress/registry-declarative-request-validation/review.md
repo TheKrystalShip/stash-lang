@@ -341,7 +341,8 @@ STASH_SNAPSHOT_REGEN=1 dotnet test --filter "FullyQualifiedName~OpenApiSnapshotT
 
 ## F05 — [MEDIUM] ScopeGrammarAttribute and TokenExpiryAttribute duplicate canonical grammar/parse — no cross-check guards drift (P2-D1)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 81fa74a0
 **Files:** `Stash.Registry.Contracts/Validation/ScopeGrammarAttribute.cs:27`, `Stash.Registry.Contracts/Validation/TokenExpiryAttribute.cs:83-122`, `Stash.Core/Common/PackageManifest.cs:31`, `Stash.Registry/Endpoints/AuthHelper.cs:39-63`
 **Phase:** P2
 **Commit:** 4df0db13
