@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-openapi-hardening
 current: null
-updated: "2026-06-03T10:22:16Z"
+updated: "2026-06-03T12:02:58Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 6d012a4c5432866fbf82e2d82e04cefeb1656930
+    verified: true
+    started: "2026-06-03T11:43:47Z"
+    completed: "2026-06-03T12:02:58Z"
+    attempts: 1
+    notes: "OpenAPI public endpoint + transformers (operationId + metadata + dynamic servers) + JTI bypass + health endpoint typed + coverage meta-test (38 in NotYetMigrated, Packages_DownloadVersion permanently exempt)"
   P2:
     status: pending
     commit: null
