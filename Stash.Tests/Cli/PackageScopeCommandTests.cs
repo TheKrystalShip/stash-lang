@@ -35,6 +35,7 @@ namespace Stash.Tests.Cli;
 /// </list>
 /// </para>
 /// </remarks>
+[Collection("CliTests")]
 public sealed class PackageScopeCommandTests : RegistryAuthzTestBase
 {
     private const string ApiBase = "http://localhost/api/v1";

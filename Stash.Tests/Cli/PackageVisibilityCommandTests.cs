@@ -29,6 +29,7 @@ namespace Stash.Tests.Cli;
 /// with a clear message listing the valid values.
 /// </para>
 /// </remarks>
+[Collection("CliTests")]
 public sealed class PackageVisibilityCommandTests : RegistryAuthzTestBase
 {
     private const string ApiBase = "http://localhost/api/v1";

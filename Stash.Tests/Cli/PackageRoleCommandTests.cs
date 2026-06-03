@@ -28,6 +28,7 @@ namespace Stash.Tests.Cli;
 /// via the <see cref="InvalidOperationException"/> that bubbles up through the command.
 /// </para>
 /// </remarks>
+[Collection("CliTests")]
 public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
 {
     private const string ApiBase = "http://localhost/api/v1";
