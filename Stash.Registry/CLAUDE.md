@@ -185,6 +185,8 @@ All controller actions that accept a request body or query parameters use ASP.NE
    - `ScopeGrammarAttribute` — validates the scope-name grammar (`^[a-z][a-z0-9-]{0,38}$`). Used on `RegisterRequest.Username`, `CreateOrgRequest.Name`, `CreateTeamRequest.Name`, `ClaimScopeRequest.Scope`.
    - `TokenExpiryAttribute` — validates the `expires_in` duration string format and enforces a `≥ 1h` floor. Used on `TokenCreateRequest.ExpiresIn`.
 
+**Validation runs on the raw bound value.** DataAnnotations (including `[ScopeGrammar]`) execute on the value as received from the HTTP body, before any `Trim()` / `ToLowerInvariant()` normalization that may appear later in the action body. This means non-canonical inputs — mixed-case values such as `"MyOrg"` or whitespace-padded values such as `"alice "` — are rejected with `400 InvalidRequest` rather than silently normalized. Clients must send canonical lowercase strings without surrounding whitespace. This applies to: `RegisterRequest.Username`, `CreateOrgRequest.Name`, `CreateTeamRequest.Name`, and `ClaimScopeRequest.Scope`. (Complements the `pageSize` reject documented above: both are deliberate authorized behavior changes.)
+
 **Enforcement** — `RequestModelBindingMetaTests` (`Stash.Tests/Registry/Validation/`) is a Roslyn meta-test that fails CI if any controller action reads `Request.Body` directly or if a Contracts-typed action parameter lacks `[FromBody]`/`[FromQuery]`. Its `KnownExemptions` set is empty: every action is model-bound. Adding a new action that bypasses model binding without updating the exemption set fails the test immediately.
 
 **Key rules:**
