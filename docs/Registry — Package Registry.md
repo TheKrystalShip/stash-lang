@@ -621,11 +621,11 @@ Request:
 
 Search package names and descriptions.
 
-| Query parameter | Type    | Default | Description                 |
-| --------------- | ------- | ------- | --------------------------- |
-| `q`             | string  | -       | Search query (required).    |
-| `page`          | integer | `1`     | Page number (1-based).      |
-| `pageSize`      | integer | `20`    | Results per page (max 100). |
+| Query parameter | Type    | Default | Description                                             |
+| --------------- | ------- | ------- | ------------------------------------------------------- |
+| `q`             | string  | -       | Search query (required).                                |
+| `page`          | integer | `1`     | Page number (1-based, must be ≥ 1).                     |
+| `pageSize`      | integer | `20`    | Results per page (1–100); out-of-range returns `400`. |
 
 Results are filtered by visibility:
 - Unauthenticated callers: only `public` packages.
@@ -819,12 +819,12 @@ Revoke a role from a principal on a package (admin override). Body is identical 
 
 Query the audit log. Entries are returned in descending chronological order.
 
-| Query parameter | Type    | Description                               |
-| --------------- | ------- | ----------------------------------------- |
-| `package`       | string  | Filter by package name.                   |
-| `action`        | string  | Filter by action type (see [Section 13]). |
-| `page`          | integer | Page number (1-based).                    |
-| `pageSize`      | integer | Results per page (default 50, max 200).   |
+| Query parameter | Type    | Description                                                      |
+| --------------- | ------- | ---------------------------------------------------------------- |
+| `package`       | string  | Filter by package name.                                          |
+| `action`        | string  | Filter by action type (see [Section 13]).                        |
+| `page`          | integer | Page number (1-based, must be ≥ 1).                              |
+| `pageSize`      | integer | Results per page (default 50, 1–200); out-of-range returns `400`. |
 
 ```json
 {
@@ -1371,7 +1371,7 @@ Storage backends are selected by `Storage.Type` and bound at startup; switching 
 | Password hashing       | Argon2id with OWASP parameters, stored in PHC string format.                                                                            |
 | Integrity verification | Every published tarball stores a `sha256-<base64>` hash; downloads return it as `X-Integrity`. Optional client verification on publish. |
 | Path traversal         | `FileSystemStorage` canonicalizes every path before reading or writing and rejects paths that escape `Storage.Path`.                    |
-| Input validation       | Username must match scope grammar: `^[a-z][a-z0-9-]{0,38}$` (max 39 chars, leading lowercase letter). Password minimum 8 chars. Package name validated against `^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$`. |
+| Input validation       | All request bodies and query parameters are validated declaratively before the action body runs. Invalid requests return `400 Bad Request` with body `{ "error": "InvalidRequest", "message": "<all field errors joined with '; '>" }`. Specific constraints: username must match scope grammar `^[a-z][a-z0-9-]{0,38}$` (max 39 chars, leading lowercase letter); password minimum 8 chars; package name validated against `^@[a-z][a-z0-9-]{0,38}/[a-z][a-z0-9-]{0,38}$`. Pagination `pageSize` is declared and enforced: Search `pageSize` must be 1–100, audit-log `pageSize` must be 1–200; out-of-range values are rejected `400`, not silently clamped. |
 | Machine binding        | Refresh tokens are bound to a SHA-256 machine fingerprint of `hostname:username:platform`; mismatched fingerprints are rejected.        |
 | Token revocation       | Database-driven via `jti` lookup on every authenticated request.                                                                        |
 | Visibility enforcement | Private/internal packages return `404 Not Found` (not `403`) for unauthorized callers to avoid leaking package existence.               |

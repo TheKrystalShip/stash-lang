@@ -171,6 +171,22 @@ The three formerly-imperative endpoints now folded into the shared filter (via `
 - `OrganizationsController.DeleteOrg` — folded; wrong-action bug (`AddOrgMember`) fixed; proper `DeleteOrg` PDP handler added
 - `ScopesController.DeleteScope` — folded; filter's `ResourceIdForAudit(ScopeResource)` emits `@` + scope uniformly
 
+### Request validation
+
+All controller actions that accept a request body or query parameters use ASP.NET Core declarative model binding (`[FromBody]` / `[FromQuery]`) so the `[ApiController]` automatic model-validation filter (`ModelStateInvalidFilter`) can short-circuit with a `400 Bad Request` before the action body runs. There are four moving parts:
+
+1. **`[ApiController]`'s automatic model-validation filter** (`ModelStateInvalidFilter`, wired globally via `[ApiController]`). When the model state is invalid after binding and attribute evaluation, the filter calls `InvalidModelStateResponseFactory` (registered in `Startup.cs` via `ConfigureApiBehaviorOptions`) before the action body executes. The factory aggregates all field-level error messages with `"; "` and returns `ErrorResponse { Error = "InvalidRequest", Message = <aggregated messages> }` as `400 Bad Request`.
+
+2. **DataAnnotations on `Stash.Registry.Contracts` DTOs** — `[Required]`, `[StringLength]`, `[RegularExpression]`, `[Range]`, `[MinLength]` attributes on request DTOs in the shared Contracts project. Examples: `[Range(1, 100)]` on `SearchQuery.PageSize` (rejects out-of-range values with `400 InvalidRequest` — out-of-range is declared and rejected, not silently clamped); `[Range(1, 200)]` on `AuditLogQuery.PageSize`.
+
+3. **`IValidatableObject` on `ClaimScopeRequest`** — for the cross-field owner-required rule: `owner_type = "org"` requires `owner` to be present; `owner_type = "user"` requires `owner` to be a non-empty username. These multi-field rules cannot be expressed by a single attribute and are implemented in `ClaimScopeRequest.Validate()`.
+
+4. **Custom `ValidationAttribute` subclasses** under `Stash.Registry.Contracts/Validation/` — for closed-form grammar rules that apply across multiple DTOs:
+   - `ScopeGrammarAttribute` — validates the scope-name grammar (`^[a-z][a-z0-9-]{0,38}$`). Used on `RegisterRequest.Username`, `CreateOrgRequest.Name`, `CreateTeamRequest.Name`, `ClaimScopeRequest.Scope`.
+   - `TokenExpiryAttribute` — validates the `expires_in` duration string format and enforces a `≥ 1h` floor. Used on `TokenCreateRequest.ExpiresIn`.
+
+**Enforcement** — `RequestModelBindingMetaTests` (`Stash.Tests/Registry/Validation/`) is a Roslyn meta-test that fails CI if any controller action reads `Request.Body` directly or if a Contracts-typed action parameter lacks `[FromBody]`/`[FromQuery]`. Its `KnownExemptions` set is empty: every action is model-bound. Adding a new action that bypasses model binding without updating the exemption set fails the test immediately.
+
 **Key rules:**
 
 - Public read endpoints (GET packages, search, download, health) carry `[PublicEndpoint("reason")]` instead of `[Authorize]`; the JTI revocation middleware still rejects revoked tokens even on public endpoints
