@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T20:55:15Z"
+updated: "2026-06-03T21:09:56Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "AdminController (CreateUser/AdminAssignRole/GetAuditLog) + ScopesController.ClaimScope migrated; KnownExemptions emptied; AdminControllerValidationTests + ScopesControllerValidationTests added; OpenAPI snapshot updated; IValidatableObject patched for null owner_type; [RegularExpression] added to CreateUserRequest.Username; 810 passed, 0 failed"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d891063af1d67f3fea10d9c8da73b5412547aa38
+    verified: true
+    started: "2026-06-03T20:59:59Z"
+    completed: "2026-06-03T21:09:56Z"
+    attempts: 1
+    notes: CLAUDE.md gains Request-validation subsection naming 4 parts + meta-test; docs/Registry Security Contract row updated with ErrorResponse 400 shape and pageSie 1..100/1..200 declared-not-clamped
 review:
   status: not_started
   started: null
