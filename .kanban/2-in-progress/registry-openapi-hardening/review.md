@@ -80,7 +80,8 @@ dotnet test --filter "FullyQualifiedName~BoundedDomainBoundaryTests|FullyQualifi
 
 ## F02 — [MEDIUM] CLR-default enum member alignment with DB default literal is documented in prose only — no test guards it
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** c1a77dd0
 **Files:** `Stash.Registry/Database/RegistryDbContext.cs:97,136,223`, `Stash.Registry.Contracts/BoundedDomains.cs:46,99,196`, `Stash.Registry/CLAUDE.md`
 **Phase:** P4
 **Commit:** 4ec47470
@@ -163,7 +164,8 @@ dotnet test --filter "FullyQualifiedName~Registry.OpenApi|FullyQualifiedName~Aut
 
 ## F04 — [LOW] AOT subprocess self-test exercises serialize but not deserialize — partial coverage of P5 done_when
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** c1a77dd0
 **Files:** `Stash.Cli/Program.cs:442-502` (`RunEnumSelfTest`), `Stash.Tests/Cli/AotPublishedBinaryEnumRoundTripTests.cs`
 **Phase:** P5
 **Commit:** 3d559674

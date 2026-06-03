@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-openapi-hardening
 current: null
-updated: "2026-06-03T15:45:43Z"
+updated: "2026-06-03T15:53:25Z"
 phases:
   P1:
     status: done
