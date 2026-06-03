@@ -11,7 +11,7 @@ namespace Stash.Registry.Contracts;
 /// </summary>
 public sealed class CreateUserRequest
 {
-    /// <summary>The username for the new account (max 64 characters).</summary>
+    /// <summary>The username for the new account (max 64 characters, letters/digits/hyphens/underscores only).</summary>
     [Required]
     [StringLength(64, MinimumLength = 1)]
     [UnconditionalSuppressMessage("Trimming", "IL2026",
@@ -20,6 +20,13 @@ public sealed class CreateUserRequest
                         "ICollection.Count reflection path, which is a server-side validation concern; " +
                         "the CLI has zero calls to Validator.*, ValidateObject, or ValidateValue and " +
                         "never reaches that path at runtime.")]
+    [RegularExpression(@"^[a-zA-Z0-9_-]+$",
+        ErrorMessage = "Username must contain only letters, digits, hyphens, or underscores.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RegularExpressionAttribute is [RequiresUnreferencedCode] for its " +
+                        "reflection-based type-coercion helper paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 
