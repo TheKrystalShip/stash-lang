@@ -1,0 +1,218 @@
+#!/usr/bin/env stash
+
+// examples/package_roles.stash
+//
+// Demonstrates the `stash pkg role` grammar shipped in pkg-cli-api-parity.
+// The role sub-command REPLACES the old `stash pkg owner` command.
+//
+// Grammar:
+//   stash pkg role list   <pkg>
+//   stash pkg role assign <pkg> <user|team|org> <principal> <owner|maintainer|publisher|reader>
+//   stash pkg role revoke <pkg> <user|team|org> <principal>
+//
+// Roles (highest → lowest privilege):  owner | maintainer | publisher | reader
+// Principal types:                      user  | team       | org
+//
+// All three sub-commands operate on the publish route:
+//   /packages/{scope}/{name}/roles
+// and require a token at the publish ceiling (STASH_TOKEN or --token).
+//
+// This script is ILLUSTRATIVE: it prints each command and its expected
+// output rather than shelling out to a live registry. The installed `stash`
+// binary predates this feature; a live run would require a real registry
+// instance and a valid session token.
+//
+// Run: stash examples/package_roles.stash
+
+// ── Role and principal-type reference tables ──────────────────────────────────
+
+// Roles, ordered from highest to lowest privilege
+
+const ROLES = ["owner", "maintainer", "publisher", "reader"];
+// All valid principal types
+
+const PRINCIPAL_TYPES = ["user", "team", "org"];
+
+// Role descriptions
+
+struct RoleInfo {
+  name,
+  description
+}
+
+const role_docs = [
+  RoleInfo {
+    name: "owner",
+    description: "Full control: transfer, delete, manage roles"
+  },
+  RoleInfo {
+    name: "maintainer",
+    description: "Unpublish, deprecate, change visibility"
+  },
+  RoleInfo { name: "publisher", description: "Publish new versions" },
+  RoleInfo { name: "reader", description: "Download and view package metadata" }
+];
+
+// ── Helper: render a command line + its expected output ───────────────────────
+
+fn show_command(cmd: string) {
+  io.println($"  $ {cmd}");
+}
+
+fn show_output(line: string) {
+  io.println($"  {line}");
+}
+
+const RULE_WIDTH = 64;
+
+fn separator() {
+  io.println("-" * RULE_WIDTH);
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+
+io.println("=" * RULE_WIDTH);
+io.println("  stash pkg role — package access control");
+io.println("=" * RULE_WIDTH);
+io.println();
+io.println("Roles grant named principals (users, teams, or orgs) scoped");
+io.println("access to a package. They replace the old `stash pkg owner`");
+io.println("sub-command with a finer-grained permission model.");
+io.println();
+// Print the role reference table
+
+io.println("Roles (highest → lowest privilege):");
+for (let r in role_docs) {
+  io.println($"  {str.padEnd(r.name, 14)} {r.description}");
+}
+io.println();
+io.println("Principal types: " + arr.join(PRINCIPAL_TYPES, " | "));
+io.println();
+// ── End-to-end walkthrough: assign → list → revoke → list ────────────────────
+
+const PKG = "@myorg/awesome-lib";
+const PT_USER = "user";
+const PT_TEAM = "team";
+const PT_ORG = "org";
+separator();
+io.println("  Walkthrough: assign → list → revoke → list");
+separator();
+// Step 1: Assign a maintainer role to a user
+
+io.println();
+io.println("Step 1 — Assign user 'alice' the maintainer role:");
+io.println();
+show_command($"stash pkg role assign {PKG} {PT_USER} alice maintainer");
+io.println();
+io.println("  Expected output:");
+show_output($"Assigned {PT_USER}/alice the role 'maintainer' on {PKG}.");
+io.println();
+// Step 2: Assign publisher to a team
+
+io.println("Step 2 — Assign team 'ci-bots' the publisher role:");
+io.println();
+show_command($"stash pkg role assign {PKG} {PT_TEAM} ci-bots publisher");
+io.println();
+io.println("  Expected output:");
+show_output($"Assigned {PT_TEAM}/ci-bots the role 'publisher' on {PKG}.");
+io.println();
+// Step 3: Assign reader to an org
+
+io.println("Step 3 — Assign org 'partner-co' the reader role:");
+io.println();
+show_command($"stash pkg role assign {PKG} {PT_ORG} partner-co reader");
+io.println();
+io.println("  Expected output:");
+show_output($"Assigned org/partner-co the role 'reader' on {PKG}.");
+io.println();
+// Step 4: List roles — shows all three assignments plus the implicit owner
+
+io.println("Step 4 — List all roles on the package:");
+io.println();
+show_command($"stash pkg role list {PKG}");
+io.println();
+io.println("  Expected output:");
+show_output($"Roles on {PKG}:");
+show_output("  user/alice: maintainer");
+show_output("  team/ci-bots: publisher");
+show_output("  org/partner-co: reader");
+io.println();
+// Step 5: Revoke alice's role
+
+io.println("Step 5 — Revoke user 'alice' (removes her role entirely):");
+io.println();
+show_command($"stash pkg role revoke {PKG} {PT_USER} alice");
+io.println();
+io.println("  Expected output:");
+show_output($"Revoked user/alice's role on {PKG}.");
+io.println();
+// Step 6: List again — alice is gone
+
+io.println("Step 6 — List roles after revoke:");
+io.println();
+show_command($"stash pkg role list {PKG}");
+io.println();
+io.println("  Expected output:");
+show_output($"Roles on {PKG}:");
+show_output("  team/ci-bots: publisher");
+show_output("  org/partner-co: reader");
+io.println();
+// ── Edge cases ────────────────────────────────────────────────────────────────
+
+separator();
+io.println("  Edge cases");
+separator();
+io.println();
+// No roles assigned
+
+io.println("Empty package (no roles assigned):");
+io.println();
+show_command("stash pkg role list @me/brand-new");
+io.println();
+io.println("  Expected output:");
+show_output("No roles assigned on @me/brand-new.");
+io.println();
+// Last-owner protection: the registry rejects removal of the sole owner
+
+io.println("Last-owner protection (the registry refuses):");
+io.println();
+show_command("stash pkg role revoke @me/brand-new user me");
+io.println();
+io.println("  The registry returns 409 Conflict; the CLI exits non-zero and");
+io.println("  prints the server error message. The owner row is never deleted");
+io.println("  when it is the only remaining owner.");
+io.println();
+// ── Authentication notes ──────────────────────────────────────────────────────
+
+separator();
+io.println("  Authentication");
+separator();
+io.println();
+io.println("All three sub-commands require a token at the publish ceiling.");
+io.println("Three ways to supply it:");
+io.println();
+io.println("  1. Log in once — credentials cached in ~/.stash/config.json:");
+show_command("stash pkg login");
+io.println();
+io.println("  2. Environment variable (CI/CD pipelines):");
+show_command("STASH_TOKEN=<token> stash pkg role list @org/pkg");
+io.println();
+io.println("  3. Per-command flag:");
+show_command("stash pkg role list @org/pkg --token <token>");
+io.println();
+// ── Available roles summary ────────────────────────────────────────────────────
+
+separator();
+io.println("  Role hierarchy summary");
+separator();
+io.println();
+for (let i = 0; i < len(ROLES); i++) {
+  const rank = i + 1;
+  const label = str.padEnd(ROLES[i], 14);
+  io.println($"  {rank}. {label} (privilege rank {rank}/{len(ROLES)})");
+}
+io.println();
+io.println("Higher rank = more privilege. An owner can do everything a");
+io.println("maintainer can, plus transfer and delete the package.");
+io.println();
+io.println("Done.");

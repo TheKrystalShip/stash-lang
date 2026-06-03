@@ -54,7 +54,7 @@ All package routes use the two-segment form `/packages/{scope}/{name}` where `{s
 | DELETE | `/api/v1/packages/{scope}/{name}/deprecate`            | publish scope         | Undeprecate package                      |
 | PATCH  | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope         | Deprecate version                        |
 | DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope         | Undeprecate version                      |
-| GET    | `/api/v1/packages/{scope}/{name}/roles`                | admin                 | List package roles                       |
+| GET    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | List package roles                       |
 | PUT    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | Assign a role to a principal             |
 | DELETE | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | Revoke a role from a principal           |
 | PATCH  | `/api/v1/packages/{scope}/{name}/visibility`           | publish scope (owner) | Change package visibility                |
@@ -531,7 +531,14 @@ Response (all four):
 
 ### 6.7 GET /api/v1/packages/{scope}/{name}/roles
 
-List role assignments for a package. Requires `admin` role.
+List role assignments for a package. Requires `publish` scope and `owner` permission on the
+package.
+
+`GET`, `PUT`, and `DELETE` on `/api/v1/packages/{scope}/{name}/roles` are **self-service**
+routes at a uniform **publish** ceiling — a package owner lists, assigns, and revokes roles
+on their own package with a publish token, no admin required. These are the routes the
+`stash pkg role` CLI command uses. The parallel `/api/v1/admin/packages/{scope}/{name}/roles`
+routes (below) are admin-override only.
 
 ```json
 {
