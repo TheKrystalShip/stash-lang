@@ -41,22 +41,36 @@ public sealed class ClaimScopeRequest : IValidatableObject
     public string? VerificationMethod { get; set; }
 
     /// <summary>
-    /// Cross-field validation: <c>owner</c> is required for both <c>user</c> and <c>org</c> owner
-    /// types when <see cref="OwnerType"/> is set. The "caller matches owner" business check
-    /// (i.e. verifying the authenticated user has the right to claim on behalf of the named owner)
-    /// stays in the controller's <c>[ImperativeAuthz]</c> action body and is not expressed here.
+    /// Cross-field validation: <c>owner_type</c> must be <c>user</c> or <c>org</c> (the
+    /// <c>system</c> value is not user-claimable), and <c>owner</c> is required for both
+    /// user-claimable types. The "caller matches owner" business check stays in the
+    /// controller's <c>[ImperativeAuthz]</c> action body and is not expressed here.
     /// </summary>
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        // If OwnerType is set to a user-claimable type, Owner must be provided.
-        if (OwnerType == ScopeOwnerTypes.User || OwnerType == ScopeOwnerTypes.Org)
+        // owner_type must be present and must be a user-claimable type.
+        if (OwnerType == null)
         {
-            if (string.IsNullOrWhiteSpace(Owner))
-            {
-                yield return new ValidationResult(
-                    $"The owner field is required when owner_type is '{OwnerType.Value.ToWire()}'.",
-                    [nameof(Owner)]);
-            }
+            yield return new ValidationResult(
+                $"The owner_type field is required and must be '{ScopeOwnerTypes.User.ToWire()}' or '{ScopeOwnerTypes.Org.ToWire()}'.",
+                [nameof(OwnerType)]);
+            yield break;
+        }
+
+        if (OwnerType != ScopeOwnerTypes.User && OwnerType != ScopeOwnerTypes.Org)
+        {
+            yield return new ValidationResult(
+                $"owner_type must be '{ScopeOwnerTypes.User.ToWire()}' or '{ScopeOwnerTypes.Org.ToWire()}'.",
+                [nameof(OwnerType)]);
+            yield break;
+        }
+
+        // If OwnerType is set to a user-claimable type, Owner must be provided.
+        if (string.IsNullOrWhiteSpace(Owner))
+        {
+            yield return new ValidationResult(
+                $"The owner field is required when owner_type is '{OwnerType.Value.ToWire()}'.",
+                [nameof(Owner)]);
         }
     }
 }

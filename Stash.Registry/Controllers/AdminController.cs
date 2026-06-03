@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -73,32 +72,13 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.ManageUser)]
     [HttpPost("users")]
-    public async Task<Results<Created<CreateUserResponse>, BadRequest<ErrorResponse>, Conflict<ErrorResponse>>> CreateUser()
+    public async Task<Results<Created<CreateUserResponse>, BadRequest<ErrorResponse>, Conflict<ErrorResponse>>> CreateUser([FromBody] CreateUserRequest request)
     {
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        CreateUserRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<CreateUserRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        string? newUsername = body?.Username?.Trim();
-        string? password = body?.Password;
-        UserRoles newRole = body?.Role ?? UserRoles.User;
-
-        if (string.IsNullOrEmpty(newUsername) || string.IsNullOrEmpty(password))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
-
-        if (newUsername.Length > 64 || !System.Text.RegularExpressions.Regex.IsMatch(newUsername, @"^[a-zA-Z0-9_-]+$"))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username must be 1-64 characters and contain only letters, digits, hyphens, or underscores." });
-
-        if (password.Length < 8)
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
+        string newUsername = request.Username!.Trim();
+        string password = request.Password!;
+        UserRoles newRole = request.Role ?? UserRoles.User;
 
         try
         {
@@ -144,7 +124,7 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.AdminAssignPackageRole)]
     [HttpPut("packages/{scope}/{name}/roles")]
-    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>>> AdminAssignRole(string scope, string name)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>>> AdminAssignRole(string scope, string name, [FromBody] AssignRoleRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -155,23 +135,9 @@ public class AdminController : ControllerBase
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        AssignRoleRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<AssignRoleRequest>(
-                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        if (body == null)
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Request body is required." });
-
         // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
-        await _db.AssignPackageRoleAsync(packageName, body.PrincipalType.ToWire(), body.PrincipalId, body.Role.ToWire());
-        await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, body.PrincipalId, ip);
+        await _db.AssignPackageRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId, request.Role.ToWire());
+        await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, request.PrincipalId, ip);
 
         return TypedResults.Ok(new SuccessResponse());
     }
@@ -219,27 +185,10 @@ public class AdminController : ControllerBase
     /// </summary>
     [RegistryAuthorize(RegistryAction.ReadAuditLog)]
     [HttpGet("audit-log")]
-    public async Task<Ok<AuditLogResponse>> GetAuditLog()
+    public async Task<Ok<AuditLogResponse>> GetAuditLog([FromQuery] AuditLogQuery query)
     {
-        int page = 1;
-        int pageSize = 50;
-        string? packageFilter = null;
-        string? actionFilter = null;
-
-        if (Request.Query.TryGetValue("page", out var pageStr) && int.TryParse(pageStr, out int parsedPage) && parsedPage > 0)
-            page = parsedPage;
-
-        if (Request.Query.TryGetValue("pageSize", out var pageSizeStr) && int.TryParse(pageSizeStr, out int parsedPageSize) && parsedPageSize > 0)
-            pageSize = Math.Min(parsedPageSize, 200);
-
-        if (Request.Query.TryGetValue("package", out var pkgFilter) && !string.IsNullOrEmpty(pkgFilter))
-            packageFilter = pkgFilter.ToString();
-
-        if (Request.Query.TryGetValue("action", out var actFilter) && !string.IsNullOrEmpty(actFilter))
-            actionFilter = actFilter.ToString();
-
-        var result = await _auditService.GetAuditLogAsync(page, pageSize, packageFilter, actionFilter);
-        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)pageSize);
+        var result = await _auditService.GetAuditLogAsync(query.Page, query.PageSize, query.Package, query.Action);
+        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.PageSize);
 
         return TypedResults.Ok(new AuditLogResponse
         {
@@ -256,8 +205,8 @@ public class AdminController : ControllerBase
                 DenyReason = e.DenyReason
             }).ToList(),
             TotalCount = result.TotalCount,
-            Page = page,
-            PageSize = pageSize,
+            Page = query.Page,
+            PageSize = query.PageSize,
             TotalPages = totalPages
         });
     }

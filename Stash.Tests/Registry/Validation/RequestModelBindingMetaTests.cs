@@ -91,20 +91,16 @@ public sealed class RequestModelBindingMetaTests
     /// The pinned set of currently-bypassing actions, formatted as
     /// <c>"{ControllerBaseName}.{ActionMethodName}"</c> (no "Controller" suffix).
     /// <para>
-    /// This set is seeded with all twelve actions at P1 and shrinks to empty by P5.
-    /// Each migration phase removes the migrated actions from this set and also removes
-    /// their corresponding <c>DeserializeAsync</c> / <c>Request.Query</c> calls.
+    /// This set started with all twelve actions at P1 and reached empty at P5.
+    /// It is asserted empty here: any future endpoint that bypasses model binding will
+    /// show up as a "NEW violation not in KnownExemptions" and fail the test loudly,
+    /// forcing a deliberate update to this pin (which documents the reason for the bypass).
     /// </para>
     /// </summary>
     private static readonly IReadOnlySet<string> KnownExemptions = new HashSet<string>(StringComparer.Ordinal)
     {
-        // Admin controller — 2 body-deserialization bypasses + 1 query bypass (P5 will migrate these)
-        "Admin.CreateUser",
-        "Admin.AdminAssignRole",
-        "Admin.GetAuditLog",
-
-        // Scopes controller — 1 body-deserialization bypass (P5 will migrate this)
-        "Scopes.ClaimScope",
+        // Empty — all controller actions now use declarative [FromBody] / [FromQuery] binding.
+        // Adding an entry here requires a deliberate decision and explanation.
     };
 
     // ── Repo-root discovery ───────────────────────────────────────────────────
