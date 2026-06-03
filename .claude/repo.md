@@ -27,7 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
-_(none active)_
+- registry-declarative-request-validation — Registry Declarative Request Validation | .kanban/2-in-progress/registry-declarative-request-validation/ | 6 phases | started 2026-06-03
 
 ---
 

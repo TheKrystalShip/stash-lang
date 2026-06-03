@@ -1,0 +1,189 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>
+
+schema_version: 1
+
+feature: registry-declarative-request-validation
+title: Registry Declarative Request Validation
+
+brief: ./brief.md
+
+created: 2026-06-03
+architect_session: architect-2026-06-03
+
+# Default verify command run after every phase (cheap; per-phase verify adds the focused suite).
+default_verify:
+  - dotnet build
+
+# Safety rail — the in-scope subsystems. Implementers may correct stale paths within scope.
+scope:
+  - Stash.Registry/Controllers/**
+  - Stash.Registry/Startup.cs
+  - Stash.Registry.Contracts/**
+  - Stash.Tests/Registry/**
+  - Stash.Registry/CLAUDE.md
+  - docs/Registry — Package Registry.md
+
+phases:
+  - id: P1
+    title: Roslyn meta-test lands RED with pinned exemptions
+    deps: []
+    files:
+      - Stash.Tests/Registry/Validation/RequestModelBindingMetaTests.cs
+    verify:
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~RequestModelBindingMetaTests"
+    done_when:
+      - RequestModelBindingMetaTests scans every controller .cs under Stash.Registry/Controllers/ using a load-order-deterministic Roslyn compilation (TRUSTED_PLATFORM_ASSEMBLIES + Stash.Registry.Contracts + System.ComponentModel.DataAnnotations).
+      - The test flags two sink shapes — (a) calls of the form JsonSerializer.DeserializeAsync<T>(Request.Body, ...), and (b) public controller actions taking a parameter of any type declared in the Stash.Registry.Contracts namespace without a [FromBody] / [FromQuery] / [FromForm] / [FromRoute] binding-source attribute.
+      - A pinned KnownExemptions set contains exactly the 12 currently-bypassing actions — Auth.Login, Auth.Register, Auth.CreateToken, Auth.RefreshToken, Organizations.CreateOrg, Organizations.CreateTeam, Organizations.AddTeamMember, Admin.CreateUser, Admin.AdminAssignRole, Admin.GetAuditLog, Scopes.ClaimScope, Search.Search — and the test asserts the live violation set equals this pin.
+      - A binding-floor probe asserts a known Stash.Registry.Contracts type (e.g. AssignRoleRequest) resolves to a non-error symbol; the file-count floor (MinScannedFiles = 6) is asserted; a positive self-test fixture proves the scanner flags a manual DeserializeAsync; a negative self-test fixture proves a clean [FromBody] action is not flagged.
+      - The test class lives in Stash.Tests/Registry/Validation/ (new directory).
+    notes: |
+      Mirror the Roslyn pattern in CliNoMagicWireStringsMetaTests:
+      AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") for the framework closure,
+      plus typeof(AssignRoleRequest).Assembly.Location and
+      typeof(MinLengthAttribute).Assembly.Location. Never use
+      AppDomain.CurrentDomain.GetAssemblies() — its set varies with test order.
+      The exemption format is "{ControllerBaseName}.{ActionMethodName}".
+      The action's binding-source attribute is detected via semantic model on the
+      ParameterSyntax — checking the attribute symbol's containing type is in the
+      Microsoft.AspNetCore.Mvc namespace (FromBody/FromQuery/FromForm/FromRoute).
+
+  - id: P2
+    title: Contracts DTOs gain DataAnnotations + factory aggregates
+    deps: [P1]
+    files:
+      - Stash.Registry.Contracts/AuthContracts.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry.Contracts/OrganizationContracts.cs
+      - Stash.Registry.Contracts/ScopeContracts.cs
+      - Stash.Registry.Contracts/SearchContracts.cs
+      - Stash.Registry.Contracts/PackageContracts.cs
+      - Stash.Registry.Contracts/Validation/ScopeGrammarAttribute.cs
+      - Stash.Registry.Contracts/Validation/TokenExpiryAttribute.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Tests/Registry/Validation/InvalidModelStateFactoryTests.cs
+      - Stash.Tests/Registry/Validation/ContractsValidationAttributesTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~Registry.Validation"
+      - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName~BoundedDomainBoundaryTests"
+    done_when:
+      - LoginRequest.Username/.Password, RegisterRequest.Username/.Password, CreateUserRequest.Username/.Password, CreateOrgRequest.Name, CreateTeamRequest.Name, AddOrgMemberRequest.Username, AddTeamMemberRequest.Username, ClaimScopeRequest.Scope/.Owner, RefreshTokenRequest.RefreshToken/.AccessToken/.MachineId carry [Required] and (where applicable) [StringLength] / [RegularExpression] / ScopeGrammarAttribute attributes.
+      - TokenCreateRequest.Ceiling carries [Required]; TokenCreateRequest.ExpiresIn carries [Required] + TokenExpiryAttribute (validates parseability + the >=1h floor; ceiling-vs-config stays inline because it is config-dependent).
+      - Two new [FromQuery] DTOs land in Stash.Registry.Contracts/SearchContracts.cs and AdminContracts.cs — SearchQuery with [FromQuery]-bindable Query/Page/PageSize ([Range(1, int.MaxValue)], [Range(1, 100)]); AuditLogQuery with Page/PageSize/Package/Action ([Range(1, int.MaxValue)], [Range(1, 200)]).
+      - ScopeGrammarAttribute (subclass of ValidationAttribute) wraps PackageManifest.IsValidScopeName; TokenExpiryAttribute wraps AuthHelper.ParseTokenExpiry plus the >=1h floor. Both live under Stash.Registry.Contracts/Validation/.
+      - ClaimScopeRequest implements IValidatableObject — Validate(ValidationContext) returns the "owner is required" rule for both User and Org owner types, and a placeholder allowing the [ImperativeAuthz] action body to keep its "verify the caller matches" business check.
+      - Every new attribute on a member of Stash.Registry.Contracts that has a [RequiresUnreferencedCode] reflection path carries [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = ...)] mirroring the existing DeprecatePackageRequest.Message precedent.
+      - 'Startup.cs InvalidModelStateResponseFactory aggregates: ctx.ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage), joined with "; " into ErrorResponse.Message; Error stays "InvalidRequest"; the existing fallback ("Request body is invalid.") is preserved for the empty-state branch.'
+      - ContractsValidationAttributesTests verifies each attribute and the IValidatableObject implementation via System.ComponentModel.DataAnnotations.Validator.TryValidateObject (in-process, no controller).
+      - InvalidModelStateFactoryTests verifies the aggregation behaviour against a hand-built ModelStateDictionary fixture.
+      - RegistryAuthzMatrixTests, OpenApiSnapshotTests, BoundedDomainBoundaryTests all green (no controller migration yet, so the matrix is wire-unchanged).
+    notes: |
+      Do NOT touch BoundedDomains.cs. Do NOT add attributes to bounded-domain
+      properties (PrincipalType, Role, Visibility, OwnerType, OrgRole) — they
+      are already enums with [JsonStringEnumConverter] and reject illegal wire
+      values at deserialization.
+
+  - id: P3
+    title: AuthController + SearchController migrate; meta-test exemption -5
+    deps: [P2]
+    files:
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Registry/Controllers/SearchController.cs
+      - Stash.Tests/Registry/Validation/RequestModelBindingMetaTests.cs
+      - Stash.Tests/Registry/Validation/AuthControllerValidationTests.cs
+      - Stash.Tests/Registry/Validation/SearchControllerValidationTests.cs
+    verify:
+      - dotnet build Stash.Registry Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~Registry.Validation|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests"
+    done_when:
+      - AuthController.Login, Register, CreateToken, RefreshToken take [FromBody] T request parameters instead of opening Request.Body. Every try-catch (JsonException) block in those four methods is gone, and inline null/empty/length/regex guards covered by DataAnnotations attributes are deleted per the Guard-deletion policy in brief.md → Semantics.
+      - SearchController.Search takes [FromQuery] SearchQuery query and removes the manual Request.Query.TryGetValue / int.TryParse / Math.Min pagination block. Out-of-range pageSize now returns 400 InvalidRequest (recorded behaviour change).
+      - RequestModelBindingMetaTests' KnownExemptions set shrinks by exactly 5 — Auth.Login, Auth.Register, Auth.CreateToken, Auth.RefreshToken, Search.Search are removed.
+      - 'AuthControllerValidationTests verifies a POST to /api/v1/auth/login with {"username":""} (no password) returns 400 ErrorResponse{Error="InvalidRequest", Message contains both "Username is required." and "Password is required." joined with "; "}; the action body is provably not entered (no audit-log entry, no token issuance).'
+      - SearchControllerValidationTests verifies GET /api/v1/search?pageSize=500 returns 400 InvalidRequest (replacing the silent clamp); GET /api/v1/search?pageSize=20 still returns 200 with 20-item page.
+      - RegistryAuthzMatrixTests and OpenApiSnapshotTests stay green.
+    notes: |
+      The "deferred shape" guard (if (body?.Capabilities != null)) in CreateToken
+      stays inline — it is a forbid, not a validate, and returns a custom
+      "capabilities_not_supported" error code (not "InvalidRequest").
+
+  - id: P4
+    title: OrganizationsController migrates; AddMember body flips non-nullable; exemption -3
+    deps: [P3]
+    files:
+      - Stash.Registry/Controllers/OrganizationsController.cs
+      - Stash.Tests/Registry/Validation/RequestModelBindingMetaTests.cs
+      - Stash.Tests/Registry/Validation/OrganizationsControllerValidationTests.cs
+    verify:
+      - dotnet build Stash.Registry Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~Registry.Validation|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName~OrgAndAdminAuthzTests"
+    done_when:
+      - OrganizationsController.CreateOrg, CreateTeam, AddTeamMember take [FromBody] T request parameters; every try-catch (JsonException) is gone in those three methods; inline guards covered by attributes are deleted.
+      - AddMember's signature changes from "AddMember(string org, [FromBody] AddOrgMemberRequest? body)" to "AddMember(string org, [FromBody] AddOrgMemberRequest request)" — non-nullable. The action body's null-body guard is removed.
+      - RequestModelBindingMetaTests' KnownExemptions shrinks by exactly 3 — Organizations.CreateOrg, Organizations.CreateTeam, Organizations.AddTeamMember are removed.
+      - 'OrganizationsControllerValidationTests verifies POST /api/v1/orgs/{org}/members with an empty body now returns 400 InvalidRequest (today: returns 400 "Username is required." from inline guard; after: returns 400 InvalidRequest from the filter on a missing request body).'
+      - RegistryAuthzMatrixTests, OpenApiSnapshotTests, OrgAndAdminAuthzTests all green.
+    notes: |
+      Normalisation (Trim, ToLowerInvariant) and ReservedScopes.IsReserved(name)
+      stay inline per the Guard-deletion policy. The 409 conflict path on
+      InvalidOperationException stays exactly as today.
+
+  - id: P5
+    title: AdminController + ScopesController migrate; exemption set reaches empty
+    deps: [P4]
+    files:
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Controllers/ScopesController.cs
+      - Stash.Tests/Registry/Validation/RequestModelBindingMetaTests.cs
+      - Stash.Tests/Registry/Validation/AdminControllerValidationTests.cs
+      - Stash.Tests/Registry/Validation/ScopesControllerValidationTests.cs
+    verify:
+      - dotnet build Stash.Registry Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~Registry"
+    done_when:
+      - AdminController.CreateUser, AdminAssignRole take [FromBody] T request parameters; every try-catch (JsonException) is gone in those two methods; inline guards covered by attributes are deleted.
+      - AdminController.GetAuditLog takes [FromQuery] AuditLogQuery query; the manual Request.Query.TryGetValue / int.TryParse / Math.Min pagination block is gone. Out-of-range pageSize returns 400 InvalidRequest.
+      - ScopesController.ClaimScope takes [FromBody] ClaimScopeRequest request; the try-catch (JsonException) is gone; the if (string.IsNullOrEmpty(scopeName)) and if (ownerTypeRaw == null) guards are gone (DataAnnotations + IValidatableObject cover them). The [ImperativeAuthz] marker stays, the inline _authorizer.AuthorizeAsync(...) call stays, the 409 ScopeReserved/ScopeNotOwned mapping stays, and the cross-resource guards (caller matches owner / is org owner) stay.
+      - AuthzDispatchCoverageMetaTests' imperative-pin still equals {ScopesController.ClaimScope} — verified green.
+      - RequestModelBindingMetaTests' KnownExemptions equals the empty set; the test asserts this equality explicitly so any future regression repopulates and forces an explicit test edit.
+      - AdminControllerValidationTests verifies CreateUser empty-body returns 400 InvalidRequest; out-of-range GetAuditLog pageSize=300 returns 400 InvalidRequest.
+      - ScopesControllerValidationTests verifies ClaimScope with missing owner_type returns 400 InvalidRequest; ClaimScope with valid body still reaches the inline PDP (positive integration row from the matrix data).
+      - RegistryAuthzMatrixTests passes — including all matrix rows that POST a body to /api/v1/scopes (well-formed body, no malformed cases that would shift 403/409 to 400).
+      - dotnet test --filter "FullyQualifiedName~Registry" reports zero failures.
+    notes: |
+      ClaimScope migration is the most subtle: keep the trim+lowercase on
+      body.Scope, keep the caller-matches-owner business check, keep the
+      isOrgOwner DB check, keep the namespace-pool collision checks (409),
+      keep the 409 status mapping for ScopeReserved/ScopeNotOwned. ONLY the
+      structural deserialize-and-empty-check ceremony is replaced.
+
+  - id: P6
+    title: Documentation — registry guidelines + spec
+    deps: [P5]
+    files:
+      - Stash.Registry/CLAUDE.md
+      - docs/Registry — Package Registry.md
+    verify:
+      - dotnet test
+    done_when:
+      - Stash.Registry/CLAUDE.md "Controller Pattern" section gains a "Request validation" subsection naming the four moving parts — [ApiController] auto-validation filter, DataAnnotations attributes on Contracts DTOs, IValidatableObject for cross-field rules, custom ValidationAttribute subclasses for closed-form helpers — and points at RequestModelBindingMetaTests as the enforcement.
+      - docs/Registry — Package Registry.md Security Requirements input-validation line describes the 400 wire shape (ErrorResponse{Error="InvalidRequest", Message=aggregated}) and the pagination caps (Search pageSize 1..100, Audit-log pageSize 1..200) as declared, not clamped.
+      - The full test suite stays green.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The two `checkpoint lint` lines are
+# the standing omission guard: every feature's promotion gate confirms the live doc
+# surface has no raw `scripts/checkpoint/<sub>.stash` reference (it routes through the
+# facade) and that the guard still has teeth. Keep them — dropping them makes the
+# guard one-shot instead of perpetual.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
