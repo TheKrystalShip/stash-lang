@@ -98,11 +98,6 @@ public sealed class RequestModelBindingMetaTests
     /// </summary>
     private static readonly IReadOnlySet<string> KnownExemptions = new HashSet<string>(StringComparer.Ordinal)
     {
-        // Organizations controller — 3 body-deserialization bypasses (P4 will migrate these)
-        "Organizations.CreateOrg",
-        "Organizations.CreateTeam",
-        "Organizations.AddTeamMember",
-
         // Admin controller — 2 body-deserialization bypasses + 1 query bypass (P5 will migrate these)
         "Admin.CreateUser",
         "Admin.AdminAssignRole",
