@@ -202,7 +202,8 @@ dotnet test --filter "FullyQualifiedName~OrganizationsControllerValidationTests"
 
 ## F03 — [HIGH] AuditLogQuery.PageSize default silently changed from 50 to 20 (docs still say 50)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e9f7bdd4
 **Files:** `Stash.Registry.Contracts/AdminContracts.cs:75`, `docs/Registry — Package Registry.md:827`
 **Phase:** P5
 **Commit:** d628db5b
@@ -612,7 +613,8 @@ dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests"
 
 ## F09 — [LOW] CreateUserRequest.Username regex restoration deserves a behaviour-pinning test (P5-D3)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e9f7bdd4
 **Files:** `Stash.Registry.Contracts/AdminContracts.cs:23-29`, `Stash.Tests/Registry/Validation/AdminControllerValidationTests.cs`
 **Phase:** P5
 **Commit:** df69e2cd (fix), d628db5b (feat)
