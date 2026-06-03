@@ -5,7 +5,6 @@ using System.Linq;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -13,7 +12,6 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
-using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
@@ -89,25 +87,10 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpPost("login")]
     [PublicEndpoint("login does not require a prior session — credentials are the authenticator")]
-    public async Task<Results<Ok<LoginResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> Login()
+    public async Task<Results<Ok<LoginResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> Login([FromBody] LoginRequest request)
     {
-        LoginRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<LoginRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        string? username = body?.Username?.Trim();
-        string? password = body?.Password;
-
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
-        }
+        string username = request.Username!.Trim();
+        string password = request.Password!;
 
         if (!await _authProvider.AuthenticateAsync(username, password))
         {
@@ -184,40 +167,15 @@ public class AuthController : ControllerBase
     /// </returns>
     [HttpPost("register")]
     [PublicEndpoint("self-service registration requires no prior account")]
-    public async Task<Results<Created<RegisterResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>, Conflict<ErrorResponse>>> Register()
+    public async Task<Results<Created<RegisterResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>, Conflict<ErrorResponse>>> Register([FromBody] RegisterRequest request)
     {
         if (!_config.Auth.RegistrationEnabled)
         {
             return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "registration_disabled", Message = "User registration is disabled on this registry." });
         }
 
-        RegisterRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<RegisterRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        string? username = body?.Username?.Trim();
-        string? password = body?.Password;
-
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username and password are required." });
-        }
-
-        if (!PackageManifest.IsValidScopeName(username))
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username must match the scope grammar: a lowercase letter followed by up to 38 lowercase letters, digits, or hyphens (max 39 characters)." });
-        }
-
-        if (password.Length < 8)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Password must be at least 8 characters." });
-        }
+        string username = request.Username!.Trim();
+        string password = request.Password!;
 
         try
         {
@@ -318,24 +276,15 @@ public class AuthController : ControllerBase
     [HttpPost("tokens")]
     [Authorize]
     [RegistryAuthorize(RegistryAction.IssueToken)]
-    public async Task<Results<Created<TokenCreateResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>>> CreateToken()
+    public async Task<Results<Created<TokenCreateResponse>, BadRequest<ErrorResponse>, JsonForbidden<ErrorResponse>>> CreateToken([FromBody] TokenCreateRequest request)
     {
         string username = User.Identity!.Name!;
         string role = User.FindFirstValue(ClaimTypes.Role) ?? UserRoles.User.ToWire();
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        TokenCreateRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<TokenCreateRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
         // Guard against the deferred fine-grained token capability shape leaking in.
-        if (body?.Capabilities != null)
+        // This is a forbid (custom error code), not a validation failure — kept inline.
+        if (request.Capabilities != null)
         {
             return TypedResults.BadRequest(new ErrorResponse
             {
@@ -344,18 +293,10 @@ public class AuthController : ControllerBase
             });
         }
 
-        // ceiling is the canonical, mandatory field (no alias, no default — D11 hard clean break).
-        string? rawCeiling = body?.Ceiling;
-        if (string.IsNullOrEmpty(rawCeiling))
-        {
-            return TypedResults.BadRequest(new ErrorResponse
-            {
-                Error = "ceiling_required",
-                Message = "ceiling is required. Set it to 'read', 'publish', or 'admin'."
-            });
-        }
-
-        string scope = rawCeiling;
+        // ceiling: [Required] + [TokenExpiry] on the DTO cover null/empty and format.
+        // The value-set check (read/publish/admin) is not expressible as a DataAnnotation
+        // because Ceiling is string? (not a TokenScopes enum) — kept inline.
+        string scope = request.Ceiling!;
 
         if (!string.Equals(scope, TokenScopes.Read.ToWire(), StringComparison.Ordinal)
             && !string.Equals(scope, TokenScopes.Publish.ToWire(), StringComparison.Ordinal)
@@ -370,32 +311,10 @@ public class AuthController : ControllerBase
             return new JsonForbidden<ErrorResponse>(new ErrorResponse { Error = "Only admin users can create admin-ceiling tokens." });
         }
 
-        // expires_in is mandatory — absent or blank is a 400.
-        if (string.IsNullOrWhiteSpace(body?.ExpiresIn))
-        {
-            return TypedResults.BadRequest(new ErrorResponse
-            {
-                Error = "expires_in_required",
-                Message = "expires_in is required. Use formats like '30d', '12h', or '90m'."
-            });
-        }
-
-        DateTime expiresAt;
-        try
-        {
-            expiresAt = AuthHelper.ParseTokenExpiry(body.ExpiresIn);
-        }
-        catch (Exception)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid expires_in format: '{body.ExpiresIn}'. Use formats like '30d', '12h', or '90m'." });
-        }
-
+        // [Required] + [TokenExpiry] on ExpiresIn guarantee it is present and >= 1h.
+        // Re-parse here to compute the DateTime needed for token issuance.
+        DateTime expiresAt = AuthHelper.ParseTokenExpiry(request.ExpiresIn!);
         TimeSpan duration = expiresAt - DateTime.UtcNow;
-
-        if (duration < TimeSpan.FromHours(1))
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour." });
-        }
 
         TimeSpan maxLifetime = _config.Security.MaxTokenLifetime;
         if (duration > maxLifetime)
@@ -409,7 +328,7 @@ public class AuthController : ControllerBase
         }
 
         string tokenId = Guid.NewGuid().ToString();
-        string description = body.Name ?? body.Description ?? "";
+        string description = request.Name ?? request.Description ?? "";
         string jwt = _jwtService.CreateToken(username, role, scope, expiresAt, tokenId);
 
         await _db.CreateTokenAsync(new TokenRecord
@@ -518,29 +437,15 @@ public class AuthController : ControllerBase
     /// </remarks>
     [HttpPost("tokens/refresh")]
     [PublicEndpoint("token refresh validates the refresh-token credential itself — no bearer session required")]
-    public async Task<Results<Ok<RefreshTokenResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> RefreshToken()
+    public async Task<Results<Ok<RefreshTokenResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> RefreshToken([FromBody] RefreshTokenRequest request)
     {
-        RefreshTokenRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<RefreshTokenRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        if (string.IsNullOrEmpty(body?.RefreshToken) || string.IsNullOrEmpty(body?.AccessToken) || string.IsNullOrEmpty(body?.MachineId))
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "refreshToken, accessToken, and machineId are required." });
-        }
-
+        // [Required] on RefreshToken, AccessToken, MachineId ensures all three are present.
         // Validate the expired access token's signature (but not lifetime)
         ClaimsPrincipal? principal;
         try
         {
             var tokenHandler = new JwtSecurityTokenHandler();
-            principal = tokenHandler.ValidateToken(body.AccessToken, _jwtService.GetExpiredTokenValidationParameters(), out _);
+            principal = tokenHandler.ValidateToken(request.AccessToken, _jwtService.GetExpiredTokenValidationParameters(), out _);
         }
         catch (SecurityTokenException)
         {
@@ -556,13 +461,13 @@ public class AuthController : ControllerBase
 
         // Cross-validate machine_id claim from the JWT against the request body
         string? tokenMachineId = principal.FindFirstValue(RegistryClaims.MachineId);
-        if (!string.Equals(tokenMachineId, body.MachineId, StringComparison.Ordinal))
+        if (!string.Equals(tokenMachineId, request.MachineId, StringComparison.Ordinal))
         {
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Machine fingerprint mismatch." });
         }
 
         // Look up the refresh token by hash
-        string refreshTokenHash = HashToken(body.RefreshToken);
+        string refreshTokenHash = HashToken(request.RefreshToken!);
         var refreshRecord = await _db.GetRefreshTokenByHashAsync(refreshTokenHash);
         if (refreshRecord == null)
         {
@@ -589,7 +494,7 @@ public class AuthController : ControllerBase
         }
 
         // Validate machine fingerprint matches
-        if (!string.Equals(refreshRecord.MachineId, body.MachineId, StringComparison.Ordinal))
+        if (!string.Equals(refreshRecord.MachineId, request.MachineId, StringComparison.Ordinal))
         {
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Machine fingerprint mismatch. Please log in again." });
         }
@@ -618,7 +523,7 @@ public class AuthController : ControllerBase
         // Create new access token
         string newAccessTokenId = Guid.NewGuid().ToString();
         DateTime newAccessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
-        string newAccessJwt = _jwtService.CreateToken(tokenUsername, role, refreshRecord.Scope, newAccessExpiresAt, newAccessTokenId, body.MachineId);
+        string newAccessJwt = _jwtService.CreateToken(tokenUsername, role, refreshRecord.Scope, newAccessExpiresAt, newAccessTokenId, request.MachineId);
 
         await _db.CreateTokenAsync(new TokenRecord
         {
@@ -642,7 +547,7 @@ public class AuthController : ControllerBase
             TokenHash = newRefreshTokenHash,
             AccessTokenId = newAccessTokenId,
             FamilyId = refreshRecord.FamilyId,
-            MachineId = body.MachineId,
+            MachineId = request.MachineId!,
             Scope = refreshRecord.Scope,
             CreatedAt = DateTime.UtcNow,
             ExpiresAt = newRefreshExpiresAt

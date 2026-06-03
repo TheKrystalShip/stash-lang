@@ -1,0 +1,59 @@
+schema_version: 1
+feature: registry-declarative-request-validation
+current: null
+updated: "2026-06-03T22:48:40Z"
+phases:
+  P1:
+    status: done
+    commit: 82627ac357d7546aed739e8d058e284d476797cf
+    verified: true
+    started: "2026-06-03T18:06:30Z"
+    completed: "2026-06-03T18:17:35Z"
+    attempts: 1
+    notes: "RequestModelBindingMetaTests: 4 tests green, 12-entry pin matches live violation set, all three sinks detected"
+  P2:
+    status: done
+    commit: 4df0db13e56e4e969dfee030f9af7bb83e331f04
+    verified: true
+    started: "2026-06-03T18:24:11Z"
+    completed: "2026-06-03T18:55:44Z"
+    attempts: 1
+    notes: DataAnnotations on 8 request DTOs + ScopeGrammarAttribute + TokenExpiryAttribute + IValidatableObject on ClaimScopeRequest + SearchQuery/AuditLogQuery + factory aggregation; OpenAPI snapshot updated for AddOrgMemberRequest.username
+  P3:
+    status: done
+    commit: 4d812e13f9647123a4ad1b66725dd55c1eb1e543
+    verified: true
+    started: "2026-06-03T19:07:45Z"
+    completed: "2026-06-03T19:39:31Z"
+    attempts: 1
+    notes: "P3 fully green: 802/802 Registry tests pass. AuthController+SearchController migrated; 5 exemptions removed; LoginRequest ErrorMessage; TokenCreateRequest ceiling/expires_in ErrorMessage; ContractsAssemblyShapeTests updated for Validation sub-namespace"
+  P4:
+    status: done
+    commit: 8db697ca2aac9da6c768ec827e69e195d5fe8638
+    verified: true
+    started: "2026-06-03T19:42:42Z"
+    completed: "2026-06-03T20:15:57Z"
+    attempts: 1
+    notes: "OrganizationsController: CreateOrg/CreateTeam/AddTeamMember migrated to [FromBody]; AddMember nullable→non-nullable; KnownExemptions 7→4; OrganizationsControllerValidationTests green; OpenAPI snapshot updated"
+  P5:
+    status: done
+    commit: df69e2cd8bf7764890772ba4057b6219e05503ed
+    verified: true
+    started: "2026-06-03T20:30:10Z"
+    completed: "2026-06-03T20:55:15Z"
+    attempts: 1
+    notes: "AdminController (CreateUser/AdminAssignRole/GetAuditLog) + ScopesController.ClaimScope migrated; KnownExemptions emptied; AdminControllerValidationTests + ScopesControllerValidationTests added; OpenAPI snapshot updated; IValidatableObject patched for null owner_type; [RegularExpression] added to CreateUserRequest.Username; 810 passed, 0 failed"
+  P6:
+    status: done
+    commit: d891063af1d67f3fea10d9c8da73b5412547aa38
+    verified: true
+    started: "2026-06-03T20:59:59Z"
+    completed: "2026-06-03T21:09:56Z"
+    attempts: 1
+    notes: CLAUDE.md gains Request-validation subsection naming 4 parts + meta-test; docs/Registry Security Contract row updated with ErrorResponse 400 shape and pageSie 1..100/1..200 declared-not-clamped
+review:
+  status: resolved
+  started: "2026-06-03T21:26:13Z"
+  resolved: "2026-06-03T22:48:40Z"
+  findings_open: 0
+  findings_fixed: 0

@@ -69,7 +69,7 @@ phases:
       - Stash.Tests/Registry/Validation/InvalidModelStateFactoryTests.cs
       - Stash.Tests/Registry/Validation/ContractsValidationAttributesTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry.Validation"
       - dotnet test --filter "FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName~BoundedDomainBoundaryTests"
     done_when:
@@ -99,7 +99,7 @@ phases:
       - Stash.Tests/Registry/Validation/AuthControllerValidationTests.cs
       - Stash.Tests/Registry/Validation/SearchControllerValidationTests.cs
     verify:
-      - dotnet build Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry.Validation|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests"
     done_when:
       - AuthController.Login, Register, CreateToken, RefreshToken take [FromBody] T request parameters instead of opening Request.Body. Every try-catch (JsonException) block in those four methods is gone, and inline null/empty/length/regex guards covered by DataAnnotations attributes are deleted per the Guard-deletion policy in brief.md → Semantics.
@@ -121,7 +121,7 @@ phases:
       - Stash.Tests/Registry/Validation/RequestModelBindingMetaTests.cs
       - Stash.Tests/Registry/Validation/OrganizationsControllerValidationTests.cs
     verify:
-      - dotnet build Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry.Validation|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName~OrgAndAdminAuthzTests"
     done_when:
       - OrganizationsController.CreateOrg, CreateTeam, AddTeamMember take [FromBody] T request parameters; every try-catch (JsonException) is gone in those three methods; inline guards covered by attributes are deleted.
@@ -144,7 +144,7 @@ phases:
       - Stash.Tests/Registry/Validation/AdminControllerValidationTests.cs
       - Stash.Tests/Registry/Validation/ScopesControllerValidationTests.cs
     verify:
-      - dotnet build Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry"
     done_when:
       - AdminController.CreateUser, AdminAssignRole take [FromBody] T request parameters; every try-catch (JsonException) is gone in those two methods; inline guards covered by attributes are deleted.

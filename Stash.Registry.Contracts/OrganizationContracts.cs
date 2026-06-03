@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using Stash.Registry.Contracts.Validation;
 
 namespace Stash.Registry.Contracts;
 
@@ -8,7 +10,9 @@ namespace Stash.Registry.Contracts;
 /// </summary>
 public sealed class CreateOrgRequest
 {
-    /// <summary>The unique lower-case organization name (same grammar as a scope).</summary>
+    /// <summary>The unique lower-case organization name (scope grammar: 1–39 chars, <c>[a-z][a-z0-9-]*</c>).</summary>
+    [Required]
+    [ScopeGrammar]
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 
@@ -75,6 +79,7 @@ public sealed class OrgDetailResponse
 public sealed class AddOrgMemberRequest
 {
     /// <summary>The username of the user to add.</summary>
+    [Required]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 
@@ -88,7 +93,9 @@ public sealed class AddOrgMemberRequest
 /// </summary>
 public sealed class CreateTeamRequest
 {
-    /// <summary>The team name (unique within the organization).</summary>
+    /// <summary>The team name (scope grammar: 1–39 chars, <c>[a-z][a-z0-9-]*</c>).</summary>
+    [Required]
+    [ScopeGrammar]
     [JsonPropertyName("name")]
     public string? Name { get; set; }
 }
@@ -121,6 +128,7 @@ public sealed class CreateTeamResponse
 public sealed class AddTeamMemberRequest
 {
     /// <summary>The username to add to the team.</summary>
+    [Required]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 }

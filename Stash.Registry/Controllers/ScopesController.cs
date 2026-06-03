@@ -1,11 +1,9 @@
 using System;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Stash.Common;
 using Stash.Registry.Auth;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
@@ -83,44 +81,17 @@ public class ScopesController : ControllerBase
     [Authorize]
     [ImperativeAuthz("scope/owner/ownerType fields come from the JSON request body (not route values), so the shared filter's pure-route resolver cannot build a ScopeResource before the PDP call; the bespoke 409 status mapping (ScopeReserved/ScopeNotOwned → 409 instead of 403) also requires inline coordination. Folding requires the body-resolver refactor tracked in .kanban/0-backlog/registry/Body-resolver authz filter.md")]
     [HttpPost]
-    public async Task<Results<Created<ScopeDetailResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>, JsonUnauthorized<ErrorResponse>, JsonForbidden<ErrorResponse>>> ClaimScope()
+    public async Task<Results<Created<ScopeDetailResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>, JsonUnauthorized<ErrorResponse>, JsonForbidden<ErrorResponse>>> ClaimScope([FromBody] ClaimScopeRequest request)
     {
         string callerUsername = User.Identity!.Name!;
         var principal = _principalFactory.Build(User);
 
-        ClaimScopeRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<ClaimScopeRequest>(
-                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
+        // Trim+lowercase normalization stays inline — DataAnnotations cannot mutate values.
+        string scopeName = request.Scope!.Trim().ToLowerInvariant();
+        ScopeOwnerTypes ownerType = request.OwnerType!.Value;
+        string owner = request.Owner!.Trim();
 
-        string? scopeName = body?.Scope?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(scopeName))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "scope is required." });
-
-        // owner_type must be user or org (system is not user-claimable)
-        ScopeOwnerTypes? ownerTypeRaw = body?.OwnerType;
-        if (ownerTypeRaw == null || (ownerTypeRaw != ScopeOwnerTypes.User && ownerTypeRaw != ScopeOwnerTypes.Org))
-            return TypedResults.BadRequest(new ErrorResponse { Error = $"owner_type must be '{ScopeOwnerTypes.User.ToWire()}' or '{ScopeOwnerTypes.Org.ToWire()}'." });
-        ScopeOwnerTypes ownerType = ownerTypeRaw.Value;
-
-        string? owner = body?.Owner?.Trim();
-        if (string.IsNullOrEmpty(owner))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "owner is required." });
-
-        // Validate scope name grammar: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
-        if (!PackageManifest.IsValidScopeName(scopeName))
-        {
-            return TypedResults.BadRequest(new ErrorResponse
-            {
-                Error = "Scope name must be 1-39 characters, start with a lowercase letter, and contain only [a-z0-9-]."
-            });
-        }
+        // Scope grammar is enforced declaratively by [ScopeGrammar] on ClaimScopeRequest.Scope (runs before this action).
 
         // Run PDP for ClaimScope
         var decision = await _authorizer.AuthorizeAsync(principal, RegistryAction.ClaimScope, new ScopeResource(scopeName));

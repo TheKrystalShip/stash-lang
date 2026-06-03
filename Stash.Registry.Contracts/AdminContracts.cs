@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
 namespace Stash.Registry.Contracts;
@@ -9,17 +11,83 @@ namespace Stash.Registry.Contracts;
 /// </summary>
 public sealed class CreateUserRequest
 {
-    /// <summary>The username for the new account.</summary>
+    /// <summary>
+    /// Admin username grammar: letters (upper and lower), digits, hyphens, and underscores.
+    /// Broader than the self-register scope grammar which is lowercase-only; the distinction
+    /// is intentional and pre-existing.
+    /// </summary>
+    internal const string AdminUsernamePattern = @"^[a-zA-Z0-9_-]+$";
+
+    /// <summary>The username for the new account (max 64 characters, letters/digits/hyphens/underscores only).</summary>
+    [Required]
+    [StringLength(64, MinimumLength = 1)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. StringLengthAttribute is [RequiresUnreferencedCode] for its " +
+                        "ICollection.Count reflection path, which is a server-side validation concern; " +
+                        "the CLI has zero calls to Validator.*, ValidateObject, or ValidateValue and " +
+                        "never reaches that path at runtime.")]
+    [RegularExpression(AdminUsernamePattern,
+        ErrorMessage = "Username must contain only letters, digits, hyphens, or underscores.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RegularExpressionAttribute is [RequiresUnreferencedCode] for its " +
+                        "reflection-based type-coercion helper paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 
-    /// <summary>The plaintext password for the new account.</summary>
+    /// <summary>The plaintext password for the new account (minimum 8 characters).</summary>
+    [Required]
+    [StringLength(int.MaxValue, MinimumLength = 8)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. StringLengthAttribute is [RequiresUnreferencedCode] for its " +
+                        "ICollection.Count reflection path, which is a server-side validation concern; " +
+                        "the CLI has zero calls to Validator.*, ValidateObject, or ValidateValue and " +
+                        "never reaches that path at runtime.")]
     [JsonPropertyName("password")]
     public string? Password { get; set; }
 
     /// <summary>The role to assign to the new account (<c>"user"</c> or <c>"admin"</c>). Defaults to <c>"user"</c> if absent.</summary>
     [JsonPropertyName("role")]
     public UserRoles? Role { get; set; }
+}
+
+/// <summary>
+/// Query-string parameters for the <c>GET /api/v1/admin/audit-log</c> endpoint.
+/// Bound via <c>[FromQuery]</c> — page and pageSize are validated via <c>[Range]</c>
+/// to reject out-of-range values rather than silently clamping them.
+/// </summary>
+public sealed class AuditLogQuery
+{
+    /// <summary>The 1-based page index (minimum 1).</summary>
+    [Range(1, int.MaxValue)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
+                        "IComparable/type-conversion reflection paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
+    [JsonPropertyName("page")]
+    public int page { get; set; } = 1;
+
+    /// <summary>The number of entries per page (1–200).</summary>
+    [Range(1, 200)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
+                        "IComparable/type-conversion reflection paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
+    [JsonPropertyName("pageSize")]
+    public int pageSize { get; set; } = 50;
+
+    /// <summary>Optional package name filter.</summary>
+    [JsonPropertyName("package")]
+    public string? package { get; set; }
+
+    /// <summary>Optional action type filter (e.g. <c>"publish"</c>, <c>"user.create"</c>).</summary>
+    [JsonPropertyName("action")]
+    public string? action { get; set; }
 }
 
 /// <summary>

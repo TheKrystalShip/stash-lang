@@ -61,28 +61,16 @@ public sealed class SearchController : ControllerBase
     [PublicEndpoint("package search is a public discovery endpoint — unauthenticated callers see only public packages")]
     [RegistryAuthorize(RegistryAction.Search)]
     [HttpGet]
-    public async Task<Ok<SearchResponse>> Search()
+    public async Task<Results<Ok<SearchResponse>, BadRequest<ErrorResponse>>> Search([FromQuery] SearchQuery query)
     {
-        string query = Request.Query.TryGetValue("q", out var q) ? q.ToString() : "";
-
-        int page = 1;
-        int pageSize = 20;
-
-        if (Request.Query.TryGetValue("page", out var pageStr) && int.TryParse(pageStr, out int parsedPage) && parsedPage > 0)
-        {
-            page = parsedPage;
-        }
-
-        if (Request.Query.TryGetValue("pageSize", out var pageSizeStr) && int.TryParse(pageSizeStr, out int parsedPageSize) && parsedPageSize > 0)
-        {
-            pageSize = Math.Min(parsedPageSize, 100);
-        }
+        // [Range] on SearchQuery.page and SearchQuery.pageSize ensures valid values.
+        // Out-of-range values return 400 InvalidRequest (replaces the previous silent clamp).
 
         // Pass the caller's username so that visibility filtering can include private/internal
         // packages the caller has permission to read. Unauthenticated callers get null and see
         // only public packages. The PDP-backed predicate lives in SearchPackagesAsync.
         string? callerUsername = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
-        SearchResult result = await _db.SearchPackagesAsync(query, page, pageSize, callerUsername);
+        SearchResult result = await _db.SearchPackagesAsync(query.q ?? "", query.page, query.pageSize, callerUsername);
 
         List<PackageSummaryResponse> packages = result.Packages.Select(p =>
         {
@@ -104,14 +92,14 @@ public sealed class SearchController : ControllerBase
             };
         }).ToList();
 
-        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)pageSize);
+        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
         return TypedResults.Ok(new SearchResponse
         {
             Packages = packages,
             TotalCount = result.TotalCount,
-            Page = page,
-            PageSize = pageSize,
+            Page = query.page,
+            PageSize = query.pageSize,
             TotalPages = totalPages
         });
     }

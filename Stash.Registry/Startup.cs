@@ -81,21 +81,14 @@ public sealed class Startup
         services.AddControllers()
             .ConfigureApiBehaviorOptions(options =>
             {
-                // Normalize [ApiController] + [FromBody] deserialization failures (malformed JSON,
-                // illegal enum wire values) to the same ErrorResponse shape that business-logic
-                // 400s return.  Without this override the framework emits ValidationProblemDetails
-                // (RFC 7807) — a different shape that contradicts the published OpenAPI contract.
-                options.InvalidModelStateResponseFactory = ctx =>
-                {
-                    var first = ctx.ModelState.Values
-                        .SelectMany(v => v.Errors)
-                        .FirstOrDefault();
-                    return new BadRequestObjectResult(new ErrorResponse
-                    {
-                        Error = "InvalidRequest",
-                        Message = first?.ErrorMessage ?? "Request body is invalid.",
-                    });
-                };
+                // Normalize [ApiController] + [FromBody] / [FromQuery] validation failures
+                // (malformed JSON, illegal enum wire values, DataAnnotations constraint failures)
+                // to the same ErrorResponse shape that business-logic 400s return.  Without this
+                // override the framework emits ValidationProblemDetails (RFC 7807) — a different
+                // shape that contradicts the published OpenAPI contract.
+                // All field-level error messages are aggregated and joined with "; " so clients
+                // receive the full failure picture in one round-trip (P2: multi-field aggregation).
+                options.InvalidModelStateResponseFactory = BuildInvalidModelStateResponse;
             });
 
         var jwtService = new JwtTokenService(_config);
@@ -213,6 +206,37 @@ public sealed class Startup
         {
             options.AddOperationTransformer<OpenApiOperationIdTransformer>();
             options.AddDocumentTransformer<OpenApiDocumentMetadataTransformer>();
+        });
+    }
+
+    /// <summary>
+    /// Builds the <see cref="BadRequestObjectResult"/> for an invalid model state, aggregating
+    /// all field-bound error messages with <c>"; "</c>. Extracted as a static method so
+    /// <c>InvalidModelStateFactoryTests</c> can test the aggregation logic in isolation.
+    /// </summary>
+    /// <remarks>
+    /// If no error messages are present (empty <c>ModelState</c>), falls back to the sentinel
+    /// message <c>"Request body is invalid."</c> to ensure a well-formed response even when
+    /// the binder fails before populating any field errors.
+    /// </remarks>
+    /// <param name="ctx">The action context provided by the ASP.NET Core <c>ModelStateInvalidFilter</c>.</param>
+    /// <returns>A <see cref="BadRequestObjectResult"/> wrapping an <see cref="ErrorResponse"/>.</returns>
+    internal static BadRequestObjectResult BuildInvalidModelStateResponse(ActionContext ctx)
+    {
+        var errors = ctx.ModelState.Values
+            .SelectMany(v => v.Errors)
+            .Select(e => e.ErrorMessage)
+            .Where(m => !string.IsNullOrEmpty(m))
+            .ToList();
+
+        string message = errors.Count > 0
+            ? string.Join("; ", errors)
+            : "Request body is invalid.";
+
+        return new BadRequestObjectResult(new ErrorResponse
+        {
+            Error = "InvalidRequest",
+            Message = message,
         });
     }
 

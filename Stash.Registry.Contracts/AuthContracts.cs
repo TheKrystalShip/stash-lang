@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
+using Stash.Registry.Contracts.Validation;
 
 namespace Stash.Registry.Contracts;
 
@@ -10,10 +13,12 @@ namespace Stash.Registry.Contracts;
 public sealed class LoginRequest
 {
     /// <summary>The username to authenticate with.</summary>
+    [Required(ErrorMessage = "Username is required.")]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 
     /// <summary>The plaintext password for the account.</summary>
+    [Required(ErrorMessage = "Password is required.")]
     [JsonPropertyName("password")]
     public string? Password { get; set; }
 }
@@ -53,11 +58,21 @@ public sealed class LoginResponse
 /// </summary>
 public sealed class RegisterRequest
 {
-    /// <summary>The desired username for the new account.</summary>
+    /// <summary>The desired username for the new account (scope grammar: 1–39 chars, <c>[a-z][a-z0-9-]*</c>).</summary>
+    [Required]
+    [ScopeGrammar]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 
-    /// <summary>The plaintext password for the new account.</summary>
+    /// <summary>The plaintext password for the new account (minimum 8 characters).</summary>
+    [Required]
+    [StringLength(int.MaxValue, MinimumLength = 8)]
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. StringLengthAttribute is [RequiresUnreferencedCode] for its " +
+                        "ICollection.Count reflection path, which is a server-side validation concern; " +
+                        "the CLI has zero calls to Validator.*, ValidateObject, or ValidateValue and " +
+                        "never reaches that path at runtime.")]
     [JsonPropertyName("password")]
     public string? Password { get; set; }
 }
@@ -99,6 +114,7 @@ public sealed class TokenCreateRequest
     /// The coarse capability ceiling for the new token: <c>"read"</c>, <c>"publish"</c>, or <c>"admin"</c>.
     /// Mandatory — absent or unrecognised values are rejected 400.
     /// </summary>
+    [Required(ErrorMessage = "ceiling is required. Set it to 'read', 'publish', or 'admin'.")]
     [JsonPropertyName("ceiling")]
     public string? Ceiling { get; set; }
 
@@ -114,6 +130,8 @@ public sealed class TokenCreateRequest
     /// Required token lifetime, e.g. "30d", "12h", "90m". Must be present; absent or invalid
     /// values are rejected 400. Must not exceed <c>Security.MaxTokenLifetime</c>.
     /// </summary>
+    [Required(ErrorMessage = "expires_in is required. Use formats like '30d', '12h', or '90m'.")]
+    [TokenExpiry]
     [JsonPropertyName("expiresIn")]
     public string? ExpiresIn { get; set; }
 
@@ -189,14 +207,17 @@ public sealed class TokenListResponse
 public sealed class RefreshTokenRequest
 {
     /// <summary>The refresh token string issued during login or a previous refresh.</summary>
+    [Required]
     [JsonPropertyName("refreshToken")]
     public string? RefreshToken { get; set; }
 
     /// <summary>The expired access token to be renewed.</summary>
+    [Required]
     [JsonPropertyName("accessToken")]
     public string? AccessToken { get; set; }
 
     /// <summary>The SHA-256 machine fingerprint of the requesting client.</summary>
+    [Required]
     [JsonPropertyName("machineId")]
     public string? MachineId { get; set; }
 }

@@ -1,5 +1,4 @@
 using System;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -49,33 +48,11 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.CreateOrg)]
     [HttpPost]
-    public async Task<Results<Created<CreateOrgResponse>, BadRequest<ErrorResponse>, Conflict<ErrorResponse>>> CreateOrg()
+    public async Task<Results<Created<CreateOrgResponse>, BadRequest<ErrorResponse>, Conflict<ErrorResponse>>> CreateOrg([FromBody] CreateOrgRequest request)
     {
         string username = User.Identity!.Name!;
 
-        CreateOrgRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<CreateOrgRequest>(
-                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        string? name = body?.Name?.Trim().ToLowerInvariant();
-        if (string.IsNullOrEmpty(name))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Organization name is required." });
-
-        // Validate org name: 1-39 chars, starts with lowercase letter, [a-z0-9-] only
-        if (!PackageManifest.IsValidScopeName(name))
-        {
-            return TypedResults.BadRequest(new ErrorResponse
-            {
-                Error = "Organization name must be 1-39 characters, start with a lowercase letter, and contain only [a-z0-9-]."
-            });
-        }
+        string name = request.Name!.Trim().ToLowerInvariant();
 
         // Reserved system scopes may not be claimed as org names
         if (ReservedScopes.IsReserved(name))
@@ -83,7 +60,7 @@ public class OrganizationsController : ControllerBase
 
         try
         {
-            var org = await _db.CreateOrgAsync(name, body?.DisplayName, username);
+            var org = await _db.CreateOrgAsync(name, request.DisplayName, username);
             return TypedResults.Created((string?)null, new CreateOrgResponse
             {
                 Id = org.Id,
@@ -156,7 +133,7 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.AddOrgMember)]
     [HttpPost("{org}/members")]
-    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AddMember(string org, [FromBody] AddOrgMemberRequest? body)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> AddMember(string org, [FromBody] AddOrgMemberRequest request)
     {
         string username = User.Identity!.Name!;
 
@@ -164,14 +141,9 @@ public class OrganizationsController : ControllerBase
         if (orgRecord == null)
             return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        // With [FromBody], validation at deserialization boundary (JsonStringEnumConverter) returns 400 automatically.
-        string? newMember = body?.Username?.Trim();
-        if (string.IsNullOrEmpty(newMember))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username is required." });
+        string newMember = request.Username!.Trim();
 
-        OrgRoles orgRole = body?.OrgRole ?? OrgRoles.Member;
-        // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
-        // orgRole is already valid since deserialization succeeded.
+        OrgRoles orgRole = request.OrgRole ?? OrgRoles.Member;
 
         // Verify the target user exists
         var targetUser = await _db.GetUserAsync(newMember);
@@ -216,26 +188,13 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.CreateTeam)]
     [HttpPost("{org}/teams")]
-    public async Task<Results<Created<CreateTeamResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> CreateTeam(string org)
+    public async Task<Results<Created<CreateTeamResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> CreateTeam(string org, [FromBody] CreateTeamRequest request)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
             return TypedResults.NotFound(new ErrorResponse { Error = $"Organization '{org}' not found." });
 
-        CreateTeamRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<CreateTeamRequest>(
-                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        string? teamName = body?.Name?.Trim();
-        if (string.IsNullOrEmpty(teamName))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Team name is required." });
+        string teamName = request.Name!.Trim();
 
         try
         {
@@ -263,7 +222,7 @@ public class OrganizationsController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.AddTeamMember)]
     [HttpPost("{org}/teams/{team}/members")]
-    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>>> AddTeamMember(string org, string team)
+    public async Task<Results<Ok<SuccessResponse>, BadRequest<ErrorResponse>, NotFound<ErrorResponse>>> AddTeamMember(string org, string team, [FromBody] AddTeamMemberRequest request)
     {
         var orgRecord = await _db.GetOrgAsync(org);
         if (orgRecord == null)
@@ -273,20 +232,7 @@ public class OrganizationsController : ControllerBase
         if (teamRecord == null)
             return TypedResults.NotFound(new ErrorResponse { Error = $"Team '{team}' not found in organization '{org}'." });
 
-        AddTeamMemberRequest? body;
-        try
-        {
-            body = await JsonSerializer.DeserializeAsync<AddTeamMemberRequest>(
-                Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-        }
-        catch (JsonException)
-        {
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
-        }
-
-        string? newMember = body?.Username?.Trim();
-        if (string.IsNullOrEmpty(newMember))
-            return TypedResults.BadRequest(new ErrorResponse { Error = "Username is required." });
+        string newMember = request.Username!.Trim();
 
         await _db.AddTeamMemberAsync(teamRecord.Id, newMember);
         return TypedResults.Ok(new SuccessResponse());
