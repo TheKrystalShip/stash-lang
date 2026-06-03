@@ -130,7 +130,8 @@ dotnet test --filter "FullyQualifiedName~SqliteDatabaseTests.BoundedDomain_CLRDe
 
 ## F03 — [MEDIUM] Three `Json{Status}<T>` IResult helpers duplicated across two controller files instead of a shared home
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ad21b6f9
 **Files:** `Stash.Registry/Controllers/AuthController.cs:31-80`, `Stash.Registry/Controllers/ScopesController.cs:21-48`
 **Phase:** P2 (`JsonUnauthorized<T>`, `JsonForbidden<T>`) + P3 (`JsonNotImplemented<T>`)
 **Commit:** 8c573d63 (P2), aeb9a6f8 (P3)
