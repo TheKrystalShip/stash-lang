@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T18:17:35Z"
+updated: "2026-06-03T18:55:44Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "RequestModelBindingMetaTests: 4 tests green, 12-entry pin matches live violation set, all three sinks detected"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4df0db13e56e4e969dfee030f9af7bb83e331f04
+    verified: true
+    started: "2026-06-03T18:24:11Z"
+    completed: "2026-06-03T18:55:44Z"
+    attempts: 1
+    notes: DataAnnotations on 8 request DTOs + ScopeGrammarAttribute + TokenExpiryAttribute + IValidatableObject on ClaimScopeRequest + SearchQuery/AuditLogQuery + factory aggregation; OpenAPI snapshot updated for AddOrgMemberRequest.username
   P3:
     status: pending
     commit: null
