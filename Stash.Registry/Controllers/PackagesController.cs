@@ -5,6 +5,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
@@ -79,14 +81,14 @@ public class PackagesController : ControllerBase
     [PublicEndpoint("package metadata is public for public packages; visibility enforced by IRegistryAuthorizer")]
     [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]
     [HttpGet("{scope}/{name}")]
-    public async Task<IActionResult> GetPackage(string scope, string name)
+    public async Task<Results<Ok<PackageDetailResponse>, NotFound<ErrorResponse>>> GetPackage(string scope, string name)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
         var versionsDict = new Dictionary<string, VersionDetailResponse>();
@@ -118,7 +120,7 @@ public class PackagesController : ControllerBase
             DeprecationAlternative = package.DeprecationAlternative
         };
 
-        return Ok(response);
+        return TypedResults.Ok(response);
     }
 
     /// <summary>
@@ -127,25 +129,30 @@ public class PackagesController : ControllerBase
     [PublicEndpoint("version metadata is public for public packages; visibility gated by IRegistryAuthorizer")]
     [RegistryAuthorize(RegistryAction.ReadPackageVersion)]
     [HttpGet("{scope}/{name}/{version}")]
-    public async Task<IActionResult> GetVersion(string scope, string name, string version)
+    public async Task<Results<Ok<VersionDetailResponse>, NotFound<ErrorResponse>>> GetVersion(string scope, string name, string version)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
         VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, version);
         if (vr == null)
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
-        return Ok(BuildVersionResponse(vr));
+        return TypedResults.Ok(BuildVersionResponse(vr));
     }
 
     /// <summary>
     /// Downloads the tarball for a specific package version.
     /// </summary>
+    /// <remarks>
+    /// Returns a binary tarball stream (application/octet-stream + X-Integrity header).
+    /// Permanently exempt from the typed Results refactor — binary streams do not have
+    /// a JSON DTO schema; see <c>OpenApiCoverageMetaTests.PermanentlyExemptOperations</c>.
+    /// </remarks>
     [PublicEndpoint("tarball download is public for public packages; visibility gated by IRegistryAuthorizer")]
     [RegistryAuthorize(RegistryAction.DownloadPackageVersion)]
     [HttpGet("{scope}/{name}/{version}/download")]
@@ -192,7 +199,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.PublishPackage)]
     [HttpPut("{scope}/{name}")]
-    public async Task<IActionResult> PublishPackage(string scope, string name)
+    public async Task<Results<Created<PublishResponse>, BadRequest<ErrorResponse>, Conflict<VersionConflictResponse>>> PublishPackage(string scope, string name)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -215,7 +222,7 @@ public class PackagesController : ControllerBase
             string auditAction = isNewPackage ? "package.create" : "package.publish";
             await _auditService.LogMutationAllowAsync(auditAction, username, packageName, ip);
 
-            return StatusCode(201, new PublishResponse
+            return TypedResults.Created((string?)null, new PublishResponse
             {
                 Package = vr.PackageName,
                 Version = vr.Version,
@@ -224,7 +231,7 @@ public class PackagesController : ControllerBase
         }
         catch (ManifestRouteMismatchException ex)
         {
-            return BadRequest(new ErrorResponse
+            return TypedResults.BadRequest(new ErrorResponse
             {
                 Error = "ManifestRouteMismatch",
                 Message = ex.Message
@@ -232,11 +239,11 @@ public class PackagesController : ControllerBase
         }
         catch (VersionConflictException ex)
         {
-            return Conflict(new VersionConflictResponse { Message = ex.Message });
+            return TypedResults.Conflict(new VersionConflictResponse { Message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = ex.Message });
+            return TypedResults.BadRequest(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -246,7 +253,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.UnpublishVersion)]
     [HttpDelete("{scope}/{name}/{version}")]
-    public async Task<IActionResult> UnpublishVersion(string scope, string name, string version)
+    public async Task<Results<Ok<UnpublishResponse>, BadRequest<ErrorResponse>>> UnpublishVersion(string scope, string name, string version)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -257,11 +264,11 @@ public class PackagesController : ControllerBase
         {
             await _packageService.UnpublishAsync(packageName, version, username);
             await _auditService.LogMutationAllowAsync("package.unpublish", username, packageName, ip);
-            return Ok(new UnpublishResponse { Package = packageName, Version = version });
+            return TypedResults.Ok(new UnpublishResponse { Package = packageName, Version = version });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = ex.Message });
+            return TypedResults.BadRequest(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -273,7 +280,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.DeprecatePackage)]
     [HttpPatch("{scope}/{name}/deprecate")]
-    public async Task<IActionResult> DeprecatePackage(string scope, string name, [FromBody] DeprecatePackageRequest request)
+    public async Task<Results<Ok<DeprecationResponse>, NotFound<ErrorResponse>, BadRequest<ErrorResponse>>> DeprecatePackage(string scope, string name, [FromBody] DeprecatePackageRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -281,18 +288,18 @@ public class PackagesController : ControllerBase
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.DeprecatePackageAsync(packageName, request.Message, request.Alternative, username);
             await _auditService.LogMutationAllowAsync("package.deprecate", username, packageName, ip);
-            return Ok(new DeprecationResponse { Package = packageName, Deprecated = true });
+            return TypedResults.Ok(new DeprecationResponse { Package = packageName, Deprecated = true });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = ex.Message });
+            return TypedResults.BadRequest(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -302,7 +309,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.DeprecatePackage)]
     [HttpDelete("{scope}/{name}/deprecate")]
-    public async Task<IActionResult> UndeprecatePackage(string scope, string name)
+    public async Task<Results<Ok<DeprecationResponse>, NotFound<ErrorResponse>, BadRequest<ErrorResponse>>> UndeprecatePackage(string scope, string name)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -310,18 +317,18 @@ public class PackagesController : ControllerBase
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.UndeprecatePackageAsync(packageName);
             await _auditService.LogMutationAllowAsync("package.undeprecate", username, packageName, ip);
-            return Ok(new DeprecationResponse { Package = packageName, Deprecated = false });
+            return TypedResults.Ok(new DeprecationResponse { Package = packageName, Deprecated = false });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = ex.Message });
+            return TypedResults.BadRequest(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -331,7 +338,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.DeprecateVersion)]
     [HttpPatch("{scope}/{name}/{version}/deprecate")]
-    public async Task<IActionResult> DeprecateVersion(string scope, string name, string version, [FromBody] DeprecateVersionRequest request)
+    public async Task<Results<Ok<DeprecationResponse>, NotFound<ErrorResponse>, BadRequest<ErrorResponse>>> DeprecateVersion(string scope, string name, string version, [FromBody] DeprecateVersionRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -339,18 +346,18 @@ public class PackagesController : ControllerBase
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.VersionExistsAsync(packageName, version))
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
         string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.DeprecateVersionAsync(packageName, version, request.Message, username);
             await _auditService.LogMutationAllowAsync("version.deprecate", username, packageName, ip);
-            return Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = true });
+            return TypedResults.Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = true });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = ex.Message });
+            return TypedResults.BadRequest(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -360,7 +367,7 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.DeprecateVersion)]
     [HttpDelete("{scope}/{name}/{version}/deprecate")]
-    public async Task<IActionResult> UndeprecateVersion(string scope, string name, string version)
+    public async Task<Results<Ok<DeprecationResponse>, NotFound<ErrorResponse>, BadRequest<ErrorResponse>>> UndeprecateVersion(string scope, string name, string version)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
@@ -368,18 +375,18 @@ public class PackagesController : ControllerBase
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _db.VersionExistsAsync(packageName, version))
-            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
         string username = User.Identity!.Name!;
         try
         {
             await _deprecationService.UndeprecateVersionAsync(packageName, version);
             await _auditService.LogMutationAllowAsync("version.undeprecate", username, packageName, ip);
-            return Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = false });
+            return TypedResults.Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = false });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new ErrorResponse { Error = ex.Message });
+            return TypedResults.BadRequest(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -391,16 +398,16 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.ListPackageRoles)]
     [HttpGet("{scope}/{name}/roles")]
-    public async Task<IActionResult> GetRoles(string scope, string name)
+    public async Task<Results<Ok<PackageRolesListResponse>, NotFound<ErrorResponse>>> GetRoles(string scope, string name)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
-        return Ok(new PackageRolesListResponse
+        return TypedResults.Ok(new PackageRolesListResponse
         {
             Package = packageName,
             Roles = roles.Select(r => new PackageRoleResponse
@@ -418,26 +425,26 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.AssignPackageRole)]
     [HttpPut("{scope}/{name}/roles")]
-    public async Task<IActionResult> AssignRole(string scope, string name, [FromBody] AssignRoleRequest request)
+    public async Task<Results<Ok<SuccessResponse>, NotFound<ErrorResponse>, BadRequest<ErrorResponse>>> AssignRole(string scope, string name, [FromBody] AssignRoleRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!Array.Exists(PrincipalTypes.All, p => p == request.PrincipalType))
-            return BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid principal_type '{request.PrincipalType}'. Must be one of: {string.Join(", ", PrincipalTypes.All)}." });
 
         if (!Array.Exists(PackageRoles.RankOrder, r => r == request.Role))
-            return BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid role '{request.Role}'. Must be one of: owner, maintainer, publisher, reader." });
 
         string username = User.Identity!.Name!;
         await _db.AssignPackageRoleAsync(packageName, request.PrincipalType, request.PrincipalId, request.Role);
         await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, request.PrincipalId, ip);
-        return Ok(new SuccessResponse());
+        return TypedResults.Ok(new SuccessResponse());
     }
 
     /// <summary>
@@ -450,13 +457,13 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.RevokePackageRole)]
     [HttpDelete("{scope}/{name}/roles")]
-    public async Task<IActionResult> RevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
+    public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> RevokeRole(string scope, string name, [FromBody] RevokeRoleRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         string username = User.Identity!.Name!;
@@ -464,15 +471,15 @@ public class PackagesController : ControllerBase
         {
             await _roleService.RevokeRoleAsync(packageName, request.PrincipalType, request.PrincipalId);
             await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
-            return StatusCode(204);
+            return TypedResults.NoContent();
         }
         catch (RoleNotFoundException)
         {
-            return NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Principal '{request.PrincipalType}:{request.PrincipalId}' holds no role on '{packageName}'." });
         }
         catch (LastOwnerException ex)
         {
-            return Conflict(new ErrorResponse { Error = ex.Message });
+            return TypedResults.Conflict(new ErrorResponse { Error = ex.Message });
         }
     }
 
@@ -484,25 +491,25 @@ public class PackagesController : ControllerBase
     [Authorize]
     [RegistryAuthorize(RegistryAction.ChangePackageVisibility)]
     [HttpPatch("{scope}/{name}/visibility")]
-    public async Task<IActionResult> SetVisibility(string scope, string name, [FromBody] SetVisibilityRequest request)
+    public async Task<Results<Ok<SetVisibilityResponse>, NotFound<ErrorResponse>, BadRequest<ErrorResponse>>> SetVisibility(string scope, string name, [FromBody] SetVisibilityRequest request)
     {
         var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
         string packageName = resource.FullName;
 
         if (!await _db.PackageExistsAsync(packageName))
-            return NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (string.IsNullOrEmpty(request.Visibility) || !Visibilities.IsValid(request.Visibility))
         {
-            return BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
+            return TypedResults.BadRequest(new ErrorResponse { Error = $"Invalid visibility value '{request.Visibility}'. Must be one of: public, private, internal." });
         }
 
         string username = User.Identity!.Name!;
         await _db.SetPackageVisibilityAsync(packageName, request.Visibility);
         await _auditService.LogMutationAllowAsync("package.visibility_change", username, packageName, ip);
-        return Ok(new SetVisibilityResponse { Package = packageName, Visibility = request.Visibility });
+        return TypedResults.Ok(new SetVisibilityResponse { Package = packageName, Visibility = request.Visibility });
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

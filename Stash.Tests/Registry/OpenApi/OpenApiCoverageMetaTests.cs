@@ -70,29 +70,8 @@ public sealed class OpenApiCoverageMetaTests
     /// </remarks>
     private static readonly IReadOnlySet<string> NotYetMigratedOperations = new HashSet<string>(StringComparer.Ordinal)
     {
-        // Auth controller (8 actions)
-        "Auth_Login",
-        "Auth_Register",
-        "Auth_Whoami",
-        "Auth_ListTokens",
-        "Auth_CreateToken",
-        "Auth_RevokeToken",
-        "Auth_DeleteToken",
-        "Auth_RefreshToken",
-
-        // Packages controller (12 actions — DownloadVersion is in PermanentlyExempt)
-        "Packages_GetPackage",
-        "Packages_GetVersion",
-        "Packages_PublishPackage",
-        "Packages_UnpublishVersion",
-        "Packages_DeprecatePackage",
-        "Packages_UndeprecatePackage",
-        "Packages_DeprecateVersion",
-        "Packages_UndeprecateVersion",
-        "Packages_GetRoles",
-        "Packages_AssignRole",
-        "Packages_RevokeRole",
-        "Packages_SetVisibility",
+        // Auth controller — migrated in P2 (all 8 actions removed from this list)
+        // Packages controller — migrated in P2 (all 12 actions removed from this list)
 
         // Organizations controller (7 actions)
         "Organizations_CreateOrg",
