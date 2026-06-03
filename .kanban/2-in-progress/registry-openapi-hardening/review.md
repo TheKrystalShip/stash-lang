@@ -1,204 +1,79 @@
-# Registry OpenAPI Hardening — Review
+# Registry OpenAPI Hardening — Review (Pass 2)
 
 > Produced by `/feature-review`. One finding per H2 section.
 > Each finding header is parseable: `## Fxx — [SEVERITY] short title`.
-> Severity scheme (per task prompt): CRITICAL / HIGH / MEDIUM / LOW.
+> Severity scheme: CRITICAL / IMPORTANT / MINOR.
 
-**Scope reviewed:** commits `f194030e..2579be3c` on branch `feature/registry-openapi-hardening`
-**Brief:** ../brief.md
+**Scope reviewed:** commits `f194030e..5e3ea036` on branch `feature/registry-openapi-hardening` (full feature range; this pass concentrates on the four fix commits since pass 1: `9055f12b`, `ad21b6f9`, `c1a77dd0`).
+**Brief:** ./brief.md
 **Generated:** 2026-06-03
 
-Baseline at review entry: full `dotnet test` is **green** (failed=0 passed=13103 skipped=6 — the 6 skips are pre-existing source-level quarantines, not introduced by this feature). Brief parity is high: every Acceptance Criterion has a corresponding implementation + test. The six findings below are residual quality concerns, none CRITICAL.
+Pass-1 findings (F01 HIGH, F02 MEDIUM, F03 MEDIUM, F04 LOW) have all been verified resolved by inspecting their fix commits against the original observations. Summary of verification:
+
+- **F01 (9055f12b)** — `InvalidModelStateResponseFactory` is correctly installed globally in `Startup.ConfigureServices` and emits `BadRequestObjectResult(new ErrorResponse{Error="InvalidRequest", Message=...})`. The `Error = "InvalidRequest"` value is a free-form error message field (the existing convention is mixed prose / loose tokens — `"Invalid JSON body."`, `"registration_disabled"`, `"TokenLifetimeExceeded"`); the CLAUDE.md no-magic-strings doctrine explicitly exempts free-form error/exception prose, so this is not a bounded-domain violation. A new `BoundedDomainBoundaryTests.AssignRole_WithInvalidPackageRole_Returns400WithErrorResponse` exercises the `[FromBody]` deserialization-failure path (the original `CreateUser` case used the inline `JsonSerializer.DeserializeAsync` path) and asserts the body has `error` and NOT `type` (rejecting the RFC-7807 shape). No tests asserted RFC-7807 shape, so the global behavior change broke nothing.
+- **F02 (c1a77dd0)** — `SqliteDatabaseTests.BoundedDomain_CLRDefault_MatchesDDLDefaultLiteral` asserts `default(Visibilities).ToWire() == "public"`, `default(UserRoles).ToWire() == "user"`, `default(OrgRoles).ToWire() == "member"`. Uses the actual `ToWire()` extension method. Pairs with the pre-existing `Initialize_BoundedDomainColumnDefaults_AreLowercaseWireStrings` DDL-side guard.
+- **F03 (ad21b6f9)** — `JsonUnauthorized<T>`, `JsonForbidden<T>`, `JsonNotImplemented<T>` are relocated to `Stash.Registry/OpenApi/JsonStatusResults.cs` under namespace `Stash.Registry.OpenApi`. The three classes' bodies (`ExecuteAsync` + `IEndpointMetadataProvider.PopulateMetadata` with `ProducesResponseTypeMetadata`) are byte-identical to the originals. `using Stash.Registry.OpenApi;` is added to both `AuthController.cs` and `ScopesController.cs`; the originals are fully deleted (no stale duplicate). The misleading "must be internal" comment in `AuthController.cs` has been corrected to explain the `public`-required reason (CS0050). The OpenAPI snapshot's 401/403/501 entries still point to `ErrorResponse`/`ScopeVerifyResponse` schemas unchanged.
+- **F04 (c1a77dd0)** — `Program.RunEnumSelfTest` now has a second deserialize loop using `Func<string, bool> RoundTrips` delegates that call `JsonSerializer.Deserialize(j, ctx.<EnumT>)` — the typed `JsonTypeInfo` overload, AOT-safe (no reflection-based `Deserialize<T>(string)`). All seven enum domains and all 19 enum values are exercised. PASS/FAIL/exit-code contract preserved; failures now distinguish `[serialize]` from `[deserialize]` direction in the FAIL detail.
+
+Baseline at review entry: full `dotnet test` is **green** — failed=0 passed=13105 skipped=6 (the +2 over pass 1 is exactly the F01 boundary test and the F02 CLR-default test). The 6 skips are pre-existing source quarantines.
+
+Fresh adversarial pass surfaces ONE new finding (a residual contract gap exposed by the F01 fix, distinct from the original F01 defect and not catchable by the existing coverage meta-test).
 
 ---
 
-## F01 — [HIGH] `[FromBody]` endpoints return `ValidationProblemDetails`, not `ErrorResponse`, on malformed bodies — contract lies about 400 shape
+## F01 — [MINOR] Two `[FromBody]` endpoints can emit an undocumented `400 ErrorResponse` after the F01 fix — `Results<...>` unions omit `BadRequest<ErrorResponse>`
 
-**Status:** fixed
-**Fixed in:** 9055f12b
-**Files:** `Stash.Registry/Controllers/OrganizationsController.cs:159`, `Stash.Registry/Controllers/PackagesController.cs:283,341,428,456,490`, `Stash.Registry/Controllers/AdminController.cs:190`, `Stash.Registry/Startup.cs:79`, `docs/Registry — Package Registry.md:1534`
-**Phase:** P4 (regression cross-cuts P4 docs + P2/P3 controller refactor)
-**Commit:** 4ec47470 (P4 enum conversion that introduced `[FromBody]` on `AddMember`); `[FromBody]` also present on six other endpoints from P2/P3.
+**Status:** open
+**Files:** `Stash.Registry/Controllers/PackagesController.cs:456` (`RevokeRole`), `Stash.Registry/Controllers/AdminController.cs:190` (`AdminRevokeRole`), `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json:241-265` (`Admin_AdminRevokeRole`), `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json:1666-1690` (`Packages_RevokeRole`)
+**Phase:** Cross-phase — exposed by the F01 fix (`9055f12b`) on top of P2/P3 (typed `Results<...>` refactor) and P5 (snapshot baseline).
+**Commit:** `9055f12b` (the fix that surfaces the gap)
 
 ### Observation
 
-The published OpenAPI document — and §22.6 of `docs/Registry — Package Registry.md` — claim every 400 on every operation returns `ErrorResponse { Error, Message }`. Every `BadRequest<ErrorResponse>` variant in the controllers' `Results<...>` unions advertises the same schema (see e.g. `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json:78-87`, repeated ~10 times).
+The F01 fix installs an `InvalidModelStateResponseFactory` globally in `Startup.ConfigureServices`. Every `[ApiController]` model-binding failure — including any `[FromBody]` deserialization failure on `JsonStringEnumConverter` — now returns `400 BadRequest` with an `ErrorResponse` body. Seven controller actions use `[FromBody]` (`grep "FromBody" Stash.Registry/Controllers/*.cs`):
 
-But seven endpoints take their request body via `[FromBody]` on `[ApiController]` (see `grep "FromBody" Stash.Registry/Controllers/*.cs`): `OrganizationsController.AddMember`, `AdminController.AdminRevokeRole`, `PackagesController.DeprecatePackage`, `PackagesController.DeprecateVersion`, `PackagesController.AssignRole`, `PackagesController.RevokeRole`, `PackagesController.SetVisibility`. `Startup.cs:79` calls `services.AddControllers()` with no `ConfigureApiBehaviorOptions(o => o.SuppressModelStateInvalidFilter = true)` or `InvalidModelStateResponseFactory` override (verified by `grep -r "SuppressModelStateInvalidFilter\|ConfigureApiBehaviorOptions\|InvalidModelStateResponseFactory" Stash.Registry/` → empty).
+| Action | `Results<...>` declares `BadRequest<ErrorResponse>`? |
+| --- | --- |
+| `PackagesController.DeprecatePackage` | yes |
+| `PackagesController.DeprecateVersion` | yes |
+| `PackagesController.AssignRole` | yes |
+| `PackagesController.SetVisibility` | yes |
+| `OrganizationsController.AddMember` | yes |
+| **`PackagesController.RevokeRole`** | **no** — `Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>` |
+| **`AdminController.AdminRevokeRole`** | **no** — `Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>` |
 
-For an `[ApiController]` endpoint using `[FromBody]`, malformed JSON OR an illegal enum wire value (e.g. `{"role":"NOT_A_REAL_ROLE"}`) triggers the framework's default `ValidationProblemDetails` shape (RFC 7807): `{"type":"...","title":"...","status":400,"errors":{"$.role":["..."]}}` — NOT `ErrorResponse { Error, Message }`. The body shape an external client will actually receive on a deserialization-failure 400 does not match the schema the contract declares.
+The published OpenAPI document (snapshot at `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json:241-265` for `Admin_AdminRevokeRole` and `:1666-1690` for `Packages_RevokeRole`) confirms the contract declares only `204`, `404`, `409` for these two endpoints — no `400`. With the global filter installed, a `DELETE /api/v1/packages/{scope}/{name}/roles` with `{"role":"NOT_A_REAL_ROLE"}` (or just malformed JSON) now returns a `400 ErrorResponse` body that is **not declared in the contract**.
 
-Note: business-validation 400s (those produced inside the action body via `TypedResults.BadRequest(new ErrorResponse {...})`) do return the documented shape. The mismatch is exclusively on the *deserialization failure* path.
+**Other binding surfaces were checked and ruled out:** every controller action parameter is `string` (route/query) or `[FromBody] DTO?`. `SearchController.Search` reads `page`/`pageSize` manually via `int.TryParse(Request.Query["page"])`, not typed binding — so no model-binding failure path. No action exposes a typed `int`/`bool`/`Guid` parameter that could fail binding. The blast radius is exactly the two `RevokeRole` actions above.
 
-§22.6 of `docs/Registry — Package Registry.md` makes the claim concretely: "Submitting any other value for a field typed to one of these schemas yields `400 Bad Request` with an `ErrorResponse` body." For `AssignRoleRequest.role` (PackageRoles), `SetVisibilityRequest.visibility` (Visibilities), `AddOrgMemberRequest.org_role` (OrgRoles), and the `DeprecatePackage/Version` bodies — every one of which is bound via `[FromBody]` — this claim is demonstrably false.
-
-The P4 boundary test (`Stash.Tests/Registry/Authz/BoundedDomainBoundaryTests.cs:28`) does not exercise this path: `AdminController.CreateUser` uses inline `JsonSerializer.DeserializeAsync` + `try/catch JsonException → TypedResults.BadRequest(new ErrorResponse{...})` (see `AdminController.cs:80-88`), so the test passes against the inline path while the `[FromBody]` siblings remain uncovered.
+**This is NOT a regression introduced by the F01 fix.** Pre-fix, these same two endpoints already returned a 400 on a malformed body — as `ValidationProblemDetails`. The fix changed only the *shape* (now correctly `ErrorResponse`); the response code itself was already undeclared. F01 was "wrong body shape"; this is "undeclared status code" — a distinct defect class that the `OpenApiCoverageMetaTests` cannot catch, because it only verifies that *declared* response codes resolve to `$ref` schemas (`FindViolations` at `OpenApiCoverageMetaTests.cs:189-201`) — it does not enumerate *emittable* codes back to declarations.
 
 ### Why this matters
 
-The feature's stated purpose is "a high-fidelity public contract suitable for third-party client generation" (brief Summary). A generated client modeled against the published OpenAPI document will be wired to deserialize 400 bodies as `ErrorResponse` — and will throw / mis-route on the framework's `ValidationProblemDetails` shape that actually arrives. This is the exact "client cannot reject illegal values at the call site" failure mode the bounded-domain enum work was meant to prevent.
+The brief's stated purpose (Summary) is "a high-fidelity public contract suitable for third-party client generation." A strict OpenAPI client (e.g. `openapi-generator-cli` with `useResponseAsIs=false`, or any generator that enums response statuses) modeled against the document will reject the `400` body it does not expect on these two endpoints, even though the body is well-formed `ErrorResponse`. The fix made the body usable; this finding closes the residual gap by also documenting it.
 
-It also makes the project's published documentation (§22.6) false. That section is the one external integrators read first.
+`docs/Registry — Package Registry.md:1534` now claims "Submitting any other value for a field typed to one of these schemas yields `400 Bad Request` with an `ErrorResponse` body." For the two `RevokeRole` endpoints whose `Results<...>` unions don't declare 400, this is true at runtime (good, post-fix) but the published contract omits the 400 declaration — a generator can't see the doc-stated guarantee.
+
+Severity rationale (MINOR, not IMPORTANT): the body is well-formed and matches every other 400 in the contract; clients implementing generic error handling will parse it correctly; only generators that strictly enum the declared response set are affected; and it is strictly better than the pre-fix state. No correctness or security impact on any well-formed call.
 
 ### Suggested fix
 
-Pick one of:
+Two mechanical edits, then re-baseline the snapshot:
 
-1. **Conform to the contract** (preferred, minimal change). In `Startup.ConfigureServices` (around `Startup.cs:79`):
+1. In `Stash.Registry/Controllers/PackagesController.cs:456` change
    ```csharp
-   services.AddControllers()
-       .ConfigureApiBehaviorOptions(options =>
-       {
-           options.InvalidModelStateResponseFactory = ctx =>
-           {
-               var first = ctx.ModelState.Values
-                   .SelectMany(v => v.Errors).FirstOrDefault();
-               return new BadRequestObjectResult(new ErrorResponse
-               {
-                   Error = "InvalidRequest",
-                   Message = first?.ErrorMessage ?? "Request body is invalid.",
-               });
-           };
-       });
+   public async Task<Results<NoContent, NotFound<ErrorResponse>, Conflict<ErrorResponse>>> RevokeRole(...)
    ```
-   This normalizes every `[FromBody]` 400 to `ErrorResponse` shape across all seven endpoints in one place.
+   to add `BadRequest<ErrorResponse>` to the union (mirroring the sibling `AssignRole` action at `:428` which already includes it).
+2. In `Stash.Registry/Controllers/AdminController.cs:190` apply the same change to `AdminRevokeRole`.
+3. Re-baseline `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json` with `STASH_SNAPSHOT_REGEN=1 dotnet test --filter FullyQualifiedName~OpenApiSnapshotTests` and inspect the diff: it should add `"400"` blocks pointing to `#/components/schemas/ErrorResponse` for the two operations.
 
-2. **Replace `[FromBody]` with the inline `JsonSerializer.DeserializeAsync` + `try/catch` pattern already used by `AdminController.CreateUser` and `OrganizationsController.CreateTeam`** (consistent with the registry's existing style). More mechanical edits but no startup-pipeline change.
-
-Either fix, then extend `BoundedDomainBoundaryTests` with a parameterized case that POSTs a bad enum value (e.g. `{"role":"NOT_A_REAL_ROLE"}` to `AssignRoleRequest` and `OrgRole` for `AddMember`) and asserts the body is `ErrorResponse`-shaped — closes the test gap.
-
-Optionally also clarify §22.6 wording to be exact about the body shape — leaving the doc claim intact requires #1 or #2.
+Optionally extend `BoundedDomainBoundaryTests` with a parameterized case that POSTs an illegal `principalType` (e.g. `"NOT_A_REAL_TYPE"`) to `RevokeRole` and asserts both the 400 status and that the operation now declares 400 in the live doc — closes the test gap for these two endpoints. Optional because the existing `AssignRole_WithInvalidPackageRole_Returns400WithErrorResponse` case proves the global filter shape is correct; the missing piece is the doc declaration, which the snapshot diff itself attests.
 
 ### Verify
 
 ```bash
-dotnet test --filter "FullyQualifiedName~BoundedDomainBoundaryTests|FullyQualifiedName~Registry.OpenApi"
-# new test should POST {"role":"NOT_A_REAL_ROLE"} to /api/v1/packages/{scope}/{name}/roles and assert ErrorResponse shape
-```
-
----
-
-## F02 — [MEDIUM] CLR-default enum member alignment with DB default literal is documented in prose only — no test guards it
-
-**Status:** fixed
-**Fixed in:** c1a77dd0
-**Files:** `Stash.Registry/Database/RegistryDbContext.cs:97,136,223`, `Stash.Registry.Contracts/BoundedDomains.cs:46,99,196`, `Stash.Registry/CLAUDE.md`
-**Phase:** P4
-**Commit:** 4ec47470
-
-### Observation
-
-Three EF columns use `.HasConversion(...)` + `.HasDefaultValueSql("'<literal>'")` (`packages.visibility='public'`, `users.role='user'`, `org_members.org_role='member'`). EF's INSERT path omits properties whose CLR value equals the type's CLR default (zero-value for enums), letting the DB-level default fill in. The end-to-end correctness invariant is therefore:
-
-> the wire string of `default(T)` (the enum member with numeric value 0) must equal the SQL literal in `HasDefaultValueSql("'X'")`.
-
-The enums are arranged today so this holds: `Visibilities.Public = 0` (first declared) → `"public"`; `UserRoles.User = 0` (first declared) → `"user"`; `OrgRoles.Member = 0` (explicitly assigned). `Stash.Registry/CLAUDE.md`'s bounded-domain bullet documents the rule explicitly ("the SQL literal must match the CLR-default enum member's wire string — for OrgRoles this means Member = 0 (the CLR default) is ordered first").
-
-But this is **Instruct** only (per the CLAUDE.md doctrine "prefer Construct, then Detect, then Instruct"). A future contributor reordering enum members for any reason — e.g. moving `Visibilities.Public` after `Visibilities.Private` for alphabetical neatness, or assigning explicit numeric values that shift the default — silently corrupts every default-visibility insert (DB stores `'public'` while the in-memory entity reads back `Visibilities.Private`). EF's own EF20601 model-validation warning fires at runtime model-finalization for exactly this fragility ("configured with a database-generated default, but has no configured sentinel value"); the warning is not surfaced by `dotnet build` (it is an `ILogger` runtime warning, not an MSBuild diagnostic, and the test contexts don't wire a logger).
-
-`Stash.Tests/Registry/SqliteDatabaseTests.cs:885-947` (`Initialize_BoundedDomainColumnDefaults_AreLowercaseWireStrings`) guards the DDL literal — proving the SQL side stores `'public'`/`'user'`/`'member'`. Nothing asserts the matching invariant on the CLR side.
-
-### Why this matters
-
-This is a classic silent-corruption shape: the regression is INSERT-side (rows land with the wrong literal value), not visible until the table is queried later. The fix is a one-time three-line test; the cost of leaving it is a future P0 with a "we changed an enum order and now everything is private" postmortem.
-
-### Suggested fix
-
-Add a guard alongside the existing DDL-literal test in `Stash.Tests/Registry/SqliteDatabaseTests.cs`:
-
-```csharp
-[Fact]
-public void BoundedDomain_CLRDefault_MatchesDDLDefaultLiteral()
-{
-    // The DB default fills in when EF omits a CLR-default value from INSERT.
-    // If the CLR default member's wire string drifts from the SQL literal,
-    // every default-valued row stores the wrong value silently.
-    Assert.Equal("public", default(Visibilities).ToWire()); // packages.visibility DEFAULT 'public'
-    Assert.Equal("user",   default(UserRoles).ToWire());    // users.role         DEFAULT 'user'
-    Assert.Equal("member", default(OrgRoles).ToWire());     // org_members.org_role DEFAULT 'member'
-}
-```
-
-Alternatively (Construct, stronger): replace `.HasDefaultValueSql("'public'")` with `.HasDefaultValue(Visibilities.Public)` + `.HasSentinel(Visibilities.Public)` and let EF's converter emit the right literal — but the explicit-SQL approach is intentional per CLAUDE.md (the SQL literal stays exact), so the Detect guard is the lighter fix.
-
-### Verify
-
-```bash
-dotnet test --filter "FullyQualifiedName~SqliteDatabaseTests.BoundedDomain_CLRDefault"
-```
-
----
-
-## F03 — [MEDIUM] Three `Json{Status}<T>` IResult helpers duplicated across two controller files instead of a shared home
-
-**Status:** fixed
-**Fixed in:** ad21b6f9
-**Files:** `Stash.Registry/Controllers/AuthController.cs:31-80`, `Stash.Registry/Controllers/ScopesController.cs:21-48`
-**Phase:** P2 (`JsonUnauthorized<T>`, `JsonForbidden<T>`) + P3 (`JsonNotImplemented<T>`)
-**Commit:** 8c573d63 (P2), aeb9a6f8 (P3)
-
-### Observation
-
-P2 introduced two custom typed-result helpers (`JsonUnauthorized<T>`, `JsonForbidden<T>` at `AuthController.cs:43,64`); P3 added a third (`JsonNotImplemented<T>` at `ScopesController.cs:32`). All three are `public sealed class … : IResult, IEndpointMetadataProvider`, declared at *namespace* scope inside a controller file. `ScopesController.cs:26-27` even acknowledges the duplication ("mirroring the `JsonUnauthorized<T>` / `JsonForbidden<T>` helpers in `AuthController.cs`").
-
-A side-issue: the explanatory comment at `AuthController.cs:36-38` says the helpers "must be internal (not private) so they can appear in a public action's generic Results<…> return." The declared accessibility is `public`, not `internal` — `public` is in fact required (a private/internal type used in a public method signature triggers CS0050). The comment is imprecise but harmless.
-
-### Why this matters
-
-The placement is the canonical "helper buried in a feature file" anti-pattern: the next reviewer cannot find these via any module-level search, the duplication invitation is already visible (P3 cloned the pattern), and the next status code the codebase needs (e.g. `JsonTooManyRequests<T>` for rate-limited routes) will likely get a fourth copy in whichever controller introduces it first. This is exactly the kind of cross-cutting concern the project doctrine (CLAUDE.md "Single source of truth — A closed set duplicated across files is the same defect as an inline literal") frames as a quality issue worth flagging.
-
-### Suggested fix
-
-Move the three helpers to a single file `Stash.Registry/OpenApi/JsonStatusResults.cs` (or `Stash.Registry/Endpoints/JsonStatusResults.cs` — `OpenApi/` already exists for transformers). Keep them `public` (the public-action-signature requirement is real). Update `AuthController.cs:31-80` and `ScopesController.cs:21-48` to delete the local declarations. Optionally clean up the AuthController's "internal (not private)" comment to read "public (so they can appear in a public action's generic Results<…> return — CS0050)".
-
-A small extra payoff: a single home is the natural place for a parameterized base (`JsonStatusResult<T>(int status)`) if the family grows.
-
-### Verify
-
-```bash
-dotnet build Stash.Registry/Stash.Registry.csproj
-dotnet test --filter "FullyQualifiedName~Registry.OpenApi|FullyQualifiedName~AuthController|FullyQualifiedName~ScopesController"
-```
-
----
-
-## F04 — [LOW] AOT subprocess self-test exercises serialize but not deserialize — partial coverage of P5 done_when
-
-**Status:** fixed
-**Fixed in:** c1a77dd0
-**Files:** `Stash.Cli/Program.cs:442-502` (`RunEnumSelfTest`), `Stash.Tests/Cli/AotPublishedBinaryEnumRoundTripTests.cs`
-**Phase:** P5
-**Commit:** 3d559674
-
-### Observation
-
-`Program.RunEnumSelfTest` (the `--self-test enums` implementation that the AOT subprocess test invokes) only serializes each enum value and compares the result to `ToWire()` — see the `cases[]` table at `Program.cs:450-479` and the comparison loop at `483-491`. It never calls `JsonSerializer.Deserialize(...)`. The brief's Cross-Cutting Concerns row 4 frames the round-trip as the load-bearing property: "every enum value round-trips byte-identical through CLI source-gen + Native AOT," and the P5 done_when paraphrases as "`--self-test enums` invocation that prints PASS/FAIL after running the same round-trip." "Same round-trip" refers to the in-process test (`Stash.Tests/Cli/EnumRoundTripTests.cs:89-148`), which DOES exercise both serialize and deserialize (`AssertRoundTrip<T>` at line 184).
-
-The in-process test runs under JIT, where the runtime can fall back to reflection if source-gen metadata for a type is missing — exactly the failure mode the AOT subprocess test is named for and built to guard. Deserialize is the more failure-prone direction under trim/AOT (parsing relies on `JsonTypeInfo` constructor metadata that trim can strip). Serialize-only coverage means a future regression that strips deserialize-side source-gen metadata would still print PASS.
-
-### Why this matters
-
-The brief explicitly frames closing the shared-contracts feature's "no AOT round-trip test shipped there" gap as a P5 goal (Acceptance Criteria: "Closes the shared-contracts residual gap"). Closing it with serialize-only coverage leaves the gap half-closed and the test name (`AotBinary_SelfTestEnums_PrintsPassAndExitsZero`) misleading.
-
-### Suggested fix
-
-Extend `Program.RunEnumSelfTest` (`Program.cs:442`) with a second loop that, for each enum value, deserializes the bare-string JSON literal back to the enum and asserts `Equals(value)`. The cleanest pattern reuses the existing `cases[]` table:
-
-```csharp
-foreach (var (label, json, expected) in cases)
-{
-    // … existing serialize check …
-
-    // Round-trip back: parse the same JSON via the typed JsonTypeInfo and assert equality
-    // (snippet — match the typed pattern already used for Serialize, per enum)
-}
-```
-
-Adding seven typed `JsonSerializer.Deserialize(json, ctx.PackageRoles)` etc. calls keeps the code AOT-safe (no reflection). The fail-path coverage check in `EnumRoundTripTests` (`Stash.Tests/Cli/EnumRoundTripTests.cs:171`) already proves the in-process scanner has teeth on the deserialize direction — the AOT subprocess test should not have a weaker contract than the in-process one.
-
-### Verify
-
-```bash
-dotnet publish Stash.Cli/Stash.Cli.csproj -c Release -o .bench-bin
-dotnet test --filter "FullyQualifiedName~AotPublishedBinaryEnumRoundTripTests"
+dotnet test --filter "FullyQualifiedName~Registry.OpenApi|FullyQualifiedName~BoundedDomainBoundaryTests|FullyQualifiedName~RegistryAuthzMatrixTests"
+# OpenApiSnapshotTests must pass against the re-baselined snapshot
+# RegistryAuthzMatrixTests must remain green (behavior preservation)
 ```
