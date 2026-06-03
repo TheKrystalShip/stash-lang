@@ -1040,6 +1040,336 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         return true;
     }
 
+    // ── P2 parity additions ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sets the visibility of a package on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>PATCH /packages/{scope}/{name}/visibility</c> with a
+    /// <see cref="SetVisibilityRequest"/> body. Requires a publish-ceiling token and the
+    /// appropriate resource-side role.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name (e.g. <c>@alice/widget</c>).</param>
+    /// <param name="visibility">The new visibility value: <c>public</c>, <c>private</c>, or <c>internal</c>.</param>
+    /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
+    public bool SetVisibility(string packageName, string visibility)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new SetVisibilityRequest { Visibility = visibility },
+            CliJsonContext.Default.SetVisibilityRequest);
+        var request = new HttpRequestMessage(new HttpMethod("PATCH"),
+            $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/visibility")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>
+    /// Returns the role list for a package.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /packages/{scope}/{name}/roles</c>. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name.</param>
+    /// <returns>
+    /// A <see cref="PackageRolesListResponse"/> on success, or <c>null</c> when the
+    /// package is not found (HTTP 404).
+    /// </returns>
+    public PackageRolesListResponse? GetRoles(string packageName)
+    {
+        EnsureTokenFresh();
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.PackageRolesListResponse);
+    }
+
+    /// <summary>
+    /// Assigns a role to a principal on a package using the self-service publish route.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>PUT /packages/{scope}/{name}/roles</c> with an
+    /// <see cref="AssignRoleRequest"/> body. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name.</param>
+    /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
+    /// <param name="principalId">The principal identifier (username, team name, or org name).</param>
+    /// <param name="role">The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
+    /// <returns><c>true</c> when the server accepts the assignment; <c>false</c> otherwise.</returns>
+    public bool AssignRole(string packageName, string principalType, string principalId, string role)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new AssignRoleRequest { PrincipalType = principalType, PrincipalId = principalId, Role = role },
+            CliJsonContext.Default.AssignRoleRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PutAsync(
+            $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles", content)
+            .GetAwaiter().GetResult();
+        return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>
+    /// Revokes the role of a principal on a package using the self-service publish route.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>DELETE /packages/{scope}/{name}/roles</c> with a
+    /// <see cref="RevokeRoleRequest"/> body. Requires a publish-ceiling token.
+    /// The server enforces the last-owner invariant: a revoke that would leave the
+    /// package with zero owners is refused with <c>409 Conflict</c>; a principal holding
+    /// no role yields <c>404</c>. Both are surfaced as exceptions.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name.</param>
+    /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
+    /// <param name="principalId">The principal identifier.</param>
+    /// <returns><c>true</c> when the server confirms revocation (<c>204 No Content</c>).</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response — e.g. <c>404</c> (the principal
+    /// holds no role) or <c>409</c> (cannot remove the last owner).
+    /// The server's error message is included so the caller can surface the reason.
+    /// </exception>
+    public bool RevokeRole(string packageName, string principalType, string principalId)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new RevokeRoleRequest { PrincipalType = principalType, PrincipalId = principalId },
+            CliJsonContext.Default.RevokeRoleRequest);
+        var request = new HttpRequestMessage(HttpMethod.Delete,
+            $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        throw new InvalidOperationException($"Revoke role failed ({response.StatusCode}): {error}");
+    }
+
+    /// <summary>
+    /// Claims a scope on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /scopes</c> with a <see cref="ClaimScopeRequest"/> body.
+    /// In Verified mode the response carries <c>state=pending</c> and a DNS-TXT challenge.
+    /// </remarks>
+    /// <param name="scope">The bare scope name to claim (without the leading <c>@</c>).</param>
+    /// <param name="ownerType">The owner type: <c>user</c> or <c>org</c>.</param>
+    /// <param name="owner">The owner identifier (username or org name).</param>
+    /// <returns>
+    /// A <see cref="ScopeDetailResponse"/> on success (may carry a pending challenge),
+    /// or <c>null</c> on failure.
+    /// </returns>
+    public ScopeDetailResponse? ClaimScope(string scope, string ownerType, string owner)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new ClaimScopeRequest { Scope = scope, OwnerType = ownerType, Owner = owner },
+            CliJsonContext.Default.ClaimScopeRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync($"{_baseUrl}/scopes", content).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse);
+    }
+
+    /// <summary>
+    /// Retrieves scope details from the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /scopes/{scope}</c>. This is an anonymous read — no token required.
+    /// </remarks>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <returns>
+    /// A <see cref="ScopeDetailResponse"/> on success, or <c>null</c> when the scope is
+    /// not found (HTTP 404).
+    /// </returns>
+    public ScopeDetailResponse? GetScope(string scope)
+    {
+        string url = $"{_baseUrl}/scopes/{Uri.EscapeDataString(scope)}";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse);
+    }
+
+    /// <summary>
+    /// Creates a new organization on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs</c> with a <see cref="CreateOrgRequest"/> body.
+    /// Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="name">The unique lower-case organization name.</param>
+    /// <param name="displayName">An optional human-readable display name.</param>
+    /// <returns>
+    /// A <see cref="CreateOrgResponse"/> on success, or <c>null</c> on failure.
+    /// </returns>
+    public CreateOrgResponse? CreateOrg(string name, string? displayName = null)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new CreateOrgRequest { Name = name, DisplayName = displayName },
+            CliJsonContext.Default.CreateOrgRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync($"{_baseUrl}/orgs", content).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateOrgResponse);
+    }
+
+    /// <summary>
+    /// Retrieves organization details from the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /orgs/{org}</c>. This is an anonymous read — no token required.
+    /// Returns flat metadata only; member/team lists are not available (no server read path).
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <returns>
+    /// An <see cref="OrgDetailResponse"/> on success, or <c>null</c> when the org is
+    /// not found (HTTP 404).
+    /// </returns>
+    public OrgDetailResponse? GetOrg(string org)
+    {
+        string url = $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.OrgDetailResponse);
+    }
+
+    /// <summary>
+    /// Adds a member to an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs/{org}/members</c> with an <see cref="AddOrgMemberRequest"/> body.
+    /// Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="username">The username to add.</param>
+    /// <param name="orgRole">The org role to assign: <c>owner</c> or <c>member</c>. Defaults to <c>member</c>.</param>
+    /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
+    public bool AddOrgMember(string org, string username, string? orgRole = null)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new AddOrgMemberRequest { Username = username, OrgRole = orgRole },
+            CliJsonContext.Default.AddOrgMemberRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/members", content)
+            .GetAwaiter().GetResult();
+        return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>
+    /// Removes a member from an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>DELETE /orgs/{org}/members/{username}</c>. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="username">The username to remove.</param>
+    /// <returns><c>true</c> when the server confirms the removal; <c>false</c> otherwise.</returns>
+    public bool RemoveOrgMember(string org, string username)
+    {
+        EnsureTokenFresh();
+        var response = _http.DeleteAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/members/{Uri.EscapeDataString(username)}")
+            .GetAwaiter().GetResult();
+        return response.IsSuccessStatusCode;
+    }
+
+    /// <summary>
+    /// Creates a new team within an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs/{org}/teams</c> with a <see cref="CreateTeamRequest"/> body.
+    /// Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="team">The team name (unique within the organization).</param>
+    /// <returns>
+    /// A <see cref="CreateTeamResponse"/> on success, or <c>null</c> on failure.
+    /// </returns>
+    public CreateTeamResponse? CreateTeam(string org, string team)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new CreateTeamRequest { Name = team },
+            CliJsonContext.Default.CreateTeamRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/teams", content)
+            .GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateTeamResponse);
+    }
+
+    /// <summary>
+    /// Adds a member to a team within an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs/{org}/teams/{team}/members</c> with an
+    /// <see cref="AddTeamMemberRequest"/> body. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="team">The team name.</param>
+    /// <param name="username">The username to add to the team.</param>
+    /// <returns><c>true</c> when the server accepts the addition; <c>false</c> otherwise.</returns>
+    public bool AddTeamMember(string org, string team, string username)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new AddTeamMemberRequest { Username = username },
+            CliJsonContext.Default.AddTeamMemberRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/teams/{Uri.EscapeDataString(team)}/members",
+            content)
+            .GetAwaiter().GetResult();
+        return response.IsSuccessStatusCode;
+    }
+
+    // ── private helpers ────────────────────────────────────────────────────────
+
     /// <summary>
     /// Builds the two-segment URL path for a scoped package name.
     /// </summary>
