@@ -59,9 +59,11 @@ public sealed class PackageRoleCommandTests : RegistryAuthzTestBase
         var rolesAfterAssign = await GetPackageRolesAsync(factory, "@roleowner/pkg");
         Assert.Contains(rolesAfterAssign, r => r.PrincipalId == "rolebob" && r.Role == "maintainer");
 
-        // ── list: command runs without error and calls GetRoles ────────────────
-        // We verify the list result through the DB read above (the list command
-        // itself writes to stdout which is not captured in this test pattern).
+        // ── list: exercise the command code path (writes to stdout, not captured) ──
+        // The command must run without throwing against the real package+role data.
+        RoleCommand.ExecuteCore("list", ["@roleowner/pkg"], cli);
+
+        // Also verify the content via the client directly (no stdout capture needed).
         var listResult = cli.GetRoles("@roleowner/pkg");
         Assert.NotNull(listResult);
         Assert.Contains(listResult!.Roles, r => r.PrincipalId == "rolebob" && r.Role == "maintainer");

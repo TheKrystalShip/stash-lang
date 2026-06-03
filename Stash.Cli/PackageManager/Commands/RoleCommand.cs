@@ -114,9 +114,7 @@ public static class RoleCommand
         var result = client.GetRoles(packageName);
         if (result == null)
         {
-            Console.Error.WriteLine($"Package '{packageName}' not found.");
-            Environment.Exit(1);
-            return;
+            throw new InvalidOperationException($"Package '{packageName}' not found.");
         }
 
         if (result.Roles.Count == 0)
@@ -172,8 +170,7 @@ public static class RoleCommand
         }
         else
         {
-            Console.Error.WriteLine("Failed to assign role.");
-            Environment.Exit(1);
+            throw new InvalidOperationException("Failed to assign role.");
         }
     }
 
