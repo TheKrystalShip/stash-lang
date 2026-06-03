@@ -14,7 +14,7 @@ public sealed class SearchQuery
 {
     /// <summary>The free-text search query string (bound from the <c>?q=</c> query-string parameter).</summary>
     [JsonPropertyName("q")]
-    public string? Q { get; set; }
+    public string? q { get; set; }
 
     /// <summary>The 1-based page index (minimum 1).</summary>
     [Range(1, int.MaxValue)]
@@ -24,7 +24,7 @@ public sealed class SearchQuery
                         "IComparable/type-conversion reflection paths, which are server-side concerns; " +
                         "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("page")]
-    public int Page { get; set; } = 1;
+    public int page { get; set; } = 1;
 
     /// <summary>The number of results per page (1–100).</summary>
     [Range(1, 100)]
@@ -34,7 +34,7 @@ public sealed class SearchQuery
                         "IComparable/type-conversion reflection paths, which are server-side concerns; " +
                         "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("pageSize")]
-    public int PageSize { get; set; } = 20;
+    public int pageSize { get; set; } = 20;
 }
 
 /// <summary>

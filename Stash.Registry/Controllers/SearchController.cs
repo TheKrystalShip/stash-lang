@@ -70,7 +70,7 @@ public sealed class SearchController : ControllerBase
         // packages the caller has permission to read. Unauthenticated callers get null and see
         // only public packages. The PDP-backed predicate lives in SearchPackagesAsync.
         string? callerUsername = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
-        SearchResult result = await _db.SearchPackagesAsync(query.Q ?? "", query.Page, query.PageSize, callerUsername);
+        SearchResult result = await _db.SearchPackagesAsync(query.q ?? "", query.page, query.pageSize, callerUsername);
 
         List<PackageSummaryResponse> packages = result.Packages.Select(p =>
         {
@@ -92,14 +92,14 @@ public sealed class SearchController : ControllerBase
             };
         }).ToList();
 
-        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.PageSize);
+        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
         return TypedResults.Ok(new SearchResponse
         {
             Packages = packages,
             TotalCount = result.TotalCount,
-            Page = query.Page,
-            PageSize = query.PageSize,
+            Page = query.page,
+            PageSize = query.pageSize,
             TotalPages = totalPages
         });
     }

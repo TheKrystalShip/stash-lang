@@ -323,7 +323,7 @@
         "operationId": "Admin_GetAuditLog",
         "parameters": [
           {
-            "name": "Page",
+            "name": "page",
             "in": "query",
             "schema": {
               "maximum": 2147483647,
@@ -337,7 +337,7 @@
             }
           },
           {
-            "name": "PageSize",
+            "name": "pageSize",
             "in": "query",
             "schema": {
               "maximum": 200,
@@ -351,14 +351,14 @@
             }
           },
           {
-            "name": "Package",
+            "name": "package",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "Action",
+            "name": "action",
             "in": "query",
             "schema": {
               "type": "string"
@@ -2201,14 +2201,14 @@
         "operationId": "Search_Search",
         "parameters": [
           {
-            "name": "Q",
+            "name": "q",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "Page",
+            "name": "page",
             "in": "query",
             "schema": {
               "maximum": 2147483647,
@@ -2222,7 +2222,7 @@
             }
           },
           {
-            "name": "PageSize",
+            "name": "pageSize",
             "in": "query",
             "schema": {
               "maximum": 100,

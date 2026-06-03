@@ -305,41 +305,41 @@ public sealed class ContractsValidationAttributesTests
 
     [Fact]
     public void SearchQuery_PageBelowOne_FailsRange()
-        => AssertInvalid(new SearchQuery { Page = 0, PageSize = 10 }, "Page");
+        => AssertInvalid(new SearchQuery { page = 0, pageSize = 10 }, "Page");
 
     [Fact]
     public void SearchQuery_PageSizeAbove100_FailsRange()
-        => AssertInvalid(new SearchQuery { Page = 1, PageSize = 101 }, "PageSize");
+        => AssertInvalid(new SearchQuery { page = 1, pageSize = 101 }, "PageSize");
 
     [Fact]
     public void SearchQuery_PageSizeBelowOne_FailsRange()
-        => AssertInvalid(new SearchQuery { Page = 1, PageSize = 0 }, "PageSize");
+        => AssertInvalid(new SearchQuery { page = 1, pageSize = 0 }, "PageSize");
 
     [Fact]
     public void SearchQuery_ValidDefaults_PassesValidation()
-        => AssertValid(new SearchQuery { Page = 1, PageSize = 20 });
+        => AssertValid(new SearchQuery { page = 1, pageSize = 20 });
 
     [Fact]
     public void SearchQuery_PageSizeAtMax_PassesValidation()
-        => AssertValid(new SearchQuery { Page = 1, PageSize = 100 });
+        => AssertValid(new SearchQuery { page = 1, pageSize = 100 });
 
     // ── AuditLogQuery ─────────────────────────────────────────────────────────
 
     [Fact]
     public void AuditLogQuery_PageBelowOne_FailsRange()
-        => AssertInvalid(new AuditLogQuery { Page = 0, PageSize = 10 }, "Page");
+        => AssertInvalid(new AuditLogQuery { page = 0, pageSize = 10 }, "Page");
 
     [Fact]
     public void AuditLogQuery_PageSizeAbove200_FailsRange()
-        => AssertInvalid(new AuditLogQuery { Page = 1, PageSize = 201 }, "PageSize");
+        => AssertInvalid(new AuditLogQuery { page = 1, pageSize = 201 }, "PageSize");
 
     [Fact]
     public void AuditLogQuery_ValidDefaults_PassesValidation()
-        => AssertValid(new AuditLogQuery { Page = 1, PageSize = 20 });
+        => AssertValid(new AuditLogQuery { page = 1, pageSize = 20 });
 
     [Fact]
     public void AuditLogQuery_PageSizeAtMax_PassesValidation()
-        => AssertValid(new AuditLogQuery { Page = 1, PageSize = 200 });
+        => AssertValid(new AuditLogQuery { page = 1, pageSize = 200 });
 
     // ── ScopeGrammarAttribute ─────────────────────────────────────────────────
 

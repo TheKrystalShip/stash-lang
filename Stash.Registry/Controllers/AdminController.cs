@@ -187,8 +187,8 @@ public class AdminController : ControllerBase
     [HttpGet("audit-log")]
     public async Task<Ok<AuditLogResponse>> GetAuditLog([FromQuery] AuditLogQuery query)
     {
-        var result = await _auditService.GetAuditLogAsync(query.Page, query.PageSize, query.Package, query.Action);
-        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.PageSize);
+        var result = await _auditService.GetAuditLogAsync(query.page, query.pageSize, query.package, query.action);
+        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
         return TypedResults.Ok(new AuditLogResponse
         {
@@ -205,8 +205,8 @@ public class AdminController : ControllerBase
                 DenyReason = e.DenyReason
             }).ToList(),
             TotalCount = result.TotalCount,
-            Page = query.Page,
-            PageSize = query.PageSize,
+            Page = query.page,
+            PageSize = query.pageSize,
             TotalPages = totalPages
         });
     }

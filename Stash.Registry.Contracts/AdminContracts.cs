@@ -69,7 +69,7 @@ public sealed class AuditLogQuery
                         "IComparable/type-conversion reflection paths, which are server-side concerns; " +
                         "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("page")]
-    public int Page { get; set; } = 1;
+    public int page { get; set; } = 1;
 
     /// <summary>The number of entries per page (1–200).</summary>
     [Range(1, 200)]
@@ -79,15 +79,15 @@ public sealed class AuditLogQuery
                         "IComparable/type-conversion reflection paths, which are server-side concerns; " +
                         "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("pageSize")]
-    public int PageSize { get; set; } = 50;
+    public int pageSize { get; set; } = 50;
 
     /// <summary>Optional package name filter.</summary>
     [JsonPropertyName("package")]
-    public string? Package { get; set; }
+    public string? package { get; set; }
 
     /// <summary>Optional action type filter (e.g. <c>"publish"</c>, <c>"user.create"</c>).</summary>
     [JsonPropertyName("action")]
-    public string? Action { get; set; }
+    public string? action { get; set; }
 }
 
 /// <summary>
