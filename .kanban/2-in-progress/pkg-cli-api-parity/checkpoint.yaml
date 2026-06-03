@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T00:34:17Z"
+updated: "2026-06-03T00:50:00Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "Added 12 parity methods to RegistryClient (self-service routes), registered 15 DTOs in CliJsonContext, 26 fake-handler tests all pass, AOT publish clean"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: a41ac1d8b64f84fdb48407e33da1e38aaa163634
+    verified: true
+    started: "2026-06-03T00:35:48Z"
+    completed: "2026-06-03T00:50:00Z"
+    attempts: 1
+    notes: "Added RoleCommand (list/assign/revoke), deleted OwnerCommand and 3 legacy helpers, updated RegistryClientRemoveOwnerTests to use RevokeRole, 5 integration tests all pass"
   P4:
     status: pending
     commit: null
