@@ -16,6 +16,7 @@ using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Middleware;
 using Stash.Registry.Services;
+using Stash.Registry.OpenApi;
 using Stash.Registry.Storage;
 
 namespace Stash.Registry;
@@ -186,7 +187,13 @@ public sealed class Startup
         // Shared principal factory — Singleton (pure function, no scoped state).
         services.AddSingleton<IRegistryAuthzPrincipalFactory, RegistryAuthzPrincipalFactory>();
 
-        services.AddOpenApi();
+        services.AddHttpContextAccessor();
+
+        services.AddOpenApi(options =>
+        {
+            options.AddOperationTransformer<OpenApiOperationIdTransformer>();
+            options.AddDocumentTransformer<OpenApiDocumentMetadataTransformer>();
+        });
     }
 
     /// <summary>
@@ -261,10 +268,8 @@ public sealed class Startup
             app.UseMiddleware<RateLimitingMiddleware>(_config.RateLimiting);
         }
 
-        if (app.Environment.IsDevelopment())
-        {
-            app.MapOpenApi();
-        }
+        // P1: OpenAPI endpoint is public in every environment (drop the IsDevelopment() gate).
+        app.MapOpenApi();
 
         app.UseRouting();
         app.UseAuthentication();
@@ -275,6 +280,15 @@ public sealed class Startup
         // (before the PDP), surfacing as TokenRevoked in the audit log.
         app.Use(async (context, next) =>
         {
+            // P1: The OpenAPI document is public in every environment; bypass the JTI
+            // revocation check entirely for /openapi/* paths so a caller presenting a stale
+            // or revoked token can still fetch the API contract.
+            if (context.Request.Path.StartsWithSegments("/openapi"))
+            {
+                await next();
+                return;
+            }
+
             if (context.Items.ContainsKey("TokenRevoked"))
             {
                 // Audit the revoked-token presentation before terminating.
@@ -312,7 +326,11 @@ public sealed class Startup
 
         app.UseAuthorization();
 
-        app.MapGet("/", () => Results.Json(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }));
+        // P1: Typed result so the health endpoint carries an operationId and a $ref schema
+        // in the generated OpenAPI document. TypedResults.Ok<T> makes ApiExplorer emit the
+        // component schema; .WithName gives it a stable operationId.
+        app.MapGet("/", () => TypedResults.Ok(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }))
+            .WithName("Health_Check");
 
         app.MapControllers();
     }
