@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T01:05:55Z"
+updated: "2026-06-03T01:18:30Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "Added VisibilityCommand (set-only), Visibilities bounded set from contracts, 4 integration tests all pass (private-flip rejection + idempotent + unknown-tier + no-get)"
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 74daa2f7ff204469830803479a0cace24435c5f5
+    verified: true
+    started: "2026-06-03T01:07:17Z"
+    completed: "2026-06-03T01:18:30Z"
+    attempts: 1
+    notes: "Added ScopeCommand (claim/info), ScopeOwnerTypes constants for owner_type, challenge-print for Verified mode, 6 integration tests pass"
   P6:
     status: pending
     commit: null
