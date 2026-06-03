@@ -473,6 +473,7 @@ public class PackageInstallerTests : IDisposable
 /// HTTP download tests use System.Net.HttpListener on a randomly chosen port.
 /// Cache-only tests exercise InstallEntry via InstallFromLockFile.
 /// </summary>
+[Collection("NetworkListenerTests")]
 public class IntegrityVerificationTests : IDisposable
 {
     private readonly string _tempDir;
