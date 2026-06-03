@@ -5,7 +5,8 @@
 > **Purpose:** reference for `stash pkg`, the package-management command group built into the Stash CLI.
 
 `stash pkg` manages Stash package manifests, dependency installation, lock files,
-publishing, registry authentication, owners, and API tokens. The short alias
+publishing, registry authentication, roles, visibility, scopes, organizations, and
+API tokens. The short alias
 `stash p` is equivalent to `stash pkg`.
 
 **Companion documents:**
@@ -49,7 +50,7 @@ It provides:
 - dependency installation into `stashes/`
 - deterministic locking with `stash-lock.json`
 - package search, info, publish, and unpublish
-- registry login/logout, owner management, and API token management
+- registry login/logout, role / visibility / scope / organization management, and API token management
 - Git dependency installation
 - tarball packing, integrity verification, and local cache reuse
 
@@ -298,7 +299,8 @@ stash pkg search deploy --page 2
 
 ### `stash pkg info <name>`
 
-Displays package metadata, versions, owners, and a truncated README.
+Displays package metadata, versions, and a truncated README. (Owner/role display
+moved to `stash pkg role list`; see that command.)
 
 ```bash
 stash pkg info http-utils
@@ -334,7 +336,7 @@ Publish flow:
 
 Published versions are immutable. To release a fix, publish a new version. The
 first publisher becomes an owner. Only owners and registry admins can publish later
-versions.
+versions. Manage per-package roles with `stash pkg role`.
 
 | Flag               | Meaning                                        |
 | ------------------ | ---------------------------------------------- |
@@ -412,23 +414,126 @@ also prints email, role, and registry URL. Missing optional fields are printed a
 
 The command exits non-zero when not logged in or when the registry is unreachable.
 
-### `stash pkg owner <action> <package> [username]`
+### `stash pkg role <action> <package> ...`
 
-Manages package owners.
+Manages per-package role grants. Replaces the former `stash pkg owner` command with a
+principal-typed grammar: a role is granted to a **user**, **team**, or **org**, and the
+role itself is explicit (`owner`, `maintainer`, `publisher`, or `reader`).
 
 ```bash
-stash pkg owner list http-utils
-stash pkg owner ls http-utils
-stash pkg owner add http-utils carol
-stash pkg owner remove http-utils bob
+stash pkg role list   @myorg/widget
+stash pkg role assign @myorg/widget user alice     maintainer
+stash pkg role assign @myorg/widget team designers publisher
+stash pkg role revoke @myorg/widget user alice
 ```
 
-`add` and `remove` require authentication.
+| Subcommand                                                    | Effect                                       |
+| ------------------------------------------------------------- | -------------------------------------------- |
+| `role list <package>`                                         | list every role grant on the package         |
+| `role assign <package> <user\|team\|org> <principal> <role>`  | grant `<role>` to a principal                |
+| `role revoke <package> <user\|team\|org> <principal>`         | remove whatever role the principal holds      |
+
+The principal type (`user`, `team`, `org`) and the role (`owner`, `maintainer`,
+`publisher`, `reader`) are required, explicit arguments — there is no implicit user-owner
+default. `role revoke` takes **no** role argument: a principal holds at most one role per
+package, and revoke removes whichever role they hold.
+
+`role list`, `assign`, and `revoke` all run at the **publish** ceiling on the self-service
+route `/packages/{scope}/{name}/roles` — a package owner manages their own package's roles
+with a publish token; no admin token is required. Revoking the **last owner** of a package
+is refused by the registry (the server's last-owner message is surfaced); revoking a
+principal that holds no role reports a clear not-found error.
 
 | Flag               | Meaning                                        |
 | ------------------ | ---------------------------------------------- |
 | `--registry <url>` | use this registry                              |
 | `--token <token>`  | auth token; overrides config and `STASH_TOKEN` |
+
+> The flat `owners` array was removed from `stash pkg info`; `stash pkg role list` is now
+> the canonical, principal-typed reader of who can act on a package. (`info` is anonymous,
+> whereas `role list` requires a publish token.)
+
+### `stash pkg visibility set <package> <public|internal|private>`
+
+Sets a package's visibility tier. **Set-only** — there is no `visibility get` subcommand
+because the registry exposes no visibility read path (the package-detail response carries
+no visibility field). The read gap is tracked as a deferred backlog item.
+
+```bash
+stash pkg visibility set @myorg/widget private
+stash pkg visibility set @myorg/widget public
+```
+
+`visibility set` runs at the **publish** ceiling on `/packages/{scope}/{name}/visibility`
+and is idempotent (setting a tier the package already has succeeds). An unknown tier is
+rejected with a non-zero exit and the list of valid tiers.
+
+| Flag               | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| `--registry <url>` | use this registry                              |
+| `--token <token>`  | auth token; overrides config and `STASH_TOKEN` |
+
+### `stash pkg scope <action> <scope> ...`
+
+Claims and inspects namespace scopes.
+
+```bash
+stash pkg scope claim myorg
+stash pkg scope claim myorg --org acme
+stash pkg scope info  myorg
+```
+
+| Subcommand                          | Effect                                                  |
+| ----------------------------------- | ------------------------------------------------------- |
+| `scope claim <scope> [--org <org>]` | claim a scope for the authenticated user, or for an org |
+| `scope info <scope>`                | print the scope's owner (anonymous read)                |
+
+`scope claim` posts to `/scopes`. By default the scope is claimed for the authenticated
+user (`owner_type=user`); `--org <org>` claims it for an organization (`owner_type=org`).
+When the registry runs in **Verified** ownership mode, `claim` prints a DNS-TXT challenge
+(record name, record value, and expiry) to satisfy before the claim completes, instead of
+reporting a finished claim. A second claim of an already-owned scope by a different user
+fails with a clear error.
+
+| Flag               | Meaning                                        |
+| ------------------ | ---------------------------------------------- |
+| `--org <org>`      | claim the scope for an organization            |
+| `--registry <url>` | use this registry                              |
+| `--token <token>`  | auth token; overrides config and `STASH_TOKEN` |
+
+### `stash pkg org <action> ...`
+
+Manages organizations and their teams.
+
+```bash
+stash pkg org create acme --display-name "Acme Corp"
+stash pkg org info   acme
+stash pkg org member add    acme bob --role member
+stash pkg org member remove acme bob
+stash pkg org team add        acme designers
+stash pkg org team member add acme designers bob
+```
+
+| Subcommand                                            | Effect                                          |
+| ----------------------------------------------------- | ----------------------------------------------- |
+| `org create <org> [--display-name <name>]`            | create an organization                          |
+| `org info <org>`                                      | print the org's flat metadata (anonymous read)  |
+| `org member add <org> <user> [--role owner\|member]`  | add a member                                    |
+| `org member remove <org> <user>`                      | remove a member                                 |
+| `org team add <org> <team>`                           | create a team                                   |
+| `org team member add <org> <team> <user>`             | add a user to a team                            |
+
+`org info` prints only the organization's flat metadata (id, name, display name, creation
+time, creator). It does **not** list members or teams — the registry exposes no membership
+read path (tracked as a deferred backlog item). The write subcommands run at the
+**publish** ceiling.
+
+| Flag                     | Meaning                                          |
+| ------------------------ | ------------------------------------------------ |
+| `--display-name <name>`  | human-readable org name (on `create`)            |
+| `--role <owner\|member>` | member role (on `member add`; default `member`)  |
+| `--registry <url>`       | use this registry                                |
+| `--token <token>`        | auth token; overrides config and `STASH_TOKEN`   |
 
 ### `stash pkg token`
 
@@ -602,18 +707,23 @@ Auth token selection:
 
 ### Authentication Requirements
 
-| Command                    | Auth required |
-| -------------------------- | ------------- |
-| `install`                  | no            |
-| `search`                   | no            |
-| `info`                     | no            |
-| `owner list`               | no            |
-| `publish`                  | yes           |
-| `unpublish`                | yes           |
-| `owner add`                | yes           |
-| `owner remove`             | yes           |
-| `token create/list/revoke` | yes           |
-| `whoami`                   | yes           |
+| Command                       | Auth required |
+| ----------------------------- | ------------- |
+| `install`                     | no            |
+| `search`                      | no            |
+| `info`                        | no            |
+| `scope info`                  | no            |
+| `org info`                    | no            |
+| `publish`                     | yes           |
+| `unpublish`                   | yes           |
+| `role list / assign / revoke` | yes (publish) |
+| `visibility set`              | yes (publish) |
+| `scope claim`                 | yes (publish) |
+| `org create`                  | yes (publish) |
+| `org member add / remove`     | yes (publish) |
+| `org team add / member add`   | yes (publish) |
+| `token create/list/revoke`    | yes           |
+| `whoami`                      | yes           |
 
 ## Git Dependencies
 
@@ -715,7 +825,7 @@ rm -rf ~/.stash/cache/http-utils/
 Package-manager security properties:
 
 - published versions are immutable
-- publish/unpublish/owner/token commands require authenticated registry requests
+- publish/unpublish/role/visibility/scope/org/token commands require authenticated registry requests
 - credentials are stored in the user config file with restricted permissions where
   supported by the platform
 - `STASH_TOKEN` and `--token` allow CI usage without writing config files

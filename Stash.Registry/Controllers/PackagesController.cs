@@ -97,13 +97,6 @@ public class PackagesController : ControllerBase
                 versionsDict[v] = BuildVersionResponse(vr);
         }
 
-        List<PackageRoleEntry> roles = await _db.GetPackageRolesAsync(packageName);
-        List<string> owners = roles
-            .Where(r => r.PrincipalType == PrincipalTypes.User && r.Role == PackageRoles.Owner)
-            .Select(r => r.PrincipalId)
-            .OrderBy(u => u)
-            .ToList();
-
         List<string>? keywords = package.Keywords != null
             ? JsonSerializer.Deserialize<List<string>>(package.Keywords)
             : null;
@@ -112,7 +105,6 @@ public class PackagesController : ControllerBase
         {
             Name = package.Name,
             Description = package.Description,
-            Owners = owners,
             License = package.License,
             Repository = package.Repository,
             Keywords = keywords ?? new List<string>(),

@@ -1,0 +1,67 @@
+schema_version: 1
+feature: pkg-cli-api-parity
+current: null
+updated: "2026-06-03T02:35:37Z"
+phases:
+  P1:
+    status: done
+    commit: 729d57824c8ca11091b75daddf06bb25997521cc
+    verified: true
+    started: "2026-06-03T00:10:27Z"
+    completed: "2026-06-03T00:16:48Z"
+    attempts: 1
+    notes: "Removed Owners from PackageDetailResponse, controller, and InfoCommand.Render; 6 tests pass"
+  P2:
+    status: done
+    commit: d46c883a4e735b9f465794caea4c3e0a59df58af
+    verified: true
+    started: "2026-06-03T00:18:44Z"
+    completed: "2026-06-03T00:34:17Z"
+    attempts: 1
+    notes: "Added 12 parity methods to RegistryClient (self-service routes), registered 15 DTOs in CliJsonContext, 26 fake-handler tests all pass, AOT publish clean"
+  P3:
+    status: done
+    commit: a41ac1d8b64f84fdb48407e33da1e38aaa163634
+    verified: true
+    started: "2026-06-03T00:35:48Z"
+    completed: "2026-06-03T00:50:00Z"
+    attempts: 1
+    notes: "Added RoleCommand (list/assign/revoke), deleted OwnerCommand and 3 legacy helpers, updated RegistryClientRemoveOwnerTests to use RevokeRole, 5 integration tests all pass"
+  P4:
+    status: done
+    commit: 1dcfffb91100cd961d85056b3ede73609fd5ecc4
+    verified: true
+    started: "2026-06-03T00:55:30Z"
+    completed: "2026-06-03T01:05:55Z"
+    attempts: 1
+    notes: "Added VisibilityCommand (set-only), Visibilities bounded set from contracts, 4 integration tests all pass (private-flip rejection + idempotent + unknown-tier + no-get)"
+  P5:
+    status: done
+    commit: 74daa2f7ff204469830803479a0cace24435c5f5
+    verified: true
+    started: "2026-06-03T01:07:17Z"
+    completed: "2026-06-03T01:18:30Z"
+    attempts: 1
+    notes: "Added ScopeCommand (claim/info), ScopeOwnerTypes constants for owner_type, challenge-print for Verified mode, 6 integration tests pass"
+  P6:
+    status: done
+    commit: 197e914cd29386d43bda2fc0e9b77ec1a58da0d7
+    verified: true
+    started: "2026-06-03T01:20:19Z"
+    completed: "2026-06-03T01:32:26Z"
+    attempts: 1
+    notes: Two-level nested org dispatch (create/info/member add-remove/team add/team member add); OrgRoles bounded constants; 17 tests green
+  P7:
+    status: done
+    commit: bfafaa632a14ed4e17ce3b65915fd9d45588e5e6
+    verified: true
+    started: "2026-06-03T01:35:44Z"
+    completed: "2026-06-03T01:46:31Z"
+    attempts: 1
+    notes: docs (PKG+Registry) + package_roles.stash example; help text already correct from P3-P6
+review:
+  status: resolved
+  started: "2026-06-03T01:59:32Z"
+  resolved: "2026-06-03T02:35:37Z"
+  findings_open: 0
+  findings_fixed: 0

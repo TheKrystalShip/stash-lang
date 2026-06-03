@@ -6,7 +6,7 @@ using System.Text.Json.Serialization;
 namespace Stash.Registry.Contracts;
 
 /// <summary>
-/// Response body returned by the <c>GET /api/v1/packages/{name}</c> endpoint.
+/// Response body returned by the <c>GET /api/v1/packages/{scope}/{name}</c> endpoint.
 /// </summary>
 public sealed class PackageDetailResponse
 {
@@ -17,10 +17,6 @@ public sealed class PackageDetailResponse
     /// <summary>A short human-readable description of the package.</summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
-
-    /// <summary>The list of usernames that own and can publish this package.</summary>
-    [JsonPropertyName("owners")]
-    public required List<string> Owners { get; set; }
 
     /// <summary>The SPDX license identifier for the package (e.g. <c>"MIT"</c>).</summary>
     [JsonPropertyName("license")]

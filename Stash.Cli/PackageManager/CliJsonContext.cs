@@ -30,6 +30,7 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(RegistryEntry))]
 [JsonSerializable(typeof(Dictionary<string, RegistryEntry>))]
 // Shared Stash.Registry.Contracts types — wire DTOs consumed by the CLI
+[JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(LoginRequest))]
 [JsonSerializable(typeof(AssignRoleRequest))]
 [JsonSerializable(typeof(RevokeRoleRequest))]
@@ -44,6 +45,23 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(SearchResponse))]
 [JsonSerializable(typeof(PackageSummaryResponse))]
 [JsonSerializable(typeof(List<PackageSummaryResponse>))]
+// Package role DTOs (P2 parity additions)
+[JsonSerializable(typeof(PackageRoleResponse))]
+[JsonSerializable(typeof(PackageRolesListResponse))]
+[JsonSerializable(typeof(List<PackageRoleResponse>))]
+[JsonSerializable(typeof(SetVisibilityRequest))]
+// Scope DTOs
+[JsonSerializable(typeof(ClaimScopeRequest))]
+[JsonSerializable(typeof(ScopeDetailResponse))]
+[JsonSerializable(typeof(ScopeChallengeBody))]
+// Organization and team DTOs
+[JsonSerializable(typeof(CreateOrgRequest))]
+[JsonSerializable(typeof(CreateOrgResponse))]
+[JsonSerializable(typeof(OrgDetailResponse))]
+[JsonSerializable(typeof(AddOrgMemberRequest))]
+[JsonSerializable(typeof(CreateTeamRequest))]
+[JsonSerializable(typeof(CreateTeamResponse))]
+[JsonSerializable(typeof(AddTeamMemberRequest))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

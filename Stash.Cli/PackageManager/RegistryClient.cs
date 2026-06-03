@@ -768,108 +768,6 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     }
 
     /// <summary>
-    /// Retrieves the list of owners for the specified package.
-    /// </summary>
-    /// <remarks>
-    /// Issues <c>GET /packages/{name}</c> and reads the <c>owners</c> array from the
-    /// response JSON.
-    /// </remarks>
-    /// <param name="packageName">The name of the package whose owners to retrieve.</param>
-    /// <returns>
-    /// A list of owner username strings, or <c>null</c> when the package is not
-    /// found (HTTP 404).
-    /// </returns>
-    /// <exception cref="HttpRequestException">
-    /// Thrown for non-404 HTTP error responses.
-    /// </exception>
-    public List<string>? GetOwners(string packageName)
-    {
-        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}";
-        var response = _http.GetAsync(url).GetAwaiter().GetResult();
-        if (response.StatusCode == HttpStatusCode.NotFound)
-        {
-            return null;
-        }
-
-        response.EnsureSuccessStatusCode();
-        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        using var doc = JsonDocument.Parse(json);
-
-        var owners = new List<string>();
-        if (doc.RootElement.TryGetProperty("owners", out var ownersArr))
-        {
-            foreach (var o in ownersArr.EnumerateArray())
-            {
-                string? s = o.GetString();
-                if (s != null)
-                {
-                    owners.Add(s);
-                }
-            }
-        }
-        return owners;
-    }
-
-    /// <summary>
-    /// Grants ownership of a package to a user by assigning them the <c>owner</c> role.
-    /// </summary>
-    /// <remarks>
-    /// Issues <c>PUT /admin/packages/{scope}/{name}/roles</c> with an
-    /// <see cref="AssignRoleRequest"/> body setting <c>principal_type = "user"</c>,
-    /// <c>principal_id = username</c>, and <c>role = "owner"</c>.
-    /// </remarks>
-    /// <param name="packageName">The name of the package to update ownership for.</param>
-    /// <param name="username">The username to grant owner role to.</param>
-    /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
-    public bool AddOwner(string packageName, string username)
-    {
-        EnsureTokenFresh();
-        var body = JsonSerializer.Serialize(new AssignRoleRequest { PrincipalType = PrincipalTypes.User, PrincipalId = username, Role = PackageRoles.Owner }, CliJsonContext.Default.AssignRoleRequest);
-        var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = _http.PutAsync($"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/roles", content).GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
-    }
-
-    /// <summary>
-    /// Revokes a user's ownership of a package by removing their <c>owner</c> role.
-    /// </summary>
-    /// <remarks>
-    /// Issues <c>DELETE /admin/packages/{scope}/{name}/roles</c> with a
-    /// <see cref="RevokeRoleRequest"/> body setting <c>principal_type = "user"</c> and
-    /// <c>principal_id = username</c>. This mirrors <see cref="AddOwner"/>'s admin route,
-    /// so ownership grant and revoke share the same admin privilege model. The server
-    /// enforces the last-owner invariant: a revoke that would leave the package with zero
-    /// owners is refused with <c>409 Conflict</c>, surfaced here as an exception.
-    /// </remarks>
-    /// <param name="packageName">The name of the package to update ownership for.</param>
-    /// <param name="username">The username whose owner role is being revoked.</param>
-    /// <returns><c>true</c> when the server confirms the revocation (<c>204 No Content</c>).</returns>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the server returns a non-success response — e.g. <c>404</c> (the package
-    /// does not exist or the user holds no role) or <c>409</c> (cannot remove the last owner).
-    /// The server's error message is included so the caller can surface the reason.
-    /// </exception>
-    public bool RemoveOwner(string packageName, string username)
-    {
-        EnsureTokenFresh();
-        string body = JsonSerializer.Serialize(
-            new RevokeRoleRequest { PrincipalType = PrincipalTypes.User, PrincipalId = username },
-            CliJsonContext.Default.RevokeRoleRequest);
-        var request = new HttpRequestMessage(HttpMethod.Delete, $"{_baseUrl}/admin/packages/{ScopedPackagePath(packageName)}/roles")
-        {
-            Content = new StringContent(body, Encoding.UTF8, "application/json")
-        };
-        var response = _http.SendAsync(request).GetAwaiter().GetResult();
-        if (response.IsSuccessStatusCode)
-        {
-            return true;
-        }
-
-        string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        throw new InvalidOperationException($"Remove owner failed ({response.StatusCode}): {error}");
-    }
-
-    /// <summary>
     /// Creates a new API token on the registry.
     /// </summary>
     public TokenCreateResponse? CreateToken(string? scope = null, string? description = null, string? expiresIn = null)
@@ -1038,6 +936,454 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             throw new InvalidOperationException($"Undeprecate version failed ({response.StatusCode}): {error}");
         }
         return true;
+    }
+
+    // ── P2 parity additions ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Sets the visibility of a package on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>PATCH /packages/{scope}/{name}/visibility</c> with a
+    /// <see cref="SetVisibilityRequest"/> body. Requires a publish-ceiling token and the
+    /// appropriate resource-side role.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name (e.g. <c>@alice/widget</c>).</param>
+    /// <param name="visibility">The new visibility value: <c>public</c>, <c>private</c>, or <c>internal</c>.</param>
+    /// <returns><c>true</c> when the server accepts the change.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public bool SetVisibility(string packageName, string visibility)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new SetVisibilityRequest { Visibility = visibility },
+            CliJsonContext.Default.SetVisibilityRequest);
+        var request = new HttpRequestMessage(new HttpMethod("PATCH"),
+            $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/visibility")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"set visibility of '{packageName}'");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Returns the role list for a package.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /packages/{scope}/{name}/roles</c>. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name.</param>
+    /// <returns>
+    /// A <see cref="PackageRolesListResponse"/> on success, or <c>null</c> when the
+    /// package is not found (HTTP 404).
+    /// </returns>
+    public PackageRolesListResponse? GetRoles(string packageName)
+    {
+        EnsureTokenFresh();
+        string url = $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"get roles for '{packageName}'");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.PackageRolesListResponse);
+    }
+
+    /// <summary>
+    /// Assigns a role to a principal on a package using the self-service publish route.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>PUT /packages/{scope}/{name}/roles</c> with an
+    /// <see cref="AssignRoleRequest"/> body. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name.</param>
+    /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
+    /// <param name="principalId">The principal identifier (username, team name, or org name).</param>
+    /// <param name="role">The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
+    /// <returns><c>true</c> when the server accepts the assignment.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public bool AssignRole(string packageName, string principalType, string principalId, string role)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new AssignRoleRequest { PrincipalType = principalType, PrincipalId = principalId, Role = role },
+            CliJsonContext.Default.AssignRoleRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PutAsync(
+            $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles", content)
+            .GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"assign role on '{packageName}'");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Revokes the role of a principal on a package using the self-service publish route.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>DELETE /packages/{scope}/{name}/roles</c> with a
+    /// <see cref="RevokeRoleRequest"/> body. Requires a publish-ceiling token.
+    /// The server enforces the last-owner invariant: a revoke that would leave the
+    /// package with zero owners is refused with <c>409 Conflict</c>; a principal holding
+    /// no role yields <c>404</c>. Both are surfaced as exceptions.
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified scoped package name.</param>
+    /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
+    /// <param name="principalId">The principal identifier.</param>
+    /// <returns><c>true</c> when the server confirms revocation (<c>204 No Content</c>).</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response — e.g. <c>404</c> (the principal
+    /// holds no role) or <c>409</c> (cannot remove the last owner).
+    /// The server's error message is included so the caller can surface the reason.
+    /// </exception>
+    public bool RevokeRole(string packageName, string principalType, string principalId)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new RevokeRoleRequest { PrincipalType = principalType, PrincipalId = principalId },
+            CliJsonContext.Default.RevokeRoleRequest);
+        var request = new HttpRequestMessage(HttpMethod.Delete,
+            $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"revoke role on '{packageName}'");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Claims a scope on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /scopes</c> with a <see cref="ClaimScopeRequest"/> body.
+    /// In Verified mode the response carries <c>state=pending</c> and a DNS-TXT challenge.
+    /// </remarks>
+    /// <param name="scope">The bare scope name to claim (without the leading <c>@</c>).</param>
+    /// <param name="ownerType">The owner type: <c>user</c> or <c>org</c>.</param>
+    /// <param name="owner">The owner identifier (username or org name).</param>
+    /// <returns>
+    /// A <see cref="ScopeDetailResponse"/> on success (may carry a pending challenge).
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public ScopeDetailResponse ClaimScope(string scope, string ownerType, string owner)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new ClaimScopeRequest { Scope = scope, OwnerType = ownerType, Owner = owner },
+            CliJsonContext.Default.ClaimScopeRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync($"{_baseUrl}/scopes", content).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"claim scope '{scope}'");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse)!;
+    }
+
+    /// <summary>
+    /// Retrieves scope details from the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /scopes/{scope}</c>. This is an anonymous read — no token required.
+    /// </remarks>
+    /// <param name="scope">The bare scope name (without the leading <c>@</c>).</param>
+    /// <returns>
+    /// A <see cref="ScopeDetailResponse"/> on success, or <c>null</c> when the scope is
+    /// not found (HTTP 404).
+    /// </returns>
+    public ScopeDetailResponse? GetScope(string scope)
+    {
+        string url = $"{_baseUrl}/scopes/{Uri.EscapeDataString(scope)}";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"get scope '{scope}'");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse);
+    }
+
+    /// <summary>
+    /// Creates a new organization on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs</c> with a <see cref="CreateOrgRequest"/> body.
+    /// Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="name">The unique lower-case organization name.</param>
+    /// <param name="displayName">An optional human-readable display name.</param>
+    /// <returns>
+    /// A <see cref="CreateOrgResponse"/> on success.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public CreateOrgResponse CreateOrg(string name, string? displayName = null)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new CreateOrgRequest { Name = name, DisplayName = displayName },
+            CliJsonContext.Default.CreateOrgRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync($"{_baseUrl}/orgs", content).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"create organization '{name}'");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateOrgResponse)!;
+    }
+
+    /// <summary>
+    /// Retrieves organization details from the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>GET /orgs/{org}</c>. This is an anonymous read — no token required.
+    /// Returns flat metadata only; member/team lists are not available (no server read path).
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <returns>
+    /// An <see cref="OrgDetailResponse"/> on success, or <c>null</c> when the org is
+    /// not found (HTTP 404).
+    /// </returns>
+    public OrgDetailResponse? GetOrg(string org)
+    {
+        string url = $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}";
+        var response = _http.GetAsync(url).GetAwaiter().GetResult();
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"get organization '{org}'");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.OrgDetailResponse);
+    }
+
+    /// <summary>
+    /// Adds a member to an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs/{org}/members</c> with an <see cref="AddOrgMemberRequest"/> body.
+    /// Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="username">The username to add.</param>
+    /// <param name="orgRole">The org role to assign: <c>owner</c> or <c>member</c>. Defaults to <c>member</c>.</param>
+    /// <returns><c>true</c> when the server accepts the change.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public bool AddOrgMember(string org, string username, string? orgRole = null)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new AddOrgMemberRequest { Username = username, OrgRole = orgRole },
+            CliJsonContext.Default.AddOrgMemberRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/members", content)
+            .GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"add member '{username}' to organization '{org}'");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a member from an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>DELETE /orgs/{org}/members/{username}</c>. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="username">The username to remove.</param>
+    /// <returns><c>true</c> when the server confirms the removal.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public bool RemoveOrgMember(string org, string username)
+    {
+        EnsureTokenFresh();
+        var response = _http.DeleteAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/members/{Uri.EscapeDataString(username)}")
+            .GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"remove member '{username}' from organization '{org}'");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Creates a new team within an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs/{org}/teams</c> with a <see cref="CreateTeamRequest"/> body.
+    /// Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="team">The team name (unique within the organization).</param>
+    /// <returns>
+    /// A <see cref="CreateTeamResponse"/> on success.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public CreateTeamResponse CreateTeam(string org, string team)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new CreateTeamRequest { Name = team },
+            CliJsonContext.Default.CreateTeamRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/teams", content)
+            .GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"create team '{team}' in organization '{org}'");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateTeamResponse)!;
+    }
+
+    /// <summary>
+    /// Adds a member to a team within an organization.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>POST /orgs/{org}/teams/{team}/members</c> with an
+    /// <see cref="AddTeamMemberRequest"/> body. Requires a publish-ceiling token.
+    /// </remarks>
+    /// <param name="org">The organization name.</param>
+    /// <param name="team">The team name.</param>
+    /// <param name="username">The username to add to the team.</param>
+    /// <returns><c>true</c> when the server accepts the addition.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public bool AddTeamMember(string org, string team, string username)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new AddTeamMemberRequest { Username = username },
+            CliJsonContext.Default.AddTeamMemberRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync(
+            $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/teams/{Uri.EscapeDataString(team)}/members",
+            content)
+            .GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"add '{username}' to team '{team}' in organization '{org}'");
+        }
+        return true;
+    }
+
+    // ── private helpers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the response body, maps the HTTP status to the brief's error-prefix convention,
+    /// and returns a ready-to-throw <see cref="InvalidOperationException"/> with the server's
+    /// <see cref="ErrorResponse"/> message (or the raw body as fallback).
+    /// </summary>
+    /// <remarks>
+    /// Status mapping (per Semantics §"General error mapping"):
+    /// <list type="bullet">
+    ///   <item><c>401</c> → "Not logged in. Run 'stash pkg login'."</item>
+    ///   <item><c>403</c> → "Forbidden (&lt;server message, or action if body is empty&gt;)."</item>
+    ///   <item><c>404</c> → "Not found: &lt;server message, or action if body is empty&gt;."</item>
+    ///   <item><c>409</c> → "Conflict: &lt;server message&gt;."</item>
+    ///   <item>other → "Error: HTTP &lt;code&gt; — &lt;server message or status phrase&gt;."</item>
+    /// </list>
+    /// The server's <c>message</c> field is preferred; <c>error</c> is used as fallback.
+    /// </remarks>
+    /// <param name="resp">The non-success HTTP response.</param>
+    /// <param name="action">A short action description used as fallback when the server returns an empty body (substituted for the status phrase in all prefix mappings).</param>
+    /// <returns>An <see cref="InvalidOperationException"/> ready to be thrown.</returns>
+    private static InvalidOperationException HandleNonSuccess(HttpResponseMessage resp, string action)
+    {
+        string rawBody = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+        // Try to parse the structured ErrorResponse; fall back to the raw body.
+        string serverMessage = rawBody;
+        try
+        {
+            var err = JsonSerializer.Deserialize(rawBody, CliJsonContext.Default.ErrorResponse);
+            if (err != null)
+            {
+                serverMessage = err.Message ?? err.Error;
+            }
+        }
+        catch (JsonException)
+        {
+            // Raw body is already in serverMessage.
+        }
+
+        if (string.IsNullOrWhiteSpace(serverMessage))
+        {
+            serverMessage = !string.IsNullOrWhiteSpace(action)
+                ? action
+                : resp.ReasonPhrase ?? resp.StatusCode.ToString();
+        }
+
+        string message = (int)resp.StatusCode switch
+        {
+            401 => "Not logged in. Run 'stash pkg login'.",
+            403 => $"Forbidden ({serverMessage}).",
+            404 => $"Not found: {serverMessage}",
+            409 => $"Conflict: {serverMessage}",
+            _   => $"Error: HTTP {(int)resp.StatusCode} — {serverMessage}"
+        };
+
+        return new InvalidOperationException(message);
     }
 
     /// <summary>

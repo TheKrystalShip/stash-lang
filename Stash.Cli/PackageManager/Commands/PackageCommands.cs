@@ -13,8 +13,8 @@ namespace Stash.Cli.PackageManager.Commands;
 /// <c>init</c>, <c>install</c>/<c>i</c>, <c>uninstall</c>/<c>remove</c>,
 /// <c>list</c>/<c>ls</c>, <c>pack</c>, <c>update</c>, <c>outdated</c>,
 /// <c>publish</c>, <c>search</c>, <c>info</c>, <c>login</c>, <c>logout</c>,
-/// <c>owner</c>, <c>unpublish</c>, <c>deprecate</c>, <c>undeprecate</c>,
-/// and <c>help</c>.
+/// <c>role</c>, <c>visibility</c>, <c>scope</c>, <c>org</c>, <c>unpublish</c>, <c>deprecate</c>,
+/// <c>undeprecate</c>, and <c>help</c>.
 /// </para>
 /// <para>
 /// Exceptions of types <see cref="InvalidOperationException"/>,
@@ -91,8 +91,17 @@ public static class PackageCommands
                 case "whoami":
                     WhoamiCommand.Execute(subArgs);
                     break;
-                case "owner":
-                    OwnerCommand.Execute(subArgs);
+                case "role":
+                    RoleCommand.Execute(subArgs);
+                    break;
+                case "visibility":
+                    VisibilityCommand.Execute(subArgs);
+                    break;
+                case "scope":
+                    ScopeCommand.Execute(subArgs);
+                    break;
+                case "org":
+                    OrgCommand.Execute(subArgs);
                     break;
                 case "unpublish":
                     UnpublishCommand.Execute(subArgs);
@@ -167,7 +176,10 @@ public static class PackageCommands
         Console.WriteLine("  login             Authenticate with registry");
         Console.WriteLine("  logout            Remove stored credentials");
         Console.WriteLine("  whoami            Show the username for the configured registry.");
-        Console.WriteLine("  owner             Manage package owners");
+        Console.WriteLine("  role              Manage package roles (list/assign/revoke)");
+        Console.WriteLine("  visibility        Change package visibility (set only; get deferred — no server read path)");
+        Console.WriteLine("  scope             Claim and inspect namespace scopes (claim/info)");
+        Console.WriteLine("  org               Manage organizations (create/info/member/team); member and team listing deferred — no server read path");
         Console.WriteLine("  unpublish         Remove a published version");
         Console.WriteLine("  deprecate         Deprecate a package or version");
         Console.WriteLine("  undeprecate       Remove deprecation status");
