@@ -207,7 +207,7 @@ public sealed class Startup
     ///   <item><description>Database initialisation — calls <see cref="Database.IRegistryDatabase.Initialize"/> in a transient scope.</description></item>
     ///   <item><description><see cref="Microsoft.AspNetCore.Builder.UsePathBaseExtensions.UsePathBase"/> — applied only when <see cref="Configuration.ServerConfig.BasePath"/> is non-empty.</description></item>
     ///   <item><description><see cref="Middleware.RateLimitingMiddleware"/> — inserted only when <see cref="Configuration.RateLimitingConfig.Enabled"/> is <see langword="true"/>.</description></item>
-    ///   <item><description>OpenAPI endpoint (<c>GET /openapi/v1.json</c>) — mapped only in the <c>Development</c> environment.</description></item>
+    ///   <item><description>OpenAPI endpoint (<c>GET /openapi/v1.json</c>) — public in every environment (P1: <c>IsDevelopment()</c> gate removed).</description></item>
     ///   <item><description>Routing, Authentication (JWT Bearer), Authorization.</description></item>
     ///   <item><description>Health-check endpoint at <c>GET /</c> returning a <see cref="Contracts.HealthCheckResponse"/> JSON payload.</description></item>
     ///   <item><description>MVC controller endpoints.</description></item>
