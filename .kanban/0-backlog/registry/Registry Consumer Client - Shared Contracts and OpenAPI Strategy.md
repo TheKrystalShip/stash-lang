@@ -156,3 +156,56 @@ Take this doc's **fuller** scope — extract the wire-visible bounded-domain **c
 ### Locked architecture (confirmed against `main`)
 
 Namespace stays `Stash.Registry.Contracts` (zero churn across ~6 controllers that `using` it); **`git mv`, not copy** (a copy duplicates type defs in the same namespace and won't compile); new `Stash.Registry.Contracts.csproj` with **zero project references** (BCL + `System.Text.Json` + `System.ComponentModel.DataAnnotations` only — verified: no contract references a `Stash.Core` type); CLI keeps its source-gen `CliJsonContext` pointed at the shared types (cross-assembly `[JsonSerializable]` is supported); registry serialization stays reflection-based / untouched. Add the project to `Stash.sln`; confirm `Stash.Tests` recompiles via its transitive `Stash.Registry` reference.
+
+---
+
+## Status as of 2026-06-03 (investigation, pre-spec) — what's DONE and what REMAINS
+
+A fresh investigation against `main` shows **the shared-contracts half of this document has shipped, and the OpenAPI half is essentially unstarted.** Concretely:
+
+### Shipped (no longer in scope here)
+
+- **`Stash.Registry.Contracts` exists and is consumed.** Merged to `main` (`953d799f`, via full `/autopilot`); done dir `.kanban/4-done/shared-registry-contracts/`. The project holds all wire DTOs (`AuthContracts`, `PackageContracts`, `OrganizationContracts`, `ScopeContracts`, `SearchContracts`, `AdminContracts`, `CommonContracts`) + the net-new `AuditEntryResponse`, plus `BoundedDomains.cs` (`PackageRoles`/`TokenScopes`/`Visibilities`/`PrincipalTypes`/`ScopeOwnerTypes`/`OrgRoles`/`UserRoles` as `const string` sets). `Stash.Registry`, `Stash.Cli`, and (future) `Stash.Registry.Web` reference it. This covers **draft phases 1–4** + the CLI no-magic-strings meta-test.
+- **`pkg-cli-api-parity` is DONE** (`.kanban/4-done/pkg-cli-api-parity`, promoted 2026-06-03). It consumes the shared types — the coordination concern in the addendum above is resolved.
+
+### The soft dependency is MOOT — `registry-web-api-readiness` was never created
+
+This document repeatedly leans on `registry-web-api-readiness` as the "owner" of the high-quality OpenAPI document and a sequencing dep ("its done-criteria should already include stable operationIds, enum schemas, a snapshot test"). **That spec does not exist anywhere** (`0-backlog` / `1-todo` / `2-in-progress` / `4-done` all searched — only the *backlog design note* `Registry Website - Optional Web Client and API Readiness.md` exists, which is a website concept, not an OpenAPI-hardening spec). **Therefore no one is doing the OpenAPI-quality work — it IS this feature.** There is no upstream blocker.
+
+### The OpenAPI document today is a bare skeleton (empirically verified)
+
+The registry already wires .NET 10's built-in OpenAPI (`Microsoft.AspNetCore.OpenApi` 10.0.5 + `OpenApiGenerateDocuments=true` + `Microsoft.Extensions.ApiDescription.Server`; `services.AddOpenApi()` in `Startup.cs:189`; `app.MapOpenApi()` at `Startup.cs:266` **gated to `IsDevelopment()` only**). The build emits `Stash.Registry/obj/Stash.Registry.json` (23 KB). Inspecting that artifact:
+
+| Aspect | Today | Needed for external client generation |
+| --- | --- | --- |
+| Served in prod | **No** — `MapOpenApi()` is `Development`-only, so an external consumer literally cannot fetch it | Public `GET /openapi/v1.json` in prod (decide auth posture vs JTI middleware) |
+| Response body schemas | **None** — every operation is `200: OK` with `schema=None`; only 5 component schemas exist (the `[FromBody]` request DTOs); response DTOs from `Stash.Registry.Contracts` are entirely absent | `[ProducesResponseType(typeof(T), code)]` on **all ~40 actions** × success + each error code (`ErrorResponse`/ProblemDetails) — **this is the bulk of the work** |
+| `operationId` | **None** on any operation → unstable/ugly generated method names | Stable explicit operationIds per action |
+| Bounded domains | Bare `{"type":"string"}` (e.g. `AssignRoleRequest.role`, `principal_type`) → generated client can't know legal values | `enum` schemas — requires a schema transformer with a manual property→const-set mapping; **note this revisits the shipped "DTO properties stay `string`" decision** |
+| Document metadata | `{"title":"StashRegistry \| v1","version":"1.0.0"}`, `servers: (none)` | Title/description/version/license/contact + `servers` |
+| Drift / coverage guard | None | Snapshot test of `openapi.json` (drift) **and** a coverage meta-test asserting every action carries response-type annotations (prevent-omission, per project doctrine — a snapshot alone won't stop a *new* endpoint shipping schema-less) |
+
+### Recommended scope for `/spec`
+
+A self-contained **"registry OpenAPI hardening"** feature (the controllers are MVC `[ApiController]`, not minimal API, so all annotation work is attribute-based):
+
+1. Annotate every controller action with `[ProducesResponseType]` for success + error shapes (largest, most mechanical phase).
+2. Stable `operationId`s (convention or explicit).
+3. Document metadata + `servers`; serve `GET /openapi/v1.json` in production (resolve the auth-posture decision).
+4. Bounded-domain `enum` schemas via a schema transformer (resolve the `string`-vs-`enum` tension first).
+5. A snapshot test of `openapi.json` **plus** a coverage meta-test for response-type annotations.
+6. Docs (`docs/Registry — Package Registry.md`) describing the published contract.
+
+**Explicitly out of scope** (per the user and the Non-Goals above): generating any in-repo client from this document. The monorepo references shared types directly; the published doc serves third parties only.
+
+### Resolved decisions (2026-06-03, with user)
+
+1. **Bounded domains → real C# `enum`s** (not a schema transformer over `const string`). This **reverses** the just-shipped "DTO properties stay `string`" decision — but it is the project's **doctrine-preferred 100% solution** (per CLAUDE.md: *"the durable fix is a real `enum` (with an EF value converter for DB columns) so illegal values fail to compile. Centralized string constants are the cheap 80%; types are the 100%."*). Blast radius to handle as its own phase(s):
+   - **JSON wire format must be preserved byte-for-byte.** Enum members serialize as their existing lowercase wire strings (`"owner"`, `"user"`, `"read"`, `"public"`), never integers or PascalCase — requires a string enum converter on each enum.
+   - **AOT CLI is the sharp edge.** `Stash.Cli` serializes via the source-gen `CliJsonContext` for Native AOT. String-enum serialization under source-gen + AOT must be verified (publish-clean **and** a runtime round-trip — the shared-contracts feature's residual was *no* AOT round-trip test; do not repeat that gap here).
+   - **EF persistence mapping.** `RegistryDbContext.HasDefaultValue(...)` and field initializers (`PackageRecord.Visibility = Visibilities.Public`) currently require a compile-time `const string`. Enums need `.HasConversion<string>()` value converters and the defaults become enum literals stored as strings. Registry is [[project-registry-pre-release]] — no data migration, design for the clean forward case.
+   - **Boundary parsing** (`RegistryAuthzPrincipalFactory` / `TokenCeilingConverter`) already parses wire strings → typed values; enums slot in cleanly (becomes parse-or-reject) and the `NoMagicAuthStringsMetaTests` regime strengthens (illegal values now fail to compile).
+2. **OpenAPI endpoint is PUBLIC in prod.** Serve `GET /openapi/v1.json` unauthenticated in all environments (remove the `IsDevelopment()` gate at `Startup.cs:266`). Needs a `[PublicEndpoint]`-style bypass of the JTI/auth middleware so an unauthenticated third party can fetch the contract.
+3. **Controllers adopt typed `Results<...>` / `TypedResults`** (not `IActionResult` + `[ProducesResponseType]`). Response schemas become compiler-derived rather than attribute-declared (no drift). This is a larger refactor of ~40 actions but eliminates the attribute-vs-reality drift class entirely. The coverage meta-test then asserts every action's declared result union is non-opaque.
+
+All three choices push toward the highest-fidelity, lowest-drift end. Net effect: the feature is now meatier than draft phase 5 alone — it folds in an "enum-ify the bounded domains end-to-end (contracts + registry serialization + EF + AOT CLI)" effort. Sequence pure annotation/typed-results + OpenAPI plumbing first; land the enum conversion as its own reviewed phase given the AOT/EF surface.

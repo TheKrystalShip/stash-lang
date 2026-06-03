@@ -17,6 +17,22 @@ Stash is **not released yet**. There are no users, no published scripts in the w
 
 This applies until the project explicitly declares a v1.0 stability commitment in this file.
 
+## Decision Doctrine — Make It Right, Not Expedient
+
+**At every decision point, default to the option that is correct for the long run — the canonical, convention-following, root-cause solution — even when a cheaper, smaller, or faster option would also "work." Make it right the first time, even if that means a rewrite.** Stash is pre-1.0 with no backwards-compatibility debt (above), so the expedient shortcut buys nothing the rewrite can't: there is never a compatibility tax to dodge, only the cost of the right construction itself.
+
+This is the umbrella over the project's other doctrines, each an instance of it: "no magic strings → a real `enum`, not a `const string` stopgap" (the 100% type-safe fix, not the 80% centralized-string one); "Construct > Detect > Instruct" (make omission *impossible*, don't merely detect it); and "cleanest end state, not smallest diff" (above).
+
+**How it operates:**
+
+- **When weighing options — in a spec, a design call, an `AskUserQuestion` — the long-run-correct option is the default: ordered first, marked recommended.** Choose it autonomously when deciding for yourself; recommend it when the user decides. "Easier to implement," "smaller diff," "fewer files touched," and "faster to land" are **not** reasons to choose the inferior option — they never outrank correctness for the long run.
+- **Prefer the durable type/construct over the cheap string/flag/patch.** A real `enum` over a `const string`; an EF value converter over a stringly-typed column; the root-cause fix over a symptom guard; the established pattern over a one-off. If making it right means rewriting working code, rewrite it.
+- **A required rewrite is surfaced and scoped, never silent.** When the right choice implies a large change, call it out (a dedicated phase in the spec, a note to the user) and size it — but do not shrink the change to dodge it. Scoping a rewrite is correct; avoiding it to stay small is not.
+- **Deferring the right choice is allowed only when deliberate and documented** — an explicit user decision, or a backlog stub stating the rationale and the correct end-state. A silent expedient default — the shortcut taken because it was easier, with no record — is the one thing this doctrine forbids.
+- **The user's explicit, informed choice always wins.** Recommend the right option and surface the tradeoff plainly; then follow their call. This doctrine governs *your* defaults and recommendations, not the user's authority to choose otherwise.
+
+**What this is NOT — it is not a license for scope creep or gold-plating.** It governs *how well you solve the agreed problem*, never *how much you build*. "Make it right" means the right depth, correctness, and durability for the in-scope work — it never means adding unrequested features, speculative generality, or polish beyond the requirement. Choosing the right construction ≠ enlarging the task.
+
 ## Architecture
 
 ```

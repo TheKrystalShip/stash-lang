@@ -83,6 +83,8 @@ Do not hand-create the feature directory.
 
 7. Tell the user the feature is ready for `/next-phase <slug>`.
 
+**Presenting design choices — the Make It Right doctrine.** When a decision has multiple viable options (recorded in the brief's Decision Log, or surfaced to the user via `AskUserQuestion`), default to the option that is correct for the long run — canonical, convention-following, root-cause — and present it **first, marked recommended**. "Easier to implement," "smaller diff," and "faster to land" never outrank correctness for the long run; when the right choice implies a rewrite, scope it as its own phase rather than dodging it to keep the change small. This governs the depth and durability of the in-scope work only — it is never a license for scope creep. The "Construct over Detect over Instruct" preference below is one instance of it. Full statement: `AGENTS.md` → "Decision Doctrine — Make It Right, Not Expedient."
+
 ## Designing Out Cross-Cutting Omission
 
 The most dangerous defect in multi-phase work is **omission**: a participant that silently fails to take part in a concern shared across phases. Unlike a wrong line of code, a *missing* call is invisible — there is nothing in the diff to point at, so neither review nor a passing test reliably catches it. Each phase did its narrow job correctly; the sum left a hole that no phase owned.
