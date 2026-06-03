@@ -160,10 +160,10 @@ public sealed class EnumRoundTripTests
     }
 
     /// <summary>
-    /// Proves the round-trip assertion is not vacuous — it WILL catch a
-    /// deliberately mis-attributed <c>[JsonStringEnumMemberName]</c>.
-    /// This fixture does NOT use <see cref="CliJsonContext"/>; it uses a separate
-    /// <see cref="JsonSerializerOptions"/> instance to avoid polluting the source-gen context.
+    /// Proves the round-trip assertion is not vacuous — <see cref="AssertRoundTrip{T}"/> WILL
+    /// throw when a deliberately mis-attributed <c>[JsonStringEnumMemberName]</c> is present.
+    /// This fixture routes through the <em>production</em> assertion method so that a future
+    /// regression in <c>AssertRoundTrip</c> itself (e.g. a case-insensitive compare) is caught.
     /// </summary>
     [Fact]
     public void FailPathFixture_WrongMemberName_IsDetectedByRoundTripAssertion()
@@ -171,22 +171,12 @@ public sealed class EnumRoundTripTests
         var brokenOpts = new JsonSerializerOptions();
         brokenOpts.Converters.Add(new JsonStringEnumConverter<BrokenWireName>());
 
-        string json = JsonSerializer.Serialize(BrokenWireName.Correct, brokenOpts);
-        // json == "\"WRONG\"" because of the [JsonStringEnumMemberName("WRONG")] attribute.
-        // The canonical name would be "correct" (lowercase); they are different.
-        string canonicalJson = "\"correct\"";
-
-        Assert.NotEqual(
-            canonicalJson,
-            json,
-            StringComparer.Ordinal);
-
-        // Prove the assertion method WOULD catch this: simulate the assertion failure.
-        bool mismatchDetected = !string.Equals(json, canonicalJson, StringComparison.Ordinal);
-        Assert.True(
-            mismatchDetected,
-            "The fail-path fixture should detect that 'WRONG' != 'correct', " +
-            "proving the round-trip assertion has teeth.");
+        // AssertRoundTrip routes through the actual assertion logic:
+        // it serializes BrokenWireName.Correct → "\"WRONG\"" (from the attribute),
+        // then asserts that equals "\"correct\"" — which it does NOT.
+        // The test passes only when AssertRoundTrip actually throws.
+        Assert.ThrowsAny<Xunit.Sdk.XunitException>(() =>
+            AssertRoundTrip(BrokenWireName.Correct, "\"correct\"", brokenOpts));
     }
 
     // ── Helper ───────────────────────────────────────────────────────────────────

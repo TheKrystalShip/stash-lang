@@ -44,11 +44,49 @@ public sealed class AotPublishedBinaryEnumRoundTripTests
 
         if (!File.Exists(binaryPath))
         {
-            Assert.Fail(
-                $"Native-AOT binary not found at: {binaryPath}\n\n" +
-                $"The verify-phase gate runs 'dotnet publish Stash.Cli/Stash.Cli.csproj -c Release -o .bench-bin' " +
-                $"before this test — if you are running this test in isolation, run that command first.\n\n" +
-                $"Full binary path: {binaryPath}");
+            // Publish the binary on demand so this test is self-sufficient on a clean
+            // checkout (no .bench-bin artifact required before dotnet test). This mirrors
+            // the verify-phase gate's behavior without coupling the test to an ordering
+            // invariant outside dotnet test.
+            string? solutionRoot = FindSolutionRoot(
+                Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)
+                ?? AppContext.BaseDirectory);
+
+            if (solutionRoot == null)
+            {
+                Assert.Fail(
+                    $"Cannot locate solution root to run dotnet publish. " +
+                    $"Binary not found at: {binaryPath}");
+            }
+
+            string cliProject = Path.Combine(solutionRoot!, "Stash.Cli", "Stash.Cli.csproj");
+            string outputDir = Path.GetDirectoryName(binaryPath)!;
+
+            using var publishProc = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "dotnet",
+                    Arguments = $"publish \"{cliProject}\" -c Release -o \"{outputDir}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = solutionRoot!,
+                }
+            };
+            publishProc.Start();
+            string pubOut = publishProc.StandardOutput.ReadToEnd();
+            string pubErr = publishProc.StandardError.ReadToEnd();
+            publishProc.WaitForExit(300_000); // 5 min timeout for cold AOT compile
+
+            if (!File.Exists(binaryPath))
+            {
+                Assert.Fail(
+                    $"dotnet publish completed but binary still not found at: {binaryPath}\n\n" +
+                    $"stdout:\n{pubOut}\n" +
+                    $"stderr:\n{pubErr}");
+            }
         }
 
         using var proc = new Process
