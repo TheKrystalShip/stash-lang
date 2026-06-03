@@ -1,12 +1,9 @@
 using System;
-using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Stash.Common;
 using Stash.Registry.Auth;
@@ -14,40 +11,10 @@ using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using Stash.Registry.OpenApi;
 using Stash.Registry.Services;
 
 namespace Stash.Registry.Controllers;
-
-// ── Custom typed result helper for 501 with body ──────────────────────────────
-//
-// TypedResults has no typed-501-with-body variant.  To preserve the ScopeVerifyResponse
-// wire body on this status code while still advertising the schema to ApiExplorer (so the
-// coverage meta-test sees a $ref for the 501 response), we define an internal
-// IResult + IEndpointMetadataProvider implementation here, mirroring the JsonUnauthorized<T>
-// / JsonForbidden<T> helpers in AuthController.cs.
-
-/// <summary>
-/// Returns HTTP 501 with a JSON-serialised body, advertising the body type to ApiExplorer.
-/// </summary>
-public sealed class JsonNotImplemented<T> : IResult, IEndpointMetadataProvider
-{
-    private readonly T _body;
-    public JsonNotImplemented(T body) => _body = body;
-
-    public Task ExecuteAsync(HttpContext httpContext)
-    {
-        httpContext.Response.StatusCode = StatusCodes.Status501NotImplemented;
-        httpContext.Response.ContentType = "application/json";
-        return httpContext.Response.WriteAsJsonAsync(_body);
-    }
-
-    static void IEndpointMetadataProvider.PopulateMetadata(MethodInfo method, EndpointBuilder builder)
-    {
-        builder.Metadata.Add(new ProducesResponseTypeMetadata(StatusCodes.Status501NotImplemented, typeof(T), ["application/json"]));
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
 /// REST API controller for scope operations.

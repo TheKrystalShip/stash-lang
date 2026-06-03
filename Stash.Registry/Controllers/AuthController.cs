@@ -2,17 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
-using System.Reflection;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
@@ -24,62 +21,10 @@ using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Endpoints;
+using Stash.Registry.OpenApi;
 using Stash.Registry.Services;
 
 namespace Stash.Registry.Controllers;
-
-// ── Custom typed result helpers for 401/403 with body ──────────────────────
-//
-// TypedResults.Unauthorized() and TypedResults.Forbid() carry NO body — unlike
-// BadRequest<T> / NotFound<T> which do.  To preserve the ErrorResponse wire body
-// on these status codes while still advertising the schema to ApiExplorer (so the
-// coverage meta-test sees a $ref for these response codes), we define two internal
-// IResult + IEndpointMetadataProvider implementations here.  They must be internal
-// (not private) so they can appear in a public action's generic Results<…> return.
-
-/// <summary>
-/// Returns HTTP 401 with a JSON-serialised body, advertising the body type to ApiExplorer.
-/// </summary>
-public sealed class JsonUnauthorized<T> : IResult, IEndpointMetadataProvider
-{
-    private readonly T _body;
-    public JsonUnauthorized(T body) => _body = body;
-
-    public Task ExecuteAsync(HttpContext httpContext)
-    {
-        httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        httpContext.Response.ContentType = "application/json";
-        return httpContext.Response.WriteAsJsonAsync(_body);
-    }
-
-    static void IEndpointMetadataProvider.PopulateMetadata(MethodInfo method, EndpointBuilder builder)
-    {
-        builder.Metadata.Add(new ProducesResponseTypeMetadata(StatusCodes.Status401Unauthorized, typeof(T), ["application/json"]));
-    }
-}
-
-/// <summary>
-/// Returns HTTP 403 with a JSON-serialised body, advertising the body type to ApiExplorer.
-/// </summary>
-public sealed class JsonForbidden<T> : IResult, IEndpointMetadataProvider
-{
-    private readonly T _body;
-    public JsonForbidden(T body) => _body = body;
-
-    public Task ExecuteAsync(HttpContext httpContext)
-    {
-        httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
-        httpContext.Response.ContentType = "application/json";
-        return httpContext.Response.WriteAsJsonAsync(_body);
-    }
-
-    static void IEndpointMetadataProvider.PopulateMetadata(MethodInfo method, EndpointBuilder builder)
-    {
-        builder.Metadata.Add(new ProducesResponseTypeMetadata(StatusCodes.Status403Forbidden, typeof(T), ["application/json"]));
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
 /// REST API controller for authentication and token management.
