@@ -30,6 +30,7 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(RegistryEntry))]
 [JsonSerializable(typeof(Dictionary<string, RegistryEntry>))]
 // Shared Stash.Registry.Contracts types — wire DTOs consumed by the CLI
+[JsonSerializable(typeof(ErrorResponse))]
 [JsonSerializable(typeof(LoginRequest))]
 [JsonSerializable(typeof(AssignRoleRequest))]
 [JsonSerializable(typeof(RevokeRoleRequest))]

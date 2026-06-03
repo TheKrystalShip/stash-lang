@@ -228,14 +228,8 @@ public static class OrgCommand
             throw new ArgumentException("Usage: stash pkg org create <org> [--display-name <name>]");
         }
 
+        // CreateOrg throws on any non-2xx with the server's ErrorResponse surfaced.
         var result = client.CreateOrg(orgName, displayName);
-        if (result == null)
-        {
-            throw new InvalidOperationException(
-                $"Failed to create organization '{orgName}'. " +
-                "The name may already be taken or the token lacks sufficient permissions.");
-        }
-
         Console.WriteLine($"Organization '{result.Name}' created successfully.");
         Console.WriteLine($"  Id          : {result.Id}");
         if (!string.IsNullOrEmpty(result.DisplayName))
@@ -329,18 +323,10 @@ public static class OrgCommand
             ValidateOrgRole(role);
         }
 
-        bool ok = client.AddOrgMember(orgName, username, role);
-        if (ok)
-        {
-            string assignedRole = role ?? OrgRoles.Member;
-            Console.WriteLine($"Added '{username}' to organization '{orgName}' with role '{assignedRole}'.");
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Failed to add '{username}' to organization '{orgName}'. " +
-                "Check that the user exists and the token has sufficient permissions.");
-        }
+        // AddOrgMember throws on any non-2xx with the server's ErrorResponse surfaced.
+        client.AddOrgMember(orgName, username, role);
+        string assignedRole = role ?? OrgRoles.Member;
+        Console.WriteLine($"Added '{username}' to organization '{orgName}' with role '{assignedRole}'.");
     }
 
     private static void MemberRemove(string[] args, RegistryClient client)
@@ -370,17 +356,9 @@ public static class OrgCommand
         string orgName = positional[0];
         string username = positional[1];
 
-        bool ok = client.RemoveOrgMember(orgName, username);
-        if (ok)
-        {
-            Console.WriteLine($"Removed '{username}' from organization '{orgName}'.");
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Failed to remove '{username}' from organization '{orgName}'. " +
-                "Check that the user is a member and the token has sufficient permissions.");
-        }
+        // RemoveOrgMember throws on any non-2xx with the server's ErrorResponse surfaced.
+        client.RemoveOrgMember(orgName, username);
+        Console.WriteLine($"Removed '{username}' from organization '{orgName}'.");
     }
 
     private static void TeamAdd(string[] args, RegistryClient client)
@@ -410,14 +388,8 @@ public static class OrgCommand
         string orgName = positional[0];
         string teamName = positional[1];
 
+        // CreateTeam throws on any non-2xx with the server's ErrorResponse surfaced.
         var result = client.CreateTeam(orgName, teamName);
-        if (result == null)
-        {
-            throw new InvalidOperationException(
-                $"Failed to create team '{teamName}' in organization '{orgName}'. " +
-                "Check that the org exists and the token has sufficient permissions.");
-        }
-
         Console.WriteLine($"Team '{result.Name}' created in organization '{orgName}'.");
         Console.WriteLine($"  Id        : {result.Id}");
         Console.WriteLine($"  Created at: {result.CreatedAt}");
@@ -451,17 +423,9 @@ public static class OrgCommand
         string teamName = positional[1];
         string username = positional[2];
 
-        bool ok = client.AddTeamMember(orgName, teamName, username);
-        if (ok)
-        {
-            Console.WriteLine($"Added '{username}' to team '{teamName}' in organization '{orgName}'.");
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Failed to add '{username}' to team '{teamName}' in organization '{orgName}'. " +
-                "Check that the org, team, and user exist and the token has sufficient permissions.");
-        }
+        // AddTeamMember throws on any non-2xx with the server's ErrorResponse surfaced.
+        client.AddTeamMember(orgName, teamName, username);
+        Console.WriteLine($"Added '{username}' to team '{teamName}' in organization '{orgName}'.");
     }
 
     // ── Validation helpers ─────────────────────────────────────────────────────

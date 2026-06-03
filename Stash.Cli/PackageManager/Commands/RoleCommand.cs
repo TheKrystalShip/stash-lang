@@ -1,5 +1,4 @@
 using System;
-using System.Net.Http;
 using Stash.Registry.Contracts;
 
 namespace Stash.Cli.PackageManager.Commands;
@@ -163,15 +162,9 @@ public static class RoleCommand
         ValidatePrincipalType(principalType);
         ValidatePackageRole(role);
 
-        bool ok = client.AssignRole(packageName, principalType, principalId, role);
-        if (ok)
-        {
-            Console.WriteLine($"Assigned {principalType}/{principalId} the role '{role}' on {packageName}.");
-        }
-        else
-        {
-            throw new InvalidOperationException("Failed to assign role.");
-        }
+        // AssignRole throws on any non-2xx with the server's ErrorResponse surfaced.
+        client.AssignRole(packageName, principalType, principalId, role);
+        Console.WriteLine($"Assigned {principalType}/{principalId} the role '{role}' on {packageName}.");
     }
 
     private static void Revoke(string[] args, RegistryClient client)

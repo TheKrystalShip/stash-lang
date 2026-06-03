@@ -950,7 +950,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </remarks>
     /// <param name="packageName">The fully-qualified scoped package name (e.g. <c>@alice/widget</c>).</param>
     /// <param name="visibility">The new visibility value: <c>public</c>, <c>private</c>, or <c>internal</c>.</param>
-    /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
+    /// <returns><c>true</c> when the server accepts the change.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
     public bool SetVisibility(string packageName, string visibility)
     {
         EnsureTokenFresh();
@@ -963,7 +967,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
         var response = _http.SendAsync(request).GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"set visibility of '{packageName}'");
+        }
+        return true;
     }
 
     /// <summary>
@@ -987,7 +995,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"get roles for '{packageName}'");
+        }
+
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return JsonSerializer.Deserialize(json, CliJsonContext.Default.PackageRolesListResponse);
     }
@@ -1003,7 +1015,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="principalType">The principal type: <c>user</c>, <c>team</c>, or <c>org</c>.</param>
     /// <param name="principalId">The principal identifier (username, team name, or org name).</param>
     /// <param name="role">The role to assign: <c>owner</c>, <c>maintainer</c>, <c>publisher</c>, or <c>reader</c>.</param>
-    /// <returns><c>true</c> when the server accepts the assignment; <c>false</c> otherwise.</returns>
+    /// <returns><c>true</c> when the server accepts the assignment.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
     public bool AssignRole(string packageName, string principalType, string principalId, string role)
     {
         EnsureTokenFresh();
@@ -1014,7 +1030,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         var response = _http.PutAsync(
             $"{_baseUrl}/packages/{ScopedPackagePath(packageName)}/roles", content)
             .GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"assign role on '{packageName}'");
+        }
+        return true;
     }
 
     /// <summary>
@@ -1068,10 +1088,13 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="ownerType">The owner type: <c>user</c> or <c>org</c>.</param>
     /// <param name="owner">The owner identifier (username or org name).</param>
     /// <returns>
-    /// A <see cref="ScopeDetailResponse"/> on success (may carry a pending challenge),
-    /// or <c>null</c> on failure.
+    /// A <see cref="ScopeDetailResponse"/> on success (may carry a pending challenge).
     /// </returns>
-    public ScopeDetailResponse? ClaimScope(string scope, string ownerType, string owner)
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public ScopeDetailResponse ClaimScope(string scope, string ownerType, string owner)
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
@@ -1081,11 +1104,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         var response = _http.PostAsync($"{_baseUrl}/scopes", content).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            throw HandleNonSuccess(response, $"claim scope '{scope}'");
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse)!;
     }
 
     /// <summary>
@@ -1108,7 +1131,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"get scope '{scope}'");
+        }
+
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return JsonSerializer.Deserialize(json, CliJsonContext.Default.ScopeDetailResponse);
     }
@@ -1123,9 +1150,13 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="name">The unique lower-case organization name.</param>
     /// <param name="displayName">An optional human-readable display name.</param>
     /// <returns>
-    /// A <see cref="CreateOrgResponse"/> on success, or <c>null</c> on failure.
+    /// A <see cref="CreateOrgResponse"/> on success.
     /// </returns>
-    public CreateOrgResponse? CreateOrg(string name, string? displayName = null)
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public CreateOrgResponse CreateOrg(string name, string? displayName = null)
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
@@ -1135,11 +1166,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         var response = _http.PostAsync($"{_baseUrl}/orgs", content).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            throw HandleNonSuccess(response, $"create organization '{name}'");
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateOrgResponse);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateOrgResponse)!;
     }
 
     /// <summary>
@@ -1163,7 +1194,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             return null;
         }
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"get organization '{org}'");
+        }
+
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         return JsonSerializer.Deserialize(json, CliJsonContext.Default.OrgDetailResponse);
     }
@@ -1178,7 +1213,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="org">The organization name.</param>
     /// <param name="username">The username to add.</param>
     /// <param name="orgRole">The org role to assign: <c>owner</c> or <c>member</c>. Defaults to <c>member</c>.</param>
-    /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
+    /// <returns><c>true</c> when the server accepts the change.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
     public bool AddOrgMember(string org, string username, string? orgRole = null)
     {
         EnsureTokenFresh();
@@ -1189,7 +1228,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         var response = _http.PostAsync(
             $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/members", content)
             .GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"add member '{username}' to organization '{org}'");
+        }
+        return true;
     }
 
     /// <summary>
@@ -1200,14 +1243,22 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </remarks>
     /// <param name="org">The organization name.</param>
     /// <param name="username">The username to remove.</param>
-    /// <returns><c>true</c> when the server confirms the removal; <c>false</c> otherwise.</returns>
+    /// <returns><c>true</c> when the server confirms the removal.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
     public bool RemoveOrgMember(string org, string username)
     {
         EnsureTokenFresh();
         var response = _http.DeleteAsync(
             $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/members/{Uri.EscapeDataString(username)}")
             .GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"remove member '{username}' from organization '{org}'");
+        }
+        return true;
     }
 
     /// <summary>
@@ -1220,9 +1271,13 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="org">The organization name.</param>
     /// <param name="team">The team name (unique within the organization).</param>
     /// <returns>
-    /// A <see cref="CreateTeamResponse"/> on success, or <c>null</c> on failure.
+    /// A <see cref="CreateTeamResponse"/> on success.
     /// </returns>
-    public CreateTeamResponse? CreateTeam(string org, string team)
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
+    public CreateTeamResponse CreateTeam(string org, string team)
     {
         EnsureTokenFresh();
         string body = JsonSerializer.Serialize(
@@ -1234,11 +1289,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             .GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
-            return null;
+            throw HandleNonSuccess(response, $"create team '{team}' in organization '{org}'");
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateTeamResponse);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.CreateTeamResponse)!;
     }
 
     /// <summary>
@@ -1251,7 +1306,11 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// <param name="org">The organization name.</param>
     /// <param name="team">The team name.</param>
     /// <param name="username">The username to add to the team.</param>
-    /// <returns><c>true</c> when the server accepts the addition; <c>false</c> otherwise.</returns>
+    /// <returns><c>true</c> when the server accepts the addition.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// The server's <c>ErrorResponse</c> message is surfaced with the brief's status prefix.
+    /// </exception>
     public bool AddTeamMember(string org, string team, string username)
     {
         EnsureTokenFresh();
@@ -1263,10 +1322,69 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
             $"{_baseUrl}/orgs/{Uri.EscapeDataString(org)}/teams/{Uri.EscapeDataString(team)}/members",
             content)
             .GetAwaiter().GetResult();
-        return response.IsSuccessStatusCode;
+        if (!response.IsSuccessStatusCode)
+        {
+            throw HandleNonSuccess(response, $"add '{username}' to team '{team}' in organization '{org}'");
+        }
+        return true;
     }
 
     // ── private helpers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Reads the response body, maps the HTTP status to the brief's error-prefix convention,
+    /// and returns a ready-to-throw <see cref="InvalidOperationException"/> with the server's
+    /// <see cref="ErrorResponse"/> message (or the raw body as fallback).
+    /// </summary>
+    /// <remarks>
+    /// Status mapping (per Semantics §"General error mapping"):
+    /// <list type="bullet">
+    ///   <item><c>401</c> → "Not logged in. Run 'stash pkg login'."</item>
+    ///   <item><c>403</c> → "Forbidden (&lt;server message or 'no reason'&gt;)."</item>
+    ///   <item><c>404</c> → "Not found: &lt;server message or action&gt;."</item>
+    ///   <item><c>409</c> → "Conflict: &lt;server message&gt;."</item>
+    ///   <item>other → "Error: HTTP &lt;code&gt; — &lt;server message or status phrase&gt;."</item>
+    /// </list>
+    /// The server's <c>message</c> field is preferred; <c>error</c> is used as fallback.
+    /// </remarks>
+    /// <param name="resp">The non-success HTTP response.</param>
+    /// <param name="action">A short action description used as fallback in the "Not found" prefix.</param>
+    /// <returns>An <see cref="InvalidOperationException"/> ready to be thrown.</returns>
+    private static InvalidOperationException HandleNonSuccess(HttpResponseMessage resp, string action)
+    {
+        string rawBody = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+        // Try to parse the structured ErrorResponse; fall back to the raw body.
+        string serverMessage = rawBody;
+        try
+        {
+            var err = JsonSerializer.Deserialize(rawBody, CliJsonContext.Default.ErrorResponse);
+            if (err != null)
+            {
+                serverMessage = err.Message ?? err.Error;
+            }
+        }
+        catch (JsonException)
+        {
+            // Raw body is already in serverMessage.
+        }
+
+        if (string.IsNullOrWhiteSpace(serverMessage))
+        {
+            serverMessage = resp.ReasonPhrase ?? resp.StatusCode.ToString();
+        }
+
+        string message = (int)resp.StatusCode switch
+        {
+            401 => "Not logged in. Run 'stash pkg login'.",
+            403 => $"Forbidden ({serverMessage}).",
+            404 => $"Not found: {serverMessage}",
+            409 => $"Conflict: {serverMessage}",
+            _   => $"Error: HTTP {(int)resp.StatusCode} — {serverMessage}"
+        };
+
+        return new InvalidOperationException(message);
+    }
 
     /// <summary>
     /// Builds the two-segment URL path for a scoped package name.

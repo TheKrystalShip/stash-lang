@@ -119,8 +119,11 @@ public sealed class PackageScopeCommandTests : RegistryAuthzTestBase
         var ex = Assert.Throws<InvalidOperationException>(() =>
             ScopeCommand.ExecuteCore("claim", ["sc-alice-corp"], malloryCli));
 
-        // The exception message must be clear about the conflict
+        // The exception message must surface the server's conflict reason (F02)
         Assert.False(string.IsNullOrEmpty(ex.Message));
+        // "Conflict: ..." prefix from the brief's §General error mapping
+        Assert.Contains("Conflict", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // The server returns a 409 with a message about the scope being already owned/reserved
         Assert.Contains("sc-alice-corp", ex.Message);
     }
 
@@ -227,6 +230,9 @@ public sealed class PackageScopeCommandTests : RegistryAuthzTestBase
             // The DNS record name and value must be non-empty
             Assert.Contains("_stash-challenge.", output);
             Assert.Contains("stash-verify=", output);
+
+            // Must NOT instruct the user to run a CLI verb that doesn't exist (F01)
+            Assert.DoesNotContain("stash pkg scope verify", output);
         }
         finally
         {

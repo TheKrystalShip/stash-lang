@@ -83,14 +83,16 @@ public class RegistryClientParityTests
     }
 
     [Fact]
-    public void SetVisibility_ServerReturnsError_ReturnsFalse()
+    public void SetVisibility_ServerReturnsError_ThrowsWithServerMessage()
     {
-        var handler = new CapturingHandler(HttpStatusCode.Forbidden, """{"error":"forbidden"}""");
+        var handler = new CapturingHandler(HttpStatusCode.Forbidden, """{"error":"forbidden","message":"publish ceiling required"}""");
         var client = BuildClient(handler);
 
-        bool result = client.SetVisibility("@alice/widget", "private");
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => client.SetVisibility("@alice/widget", "private"));
 
-        Assert.False(result);
+        Assert.Contains("Forbidden", ex.Message);
+        Assert.Contains("publish ceiling required", ex.Message);
     }
 
     // ---------------------------------------------------------------------------
@@ -227,9 +229,8 @@ public class RegistryClientParityTests
         var handler = new CapturingHandler(HttpStatusCode.Created, responseJson);
         var client = BuildClient(handler);
 
-        ScopeDetailResponse? result = client.ClaimScope("acme", "user", "alice");
+        ScopeDetailResponse result = client.ClaimScope("acme", "user", "alice");
 
-        Assert.NotNull(result);
         Assert.Equal(HttpMethod.Post, handler.CapturedMethod);
         Assert.Equal($"{Base}/scopes", handler.CapturedUri!.ToString());
 
@@ -238,19 +239,21 @@ public class RegistryClientParityTests
         Assert.Equal("user", body.GetProperty("owner_type").GetString());
         Assert.Equal("alice", body.GetProperty("owner").GetString());
 
-        Assert.Equal("acme", result!.Scope);
+        Assert.Equal("acme", result.Scope);
         Assert.Equal("claimed", result.State);
     }
 
     [Fact]
-    public void ClaimScope_ServerError_ReturnsNull()
+    public void ClaimScope_ServerError_ThrowsWithServerMessage()
     {
-        var handler = new CapturingHandler(HttpStatusCode.Conflict, """{"error":"scope already claimed"}""");
+        var handler = new CapturingHandler(HttpStatusCode.Conflict, """{"error":"scope already claimed","message":"Scope '@acme' already exists."}""");
         var client = BuildClient(handler);
 
-        ScopeDetailResponse? result = client.ClaimScope("acme", "user", "alice");
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => client.ClaimScope("acme", "user", "alice"));
 
-        Assert.Null(result);
+        Assert.Contains("Conflict", ex.Message);
+        Assert.Contains("already exists", ex.Message);
     }
 
     // ---------------------------------------------------------------------------
@@ -295,9 +298,8 @@ public class RegistryClientParityTests
         var handler = new CapturingHandler(HttpStatusCode.Created, responseJson);
         var client = BuildClient(handler);
 
-        CreateOrgResponse? result = client.CreateOrg("acme", "Acme Corp");
+        CreateOrgResponse result = client.CreateOrg("acme", "Acme Corp");
 
-        Assert.NotNull(result);
         Assert.Equal(HttpMethod.Post, handler.CapturedMethod);
         Assert.Equal($"{Base}/orgs", handler.CapturedUri!.ToString());
 
@@ -305,7 +307,7 @@ public class RegistryClientParityTests
         Assert.Equal("acme", body.GetProperty("name").GetString());
         Assert.Equal("Acme Corp", body.GetProperty("display_name").GetString());
 
-        Assert.Equal("acme", result!.Name);
+        Assert.Equal("acme", result.Name);
         Assert.Equal("alice", result.CreatedBy);
     }
 
@@ -316,23 +318,24 @@ public class RegistryClientParityTests
         var handler = new CapturingHandler(HttpStatusCode.Created, responseJson);
         var client = BuildClient(handler);
 
-        CreateOrgResponse? result = client.CreateOrg("acme2");
+        CreateOrgResponse result = client.CreateOrg("acme2");
 
-        Assert.NotNull(result);
         var body = JsonDocument.Parse(handler.CapturedBody!).RootElement;
         // display_name omitted when null (WhenWritingNull)
         Assert.False(body.TryGetProperty("display_name", out _));
     }
 
     [Fact]
-    public void CreateOrg_ServerError_ReturnsNull()
+    public void CreateOrg_ServerError_ThrowsWithServerMessage()
     {
-        var handler = new CapturingHandler(HttpStatusCode.Conflict, """{"error":"org name taken"}""");
+        var handler = new CapturingHandler(HttpStatusCode.Conflict, """{"error":"org name taken","message":"Organization name is already in use."}""");
         var client = BuildClient(handler);
 
-        CreateOrgResponse? result = client.CreateOrg("acme");
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => client.CreateOrg("acme"));
 
-        Assert.Null(result);
+        Assert.Contains("Conflict", ex.Message);
+        Assert.Contains("already in use", ex.Message);
     }
 
     // ---------------------------------------------------------------------------
@@ -420,14 +423,16 @@ public class RegistryClientParityTests
     }
 
     [Fact]
-    public void RemoveOrgMember_ServerError_ReturnsFalse()
+    public void RemoveOrgMember_ServerError_ThrowsWithServerMessage()
     {
-        var handler = new CapturingHandler(HttpStatusCode.NotFound);
+        var handler = new CapturingHandler(HttpStatusCode.NotFound, """{"error":"MemberNotFoundException","message":"User is not a member of this organization."}""");
         var client = BuildClient(handler);
 
-        bool result = client.RemoveOrgMember("acme", "nobody");
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => client.RemoveOrgMember("acme", "nobody"));
 
-        Assert.False(result);
+        Assert.Contains("Not found", ex.Message);
+        Assert.Contains("not a member", ex.Message);
     }
 
     // ---------------------------------------------------------------------------
@@ -441,28 +446,29 @@ public class RegistryClientParityTests
         var handler = new CapturingHandler(HttpStatusCode.Created, responseJson);
         var client = BuildClient(handler);
 
-        CreateTeamResponse? result = client.CreateTeam("acme", "designers");
+        CreateTeamResponse result = client.CreateTeam("acme", "designers");
 
-        Assert.NotNull(result);
         Assert.Equal(HttpMethod.Post, handler.CapturedMethod);
         Assert.Equal($"{Base}/orgs/acme/teams", handler.CapturedUri!.ToString());
 
         var body = JsonDocument.Parse(handler.CapturedBody!).RootElement;
         Assert.Equal("designers", body.GetProperty("name").GetString());
 
-        Assert.Equal("designers", result!.Name);
+        Assert.Equal("designers", result.Name);
         Assert.Equal("org-1", result.OrgId);
     }
 
     [Fact]
-    public void CreateTeam_ServerError_ReturnsNull()
+    public void CreateTeam_ServerError_ThrowsWithServerMessage()
     {
-        var handler = new CapturingHandler(HttpStatusCode.Conflict, """{"error":"team name taken"}""");
+        var handler = new CapturingHandler(HttpStatusCode.Conflict, """{"error":"team name taken","message":"A team with that name already exists in this organization."}""");
         var client = BuildClient(handler);
 
-        CreateTeamResponse? result = client.CreateTeam("acme", "designers");
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => client.CreateTeam("acme", "designers"));
 
-        Assert.Null(result);
+        Assert.Contains("Conflict", ex.Message);
+        Assert.Contains("already exists", ex.Message);
     }
 
     // ---------------------------------------------------------------------------
@@ -486,13 +492,15 @@ public class RegistryClientParityTests
     }
 
     [Fact]
-    public void AddTeamMember_ServerError_ReturnsFalse()
+    public void AddTeamMember_ServerError_ThrowsWithServerMessage()
     {
-        var handler = new CapturingHandler(HttpStatusCode.NotFound);
+        var handler = new CapturingHandler(HttpStatusCode.NotFound, """{"error":"UserNotFoundException","message":"User not found."}""");
         var client = BuildClient(handler);
 
-        bool result = client.AddTeamMember("acme", "designers", "nobody");
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => client.AddTeamMember("acme", "designers", "nobody"));
 
-        Assert.False(result);
+        Assert.Contains("Not found", ex.Message);
+        Assert.Contains("User not found", ex.Message);
     }
 }

@@ -114,15 +114,9 @@ public static class VisibilityCommand
 
         ValidateVisibilityTier(tier);
 
-        bool ok = client.SetVisibility(packageName, tier);
-        if (ok)
-        {
-            Console.WriteLine($"Visibility of {packageName} set to '{tier}'.");
-        }
-        else
-        {
-            throw new InvalidOperationException($"Failed to set visibility of '{packageName}' to '{tier}'.");
-        }
+        // SetVisibility throws on any non-2xx with the server's ErrorResponse surfaced.
+        client.SetVisibility(packageName, tier);
+        Console.WriteLine($"Visibility of {packageName} set to '{tier}'.");
     }
 
     // ── Validation helpers ─────────────────────────────────────────────────────

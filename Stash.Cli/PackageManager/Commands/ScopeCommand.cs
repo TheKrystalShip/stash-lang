@@ -157,14 +157,8 @@ public static class ScopeCommand
             owner = info.Username;
         }
 
+        // ClaimScope throws on any non-2xx with the server's ErrorResponse surfaced.
         var result = client.ClaimScope(scopeName, ownerType, owner);
-        if (result == null)
-        {
-            throw new InvalidOperationException(
-                $"Failed to claim scope '{scopeName}'. " +
-                "It may already be owned by another user or org. " +
-                "Use 'stash pkg scope info <scope>' to check the current owner.");
-        }
 
         // Verified policy: when the response includes a DNS-TXT challenge,
         // print the instructions instead of reporting a completed claim.
@@ -177,7 +171,10 @@ public static class ScopeCommand
             Console.WriteLine($"  Record value: {result.Challenge.RecordValue}");
             Console.WriteLine($"  Expires at  : {result.Challenge.ExpiresAt}");
             Console.WriteLine();
-            Console.WriteLine("Once the record is in place, run 'stash pkg scope verify' to complete the claim.");
+            Console.WriteLine("Once the DNS TXT record propagates, the registry administrator");
+            Console.WriteLine("can verify the scope server-side (POST /scopes/{scope}/verify).");
+            Console.WriteLine("Note: server-side verification is not available in this CLI release");
+            Console.WriteLine("(the endpoint is a 501 stub, tracked separately).");
             return;
         }
 
