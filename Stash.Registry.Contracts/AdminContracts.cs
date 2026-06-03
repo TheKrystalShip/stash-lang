@@ -11,6 +11,13 @@ namespace Stash.Registry.Contracts;
 /// </summary>
 public sealed class CreateUserRequest
 {
+    /// <summary>
+    /// Admin username grammar: letters (upper and lower), digits, hyphens, and underscores.
+    /// Broader than the self-register scope grammar which is lowercase-only; the distinction
+    /// is intentional and pre-existing.
+    /// </summary>
+    internal const string AdminUsernamePattern = @"^[a-zA-Z0-9_-]+$";
+
     /// <summary>The username for the new account (max 64 characters, letters/digits/hyphens/underscores only).</summary>
     [Required]
     [StringLength(64, MinimumLength = 1)]
@@ -20,7 +27,7 @@ public sealed class CreateUserRequest
                         "ICollection.Count reflection path, which is a server-side validation concern; " +
                         "the CLI has zero calls to Validator.*, ValidateObject, or ValidateValue and " +
                         "never reaches that path at runtime.")]
-    [RegularExpression(@"^[a-zA-Z0-9_-]+$",
+    [RegularExpression(AdminUsernamePattern,
         ErrorMessage = "Username must contain only letters, digits, hyphens, or underscores.")]
     [UnconditionalSuppressMessage("Trimming", "IL2026",
         Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
@@ -72,7 +79,7 @@ public sealed class AuditLogQuery
                         "IComparable/type-conversion reflection paths, which are server-side concerns; " +
                         "the CLI never calls Validator.* or ValidateObject.")]
     [JsonPropertyName("pageSize")]
-    public int PageSize { get; set; } = 20;
+    public int PageSize { get; set; } = 50;
 
     /// <summary>Optional package name filter.</summary>
     [JsonPropertyName("package")]

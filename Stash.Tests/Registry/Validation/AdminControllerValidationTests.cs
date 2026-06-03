@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -11,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
+using Stash.Registry.Database.Models;
 using Xunit;
 
 namespace Stash.Tests.Registry.Validation;
@@ -168,6 +170,128 @@ public sealed class AdminControllerValidationTests
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
 
         var response = await client.GetAsync("/api/v1/admin/audit-log?pageSize=300");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var error = await ReadErrorResponseAsync(response);
+        Assert.NotNull(error);
+        Assert.Equal("InvalidRequest", error!.Error);
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log with no <c>pageSize</c> parameter returns the default
+    /// page size of 50 entries per page. Seeds 55 audit entries so page 1 is full; asserts
+    /// both <c>entries.Count == 50</c> and the response body's <c>pageSize == 50</c>.
+    /// Regression test for the accidental drift from 50 → 20 introduced in P5.
+    /// </summary>
+    [Fact]
+    public async Task GetAuditLog_NoPageSize_DefaultsTo50EntriesPerPage()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-al-default");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
+
+        // Seed 55 audit entries directly via EF so the first page (default 50) is full.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+            for (int i = 0; i < 55; i++)
+            {
+                db.AuditLog.Add(new AuditEntry
+                {
+                    Action = "test.seed",
+                    Timestamp = DateTime.UtcNow.AddSeconds(-i)
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        int pageSize = root.GetProperty("pageSize").GetInt32();
+        int entriesCount = root.GetProperty("entries").GetArrayLength();
+
+        Assert.Equal(50, pageSize);
+        Assert.Equal(50, entriesCount);
+    }
+
+    // ── CreateUser username grammar ───────────────────────────────────────────
+
+    /// <summary>
+    /// POST /api/v1/admin/users with an UPPERCASE username returns 201 Created.
+    /// Admin grammar (<c>^[a-zA-Z0-9_-]+$</c>) allows uppercase; this is intentionally
+    /// broader than the self-register scope grammar which is lowercase-only.
+    /// </summary>
+    [Fact]
+    public async Task CreateUser_UpperCaseUsername_Returns201()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-cu-upper");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
+
+        var response = await client.PostAsync("/api/v1/admin/users",
+            Json(new { username = "Alice_01", password = "Password123!" }));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    /// <summary>
+    /// POST /api/v1/admin/users with an underscore-only username returns 201 Created.
+    /// Admin grammar allows underscores; this differs from the scope grammar used at self-register.
+    /// </summary>
+    [Fact]
+    public async Task CreateUser_UsernameWithUnderscore_Returns201()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-cu-under");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
+
+        var response = await client.PostAsync("/api/v1/admin/users",
+            Json(new { username = "under_score", password = "Password123!" }));
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+    }
+
+    /// <summary>
+    /// POST /api/v1/admin/users with a username containing a space returns 400 InvalidRequest.
+    /// Spaces are outside the admin grammar (<c>^[a-zA-Z0-9_-]+$</c>) and are rejected by
+    /// <c>ModelStateInvalidFilter</c> before the action body runs.
+    /// </summary>
+    [Fact]
+    public async Task CreateUser_UsernameWithSpace_Returns400()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-cu-space");
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", adminToken);
+
+        var response = await client.PostAsync("/api/v1/admin/users",
+            Json(new { username = "has space", password = "Password123!" }));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
