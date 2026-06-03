@@ -10,8 +10,7 @@ namespace Stash.Cli.PackageManager.Commands;
 /// <remarks>
 /// <para>
 /// Prints the package name, latest version, description, license, repository URL,
-/// owner list, published version history, and (up to ten lines of) the README
-/// to standard output.
+/// published version history, and (up to ten lines of) the README to standard output.
 /// </para>
 /// </remarks>
 public static class InfoCommand
@@ -102,23 +101,6 @@ public static class InfoCommand
         if (root.TryGetProperty("repository", out var repo) && repo.ValueKind == JsonValueKind.String)
         {
             Console.WriteLine($"Repository: {repo.GetString()}");
-        }
-
-        if (root.TryGetProperty("owners", out var owners) && owners.ValueKind == JsonValueKind.Array)
-        {
-            Console.Write("Owners: ");
-            bool first = true;
-            foreach (var o in owners.EnumerateArray())
-            {
-                if (!first)
-                {
-                    Console.Write(", ");
-                }
-
-                Console.Write(o.GetString());
-                first = false;
-            }
-            Console.WriteLine();
         }
 
         if (root.TryGetProperty("versions", out var versions) && versions.ValueKind == JsonValueKind.Object)
