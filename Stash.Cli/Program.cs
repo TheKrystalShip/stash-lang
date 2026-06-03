@@ -78,6 +78,13 @@ public class Program
             return;
         }
 
+        // AST graph subcommand
+        if (args.Length > 0 && args[0] is "ast" or "a")
+        {
+            Stash.Cli.AstGraph.AstCommands.Run(args[1..]);
+            return;
+        }
+
         // Static --help for a script: stash --help script.stash
         // This short-circuits before the normal parse/compile/execute path.
         if (args.Length >= 2 && (args[0] is "--help" or "-h") &&

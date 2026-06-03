@@ -49,6 +49,7 @@ Use `build.stash` for official release builds — it includes binary size guards
 | ---------- | ------- | ----------- |
 | Package manager | `pkg`, `p` | `PackageManager/Commands/PackageCommands.cs` |
 | Service manager | `service`, `svc` | `ServiceManager/ServiceCommands.cs` |
+| AST graph | `ast`, `a` | `AstGraph/AstCommands.cs` |
 
 ## Project Structure
 
@@ -64,8 +65,16 @@ Stash.Cli/
 ├── PackageManager/         → `stash pkg` subcommand implementation
 │   ├── Commands/           → install, publish, search, info, etc.
 │   └── ...
-└── ServiceManager/         → `stash service` subcommand (wraps Stash.Scheduler)
-    └── ServiceCommands.cs
+├── ServiceManager/         → `stash service` subcommand (wraps Stash.Scheduler)
+│   └── ServiceCommands.cs
+└── AstGraph/               → `stash ast` subcommand (Graphviz DOT AST visualizer)
+    ├── AstCommands.cs      → Entry point dispatcher
+    ├── AstRunner.cs        → Lex → Parse → (Resolve) → DOT generation
+    ├── Models/
+    │   ├── AstOptions.cs   → CLI arg parsing (--output, --semantic)
+    │   └── AstResult.cs    → Success/error result type
+    └── Visitors/
+        └── AstDotVisitor.cs → IExprVisitor + IStmtVisitor → DOT output
 ```
 
 ## REPL Modes
@@ -93,3 +102,7 @@ Wraps the Stash Registry REST API. Commands: `install`, `publish`, `search`, `in
 ## Service Manager (stash service)
 
 Wraps `Stash.Scheduler` for OS-level service management. Commands: `install`, `uninstall`, `start`, `stop`, `status`, `restart`, `logs`. Dispatches to systemd/launchd/Task Scheduler based on platform. See `docs/Scheduler — Service Manager.md`.
+
+## AST Graph (stash ast)
+
+Generates Graphviz DOT graphs of the abstract syntax tree. Options: `--output`/`-o` (file path), `--semantic`/`-s` (include scope resolution info). Output is a DOT digraph to stdout or file. Render with `dot -Tpng ast.dot -o ast.png`.
