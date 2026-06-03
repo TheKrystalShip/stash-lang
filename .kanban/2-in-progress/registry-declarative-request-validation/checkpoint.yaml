@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T22:47:03Z"
+updated: "2026-06-03T22:48:40Z"
 phases:
   P1:
     status: done
@@ -52,8 +52,8 @@ phases:
     attempts: 1
     notes: CLAUDE.md gains Request-validation subsection naming 4 parts + meta-test; docs/Registry Security Contract row updated with ErrorResponse 400 shape and pageSie 1..100/1..200 declared-not-clamped
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-03T21:26:13Z"
-  resolved: null
+  resolved: "2026-06-03T22:48:40Z"
   findings_open: 0
   findings_fixed: 0

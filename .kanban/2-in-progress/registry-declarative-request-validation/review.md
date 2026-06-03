@@ -80,7 +80,8 @@ resolve. It is non-blocking and explicitly human-acceptable (`/accept`).
 
 ## F01 — [MINOR] Stale property-name reference in SearchController comment after the F04 lowercase rename
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** a6f8950f
 **Files:** `Stash.Registry/Controllers/SearchController.cs:66`
 **Phase:** P3 (introduced); F04 (missed during rename)
 **Commit:** f7c9ea9b
