@@ -98,12 +98,6 @@ public sealed class RequestModelBindingMetaTests
     /// </summary>
     private static readonly IReadOnlySet<string> KnownExemptions = new HashSet<string>(StringComparer.Ordinal)
     {
-        // Auth controller — 4 body-deserialization bypasses (P3 will migrate these)
-        "Auth.Login",
-        "Auth.Register",
-        "Auth.CreateToken",
-        "Auth.RefreshToken",
-
         // Organizations controller — 3 body-deserialization bypasses (P4 will migrate these)
         "Organizations.CreateOrg",
         "Organizations.CreateTeam",
@@ -116,9 +110,6 @@ public sealed class RequestModelBindingMetaTests
 
         // Scopes controller — 1 body-deserialization bypass (P5 will migrate this)
         "Scopes.ClaimScope",
-
-        // Search controller — 1 query-string bypass (P3 will migrate this)
-        "Search.Search",
     };
 
     // ── Repo-root discovery ───────────────────────────────────────────────────

@@ -13,12 +13,12 @@ namespace Stash.Registry.Contracts;
 public sealed class LoginRequest
 {
     /// <summary>The username to authenticate with.</summary>
-    [Required]
+    [Required(ErrorMessage = "Username is required.")]
     [JsonPropertyName("username")]
     public string? Username { get; set; }
 
     /// <summary>The plaintext password for the account.</summary>
-    [Required]
+    [Required(ErrorMessage = "Password is required.")]
     [JsonPropertyName("password")]
     public string? Password { get; set; }
 }

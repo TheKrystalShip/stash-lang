@@ -12,9 +12,9 @@ namespace Stash.Registry.Contracts;
 /// </summary>
 public sealed class SearchQuery
 {
-    /// <summary>The free-text search query string.</summary>
+    /// <summary>The free-text search query string (bound from the <c>?q=</c> query-string parameter).</summary>
     [JsonPropertyName("q")]
-    public string? Query { get; set; }
+    public string? Q { get; set; }
 
     /// <summary>The 1-based page index (minimum 1).</summary>
     [Range(1, int.MaxValue)]

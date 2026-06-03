@@ -99,7 +99,7 @@ phases:
       - Stash.Tests/Registry/Validation/AuthControllerValidationTests.cs
       - Stash.Tests/Registry/Validation/SearchControllerValidationTests.cs
     verify:
-      - dotnet build Stash.Registry Stash.Tests
+      - dotnet build
       - dotnet test --filter "FullyQualifiedName~Registry.Validation|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~OpenApiSnapshotTests"
     done_when:
       - AuthController.Login, Register, CreateToken, RefreshToken take [FromBody] T request parameters instead of opening Request.Body. Every try-catch (JsonException) block in those four methods is gone, and inline null/empty/length/regex guards covered by DataAnnotations attributes are deleted per the Guard-deletion policy in brief.md → Semantics.
