@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T00:50:00Z"
+updated: "2026-06-03T01:05:55Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "Added RoleCommand (list/assign/revoke), deleted OwnerCommand and 3 legacy helpers, updated RegistryClientRemoveOwnerTests to use RevokeRole, 5 integration tests all pass"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 1dcfffb91100cd961d85056b3ede73609fd5ecc4
+    verified: true
+    started: "2026-06-03T00:55:30Z"
+    completed: "2026-06-03T01:05:55Z"
+    attempts: 1
+    notes: "Added VisibilityCommand (set-only), Visibilities bounded set from contracts, 4 integration tests all pass (private-flip rejection + idempotent + unknown-tier + no-get)"
   P5:
     status: pending
     commit: null
