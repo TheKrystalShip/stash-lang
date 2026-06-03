@@ -61,16 +61,26 @@ public sealed class ContractsAssemblyShapeTests
     }
 
     /// <summary>
-    /// Assertion 2: every public type in the assembly must reside in the <c>Stash.Registry.Contracts</c> namespace.
+    /// Assertion 2: every public type in the assembly must reside in the
+    /// <c>Stash.Registry.Contracts</c> namespace or its allowed sub-namespace
+    /// <c>Stash.Registry.Contracts.Validation</c> (custom ValidationAttribute subclasses
+    /// for DataAnnotations shipped in P2).
     /// </summary>
     [Fact]
     public void ContractsAssembly_AllPublicTypesInCorrectNamespace()
     {
         var assembly = typeof(Stash.Registry.Contracts.LoginRequest).Assembly;
-        var expected = "Stash.Registry.Contracts";
+
+        // Two allowed namespaces: the root contracts namespace and the validation
+        // sub-namespace introduced in P2 for ScopeGrammarAttribute / TokenExpiryAttribute.
+        var allowedNamespaces = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal)
+        {
+            "Stash.Registry.Contracts",
+            "Stash.Registry.Contracts.Validation",
+        };
 
         var violators = assembly.GetExportedTypes()
-            .Where(t => t.Namespace != expected)
+            .Where(t => !allowedNamespaces.Contains(t.Namespace ?? ""))
             .Select(t => $"{t.Namespace}.{t.Name}")
             .ToList();
 

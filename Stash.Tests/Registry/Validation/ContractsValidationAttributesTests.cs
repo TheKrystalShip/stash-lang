@@ -93,11 +93,11 @@ public sealed class ContractsValidationAttributesTests
 
     [Fact]
     public void TokenCreateRequest_MissingCeiling_FailsRequired()
-        => AssertInvalid(new TokenCreateRequest { Ceiling = null, ExpiresIn = "30d" }, "Ceiling");
+        => AssertInvalid(new TokenCreateRequest { Ceiling = null, ExpiresIn = "30d" }, "ceiling");
 
     [Fact]
     public void TokenCreateRequest_MissingExpiresIn_FailsRequired()
-        => AssertInvalid(new TokenCreateRequest { Ceiling = "read", ExpiresIn = null }, "ExpiresIn");
+        => AssertInvalid(new TokenCreateRequest { Ceiling = "read", ExpiresIn = null }, "expires_in");
 
     [Fact]
     public void TokenCreateRequest_InvalidExpiresInFormat_FailsTokenExpiry()

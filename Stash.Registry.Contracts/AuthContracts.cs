@@ -114,7 +114,7 @@ public sealed class TokenCreateRequest
     /// The coarse capability ceiling for the new token: <c>"read"</c>, <c>"publish"</c>, or <c>"admin"</c>.
     /// Mandatory — absent or unrecognised values are rejected 400.
     /// </summary>
-    [Required]
+    [Required(ErrorMessage = "ceiling is required. Set it to 'read', 'publish', or 'admin'.")]
     [JsonPropertyName("ceiling")]
     public string? Ceiling { get; set; }
 
@@ -130,7 +130,7 @@ public sealed class TokenCreateRequest
     /// Required token lifetime, e.g. "30d", "12h", "90m". Must be present; absent or invalid
     /// values are rejected 400. Must not exceed <c>Security.MaxTokenLifetime</c>.
     /// </summary>
-    [Required]
+    [Required(ErrorMessage = "expires_in is required. Use formats like '30d', '12h', or '90m'.")]
     [TokenExpiry]
     [JsonPropertyName("expiresIn")]
     public string? ExpiresIn { get; set; }
