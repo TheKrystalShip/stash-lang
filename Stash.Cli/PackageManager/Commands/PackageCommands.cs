@@ -13,8 +13,8 @@ namespace Stash.Cli.PackageManager.Commands;
 /// <c>init</c>, <c>install</c>/<c>i</c>, <c>uninstall</c>/<c>remove</c>,
 /// <c>list</c>/<c>ls</c>, <c>pack</c>, <c>update</c>, <c>outdated</c>,
 /// <c>publish</c>, <c>search</c>, <c>info</c>, <c>login</c>, <c>logout</c>,
-/// <c>role</c>, <c>unpublish</c>, <c>deprecate</c>, <c>undeprecate</c>,
-/// and <c>help</c>.
+/// <c>role</c>, <c>visibility</c>, <c>unpublish</c>, <c>deprecate</c>,
+/// <c>undeprecate</c>, and <c>help</c>.
 /// </para>
 /// <para>
 /// Exceptions of types <see cref="InvalidOperationException"/>,
@@ -94,6 +94,9 @@ public static class PackageCommands
                 case "role":
                     RoleCommand.Execute(subArgs);
                     break;
+                case "visibility":
+                    VisibilityCommand.Execute(subArgs);
+                    break;
                 case "unpublish":
                     UnpublishCommand.Execute(subArgs);
                     break;
@@ -168,6 +171,7 @@ public static class PackageCommands
         Console.WriteLine("  logout            Remove stored credentials");
         Console.WriteLine("  whoami            Show the username for the configured registry.");
         Console.WriteLine("  role              Manage package roles (list/assign/revoke)");
+        Console.WriteLine("  visibility        Change package visibility (set only; get deferred — no server read path)");
         Console.WriteLine("  unpublish         Remove a published version");
         Console.WriteLine("  deprecate         Deprecate a package or version");
         Console.WriteLine("  undeprecate       Remove deprecation status");
