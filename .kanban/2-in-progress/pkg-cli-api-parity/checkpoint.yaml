@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T00:16:48Z"
+updated: "2026-06-03T00:34:17Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "Removed Owners from PackageDetailResponse, controller, and InfoCommand.Render; 6 tests pass"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d46c883a4e735b9f465794caea4c3e0a59df58af
+    verified: true
+    started: "2026-06-03T00:18:44Z"
+    completed: "2026-06-03T00:34:17Z"
+    attempts: 1
+    notes: "Added 12 parity methods to RegistryClient (self-service routes), registered 15 DTOs in CliJsonContext, 26 fake-handler tests all pass, AOT publish clean"
   P3:
     status: pending
     commit: null
