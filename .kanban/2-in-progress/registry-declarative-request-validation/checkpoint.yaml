@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-declarative-request-validation
 current: null
-updated: "2026-06-03T19:39:31Z"
+updated: "2026-06-03T20:15:57Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "P3 fully green: 802/802 Registry tests pass. AuthController+SearchController migrated; 5 exemptions removed; LoginRequest ErrorMessage; TokenCreateRequest ceiling/expires_in ErrorMessage; ContractsAssemblyShapeTests updated for Validation sub-namespace"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 8db697ca2aac9da6c768ec827e69e195d5fe8638
+    verified: true
+    started: "2026-06-03T19:42:42Z"
+    completed: "2026-06-03T20:15:57Z"
+    attempts: 1
+    notes: "OrganizationsController: CreateOrg/CreateTeam/AddTeamMember migrated to [FromBody]; AddMember nullable→non-nullable; KnownExemptions 7→4; OrganizationsControllerValidationTests green; OpenAPI snapshot updated"
   P5:
     status: pending
     commit: null
