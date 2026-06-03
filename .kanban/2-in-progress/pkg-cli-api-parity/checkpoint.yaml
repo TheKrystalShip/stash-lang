@@ -1,7 +1,7 @@
 schema_version: 1
 feature: pkg-cli-api-parity
 current: null
-updated: "2026-06-03T01:59:32Z"
+updated: "2026-06-03T02:13:41Z"
 phases:
   P1:
     status: done

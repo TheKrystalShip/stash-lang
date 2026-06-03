@@ -22,7 +22,8 @@ Counts: **CRITICAL=0, IMPORTANT/HIGH=0, MEDIUM=2, LOW=1.**
 
 ## F01 — [MEDIUM] `scope claim` Verified-mode points users at a non-existent CLI verb (and a 501 server route)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9ea494f8
 **Files:** `Stash.Cli/PackageManager/Commands/ScopeCommand.cs:180`
 **Phase:** P5
 **Commit:** 74daa2f7
@@ -66,7 +67,8 @@ dotnet test --filter "FullyQualifiedName~PackageScopeCommandTests"
 
 ## F02 — [MEDIUM] New CLI failure paths drop the server's `ErrorResponse` message; `scope claim` mis-attributes every failure to "already owned"
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9ea494f8
 **Files:** `Stash.Cli/PackageManager/Commands/ScopeCommand.cs:160-167`, `Stash.Cli/PackageManager/Commands/RoleCommand.cs:166-174`, `Stash.Cli/PackageManager/Commands/VisibilityCommand.cs:117-125`, `Stash.Cli/PackageManager/Commands/OrgCommand.cs:231-237`, `:332-343`, `:373-383`, `:413-419`, `:454-464`; `Stash.Cli/PackageManager/RegistryClient.cs:944-957` (`SetVisibility`), `:1007-1019` (`AssignRole`), `:1074-1087` (`ClaimScope`), `:1133-1146` (`CreateOrg`), `:1185-1196` (`AddOrgMember`), `:1201-1207` (`RemoveOrgMember`), `:1213-1228` (`CreateTeam`), `:1235-1246` (`AddTeamMember`); `Stash.Cli/PackageManager/Commands/PackageCommands.cs:151-155` (HttpRequestException leak)
 **Phase:** cross-phase (P2/P4/P5/P6)
 **Commit:** d46c883a, 1dcfffb9, 74daa2f7, 197e914c
