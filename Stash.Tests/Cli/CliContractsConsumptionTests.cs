@@ -63,7 +63,9 @@ public sealed class CliContractsConsumptionTests
             typeof(RefreshTokenRequest),
             typeof(DeprecatePackageRequest),
             typeof(DeprecateVersionRequest),
-            typeof(SearchResponse),
+            // SearchResponse was removed in P1 (registry-api-readiness-phase1) and replaced by
+            // PagedResponse<PackageSummaryResponse> — the closed generic is the new shared DTO.
+            typeof(PagedResponse<PackageSummaryResponse>),
             typeof(PackageSummaryResponse),
             typeof(LoginRequest),
             typeof(PackageRoleResponse),

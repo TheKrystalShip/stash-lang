@@ -16,7 +16,7 @@ architect_session: 2026-06-04-architect
 
 # Cheap default verify on every phase. Heavier per-phase work is in `verify:` below.
 default_verify:
-  - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Cli
+  - dotnet build Stash.sln
 
 # Broad scope — safety rail, not prison. Implementers may correct stale paths within phase intent.
 scope:
@@ -42,10 +42,14 @@ phases:
       - Stash.Tests/Registry/Contracts/PagedResponseTests.cs
       - Stash.Tests/Registry/SearchControllerTests.cs
       - Stash.Tests/Registry/AuditLogControllerTests.cs
+      - Stash.Tests/Cli/CliContractsConsumptionTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Cli
+      # Build the three involved projects via solution (dotnet build takes one project at a time)
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~PagedResponseTests|FullyQualifiedName~SearchControllerTests|FullyQualifiedName~AuditLogControllerTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
-      - dotnet publish Stash.Cli/ -c Release -o /tmp/stash-aot-readiness-p1 /p:PublishAot=true
+      # AOT publish: use -r linux-x64 so the netstandard2.0 Roslyn analyzer (Stash.Stdlib.Generators)
+      # skips AOT evaluation (it has DevelopmentDependency=true and is skipped with a runtime identifier)
+      - dotnet publish Stash.Cli/ -c Release -r linux-x64 -o /tmp/stash-aot-readiness-p1
     done_when:
       - PagedResponse<T> exists in Stash.Registry.Contracts with Items/TotalCount/Page/PageSize/TotalPages (collection key 'items').
       - SearchResponse and AuditLogResponse classes are deleted; SearchController and AdminController return PagedResponse<PackageSummaryResponse> and PagedResponse<AuditEntryResponse>.
@@ -90,7 +94,7 @@ phases:
       - Stash.Registry/Http/ConditionalResponse.cs
       - Stash.Tests/Registry/VersionsEndpointTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~VersionsEndpointTests|FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
     done_when:
       - GET /api/v1/packages/{scope}/{name}/versions is reachable on PackagesController, carries [PublicEndpoint] AND [RegistryAuthorize(RegistryAction.ReadPackageMetadata)] (reusing the existing action — no new RegistryAction added), and binds VersionsQuery via [FromQuery].
@@ -115,7 +119,7 @@ phases:
       - Stash.Registry/Controllers/PackagesController.cs
       - Stash.Tests/Registry/ReadmeEndpointTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~ReadmeEndpointTests|FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests"
     done_when:
       - GET /api/v1/packages/{scope}/{name}/readme is reachable on PackagesController and carries [PublicEndpoint] AND [RegistryAuthorize(RegistryAction.ReadPackageMetadata)].
@@ -137,7 +141,7 @@ phases:
       - Stash.Tests/Registry/SearchV2FiltersTests.cs
       - Stash.Tests/Registry/SearchV2SortTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~SearchV2FiltersTests|FullyQualifiedName~SearchV2SortTests|FullyQualifiedName~SearchControllerTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RequestModelBindingMetaTests|FullyQualifiedName~OpenApiCoverageMetaTests"
     done_when:
       - SearchQuery gains optional [FromQuery] properties keyword, license, deprecated, owner, and sort (typed as the new PackageSortOrder enum) — all bound via DataAnnotations, no Request.Query/Body reads.
@@ -181,7 +185,7 @@ phases:
       - Stash.Registry/Endpoints/DiscoveryEndpoint.cs
       - Stash.Tests/Registry/DiscoveryEndpointTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~DiscoveryEndpointTests|FullyQualifiedName~OpenApiCoverageMetaTests"
     done_when:
       - GET /api/v1/.well-known/registry returns 200 with a DiscoveryResponse JSON body containing name, apiVersion ("v1"), basePath ("/api/v1"), limits, links, and features.

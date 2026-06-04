@@ -182,17 +182,18 @@ public class AdminController : ControllerBase
 
     /// <summary>
     /// Returns a paginated list of audit log entries.
+    /// The response uses the shared <see cref="PagedResponse{T}"/> envelope with collection key <c>"items"</c>.
     /// </summary>
     [RegistryAuthorize(RegistryAction.ReadAuditLog)]
     [HttpGet("audit-log")]
-    public async Task<Ok<AuditLogResponse>> GetAuditLog([FromQuery] AuditLogQuery query)
+    public async Task<Ok<PagedResponse<AuditEntryResponse>>> GetAuditLog([FromQuery] AuditLogQuery query)
     {
         var result = await _auditService.GetAuditLogAsync(query.page, query.pageSize, query.package, query.action);
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
-        return TypedResults.Ok(new AuditLogResponse
+        return TypedResults.Ok(new PagedResponse<AuditEntryResponse>
         {
-            Entries = result.Items.Select(e => new AuditEntryResponse
+            Items = result.Items.Select(e => new AuditEntryResponse
             {
                 Action = e.Action,
                 Package = e.Package,

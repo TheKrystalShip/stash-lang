@@ -220,7 +220,7 @@ public sealed class AdminControllerValidationTests
         var root = doc.RootElement;
 
         int pageSize = root.GetProperty("pageSize").GetInt32();
-        int entriesCount = root.GetProperty("entries").GetArrayLength();
+        int entriesCount = root.GetProperty("items").GetArrayLength();
 
         Assert.Equal(50, pageSize);
         Assert.Equal(50, entriesCount);

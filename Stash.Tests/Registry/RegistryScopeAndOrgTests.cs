@@ -699,7 +699,7 @@ public sealed class RegistryScopeAndOrgTests
         SearchResult result = await db.SearchPackagesAsync("widget", 1, 20, "alice");
 
         Assert.Single(result.Packages);
-        Assert.Equal("@acme/widget", result.Packages[0].Name);
+        Assert.Equal("@acme/widget", result.Packages[0].Package.Name);
     }
 
     [Fact]
@@ -722,7 +722,7 @@ public sealed class RegistryScopeAndOrgTests
         SearchResult result = await db.SearchPackagesAsync("lib", 1, 20, "bob");
 
         // Bob can read via team role — search must surface the private package
-        Assert.Contains(result.Packages, p => p.Name == "@acme/lib");
+        Assert.Contains(result.Packages, p => p.Package.Name == "@acme/lib");
     }
 
     [Fact]
@@ -743,7 +743,7 @@ public sealed class RegistryScopeAndOrgTests
         SearchResult result = await db.SearchPackagesAsync("internal-pkg", 1, 20, "bob");
 
         // Org member inherits reader floor — search must surface the private package
-        Assert.Contains(result.Packages, p => p.Name == "@acme/internal-pkg");
+        Assert.Contains(result.Packages, p => p.Package.Name == "@acme/internal-pkg");
     }
 
     [Fact]

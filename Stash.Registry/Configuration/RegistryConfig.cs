@@ -9,4 +9,5 @@ public sealed class RegistryConfig
     public SecurityConfig Security { get; set; } = new();
     public RateLimitingConfig RateLimiting { get; set; } = new();
     public BootstrapConfig Bootstrap { get; set; } = new();
+    public CorsConfig Cors { get; set; } = new();
 }

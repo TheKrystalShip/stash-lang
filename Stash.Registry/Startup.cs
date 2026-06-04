@@ -16,6 +16,7 @@ using Stash.Registry.Bootstrap;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
+using Stash.Registry.Endpoints;
 using Stash.Registry.Middleware;
 using Stash.Registry.Services;
 using Stash.Registry.OpenApi;
@@ -207,7 +208,41 @@ public sealed class Startup
             options.AddOperationTransformer<OpenApiOperationIdTransformer>();
             options.AddDocumentTransformer<OpenApiDocumentMetadataTransformer>();
         });
+
+        // CORS — always register the services so AddCors is available when Cors.Enabled is true.
+        // The middleware is only inserted in Configure() when the flag is set. Keeping AddCors
+        // unconditional allows test factories to replace the named policy via ConfigureTestServices
+        // without needing to also wire the services again.
+        services.AddCors(options =>
+        {
+            options.AddPolicy(CorsPolicyName, policy =>
+            {
+                policy.WithOrigins(_config.Cors.AllowedOrigins.Count > 0
+                    ? _config.Cors.AllowedOrigins.ToArray()
+                    : new[] { "__no_origin_configured__" });
+
+                policy.WithMethods(_config.Cors.AllowedMethods.Count > 0
+                    ? _config.Cors.AllowedMethods.ToArray()
+                    : new[] { "GET", "HEAD" });
+
+                policy.WithHeaders(_config.Cors.AllowedHeaders.Count > 0
+                    ? _config.Cors.AllowedHeaders.ToArray()
+                    : new[] { "Content-Type", "Authorization", "If-None-Match", "If-Modified-Since" });
+
+                if (_config.Cors.AllowCredentials)
+                {
+                    policy.AllowCredentials();
+                }
+                else
+                {
+                    policy.DisallowCredentials();
+                }
+            });
+        });
     }
+
+    /// <summary>Named CORS policy used by <see cref="Configure"/> when CORS is enabled.</summary>
+    internal const string CorsPolicyName = "RegistryCorsPolicy";
 
     /// <summary>
     /// Builds the <see cref="BadRequestObjectResult"/> for an invalid model state, aggregating
@@ -316,6 +351,20 @@ public sealed class Startup
         app.MapOpenApi();
 
         app.UseRouting();
+
+        // CORS must be placed after UseRouting and before UseAuthentication so that preflight
+        // OPTIONS requests are short-circuited before the auth pipeline runs.
+        // Read Enabled from the live IConfiguration (honoring test factory overrides) with
+        // _config.Cors.Enabled as the fast path, mirroring the BasePath pattern.
+        var corsEnabledRaw = app.Configuration["Registry:Cors:Enabled"];
+        bool corsEnabled = string.IsNullOrEmpty(corsEnabledRaw)
+            ? _config.Cors.Enabled
+            : bool.TryParse(corsEnabledRaw, out var parsed) && parsed;
+        if (corsEnabled)
+        {
+            app.UseCors(CorsPolicyName);
+        }
+
         app.UseAuthentication();
 
         // Uniform revocation gate (D22): if OnTokenValidated set the "TokenRevoked" flag,
@@ -327,7 +376,11 @@ public sealed class Startup
             // P1: The OpenAPI document is public in every environment; bypass the JTI
             // revocation check entirely for /openapi/* paths so a caller presenting a stale
             // or revoked token can still fetch the API contract.
-            if (context.Request.Path.StartsWithSegments("/openapi"))
+            // P7: The discovery endpoint is similarly public — bypass revocation checks
+            // for /api/v1/.well-known/* paths so a revoked token does not block capability
+            // advertisement (static document, no database call, no PDP).
+            if (context.Request.Path.StartsWithSegments("/openapi") ||
+                context.Request.Path.StartsWithSegments("/api/v1/.well-known"))
             {
                 await next();
                 return;
@@ -375,6 +428,9 @@ public sealed class Startup
         // component schema; .WithName gives it a stable operationId.
         app.MapGet("/", () => TypedResults.Ok(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }))
             .WithName("Health_Check");
+
+        // P7: Public discovery endpoint — GET /api/v1/.well-known/registry.
+        DiscoveryEndpoint.Map(app, _config);
 
         app.MapControllers();
     }

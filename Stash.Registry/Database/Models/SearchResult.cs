@@ -3,6 +3,24 @@ using System.Collections.Generic;
 namespace Stash.Registry.Database.Models;
 
 /// <summary>
+/// A package record enriched with derived search-result fields.
+/// Used by <see cref="IRegistryDatabase.SearchPackagesAsync"/> to avoid N+1 queries for
+/// per-package aggregates (e.g. <see cref="OwnerCount"/>).
+/// </summary>
+public sealed class PackageSearchRow
+{
+    /// <summary>The package record.</summary>
+    public PackageRecord Package { get; set; } = null!;
+
+    /// <summary>
+    /// The number of user principals with the <c>Owner</c> role on this package.
+    /// Derived from a correlated-subquery count in the search query; never requires
+    /// a separate per-package round-trip.
+    /// </summary>
+    public int OwnerCount { get; set; }
+}
+
+/// <summary>
 /// Encapsulates the result of a paginated package search query.
 /// </summary>
 /// <remarks>
@@ -13,8 +31,8 @@ namespace Stash.Registry.Database.Models;
 /// </remarks>
 public sealed class SearchResult
 {
-    /// <summary>The <see cref="PackageRecord"/> items for the current page.</summary>
-    public List<PackageRecord> Packages { get; set; } = new();
+    /// <summary>The enriched package rows for the current page.</summary>
+    public List<PackageSearchRow> Packages { get; set; } = new();
 
     /// <summary>The total number of packages matching the query across all pages.</summary>
     public int TotalCount { get; set; }

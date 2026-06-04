@@ -139,7 +139,16 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
-    public async Task<SearchResult> SearchPackagesAsync(string query, int page, int pageSize, string? callerUsername)
+    public async Task<SearchResult> SearchPackagesAsync(
+        string query,
+        int page,
+        int pageSize,
+        string? callerUsername,
+        string? keyword = null,
+        string? license = null,
+        bool? deprecated = null,
+        string? owner = null,
+        PackageSortOrder sort = PackageSortOrder.Relevance)
     {
         string pattern = $"%{query}%";
         var queryable = _context.Packages.Where(p =>
@@ -196,15 +205,92 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
                         p.Name.StartsWith("@" + s.Name + "/"))));
         }
 
+        // ── Bucket-A filters (column-backed, compose with AND) ────────────────
+
+        // keyword: exact match against one element of the JSON-array keywords string.
+        // The keywords column stores a JSON array (e.g. '["foo","bar"]'); we match
+        // the quoted substring "%\"<keyword>\"%" to avoid false partial-word hits.
+        //
+        // The keyword is escaped so that LIKE metacharacters (%, _, \) in the input
+        // are treated as literals — preventing over-matching.  The ESCAPE '\' clause
+        // is supported by both SQLite and PostgreSQL.
+        if (!string.IsNullOrEmpty(keyword))
+        {
+            string esc = keyword
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_")
+                .Replace("\"", "\\\"");
+            queryable = queryable.Where(p =>
+                p.Keywords != null &&
+                EF.Functions.Like(p.Keywords, $"%\"{esc}\"%", "\\"));
+        }
+
+        // license: exact match against PackageRecord.License (SPDX identifier).
+        if (!string.IsNullOrEmpty(license))
+        {
+            string lic = license;
+            queryable = queryable.Where(p => p.License == lic);
+        }
+
+        // deprecated: boolean filter.
+        if (deprecated.HasValue)
+        {
+            bool dep = deprecated.Value;
+            queryable = queryable.Where(p => p.Deprecated == dep);
+        }
+
+        // owner: exact match against a user principal with Owner role on the package.
+        // Uses PrincipalTypes.User and PackageRoles.Owner — named enum values, never literals.
+        if (!string.IsNullOrEmpty(owner))
+        {
+            string ownerName = owner;
+            queryable = queryable.Where(p =>
+                _context.PackageRoles.Any(r =>
+                    r.PackageName == p.Name &&
+                    r.PrincipalType == PrincipalTypes.User &&
+                    r.Role == PackageRoles.Owner &&
+                    r.PrincipalId == ownerName));
+        }
+
         int totalCount = await queryable.CountAsync();
-        var packages = await queryable
-            .OrderBy(p => p.Name)
+
+        // ── Sort order ────────────────────────────────────────────────────────
+        // Relevance (default) and Name both order by Name ascending — matching the
+        // pre-P5 behavior so the q/page/pageSize-only path remains byte-identical.
+
+        // ── Project to PackageSearchRow — single query, no N+1 ────────────────
+        // ownerCount is a correlated-subquery count in the SELECT so we never issue
+        // a separate round-trip per result row.
+        var rowsQuery = sort switch
+        {
+            PackageSortOrder.Name => queryable
+                .OrderBy(p => p.Name),
+            PackageSortOrder.Updated => queryable
+                .OrderByDescending(p => p.UpdatedAt)
+                .ThenBy(p => p.Name),
+            PackageSortOrder.Published => queryable
+                .OrderByDescending(p => p.CreatedAt)
+                .ThenBy(p => p.Name),
+            _ => queryable   // Relevance (default)
+                .OrderBy(p => p.Name),
+        };
+
+        var rows = await rowsQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .AsNoTracking()
+            .Select(p => new PackageSearchRow
+            {
+                Package = p,
+                OwnerCount = _context.PackageRoles.Count(r =>
+                    r.PackageName == p.Name &&
+                    r.PrincipalType == PrincipalTypes.User &&
+                    r.Role == PackageRoles.Owner),
+            })
             .ToListAsync();
 
-        return new SearchResult { Packages = packages, TotalCount = totalCount };
+        return new SearchResult { Packages = rows, TotalCount = totalCount };
     }
 
     /// <inheritdoc/>
@@ -228,6 +314,24 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .OrderByDescending(v => v.PublishedAt)
             .Select(v => v.Version)
             .ToListAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<SearchResult<VersionRecord>> GetPackageVersionsAsync(string name, int page, int pageSize)
+    {
+        var queryable = _context.Versions
+            .AsNoTracking()
+            .Where(v => v.PackageName == name);
+
+        int totalCount = await queryable.CountAsync();
+        var items = await queryable
+            .OrderByDescending(v => v.PublishedAt)
+            .ThenByDescending(v => v.Version)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new SearchResult<VersionRecord> { Items = items, TotalCount = totalCount };
     }
 
     /// <inheritdoc/>
@@ -306,6 +410,10 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             record.Deprecated = true;
             record.DeprecationMessage = message;
             record.DeprecatedBy = deprecatedBy;
+            // Bump the parent package timestamp so the /versions ETag reflects this change.
+            var package = await _context.Packages.FindAsync(name);
+            if (package != null)
+                package.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
     }
@@ -319,6 +427,10 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             record.Deprecated = false;
             record.DeprecationMessage = null;
             record.DeprecatedBy = null;
+            // Bump the parent package timestamp so the /versions ETag reflects this change.
+            var package = await _context.Packages.FindAsync(name);
+            if (package != null)
+                package.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
     }

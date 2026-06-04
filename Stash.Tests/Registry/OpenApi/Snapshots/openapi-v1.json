@@ -38,6 +38,26 @@
         }
       }
     },
+    "/api/v1/.well-known/registry": {
+      "get": {
+        "tags": [
+          "StashRegistry"
+        ],
+        "operationId": "Discovery_GetRegistry",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/stats": {
       "get": {
         "tags": [
@@ -371,7 +391,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuditLogResponse"
+                  "$ref": "#/components/schemas/PagedResponseOfAuditEntryResponse"
                 }
               }
             }
@@ -1388,6 +1408,136 @@
         }
       }
     },
+    "/api/v1/packages/{scope}/{name}/versions": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "Packages_GetVersions",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResponseOfVersionDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          }
+        }
+      }
+    },
+    "/api/v1/packages/{scope}/{name}/readme": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "Packages_GetReadme",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadmeResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          }
+        }
+      }
+    },
     "/api/v1/packages/{scope}/{name}/{version}/download": {
       "get": {
         "tags": [
@@ -2208,6 +2358,41 @@
             }
           },
           {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "license",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deprecated",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PackageSortOrder"
+            }
+          },
+          {
             "name": "page",
             "in": "query",
             "schema": {
@@ -2242,7 +2427,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SearchResponse"
+                  "$ref": "#/components/schemas/PagedResponseOfPackageSummaryResponse"
                 }
               }
             }
@@ -2371,52 +2556,6 @@
               "null",
               "string"
             ]
-          }
-        }
-      },
-      "AuditLogResponse": {
-        "required": [
-          "entries"
-        ],
-        "type": "object",
-        "properties": {
-          "entries": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AuditEntryResponse"
-            }
-          },
-          "totalCount": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "page": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "pageSize": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "totalPages": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
           }
         }
       },
@@ -2647,6 +2786,113 @@
           },
           "deprecated": {
             "type": "boolean"
+          }
+        }
+      },
+      "DiscoveryFeatures": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "type": "boolean"
+          },
+          "advisories": {
+            "type": "boolean"
+          },
+          "provenance": {
+            "type": "boolean"
+          },
+          "signatures": {
+            "type": "boolean"
+          },
+          "trustedPublishing": {
+            "type": "boolean"
+          },
+          "verifiedPublishers": {
+            "type": "boolean"
+          },
+          "organizations": {
+            "type": "boolean"
+          },
+          "privatePackages": {
+            "type": "boolean"
+          },
+          "cors": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DiscoveryLimits": {
+        "type": "object",
+        "properties": {
+          "maxPackageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "maxPageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "DiscoveryLinks": {
+        "required": [
+          "search",
+          "packages",
+          "openapi",
+          "wellKnown"
+        ],
+        "type": "object",
+        "properties": {
+          "search": {
+            "type": "string"
+          },
+          "packages": {
+            "type": "string"
+          },
+          "openapi": {
+            "type": "string"
+          },
+          "wellKnown": {
+            "type": "string"
+          }
+        }
+      },
+      "DiscoveryResponse": {
+        "required": [
+          "name",
+          "apiVersion",
+          "basePath",
+          "limits",
+          "links",
+          "features"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "basePath": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/DiscoveryLimits"
+          },
+          "links": {
+            "$ref": "#/components/schemas/DiscoveryLinks"
+          },
+          "features": {
+            "$ref": "#/components/schemas/DiscoveryFeatures"
           }
         }
       },
@@ -2905,6 +3151,9 @@
           }
         }
       },
+      "PackageSortOrder": {
+        "type": "integer"
+      },
       "PackageSummaryResponse": {
         "required": [
           "name",
@@ -2939,6 +3188,158 @@
           },
           "deprecated": {
             "type": "boolean"
+          },
+          "license": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ownerCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResponseOfAuditEntryResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntryResponse"
+            }
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResponseOfPackageSummaryResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PackageSummaryResponse"
+            }
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResponseOfVersionDetailResponse": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VersionDetailResponse"
+            }
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -2968,6 +3369,36 @@
           },
           "integrity": {
             "type": "string"
+          }
+        }
+      },
+      "ReadmeResponse": {
+        "required": [
+          "content",
+          "contentType",
+          "byteSize"
+        ],
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "byteSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "extractedFromVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3161,52 +3592,6 @@
           },
           "message": {
             "type": "string"
-          }
-        }
-      },
-      "SearchResponse": {
-        "required": [
-          "packages"
-        ],
-        "type": "object",
-        "properties": {
-          "packages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PackageSummaryResponse"
-            }
-          },
-          "totalCount": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "page": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "pageSize": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "totalPages": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
           }
         }
       },

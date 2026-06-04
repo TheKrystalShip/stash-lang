@@ -718,17 +718,18 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
     /// </summary>
     /// <remarks>
     /// Issues <c>GET /search?q={query}&amp;page={page}&amp;pageSize={pageSize}</c> and
-    /// deserialises the JSON response into a <see cref="SearchResponse"/> object using
-    /// <see cref="CliJsonContext"/>.
+    /// deserialises the JSON response into a <see cref="PagedResponse{T}"/> of
+    /// <see cref="PackageSummaryResponse"/> objects using <see cref="CliJsonContext"/>.
+    /// The wire key for the items collection is <c>"items"</c>.
     /// </remarks>
     /// <param name="query">The search query string.</param>
     /// <param name="page">The 1-based page number to retrieve (default <c>1</c>).</param>
     /// <param name="pageSize">The number of results per page (default <c>20</c>).</param>
     /// <returns>
-    /// A <see cref="SearchResponse"/> object with matching packages, or <c>null</c> on
-    /// failure.
+    /// A <see cref="PagedResponse{T}"/> of <see cref="PackageSummaryResponse"/> with
+    /// matching packages, or <c>null</c> on failure.
     /// </returns>
-    public SearchResponse? Search(string query, int page = 1, int pageSize = 20)
+    public PagedResponse<PackageSummaryResponse>? Search(string query, int page = 1, int pageSize = 20)
     {
         string url = $"{_baseUrl}/search?q={Uri.EscapeDataString(query)}&page={page}&pageSize={pageSize}";
         var response = _http.GetAsync(url).GetAwaiter().GetResult();
@@ -738,7 +739,7 @@ public sealed class RegistryClient : IPackageSource, IVersionLookup
         }
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-        return JsonSerializer.Deserialize(json, CliJsonContext.Default.SearchResponse);
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.PagedResponsePackageSummaryResponse);
     }
 
     /// <summary>

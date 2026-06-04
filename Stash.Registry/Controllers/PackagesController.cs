@@ -15,6 +15,7 @@ using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using Stash.Registry.Http;
 using Stash.Registry.Services;
 using Stash.Registry.Storage;
 
@@ -143,6 +144,131 @@ public class PackagesController : ControllerBase
             return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
         return TypedResults.Ok(BuildVersionResponse(vr));
+    }
+
+    /// <summary>
+    /// Returns a paginated list of all published versions for a package.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Visibility is enforced by the same PDP chokepoint as <see cref="GetPackage"/>:
+    /// <c>[RegistryAuthorize(RegistryAction.ReadPackageMetadata)]</c> runs
+    /// <c>AuthorizePackageReadAsync</c> before the action body executes. Anonymous callers
+    /// on private or internal packages receive <c>404 Not Found</c> — never 403 — to avoid
+    /// leaking the package's existence.
+    /// </para>
+    /// <para>
+    /// Responses include <c>ETag</c>, <c>Last-Modified</c>, and <c>Cache-Control</c> headers
+    /// and honor <c>If-None-Match</c> / <c>If-Modified-Since</c> conditional requests with
+    /// <c>304 Not Modified</c> (RFC 7232 §4.1).
+    /// </para>
+    /// </remarks>
+    /// <param name="scope">The package scope (e.g. <c>org</c> from <c>@org/name</c>).</param>
+    /// <param name="name">The unscoped package name (e.g. <c>name</c> from <c>@org/name</c>).</param>
+    /// <param name="query">Pagination parameters: <c>page</c> (default 1) and <c>pageSize</c> (default 20, max 100).</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="PagedResponse{T}"/> of <see cref="VersionDetailResponse"/> items,
+    /// or <c>304 Not Modified</c> when the caller's conditional headers match the current state,
+    /// or <c>404 Not Found</c> if the package does not exist or is not visible to the caller.
+    /// </returns>
+    [PublicEndpoint("version listing is public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]
+    [HttpGet("{scope}/{name}/versions")]
+    [ProducesResponseType(StatusCodes.Status304NotModified)]
+    public async Task<Results<Ok<PagedResponse<VersionDetailResponse>>, NotFound<ErrorResponse>, StatusCodeHttpResult>> GetVersions(
+        string scope, string name, [FromQuery] VersionsQuery query)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
+        if (package == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+
+        SearchResult<VersionRecord> result = await _db.GetPackageVersionsAsync(packageName, query.page, query.pageSize);
+
+        // Evaluate conditional request (ETag / Last-Modified). 304 fires after the PDP allow.
+        if (ConditionalResponse.SetHeadersAndCheckNotModified(HttpContext, package.UpdatedAt, result.TotalCount))
+            return TypedResults.StatusCode(StatusCodes.Status304NotModified);
+
+        int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
+        var items = result.Items.Select(BuildVersionResponse).ToList();
+
+        return TypedResults.Ok(new PagedResponse<VersionDetailResponse>
+        {
+            Items = items,
+            TotalCount = result.TotalCount,
+            Page = query.page,
+            PageSize = query.pageSize,
+            TotalPages = totalPages
+        });
+    }
+
+    /// <summary>
+    /// Returns the README for a package as a typed JSON response.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Returns a <see cref="ReadmeResponse"/> JSON DTO — not a raw <c>text/markdown</c> body.
+    /// A raw body would require a new OpenAPI schema exemption; the JSON wrapper preserves
+    /// the "zero new exemptions" invariant in <c>OpenApiCoverageMetaTests</c>.
+    /// </para>
+    /// <para>
+    /// Visibility is enforced by the same PDP chokepoint as <see cref="GetPackage"/>:
+    /// <c>[RegistryAuthorize(RegistryAction.ReadPackageMetadata)]</c> runs
+    /// <c>AuthorizePackageReadAsync</c> before the action body executes.  Anonymous callers
+    /// on private or internal packages receive <c>404 Not Found</c> — never 403.
+    /// </para>
+    /// <para>
+    /// When the package record has no README (null or empty <c>PackageRecord.Readme</c>),
+    /// the endpoint returns <c>404 Not Found</c>.
+    /// </para>
+    /// <para>
+    /// Responses include <c>ETag</c>, <c>Last-Modified</c>, and <c>Cache-Control</c> headers
+    /// and honor <c>If-None-Match</c> / <c>If-Modified-Since</c> conditional requests with
+    /// <c>304 Not Modified</c> (RFC 7232 §4.1).
+    /// </para>
+    /// </remarks>
+    /// <param name="scope">The package scope (e.g. <c>org</c> from <c>@org/name</c>).</param>
+    /// <param name="name">The unscoped package name (e.g. <c>name</c> from <c>@org/name</c>).</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="ReadmeResponse"/>,
+    /// or <c>304 Not Modified</c> when the caller's conditional headers match the current state,
+    /// or <c>404 Not Found</c> if the package does not exist, is not visible to the caller,
+    /// or has no README.
+    /// </returns>
+    [PublicEndpoint("readme is public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]
+    [HttpGet("{scope}/{name}/readme")]
+    [ProducesResponseType(StatusCodes.Status304NotModified)]
+    public async Task<Results<Ok<ReadmeResponse>, NotFound<ErrorResponse>, StatusCodeHttpResult>> GetReadme(
+        string scope, string name)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
+        if (package == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+
+        // A package with no README returns 404 — the resource (the readme) does not exist.
+        if (string.IsNullOrEmpty(package.Readme))
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' has no README." });
+
+        string content = package.Readme;
+        int byteSize = System.Text.Encoding.UTF8.GetByteCount(content);
+
+        // Evaluate conditional request (ETag / Last-Modified). 304 fires after the PDP allow.
+        if (ConditionalResponse.SetHeadersAndCheckNotModified(HttpContext, package.UpdatedAt, byteSize))
+            return TypedResults.StatusCode(StatusCodes.Status304NotModified);
+
+        return TypedResults.Ok(new ReadmeResponse
+        {
+            Content = content,
+            ContentType = ReadmeContentTypes.Markdown,
+            ByteSize = byteSize,
+            ExtractedFromVersion = package.Latest
+        });
     }
 
     /// <summary>

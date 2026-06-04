@@ -1,0 +1,75 @@
+schema_version: 1
+feature: registry-api-readiness-phase1
+current: null
+updated: "2026-06-04T12:33:55Z"
+phases:
+  P1:
+    status: done
+    commit: 21c1fec21852caa2ee6dedbf359e6fb8e1ed1d0d
+    verified: true
+    started: "2026-06-04T09:41:27Z"
+    completed: "2026-06-04T09:59:29Z"
+    attempts: 1
+    notes: "PagedResponse<T> in Contracts; SearchResponse/AuditLogResponse deleted; controllers migrated; CLI lockstep; AOT publish green; 30 phase tests pass; all 728 Registry tests pass"
+  P2:
+    status: done
+    commit: 9007359238cdc987d2cc0cb919a47546181d0ded
+    verified: true
+    started: "2026-06-04T10:07:43Z"
+    completed: "2026-06-04T10:17:26Z"
+    attempts: 1
+    notes: "PackagesControllerRegistryAuthorizeRequiredTests: 4-assertion reflection meta-test with [PublicEndpoint]-no-exemption predicate, count floor >= 13, fail-path fixture, and dual-attribute fixture"
+  P3:
+    status: done
+    commit: 3f10f7de2b5bf23532ddc1906d85312954e0054e
+    verified: true
+    started: "2026-06-04T10:22:57Z"
+    completed: "2026-06-04T10:34:46Z"
+    attempts: 1
+    notes: "GetVersions action on PackagesController: [PublicEndpoint]+[RegistryAuthorize(ReadPackageMetadata)], PagedResponse<VersionDetailResponse>, ETag/Last-Modified/Cache-Control, 304 conditional, visibility-enforced (anon/no-role → 404, reader+ → 200); ConditionalResponse helper in Stash.Registry/Http/"
+  P4:
+    status: done
+    commit: 95496a472e68b0e521574b2643bc6a7f01419796
+    verified: true
+    started: "2026-06-04T10:42:01Z"
+    completed: "2026-06-04T10:50:53Z"
+    attempts: 1
+    notes: "GetReadme action on PackagesController: typed JSON ReadmeResponse, PDP-gated, ETag/Last-Modified/304 via ConditionalResponse helper; null/empty README → 404; OpenAPI snapshot rebaselined"
+  P5:
+    status: done
+    commit: 0a6525bc2c425bd66613f60a1f33ca32cef674ee
+    verified: true
+    started: "2026-06-04T10:51:54Z"
+    completed: "2026-06-04T11:06:33Z"
+    attempts: 1
+    notes: "Added PackageSortOrder enum, keyword/license/deprecated/owner filters, license+ownerCount to PackageSummaryResponse, extended SearchPackagesAsync with single-query N+1-free ownerCount; rebaselined OpenAPI snapshot; 48 targeted tests green"
+  P6:
+    status: done
+    commit: cd6297413c41d0a2730959b80cea0c24145989c3
+    verified: true
+    started: "2026-06-04T11:10:55Z"
+    completed: "2026-06-04T11:25:30Z"
+    attempts: 1
+    notes: "CorsConfig added with Enabled/AllowedOrigins/AllowedMethods/AllowedHeaders/AllowCredentials; wired into RegistryConfig; appsettings.json Cors section off-by-default; 4 CorsMiddlewareTests prove both directions (disabled=inert, enabled=active); 11 CorsConfigTests prove parsing/defaults/round-trip; all 22 phase tests green"
+  P7:
+    status: done
+    commit: a614a21fd417f74d90ac332bda7213312cbf81f1
+    verified: true
+    started: "2026-06-04T11:26:48Z"
+    completed: "2026-06-04T11:39:23Z"
+    attempts: 1
+    notes: "DiscoveryResponse in CommonContracts; PagingLimits.MaxPageSize const driving SearchQuery/VersionsQuery [Range] and discovery limits; MapGet Discovery_GetRegistry with JTI bypass for /.well-known; 8 DiscoveryEndpointTests pass; OpenAPI snapshot rebaselined"
+  P8:
+    status: done
+    commit: 2187c8f4fd74347da8b5af8f92a07bb6e144fc83
+    verified: true
+    started: "2026-06-04T11:42:44Z"
+    completed: "2026-06-04T11:54:31Z"
+    attempts: 1
+    notes: "Documented new search filters (keyword/license/deprecated/owner/sort), sort vocab, Bucket-B exclusions; added 6.11 /versions and 6.12 /readme with response shapes, visibility rules, ETag/304 caching contract; new 10.8 CORS, 10.9 Pagination (shared items envelope + caps), 10.10 .well-known/registry discovery with features map; updated Endpoint Summary with 3 new endpoints; fixed stale packages/entries collection keys to items in search and audit-log examples"
+review:
+  status: resolved
+  started: "2026-06-04T12:07:40Z"
+  resolved: "2026-06-04T12:33:55Z"
+  findings_open: 0
+  findings_fixed: 0

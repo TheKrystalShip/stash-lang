@@ -5,6 +5,40 @@ using System.Text.Json.Serialization;
 
 namespace Stash.Registry.Contracts;
 
+// ── Search sort order ─────────────────────────────────────────────────────────
+
+/// <summary>
+/// Vocabulary of valid <c>sort=</c> values for <c>GET /api/v1/search</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Members are named to match the wire spelling directly because
+/// <c>[FromQuery]</c> enum binding uses case-insensitive member-name matching,
+/// NOT <c>[JsonStringEnumMemberName]</c> (which only affects JSON body serialization).
+/// </para>
+/// <para>
+/// An unknown <c>sort=</c> string (e.g. <c>sort=downloads</c>) is rejected by the model
+/// binder and returns <c>400 InvalidRequest</c> via the existing
+/// <c>InvalidModelStateResponseFactory</c> — no explicit switch/throw needed.
+/// </para>
+/// </remarks>
+public enum PackageSortOrder
+{
+    /// <summary>Default: order by package name ascending (free-text relevance proxy).</summary>
+    Relevance = 0,
+
+    /// <summary>Order by package name ascending (<c>sort=Name</c>).</summary>
+    Name,
+
+    /// <summary>Order by most-recently updated descending (<c>sort=Updated</c>).</summary>
+    Updated,
+
+    /// <summary>Order by most-recently published (created) descending (<c>sort=Published</c>).</summary>
+    Published,
+}
+
+// ── Search query ──────────────────────────────────────────────────────────────
+
 /// <summary>
 /// Query-string parameters for the <c>GET /api/v1/search</c> endpoint.
 /// Bound via <c>[FromQuery]</c> — page and pageSize are validated via <c>[Range]</c>
@@ -16,6 +50,42 @@ public sealed class SearchQuery
     [JsonPropertyName("q")]
     public string? q { get; set; }
 
+    /// <summary>
+    /// Optional keyword filter: exact match against one element of the package keywords array.
+    /// Absent or empty means no keyword filter.
+    /// </summary>
+    [JsonPropertyName("keyword")]
+    public string? keyword { get; set; }
+
+    /// <summary>
+    /// Optional SPDX license identifier filter: exact match against <c>PackageRecord.License</c>.
+    /// Absent or empty means no license filter.
+    /// </summary>
+    [JsonPropertyName("license")]
+    public string? license { get; set; }
+
+    /// <summary>
+    /// Optional deprecated filter: when <c>true</c>, only deprecated packages are returned;
+    /// when <c>false</c>, only non-deprecated packages; when absent, both are included.
+    /// </summary>
+    [JsonPropertyName("deprecated")]
+    public bool? deprecated { get; set; }
+
+    /// <summary>
+    /// Optional owner filter: exact match against a user principal with <c>Owner</c> role on the package.
+    /// Absent or empty means no owner filter.
+    /// </summary>
+    [JsonPropertyName("owner")]
+    public string? owner { get; set; }
+
+    /// <summary>
+    /// Sort order for search results. Defaults to <see cref="PackageSortOrder.Relevance"/>.
+    /// An unknown value (e.g. <c>sort=downloads</c>) is rejected with <c>400 InvalidRequest</c>
+    /// by the model binder — no Bucket-B sort values are accepted.
+    /// </summary>
+    [JsonPropertyName("sort")]
+    public PackageSortOrder sort { get; set; } = PackageSortOrder.Relevance;
+
     /// <summary>The 1-based page index (minimum 1).</summary>
     [Range(1, int.MaxValue)]
     [UnconditionalSuppressMessage("Trimming", "IL2026",
@@ -26,8 +96,8 @@ public sealed class SearchQuery
     [JsonPropertyName("page")]
     public int page { get; set; } = 1;
 
-    /// <summary>The number of results per page (1–100).</summary>
-    [Range(1, 100)]
+    /// <summary>The number of results per page (1–<see cref="PagingLimits.MaxPageSize"/>).</summary>
+    [Range(1, PagingLimits.MaxPageSize)]
     [UnconditionalSuppressMessage("Trimming", "IL2026",
         Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
                         "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
@@ -36,6 +106,8 @@ public sealed class SearchQuery
     [JsonPropertyName("pageSize")]
     public int pageSize { get; set; } = 20;
 }
+
+// ── Package summary response ──────────────────────────────────────────────────
 
 /// <summary>
 /// A lightweight package summary included in search result listings.
@@ -65,30 +137,19 @@ public sealed class PackageSummaryResponse
     /// <summary>Whether the package has been deprecated.</summary>
     [JsonPropertyName("deprecated")]
     public bool Deprecated { get; set; }
+
+    /// <summary>
+    /// The SPDX license identifier for the package, or <c>null</c> if not specified.
+    /// Copied from <c>PackageRecord.License</c>.
+    /// </summary>
+    [JsonPropertyName("license")]
+    public string? License { get; set; }
+
+    /// <summary>
+    /// The number of user principals with the <c>Owner</c> role on this package.
+    /// Derived from <c>PackageRoleEntry</c> rows with <c>PrincipalType=User</c> and <c>Role=Owner</c>.
+    /// </summary>
+    [JsonPropertyName("ownerCount")]
+    public int OwnerCount { get; set; }
 }
 
-/// <summary>
-/// Response body returned by the <c>GET /api/v1/packages?q={query}</c> search endpoint.
-/// </summary>
-public sealed class SearchResponse
-{
-    /// <summary>The list of packages matching the search query for the current page.</summary>
-    [JsonPropertyName("packages")]
-    public required List<PackageSummaryResponse> Packages { get; set; }
-
-    /// <summary>The total number of packages that matched the query across all pages.</summary>
-    [JsonPropertyName("totalCount")]
-    public int TotalCount { get; set; }
-
-    /// <summary>The 1-based page index of the current result set.</summary>
-    [JsonPropertyName("page")]
-    public int Page { get; set; }
-
-    /// <summary>The number of results included per page.</summary>
-    [JsonPropertyName("pageSize")]
-    public int PageSize { get; set; }
-
-    /// <summary>The total number of pages available given <see cref="TotalCount"/> and <see cref="PageSize"/>.</summary>
-    [JsonPropertyName("totalPages")]
-    public int TotalPages { get; set; }
-}
