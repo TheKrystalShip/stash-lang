@@ -31,6 +31,7 @@ scope:
   - Stash.Registry.Web/**
   - Stash.sln
   - Stash.Tests/Registry/Web/**
+  - Stash.Tests/Stash.Tests.csproj
   - docs/Registry — Package Registry.md
 
 phases:
