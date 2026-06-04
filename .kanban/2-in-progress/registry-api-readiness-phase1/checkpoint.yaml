@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T11:39:23Z"
+updated: "2026-06-04T11:54:31Z"
 phases:
   P1:
     status: done
@@ -60,13 +60,13 @@ phases:
     attempts: 1
     notes: "DiscoveryResponse in CommonContracts; PagingLimits.MaxPageSize const driving SearchQuery/VersionsQuery [Range] and discovery limits; MapGet Discovery_GetRegistry with JTI bypass for /.well-known; 8 DiscoveryEndpointTests pass; OpenAPI snapshot rebaselined"
   P8:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 2187c8f4fd74347da8b5af8f92a07bb6e144fc83
+    verified: true
+    started: "2026-06-04T11:42:44Z"
+    completed: "2026-06-04T11:54:31Z"
+    attempts: 1
+    notes: "Documented new search filters (keyword/license/deprecated/owner/sort), sort vocab, Bucket-B exclusions; added 6.11 /versions and 6.12 /readme with response shapes, visibility rules, ETag/304 caching contract; new 10.8 CORS, 10.9 Pagination (shared items envelope + caps), 10.10 .well-known/registry discovery with features map; updated Endpoint Summary with 3 new endpoints; fixed stale packages/entries collection keys to items in search and audit-log examples"
 review:
   status: not_started
   started: null
