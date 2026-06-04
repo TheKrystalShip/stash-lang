@@ -159,7 +159,8 @@ dotnet test
 
 ## F02 — [IMPORTANT] `event.poll` / `event.loop` silently no-op on non-VM `IInterpreterContext` — brief mandated fail-loud, P2 did not implement it
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** c01877d2
 **Files:** `Stash.Stdlib/BuiltIns/EventBuiltIns.cs:35-52`, `Stash.Core/Runtime/IInterpreterContext.cs:90` (default `DrainCallbacks` is a no-op)
 **Phase:** P2
 **Commit:** ddc777dc
