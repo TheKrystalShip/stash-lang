@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -128,6 +129,110 @@ public sealed class AntiForgeryConstructMetaTests
         ]);
 
         var response = await client.PostAsync("/logout", formContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="WebApplicationFactory{TEntryPoint}"/> with a fixture session seeded
+    /// so that requests to the authenticated Maintainer area reach the CSRF filter before auth
+    /// redirects them. Used for the A4 token-page CSRF assertions.
+    /// </summary>
+    private static WebApplicationFactory<HealthModel> CreateAuthenticatedFactory()
+    {
+        const string SessionId = "csrf-test-session-a4";
+        return new WebApplicationFactory<HealthModel>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSolutionRelativeContentRoot("Stash.Registry.Web");
+
+            builder.ConfigureTestServices(services =>
+            {
+                // Seed a session so the auth handler accepts the cookie and the CSRF filter
+                // (not the auth 302) fires first on the POST.
+                services.AddSingleton<ISessionStore>(sp =>
+                {
+                    var store = new InMemorySessionStore();
+                    store.SetAsync(
+                        SessionId,
+                        new BffSession
+                        {
+                            Username = "csrf-test-user",
+                            PublishTokenJwt = "csrf-test-jwt",
+                            PublishTokenId = "tok-csrf-001",
+                            ExpiresAt = DateTimeOffset.UtcNow.AddHours(8),
+                        },
+                        DateTimeOffset.UtcNow.AddHours(8))
+                        .GetAwaiter().GetResult();
+                    return store;
+                });
+
+                // Stub the authenticated client so CSRF rejection (400) is the only error path
+                // that fires before the auth client is resolved.
+                services.AddScoped<IAuthenticatedRegistryClient>(_ =>
+                    new StubAuthenticatedRegistryClient());
+            });
+        });
+    }
+
+    // Expose the session id for use in Cookie headers in the two token tests below.
+    private const string AuthFactorySessionId = "csrf-test-session-a4";
+
+    /// <summary>
+    /// <b>Load-bearing.</b> POST to <c>/settings/tokens</c> WITH a valid session cookie but
+    /// WITHOUT an anti-forgery token returns 400, proving the global CSRF filter is active
+    /// on the token-create route (A4).
+    /// </summary>
+    [Fact]
+    public async Task PostTokenCreate_WithoutAntiForgeryToken_Returns400()
+    {
+        using var factory = CreateAuthenticatedFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+
+        // Attach a valid session cookie so auth passes and CSRF fires.
+        client.DefaultRequestHeaders.Add("Cookie",
+            $"{SessionCookie.CookieName}={AuthFactorySessionId}");
+
+        var formContent = new FormUrlEncodedContent(
+        [
+            new("Ceiling", "Read"),
+            new("ExpiresIn", "30d"),
+            // Deliberately no __RequestVerificationToken.
+        ]);
+
+        var response = await client.PostAsync("/settings/tokens", formContent);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// <b>Load-bearing.</b> POST to <c>/settings/tokens/{id}/revoke</c> WITH a valid session
+    /// cookie but WITHOUT an anti-forgery token returns 400, proving the global CSRF filter is
+    /// active on the token-revoke route (A4).
+    /// </summary>
+    [Fact]
+    public async Task PostTokenRevoke_WithoutAntiForgeryToken_Returns400()
+    {
+        using var factory = CreateAuthenticatedFactory();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+
+        // Attach a valid session cookie so auth passes and CSRF fires.
+        client.DefaultRequestHeaders.Add("Cookie",
+            $"{SessionCookie.CookieName}={AuthFactorySessionId}");
+
+        var formContent = new FormUrlEncodedContent(
+        [
+            // Deliberately no __RequestVerificationToken.
+        ]);
+
+        var response = await client.PostAsync("/settings/tokens/tok-some-id/revoke", formContent);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

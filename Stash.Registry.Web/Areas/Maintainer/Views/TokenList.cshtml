@@ -1,0 +1,84 @@
+@using Stash.Registry.Contracts
+@using Stash.Registry.Web.Constants
+@using Stash.Registry.Web.Areas.Maintainer.Pages.Settings
+@model TokensModel
+
+@* Token list table.
+   The token VALUE is never rendered — it is not returned by GET /auth/tokens.
+   The session's own publish token gets a "current session" badge and no revoke button.
+   The revoke form POSTs to /settings/tokens/{id}/revoke. *@
+
+<section class="manage-section" aria-labelledby="token-list-heading">
+    <h2 id="token-list-heading" class="manage-section-title">@ViewLabels.TokenListSectionTitle</h2>
+
+    @if (Model.Tokens is null || Model.Tokens.Tokens.Count == 0)
+    {
+        <p class="tokens-empty">No API tokens found. Create one below.</p>
+    }
+    else
+    {
+        <div class="tokens-table-wrapper">
+            <table class="tokens-table">
+                <thead>
+                    <tr>
+                        <th scope="col">Token ID</th>
+                        <th scope="col">Scope</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Created</th>
+                        <th scope="col">Expires</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var token in Model.Tokens.Tokens)
+                    {
+                        bool isCurrentSession = string.Equals(
+                            token.TokenId,
+                            Model.CurrentSessionTokenId,
+                            System.StringComparison.Ordinal);
+
+                        <tr class="@(isCurrentSession ? "token-row token-row-current" : "token-row")">
+                            <td class="token-id">
+                                <code class="token-id-value">@token.TokenId</code>
+                                @if (isCurrentSession)
+                                {
+                                    <span class="badge @ViewLabels.CurrentSessionBadgeClass"
+                                          aria-label="@ViewLabels.CurrentSessionBadgeLabel">
+                                        @ViewLabels.CurrentSessionBadgeLabel
+                                    </span>
+                                }
+                            </td>
+                            <td class="token-scope">@token.Scope.ToWire()</td>
+                            <td class="token-description">@(token.Description ?? "—")</td>
+                            <td class="token-created">@token.CreatedAt.ToString("yyyy-MM-dd")</td>
+                            <td class="token-expires">@token.ExpiresAt.ToString("yyyy-MM-dd")</td>
+                            <td class="token-actions">
+                                @if (!isCurrentSession)
+                                {
+                                    <form method="post"
+                                          asp-page="/Settings/Tokens"
+                                          asp-page-handler="Revoke"
+                                          asp-route-id="@token.TokenId"
+                                          asp-area="Maintainer"
+                                          class="inline-form">
+                                        <button type="submit"
+                                                class="btn btn-sm btn-warning"
+                                                onclick="return confirm('Revoke this token? This cannot be undone.')">
+                                            Revoke
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    @* No revoke button for the current session token.
+                                       The only path to terminate the session is POST /logout. *@
+                                    <span class="token-action-none">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

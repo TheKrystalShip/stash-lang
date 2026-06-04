@@ -402,6 +402,85 @@ public sealed class FieldDisciplineMetaTests
             "Remove all Bucket-B placeholder chrome from the manage page and its partials.");
     }
 
+    /// <summary>
+    /// Token settings page (<c>GET /settings/tokens</c>) with populated tokens —
+    /// no Bucket-B label vocabulary appears in the rendered HTML.
+    /// </summary>
+    [Fact]
+    public async Task TokenSettingsPage_WithTokens_ContainsNoBucketBLabels()
+    {
+        // Arrange
+        const string FixtureSessionId = "test-session-tokens-field-discipline";
+        const string FixtureTokenId = "tok-field-discipline-001";
+
+        var authStub = new StubAuthenticatedRegistryClient
+        {
+            ListTokensResult = new Stash.Registry.Contracts.TokenListResponse
+            {
+                Tokens =
+                [
+                    new Stash.Registry.Contracts.TokenListItem
+                    {
+                        TokenId = FixtureTokenId,
+                        Scope = Stash.Registry.Contracts.TokenScopes.Read,
+                        Description = "Field discipline test token",
+                        CreatedAt = System.DateTime.UtcNow.AddDays(-1),
+                        ExpiresAt = System.DateTime.UtcNow.AddDays(29),
+                    },
+                ],
+            },
+        };
+
+        using var factory = new WebApplicationFactory<HealthModel>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSolutionRelativeContentRoot("Stash.Registry.Web");
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<ISessionStore>(sp =>
+                {
+                    var store = new InMemorySessionStore();
+                    store.SetAsync(
+                        FixtureSessionId,
+                        new BffSession
+                        {
+                            Username = "field-discipline-user",
+                            PublishTokenJwt = "field-discipline-tokens-jwt",
+                            PublishTokenId = "tok-session-fd",
+                            ExpiresAt = DateTimeOffset.UtcNow.AddHours(8),
+                        },
+                        DateTimeOffset.UtcNow.AddHours(8))
+                        .GetAwaiter().GetResult();
+                    return store;
+                });
+
+                services.AddScoped<IAuthenticatedRegistryClient>(_ => authStub);
+            });
+        });
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+        client.DefaultRequestHeaders.Add("Cookie",
+            $"{SessionCookie.CookieName}={FixtureSessionId}");
+
+        // Act
+        var response = await client.GetAsync("/settings/tokens");
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+
+        // ── Binding floor: at least one token row rendered (non-vacuous) ──────
+        Assert.Contains(FixtureTokenId, html, StringComparison.Ordinal);
+
+        // ── Forbidden label scan ──────────────────────────────────────────────
+        var violations = FindForbiddenTokens(html);
+        Assert.True(
+            violations.Count == 0,
+            $"Token settings page HTML contains forbidden Bucket-B label(s): [{string.Join(", ", violations)}]. " +
+            "Remove all Bucket-B placeholder chrome from the token settings page and its partials.");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WebApplicationFactory<HealthModel> CreateFactory(IRegistryClient stub)

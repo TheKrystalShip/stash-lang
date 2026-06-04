@@ -192,16 +192,24 @@ public sealed class SessionTokenLeakMetaTests
                 });
 
                 // Replace the authenticated registry client with a stub (no real registry needed).
+                // Set GetPackageResult so /manage/... returns 200 (not 404) — required so the
+                // OK || Redirect assertion below passes for the manage page walk.
                 services.AddScoped<IAuthenticatedRegistryClient>(_ =>
-                    new StubAuthenticatedRegistryClient());
+                    new StubAuthenticatedRegistryClient
+                    {
+                        GetPackageResult = StubRegistryClient.SamplePackageDetail(
+                            scope: "leak-org",
+                            pkgName: "leak-lib",
+                            description: "Leak meta-test package"),
+                    });
             });
         });
     }
 
     /// <summary>
-    /// <b>Load-bearing (2 of 2).</b> Walks <c>/dashboard</c> as an authenticated user
-    /// and asserts the sentinel JWT never appears in the response body or any
-    /// <c>Set-Cookie</c> header.
+    /// <b>Load-bearing (2 of 2).</b> Walks <c>/dashboard</c>, <c>/manage/@scope/name</c>, and
+    /// <c>/settings/tokens</c> as an authenticated user and asserts the sentinel JWT never
+    /// appears in the response body or any <c>Set-Cookie</c> header.
     /// </summary>
     [Fact]
     public async Task AuthedPages_NeverEmitPublishJwtInBodyOrCookie()
@@ -215,8 +223,13 @@ public sealed class SessionTokenLeakMetaTests
         client.DefaultRequestHeaders.Add("Cookie",
             $"{SessionCookie.CookieName}={FixtureSessionId}");
 
-        // Walk the authed pages available in A2.
-        var authedUrls = new[] { "/dashboard" };
+        // Walk all authed pages (A2 dashboard, A3 manage, A4 token settings).
+        var authedUrls = new[]
+        {
+            "/dashboard",
+            "/manage/@leak-org/leak-lib",
+            "/settings/tokens",
+        };
 
         foreach (var url in authedUrls)
         {

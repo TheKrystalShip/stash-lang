@@ -1,0 +1,65 @@
+@using Stash.Registry.Contracts
+@using Stash.Registry.Web.Constants
+@using Stash.Registry.Web.Areas.Maintainer.Pages.Settings
+@model TokensModel
+
+@* Token create form.
+   Ceiling values come from TokensModel.AllowedCeilings — [Read, Publish].
+   Admin is intentionally excluded.
+   Wire values are produced by TokenScopes.ToWire() — no inline "read"/"publish" literals. *@
+
+<section class="manage-section" aria-labelledby="create-token-heading">
+    <h2 id="create-token-heading" class="manage-section-title">@ViewLabels.CreateTokenSectionTitle</h2>
+
+    <form method="post"
+          asp-page="/Settings/Tokens"
+          asp-page-handler=""
+          asp-area="Maintainer"
+          class="create-token-form">
+
+        @* Ceiling dropdown — values from named AllowedCeilings array, labels from ViewLabels *@
+        <div class="form-field">
+            <label for="ceiling-select" class="form-label">
+                Scope Ceiling <span class="required" aria-hidden="true">*</span>
+            </label>
+            <select id="ceiling-select"
+                    name="Ceiling"
+                    class="select-control"
+                    aria-label="Token scope ceiling"
+                    required>
+                @foreach (var scope in TokensModel.AllowedCeilings)
+                {
+                    @* value = enum member name (e.g. "Read") — model binder produces TokenScopes value *@
+                    <option value="@scope.ToString()">@ViewLabels.ForTokenScope(scope)</option>
+                }
+            </select>
+        </div>
+
+        @* Description *@
+        <div class="form-field">
+            <label for="token-description" class="form-label">Description</label>
+            <input id="token-description"
+                   type="text"
+                   name="Description"
+                   class="input-full"
+                   placeholder="e.g. CI pipeline token"
+                   maxlength="200" />
+        </div>
+
+        @* Lifetime — free-form duration string exempt from no-magic-strings (not a bounded set) *@
+        <div class="form-field">
+            <label for="token-expires" class="form-label">
+                Lifetime <span class="required" aria-hidden="true">*</span>
+            </label>
+            <input id="token-expires"
+                   type="text"
+                   name="ExpiresIn"
+                   class="input-full"
+                   placeholder="e.g. 30d, 12h, 90m"
+                   required />
+            <p class="form-hint">Supports days (d), hours (h), or minutes (m). Maximum 365d.</p>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create Token</button>
+    </form>
+</section>
