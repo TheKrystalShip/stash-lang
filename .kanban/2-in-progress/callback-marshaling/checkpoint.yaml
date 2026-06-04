@@ -1,7 +1,7 @@
 schema_version: 1
 feature: callback-marshaling
 current: null
-updated: "2026-06-04T11:30:06Z"
+updated: "2026-06-04T11:58:19Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "P2 complete: event namespace (Poll+Loop) routing through DrainCallbacks; reentrancy guard inherited from P1; loud-fail deviation filed; CompletionSurfaceSnapshot deferred to P4"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 3e1d14e2f43e2f91fe0d073e4b43eb46d05e2669
+    verified: true
+    started: "2026-06-04T11:34:02Z"
+    completed: "2026-06-04T11:58:19Z"
+    attempts: 1
+    notes: "Spec rewritten: marshaling model, drain points, reentrancy, explicit-park lifetime, documented races, signal caveat; event namespace section added; reference regenerated with event namespace; example staged"
   P4:
     status: pending
     commit: null
