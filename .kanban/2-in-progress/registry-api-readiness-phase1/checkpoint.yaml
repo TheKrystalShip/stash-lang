@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T10:50:53Z"
+updated: "2026-06-04T11:06:33Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "GetReadme action on PackagesController: typed JSON ReadmeResponse, PDP-gated, ETag/Last-Modified/304 via ConditionalResponse helper; null/empty README → 404; OpenAPI snapshot rebaselined"
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 0a6525bc2c425bd66613f60a1f33ca32cef674ee
+    verified: true
+    started: "2026-06-04T10:51:54Z"
+    completed: "2026-06-04T11:06:33Z"
+    attempts: 1
+    notes: "Added PackageSortOrder enum, keyword/license/deprecated/owner filters, license+ownerCount to PackageSummaryResponse, extended SearchPackagesAsync with single-query N+1-free ownerCount; rebaselined OpenAPI snapshot; 48 targeted tests green"
   P6:
     status: pending
     commit: null
