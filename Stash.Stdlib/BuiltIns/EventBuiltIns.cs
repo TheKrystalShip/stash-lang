@@ -34,7 +34,11 @@ public static partial class EventBuiltIns
     /// </remarks>
     [StashFn]
     public static void Poll(IInterpreterContext ctx)
-        => ctx.DrainCallbacks(WaitMode.Poll);
+    {
+        if (!ctx.SupportsCallbackDrain)
+            throw new RuntimeError("'event.poll' requires a VM context with an event-loop pump; this host does not provide one.");
+        ctx.DrainCallbacks(WaitMode.Poll);
+    }
 
     /// <summary>
     /// Blocks and drains queued callbacks indefinitely until the script's
@@ -49,5 +53,9 @@ public static partial class EventBuiltIns
     /// <exception cref="CancellationError">when the script's cancellation token is triggered</exception>
     [StashFn]
     public static void Loop(IInterpreterContext ctx)
-        => ctx.DrainCallbacks(WaitMode.Forever);
+    {
+        if (!ctx.SupportsCallbackDrain)
+            throw new RuntimeError("'event.loop' requires a VM context with an event-loop pump; this host does not provide one.");
+        ctx.DrainCallbacks(WaitMode.Forever);
+    }
 }

@@ -1,10 +1,14 @@
+using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using Stash.Bytecode;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
+using Stash.Runtime.Types;
 using Stash.Stdlib;
 using Stash.Stdlib.BuiltIns;
 
@@ -197,6 +201,87 @@ public class EventBuiltInsTests
             // The globals dict persists even after the VM throws.
             Assert.True(vm.Globals.TryGetValue("x", out var xVal));
             Assert.Equal(42L, xVal.ToObject());
+        }
+    }
+
+    // ── Fail-loud guard on non-VM contexts ───────────────────────────────────
+
+    /// <summary>
+    /// F02 guard: event.poll and event.loop must throw RuntimeError when invoked on a
+    /// context that does not own a callback queue (SupportsCallbackDrain == false).
+    /// </summary>
+    public class EventPollLoop_NonVmContext_ThrowsRuntimeError_Tests
+    {
+        /// <summary>
+        /// Minimal stub that implements IInterpreterContext but does NOT override
+        /// SupportsCallbackDrain, so it returns the default false.
+        /// Only the members required by the C# compiler (no defaults) are implemented;
+        /// everything else retains the interface's default implementation.
+        /// </summary>
+        private sealed class NoQueueContext : IInterpreterContext
+        {
+            // IBuiltInContext / IExecutionContext (Output/ErrorOutput/Input have set accessors in IExecutionContext)
+            public TextWriter Output { get; set; } = TextWriter.Null;
+            public TextWriter ErrorOutput { get; set; } = TextWriter.Null;
+            public TextReader Input { get; set; } = TextReader.Null;
+            public CancellationToken CancellationToken => CancellationToken.None;
+            public StashValue InvokeCallbackDirect(IStashCallable callable, System.ReadOnlySpan<StashValue> args) =>
+                throw new System.NotSupportedException();
+
+            // IExecutionContext
+            public object? LastError { get; set; }
+            public bool EmbeddedMode => false;
+            public string? CurrentFile => null;
+            public SourceSpan? CurrentSpan => null;
+            public string[]? ScriptArgs => null;
+            public object? Debugger => null;
+            public string ExpandTilde(string path) => path;
+
+            // IProcessContext
+            public List<(StashInstance Handle, System.Diagnostics.Process Process)> TrackedProcesses { get; } = new();
+            public Dictionary<StashInstance, StashInstance> ProcessWaitCache { get; } = new();
+            public Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks { get; } = new();
+            public void CleanupTrackedProcesses() { }
+            public List<string> DirStack { get; } = new();
+
+            // ITestContext
+            public ITestHarness? TestHarness { get; set; }
+            public string? CurrentDescribe { get; set; }
+            public string[]? TestFilter { get; set; }
+            public bool DiscoveryMode { get; set; }
+            public bool HasExclusiveTests { get; set; }
+            public List<List<IStashCallable>> BeforeEachHooks { get; } = new();
+            public List<List<IStashCallable>> AfterEachHooks { get; } = new();
+            public List<List<IStashCallable>> AfterAllHooks { get; } = new();
+
+            // IFileWatchContext
+            public List<(StashInstance Handle, FileSystemWatcher Watcher)> TrackedWatchers { get; } = new();
+            public void CleanupTrackedWatchers() { }
+
+            // ILoggerContext
+            public LoggerState LoggerState { get; } = new();
+
+            // IInterpreterContext
+            public IInterpreterContext Fork(CancellationToken cancellationToken = default) =>
+                throw new System.NotSupportedException();
+        }
+
+        [Fact]
+        public void EventPoll_NonVmContext_ThrowsRuntimeError()
+        {
+            var stub = new NoQueueContext();
+            var ex = Assert.Throws<RuntimeError>(() => EventBuiltIns.Poll(stub));
+            Assert.Contains("event.poll", ex.Message);
+            Assert.Contains("event-loop pump", ex.Message);
+        }
+
+        [Fact]
+        public void EventLoop_NonVmContext_ThrowsRuntimeError()
+        {
+            var stub = new NoQueueContext();
+            var ex = Assert.Throws<RuntimeError>(() => EventBuiltIns.Loop(stub));
+            Assert.Contains("event.loop", ex.Message);
+            Assert.Contains("event-loop pump", ex.Message);
         }
     }
 

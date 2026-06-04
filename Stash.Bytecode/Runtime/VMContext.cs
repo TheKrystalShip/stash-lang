@@ -468,6 +468,9 @@ internal sealed class VMContext : IInterpreterContext
         _queueSignal.Release(); // wake any parked drain loop
     }
 
+    /// <inheritdoc/>
+    public bool SupportsCallbackDrain => true;
+
     /// <summary>
     /// Drain queued callbacks according to <paramref name="mode"/>.  This is the ONLY method
     /// that pops the queue and invokes callbacks — the single chokepoint.
