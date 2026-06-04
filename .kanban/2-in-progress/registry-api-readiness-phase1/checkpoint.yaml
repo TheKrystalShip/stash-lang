@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T10:17:26Z"
+updated: "2026-06-04T10:34:46Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "PackagesControllerRegistryAuthorizeRequiredTests: 4-assertion reflection meta-test with [PublicEndpoint]-no-exemption predicate, count floor >= 13, fail-path fixture, and dual-attribute fixture"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 3f10f7de2b5bf23532ddc1906d85312954e0054e
+    verified: true
+    started: "2026-06-04T10:22:57Z"
+    completed: "2026-06-04T10:34:46Z"
+    attempts: 1
+    notes: "GetVersions action on PackagesController: [PublicEndpoint]+[RegistryAuthorize(ReadPackageMetadata)], PagedResponse<VersionDetailResponse>, ETag/Last-Modified/Cache-Control, 304 conditional, visibility-enforced (anon/no-role → 404, reader+ → 200); ConditionalResponse helper in Stash.Registry/Http/"
   P4:
     status: pending
     commit: null
