@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T11:25:30Z"
+updated: "2026-06-04T11:39:23Z"
 phases:
   P1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: "CorsConfig added with Enabled/AllowedOrigins/AllowedMethods/AllowedHeaders/AllowCredentials; wired into RegistryConfig; appsettings.json Cors section off-by-default; 4 CorsMiddlewareTests prove both directions (disabled=inert, enabled=active); 11 CorsConfigTests prove parsing/defaults/round-trip; all 22 phase tests green"
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: a614a21fd417f74d90ac332bda7213312cbf81f1
+    verified: true
+    started: "2026-06-04T11:26:48Z"
+    completed: "2026-06-04T11:39:23Z"
+    attempts: 1
+    notes: "DiscoveryResponse in CommonContracts; PagingLimits.MaxPageSize const driving SearchQuery/VersionsQuery [Range] and discovery limits; MapGet Discovery_GetRegistry with JTI bypass for /.well-known; 8 DiscoveryEndpointTests pass; OpenAPI snapshot rebaselined"
   P8:
     status: pending
     commit: null
