@@ -197,6 +197,27 @@ public class HostMarshallerTests
         Assert.Equal("hello", result.GetProperty("b").GetString());
     }
 
+    // ── byte[] marshalling through JSON bridge ────────────────────────────
+
+    [Fact]
+    public async Task JsonStashBridge_ByteArrayInDict_RoundTripsAsBase64()
+    {
+        // byte[] arg wrapped in a dict → JsonElement return.
+        // The JSON bridge must base64-encode the byte[] rather than silently emitting null.
+        await using var host = new StashHost();
+        var s = await host.CompileAsync("fn f(b) { return { \"blob\": b }; }");
+        await host.RunAsync(s);
+
+        byte[] payload = new byte[] { 0x01, 0x02, 0x03, 0xFF };
+        // Must wrap in object?[] to prevent ToStashArgs from spreading byte[] as per-byte args.
+        JsonElement result = await host.CallAsync<JsonElement>("f", new object?[] { payload });
+
+        Assert.Equal(JsonValueKind.Object, result.ValueKind);
+        JsonElement blobProp = result.GetProperty("blob");
+        Assert.Equal(JsonValueKind.String, blobProp.ValueKind);
+        Assert.Equal(Convert.ToBase64String(payload), blobProp.GetString());
+    }
+
     // ── Unsupported types → exceptions ────────────────────────────────────
 
     [Fact]

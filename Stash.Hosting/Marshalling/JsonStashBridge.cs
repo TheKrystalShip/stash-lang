@@ -152,6 +152,17 @@ internal static class JsonStashBridge
                 writer.WriteEndObject();
                 break;
 
+            case StashValueTag.Obj when value.AsObj is byte[] bytes:
+                writer.WriteBase64StringValue(bytes);
+                break;
+
+            case StashValueTag.Obj:
+                throw new InvalidOperationException(
+                    $"JsonStashBridge cannot serialize Stash Obj value of runtime type " +
+                    $"'{value.AsObj?.GetType().FullName ?? "null"}' to JSON; " +
+                    $"supported Obj types are string, array (List<StashValue>), " +
+                    $"StashDictionary, and byte[].");
+
             default:
                 writer.WriteNullValue();
                 break;
