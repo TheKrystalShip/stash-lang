@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T16:13:19Z"
+updated: "2026-06-04T17:23:09Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "Home+Search pages with filter/sort/pagination; SortLabels const class; PackageCard partial (Bucket-A only); StubRegistryClient fixture; FieldDisciplineMetaTests (word-boundary scan + fail-path fixture); HomePageTests + SearchPageTests covering 200/empty/502; plan corrections: _ViewImports added usings, WAF uses HealthModel not Program to avoid global-namespace ambiguity with Stash.Cli"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 8383de24ae2f29fe01b8a04c0fa6cefe2ef3cb2e
+    verified: true
+    started: "2026-06-04T16:21:08Z"
+    completed: "2026-06-04T17:23:09Z"
+    attempts: 1
+    notes: "Package detail page at /packages/@{scope}/{name}; sidebar (description, latest, updatedAt, license); versions table; dependencies section; install widget + copy-install.js; deprecation banner; static README placeholder; PackagePageTests (9 tests); FieldDisciplineMetaTests extended to package page; ownerCount omitted (not in PackageDetailResponse — only in PackageSummaryResponse)"
   P5:
     status: pending
     commit: null
