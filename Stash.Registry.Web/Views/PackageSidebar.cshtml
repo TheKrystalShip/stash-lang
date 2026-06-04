@@ -1,0 +1,73 @@
+@using Stash.Registry.Contracts
+@model PackageDetailResponse
+
+<div class="sidebar-widget">
+    <h3 class="sidebar-widget-title">About</h3>
+    <dl class="sidebar-meta">
+
+        @if (!string.IsNullOrWhiteSpace(Model.Description))
+        {
+            <div class="sidebar-meta-item">
+                <dt class="sidebar-meta-label">Description</dt>
+                <dd class="sidebar-meta-value">@Model.Description</dd>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.Latest))
+        {
+            var latestDisplay = "v" + Model.Latest;
+            <div class="sidebar-meta-item">
+                <dt class="sidebar-meta-label">Latest</dt>
+                <dd class="sidebar-meta-value sidebar-version">@latestDisplay</dd>
+            </div>
+        }
+
+        <div class="sidebar-meta-item">
+            <dt class="sidebar-meta-label">Updated</dt>
+            <dd class="sidebar-meta-value">@Model.UpdatedAt</dd>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.License))
+        {
+            <div class="sidebar-meta-item">
+                <dt class="sidebar-meta-label">License</dt>
+                <dd class="sidebar-meta-value">@Model.License</dd>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Model.Repository))
+        {
+            var safeRepo = Stash.Registry.Web.Rendering.SafeUrl.AllowExternal(Model.Repository);
+            if (safeRepo is not null)
+            {
+                <div class="sidebar-meta-item">
+                    <dt class="sidebar-meta-label">Repository</dt>
+                    <dd class="sidebar-meta-value">
+                        <a href="@safeRepo" target="_blank" rel="noopener noreferrer">@Model.Repository</a>
+                    </dd>
+                </div>
+            }
+            else
+            {
+                <div class="sidebar-meta-item">
+                    <dt class="sidebar-meta-label">Repository</dt>
+                    <dd class="sidebar-meta-value">@Model.Repository</dd>
+                </div>
+            }
+        }
+
+        @if (Model.Keywords.Count > 0)
+        {
+            <div class="sidebar-meta-item">
+                <dt class="sidebar-meta-label">Keywords</dt>
+                <dd class="sidebar-meta-value sidebar-keywords">
+                    @foreach (var keyword in Model.Keywords)
+                    {
+                        <span class="keyword-tag">@keyword</span>
+                    }
+                </dd>
+            </div>
+        }
+
+    </dl>
+</div>

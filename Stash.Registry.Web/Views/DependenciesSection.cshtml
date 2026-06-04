@@ -1,0 +1,36 @@
+@using Stash.Registry.Contracts
+@using System.Linq
+@model PackageDetailResponse
+
+@{
+    Dictionary<string, object> deps;
+    if (Model.Latest is not null && Model.Versions.TryGetValue(Model.Latest, out var latestVersion))
+    {
+        deps = new Dictionary<string, object>(latestVersion.Dependencies);
+    }
+    else
+    {
+        deps = new Dictionary<string, object>();
+    }
+}
+
+<section class="dependencies-section">
+    <h2 class="section-title">Dependencies</h2>
+
+    @if (!deps.Any())
+    {
+        <p class="empty-state">No dependencies.</p>
+    }
+    else
+    {
+        <ul class="dependencies-list">
+            @foreach (var dep in deps)
+            {
+                <li class="dependency-item">
+                    <span class="dependency-name">@dep.Key</span>
+                    <span class="dependency-version">@dep.Value</span>
+                </li>
+            }
+        </ul>
+    }
+</section>

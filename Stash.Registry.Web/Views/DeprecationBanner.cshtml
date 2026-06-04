@@ -1,0 +1,29 @@
+@using Stash.Registry.Contracts
+@model PackageDetailResponse
+
+@{
+    var message = string.IsNullOrWhiteSpace(Model.DeprecationMessage)
+        ? "This package has been deprecated."
+        : Model.DeprecationMessage;
+}
+
+<div class="deprecation-banner" role="alert">
+    <strong class="deprecation-label">Deprecated</strong>
+    <span class="deprecation-message">@message</span>
+    @if (!string.IsNullOrWhiteSpace(Model.DeprecationAlternative))
+    {
+        var altParts = Model.DeprecationAlternative.Split('/', 2);
+        string altHref;
+        if (altParts.Length == 2)
+        {
+            altHref = $"/packages/@{altParts[0]}/{altParts[1]}";
+        }
+        else
+        {
+            altHref = $"/search?q={Uri.EscapeDataString(Model.DeprecationAlternative)}";
+        }
+        <span class="deprecation-alt">
+            Consider using <a href="@altHref" class="deprecation-alt-link">@Model.DeprecationAlternative</a> instead.
+        </span>
+    }
+</div>

@@ -1,0 +1,51 @@
+@using Stash.Registry.Contracts
+@using System.Linq
+@model PackageDetailResponse
+
+@{
+    var sortedVersions = Model.Versions.Values
+        .OrderByDescending(v => v.PublishedAt)
+        .ToList();
+}
+
+<section class="versions-section">
+    <h2 class="section-title">Versions</h2>
+
+    @if (!sortedVersions.Any())
+    {
+        <p class="empty-state">No published versions.</p>
+    }
+    else
+    {
+        <table class="versions-table">
+            <thead>
+                <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Published</th>
+                    <th scope="col">Published by</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var version in sortedVersions)
+                {
+                    var versionDisplay = "v" + version.Version;
+                    <tr class="@(version.Deprecated ? "version-row version-row-deprecated" : "version-row")">
+                        <td class="version-cell-version">
+                            <span class="version-string">@versionDisplay</span>
+                            @if (version.Version == Model.Latest)
+                            {
+                                <span class="badge badge-latest">latest</span>
+                            }
+                            @if (version.Deprecated)
+                            {
+                                <span class="badge badge-deprecated">deprecated</span>
+                            }
+                        </td>
+                        <td class="version-cell-published">@version.PublishedAt</td>
+                        <td class="version-cell-publisher">@version.PublishedBy</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>

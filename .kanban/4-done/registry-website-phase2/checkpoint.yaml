@@ -1,0 +1,67 @@
+schema_version: 1
+feature: registry-website-phase2
+current: null
+updated: "2026-06-04T18:58:21Z"
+phases:
+  P1:
+    status: done
+    commit: 1d13ceb9edfc52ee3b7ffbdab5691122f9fd2629
+    verified: true
+    started: "2026-06-04T15:16:47Z"
+    completed: "2026-06-04T15:39:10Z"
+    attempts: 1
+    notes: "Scaffold Stash.Registry.Web (net10.0 Razor Pages, Contracts-only ref); /health page; WebProjectIsolationMetaTests green (6 tests: reflection + csproj-parse, each with clean/stray fail-path fixtures); typeof-derived assembly names prevent vacuous pass"
+  P2:
+    status: done
+    commit: c3be4c0fd952dbc308dba5479e727983940f81ed
+    verified: true
+    started: "2026-06-04T15:42:03Z"
+    completed: "2026-06-04T15:56:49Z"
+    attempts: 1
+    notes: "Layout + brand: _Layout.cshtml with stash-icon + global search form (GET /search); site.css with Catppuccin Mocha/Latte palette from Playground; _ViewStart at Pages/ (plan stale: Shared/ path incorrect for Razor Pages discovery); IRegistryClient expanded to 6 methods; HttpRegistryClient via IHttpClientFactory, 404->null, 5xx->RegistryClientException; 18 HttpRegistryClientTests green (200/404/500 paths, no Auth header)"
+  P3:
+    status: done
+    commit: f06ffda75604d9465d042034d35b3808ed6428f4
+    verified: true
+    started: "2026-06-04T15:57:45Z"
+    completed: "2026-06-04T16:13:19Z"
+    attempts: 1
+    notes: "Home+Search pages with filter/sort/pagination; SortLabels const class; PackageCard partial (Bucket-A only); StubRegistryClient fixture; FieldDisciplineMetaTests (word-boundary scan + fail-path fixture); HomePageTests + SearchPageTests covering 200/empty/502; plan corrections: _ViewImports added usings, WAF uses HealthModel not Program to avoid global-namespace ambiguity with Stash.Cli"
+  P4:
+    status: done
+    commit: 8383de24ae2f29fe01b8a04c0fa6cefe2ef3cb2e
+    verified: true
+    started: "2026-06-04T16:21:08Z"
+    completed: "2026-06-04T17:23:09Z"
+    attempts: 1
+    notes: "Package detail page at /packages/@{scope}/{name}; sidebar (description, latest, updatedAt, license); versions table; dependencies section; install widget + copy-install.js; deprecation banner; static README placeholder; PackagePageTests (9 tests); FieldDisciplineMetaTests extended to package page; ownerCount omitted (not in PackageDetailResponse — only in PackageSummaryResponse)"
+  P5:
+    status: done
+    commit: 6f40b2ecc8d1d12d1c15499944e1877d88dc750d
+    verified: true
+    started: "2026-06-04T17:27:21Z"
+    completed: "2026-06-04T17:48:46Z"
+    attempts: 1
+    notes: "IReadmeRenderer+ReadmeRenderer (Markdig DisableHtml+HtmlSanitizer Ganss.Xss); @Html.Raw(Model.ReadmeHtml) sole chokepoint; ReadmeChokepointMetaTests scans production .cshtml files; teeth drive ScanFileForViolations with rogue/safe/string-prop/HtmlString-prop cases; ReadmeRendererTests hostile-input+benign (38 tests green)"
+  P6:
+    status: done
+    commit: bfc5009a2f0411b3e5085c10746ee42321af7aac
+    verified: true
+    started: "2026-06-04T17:51:07Z"
+    completed: "2026-06-04T17:59:26Z"
+    attempts: 1
+    notes: "Version detail page at /packages/@{scope}/{name}/v/{version}; VersionMetadataTable partial (version/publishedAt/publishedBy/stashVersion/integrity/dependencies); inline deprecation banner for VersionDetailResponse (no DeprecationAlternative field); VersionPageTests (6 tests: 200 full-metadata, no-deps empty-state, deprecated, non-deprecated, 404, 502); FieldDisciplineMetaTests extended with version page walk"
+  P7:
+    status: done
+    commit: 36229aafbcc41628c7534a77b7339d9c9f96c16e
+    verified: true
+    started: "2026-06-04T18:01:18Z"
+    completed: "2026-06-04T18:06:46Z"
+    attempts: 1
+    notes: "Stash.Registry.Web/README.md: what-it-is, dependency constraint, build/run/configure, 4 routes, no-CORS note, brand/CSS origin; docs/Registry—Package Registry.md: Clients section + companion-doc link; 13425 tests passed, 6 skipped, 0 failed"
+review:
+  status: resolved
+  started: "2026-06-04T18:22:46Z"
+  resolved: "2026-06-04T18:58:21Z"
+  findings_open: 0
+  findings_fixed: 0

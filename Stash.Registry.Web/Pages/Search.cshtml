@@ -1,0 +1,126 @@
+@page
+@using Stash.Registry.Contracts
+@using Stash.Registry.Web.Constants
+@model SearchModel
+@{
+    ViewData["Title"] = string.IsNullOrWhiteSpace(Model.Q) ? "Search" : $"Search: {Model.Q}";
+    ViewData["SearchQuery"] = Model.Q;
+}
+
+<section class="search-page">
+
+    <form class="search-filters" action="/search" method="get">
+        <div class="filter-row">
+            <div class="filter-group">
+                <label for="filter-keyword">Keyword</label>
+                <input type="text" id="filter-keyword" name="keyword" value="@Model.Keyword"
+                       placeholder="e.g. crypto" />
+            </div>
+            <div class="filter-group">
+                <label for="filter-license">License</label>
+                <input type="text" id="filter-license" name="license" value="@Model.License"
+                       placeholder="e.g. MIT" />
+            </div>
+            <div class="filter-group">
+                <label for="filter-owner">Owner</label>
+                <input type="text" id="filter-owner" name="owner" value="@Model.Owner"
+                       placeholder="e.g. my-org" />
+            </div>
+            <div class="filter-group filter-group-checkbox">
+                <label>
+                    <input type="checkbox" name="deprecated" value="true"
+                           @(Model.Deprecated == true ? "checked" : "") />
+                    Show deprecated only
+                </label>
+            </div>
+            <div class="filter-group">
+                <label for="filter-sort">Sort by</label>
+                <select id="filter-sort" name="sort">
+                    @foreach (var sortVal in Enum.GetValues<PackageSortOrder>())
+                    {
+                        if (Model.Sort == sortVal)
+                        {
+                            <option value="@sortVal.ToString()" selected>@SortLabels.For(sortVal)</option>
+                        }
+                        else
+                        {
+                            <option value="@sortVal.ToString()">@SortLabels.For(sortVal)</option>
+                        }
+                    }
+                </select>
+            </div>
+            @if (!string.IsNullOrEmpty(Model.Q))
+            {
+                <input type="hidden" name="q" value="@Model.Q" />
+            }
+            <button type="submit" class="btn-filter-apply">Apply</button>
+        </div>
+    </form>
+
+    @if (Model.ValidationError is not null)
+    {
+        <div class="alert alert-error" role="alert">
+            @Model.ValidationError
+        </div>
+    }
+    else if (Model.RegistryError is not null)
+    {
+        <div class="alert alert-error" role="alert">
+            <strong>Registry unavailable.</strong> @Model.RegistryError
+        </div>
+    }
+    else if (Model.Results is not null)
+    {
+        @if (!string.IsNullOrWhiteSpace(Model.Q))
+        {
+            <p class="search-summary">
+                Showing @Model.Results.TotalCount result@(Model.Results.TotalCount == 1 ? "" : "s")
+                for <strong>@Model.Q</strong>
+            </p>
+        }
+
+        @if (!Model.Results.Items.Any())
+        {
+            <p class="empty-state">No packages found matching your search.</p>
+        }
+        else
+        {
+            <div class="package-grid">
+                @foreach (var pkg in Model.Results.Items)
+                {
+                    <partial name="~/Views/PackageCard.cshtml" model="pkg" />
+                }
+            </div>
+
+            @if (Model.Results.TotalPages > 1)
+            {
+                <nav class="pagination" aria-label="Search result pages">
+                    @if (Model.Page > 1)
+                    {
+                        <a href="@Model.BuildPageUrl(Model.Page - 1)" class="pagination-prev"
+                           aria-label="Previous page">&laquo; Previous</a>
+                    }
+
+                    @for (var p = 1; p <= Model.Results.TotalPages; p++)
+                    {
+                        if (p == Model.Page)
+                        {
+                            <span class="pagination-current" aria-current="page">@p</span>
+                        }
+                        else
+                        {
+                            <a href="@Model.BuildPageUrl(p)" class="pagination-link">@p</a>
+                        }
+                    }
+
+                    @if (Model.Page < Model.Results.TotalPages)
+                    {
+                        <a href="@Model.BuildPageUrl(Model.Page + 1)" class="pagination-next"
+                           aria-label="Next page">Next &raquo;</a>
+                    }
+                </nav>
+            }
+        }
+    }
+
+</section>

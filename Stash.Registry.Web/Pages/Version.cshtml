@@ -1,0 +1,73 @@
+@page "/packages/@{scope}/{name}/v/{version}"
+@model VersionModel
+@{
+    ViewData["Title"] = Model.VersionDetail is not null
+        ? $"{Model.FullDisplayName}@{Model.Version}"
+        : (Model.VersionNotFound ? "Version Not Found" : "Registry Error");
+}
+
+@if (Model.VersionNotFound)
+{
+    <section class="error-page">
+        <h1 class="error-title">Version Not Found</h1>
+        <p class="error-message">
+            The version <strong>@Model.Version</strong> of package <strong>@Model.FullDisplayName</strong>
+            does not exist or is not publicly available.
+        </p>
+        <a href="@Model.PackageDetailUrl" class="btn-primary">View package</a>
+    </section>
+}
+else if (Model.ValidationError is not null)
+{
+    <section class="error-page">
+        <div class="alert alert-error" role="alert">
+            @Model.ValidationError
+        </div>
+        <a href="/" class="btn-primary">Return home</a>
+    </section>
+}
+else if (Model.RegistryError is not null)
+{
+    <section class="error-page">
+        <h1 class="error-title">Registry Unavailable</h1>
+        <div class="alert alert-error" role="alert">
+            <strong>502 Bad Gateway.</strong> @Model.RegistryError
+        </div>
+        <a href="/" class="btn-primary">Return home</a>
+    </section>
+}
+else if (Model.VersionDetail is not null)
+{
+    @* ── Deprecation banner — only when this version is deprecated *@
+    @if (Model.VersionDetail.Deprecated)
+    {
+        <div class="deprecation-banner" role="alert">
+            <strong class="deprecation-label">Deprecated</strong>
+            <span class="deprecation-message">
+                @(string.IsNullOrWhiteSpace(Model.VersionDetail.DeprecationMessage)
+                    ? "This version has been deprecated."
+                    : Model.VersionDetail.DeprecationMessage)
+            </span>
+        </div>
+    }
+
+    <div class="version-detail-layout">
+
+        @* ── Breadcrumb ──────────────────────────────────────────────────── *@
+        <nav class="breadcrumb" aria-label="breadcrumb">
+            <a href="@Model.PackageDetailUrl" class="breadcrumb-link">@Model.FullDisplayName</a>
+            <span class="breadcrumb-separator" aria-hidden="true">/</span>
+            <span class="breadcrumb-current">v@Model.Version</span>
+        </nav>
+
+        @* ── Page heading ────────────────────────────────────────────────── *@
+        <h1 class="version-detail-heading">
+            <a href="@Model.PackageDetailUrl" class="version-detail-pkg-link">@Model.FullDisplayName</a>
+            <span class="version-detail-at" aria-hidden="true">@@</span>@Model.Version
+        </h1>
+
+        @* ── Metadata table + dependencies ──────────────────────────────── *@
+        <partial name="~/Views/VersionMetadataTable.cshtml" model="Model.VersionDetail" />
+
+    </div>
+}

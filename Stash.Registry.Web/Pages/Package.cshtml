@@ -1,0 +1,96 @@
+@page "/packages/@{scope}/{name}"
+@model PackageModel
+@{
+    ViewData["Title"] = Model.Package is not null
+        ? Model.FullDisplayName
+        : (Model.PackageNotFound ? "Package Not Found" : "Registry Error");
+}
+
+@if (Model.PackageNotFound)
+{
+    <section class="error-page">
+        <h1 class="error-title">Package Not Found</h1>
+        <p class="error-message">
+            The package <strong>@Model.FullDisplayName</strong> does not exist or is not publicly available.
+        </p>
+        <a href="/search" class="btn-primary">Browse packages</a>
+    </section>
+}
+else if (Model.ValidationError is not null)
+{
+    <section class="error-page">
+        <div class="alert alert-error" role="alert">
+            @Model.ValidationError
+        </div>
+        <a href="/search" class="btn-primary">Browse packages</a>
+    </section>
+}
+else if (Model.RegistryError is not null)
+{
+    <section class="error-page">
+        <h1 class="error-title">Registry Unavailable</h1>
+        <div class="alert alert-error" role="alert">
+            <strong>502 Bad Gateway.</strong> @Model.RegistryError
+        </div>
+        <a href="/" class="btn-primary">Return home</a>
+    </section>
+}
+else if (Model.Package is not null)
+{
+    @* Deprecation banner — only when deprecated *@
+    @if (Model.Package.Deprecated)
+    {
+        <partial name="~/Views/DeprecationBanner.cshtml" model="Model.Package" />
+    }
+
+    <div class="package-detail-layout">
+
+        @* ── Main content column ─────────────────────────────────── *@
+        <section class="package-detail-main">
+
+            <h1 class="package-detail-name">@Model.FullDisplayName</h1>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Package.Description))
+            {
+                <p class="package-detail-description">@Model.Package.Description</p>
+            }
+
+            @* ── Install widget ─────────────────────────────────── *@
+            <partial name="~/Views/InstallWidget.cshtml" model="Model.InstallCommand" />
+
+            @* ── README column — sole @Html.Raw site in the project (chokepoint) *@
+            <section class="readme-section">
+                <h2 class="section-title">README</h2>
+                @if (Model.ReadmeHtml is not null)
+                {
+                    <div class="readme-content">
+                        @Html.Raw(Model.ReadmeHtml)
+                    </div>
+                }
+                else
+                {
+                    <div class="readme-empty-state">
+                        <p>This package has no README.</p>
+                    </div>
+                }
+            </section>
+
+            @* ── Dependencies ─────────────────────────────────── *@
+            <partial name="~/Views/DependenciesSection.cshtml" model="Model.Package" />
+
+            @* ── Versions table ────────────────────────────────── *@
+            <partial name="~/Views/VersionsSection.cshtml" model="Model.Package" />
+
+        </section>
+
+        @* ── Sidebar column ─────────────────────────────────────── *@
+        <aside class="package-detail-sidebar">
+            <partial name="~/Views/PackageSidebar.cshtml" model="Model.Package" />
+        </aside>
+
+    </div>
+}
+
+@section Scripts {
+    <script src="~/js/copy-install.js"></script>
+}

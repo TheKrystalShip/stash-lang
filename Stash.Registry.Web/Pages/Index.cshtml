@@ -1,0 +1,37 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home";
+}
+
+<section class="hero">
+    <h1 class="hero-title">Stash Package Registry</h1>
+    <p class="hero-subtitle">Discover and share Stash language packages.</p>
+</section>
+
+@if (Model.RegistryError is not null)
+{
+    <div class="alert alert-error" role="alert">
+        <strong>Registry unavailable.</strong> @Model.RegistryError
+    </div>
+}
+else
+{
+    <section class="recently-updated">
+        <h2 class="section-title">Recently Updated</h2>
+
+        @if (!Model.RecentPackages.Any())
+        {
+            <p class="empty-state">No packages found.</p>
+        }
+        else
+        {
+            <div class="package-grid">
+                @foreach (var pkg in Model.RecentPackages)
+                {
+                    <partial name="~/Views/PackageCard.cshtml" model="pkg" />
+                }
+            </div>
+        }
+    </section>
+}

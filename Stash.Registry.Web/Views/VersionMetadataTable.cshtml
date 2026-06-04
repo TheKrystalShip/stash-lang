@@ -1,0 +1,52 @@
+@using Stash.Registry.Contracts
+@using System.Linq
+@model VersionDetailResponse
+
+<table class="version-metadata-table">
+    <tbody>
+        <tr class="version-metadata-row">
+            <th class="version-metadata-label" scope="row">Version</th>
+            <td class="version-metadata-value">@Model.Version</td>
+        </tr>
+        <tr class="version-metadata-row">
+            <th class="version-metadata-label" scope="row">Published</th>
+            <td class="version-metadata-value">@Model.PublishedAt</td>
+        </tr>
+        <tr class="version-metadata-row">
+            <th class="version-metadata-label" scope="row">Publisher</th>
+            <td class="version-metadata-value">@Model.PublishedBy</td>
+        </tr>
+        @if (!string.IsNullOrWhiteSpace(Model.StashVersion))
+        {
+            <tr class="version-metadata-row">
+                <th class="version-metadata-label" scope="row">Requires Stash</th>
+                <td class="version-metadata-value">@Model.StashVersion</td>
+            </tr>
+        }
+        <tr class="version-metadata-row">
+            <th class="version-metadata-label" scope="row">Integrity</th>
+            <td class="version-metadata-value version-metadata-integrity">@Model.Integrity</td>
+        </tr>
+    </tbody>
+</table>
+
+@* ── Dependencies ──────────────────────────────────────────────────────────── *@
+<section class="version-dependencies-section">
+    <h3 class="version-section-title">Dependencies</h3>
+    @if (!Model.Dependencies.Any())
+    {
+        <p class="empty-state">No dependencies.</p>
+    }
+    else
+    {
+        <ul class="dependencies-list">
+            @foreach (var dep in Model.Dependencies)
+            {
+                <li class="dependency-item">
+                    <span class="dependency-name">@dep.Key</span>
+                    <span class="dependency-version">@dep.Value</span>
+                </li>
+            }
+        </ul>
+    }
+</section>
