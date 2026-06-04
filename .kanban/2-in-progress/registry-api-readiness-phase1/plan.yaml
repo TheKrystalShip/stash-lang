@@ -1,0 +1,217 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>
+
+schema_version: 1
+
+feature: registry-api-readiness-phase1
+title: Registry API Readiness — Phase 1 (web-client prerequisites)
+
+brief: ./brief.md
+
+created: 2026-06-04
+architect_session: 2026-06-04-architect
+
+# Cheap default verify on every phase. Heavier per-phase work is in `verify:` below.
+default_verify:
+  - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Cli
+
+# Broad scope — safety rail, not prison. Implementers may correct stale paths within phase intent.
+scope:
+  - Stash.Registry.Contracts/**
+  - Stash.Registry/**
+  - Stash.Cli/PackageManager/**
+  - Stash.Tests/Registry/**
+  - docs/Registry*.md
+
+phases:
+  - id: P1
+    title: Shared PagedResponse<T> envelope (Contracts) + Search/Audit migration + CLI lockstep
+    deps: []
+    files:
+      - Stash.Registry.Contracts/PagedResponse.cs
+      - Stash.Registry.Contracts/SearchContracts.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry/Controllers/SearchController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Cli/PackageManager/RegistryClient.cs
+      - Stash.Cli/PackageManager/Commands/SearchCommand.cs
+      - Stash.Cli/PackageManager/CliJsonContext.cs
+      - Stash.Tests/Registry/Contracts/PagedResponseTests.cs
+      - Stash.Tests/Registry/SearchControllerTests.cs
+      - Stash.Tests/Registry/AuditLogControllerTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Cli
+      - dotnet test --filter "FullyQualifiedName~PagedResponseTests|FullyQualifiedName~SearchControllerTests|FullyQualifiedName~AuditLogControllerTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
+      - dotnet publish Stash.Cli/ -c Release -o /tmp/stash-aot-readiness-p1 /p:PublishAot=true
+    done_when:
+      - PagedResponse<T> exists in Stash.Registry.Contracts with Items/TotalCount/Page/PageSize/TotalPages (collection key 'items').
+      - SearchResponse and AuditLogResponse classes are deleted; SearchController and AdminController return PagedResponse<PackageSummaryResponse> and PagedResponse<AuditEntryResponse>.
+      - On the wire GET /api/v1/search returns a JSON object with key 'items' (not 'packages'); GET /api/v1/admin/audit-log returns a JSON object with key 'items' (not 'entries').
+      - Per-endpoint pageSize caps remain on the query DTOs (SearchQuery.[Range(1,100)], AuditLogQuery.[Range(1,200)]); the envelope does NOT carry caps.
+      - CLI search command parses the new envelope and prints the same human output as before; the closed generic PagedResponse<PackageSummaryResponse> is registered in CliJsonContext and AOT publish succeeds.
+      - OpenApiCoverageMetaTests and RequestModelBindingMetaTests stay green.
+    notes: |
+      This is the cross-cutting Construct chokepoint for pagination — every later listing endpoint reuses
+      it. AOT publish is in `verify` because closed-generic JSON source-gen registration is a known trap.
+      AuditLogResponse has no CLI consumer (confirmed by grep), so the audit half of the breaking change
+      is registry+tests only.
+
+  - id: P2
+    title: PackagesController structural meta-test (Detect guard for visibility omission)
+    deps: [P1]
+    files:
+      - Stash.Tests/Registry/Authz/PackagesControllerRegistryAuthorizeRequiredTests.cs
+    verify:
+      - dotnet build Stash.Tests
+      - dotnet test --filter "FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests"
+    done_when:
+      - The new meta-test enumerates every public action method on PackagesController (Roslyn or reflection) and asserts each carries [RegistryAuthorize].
+      - The test is green against the current controller (every existing PackagesController action carries [RegistryAuthorize] today — verified during exploration).
+      - "A fail-path fixture in the same file proves the scan has teeth: a synthetic action declared with [PublicEndpoint] but no [RegistryAuthorize] is detected as a violation."
+      - "The class documents WHY this is Detect-not-Construct: [PublicEndpoint] alone satisfies AuthzCoverageMetaTests AND AuthzDispatchCoverageMetaTests, so without this floor a future read-subresource could ship a private-package leak with a green build."
+    notes: |
+      Built BEFORE the new endpoints land in P3/P4 so the structural guarantee is in place when those
+      phases add new actions. This is the load-bearing cross-cutting safeguard: see brief.md Cross-Cutting
+      Concerns. Use the existing AuthzDispatchCoverageMetaTests as the structural template (Roslyn scan,
+      fail-path fixture, pin assertion).
+
+  - id: P3
+    title: GET /versions endpoint — paginated, PDP-gated, conditional caching
+    deps: [P2]
+    files:
+      - Stash.Registry.Contracts/PackageContracts.cs
+      - Stash.Registry.Contracts/SearchContracts.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Http/ConditionalResponse.cs
+      - Stash.Tests/Registry/VersionsEndpointTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~VersionsEndpointTests|FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
+    done_when:
+      - GET /api/v1/packages/{scope}/{name}/versions is reachable on PackagesController, carries [PublicEndpoint] AND [RegistryAuthorize(RegistryAction.ReadPackageMetadata)] (reusing the existing action — no new RegistryAction added), and binds VersionsQuery via [FromQuery].
+      - The endpoint returns PagedResponse<VersionDetailResponse> using the P1 envelope.
+      - A new IRegistryDatabase.GetPackageVersionsAsync(name, page, pageSize) method returns (items, totalCount); the controller does NOT thread callerUsername into its query — the PDP gate has already enforced visibility.
+      - "VISIBILITY (load-bearing): anonymous caller on private package returns 404; authenticated caller without role on private package returns 404; authenticated caller with reader-or-above role returns 200 with the versions list. These are EXPLICIT tests in VersionsEndpointTests."
+      - ETag (weak), Last-Modified, and Cache-Control headers are emitted on 200 responses.
+      - If-None-Match matching the current ETag returns 304 with no body; If-Modified-Since >= Last-Modified returns 304.
+      - PackagesControllerRegistryAuthorizeRequiredTests stays green (the new action carries [RegistryAuthorize]).
+      - OpenApiCoverageMetaTests, AuthzCoverageMetaTests, AuthzDispatchCoverageMetaTests, NoMagicAuthStringsMetaTests, RequestModelBindingMetaTests all stay green.
+    notes: |
+      The ConditionalResponse helper is introduced here so /readme (P4) can reuse it. Etag formula:
+      W/"<UpdatedAt-ticks>-<TotalCount>". RegistryActionResourceResolver already maps
+      ReadPackageMetadata→PackageRoute.From(scope,name); no resolver change needed — the new route shape
+      matches the existing one.
+
+  - id: P4
+    title: GET /readme endpoint — typed JSON, PDP-gated, conditional caching
+    deps: [P3]
+    files:
+      - Stash.Registry.Contracts/PackageContracts.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Tests/Registry/ReadmeEndpointTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~ReadmeEndpointTests|FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests"
+    done_when:
+      - GET /api/v1/packages/{scope}/{name}/readme is reachable on PackagesController and carries [PublicEndpoint] AND [RegistryAuthorize(RegistryAction.ReadPackageMetadata)].
+      - The endpoint returns ReadmeResponse { content, contentType ("text/markdown"), byteSize, extractedFromVersion } as JSON via TypedResults.Ok<ReadmeResponse> — NOT a raw text/markdown body (preserves OpenApiCoverageMetaTests with zero new schema exemption).
+      - The content field carries raw markdown verbatim from PackageRecord.Readme (no sanitization, no rendering).
+      - "VISIBILITY: anonymous caller on private package returns 404; authenticated caller without role on private package returns 404; authenticated caller with role returns 200. Explicit tests in ReadmeEndpointTests."
+      - ETag (weak), Last-Modified, Cache-Control emitted on 200; If-None-Match and If-Modified-Since produce 304 (using the P3 ConditionalResponse helper).
+      - PackagesControllerRegistryAuthorizeRequiredTests stays green; OpenApiCoverageMetaTests stays green (no new exempt operation added).
+
+  - id: P5
+    title: Search v2 — column-backed filters and sort (Bucket-A only)
+    deps: [P1]
+    files:
+      - Stash.Registry.Contracts/SearchContracts.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Database/Models/SearchResult.cs
+      - Stash.Registry/Controllers/SearchController.cs
+      - Stash.Tests/Registry/SearchV2FiltersTests.cs
+      - Stash.Tests/Registry/SearchV2SortTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~SearchV2FiltersTests|FullyQualifiedName~SearchV2SortTests|FullyQualifiedName~SearchControllerTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RequestModelBindingMetaTests|FullyQualifiedName~OpenApiCoverageMetaTests"
+    done_when:
+      - SearchQuery gains optional [FromQuery] properties keyword, license, deprecated, owner, and sort (typed as the new PackageSortOrder enum) — all bound via DataAnnotations, no Request.Query/Body reads.
+      - PackageSortOrder enum is added to Stash.Registry.Contracts with members Relevance, Name, Updated, Published (named to match wire spelling — [FromQuery] enum binding is case-insensitive member-name-based, NOT JsonStringEnumMemberName).
+      - PackageSummaryResponse gains license (from PackageRecord.License) and ownerCount (count of PackageRoleEntry rows with PrincipalType=User AND Role=Owner). NO new columns added.
+      - SearchPackagesAsync supports the new filters AND/composition and the four sort orders; existing callerUsername visibility predicate is preserved unchanged.
+      - An unknown sort= value (e.g. sort=downloads) returns 400 InvalidRequest via the existing InvalidModelStateResponseFactory — explicit test asserting the 400 body shape.
+      - Bucket-B values (vulnerable, verified, provenance, sort=downloads) are NOT accepted — confirmed by an explicit test that sort=downloads returns 400 and by absent fields in the SearchQuery DTO.
+      - Existing /search behavior with only q/page/pageSize remains byte-identical (default sort = Relevance).
+      - RequestModelBindingMetaTests stays green; NoMagicAuthStringsMetaTests stays green (PackageSortOrder is a named enum, not magic strings); OpenApiCoverageMetaTests stays green.
+
+  - id: P6
+    title: CORS configuration (off by default)
+    deps: []
+    files:
+      - Stash.Registry/Configuration/CorsConfig.cs
+      - Stash.Registry/Configuration/RegistryConfig.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/appsettings.json
+      - Stash.Tests/Registry/CorsConfigTests.cs
+      - Stash.Tests/Registry/CorsMiddlewareTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~CorsConfigTests|FullyQualifiedName~CorsMiddlewareTests|FullyQualifiedName~RegistryConfigTests"
+    done_when:
+      - CorsConfig is added with properties Enabled (default false), AllowedOrigins, AllowedMethods, AllowedHeaders, AllowCredentials; wired into RegistryConfig.
+      - When Cors.Enabled=false (default), no Access-Control-Allow-Origin header is emitted on any response and no preflight OPTIONS handling is attached — byte-identical to today.
+      - When Cors.Enabled=true with a configured origin, a preflight OPTIONS succeeds and an actual GET emits the expected Access-Control-Allow-Origin header.
+      - appsettings.json carries the new "Cors" section with off-by-default values matching the brief.
+      - RegistryConfigTests parses the new config section without regression.
+    notes: |
+      Independent of P1–P5; can be sequenced anywhere after the spec is approved. Listed with deps:[] so
+      the implementer can pick it up in parallel without blocking on the envelope chain.
+
+  - id: P7
+    title: GET /api/v1/.well-known/registry discovery endpoint
+    deps: [P5, P6]
+    files:
+      - Stash.Registry.Contracts/CommonContracts.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/Endpoints/DiscoveryEndpoint.cs
+      - Stash.Tests/Registry/DiscoveryEndpointTests.cs
+    verify:
+      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~DiscoveryEndpointTests|FullyQualifiedName~OpenApiCoverageMetaTests"
+    done_when:
+      - GET /api/v1/.well-known/registry returns 200 with a DiscoveryResponse JSON body containing name, apiVersion ("v1"), basePath ("/api/v1"), limits, links, and features.
+      - The endpoint is hosted as a minimal-API MapGet (health-endpoint style) so it does NOT live on a controller and therefore does NOT carry [RegistryAuthorize] — capability advertisement is static.
+      - "Bucket-B feature flags are pinned false: metrics, advisories, provenance, signatures, trustedPublishing, verifiedPublishers."
+      - organizations and privatePackages flags are true; cors reflects the current CorsConfig.Enabled value.
+      - limits.maxPageSize is sourced from the SAME const int (e.g. Stash.Registry.Contracts.PagingLimits.MaxPageSize = 100) used by SearchQuery.[Range] AND VersionsQuery.[Range]; an explicit test asserts the advertised limit equals the const.
+      - The endpoint requires no authentication (anonymous GET returns 200) and is reachable with a revoked token presented as Bearer (PDP/JTI gate does not block /.well-known per the public-endpoint pattern).
+      - The endpoint appears in the OpenAPI document with an operation ID via .WithName(...); OpenApiCoverageMetaTests stays green.
+
+  - id: P8
+    title: Documentation — docs/Registry — Package Registry.md
+    deps: [P3, P4, P5, P6, P7]
+    files:
+      - docs/Registry — Package Registry.md
+    verify:
+      - dotnet test --filter "FullyQualifiedName~RegistryDocsTests|FullyQualifiedName~StandardLibraryReferenceTests"
+    done_when:
+      - The "Search" section documents the new filters (keyword, license, deprecated, owner) and the sort vocabulary (Relevance/Name/Updated/Published), explicitly NOTING that vulnerable/verified/provenance/sort=downloads are Bucket-B and not yet supported.
+      - The "Package Endpoints" section documents GET /api/v1/packages/{scope}/{name}/versions and GET /api/v1/packages/{scope}/{name}/readme with their response shapes, visibility rules (404 on private for unauthorized), and conditional caching behavior (ETag/Last-Modified/304).
+      - A new "Pagination" subsection documents the shared envelope shape and per-endpoint pageSize caps.
+      - A new "CORS" subsection documents the off-by-default configuration.
+      - A new ".well-known/registry" subsection documents the discovery endpoint with the features map (and explicitly marks the Bucket-B flags as future seams).
+      - The Endpoint Summary table includes the three new endpoints with correct auth column ("None (public)" for /versions, /readme, /.well-known/registry — visibility-gated by PDP for the first two).
+      - No edits to Standard Library Reference (this is registry, not language/stdlib).
+
+# Final acceptance — `/done` runs the FULL test suite. No namespace exclusions ever.
+# The two checkpoint lint lines are the standing omission guard (perpetual).
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
