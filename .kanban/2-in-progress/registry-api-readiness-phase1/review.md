@@ -2,369 +2,182 @@
 
 > Produced by `/feature-review`. One finding per H2 section.
 
-**Scope reviewed:** commits `d251d128..45dacee1` on branch `main` (worktree `stash-registry-api-readiness-phase1`)
+**Scope reviewed:** commits `d251d128..4edb1e9a` on branch `feature/registry-api-readiness-phase1` (worktree `stash-registry-api-readiness-phase1`)
 **Brief:** ../brief.md
 **Generated:** 2026-06-04
+**Review pass:** 2 (final)
 
 ---
 
 ## Summary
 
-The feature ships its declared Bucket-A surface cleanly and the load-bearing safety
-properties hold up under scrutiny:
+**This is the second and final review pass.** Pass 1 (`b5fb0430`) raised three
+findings — one MEDIUM (F01) and two LOW (F02, F03). All three have been resolved
+by commits `07ad55e6` (F01) and `bdf8bf12` (F02, F03), and this pass verified
+each fix against its observation, suggested fix, and the supporting tests.
 
-- **Visibility chokepoint is genuinely reused.** `/versions` and `/readme` both
-  carry `[PublicEndpoint] + [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]`,
-  which the `RegistryAuthorizeFilter` dispatches into `RegistryAuthorizer` →
-  `AuthorizePackageReadAsync` — the exact same predicate `GetPackage` uses
-  (`RegistryAuthorizer.cs:160-163`). Neither endpoint re-implements visibility,
-  neither threads `callerUsername` into a bespoke DB call, and there is no
-  separate "exists but hidden vs not found" code path. The three load-bearing rows
-  (anon → 404, authed-no-role → 404, reader+ → 200) are exercised through the full
-  `WebApplicationFactory` HTTP pipeline in `VersionsEndpointTests` and
-  `ReadmeEndpointTests`, not via unit shortcuts.
-- **P2 Detect guard has teeth.** `PackagesControllerRegistryAuthorizeRequiredTests`
-  binds via `typeof(PackagesController)` (a compile-time hard reference, not an
-  `AppDomain.GetAssemblies()` scan, so the CLAUDE.md load-order-determinism
-  concern does not apply). It pairs the production-compliance sweep with a
-  `MinActionCount >= 13` floor and a `PublicEndpointOnlyFixtureController`
-  fail-path fixture; a stray `[PublicEndpoint]`-only action would flip Assertion 1
-  red. The dual-attribute fixture also proves the scanner accepts the correct shape.
-- **`maxPageSize` drift-impossibility is real.** `PagingLimits.MaxPageSize = 100`
-  (`Stash.Registry.Contracts/PagedResponse.cs:28`) is the single `const int` used by
-  `SearchQuery.[Range(1, PagingLimits.MaxPageSize)]` (line 100), the new
-  `VersionsQuery.[Range(1, PagingLimits.MaxPageSize)]`
-  (`PackageContracts.cs:289`), and the discovery payload's
-  `DiscoveryLimits.MaxPageSize = PagingLimits.MaxPageSize`
-  (`DiscoveryEndpoint.cs:50`). `DiscoveryEndpointTests.GetDiscovery_LimitsMaxPageSize_EqualsConstant`
-  asserts the advertised limit equals the const at runtime as a belt-and-suspenders
-  check. `AuditLogQuery.[Range(1, 200)]` correctly remains a separate literal as
-  declared in the brief.
-- **Bucket-B boundary is held.** `sort=downloads`, `sort=vulnerable`, and
-  `sort=verified` all return 400 InvalidRequest via the model binder
-  (`SearchV2SortTests.Sort_Downloads_Returns400_WithInvalidRequestBody` etc.).
-  `SearchQuery` exposes no `vulnerable`/`verified`/`provenance` properties
-  (`SearchQuery_DoesNotExposeBucketBFilterFields`). Discovery's Bucket-B flags are
-  pinned `false` (`GetDiscovery_BucketBFlags_ArePinnedFalse`). No new DB columns
-  added — `license` derives from existing `PackageRecord.License` and `ownerCount`
-  from a correlated-subquery on `PackageRoleEntry`.
-- **Pagination unification is wire-correct.** `SearchResponse`/`AuditLogResponse`
-  are deleted; both controllers return `PagedResponse<T>` with key `"items"`;
-  `SearchControllerTests` and `AuditLogControllerTests` explicitly assert
-  `items` is present AND `packages`/`entries` are absent. The closed generic
-  `PagedResponse<PackageSummaryResponse>` is registered in `CliJsonContext` (line 54)
-  and the CLI's `SearchCommand` reads `results.Items`. Per-endpoint pageSize caps
-  remain on the query DTOs.
-- **Conditional caching is RFC-correct in the common cases.** `ConditionalResponse`
-  emits a weak ETag (`W/"<ticks>-<suffix>"`), uses
-  `candidate.Compare(etag, useStrongComparison: false)` for `If-None-Match`,
-  truncates `Last-Modified` to whole seconds for `If-Modified-Since`, and
-  explicitly `DateTime.SpecifyKind(updatedAt, DateTimeKind.Utc)` so SQLite-
-  roundtripped timestamps stay UTC. The five behavior tests cover ETag-match-304,
-  IMS-equal-304, stale-ETag-200, weak-prefix, and headers-on-200. The JTI
-  revocation gate correctly bypasses `/api/v1/.well-known/*` (Startup.cs:382)
-  so the discovery endpoint remains reachable with a revoked token, verified
-  by `GetDiscovery_WithRevokedJwt_Returns200`.
-- **CORS is off-by-default and inert.** `CorsConfig.Enabled = false` by default;
-  `Startup.Configure` reads the flag from live `IConfiguration` before deciding to
-  call `UseCors` (Startup.cs:359-366); `AddCors` runs unconditionally so test
-  factories can replace the policy without re-wiring services. `CorsMiddlewareTests`
-  covers both the disabled (no headers) and enabled (preflight + actual GET) paths.
+**Verdict — zero new findings.** The feature is ready for `/done`.
 
-Three findings remain, all narrow. None block correctness of the declared
-acceptance criteria; the highest is a cache-staleness bug in `/versions` that
-surfaces only under per-version deprecation flips.
+### F01 verification — fixed
 
----
+`StashRegistryDatabase.DeprecateVersionAsync` (lines 405-419) and
+`UndeprecateVersionAsync` (lines 422-434) now load the parent `PackageRecord`
+via `_context.Packages.FindAsync(name)` and set `package.UpdatedAt =
+DateTime.UtcNow` **before the same** `await _context.SaveChangesAsync()` that
+persists the version-row mutation. Both writes land in a single EF Core
+change-tracking flush — there is no split-transaction window where the
+version row could persist with the package timestamp stale. The pattern
+mirrors `DeprecatePackageAsync` / `UndeprecatePackageAsync` (lines 376-402)
+which already worked this way, so the version paths are now consistent with
+the package paths.
 
-## F01 — [MEDIUM] /versions ETag does not invalidate on version-level deprecate/undeprecate
+The `if (package != null)` guard is appropriate — the version mutation is
+already inside `if (record != null)`, and a version cannot exist without a
+parent package row given the FK, but the null guard keeps the code
+defensive at minimal cost.
 
-**Status:** fixed
-**Fixed in:** 07ad55e6
-**Files:** `Stash.Registry/Http/ConditionalResponse.cs:62-65`, `Stash.Registry/Controllers/PackagesController.cs:191`, `Stash.Registry/Database/StashRegistryDatabase.cs:393-417`, `Stash.Registry/Services/DeprecationService.cs:66-90`
-**Phase:** P3
-**Commit:** 3f10f7de
+Two new tests in `VersionsEndpointTests`
+(`DeprecateVersion_ThenIfNoneMatchPriorETag_Returns200WithDeprecatedState`,
+`UndeprecateVersion_ThenIfNoneMatchPriorETag_Returns200WithUndeprecatedState`)
+exercise the full HTTP pipeline. They explicitly assert:
 
-### Observation
+1. `Assert.NotEqual(oldEtag, newEtag)` — the load-bearing invalidation
+   property, not just `200 OK`.
+2. The response body reflects the new deprecation state
+   (`deprecated == true` after PATCH, `deprecated == false` after DELETE).
+3. The pre-deprecation ETag does not produce a 304.
 
-The `/versions` weak ETag is computed as
-`W/"<package.UpdatedAt.Ticks>-<TotalCount>"`
-(`ConditionalResponse.SetHeadersAndCheckNotModified` builds the suffix from the
-controller's `result.TotalCount` argument in `PackagesController.GetVersions`).
+The audit trail and the existing package-level `Deprecate{,Undeprecate}PackageAsync`
+paths are untouched — F01's fix did not regress them.
 
-But the per-version deprecation paths bypass both inputs:
+### F02 verification — fixed
 
-- `StashRegistryDatabase.DeprecateVersionAsync` (lines 393-404) flips
-  `record.Deprecated`, `record.DeprecationMessage`, `record.DeprecatedBy` on the
-  `VersionRecord` and calls `SaveChangesAsync()`. It does **not** touch
-  `PackageRecord.UpdatedAt`.
-- `StashRegistryDatabase.UndeprecateVersionAsync` (lines 406-417) is identical.
-- `DeprecationService.DeprecateVersionAsync` / `UndeprecateVersionAsync`
-  (`DeprecationService.cs:66, 82`) just calls the DB method; no parent-package
-  timestamp bump.
-
-So a `PATCH /api/v1/packages/{scope}/{name}/{version}/deprecate` flips
-`VersionRecord.Deprecated` and `DeprecationMessage` — both of which
-`PackagesController.BuildVersionResponse` (lines 635-652) projects into every
-`VersionDetailResponse` item on the `/versions` listing — without changing either
-`package.UpdatedAt` or `TotalCount`. A client whose `If-None-Match` carries the
-pre-deprecation ETag will receive 304 with no body and continue showing the stale
-`Deprecated=false`/`DeprecationMessage=null` data. The
-`Cache-Control: public, max-age=60` headline doesn't bound this — once the client
-starts revalidating, the stale ETag is what comes back on every subsequent request.
-
-This is `/versions`-specific. `/readme` is unaffected: `UpdatePackageReadmeAsync`
-(line 350) and `UpdatePackageLatestAsync` (line 338) both bump `UpdatedAt`, so
-both `content` and `extractedFromVersion` flips invalidate the readme ETag.
-Version add and unpublish are also covered — adds change `TotalCount`,
-non-last unpublish calls `UpdatePackageLatestAsync` (`PackageService.cs:264`),
-last-version unpublish changes `TotalCount` too. The only blind spot is
-in-place per-version mutation.
-
-### Why this matters
-
-`/versions` is a brand-new endpoint and a public, paginated UI listing —
-exactly the surface where conditional caching makes the most difference.
-Shipping it with a cache-staleness bug means a Bucket-A consumer that follows
-the standard `ETag`/`If-None-Match` revalidation pattern will durably
-display incorrect deprecation status (`deprecated=false` for an actually-deprecated
-version, or vice versa) for any version-level deprecation lifecycle change. The
-broken contract is the brief's load-bearing P3 acceptance criterion that
-"`ETag` (weak), `Last-Modified`, and `Cache-Control` headers are emitted on
-200 responses; If-None-Match matching the current ETag returns 304" — the
-text is satisfied, but the ETag's *meaning* (changes when the response body
-would change) is silently violated for version-deprecation mutations.
-
-### Suggested fix
-
-Two viable shapes; either resolves the finding:
-
-1. **Bump `package.UpdatedAt` on every version-level mutation.**
-   Easiest: make `DeprecateVersionAsync` / `UndeprecateVersionAsync` in
-   `StashRegistryDatabase` also set the parent `PackageRecord.UpdatedAt =
-   DateTime.UtcNow` (mirroring how `UpdatePackageReadmeAsync` /
-   `UpdatePackageLatestAsync` already work). Cheapest change; touches one file;
-   parent-row write was already happening for every other content-changing path
-   anyway. (Strictly, this would also cover any future `AddVersionAsync`
-   /`DeleteVersionAsync` ETag dependency if the per-row count component were
-   ever removed.)
-
-2. **Fold version-row "fingerprint" into the ETag suffix.** Replace
-   `<TotalCount>` with e.g. `<TotalCount-MAX(UpdatedAt-or-equivalent)>` on the
-   version rows — a `MAX(...)` aggregate on the same `IQueryable` chain that
-   already computes `TotalCount`. Avoids the parent-write but requires schema
-   awareness (`VersionRecord` currently has no `UpdatedAt`; would need
-   one added, or `MAX(Id)` if the table has an autoincrement surrogate). Cleaner
-   semantically but a larger change.
-
-Path (1) is the proportionate fix and matches the existing project pattern
-(every parent-mutation path already bumps `UpdatedAt`; the version-deprecation
-paths are the only outliers). Add a behavior test:
-`DeprecateVersion_ThenIfNoneMatchPriorETag_Returns200` (and the mirror for
-undeprecate) so the contract is locked.
-
-A side note: the controller currently fetches both `result.TotalCount` *and*
-`result.Items` before computing the conditional. When the conditional hits,
-the `Items` list is materialized for nothing. The count alone is needed for
-the ETag suffix; the items list isn't. If you touch `GetPackageVersionsAsync`
-for fix (2) anyway, splitting it into a cheap `CountAsync()` first and only
-materializing items when not-modified is false saves a query on every
-revalidating cache hit. Not blocking — pure perf — and weakly worth folding
-into the same change set since both touch the same chain.
-
-### Verify
-
-```
-dotnet test --filter "FullyQualifiedName~VersionsEndpointTests"
-# Plus a new explicit test along the lines of:
-#   GetVersions_VersionDeprecated_InvalidatesETag()
-#       — fetch /versions, capture ETag, PATCH /version/deprecate,
-#         re-fetch with If-None-Match=<old ETag>, assert 200 + new ETag.
-dotnet test --filter "FullyQualifiedName~ReadmeEndpointTests"
-dotnet test
-```
-
----
-
-## F02 — [LOW] `keyword` search filter is vulnerable to LIKE-metacharacter / quote leakage
-
-**Status:** fixed
-**Fixed in:** bdf8bf12
-**Files:** `Stash.Registry/Database/StashRegistryDatabase.cs:213-219`
-**Phase:** P5
-**Commit:** 0a6525bc
-
-### Observation
-
-`SearchPackagesAsync` builds the keyword-match LIKE pattern by string interpolation:
+`SearchPackagesAsync` (lines 217-227) escapes the keyword input before
+interpolation and passes `ESCAPE '\'` as the third argument to
+`EF.Functions.Like`:
 
 ```csharp
-if (!string.IsNullOrEmpty(keyword))
-{
-    string kw = keyword;
-    queryable = queryable.Where(p =>
-        p.Keywords != null &&
-        EF.Functions.Like(p.Keywords, $"%\"{kw}\"%"));
-}
+string esc = keyword
+    .Replace("\\", "\\\\")
+    .Replace("%", "\\%")
+    .Replace("_", "\\_")
+    .Replace("\"", "\\\"");
+queryable = queryable.Where(p =>
+    p.Keywords != null &&
+    EF.Functions.Like(p.Keywords, $"%\"{esc}\"%", "\\"));
 ```
 
-The keyword value reaches the LIKE pattern unescaped. Three classes of input
-break the intended exact-match semantics (no escape clause, no validation
-attribute on `SearchQuery.keyword`):
+Critical correctness points all hold:
 
-- **`%`** in `keyword` becomes an unanchored wildcard in the pattern,
-  matching arbitrary suffixes/prefixes mid-keyword. `keyword=foo%` matches every
-  package whose keywords array contains a quoted token starting with `foo`.
-- **`_`** matches any single character. `keyword=fo_` matches `"foo"`,
-  `"fob"`, etc.
-- **`"`** in `keyword` produces a malformed pattern (`%""<rest>""%`). EF Core will
-  not reject it but the match becomes nonsense — likely zero results — when
-  the user reasonably expects "no package has that literal in its keywords".
+- **Backslash escaped first** — if `%` were escaped before `\`, the `\%`
+  produced by step 2 would be re-escaped to `\\%` by step 1 (which would
+  then mean "literal backslash, then any-suffix wildcard"). The current
+  order `\\` → `%` → `_` → `"` is correct.
+- **The `ESCAPE` clause is wired** — the literal `"\\"` (= single
+  backslash) is passed as the third argument to `EF.Functions.Like`,
+  matching the escape character used in the input transformation. SQLite
+  and PostgreSQL both honor this clause; EF Core's `Like` translator emits
+  it transparently.
+- **`"` escape was added correctly** — a quote in the keyword no longer
+  produces the malformed pattern `%""<rest>""%`; it is escaped to a literal
+  backslash-quote, which the storage layer (JSON-array text) treats as a
+  literal character match.
 
-There is no SQL-injection risk — `EF.Functions.Like` parameterizes the second
-argument — only filter-semantic drift. The behavior is undocumented (the brief
-calls it "exact-match against one element of the package keywords JSON
-array"), so a client that builds a keyword from user input cannot anticipate
-the over/under-match.
+The test `Search_KeywordWithPercent_TreatedAsLiteral` seeds two packages
+(`pkg-percent` keyword `"c%"`, `pkg-cpp` keyword `"cpp"`) and queries
+`?keyword=c%25` (URL-encoded `c%`). It asserts `items.GetArrayLength() == 1`
+and the matched name is `pkg-percent`. Without the fix, the unescaped `%`
+wildcard would also match `cpp` → totalCount == 2; with the fix only the
+literal `c%` row matches. The test genuinely separates pre- and post-fix
+behavior.
 
-### Why this matters
+I confirmed no other interpolated-LIKE sites in `SearchPackagesAsync` need
+the same fix:
 
-This is a Bucket-A search filter the future web client will expose to
-end-users (the brief positions `keyword` as one of the four column-backed
-filters that "are trivially useful to any UI"). A typed keyword like
-`c++17` or `dev_tools` would silently match more than the user intended. The
-fault scope is narrow — search misranking, not auth/visibility — so this is
-LOW, not MEDIUM.
+- `license` filter (line 232-234) is `p.License == lic` — pure equality, no LIKE.
+- `owner` filter (line 245-254) is `r.PrincipalId == ownerName` — equality.
+- `deprecated` filter (line 237-241) is `p.Deprecated == dep` — equality.
 
-### Suggested fix
+(The `q` free-text search at lines 153-156 is a LIKE pattern but with
+intentional substring semantics — fuzzy contains-match is the design, not
+the exact-match semantics F02 was about. Out of scope for F02 per the
+user-provided framing, and pre-existing behavior unchanged by this fix.)
 
-Either escape the LIKE metacharacters or validate the keyword grammar
-client-side:
+### F03 verification — fixed
 
-1. **Escape the three LIKE metacharacters in the runtime string** before
-   interpolation, and append a `LIKE … ESCAPE '\'` clause. SQLite and
-   PostgreSQL both support the `ESCAPE` clause:
+Two tie-breakers added, both producing total deterministic orderings:
 
-   ```csharp
-   string esc = keyword.Replace("\\", "\\\\")
-                       .Replace("%", "\\%")
-                       .Replace("_", "\\_")
-                       .Replace("\"", "\\\"");   // and prevents the quote bug
-   queryable = queryable.Where(p =>
-       p.Keywords != null &&
-       EF.Functions.Like(p.Keywords, $"%\"{esc}\"%", "\\"));
-   ```
-
-2. **Validate at the boundary** — add a `[RegularExpression(@"^[a-z0-9_-]{1,32}$")]`
-   on `SearchQuery.keyword` (constraint matches the de-facto npm/pypi keyword
-   grammar). Rejects pathological inputs with 400; no runtime escape required.
-   Lighter touch, narrower contract, easier for a client to satisfy. The
-   `RequestModelBindingMetaTests` infrastructure already enforces every
-   Contracts-typed action parameter goes through model binding.
-
-Either works; (2) is the smaller, more declarative change and matches the
-existing pattern (`ScopeGrammarAttribute`, `TokenExpiryAttribute`,
-`AdminUsernamePattern`). Pair with a test asserting `?keyword=foo%` returns
-either 400 (option 2) or zero/literal-only matches (option 1).
-
-### Verify
-
-```
-dotnet test --filter "FullyQualifiedName~SearchV2FiltersTests"
-# Plus an explicit test:
-#   Search_KeywordWithPercent_TreatedAsLiteral()  (option 1)
-#   Search_KeywordWithPercent_Returns400()        (option 2)
-dotnet test
-```
-
----
-
-## F03 — [LOW] `Updated`/`Published` sort orders have no tie-breaker — pagination can repeat or skip rows
-
-**Status:** fixed
-**Fixed in:** bdf8bf12
-**Files:** `Stash.Registry/Database/StashRegistryDatabase.cs:257-267`, `Stash.Registry/Database/StashRegistryDatabase.cs:317-321`
-**Phase:** P3, P5
-**Commit:** 3f10f7de, 0a6525bc
-
-### Observation
-
-The new sort orders use a single ordering column with no secondary tie-breaker:
+**`SearchPackagesAsync` (lines 269-274):**
 
 ```csharp
-// SearchPackagesAsync (P5)
-var rowsQuery = sort switch
-{
-    PackageSortOrder.Name => queryable.OrderBy(p => p.Name),
-    PackageSortOrder.Updated => queryable.OrderByDescending(p => p.UpdatedAt),
-    PackageSortOrder.Published => queryable.OrderByDescending(p => p.CreatedAt),
-    _ => queryable.OrderBy(p => p.Name),                             // Relevance
-};
+PackageSortOrder.Updated => queryable
+    .OrderByDescending(p => p.UpdatedAt)
+    .ThenBy(p => p.Name),
+PackageSortOrder.Published => queryable
+    .OrderByDescending(p => p.CreatedAt)
+    .ThenBy(p => p.Name),
+```
 
-// GetPackageVersionsAsync (P3)
+`PackageRecord.Name` is the primary key (`HasKey(e => e.Name)`, confirmed in
+`RegistryDbContext.OnModelCreating` line 77), so `Name` is unique. Adding it
+as the secondary key makes the composite key unique → the order is total.
+`Name` direction is reviewer judgment; ASC matches the conventional alphabetical
+display tie-break used elsewhere in this codebase and is uncontroversial.
+
+`Name` and `Relevance` paths are correctly left untouched — both already
+order by `Name` (the unique PK), so they are already total.
+
+**`GetPackageVersionsAsync` (line 328-329):**
+
+```csharp
 var items = await queryable
     .OrderByDescending(v => v.PublishedAt)
-    .Skip((page - 1) * pageSize)
-    .Take(pageSize)
-    .ToListAsync();
+    .ThenByDescending(v => v.Version)
+    ...
 ```
 
-When two or more rows share the sort key (two packages updated in the same
-batch — same `UpdatedAt` second/tick; two versions published from the same
-manifest in the same second), SQLite and PostgreSQL are both free to order the
-ties arbitrarily and need not order them consistently across separate queries.
-A client paging through results (page 1, page 2, page 3) can therefore see the
-same row twice or miss a row entirely on the boundary between pages — the
-classic "unstable sort + offset paging" pitfall. `OrderBy(p => p.Name)` is
-already stable because `Name` is the primary key (uniqueness guarantees no ties),
-so the `Name`/`Relevance` paths are unaffected.
+`VersionRecord` primary key is `(PackageName, Version)` (RegistryDbContext.cs:106).
+`GetPackageVersionsAsync` filters `_context.Versions.Where(v => v.PackageName == name)`,
+so within the filtered result set `Version` is unique → the composite
+ordering is total. `Version DESC` matches the primary `PublishedAt DESC`
+direction (newer-version-first when timestamps tie), a sensible display
+choice; the column is a string so the lexical compare is not semver-aware,
+but determinism — not semver correctness — is what F03 demanded, and the
+pagination invariant (no skip, no repeat) holds.
 
-### Why this matters
+Three new tests cover all three tied-ordering code paths
+(`Sort_Updated_TiedTimestamps_DeterministicOrder`,
+`Sort_Published_TiedTimestamps_DeterministicOrder`,
+`GetVersions_TiedPublishedAt_DeterministicOrder`). All three:
 
-The web client the brief is unblocking is the consumer most likely to exercise
-non-Name sorts (a "Recently Updated" or "Recently Published" view) and the most
-sensitive to "this row jumped around as I clicked Next page." Both endpoints
-are paginated and both expose the unstable orderings. Same-second collisions
-are unusual but reachable — a bulk-publish script publishing several versions
-into a single package in a tight loop, a publish-then-deprecate sequence
-landing in one second's tick, etc.
+1. Stamp identical timestamps (`tiedAt`) on every row.
+2. Insert rows in **non-sorted** order (e.g. `c, a, b` for names; `3.0.0,
+   1.0.0, 2.0.0` for versions) to detect any implicit rowid / insertion
+   ordering.
+3. Fetch page 1 (`pageSize=2`) AND page 2 (`pageSize=2`), asserting fixed
+   cross-page ordering — i.e. they prove the full pagination guarantee, not
+   just first-page determinism.
 
-### Suggested fix
+### Pass-1 areas re-confirmed
 
-Add a deterministic secondary key on every non-unique ordering. Cheapest and
-correct:
+Re-confirmed clean (full review in the pass-1 commit history `b5fb0430`):
+visibility chokepoint reuse on `/versions` and `/readme`; P2
+`[RegistryAuthorize]` Detect-guard floor + fail-path fixture;
+`PagingLimits.MaxPageSize = 100` single-source-of-truth across `SearchQuery`,
+`VersionsQuery`, and `DiscoveryEndpoint`; Bucket-A/B boundary held (no new
+DB columns; Bucket-B `sort` values rejected with 400; Discovery flags pinned
+false); pagination unification (`PagedResponse<T>` with `items` key; CLI
+`SearchCommand` reads `results.Items`); conditional caching (weak ETag, IMS
+truncation, UTC kind specification); CORS disabled-by-default and inert.
 
-```csharp
-// SearchPackagesAsync
-PackageSortOrder.Updated   => queryable.OrderByDescending(p => p.UpdatedAt)
-                                       .ThenBy(p => p.Name),
-PackageSortOrder.Published => queryable.OrderByDescending(p => p.CreatedAt)
-                                       .ThenBy(p => p.Name),
-// (Name/Relevance paths already stable on the Name primary key)
+### Baseline
 
-// GetPackageVersionsAsync
-var items = await queryable
-    .OrderByDescending(v => v.PublishedAt)
-    .ThenByDescending(v => v.Version)   // or .ThenBy(v => v.Version)
-    .Skip(…)
-    .Take(…)
-    .ToListAsync();
-```
-
-Adding `ThenBy(p.Name)` / `ThenBy(v.Version)` makes every ordering stable
-across queries because the secondary key is part of the unique row identity.
-Verify with a test that publishes 3 versions sharing the same `PublishedAt`
-(easy: stamp them manually in the seed helper) and asserts they appear in a
-fixed order on both page 1 and page 2.
-
-### Verify
-
-```
-dotnet test --filter "FullyQualifiedName~VersionsEndpointTests|FullyQualifiedName~SearchV2SortTests"
-# Plus explicit ties tests:
-#   GetVersions_TiedPublishedAt_DeterministicOrder()
-#   Search_TiedUpdatedAt_DeterministicOrder()
-dotnet test
-```
+Baseline `dotnet test` was green at the time of this pass (`failed=0
+passed=13344 skipped=6` — the 6 skips are pre-existing `[Fact(Skip=…)]`
+quarantines unrelated to this feature). The new tests added by the two
+fix commits (3 in F01's commit, 4 in F02/F03's commit) are included in
+that green count.
 
 ---
+
+(No findings filed in pass 2.)
