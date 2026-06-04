@@ -321,80 +321,13 @@ public class CallbackDeepCloneRaceStressTests
         Assert.Equal(StressIterations, successCount);
     }
 
-    // ── F02-D: end-to-end signal callback with mutable captured global ─────────
-
-    /// <summary>
-    /// End-to-end test: a Stash VM has a captured global dict.  Background tasks fire
-    /// <c>SignalImpl.Dispatch</c> (which triggers <c>VMContext.InvokeCallbackDirect</c>
-    /// → <c>BuildChildGlobals</c> → <c>DeepClone</c>) while the main thread continuously
-    /// calls <c>Set</c> on the same dict.  Verifies no exception escapes and the callback
-    /// path runs to completion without crashing.
-    /// </summary>
-    [Collection("SignalRegistry")]
-    public class DeepCloneEndToEndTest : IDisposable
-    {
-        public void Dispose() => ClearSignalHandlers();
-
-        private static void ClearSignalHandlers()
-        {
-            lock (SignalImpl.SignalLock)
-            {
-                var keys = new List<string>(SignalImpl.SignalHandlers.Keys);
-                foreach (var key in keys)
-                    if (SignalImpl.SignalHandlers.TryRemove(key, out var entries) && entries.Count > 0)
-                        entries[0].Registration?.Dispose();
-            }
-        }
-
-        private static (Chunk chunk, VirtualMachine vm) CompileToVM(string source)
-        {
-            var tokens = new Lexer(source, "<test>").ScanTokens();
-            var stmts = new Parser(tokens).ParseProgram();
-            SemanticResolver.Resolve(stmts);
-            var chunk = Compiler.Compile(stmts);
-            var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-            return (chunk, vm);
-        }
-
-        [Fact]
-        public void SignalCallback_WithMutableDictGlobal_UnderConcurrentSet_CompletesWithoutException()
-        {
-            ClearSignalHandlers();
-
-            var source =
-                "let data = { v: 0 };\n" +
-                "signal.on(Signal.Term, fn() { let x = data.v; });\n";
-
-            var (chunk, vm) = CompileToVM(source);
-            // Force the background branch: no real thread has MainThreadId == -1.
-            vm.TestForceBackgroundBranch();
-            vm.Execute(chunk);
-
-            var dataVal = vm.Globals["data"];
-            var dataDict = Assert.IsType<StashDictionary>(dataVal.AsObj);
-
-            using var cts = new CancellationTokenSource();
-
-            // Background: dispatch signal 50 times (triggers DeepClone on child VM).
-            var dispatchTask = Task.Run(() =>
-            {
-                for (int i = 0; i < 50 && !cts.Token.IsCancellationRequested; i++)
-                {
-                    SignalImpl.Dispatch("Term");
-                    Thread.SpinWait(20);
-                }
-            });
-
-            // Main thread: mutate the captured global dict.
-            var rng = new Random(99);
-            for (int i = 0; i < 200; i++)
-            {
-                dataDict.Set("v", StashValue.FromInt(rng.Next(1000)));
-                Thread.SpinWait(5);
-            }
-
-            dispatchTask.Wait(TimeSpan.FromSeconds(15));
-            cts.Cancel();
-        }
-    }
+    // ── F02-D: end-to-end removed (hazard gone) ──────────────────────────────
+    //
+    // The original end-to-end test (SignalCallback_WithMutableDictGlobal_UnderConcurrentSet)
+    // guarded the BuildChildGlobals / DeepClone path on the background callback branch.
+    // After the callback-marshaling flip, InvokeCallbackDirect's background branch no
+    // longer calls BuildChildGlobals / DeepClone — it enqueues directly.  The original
+    // hazard (concurrent Set racing with DeepClone on the pool thread) is structurally
+    // impossible on the new path.  The unit-level DeepClone_* tests above continue to
+    // cover the async SpawnAsyncFunction path that still uses BuildChildGlobals / DeepClone.
 }

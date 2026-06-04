@@ -75,6 +75,20 @@ public interface IInterpreterContext : IExecutionContext, IProcessContext, ITest
     /// </summary>
     string ResolveAgainstCwd(string path) => Path.GetFullPath(path, WorkingDirectory);
 
+    // --- Callback queue drain ---
+
+    /// <summary>
+    /// Drains queued background callbacks according to <paramref name="mode"/>.
+    /// <list type="bullet">
+    ///   <item><see cref="WaitMode.PollMode"/> — pops everything currently queued and returns.</item>
+    ///   <item><see cref="WaitMode.UntilMode"/> — parks on the queue signal until the deadline, draining on each wake.</item>
+    ///   <item><see cref="WaitMode.ForeverMode"/> — parks and drains until cancellation.</item>
+    /// </list>
+    /// The default implementation is a no-op (no queue in non-VM contexts).
+    /// <c>VMContext</c> overrides this with the real MPSC queue and reentrancy guard.
+    /// </summary>
+    void DrainCallbacks(WaitMode mode) { }
+
     // --- Parallel execution ---
     IInterpreterContext Fork(CancellationToken cancellationToken = default);
 
