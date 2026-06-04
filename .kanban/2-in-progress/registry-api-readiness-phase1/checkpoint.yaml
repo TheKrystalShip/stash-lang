@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T09:59:29Z"
+updated: "2026-06-04T10:17:26Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "PagedResponse<T> in Contracts; SearchResponse/AuditLogResponse deleted; controllers migrated; CLI lockstep; AOT publish green; 30 phase tests pass; all 728 Registry tests pass"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 9007359238cdc987d2cc0cb919a47546181d0ded
+    verified: true
+    started: "2026-06-04T10:07:43Z"
+    completed: "2026-06-04T10:17:26Z"
+    attempts: 1
+    notes: "PackagesControllerRegistryAuthorizeRequiredTests: 4-assertion reflection meta-test with [PublicEndpoint]-no-exemption predicate, count floor >= 13, fail-path fixture, and dual-attribute fixture"
   P3:
     status: pending
     commit: null
