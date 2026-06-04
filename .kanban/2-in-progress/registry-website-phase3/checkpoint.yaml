@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase3
 current: null
-updated: "2026-06-04T23:42:51Z"
+updated: "2026-06-04T23:56:22Z"
 phases:
   A1:
     status: done
@@ -44,8 +44,8 @@ phases:
     attempts: 1
     notes: "Docs: Web README authenticated-area section + registry-doc Clients cross-link (orchestrator fallback; full suite green)"
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: "2026-06-04T23:56:22Z"
   resolved: null
   findings_open: 0
   findings_fixed: 0
