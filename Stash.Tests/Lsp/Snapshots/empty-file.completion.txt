@@ -63,6 +63,7 @@ Module	dict
 Module	dns
 Module	encoding
 Module	env
+Module	event
 Module	fs
 Module	http
 Module	ini

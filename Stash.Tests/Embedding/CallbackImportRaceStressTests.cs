@@ -150,101 +150,13 @@ public class CallbackImportRaceStressTests
         Assert.Equal(2, snapshot.Count);
     }
 
-    // ── F01 end-to-end: callback fires correctly under import-stack churn ─────
-
-    /// <summary>
-    /// End-to-end stress through <c>VMContext.InvokeCallbackDirect</c>'s background-thread
-    /// branch.  A Stash VM registers a signal handler; background tasks fire
-    /// <c>SignalImpl.Dispatch("Term")</c> repeatedly while the main thread concurrently
-    /// exercises <c>IsolationHelpers.SnapshotImportStack</c> on a live set being mutated
-    /// by a second background thread (simulating parent-thread import churn).
-    ///
-    /// <c>VirtualMachine.TestForceBackgroundBranch()</c> sets <c>MainThreadId = -1</c> so
-    /// that the dispatch thread always takes the child-VM fork branch of
-    /// <c>InvokeCallbackDirect</c>, exercising the <c>SnapshotImportStack</c> code path.
-    ///
-    /// Asserts: all signal dispatches complete without exception.
-    /// </summary>
-    [Collection("SignalRegistry")]
-    public class CallbackEndToEndStressTest : IDisposable
-    {
-        public void Dispose() => ClearSignalHandlers();
-
-        private static void ClearSignalHandlers()
-        {
-            lock (SignalImpl.SignalLock)
-            {
-                var keys = new List<string>(SignalImpl.SignalHandlers.Keys);
-                foreach (var key in keys)
-                    if (SignalImpl.SignalHandlers.TryRemove(key, out var entries) && entries.Count > 0)
-                        entries[0].Registration?.Dispose();
-            }
-        }
-
-        private static (Chunk chunk, VirtualMachine vm) CompileToVM(string source)
-        {
-            var tokens = new Lexer(source, "<test>").ScanTokens();
-            var stmts = new Parser(tokens).ParseProgram();
-            SemanticResolver.Resolve(stmts);
-            var chunk = Compiler.Compile(stmts);
-            var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-            return (chunk, vm);
-        }
-
-        [Fact]
-        public void SignalCallback_UnderImportStackChurn_FiresWithoutException()
-        {
-            ClearSignalHandlers();
-
-            var source =
-                "let count = 0;\n" +
-                "signal.on(Signal.Term, fn() { count = count + 1; });\n";
-
-            var (chunk, vm) = CompileToVM(source);
-            // Force the background branch: MainThreadId = -1 is never the current thread.
-            vm.TestForceBackgroundBranch();
-            vm.Execute(chunk);
-
-            // Churn a local import-stack while dispatching callbacks.
-            var liveImportStack = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < 10; i++)
-                liveImportStack.Add($"/mod{i}.stash");
-
-            using var cts = new CancellationTokenSource();
-
-            // Background: dispatch signal 50 times (each triggers InvokeCallbackDirect).
-            var dispatchTask = Task.Run(() =>
-            {
-                for (int i = 0; i < 50 && !cts.Token.IsCancellationRequested; i++)
-                {
-                    SignalImpl.Dispatch("Term");
-                    Thread.SpinWait(20);
-                }
-            });
-
-            // Background: churn the import-stack (Add/Remove) — simulates Modules.cs.
-            var importChurnTask = Task.Run(() =>
-            {
-                var rng = new Random(7);
-                while (!cts.Token.IsCancellationRequested)
-                {
-                    string path = $"/mod{rng.Next(20)}.stash";
-                    if (rng.Next(2) == 0) liveImportStack.Add(path);
-                    else liveImportStack.Remove(path);
-                    Thread.SpinWait(10);
-                }
-            });
-
-            // Main thread: snapshot the live set — exercises the fix path in isolation.
-            for (int i = 0; i < 100; i++)
-            {
-                var snap = IsolationHelpers.SnapshotImportStack(liveImportStack);
-                Assert.NotNull(snap);
-            }
-
-            dispatchTask.Wait(TimeSpan.FromSeconds(15));
-            cts.Cancel();
-            importChurnTask.Wait(TimeSpan.FromSeconds(5));
-        }
-    }
+    // ── F01 end-to-end removed (hazard gone) ─────────────────────────────────
+    //
+    // The original end-to-end test (SignalCallback_UnderImportStackChurn_FiresWithoutException)
+    // guarded SnapshotImportStack against concurrent HashSet Add/Remove on the background
+    // callback branch.  After the callback-marshaling flip, InvokeCallbackDirect's background
+    // branch no longer calls SnapshotImportStack or forks a child VM — it enqueues directly.
+    // The original hazard is structurally impossible on the new path.
+    // The unit-level SnapshotImportStack_* tests above continue to cover that utility for
+    // the async SpawnAsyncFunction path that still snapshots import stacks.
 }

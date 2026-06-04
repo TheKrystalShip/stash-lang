@@ -36,40 +36,41 @@
 15. [`dns`](#dns--dns-resolution)
 16. [`encoding`](#encoding--encoding-and-decoding)
 17. [`env`](#env--environment-and-process-state)
-18. [`fs`](#fs--file-system-operations)
-19. [`http`](#http--http-client)
-20. [`ini`](#ini--ini-configuration)
-21. [`io`](#io--standard-io)
-22. [`json`](#json--json)
-23. [`log`](#log--structured-logging)
-24. [`math`](#math--math-functions)
-25. [`net`](#net--networking-utilities)
-26. [`os`](#os--os)
-27. [`path`](#path--path-manipulation)
-28. [`pkg`](#pkg--package-manager)
-29. [`process`](#process--process-management)
-30. [`prompt`](#prompt--repl-prompt-customisation)
-31. [`re`](#re--regular-expressions)
-32. [`scheduler`](#scheduler--os-service-management)
-33. [`sftp`](#sftp--sftp-file-transfer)
-34. [`shell`](#shell--interactive-shell-state)
-35. [`signal`](#signal--signal-handling)
-36. [`ssh`](#ssh--ssh-remote-execution)
-37. [`str`](#str--string-operations)
-38. [`sys`](#sys--system-information)
-39. [`task`](#task--parallel-tasks)
-40. [`tcp`](#tcp--tcp-sockets)
-41. [`term`](#term--terminal-formatting)
-42. [`test`](#test--test-framework)
-43. [`time`](#time--time-and-date)
-44. [`toml`](#toml--toml)
-45. [`tpl`](#tpl--templating)
-46. [`udp`](#udp--udp-datagrams)
-47. [`ws`](#ws--websockets)
-48. [`xml`](#xml--xml)
-49. [`yaml`](#yaml--yaml)
-50. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
-51. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
+18. [`event`](#event--event)
+19. [`fs`](#fs--file-system-operations)
+20. [`http`](#http--http-client)
+21. [`ini`](#ini--ini-configuration)
+22. [`io`](#io--standard-io)
+23. [`json`](#json--json)
+24. [`log`](#log--structured-logging)
+25. [`math`](#math--math-functions)
+26. [`net`](#net--networking-utilities)
+27. [`os`](#os--os)
+28. [`path`](#path--path-manipulation)
+29. [`pkg`](#pkg--package-manager)
+30. [`process`](#process--process-management)
+31. [`prompt`](#prompt--repl-prompt-customisation)
+32. [`re`](#re--regular-expressions)
+33. [`scheduler`](#scheduler--os-service-management)
+34. [`sftp`](#sftp--sftp-file-transfer)
+35. [`shell`](#shell--interactive-shell-state)
+36. [`signal`](#signal--signal-handling)
+37. [`ssh`](#ssh--ssh-remote-execution)
+38. [`str`](#str--string-operations)
+39. [`sys`](#sys--system-information)
+40. [`task`](#task--parallel-tasks)
+41. [`tcp`](#tcp--tcp-sockets)
+42. [`term`](#term--terminal-formatting)
+43. [`test`](#test--test-framework)
+44. [`time`](#time--time-and-date)
+45. [`toml`](#toml--toml)
+46. [`tpl`](#tpl--templating)
+47. [`udp`](#udp--udp-datagrams)
+48. [`ws`](#ws--websockets)
+49. [`xml`](#xml--xml)
+50. [`yaml`](#yaml--yaml)
+51. [Appendix A — Deprecated Members](#appendix-a--deprecated-members)
+52. [Appendix B — Capability-Gated Namespaces](#appendix-b--capability-gated-namespaces)
 
 ---
 
@@ -4202,6 +4203,42 @@ Exits the current process with the given integer exit code (default 0). Runs all
 - `code`: `int` — The exit code. Defaults to 0
 
 **Returns:** `null` — Does not return — exits the process
+
+---
+
+## `event` — event
+
+**Capability:** _none — always available_
+**Throws:** `CancellationError`
+
+### Functions
+
+| Function | Returns | Throws | Description |
+| -------- | ------- | ------ | ----------- |
+| `event.poll` | `null` | — | Drains everything currently queued and returns immediately without blocking. |
+| `event.loop` | `null` | `CancellationError` | Blocks and drains queued callbacks indefinitely until the script's is cancelled. |
+
+### Function Details
+
+#### `event.poll() -> null`
+
+Drains everything currently queued and returns immediately without blocking. Any callbacks registered before this call have their mutations visible to the caller by the time event.poll() returns.
+
+When called from inside a queued callback (_isDraining is set), this is a no-op — the run-to-completion task model prevents re-entrant draining.
+
+**Returns:** `null`
+
+#### `event.loop() -> null`
+
+Blocks and drains queued callbacks indefinitely until the script's is cancelled. Use this to keep a script alive while waiting for events (e.g. fs.watch or signal.on callbacks).
+
+When called from inside a queued callback (_isDraining is set), this is a no-op — the run-to-completion task model prevents re-entrant draining.
+
+**Returns:** `null`
+
+**Throws:**
+
+- `CancellationError` — when the script's cancellation token is triggered
 
 ---
 

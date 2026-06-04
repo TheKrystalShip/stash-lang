@@ -126,15 +126,24 @@ an `AutoResetEvent`/semaphore signal. MPSC: any number of background producers e
 the single VM thread consumes. Per-VM (not per-process) so engine↔engine isolation is
 preserved.
 
-**Producer.** When `VMContext.InvokeCallbackDirect` is called on a thread other than the
-main thread *and* the callable is a `VMFunction` (the current Branch-2 path), the queued
-implementation replaces the entire child-VM construction (`BuildChildGlobals`,
-`SnapshotUpvalues`, fresh `VirtualMachine`). Producers must `args.ToArray()` because
-`ReadOnlySpan<StashValue>` is a ref struct and cannot be stored; the queued path returns
-`StashValue.Null` immediately (the existing background path's return value is already
-discarded by both `fs.watch` and `signal.on`). The queued path **does not** call
-`IsolationHelpers.BuildChildGlobals` / `SnapshotUpvalues` / construct a child VM — those
-helpers stay in place for the `async fn` fork in `SpawnAsyncFunction`, untouched.
+**Producer.** `VMContext.InvokeCallbackDirect` is a 3-way branch keyed on `ActiveVM`:
+
+- **Branch 1** (`ActiveVM != null`, same thread): execute inline, shared semantics (unchanged).
+- **Branch 2** (`ActiveVM != null`, background thread — fs.watch / signal.on path): the
+  queued implementation replaces the child-VM construction. Producers must `args.ToArray()`
+  because `ReadOnlySpan<StashValue>` is a ref struct and cannot be stored; the queued path
+  returns `StashValue.Null` immediately (the existing background path's return value is
+  already discarded by both `fs.watch` and `signal.on`). The queued path **does not** call
+  `IsolationHelpers.BuildChildGlobals` / `SnapshotUpvalues` / construct a child VM — those
+  helpers stay in place for the `async fn` fork in `SpawnAsyncFunction`, untouched.
+- **Branch 3** (`ActiveVM == null`, forked child — task.run / task.parMap / task.timeout /
+  process.exec exit / TCP accept): the pre-queue child-VM fork path **stays intact**. These
+  callers invoke on a forked child context where `ActiveVM` is null; they use the
+  **parallel-isolated async contract** (execute-and-return via the child-VM fork,
+  communicate via the Future). The locked design Q3 asymmetry is explicit:
+  *async = parallel-isolated (Branch 3); event callback = serial-shared (Branch 2).*
+  `BuildChildGlobals` + `SnapshotUpvalues` + `new VirtualMachine` remain in Branch 3 as
+  before; they are NOT removed from this path.
 
 Producers register watchers/handlers against the queue of the VM that called
 `fs.watch`/`signal.on`. A watcher/handler registered from inside an isolated `async`
@@ -201,9 +210,14 @@ async child is short-lived).
    `ConcurrentQueue<(IStashCallable, StashValue[])>`, `AutoResetEvent` signal, and the
    private `_isDraining` flag. Expose `EnqueueCallback(callable, args)` (producer side)
    and `DrainCallbacks(WaitMode, TimeSpan?)` (consumer side, the chokepoint).
-2. **Flip `InvokeCallbackDirect`'s background branch (same file).** Replace the
-   `BuildChildGlobals` + `SnapshotUpvalues` + child-VM construction with `EnqueueCallback`.
-   Return `StashValue.Null`. The same-thread Branch-1 path is unchanged.
+2. **Flip `InvokeCallbackDirect`'s background branch where `ActiveVM != null` (same file).**
+   Replace the `BuildChildGlobals` + `SnapshotUpvalues` + child-VM construction with
+   `EnqueueCallback` **only** in the `ActiveVM != null` background case (fs.watch /
+   signal.on). Return `StashValue.Null` on that path. The same-thread Branch-1 path is
+   unchanged. The forked-child path (`ActiveVM == null`, used by `task.*` / `process.exec`
+   exit / TCP accept) **stays parallel-isolated** — execute-and-return via the child-VM
+   fork, communicate via the Future. This is the locked design Q3 asymmetry:
+   async = parallel-isolated; event callback = serial-shared.
 3. **Drain-aware `time.sleep` (`Stash.Stdlib/BuiltIns/TimeBuiltIns.cs`).** Replace the
    single `WaitHandle.WaitOne` / `Thread.Sleep` with the WaitAny-loop, gated on
    `_isDraining` (when draining: plain sleep, no re-pump).
@@ -259,7 +273,7 @@ relies on a meta-test or on prose alone.
 
 | Concern | Single source of truth | Omission prevented by |
 | --- | --- | --- |
-| Every background-thread producer must enqueue (never fork a child VM) | `VMContext.InvokeCallbackDirect`'s background branch | **Construct** — all background callbacks already funnel through this one branch. Replacing the branch body means no producer code path *can* skip enqueuing; no alternative exists in the codebase. New background producers (future timers) added later must call `InvokeCallbackDirect` anyway because it is the only public callback entry point. |
+| Every background-thread producer where `ActiveVM != null` (fs.watch / signal.on) must enqueue (never fork a child VM) | `VMContext.InvokeCallbackDirect`'s `ActiveVM != null` background branch | **Construct** — all such background callbacks funnel through this one branch. The forked-child path (`ActiveVM == null`: `task.*` / `process.exec` exit / TCP accept) **stays parallel-isolated** — it executes via the child-VM fork and returns the result; it does NOT enqueue. New background event producers (future timers) added later must call `InvokeCallbackDirect` anyway because it is the only public callback entry point; they will land in the correct branch based on whether they run on the root context (`ActiveVM != null`) or a forked child. |
 | Drain must be non-reentrant (run-to-completion task model) | `_isDraining` flag inside `VMContext.DrainCallbacks` | **Construct** — the flag is owned by the single drain method, set/cleared with `try` / `finally`. No caller can forget it because no caller pops the queue directly; every yield point calls `DrainCallbacks` and the flag is set inside, not by the caller. |
 | Callback delivery must NEVER fire from `RunInner`'s 256-iter safepoint (delivery ≠ cancellation) | The location of `DrainCallbacks` (called only from stdlib yield points — `time.sleep`, `event.poll`, `event.loop`) | **Construct** — `DrainCallbacks` lives at the stdlib boundary and is never wired into `RunInner`. The separation is *structural*: the dispatch loop has no reference to the drain method, the drain method has no opcode, no new dispatch-loop case is added. A future contributor would have to invent a new mechanism (wire `VMContext` into `RunInner`) to break this — there is nothing to "forget." |
 

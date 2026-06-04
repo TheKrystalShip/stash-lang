@@ -140,6 +140,7 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         _context.MainThreadId = -1;
     }
 
+
     public void RegisterTypeCheck(string vmTypeName, Func<object, bool> predicate)
     {
         _registeredTypeChecks[vmTypeName] = predicate;

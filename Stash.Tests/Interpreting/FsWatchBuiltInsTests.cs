@@ -611,83 +611,65 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
         Assert.Equal(1, count);
     }
 
-    // ── Scope isolation tests ─────────────────────────────────────────────────
+    // ── Queued-delivery mutation tests ───────────────────────────────────────
+    //
+    // Background-thread callbacks (fs.watch) are now marshaled onto the VM thread via
+    // a per-VM callback queue.  Delivery happens at the next drain point (time.sleep).
+    // This gives Branch-1 (shared) semantics: mutations inside the callback ARE visible
+    // to the parent after time.sleep returns.  These tests document the new behavior.
 
     [Fact]
-    public void Watch_Callback_FiresOnChange_MutationIsCallLocal()
+    public void Watch_Callback_FiresOnChange_MutationIsSharedViaQueuedDelivery()
     {
-        // Background-thread callbacks (fs.watch) run in an isolated child VM.
-        // They CANNOT mutate outer/parent globals — primitive rebinds (x = 99) are
-        // call-local: the child has its own copy of the global slot, and the parent
-        // never sees the write.  The callback can communicate via I/O side effects.
-        var watchedFile = Path.Combine(TestDir, "watch_fork.txt").Replace("\\", "/");
-        var signalFile  = Path.Combine(TestDir, "watch_fork_signal.txt").Replace("\\", "/");
+        // Background-thread fs.watch callbacks are enqueued and delivered on the VM thread
+        // at the next time.sleep drain point.  A primitive rebind (x = 99) inside the
+        // callback IS visible to the parent after the sleep that drained it returns.
+        var watchedFile = Path.Combine(TestDir, "watch_queued.txt").Replace("\\", "/");
         File.WriteAllText(watchedFile, "initial");
 
-        // (a) Prove the callback fired via a side-effect channel: the callback writes
-        //     to signalFile.  The parent polls until the file appears (up to 5s deadline)
-        //     so slow FSW latency is tolerated without a fixed sleep.
-        // (b) x remains 0 in the parent — documents call-local primitive mutation.
         var result = Run($$"""
             let x = 0;
             let w = fs.watch("{{watchedFile}}", (event) => {
                 x = 99;
-                fs.writeFile("{{signalFile}}", "fired");
             });
             fs.writeFile("{{watchedFile}}", "trigger");
             let deadline = time.millis() + 5000;
-            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
-                time.sleep(0.02);
+            while (x == 0 && time.millis() < deadline) {
+                time.sleep(0.05);
             }
             fs.unwatch(w);
             let result = x;
             """);
 
-        // (a) Callback fired — signal file was written by the child VM.
-        Assert.True(File.Exists(signalFile), "callback did not fire: signal file was not written within 5s");
-        Assert.Equal("fired", File.ReadAllText(signalFile));
-
-        // (b) Parent's global x is still 0 — primitive rebind inside the background-thread
-        //     callback is call-local and never propagates to the parent VM.
-        Assert.Equal(0L, result);
+        // Parent's global x was flipped to 99 by the queued callback.
+        Assert.Equal(99L, result);
     }
 
     [Fact]
-    public void Watch_UpvalueRefType_DictMutationIsCallLocal()
+    public void Watch_UpvalueRefType_DictMutationIsSharedViaQueuedDelivery()
     {
-        // Background-thread callbacks (fs.watch) run in an isolated child VM whose
-        // upvalues are snapshotted via IsolationHelpers.SnapshotUpvalues.  A mutation
-        // of a reference-typed captured local (dict) inside the callback is call-local:
-        // the child gets its own deep-cloned copy of the dict, so the parent's dict is
-        // unchanged after the callback fires.
-        //
-        // Prove the callback fired via a side-effect channel (signalFile write), then
-        // assert the parent's captured dict is unchanged — mirroring the primitive test
-        // Watch_Callback_FiresOnChange_MutationIsCallLocal.
-        var filePath   = Path.Combine(TestDir, "watch_upvalue_ref.txt").Replace("\\", "/");
-        var signalFile = Path.Combine(TestDir, "watch_upvalue_ref_signal.txt").Replace("\\", "/");
+        // Background-thread fs.watch callbacks are enqueued and delivered on the VM thread
+        // at the next time.sleep drain point.  A mutation of a reference-typed captured
+        // upvalue (dict) inside the callback IS visible to the parent after the sleep
+        // that drained it returns.
+        var filePath = Path.Combine(TestDir, "watch_queued_upvalue.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
             let state = {value: 0};
             let w = fs.watch("{{filePath}}", (event) => {
                 state.value = 42;
-                fs.writeFile("{{signalFile}}", "fired");
             });
             fs.writeFile("{{filePath}}", "trigger");
             let deadline = time.millis() + 5000;
-            while (!fs.exists("{{signalFile}}") && time.millis() < deadline) {
-                time.sleep(0.02);
+            while (state.value == 0 && time.millis() < deadline) {
+                time.sleep(0.05);
             }
             fs.unwatch(w);
             let result = state.value;
             """);
 
-        // Callback fired — signal file was written by the child VM.
-        Assert.True(File.Exists(signalFile), "callback did not fire: signal file was not written within 5s");
-        Assert.Equal("fired", File.ReadAllText(signalFile));
-
-        // Parent's captured dict is unchanged — upvalue snapshot makes mutation call-local.
-        Assert.Equal(0L, result);
+        // Parent's captured dict.value was mutated to 42 by the queued callback.
+        Assert.Equal(42L, result);
     }
 }

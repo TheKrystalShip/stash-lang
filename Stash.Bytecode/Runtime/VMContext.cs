@@ -433,10 +433,182 @@ internal sealed class VMContext : IInterpreterContext
 
     /// <summary>
     /// The managed thread ID of the thread that owns this VM context.
-    /// Used by <see cref="InvokeCallback"/> to distinguish same-thread (inline) from
-    /// background-thread (child VM) callback invocations.
+    /// Used by <see cref="InvokeCallbackDirect"/> to distinguish same-thread (inline) from
+    /// background-thread (queued) callback invocations.
     /// </summary>
     internal int MainThreadId { get; set; }
+
+    // ── Per-VM callback queue (event-loop marshaling) ─────────────────────────
+    //
+    // Background producers (fs.watch, signal.on, future timers) call EnqueueCallback
+    // rather than forking a child VM.  The VM thread dequeues and runs each callback
+    // inline only while parked at a yield point (time.sleep, event.poll, event.loop) via
+    // DrainCallbacks.  This gives zero-concurrency delivery → Branch-1 (shared) semantics.
+    //
+    // Design contract (from brief.md + callback-vm-thread-marshaling.md):
+    //   – MPSC: any number of background producers, single consumer (VM thread).
+    //   – Per-VM (not process-global) so engine↔engine isolation is preserved.
+    //   – _isDraining prevents re-entrant drain (run-to-completion task model).
+    //   – Lost-wakeup safety: drain-until-empty after each signal, never one-item-per-signal.
+
+    private readonly ConcurrentQueue<(IStashCallable Callable, StashValue[] Args)> _callbackQueue = new();
+    private readonly SemaphoreSlim _queueSignal = new(0, int.MaxValue);
+    private bool _isDraining;
+
+
+    /// <summary>
+    /// Enqueues a callback for delivery on the VM thread at the next drain point.
+    /// Safe to call from any thread.  <paramref name="args"/> must be an independent
+    /// copy — callers must <c>args.ToArray()</c> before passing (spans are ref-structs
+    /// and cannot be stored; array ensures the producer does not retain the original buffer).
+    /// </summary>
+    internal void EnqueueCallback(IStashCallable callable, StashValue[] args)
+    {
+        _callbackQueue.Enqueue((callable, args));
+        _queueSignal.Release(); // wake any parked drain loop
+    }
+
+    /// <inheritdoc/>
+    public bool SupportsCallbackDrain => true;
+
+    /// <summary>
+    /// Drain queued callbacks according to <paramref name="mode"/>.  This is the ONLY method
+    /// that pops the queue and invokes callbacks — the single chokepoint.
+    ///
+    /// <list type="bullet">
+    ///   <item><see cref="WaitMode.PollMode"/> — dequeue everything currently pending and return.</item>
+    ///   <item><see cref="WaitMode.UntilMode"/> — park on <c>WaitAny([cancel, queueSignal], remaining)</c>,
+    ///     drain, recompute remaining, repeat until the deadline is reached.</item>
+    ///   <item><see cref="WaitMode.ForeverMode"/> — same as Until but with no deadline.</item>
+    /// </list>
+    ///
+    /// Reentrancy: if <c>_isDraining</c> is already set (a queued callback reached a yield point
+    /// internally), the method returns immediately without draining (run-to-completion model).
+    /// </summary>
+    public void DrainCallbacks(WaitMode mode)
+    {
+        // Reentrancy guard — a callback calling time.sleep/event.poll must not re-pump.
+        if (_isDraining) return;
+
+        _isDraining = true;
+        try
+        {
+            switch (mode)
+            {
+                case WaitMode.PollMode:
+                    DrainAll();
+                    break;
+
+                case WaitMode.UntilMode until:
+                    DrainUntil(until.Deadline);
+                    break;
+
+                case WaitMode.ForeverMode:
+                    DrainForever();
+                    break;
+            }
+        }
+        finally
+        {
+            _isDraining = false;
+        }
+    }
+
+    private void DrainAll()
+    {
+        while (_callbackQueue.TryDequeue(out var item))
+            InvokeQueuedCallback(item.Callable, item.Args);
+    }
+
+    private void DrainUntil(DateTimeOffset deadline)
+    {
+        var cancelHandle = _ct.CanBeCanceled ? _ct.WaitHandle : null;
+
+        while (true)
+        {
+            // Drain whatever is currently queued.
+            DrainAll();
+
+            // Check if time is up.
+            var remaining = deadline - DateTimeOffset.UtcNow;
+            if (remaining <= TimeSpan.Zero) return;
+
+            // Park until the queue has something OR the deadline passes OR cancellation.
+            int remainingMs = (int)Math.Min(remaining.TotalMilliseconds, int.MaxValue);
+            if (cancelHandle is not null)
+            {
+                // WaitAny: [cancel, queueSignal] — whichever fires first wakes us.
+                int index = WaitHandle.WaitAny(new[] { cancelHandle, _queueSignal.AvailableWaitHandle }, remainingMs);
+                if (index == 0) // cancellation fired
+                    _ct.ThrowIfCancellationRequested();
+                // If index == WaitHandle.WaitTimeout (258), the duration expired; drain once
+                // more in case a late enqueue raced the timeout, then return.
+                if (index == WaitHandle.WaitTimeout)
+                {
+                    DrainAll();
+                    return;
+                }
+                // index == 1: queue signal fired — consume the semaphore permit so the
+                // AvailableWaitHandle is properly reset for the next wait iteration.
+                // Non-blocking TryWait with 0 timeout consumes it without blocking.
+                _queueSignal.Wait(0);
+            }
+            else
+            {
+                // No cancellation token — just wait on queue signal with a timeout.
+                bool signaled = _queueSignal.Wait(remainingMs);
+                if (!signaled)
+                {
+                    // Timeout: drain any late arrivals and return.
+                    DrainAll();
+                    return;
+                }
+            }
+            // Loop: recompute remaining and drain again.
+        }
+    }
+
+    private void DrainForever()
+    {
+        var cancelHandle = _ct.CanBeCanceled ? _ct.WaitHandle : null;
+
+        while (true)
+        {
+            DrainAll();
+
+            if (cancelHandle is not null)
+            {
+                int index = WaitHandle.WaitAny(new[] { cancelHandle, _queueSignal.AvailableWaitHandle });
+                if (index == 0)
+                    _ct.ThrowIfCancellationRequested();
+                _queueSignal.Wait(0);
+            }
+            else
+            {
+                _queueSignal.Wait();
+            }
+        }
+    }
+
+    private void InvokeQueuedCallback(IStashCallable callable, StashValue[] args)
+    {
+        // Deliver via the inline same-thread path (Branch-1 semantics).
+        // ActiveVM must be set — we are on the VM thread, inside a yield point.
+        if (ActiveVM is null) return;
+
+        try
+        {
+            if (callable is VMFunction vmFn)
+                ActiveVM.ExecuteVMFunctionInlineDirect(vmFn, args, null);
+            else
+                callable.CallDirect(this, args);
+        }
+        catch
+        {
+            // Log-and-swallow: a buggy handler must not break subsequent callbacks
+            // or the drain loop.  Matches SignalImpl.Dispatch and FsBuiltIns.InvokeCallback.
+        }
+    }
 
     public StashValue InvokeCallbackDirect(IStashCallable callable, System.ReadOnlySpan<StashValue> args)
     {
@@ -444,9 +616,29 @@ internal sealed class VMContext : IInterpreterContext
         {
             if (ActiveVM != null && System.Threading.Thread.CurrentThread.ManagedThreadId == MainThreadId)
             {
+                // Branch 1 — same thread, queue-owning root: execute inline, shared semantics.
                 return ActiveVM.ExecuteVMFunctionInlineDirect(vmFn, args, null);
             }
 
+            if (ActiveVM != null)
+            {
+                // Branch 2 — background thread on the queue-owning root: ENQUEUE for delivery
+                // at the next drain point (fs.watch / signal.on path; serial-shared callback
+                // marshaling). We do NOT fork a child VM here — the queue delivers on the VM
+                // thread (zero concurrency) so shared semantics are safe without cloning.
+                // args must be copied because ReadOnlySpan<StashValue> is a ref struct and
+                // cannot be stored; the array is owned by the queue entry.
+                EnqueueCallback(callable, args.ToArray());
+                return StashValue.Null; // return value is discarded by both fs.watch and signal.on
+            }
+
+            // Branch 3 — forked child (ActiveVM == null): execute via a child VM fork.
+            // This path is taken by task.run / task.parMap / task.timeout / process.exec exit
+            // callbacks / TCP accept — all of which run on a forked child context where ActiveVM
+            // is null. These use the parallel-isolated async contract: real thread, cloned state,
+            // communicate via the awaited Future. The locked design Q3 asymmetry:
+            //   async = parallel-isolated (this branch)
+            //   event callback = serial-shared (Branch 2 above)
             if (Globals != null)
             {
                 // Cross-thread path: apply freeze-or-clone to globals so the child gets a
@@ -498,6 +690,8 @@ internal sealed class VMContext : IInterpreterContext
                 // now has its own isolated globals dict — writes are call-local, not shared.
             }
         }
+
+        // Non-VMFunction callables (native delegates, etc.): fall through to fork path.
         return callable.CallDirect(Fork(), args);
     }
 

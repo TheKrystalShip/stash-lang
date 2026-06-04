@@ -75,6 +75,34 @@ public interface IInterpreterContext : IExecutionContext, IProcessContext, ITest
     /// </summary>
     string ResolveAgainstCwd(string path) => Path.GetFullPath(path, WorkingDirectory);
 
+    // --- Callback queue drain ---
+
+    /// <summary>
+    /// Indicates whether this context owns a callback queue (the <c>event.poll</c> /
+    /// <c>event.loop</c> pump). The default is <see langword="false"/>; <c>VMContext</c>
+    /// overrides this to <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>event.poll</c> and <c>event.loop</c> check this flag and throw
+    /// <see cref="RuntimeError"/> when it is <see langword="false"/>, protecting future
+    /// embedders from a silent no-op event loop. <c>time.sleep</c> is intentionally NOT
+    /// gated on this flag — it calls <see cref="DrainCallbacks"/> unconditionally and
+    /// relies on the no-op default to fall through to its plain-sleep fallback.
+    /// </remarks>
+    bool SupportsCallbackDrain => false;
+
+    /// <summary>
+    /// Drains queued background callbacks according to <paramref name="mode"/>.
+    /// <list type="bullet">
+    ///   <item><see cref="WaitMode.PollMode"/> — pops everything currently queued and returns.</item>
+    ///   <item><see cref="WaitMode.UntilMode"/> — parks on the queue signal until the deadline, draining on each wake.</item>
+    ///   <item><see cref="WaitMode.ForeverMode"/> — parks and drains until cancellation.</item>
+    /// </list>
+    /// The default implementation is a no-op (no queue in non-VM contexts).
+    /// <c>VMContext</c> overrides this with the real MPSC queue and reentrancy guard.
+    /// </summary>
+    void DrainCallbacks(WaitMode mode) { }
+
     // --- Parallel execution ---
     IInterpreterContext Fork(CancellationToken cancellationToken = default);
 

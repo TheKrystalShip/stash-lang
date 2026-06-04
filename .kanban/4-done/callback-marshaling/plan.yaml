@@ -24,6 +24,7 @@ default_verify:
 # Broad scope — see brief.md "Implementation Path" for the exact files per phase.
 # Per-phase `files:` lists are authoritative for verify-phase-scope enforcement.
 scope:
+  - Stash.Core/**
   - Stash.Bytecode/**
   - Stash.Stdlib/**
   - Stash.Tests/**
@@ -42,6 +43,8 @@ phases:
     title: Per-VM callback queue, DrainCallbacks chokepoint, time.sleep drain-loop, producer flip
     deps: []
     files:
+      - Stash.Core/Runtime/WaitMode.cs
+      - Stash.Core/Runtime/IInterpreterContext.cs
       - Stash.Bytecode/Runtime/VMContext.cs
       - Stash.Stdlib/BuiltIns/TimeBuiltIns.cs
       - Stash.Tests/Interpreting/FsWatchBuiltInsTests.cs
@@ -49,8 +52,9 @@ phases:
       - Stash.Tests/Embedding/CallbackImportRaceStressTests.cs
       - Stash.Tests/Stdlib/SignalNamespaceTests.cs
     verify:
-      - dotnet build Stash.Bytecode Stash.Stdlib
-      - dotnet test --filter "FullyQualifiedName~FsWatchBuiltInsTests|FullyQualifiedName~SignalNamespaceTests|FullyQualifiedName~SignalImplTests|FullyQualifiedName~CallbackDeepCloneRaceStressTests|FullyQualifiedName~CallbackImportRaceStressTests|FullyQualifiedName~MultiEngineIsolationTests|FullyQualifiedName~AsyncIsolationTests"
+      - dotnet build Stash.Bytecode/Stash.Bytecode.csproj
+      - dotnet build Stash.Stdlib/Stash.Stdlib.csproj
+      - dotnet test --filter "FullyQualifiedName~FsWatchBuiltInsTests|FullyQualifiedName~SignalNamespaceTests|FullyQualifiedName~SignalImplTests|FullyQualifiedName~TaskBuiltInsTests|FullyQualifiedName~AsyncAwaitTests|FullyQualifiedName~CallbackDeepCloneRaceStressTests|FullyQualifiedName~CallbackImportRaceStressTests|FullyQualifiedName~MultiEngineIsolationTests|FullyQualifiedName~AsyncIsolationTests"
     done_when:
       - A signal.on handler that sets a parent `let stop = false` flips it to true for the parent loop after the next time.sleep returns (graceful-shutdown pattern works end-to-end via SignalImpl.Dispatch from a background thread).
       - A fs.watch callback that sets a parent `let changed = false` flips it to true after the parent's next time.sleep returns when the watched file is touched.
@@ -92,7 +96,7 @@ phases:
       - Stash.Tests/Interpreting/EventBuiltInsTests.cs
     verify:
       - dotnet build Stash.Stdlib
-      - dotnet test --filter "FullyQualifiedName~EventBuiltInsTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+      - dotnet test --filter "FullyQualifiedName~EventBuiltInsTests"
     done_when:
       - event.poll() drains everything currently queued and returns immediately without blocking; a watcher fired before the poll has mutated the parent's captured state by the time poll returns.
       - event.loop() blocks and drains until cancellation; cancelling the script's CancellationToken makes the loop throw CancellationError (registered error type).

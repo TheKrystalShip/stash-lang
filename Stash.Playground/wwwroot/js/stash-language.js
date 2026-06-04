@@ -23,7 +23,7 @@ function registerStashLanguage() {
 
         namespaces: [
             'arr', 'dict', 'str', 'math', 'time', 'json', 'fs', 'path',
-            'env', 'sys', 'http', 'crypto', 'io', 'conv', 'process',
+            'env', 'event', 'sys', 'http', 'crypto', 'io', 'conv', 'process',
             'term', 'encoding', 'ini', 'config', 'args', 'tpl',
             'test', 'assert', 'buf'
         ],

@@ -23,6 +23,9 @@ public class Wave2ThrowsCoverageTests
         ["encoding"] = new(),
         ["net"] = new() { "interfaces" },
         ["env"] = new() { "set", "has", "all", "withPrefix", "remove", "cwd", "home", "hostname", "user", "os", "arch", "dirStack", "dirStackDepth", "exit" },
+        // event: poll is infallible (drain-and-return immediately, no blocking); loop throws
+        // CancellationError when the script's cancellation token fires.
+        ["event"] = new() { "poll" },
     };
 
     public static IEnumerable<object[]> Wave2Namespaces => NoThrowAllowList.Keys.Select(n => new object[] { n });

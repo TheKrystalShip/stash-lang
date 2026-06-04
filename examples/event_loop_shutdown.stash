@@ -1,0 +1,96 @@
+#!/usr/bin/env stash
+
+// examples/event_loop_shutdown.stash
+// Callback-Marshaling: closure mutation via the event-loop drain
+//
+// Demonstrates the restored pattern: an fs.watch callback mutates a
+// parent-scope flag, and the parent drive-loop observes the mutation
+// after time.sleep() drains the callback queue.
+//
+// WHY THE MUTATION REACHES THE PARENT:
+//   Background-thread callbacks (fs.watch, signal.on, …) do not run
+//   inline — they are *enqueued* onto the VM's callback queue.  The
+//   VM thread drains that queue at yield points (time.sleep, event.poll,
+//   event.loop) where the main script is parked and there is zero
+//   concurrent execution.  Because the callback runs on the VM thread,
+//   not a background thread, it shares globals and captured upvalues
+//   with the parent — mutations are visible immediately after the
+//   drain point returns.
+//
+//   This is the JS/Lua event-loop bargain.  Before this feature, the
+//   callback ran in an isolated child VM, so mutations were call-local
+//   and never reached the parent.
+
+const HR = "=" * 58;
+io.println(HR);
+io.println("  Callback-Marshaling: fs.watch config-reload demo");
+io.println(HR);
+
+// ── Setup ──────────────────────────────────────────────────────────
+// Create a temporary directory to watch; we'll drop a config file
+// into it to simulate a live config update.
+
+const watchDir = fs.tempDir();
+const configFile = path.join(watchDir, "config.toml");
+io.println($"  Watching: {watchDir}");
+
+// ── Parent-scope state ─────────────────────────────────────────────
+// `running` starts true and is flipped by the fs.watch callback.
+// It MUST be `let`, not `const` — the callback mutates it.
+// `reloadCount` tracks how many config-change callbacks fired.
+
+let running = true;
+let reloadCount = 0;
+
+// ── Register the watcher BEFORE triggering any events ─────────────
+// The callback captures `running` and `reloadCount` by reference.
+// Mutations made inside the callback ARE visible to the parent
+// because delivery happens on the VM thread at each time.sleep().
+
+const watcher = fs.watch(watchDir, (e) => {
+    reloadCount = reloadCount + 1;
+    io.println($"  [callback] #{reloadCount} {e.type} — {e.path}");
+    io.println("  [callback] Setting running = false; loop exits next tick.");
+    running = false;   // <-- the closure mutation this feature restores
+});
+
+io.println("  Watcher registered.");
+
+// ── Trigger: write the config file after a short delay ────────────
+// time.sleep(0.2) lets the watcher register before the OS event
+// fires.  No async fn needed — we write inline, then enter the loop.
+
+time.sleep(0.2);   // give the watcher time to register
+io.println("  Writing config file (simulating a live config update)...");
+fs.writeFile(configFile, "port = 9090\nhost = \"0.0.0.0\"");
+
+// ── Drive loop — drain point: time.sleep() ─────────────────────────
+// Each time.sleep() parks the VM thread.  The runtime then drains
+// every queued callback before returning.  The callback sets
+// running = false; the while-condition is re-checked on the next
+// iteration and the loop exits cleanly.
+//
+// Safety ceiling: 20 ticks × 0.1s = 2s max — prevents hangs in CI.
+
+let ticks = 0;
+while (running && ticks < 20) {
+    ticks = ticks + 1;
+    io.println($"  [loop] tick {ticks} — running = {running}");
+    time.sleep(0.1);   // <-- drain point: queued callbacks run here
+}
+
+// ── Narrate outcome ────────────────────────────────────────────────
+if (!running) {
+    io.println($"  Loop exited cleanly after {ticks} tick(s): callback mutation reached parent.");
+} else {
+    io.println($"  Loop hit safety ceiling ({ticks} ticks) — callback did not fire.");
+}
+io.println($"  Callbacks delivered: {reloadCount}");
+
+// ── Cleanup ───────────────────────────────────────────────────────
+fs.unwatch(watcher);
+fs.delete(watchDir);
+
+io.println(HR);
+io.println("  Done.");
+io.println(HR);

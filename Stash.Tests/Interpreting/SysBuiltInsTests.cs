@@ -500,11 +500,12 @@ let result = true;
             // to our own PID, then poll (inside Stash) for the marker FILE up to a 5s deadline
             // instead of a fixed sleep — robust to signal-delivery latency under load.
             //
-            // Signal handlers run in an isolated child VM (cross-thread dispatch via
-            // InvokeCallbackDirect), so upvalue-captured dict mutations (e.g. state.handled = true)
-            // are call-local and never propagate back to the parent.  The canonical cross-boundary
-            // signal channel is a file I/O side-effect, so we poll fs.exists(marker) here and
-            // assert File.Exists(marker) in C# — exactly what the handler writes.
+            // Signal handlers are MARSHALED onto the VM thread (the callback-marshaling event-loop):
+            // SignalImpl.Dispatch enqueues the handler from the OS signal thread, and it runs on the
+            // main thread only when the VM reaches a drain point (time.sleep / event.poll).  The poll
+            // loop below therefore waits with time.sleep (a drain point) — NOT a shell $(sleep), which
+            // does NOT drain the callback queue, so the handler would never fire.  We still use a file
+            // I/O side-effect as the cross-process marker so the C# side can assert File.Exists(marker).
             //
             // SIGUSR1 is registered process-globally, so the script unregisters it before
             // returning, and the C# finally re-runs offSignal as a belt-and-suspenders
@@ -517,7 +518,7 @@ let pid = sys.pid();
 $(kill -USR1 ${{pid}});
 let deadline = time.millis() + 5000;
 while (!fs.exists(""{marker.Replace("\\", "\\\\")}"") && time.millis() < deadline) {{
-    let _ = try $(sleep 0.02);
+    time.sleep(0.02);
 }}
 sys.offSignal(sys.Signal.SIGUSR1);
 ");

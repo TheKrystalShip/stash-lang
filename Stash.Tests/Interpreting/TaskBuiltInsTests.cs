@@ -836,4 +836,41 @@ task.await(t2);
         ");
         Assert.Equal(4950L, result);
     }
+
+    // ── Regression: parallel-isolated path (ActiveVM==null) must execute, not enqueue ──
+
+    /// <summary>
+    /// Regression guard for the F01 fix: <c>task.run(() => 42)</c> must return <c>42</c>,
+    /// not <c>null</c>. Before the fix, P1 routed forked-child invocations through
+    /// <c>EnqueueCallback</c> (which returns <c>StashValue.Null</c>), so every
+    /// <c>task.run</c> / <c>task.parMap</c> / <c>task.timeout</c> call resolved to null.
+    /// </summary>
+    [Fact]
+    public void Run_LambdaReturnsLiteral_ValueNotNull()
+    {
+        // Verifies that InvokeCallbackDirect's Branch 3 (ActiveVM == null, forked child)
+        // executes the function and returns its result rather than enqueueing and returning Null.
+        var result = Run(@"
+let handle = task.run(() => 42);
+let result = task.await(handle);
+");
+        Assert.Equal(42L, result);
+        Assert.NotNull(result);
+    }
+
+    /// <summary>
+    /// Regression guard: <c>task.run</c> with arithmetic in the body must return the
+    /// correct computed value, not null. Exercises the same Branch 3 path with a
+    /// non-trivial expression to catch any null-short-circuit.
+    /// </summary>
+    [Fact]
+    public void Run_LambdaWithArithmetic_ReturnsCorrectValue_NotNull()
+    {
+        var result = Run(@"
+let handle = task.run(() => 10 * 10 + 5);
+let result = task.await(handle);
+");
+        Assert.Equal(105L, result);
+        Assert.NotNull(result);
+    }
 }
