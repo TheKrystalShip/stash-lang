@@ -19,7 +19,8 @@ of smaller parity / hygiene gaps.
 
 ## F01 — [HIGH] Host test classes are not serialized against the process-global hook-owning collections
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** dd465dc6
 **Files:** `Stash.Tests/Embedding/StashHostBasicsTests.cs:21`, `Stash.Tests/Embedding/StashHostCallTests.cs:27`, `Stash.Tests/Embedding/StashHostStructuredErrorTests.cs:25`, `Stash.Tests/Embedding/StashHostStatefulnessTests.cs:14-17`, `Stash.Tests/Embedding/StashHostInvokeAsyncTests.cs:20`, `Stash.Tests/Embedding/HostMarshallerTests.cs:26`, `Stash.Tests/Embedding/StashHostDisposalTests.cs:19-31`
 **Phase:** P3
 **Commit:** 5d5b7acc
