@@ -421,6 +421,52 @@ public sealed class HttpRegistryClientTests
         Assert.Null(stub.LastRequest!.Headers.Authorization);
     }
 
+    // ── Per-segment escaping ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("my-org",  "my-lib",    "/api/v1/packages/my-org/my-lib")]
+    [InlineData("scope+",  "name space", "/api/v1/packages/scope%2B/name%20space")]
+    [InlineData("a%b",     "c/d",        "/api/v1/packages/a%25b/c%2Fd")]
+    public async Task GetPackageAsync_EscapesEachSegment(string scope, string name, string expectedPath)
+    {
+        var (client, stub) = BuildClient(new HttpResponseMessage(HttpStatusCode.NotFound));
+        await client.GetPackageAsync(scope, name);
+        Assert.Equal(expectedPath, stub.LastRequest!.RequestUri!.AbsolutePath);
+    }
+
+    [Theory]
+    [InlineData("my-org",  "my-lib",    "/api/v1/packages/my-org/my-lib/versions")]
+    [InlineData("scope+",  "name space", "/api/v1/packages/scope%2B/name%20space/versions")]
+    [InlineData("a%b",     "c/d",        "/api/v1/packages/a%25b/c%2Fd/versions")]
+    public async Task GetVersionsAsync_EscapesEachSegment(string scope, string name, string expectedPath)
+    {
+        var (client, stub) = BuildClient(new HttpResponseMessage(HttpStatusCode.NotFound));
+        await client.GetVersionsAsync(scope, name, new VersionsQuery());
+        Assert.Equal(expectedPath, stub.LastRequest!.RequestUri!.AbsolutePath);
+    }
+
+    [Theory]
+    [InlineData("my-org",  "my-lib",    "/api/v1/packages/my-org/my-lib/readme")]
+    [InlineData("scope+",  "name space", "/api/v1/packages/scope%2B/name%20space/readme")]
+    [InlineData("a%b",     "c/d",        "/api/v1/packages/a%25b/c%2Fd/readme")]
+    public async Task GetReadmeAsync_EscapesEachSegment(string scope, string name, string expectedPath)
+    {
+        var (client, stub) = BuildClient(new HttpResponseMessage(HttpStatusCode.NotFound));
+        await client.GetReadmeAsync(scope, name);
+        Assert.Equal(expectedPath, stub.LastRequest!.RequestUri!.AbsolutePath);
+    }
+
+    [Theory]
+    [InlineData("my-org",  "my-lib",   "1.0.0",   "/api/v1/packages/my-org/my-lib/1.0.0")]
+    [InlineData("scope+",  "name space", "1.0+rc1", "/api/v1/packages/scope%2B/name%20space/1.0%2Brc1")]
+    [InlineData("a%b",     "c/d",       "v1%2",    "/api/v1/packages/a%25b/c%2Fd/v1%252")]
+    public async Task GetVersionAsync_EscapesEachSegment(string scope, string name, string version, string expectedPath)
+    {
+        var (client, stub) = BuildClient(new HttpResponseMessage(HttpStatusCode.NotFound));
+        await client.GetVersionAsync(scope, name, version);
+        Assert.Equal(expectedPath, stub.LastRequest!.RequestUri!.AbsolutePath);
+    }
+
     // ── RegistryClientException ───────────────────────────────────────────────
 
     [Fact]

@@ -45,6 +45,23 @@ public sealed class ReadmeChokepointMetaTests
     /// </summary>
     private const int MinScannedCshtmlFiles = 5;
 
+    /// <summary>
+    /// The exhaustive allow-list of <c>Model.X</c> property names that are approved for use
+    /// inside <c>@Html.Raw(Model.X)</c>. Every entry must be a <see cref="HtmlString"/>
+    /// (or <see cref="HtmlString"/>?) property whose value is populated <b>only</b> from
+    /// <see cref="IReadmeRenderer.RenderToSafeHtml"/>. See <see cref="IsApprovedModelProperty"/>.
+    /// <para>
+    /// <b>Upgrade path (Roslyn provenance):</b> if the chokepoint surface grows beyond one or two
+    /// properties, replace this allow-list with a Roslyn CSharpSyntaxTree walk over the
+    /// corresponding <c>.cshtml.cs</c> file — assert the property's getter returns only the
+    /// result of a <c>RenderToSafeHtml(…)</c> call, not just that the declared type is
+    /// <see cref="HtmlString"/>. The allow-list is the right cost/complexity trade-off for Phase 2
+    /// with a single chokepoint site.
+    /// </para>
+    /// </summary>
+    private static readonly HashSet<string> ApprovedHtmlRawProperties =
+        new(StringComparer.Ordinal) { "ReadmeHtml" };
+
     // ── Regex patterns ────────────────────────────────────────────────────────
 
     /// <summary>
@@ -79,42 +96,63 @@ public sealed class ReadmeChokepointMetaTests
     /// Scans a single <c>.cshtml</c> source file for <c>@Html.Raw(...)</c> violations.
     /// Returns a list of violation descriptions (empty = clean).
     /// </summary>
+    /// <remarks>
+    /// Reads the file as a single string so that multi-line <c>@Html.Raw(\n  expr\n)</c>
+    /// invocations (valid Razor) are matched by <see cref="RegexOptions.Singleline"/> on
+    /// <see cref="HtmlRawPattern"/>. The line number of each match is computed from the
+    /// number of newlines that precede <see cref="Match.Index"/>.
+    /// </remarks>
     /// <param name="cshtmlPath">Absolute path to the <c>.cshtml</c> file.</param>
     internal static IReadOnlyList<string> ScanFileForViolations(string cshtmlPath)
     {
         var violations = new List<string>();
-        var lines = File.ReadAllLines(cshtmlPath);
+        var content = File.ReadAllText(cshtmlPath);
 
-        for (int lineIdx = 0; lineIdx < lines.Length; lineIdx++)
+        foreach (Match match in HtmlRawPattern.Matches(content))
         {
-            var line = lines[lineIdx];
-            var matches = HtmlRawPattern.Matches(line);
-            foreach (Match match in matches)
+            string argument = match.Groups[1].Value.Trim();
+
+            // Check SAFE form 1: direct RenderToSafeHtml call
+            if (SafeRenderCallPattern.IsMatch(argument))
+                continue;
+
+            // Check SAFE form 2: Model.PropertyName where property is on the allow-list
+            // AND is typed as HtmlString (two necessary conditions — type alone is not
+            // sufficient to prove the value was produced by the renderer).
+            var modelMatch = ModelPropertyPattern.Match(argument);
+            if (modelMatch.Success)
             {
-                string argument = match.Groups[1].Value.Trim();
-
-                // Check SAFE form 1: direct RenderToSafeHtml call
-                if (SafeRenderCallPattern.IsMatch(argument))
+                string propertyName = modelMatch.Groups[1].Value;
+                if (IsApprovedModelProperty(cshtmlPath, propertyName))
                     continue;
-
-                // Check SAFE form 2: Model.PropertyName where property is HtmlString
-                var modelMatch = ModelPropertyPattern.Match(argument);
-                if (modelMatch.Success)
-                {
-                    string propertyName = modelMatch.Groups[1].Value;
-                    if (IsHtmlStringModelProperty(cshtmlPath, propertyName))
-                        continue;
-                }
-
-                // Neither safe form matched — this is a violation.
-                violations.Add(
-                    $"{Path.GetFileName(cshtmlPath)}:{lineIdx + 1}: @Html.Raw({argument}) — " +
-                    "argument must be either IReadmeRenderer.RenderToSafeHtml(...) or a " +
-                    "Model property typed as HtmlString populated only from the renderer.");
             }
+
+            // Neither safe form matched — this is a violation.
+            int lineNumber = content[..match.Index].Count(c => c == '\n') + 1;
+            violations.Add(
+                $"{Path.GetFileName(cshtmlPath)}:{lineNumber}: @Html.Raw({argument}) — " +
+                "argument must be either IReadmeRenderer.RenderToSafeHtml(...) or a " +
+                "Model property typed as HtmlString populated only from the renderer.");
         }
 
         return violations;
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="propertyName"/> is approved for use
+    /// inside <c>@Html.Raw(Model.X)</c>: it must appear in <see cref="ApprovedHtmlRawProperties"/>
+    /// AND be declared as <see cref="HtmlString"/> (or <see cref="HtmlString"/>?) on the
+    /// page model type identified by the <c>@model</c> directive in <paramref name="cshtmlPath"/>.
+    /// Both conditions must hold — the type check alone is insufficient because a future property
+    /// could be typed as <see cref="HtmlString"/> while being populated from raw user input.
+    /// </summary>
+    private static bool IsApprovedModelProperty(string cshtmlPath, string propertyName)
+    {
+        // Only proceed if the property name is on the approved allow-list.
+        if (!ApprovedHtmlRawProperties.Contains(propertyName))
+            return false;
+
+        return IsHtmlStringModelProperty(cshtmlPath, propertyName);
     }
 
     /// <summary>
@@ -364,6 +402,83 @@ public sealed class ReadmeChokepointMetaTests
             var violations = ScanFileForViolations(tempFile);
 
             Assert.Empty(violations);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    /// <summary>
+    /// The PRODUCTION scanner MUST flag a multi-line <c>@Html.Raw(\n  expr\n)</c> invocation —
+    /// valid Razor that spans three lines. This exercises gap-1 coverage: the whole-file
+    /// <c>ReadAllText</c> + <c>RegexOptions.Singleline</c> path must match across newlines.
+    /// A per-line scan would see three innocent lines and miss this entirely.
+    /// </summary>
+    [Fact]
+    public void FailPathFixture_MultilineHtmlRaw_IsDetected_ByProductionScanner()
+    {
+        const string snippet = """
+            @page "/multi"
+            @model BadModel
+            <div>
+                @Html.Raw(
+                    someUnsafeExpression
+                )
+            </div>
+            """;
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"chokepoint-multiline-{Guid.NewGuid():N}.cshtml");
+        try
+        {
+            File.WriteAllText(tempFile, snippet);
+
+            var violations = ScanFileForViolations(tempFile);
+
+            Assert.True(
+                violations.Count > 0,
+                "The PRODUCTION chokepoint scanner did NOT detect a multi-line " +
+                "@Html.Raw(\\n  someUnsafeExpression\\n) — a per-line scan would miss this. " +
+                "The whole-file ReadAllText + RegexOptions.Singleline path has lost its teeth.");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    /// <summary>
+    /// The PRODUCTION scanner MUST flag <c>@Html.Raw(Model.FutureEvil)</c> even when the
+    /// property is typed as <see cref="HtmlString"/> — because <c>FutureEvil</c> is not on the
+    /// <see cref="ApprovedHtmlRawProperties"/> allow-list. This exercises gap-2 coverage:
+    /// provenance-via-allow-list must reject a non-approved HtmlString property.
+    /// </summary>
+    [Fact]
+    public void FailPathFixture_NonApprovedHtmlStringProperty_IsFlagged_ByProductionScanner()
+    {
+        // PackageModel has a HtmlString? property called ReadmeHtml.  We manufacture a .cshtml
+        // that references a DIFFERENT name that is NOT on the allow-list.  Even if someone added
+        // a HtmlString property with that name, the allow-list gate must still reject it.
+        const string snippet = """
+            @page "/test"
+            @model Stash.Registry.Web.Pages.PackageModel
+            <div>
+                @Html.Raw(Model.FutureEvil)
+            </div>
+            """;
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"chokepoint-non-approved-{Guid.NewGuid():N}.cshtml");
+        try
+        {
+            File.WriteAllText(tempFile, snippet);
+
+            var violations = ScanFileForViolations(tempFile);
+
+            Assert.True(
+                violations.Count > 0,
+                "The PRODUCTION chokepoint scanner did NOT flag @Html.Raw(Model.FutureEvil), " +
+                "which is not on the ApprovedHtmlRawProperties allow-list. " +
+                "The allow-list guard (gap-2 fix) has lost its teeth.");
         }
         finally
         {
