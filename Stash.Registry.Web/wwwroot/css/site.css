@@ -1101,23 +1101,12 @@ pre code {
     opacity: 0.7;
 }
 
-.badge {
-    display: inline-block;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
 .badge-active {
     background: color-mix(in srgb, var(--success) 15%, transparent);
     color: var(--success);
 }
 
-.badge-deprecated {
-    background: color-mix(in srgb, var(--error) 15%, transparent);
-    color: var(--error);
-}
+/* .badge-deprecated already defined in the BADGES section above */
 
 .deprecation-reason {
     margin-left: 0.5rem;
@@ -1199,18 +1188,11 @@ textarea.input-full {
     background: color-mix(in srgb, #fab387 35%, var(--surface-alt));
 }
 
-.btn-primary {
-    background: var(--accent);
-    color: var(--accent-text);
+/* .btn-primary already defined globally above; scope button-specific resets here */
+.manage-page button.btn-primary,
+.manage-page a.btn-primary {
     border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
     cursor: pointer;
-    font-weight: 600;
-}
-
-.btn-primary:hover {
-    background: var(--accent-hover);
 }
 
 .form-field {
