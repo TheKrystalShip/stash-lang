@@ -1,7 +1,7 @@
 schema_version: 1
 feature: callback-marshaling
 current: null
-updated: "2026-06-04T13:49:11Z"
+updated: "2026-06-04T13:52:16Z"
 phases:
   P1:
     status: done
@@ -36,8 +36,8 @@ phases:
     attempts: 1
     notes: "P4 complete: Wave2 event coverage, Playground tokenizer updated, completion snapshots re-baselined, tooling matrix fully verified (Playground change; 4 no-change-required)"
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-04T12:31:50Z"
-  resolved: "2026-06-04T13:04:03Z"
+  resolved: "2026-06-04T13:52:16Z"
   findings_open: 0
   findings_fixed: 0

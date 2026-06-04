@@ -53,7 +53,8 @@ The remaining baseline failure is a missed test-flip in P1 documented below as F
 
 ## F01 — [IMPORTANT] `SysBuiltInsTests.OnSignal_SIGUSR1_HandlerInvoked` polls via `$(sleep 0.02)` (process.exec) — not a drain point; queued handler never fires
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9df33ebb
 **Files:** `Stash.Tests/Interpreting/SysBuiltInsTests.cs:492-536` (the test body, in particular
 the `$(sleep 0.02)` poll loop on line 520 and the now-false comment on lines 503-507)
 **Phase:** P1 (test-flip omission — same shape as the flips in `SignalNamespaceTests` and
