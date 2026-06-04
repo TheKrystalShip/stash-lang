@@ -42,6 +42,7 @@
     <ProjectReference Include="..\Stash.Dap\Stash.Dap.csproj" />
     <ProjectReference Include="..\Stash.Lsp\Stash.Lsp.csproj" />
     <ProjectReference Include="..\Stash.Registry\Stash.Registry.csproj" />
+    <ProjectReference Include="..\Stash.Registry.Web\Stash.Registry.Web.csproj" />
     <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
     <ProjectReference Include="..\Stash.Docs\Stash.Docs.csproj" />
     <ProjectReference Include="..\Stash.Tap\Stash.Tap.csproj" />

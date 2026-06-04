@@ -47,9 +47,11 @@ phases:
       - Stash.Registry.Web/Services/HttpRegistryClient.cs
       - Stash.Registry.Web/Pages/Health.cshtml
       - Stash.Registry.Web/Pages/Health.cshtml.cs
+      - Stash.Registry.Web/Pages/_ViewImports.cshtml
       - Stash.sln
       - Stash.Tests/Registry/Web/WebProjectIsolationMetaTests.cs
       - Stash.Tests/Registry/Web/Fixtures/StrayReferenceFailPathFixture.cs
+      - Stash.Tests/Stash.Tests.csproj
     verify:
       - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~WebProjectIsolationMetaTests"

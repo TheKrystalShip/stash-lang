@@ -1,0 +1,31 @@
+@page "/health"
+@model HealthModel
+
+<h1>Registry Health</h1>
+
+@if (Model.Discovery is not null)
+{
+    <dl>
+        <dt>Name</dt>
+        <dd>@Model.Discovery.Name</dd>
+
+        <dt>API Version</dt>
+        <dd>@Model.Discovery.ApiVersion</dd>
+
+        <dt>Base Path</dt>
+        <dd>@Model.Discovery.BasePath</dd>
+
+        <dt>Max Page Size</dt>
+        <dd>@Model.Discovery.Limits.MaxPageSize</dd>
+
+        <dt>Max Package Size (bytes)</dt>
+        <dd>@Model.Discovery.Limits.MaxPackageSize</dd>
+
+        <dt>Search URL</dt>
+        <dd>@Model.Discovery.Links.Search</dd>
+    </dl>
+}
+else
+{
+    <p>Registry is currently unreachable.</p>
+}
