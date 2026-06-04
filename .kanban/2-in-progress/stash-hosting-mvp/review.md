@@ -183,7 +183,8 @@ dotnet test --filter "FullyQualifiedName~StashHostBasicsTests"
 
 ## F03 — [MEDIUM] `"StepLimitExceeded"` kind string repeated inline three times instead of named constant
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e4cc8c03
 **Files:** `Stash.Hosting/StashHost.cs:102`, `Stash.Hosting/StashHost.cs:151`, `Stash.Hosting/StashHost.cs:256`
 **Phase:** P2
 **Commit:** 712a0875
@@ -238,7 +239,8 @@ dotnet test --filter "FullyQualifiedName~StashHost"
 
 ## F04 — [MEDIUM] `CompileAsync` parse/lex errors surface as `InvalidOperationException` instead of the brief's structured `StashError { Kind = "ParseError" }`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e4cc8c03
 **Files:** `Stash.Hosting/StashHost.cs:58-63`, `Stash.Hosting/IStashHost.cs:29`
 **Phase:** P1
 **Commit:** 26ba7dd0
@@ -369,7 +371,8 @@ indirect proxy is fine).
 
 ## F06 — [LOW] `CompileAsync` ignores its `CancellationToken` parameter
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e4cc8c03
 **Files:** `Stash.Hosting/StashHost.cs:51-66`, `Stash.Hosting/IStashHost.cs:27`
 **Phase:** P1
 **Commit:** 26ba7dd0
