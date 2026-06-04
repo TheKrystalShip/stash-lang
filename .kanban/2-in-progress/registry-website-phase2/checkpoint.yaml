@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T17:48:46Z"
+updated: "2026-06-04T17:59:26Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "IReadmeRenderer+ReadmeRenderer (Markdig DisableHtml+HtmlSanitizer Ganss.Xss); @Html.Raw(Model.ReadmeHtml) sole chokepoint; ReadmeChokepointMetaTests scans production .cshtml files; teeth drive ScanFileForViolations with rogue/safe/string-prop/HtmlString-prop cases; ReadmeRendererTests hostile-input+benign (38 tests green)"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: bfc5009a2f0411b3e5085c10746ee42321af7aac
+    verified: true
+    started: "2026-06-04T17:51:07Z"
+    completed: "2026-06-04T17:59:26Z"
+    attempts: 1
+    notes: "Version detail page at /packages/@{scope}/{name}/v/{version}; VersionMetadataTable partial (version/publishedAt/publishedBy/stashVersion/integrity/dependencies); inline deprecation banner for VersionDetailResponse (no DeprecationAlternative field); VersionPageTests (6 tests: 200 full-metadata, no-deps empty-state, deprecated, non-deprecated, 404, 502); FieldDisciplineMetaTests extended with version page walk"
   P7:
     status: pending
     commit: null
