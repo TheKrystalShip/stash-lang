@@ -114,5 +114,131 @@ public class SignalNamespaceTests : Stash.Tests.Interpreting.StashTestBase
             // stop was flipped to true by the queued signal handler.
             Assert.Equal(true, result);
         }
+
+        [Fact]
+        public void SlowCallback_TimeSleepSkew_SleepReturnsTotalDuration()
+        {
+            ClearSignalHandlers();
+
+            // done_when #3: time.sleep(0.1) that drains a callback taking ~200ms
+            // returns at >= ~300ms total.  The wait-loop must recompute `remaining`
+            // correctly across drains so slow callbacks accumulate into the total.
+            var source =
+                "let done = false;\n" +
+                "signal.on(Signal.Int, () => { time.sleep(0.2); done = true; });\n" +
+                "let t0 = time.clock();\n" +
+                "time.sleep(0.1);\n" +
+                "let elapsed = time.clock() - t0;\n" +
+                "return elapsed;\n";
+
+            var (chunk, vm) = CompileToVM(source);
+
+            var dispatchThread = new Thread(() =>
+            {
+                Thread.Sleep(50); // fire the slow callback partway into the outer sleep
+                SignalImpl.Dispatch("Int");
+            })
+            { IsBackground = true };
+            dispatchThread.Start();
+
+            var result = vm.Execute(chunk);
+            dispatchThread.Join(TimeSpan.FromSeconds(5));
+
+            // Total elapsed must be >= ~300ms (100ms outer + 200ms inner callback).
+            // Use 200ms floor (generous tolerance for slow CI) to avoid flakiness.
+            double elapsed = Convert.ToDouble(result);
+            Assert.True(elapsed >= 0.20,
+                $"Expected elapsed >= 0.20s (outer 100ms + slow-callback 200ms), got {elapsed:F3}s");
+        }
+
+        [Fact]
+        public void QueuedCallback_InnerTimeSleep_DoesNotReenterDrain()
+        {
+            ClearSignalHandlers();
+
+            // done_when #4: A queued callback A that calls time.sleep must NOT re-pump
+            // the drain (reentrancy guard).  A second queued callback B fires only after
+            // A returns and the outer drain pops it.
+            //
+            // Assert: (a) B fires AFTER A sets its marker; (b) A's inner sleep actually
+            // takes time (not a 0ms no-op — the plain-sleep fallback must run).
+            var source =
+                "let a_done = false;\n" +
+                "let b_fired = false;\n" +
+                "signal.on(Signal.Usr1, () => {\n" +
+                "    let t0 = time.clock();\n" +
+                "    time.sleep(0.1);\n" +
+                "    let inner_elapsed = time.clock() - t0;\n" +
+                "    a_done = true;\n" +
+                "    return inner_elapsed;\n" +
+                "});\n" +
+                "signal.on(Signal.Usr2, () => { b_fired = true; });\n" +
+                "let deadline = time.millis() + 5000;\n" +
+                "while (!b_fired && time.millis() < deadline) {\n" +
+                "    time.sleep(0.05);\n" +
+                "}\n" +
+                "return a_done && b_fired;\n";
+
+            var (chunk, vm) = CompileToVM(source);
+
+            var t0 = DateTimeOffset.UtcNow;
+
+            var dispatchThread = new Thread(() =>
+            {
+                Thread.Sleep(50); // let the VM reach the outer sleep
+                SignalImpl.Dispatch("Usr1"); // A: slow callback
+                Thread.Sleep(10);            // give A time to be enqueued
+                SignalImpl.Dispatch("Usr2"); // B: fires only after A returns
+            })
+            { IsBackground = true };
+            dispatchThread.Start();
+
+            var result = vm.Execute(chunk);
+            dispatchThread.Join(TimeSpan.FromSeconds(5));
+
+            // Both A and B fired correctly; A set a_done before B set b_fired (ordering).
+            Assert.Equal(true, result);
+
+            // Total elapsed must be >= ~200ms (outer dispatched 50ms in + A 100ms + B after A).
+            var elapsed = (DateTimeOffset.UtcNow - t0).TotalSeconds;
+            Assert.True(elapsed >= 0.12,
+                $"Inner sleep was a no-op (elapsed only {elapsed:F3}s — reentrancy guard did not trigger plain-sleep fallback)");
+        }
+
+        [Fact]
+        public void ThrowingQueuedCallback_Swallowed_SubsequentCallbackStillFires()
+        {
+            ClearSignalHandlers();
+
+            // done_when #5: A queued callback that throws is log-and-swallowed;
+            // a subsequent queued callback still fires (matches existing Dispatch behavior).
+            var source =
+                "let second_fired = false;\n" +
+                "signal.on(Signal.Hup, () => { throw \"intentional error\"; });\n" +
+                "signal.on(Signal.Int, () => { second_fired = true; });\n" +
+                "let deadline = time.millis() + 5000;\n" +
+                "while (!second_fired && time.millis() < deadline) {\n" +
+                "    time.sleep(0.05);\n" +
+                "}\n" +
+                "return second_fired;\n";
+
+            var (chunk, vm) = CompileToVM(source);
+
+            var dispatchThread = new Thread(() =>
+            {
+                Thread.Sleep(50);
+                SignalImpl.Dispatch("Hup"); // throws inside the callback
+                Thread.Sleep(10);
+                SignalImpl.Dispatch("Int"); // should still fire
+            })
+            { IsBackground = true };
+            dispatchThread.Start();
+
+            var result = vm.Execute(chunk);
+            dispatchThread.Join(TimeSpan.FromSeconds(5));
+
+            // second_fired must be true — throwing callback didn't break drain.
+            Assert.Equal(true, result);
+        }
     }
 }

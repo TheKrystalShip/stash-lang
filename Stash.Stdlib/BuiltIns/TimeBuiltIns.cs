@@ -50,15 +50,39 @@ public static partial class TimeBuiltIns
         // Drain-aware wait: park via the callback queue's drain loop so that queued
         // callbacks (fs.watch, signal.on, future timers) fire during the sleep.
         // The deadline is computed now so DrainCallbacks recomputes remaining across drains.
-        // When _isDraining is set (a callback called time.sleep internally), DrainCallbacks
-        // returns immediately — the inner sleep then falls through to the primitive wait below.
+        //
+        // Reentrancy (run-to-completion task model): when _isDraining is set because a
+        // queued callback called time.sleep, the DrainCallbacks no-op returns immediately.
+        // In that case we fall through to a plain blocking wait for the requested duration,
+        // matching the brief's mandate: "time.sleep (while draining) becomes a plain
+        // Thread.Sleep / cancellation WaitHandle.WaitOne".
         var deadline = DateTimeOffset.UtcNow.AddMilliseconds(ms);
         ctx.DrainCallbacks(WaitMode.Until(deadline));
 
-        // After DrainCallbacks returns the duration has elapsed (or cancellation was thrown).
-        // ThrowIfCancellationRequested is still needed: DrainCallbacks (when _isDraining) may
-        // have returned immediately without checking cancellation.
-        ctx.CancellationToken.ThrowIfCancellationRequested();
+        // DrainCallbacks either (a) spent the full duration in the drain-loop (deadline
+        // reached → remaining ≤ 0) or (b) was a no-op because _isDraining was set.
+        // Case (b): we still owe a plain sleep for the originally-requested duration.
+        // Case (a): deadline has passed; remaining ≤ 0 → nothing left to sleep.
+        var remaining = deadline - DateTimeOffset.UtcNow;
+        if (remaining > TimeSpan.Zero)
+        {
+            // _isDraining was set; drain-loop was a no-op.  Do a plain blocking wait.
+            int remainingMs = (int)remaining.TotalMilliseconds;
+            if (ctx.CancellationToken.CanBeCanceled)
+            {
+                ctx.CancellationToken.WaitHandle.WaitOne(remainingMs);
+                ctx.CancellationToken.ThrowIfCancellationRequested();
+            }
+            else
+            {
+                Thread.Sleep(remainingMs);
+            }
+        }
+        else
+        {
+            // Drain-loop ran to completion; check cancellation as a final guard.
+            ctx.CancellationToken.ThrowIfCancellationRequested();
+        }
     }
 
     /// <summary>Formats a Unix timestamp using a .NET format string.</summary>
