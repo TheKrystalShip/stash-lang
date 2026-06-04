@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase3
 current: null
-updated: "2026-06-04T23:07:46Z"
+updated: "2026-06-04T23:42:51Z"
 phases:
   A1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "Token management page (list/create/revoke): 303 redirect, TempData single-use, current-session badge/guard, all chokepoint guards green (303 and copy-button fixed after advisor review)"
   A5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: fb1a36a49a7890452d6fcd2aa214d07774f133a6
+    verified: true
+    started: "2026-06-04T23:10:03Z"
+    completed: "2026-06-04T23:42:51Z"
+    attempts: 1
+    notes: "Docs: Web README authenticated-area section + registry-doc Clients cross-link (orchestrator fallback; full suite green)"
 review:
   status: not_started
   started: null
