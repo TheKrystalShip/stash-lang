@@ -29,6 +29,7 @@ scope:
   - Stash.Hosting.Benchmarks/**
   - Stash.Bytecode/StashEngine.cs
   - Stash.Tests/Embedding/**
+  - Stash.Tests/Stash.Tests.csproj
   - Stash.sln
   - .kanban/2-in-progress/stash-hosting-mvp/**
 
@@ -46,6 +47,7 @@ phases:
       - Stash.Bytecode/StashEngine.cs
       - Stash.sln
       - Stash.Tests/Embedding/StashHostBasicsTests.cs
+      - Stash.Tests/Stash.Tests.csproj
     verify:
       - dotnet build Stash.Hosting
       - dotnet test --filter "FullyQualifiedName~StashHostBasicsTests"

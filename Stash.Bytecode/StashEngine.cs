@@ -387,6 +387,34 @@ public class StashEngine
     }
 
     /// <summary>
+    /// Executes a pre-compiled script without swallowing errors.
+    /// Unlike <see cref="Run(StashScript)"/>, this method lets
+    /// <see cref="RuntimeError"/>, <see cref="OperationCanceledException"/>, and
+    /// <see cref="StepLimitExceededException"/> propagate to the caller unchanged.
+    /// Intended for host SDK consumers (e.g. <c>Stash.Hosting</c>) that need the
+    /// raw exception to construct structured error types.
+    /// </summary>
+    /// <param name="script">A pre-compiled script.</param>
+    /// <returns>The script's return value as a <see cref="StashValue"/>.</returns>
+    /// <exception cref="RuntimeError">When the script throws a Stash-level error.</exception>
+    /// <exception cref="OperationCanceledException">When the cancellation token is triggered.</exception>
+    /// <exception cref="StepLimitExceededException">When the configured step limit is exceeded.</exception>
+    public StashValue RunRaw(StashScript script)
+    {
+        if (!script.IsResolved)
+        {
+            SemanticResolver.Resolve(script.Statements);
+            script.IsResolved = true;
+        }
+
+        Chunk chunk = Compiler.Compile(script.Statements);
+        var vm = EnsureVM();
+        SyncVMSettings(vm);
+        object? result = vm.Execute(chunk);
+        return StashValue.FromObject(result);
+    }
+
+    /// <summary>
     /// Loads and executes a Stash script file. Sets the file path for import resolution.
     /// </summary>
     /// <param name="filePath">Absolute or relative path to the .stash file.</param>

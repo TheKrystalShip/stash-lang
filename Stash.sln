@@ -43,6 +43,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Docs", "Stash.Docs\St
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Registry.Contracts", "Stash.Registry.Contracts\Stash.Registry.Contracts.csproj", "{2F9E6CDD-40F6-4C56-8D30-08CABFA1A9F4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Hosting", "Stash.Hosting\Stash.Hosting.csproj", "{35226DCC-2924-49CD-81A3-118BCF880403}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -281,6 +283,18 @@ Global
 		{2F9E6CDD-40F6-4C56-8D30-08CABFA1A9F4}.Release|x64.Build.0 = Release|Any CPU
 		{2F9E6CDD-40F6-4C56-8D30-08CABFA1A9F4}.Release|x86.ActiveCfg = Release|Any CPU
 		{2F9E6CDD-40F6-4C56-8D30-08CABFA1A9F4}.Release|x86.Build.0 = Release|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Debug|x64.Build.0 = Debug|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Debug|x86.Build.0 = Debug|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Release|Any CPU.Build.0 = Release|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Release|x64.ActiveCfg = Release|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Release|x64.Build.0 = Release|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Release|x86.ActiveCfg = Release|Any CPU
+		{35226DCC-2924-49CD-81A3-118BCF880403}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
