@@ -182,4 +182,42 @@ public class StashHostBasicsTests
         // RunRaw must throw, not return a failure ExecutionResult.
         Assert.Throws<Stash.Runtime.RuntimeError>(() => engine.RunRaw(script!));
     }
+
+    // ── #9: compile-once, run-many — chunk reuse ─────────────────────────
+
+    /// <summary>
+    /// The compiled Chunk must be produced exactly once and reused across subsequent
+    /// RunRaw calls on the same StashScript. This locks in the compile-once contract
+    /// that <see cref="Stash.Hosting.CompiledScript"/> advertises:
+    /// the AST-to-bytecode step is amortised over all runs, not repeated per call.
+    ///
+    /// Assert mechanism: StashScript.CompiledChunk (internal, visible via
+    /// Stash.Bytecode InternalsVisibleTo) is null before the first run, non-null after,
+    /// and is reference-equal across subsequent runs — same object instance = same
+    /// compiled Chunk, no re-compilation.
+    /// </summary>
+    [Fact]
+    public void RunRaw_SameScript_ReusesCompiledChunk()
+    {
+        var engine = new Stash.Bytecode.StashEngine();
+
+        var script = engine.Compile("return 7;");
+        Assert.NotNull(script);
+
+        // Before the first run the cache slot must be empty.
+        Assert.Null(script!.CompiledChunk);
+
+        engine.RunRaw(script!);
+
+        // After the first run the cache slot must be populated.
+        var firstChunk = script!.CompiledChunk;
+        Assert.NotNull(firstChunk);
+
+        // After subsequent runs the same Chunk instance must be reused — not recompiled.
+        engine.RunRaw(script!);
+        Assert.Same(firstChunk, script!.CompiledChunk);
+
+        engine.RunRaw(script!);
+        Assert.Same(firstChunk, script!.CompiledChunk);
+    }
 }

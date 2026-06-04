@@ -415,7 +415,8 @@ public class StashEngine
             script.IsResolved = true;
         }
 
-        Chunk chunk = Compiler.Compile(script.Statements);
+        script.CompiledChunk ??= Compiler.Compile(script.Statements);
+        Chunk chunk = script.CompiledChunk;
         var vm = EnsureVM();
         SyncVMSettings(vm);
         object? result = vm.Execute(chunk);
@@ -592,7 +593,7 @@ public class ExecutionResult
 
 /// <summary>
 /// A pre-compiled Stash script that can be executed multiple times
-/// without re-lexing and re-parsing.
+/// without re-lexing, re-parsing, or re-compiling.
 /// </summary>
 public class StashScript
 {
@@ -600,6 +601,12 @@ public class StashScript
     internal List<Stmt> Statements { get; }
     /// <summary>Gets or sets whether the resolver has been run on these statements.</summary>
     internal bool IsResolved { get; set; }
+    /// <summary>
+    /// The compiled <see cref="Chunk"/> produced on the first execution.
+    /// Null until the first call to <see cref="StashEngine.RunRaw"/>; reused on
+    /// subsequent calls to avoid redundant AST-to-bytecode compilation.
+    /// </summary>
+    internal Chunk? CompiledChunk { get; set; }
 
     /// <summary>Creates a new pre-compiled script from parsed statements.</summary>
     /// <param name="statements">The parsed AST statements.</param>
