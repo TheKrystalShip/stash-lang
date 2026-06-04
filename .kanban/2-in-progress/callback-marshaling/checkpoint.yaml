@@ -1,16 +1,16 @@
 schema_version: 1
 feature: callback-marshaling
 current: null
-updated: "2026-06-04T11:00:02Z"
+updated: "2026-06-04T11:09:13Z"
 phases:
   P1:
     status: done
-    commit: d695c4699dfe9f5b45a9881f7cb7ee5552d4f2ba
+    commit: b70299b150a49819e4f879f057830a4ffa3ac52d
     verified: true
     started: "2026-06-04T10:06:59Z"
-    completed: "2026-06-04T11:00:02Z"
+    completed: "2026-06-04T11:09:13Z"
     attempts: 1
-    notes: Per-VM MPSC queue + DrainCallbacks drain-loop + time.sleep WaitAny wait-loop; producer flip replaces child-VM fork with enqueue; WaitMode/IInterpreterContext.DrainCallbacks added to Stash.Core as plan correction
+    notes: "P1 complete: queue+drain+producer-flip+sleep-drain-loop; plain-sleep reentrant fallback added; all 5 done_when behavioral tests pass"
   P2:
     status: pending
     commit: null
