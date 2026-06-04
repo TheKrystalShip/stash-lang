@@ -1,0 +1,167 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>
+
+schema_version: 1
+
+feature: host-object-dispatch
+
+title: Host-Objects-by-Reference — Member Dispatch from Stash
+
+milestone: embedding
+
+brief: ./brief.md
+
+created: 2026-06-05
+architect_session: host-object-dispatch-spec-2026-06-05
+
+# Default verify command run after every phase (in addition to phase-specific verify).
+default_verify:
+  - dotnet build Stash.Hosting
+
+# Scope. The MVP shipped the host SDK; this feature extends `Stash.Hosting` only.
+# Stash.Bytecode is NOT in scope by design — host objects ride existing protocols
+# (see brief Q1). One narrow exception in Stash.Core: P2 registers a new
+# `[StashError]` HostError in Stash.Core/Runtime/Errors/ (user ruling 2026-06-05).
+# Stash.Docs and the generated reference Markdown are touched only by P2's regen step.
+scope:
+  - Stash.Hosting/**
+  - Stash.Core/Runtime/Errors/HostError.cs
+  - Stash.Tests/Embedding/**
+  - Stash.Hosting.Benchmarks/**
+  - Stash.Docs/**
+  - "docs/Stash — Standard Library Reference.md"
+
+phases:
+  - id: P1
+    title: HostTypeBuilder + HostHandle + registration map (typeof / is work, no members)
+    deps: []
+    files:
+      - Stash.Hosting/HostTypeBuilder.cs
+      - Stash.Hosting/Internal/HostHandle.cs
+      - Stash.Hosting/Internal/HostTypeRegistration.cs
+      - Stash.Hosting/Internal/HostMemberDescriptor.cs
+      - Stash.Hosting/IStashHost.cs
+      - Stash.Hosting/StashHost.cs
+      - Stash.Hosting/Marshalling/HostMarshaller.cs
+      - Stash.Tests/Embedding/HostObjectRegistrationTests.cs
+    verify:
+      - dotnet build Stash.Hosting
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectRegistrationTests"
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.MultiEngineIsolationTests"
+    done_when:
+      - IStashHost.RegisterType<T>(configure) compiles and persists a HostTypeRegistration in the host's per-type map.
+      - HostMarshaller.ToStash wraps a CLR instance of a registered type as a StashValue carrying a HostHandle; unregistered complex types continue to throw the existing ArgumentException.
+      - SetGlobal("name", instance) binds a registered host instance in VM globals; unregistered instances throw a clear "type T not registered" error.
+      - Inside a script, typeof(g) returns the registered VM type name and `g is RegisteredType` returns true (verified by an xUnit test exercising the CallAsync round-trip).
+      - The hermetic-VM isolation suite (MultiEngineIsolationTests) stays green.
+    notes: |
+      Implementation invariants worth re-checking before edits:
+      - RegisterType<T> must run BEFORE the engine materialises its VM. StashEngine.RegisterType
+        already throws InvalidOperationException after VM creation; the host re-throws clearly.
+      - HostHandle.VMTryGetField returns false in P1 (no members registered). The existing
+        VirtualMachine.TypeOps.cs fall-through then raises the normal "cannot access field" error.
+      - The new ToStash branch must precede the IEnumerable fall-through (registered host types
+        often implement IEnumerable; without this order, dispatch would misroute).
+
+  - id: P2
+    title: Property dispatch + FromStash mirror + InvokeHostDelegate chokepoint + HostError registration
+    deps: [P1]
+    files:
+      - Stash.Hosting/HostTypeBuilder.cs
+      - Stash.Hosting/Internal/HostHandle.cs
+      - Stash.Hosting/Internal/HostMemberDescriptor.cs
+      - Stash.Hosting/Internal/InvokeHostDelegate.cs
+      - Stash.Hosting/Marshalling/HostMarshaller.cs
+      - Stash.Hosting/StashError.cs
+      - Stash.Core/Runtime/Errors/HostError.cs
+      - "docs/Stash — Standard Library Reference.md"
+      - Stash.Tests/Embedding/HostObjectPropertyTests.cs
+    verify:
+      - dotnet build Stash.Hosting Stash.Core Stash.Docs
+      - dotnet run --project Stash.Docs/
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectPropertyTests"
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectRegistrationTests"
+      - dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests"
+    done_when:
+      - HostTypeBuilder<T>.Property(name, get) and Property(name, get, set) compile and register descriptors.
+      - obj.hp reads the registered getter through HostHandle.VMTryGetField → InvokeHostDelegate → HostMarshaller.ToStash.
+      - obj.hp = 100 writes through HostHandle.VMSetField → InvokeHostDelegate → registered setter; assignment to a read-only Property raises ReadOnlyError.
+      - HostMarshaller.FromStash<T> recognises a HostHandle whose ClrType == typeof(T) and returns the unwrapped CLR instance; otherwise throws InvalidCastException with a clear message.
+      - InvokeHostDelegate is the only function in Stash.Hosting that invokes a registered delegate (Construct-lite chokepoint). Verified by close-read; no meta-test.
+      - "Stash.Core/Runtime/Errors/HostError.cs exists, attributed [StashError(Description = \"...\")] (no extra Properties/PropertyTypes in v1; base RuntimeError already carries Message/CallStack)."
+      - "StashError.KindHostError = \"HostError\" const added to Stash.Hosting/StashError.cs beside KindCancelled/KindStepLimitExceeded/KindParseError; every host-error construction site references the const (no inlined \"HostError\" literal anywhere in Stash.Hosting)."
+      - "An xUnit test pins StashError.KindHostError == BuiltInErrorRegistry.NameOf(new Stash.Runtime.Errors.HostError(\"\")) so the const and the registered type-name agree on the single spelling."
+      - A getter / setter that throws a CLR exception produces a StashError { Kind = StashError.KindHostError, Message = innerEx.Message, Span = call site } routed to CallAsync (throw) and TryCallAsync (Errors[0]).
+      - "An in-script try/catch round-trip (script: `try { obj.bad_prop } catch (e) { return e.type; }`) returns \"HostError\" — proving catchable-in-Stash."
+      - "docs/Stash — Standard Library Reference.md regenerated by `dotnet run --project Stash.Docs/`; HostError appears in the Built-in Errors section; StandardLibraryReferenceTests passes on the regenerated content."
+
+  - id: P3
+    title: "Sync method dispatch — HostBoundMethod : IStashCallable"
+    deps: [P2]
+    files:
+      - Stash.Hosting/HostTypeBuilder.cs
+      - Stash.Hosting/Internal/HostHandle.cs
+      - Stash.Hosting/Internal/HostBoundMethod.cs
+      - Stash.Hosting/Internal/InvokeHostDelegate.cs
+      - Stash.Tests/Embedding/HostObjectMethodTests.cs
+    verify:
+      - dotnet build Stash.Hosting
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectMethodTests"
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectPropertyTests"
+    done_when:
+      - HostTypeBuilder<T>.Method(name, Delegate handler) compiles and registers a Method descriptor.
+      - obj.attack(10) routes through HostHandle.VMTryGetField → HostBoundMethod (IStashCallable) → ExecuteCall → HostBoundMethod.CallDirect → InvokeHostDelegate.
+      - "Argument arity mismatch throws a HostError (the [StashError]-registered CLR type from P2), Message = \"<TypeName>.<name> expects N argument(s), got M\", at the call site; the surfaced StashError.Kind equals StashError.KindHostError (no inlined \"HostError\" string)."
+      - "Argument type marshalling errors throw HostError with Message = \"arg N to <TypeName>.<name>: ...\"."
+      - A method that throws a CLR exception produces a structured StashError as in P2.
+      - Method return values flow through HostMarshaller.ToStash; an unregistered return type throws the existing ArgumentException from the marshaller chokepoint.
+
+  - id: P4
+    title: Async method dispatch (Task → StashFuture) + OnRelease lifetime hook
+    deps: [P3]
+    files:
+      - Stash.Hosting/HostTypeBuilder.cs
+      - Stash.Hosting/Internal/HostHandle.cs
+      - Stash.Hosting/Internal/HostBoundMethod.cs
+      - Stash.Hosting/Internal/InvokeHostDelegate.cs
+      - Stash.Hosting/StashHost.cs
+      - Stash.Tests/Embedding/HostObjectAsyncTests.cs
+      - Stash.Tests/Embedding/HostObjectLifetimeTests.cs
+    verify:
+      - dotnet build Stash.Hosting
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectAsyncTests"
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectLifetimeTests"
+    done_when:
+      - HostTypeBuilder<T>.AsyncMethod(name, Delegate handler) compiles; the delegate signature is inspected ONCE at registration to detect a trailing CancellationToken parameter.
+      - obj.fetch(url) where fetch returns Task<TResult> produces a StashValue wrapping a new StashFuture(task, cts). Stash `await` blocks on it (existing infra) and the resolved result is HostMarshaller.ToStash'd.
+      - A faulted Task surfaces as StashError(Kind = "HostError") preserving the inner exception message; cancellation of the host's call CancellationToken propagates to the delegate's CancellationToken parameter (when present) and surfaces OperationCanceledException from CallAsync<T>.
+      - HostTypeBuilder<T>.OnRelease(callback) registers the cleanup hook. StashHost.DisposeAsync iterates a ConditionalWeakTable of seen host targets and invokes OnRelease exactly once per unique reachable target the engine has observed; never twice; never for instances the engine never observed.
+      - The MVP's existing cleanup-hook reset behaviour (PromptBuiltIns / ProcessBuiltIns / CompleteBuiltIns) still runs at DisposeAsync.
+
+  - id: P5
+    title: Test pack consolidation + host-member-access benchmark column
+    deps: [P4]
+    files:
+      - Stash.Tests/Embedding/HostObjectDispatchTests.cs
+      - Stash.Hosting.Benchmarks/HostMemberAccessBenchmarks.cs
+      - .kanban/2-in-progress/host-object-dispatch/benchmark-results.md
+    verify:
+      - dotnet build Stash.Hosting Stash.Hosting.Benchmarks
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding"
+    done_when:
+      - HostObjectDispatchTests.cs ties together the end-to-end Player example from brief Acceptance Criteria (register Player + attack/hp/fetch, SetGlobal, CallAsync round-trip, verify CLR-side mutation observable).
+      - A two-host isolation test asserts that registering the same Type in two parallel StashHosts produces ZERO shared state (the hermetic-VM foundation re-asserted through host-object dispatch).
+      - Stash.Hosting.Benchmarks/HostMemberAccessBenchmarks.cs adds one BenchmarkDotNet method for warm property-read and one for warm method-call on a registered Player handle, alongside a baseline that calls a plain Stash function.
+      - benchmark-results.md gains a "Host member access" section with the recorded medians (Release, BenchmarkDotNet) and a one-line verdict on whether any specialised path (promoted opcode, IC tweak) is justified. Default verdict expected: comparable to current IC-megamorphic property access; no further optimization warranted in v1.
+      - The benchmark is NOT in dotnet test (consistent with the MVP P4 / .claude/performance.md ruling on the AOT-enum-self-test precedent).
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Full dotnet test stays unfiltered per CLAUDE.md ("`final_verify` runs the full suite — trust it").
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
