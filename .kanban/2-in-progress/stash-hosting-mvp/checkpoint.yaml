@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stash-hosting-mvp
 current: null
-updated: "2026-06-04T20:01:04Z"
+updated: "2026-06-04T20:27:16Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "DisposeAsync wires 7 cleanup hooks; InvokeAsync<T> bridges StashFuture to CLR Task; VirtualMachine.Functions.cs fixed for async fn inline-direct calls; 20 new tests green"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 89e2c5f0d8e6b4540ae07a1e291bd12351baabd5
+    verified: true
+    started: "2026-06-04T20:09:04Z"
+    completed: "2026-06-04T20:27:16Z"
+    attempts: 1
+    notes: "Stash.Hosting.Benchmarks harness; cold ctor ~1.3 µs, full lifecycle ~79 µs, warm call ~2.8 µs; OQ#4: VM pool not justified at these numbers; plan deviation: .gitignore added to scope for BDN artifacts"
 review:
   status: not_started
   started: null
