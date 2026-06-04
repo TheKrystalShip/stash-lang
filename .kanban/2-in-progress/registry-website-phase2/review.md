@@ -14,7 +14,8 @@
 
 ## F01 — [CRITICAL] Stored XSS via package-authored `repository` URL in sidebar
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** cbe7b774
 **Files:** `Stash.Registry.Web/Views/PackageSidebar.cshtml:43`
 **Phase:** P4
 **Commit:** 8383de24
