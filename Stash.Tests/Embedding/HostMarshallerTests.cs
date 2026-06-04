@@ -218,6 +218,26 @@ public class HostMarshallerTests
         Assert.Equal(Convert.ToBase64String(payload), blobProp.GetString());
     }
 
+    // ── JsonStashBridge loud-throw on unsupported Obj ─────────────────────
+
+    [Fact]
+    public async Task JsonStashBridge_UnsupportedObj_ThrowsInvalidOperationException()
+    {
+        // A Stash struct instance is represented as StashInstance (not StashDictionary),
+        // which is an Obj-tagged value not handled by the JSON bridge.
+        // Requesting JsonElement return must throw loudly rather than silently emitting null.
+        await using var host = new StashHost();
+        var s = await host.CompileAsync(@"
+            struct S { x }
+            fn f() { return S{ x: 1 }; }
+        ");
+        await host.RunAsync(s);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => host.CallAsync<JsonElement>("f"));
+        Assert.Contains("JsonStashBridge cannot serialize", ex.Message);
+    }
+
     // ── Unsupported types → exceptions ────────────────────────────────────
 
     [Fact]
