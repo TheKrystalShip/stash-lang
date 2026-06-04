@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T17:23:09Z"
+updated: "2026-06-04T17:42:14Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "Package detail page at /packages/@{scope}/{name}; sidebar (description, latest, updatedAt, license); versions table; dependencies section; install widget + copy-install.js; deprecation banner; static README placeholder; PackagePageTests (9 tests); FieldDisciplineMetaTests extended to package page; ownerCount omitted (not in PackageDetailResponse — only in PackageSummaryResponse)"
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 134dac4861eead53ad5ba59f0804251f5d50ce05
+    verified: true
+    started: "2026-06-04T17:27:21Z"
+    completed: "2026-06-04T17:42:14Z"
+    attempts: 1
+    notes: "IReadmeRenderer+ReadmeRenderer (Markdig DisableHtml+HtmlSanitizer Ganss.Xss); @Html.Raw(Model.ReadmeHtml) sole chokepoint; ReadmeChokepointMetaTests+fail-path fixture+teeth; ReadmeRendererTests hostile-input+benign; FieldDisciplineMetaTests extended; PackagePageTests updated for P5"
   P6:
     status: pending
     commit: null
