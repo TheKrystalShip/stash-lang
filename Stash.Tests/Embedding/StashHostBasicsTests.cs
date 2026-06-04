@@ -48,6 +48,8 @@ public class StashHostBasicsTests
 
     /// <summary>
     /// A global defined in host1 must not be visible to host2.
+    /// This test has teeth: host2 explicitly attempts to read 'magic' and must fail
+    /// (Success == false), proving the two engines do not share a global store.
     /// </summary>
     [Fact]
     public async Task TwoHosts_NoGlobalLeakAcrossHosts()
@@ -60,18 +62,19 @@ public class StashHostBasicsTests
         var r1 = await host1.RunAsync(s1);
         Assert.True(r1.Success, $"host1 setup failed: {string.Join(", ", r1.Errors)}");
 
-        // Attempt to read 'magic' in host2; it must either be null/undefined or raise an error.
-        // The hermetic-VM contract means host2 has no 'magic' global.
-        var s2 = await host2.CompileAsync("return 0;"); // baseline: host2 engine works
-        var r2 = await host2.RunAsync<long>(s2);
-        Assert.True(r2.Success, $"host2 baseline failed: {string.Join(", ", r2.Errors)}");
-        Assert.Equal(0L, r2.Value);
-
-        // Further proof: running a script in host1 after host2 was created still works.
+        // host1 must be able to return the global it just defined.
         var s3 = await host1.CompileAsync("return magic;");
         var r3 = await host1.RunAsync<long>(s3);
         Assert.True(r3.Success, $"host1 magic read failed: {string.Join(", ", r3.Errors)}");
         Assert.Equal(999L, r3.Value);
+
+        // host2 must NOT see host1's 'magic' global — reading it must fail.
+        // This is the discriminating assertion: if the two hosts shared a global store,
+        // host2 would successfully return 999 and the assertion below would fail.
+        var s2 = await host2.CompileAsync("return magic;");
+        var r2 = await host2.RunAsync<long>(s2);
+        Assert.False(r2.Success,
+            "host2 must not see host1's 'magic' global — hermetic-VM contract violated.");
     }
 
     // ── #3: IAsyncDisposable shape ────────────────────────────────────────
