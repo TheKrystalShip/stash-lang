@@ -1,0 +1,174 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec stash-hosting-mvp
+
+schema_version: 1
+
+feature: stash-hosting-mvp
+title: Stash.Hosting Host SDK MVP
+
+# Tags this feature into the long-term 'embedding' milestone (phase 3b — the host
+# SDK proper). milestone-status.stash reads this field to compose the ledger.
+milestone: embedding
+
+brief: ./brief.md
+
+created: 2026-06-04
+architect_session: stash-hosting-mvp-arch-2026-06-04
+
+# Default verify on every phase. Kept cheap; heavier work in per-phase verify.
+default_verify:
+  - dotnet build
+
+# Broad scope. Implementers may make small documented corrections when discovery
+# is stale (renamed file, moved helper, wrong verify filter).
+scope:
+  - Stash.Hosting/**
+  - Stash.Hosting.Benchmarks/**
+  - Stash.Bytecode/StashEngine.cs
+  - Stash.Tests/Embedding/**
+  - Stash.sln
+  - .kanban/2-in-progress/stash-hosting-mvp/**
+
+phases:
+  - id: P1
+    title: Stash.Hosting project skeleton + facade + RunAsync/CompileAsync
+    deps: []
+    files:
+      - Stash.Hosting/Stash.Hosting.csproj
+      - Stash.Hosting/IStashHost.cs
+      - Stash.Hosting/StashHost.cs
+      - Stash.Hosting/StashHostOptions.cs
+      - Stash.Hosting/CompiledScript.cs
+      - Stash.Hosting/StashResult.cs
+      - Stash.Bytecode/StashEngine.cs
+      - Stash.sln
+      - Stash.Tests/Embedding/StashHostBasicsTests.cs
+    verify:
+      - dotnet build Stash.Hosting
+      - dotnet test --filter "FullyQualifiedName~StashHostBasicsTests"
+    done_when:
+      - The Stash.Hosting project builds standalone and is wired into Stash.sln; it references Stash.Bytecode and Stash.Stdlib and does NOT reference any ASP.NET / DI / hosting NuGet packages.
+      - StashEngine exposes a non-swallowing execution path (e.g. a new RunRaw) that lets RuntimeError / OperationCanceledException / StepLimitExceededException escape rather than stringifying them; existing Run / Evaluate / Run(StashScript) keep their current swallowing behavior unchanged.
+      - From a unit test "await using var host = new StashHost(); var s = await host.CompileAsync(\"let x = 41; x = x + 1;\"); var r = await host.RunAsync<long>(s);" produces r.Success == true and r.Value == 42.
+      - A second StashHost constructed in the same test sees no globals from the first (hermetic-VM foundation is alive at the host level).
+      - Test methods are async and use the await-using shape; the host is IAsyncDisposable from day one (DisposeAsync is a stub if cleanup-hook wiring is still P3, but the type implements the interface).
+    notes: |
+      The P1 host does NOT have the marshalling bridge yet — RunAsync<T> only needs
+      to surface a single bound value (the script's top-level value or null), which
+      can be done with a minimal in-method conversion for primitives + StashValue
+      passthrough. The full HostMarshaller chokepoint lands in P2.
+
+      Errors in P1 may still be stringly-typed (StashResult.Errors carries strings
+      wrapped in a placeholder StashError shape, or a temporary IReadOnlyList<string>
+      that P2 upgrades). The full structured-error work lands in P2.
+
+      RunAsync delegates the sync work to Task.Run and threads ct through to
+      StashEngine.CancellationToken. A SemaphoreSlim(1, 1) per host serializes
+      in-flight calls (preserves the lua_State single-thread model).
+
+  - id: P2
+    title: CallAsync + TryCallAsync + HostMarshaller chokepoint + structured StashError
+    deps: [P1]
+    files:
+      - Stash.Hosting/IStashHost.cs
+      - Stash.Hosting/StashHost.cs
+      - Stash.Hosting/StashError.cs
+      - Stash.Hosting/StackFrameInfo.cs
+      - Stash.Hosting/StashScriptException.cs
+      - Stash.Hosting/Marshalling/HostMarshaller.cs
+      - Stash.Hosting/Marshalling/JsonStashBridge.cs
+      - Stash.Bytecode/StashEngine.cs
+      - Stash.Tests/Embedding/StashHostCallTests.cs
+      - Stash.Tests/Embedding/HostMarshallerTests.cs
+      - Stash.Tests/Embedding/StashHostStructuredErrorTests.cs
+    verify:
+      - dotnet build Stash.Hosting
+      - dotnet test --filter "FullyQualifiedName~StashHostCallTests|FullyQualifiedName~HostMarshallerTests|FullyQualifiedName~StashHostStructuredErrorTests"
+    done_when:
+      - StashEngine exposes a call-a-function-by-name primitive (e.g. CallFunction(string name, ReadOnlySpan<StashValue> args)) that looks the callable up in vm.Globals, raises a clear error if not found / not callable, invokes through VMContext, and returns the raw StashValue with RuntimeError propagating (no string-flattening).
+      - IStashHost exposes Task<T> CallAsync<T>(string fn, object? args = null, CancellationToken ct = default) that throws StashScriptException on script-level failure, and Task<StashResult<T>> TryCallAsync<T>(...) that never throws on script-level failure; both honor ct.
+      - HostMarshaller is the ONLY callable API in Stash.Hosting that performs object?↔StashValue conversion — RunAsync/CallAsync/TryCallAsync all route through it for both args and returns. Liberal arg marshalling covers C# primitives, byte[], IDictionary<string,object?>, IEnumerable (non-string), anonymous objects, StashValue passthrough, and JsonElement; unsupported types throw ArgumentException with a clear "no marshaller registered for type X" message. Return marshalling covers T=StashValue short-circuit, T=JsonElement (JSON bridge), and the primitive/dict/list set; POCO/record/unknown types throw InvalidCastException naming v2.
+      - A failing script-side throw ('throw ValueError("nope")' from a Stash function) bubbles to the host as a StashScriptException whose Error.Kind == "ValueError" (per BuiltInErrorRegistry.NameOf), Error.Message == "nope", Error.Span is non-null, and Error.CallStack has at least one frame. The same script under TryCallAsync<T> returns Success == false with the same structured Errors[0] and does not throw.
+      - The RuntimeError.CallStack-populated invariant is verified on a concrete test case before this phase closes; if the field is null at the host boundary on the path under test, the cause is fixed in Stash.Bytecode (not papered over in the host).
+      - Cancellation: a script that loops on time.sleep(...) honors a CancellationToken canceled after 100ms — CallAsync throws OperationCanceledException, TryCallAsync returns Success == false with Errors[0].Kind == "Cancelled".
+    notes: |
+      The "single chokepoint" property has no meta-test — it's enforced by being
+      the only API. Reviewer is expected to grep the diff for any inline
+      object?↔StashValue conversion in StashHost.cs outside HostMarshaller and
+      flag it if found.
+
+      Verify the RuntimeError.CallStack population (open question in the brief)
+      by writing one small test that throws from inside a called Stash function
+      and asserting CallStack is non-empty at the host. If the field comes back
+      null, the (small) fix is on the Stash.Bytecode side at the catch-or-unhandled
+      boundary the VM walks to populate it.
+
+  - id: P3
+    title: IAsyncDisposable cleanup hooks + InvokeAsync future bridge
+    deps: [P2]
+    files:
+      - Stash.Hosting/StashHost.cs
+      - Stash.Hosting/IStashHost.cs
+      - Stash.Tests/Embedding/StashHostDisposalTests.cs
+      - Stash.Tests/Embedding/StashHostInvokeAsyncTests.cs
+    verify:
+      - dotnet build Stash.Hosting
+      - dotnet test --filter "FullyQualifiedName~StashHostDisposalTests|FullyQualifiedName~StashHostInvokeAsyncTests|FullyQualifiedName~MultiEngineIsolationTests"
+    done_when:
+      - StashHost.DisposeAsync nulls the process-global static delegate slots and calls the void-returning reset methods named in brief.md → Semantics → DisposeAsync semantics (Prompt/Process/Complete hooks). Implementer verifies each symbol compiles; renames are corrected in-phase against the real symbol and the brief is updated.
+      - A test that sets PromptBuiltIns.ResetBootstrapHandler / ProcessBuiltIns.HistoryAddHandler / a CompleteBuiltIns slot before constructing a host observes those slots are null again after await using's DisposeAsync completes.
+      - StashHost is safe to dispose twice (idempotent) and is safe to call DisposeAsync from a finalization-like path (no thrown exceptions from a null engine).
+      - IStashHost exposes Task<T> InvokeAsync<T>(StashFuture future, CancellationToken ct = default) that awaits future.DotNetTask, honors ct, marshals the resolved value through HostMarshaller.FromStash<T>, and on a faulted future raises StashScriptException with the structured StashError extracted from the underlying RuntimeError.
+      - End-to-end: a script defining 'async fn delayed(n) { time.sleep(n); return n * 2; }' is callable as a top-level definition; 'await host.CallAsync<StashFuture>("delayed", new object[]{1L})' returns the future; 'await host.InvokeAsync<long>(future)' yields 2.
+      - InvokeAsync does NOT drain the per-VM callback queue (the phase-3a event loop) — a script whose future depends on a callback being delivered without first hitting a drain point hangs (or fails on cancellation), and a test documents this contract.
+      - The hermetic-VM acceptance suite (Stash.Tests/Embedding/MultiEngineIsolationTests + siblings) stays green.
+    notes: |
+      The stateful-engine contract is part of P3's done_when implicitly: the
+      disposal test is the test that proves "the only reset is dispose-and-new".
+      Add one explicit StashHostStatefulnessTests case that runs two sequential
+      RunAsync calls on the same host and asserts the second sees the first's
+      global mutation — this is the deliberate v1 contract per the brief.
+
+  - id: P4
+    title: Stash.Hosting.Benchmarks harness + recorded results + OQ#4 verdict
+    deps: [P3]
+    files:
+      - Stash.Hosting.Benchmarks/Stash.Hosting.Benchmarks.csproj
+      - Stash.Hosting.Benchmarks/Program.cs
+      - Stash.Hosting.Benchmarks/HostConstructionBenchmarks.cs
+      - Stash.Hosting.Benchmarks/HostLifecycleBenchmarks.cs
+      - Stash.sln
+      - .kanban/2-in-progress/stash-hosting-mvp/benchmark-results.md
+    verify:
+      - dotnet build -c Release Stash.Hosting.Benchmarks
+      - dotnet run -c Release --project Stash.Hosting.Benchmarks -- --quick
+    done_when:
+      - A Stash.Hosting.Benchmarks console project exists, is wired into Stash.sln, builds in Release, and depends on Stash.Hosting (plus BenchmarkDotNet for the construction micro-bench).
+      - Two benchmark suites exist Release-only and outside dotnet test. A grep for Stash.Hosting.Benchmarks under Stash.Tests/ returns nothing and the suite is NOT a dependency of any test project.
+      - HostConstructionBenchmarks (BenchmarkDotNet) measures cold and warm StashHost construction.
+      - HostLifecycleBenchmarks (Stopwatch median-of-3 per .claude/performance.md) measures the full create then RunAsync then DisposeAsync lifecycle and warm CallAsync per-call overhead.
+      - Running dotnet run -c Release --project Stash.Hosting.Benchmarks -- --quick prints medians for all four measurements; the --quick flag exists for CI/verify use, default invocation runs the full BDN protocol.
+      - A benchmark-results.md file is committed under .kanban/2-in-progress/stash-hosting-mvp/ recording medians for all four measurements with machine/runtime info, and answers milestone open-question 4 in one sentence (a VM pool is or is not justified at these numbers, and here is the threshold).
+    notes: |
+      Benchmark results are an artifact, not a unit test. Don't add a flaky
+      "this should be under N ms" assertion — the verdict on OQ#4 is a human
+      judgment, recorded in benchmark-results.md.
+
+      The '--quick' flag is for the verify step (must complete in a couple of
+      minutes); the real numbers come from a separate manual invocation without
+      the flag, recorded in benchmark-results.md.
+
+# Final acceptance command — run by '/done' before promoting to 4-done/.
+# Must include the full test suite at minimum. The two 'checkpoint lint' lines are
+# the standing omission guard: every feature's promotion gate confirms the live doc
+# surface has no raw 'scripts/checkpoint/<sub>.stash' reference (it routes through the
+# facade) and that the guard still has teeth. Keep them — dropping them makes the
+# guard one-shot instead of perpetual.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
