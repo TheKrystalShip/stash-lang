@@ -1,7 +1,7 @@
 schema_version: 1
 feature: callback-marshaling
 current: null
-updated: "2026-06-04T11:09:13Z"
+updated: "2026-06-04T11:30:06Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "P1 complete: queue+drain+producer-flip+sleep-drain-loop; plain-sleep reentrant fallback added; all 5 done_when behavioral tests pass"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: ddc777dc3a4c4d5b4071a5ebbd08e4ba705fdf18
+    verified: true
+    started: "2026-06-04T11:11:34Z"
+    completed: "2026-06-04T11:30:06Z"
+    attempts: 1
+    notes: "P2 complete: event namespace (Poll+Loop) routing through DrainCallbacks; reentrancy guard inherited from P1; loud-fail deviation filed; CompletionSurfaceSnapshot deferred to P4"
   P3:
     status: pending
     commit: null

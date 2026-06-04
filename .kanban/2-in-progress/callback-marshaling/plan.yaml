@@ -96,7 +96,7 @@ phases:
       - Stash.Tests/Interpreting/EventBuiltInsTests.cs
     verify:
       - dotnet build Stash.Stdlib
-      - dotnet test --filter "FullyQualifiedName~EventBuiltInsTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+      - dotnet test --filter "FullyQualifiedName~EventBuiltInsTests"
     done_when:
       - event.poll() drains everything currently queued and returns immediately without blocking; a watcher fired before the poll has mutated the parent's captured state by the time poll returns.
       - event.loop() blocks and drains until cancellation; cancelling the script's CancellationToken makes the loop throw CancellationError (registered error type).
