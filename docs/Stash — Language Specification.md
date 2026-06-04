@@ -1502,22 +1502,162 @@ If a non-frozen value to be captured contains a cycle, the deep-clone at fork ti
 `ValueError` with the cycle path in the message. Fix: `freeze` one node on the cycle (which
 makes the entire reachable graph frozen and eligible for reference-sharing).
 
-#### Background-thread callback isolation
+#### Background-thread callback marshaling
 
-Callbacks registered with `fs.watch`, `signal.on`, and timer functions are invoked on
-background threads (OS file-system event threads or the .NET thread pool). Like `async fn`
-bodies, each such callback runs in an **isolated child VM**: its writes to captured globals
-are **call-local** and are never visible to the parent VM. The callback can still
-communicate with the outside world through side effects — writing files, spawning processes,
-or any other I/O — but it cannot mutate the parent VM's variable state.
+Background-thread callbacks — those registered with `fs.watch` and similar event-source
+functions — run their bodies on the **VM thread**, not on the OS event thread that detected
+the change. The delivery mechanism is a **per-VM callback queue**: when an event fires on a
+background thread the producer enqueues `(callable, args)` onto the queue of the VM that
+registered the watcher. The VM thread drains that queue **inline at yield points** — coarse
+points where the main script is parked and there is no concurrent execution.
+
+**Safety invariant.** Because delivery only happens when the main thread is parked, a queued
+callback runs with **zero concurrency** against the main script. It therefore has full access
+to shared globals and captured upvalues — mutations it makes are visible to the parent
+immediately after the yield point returns. This is the JS/Lua event-loop bargain.
 
 **Same-thread callbacks** (`arr.map`, sort comparators, `assert` body functions, and other
-synchronous higher-order functions) are unaffected. They run inline on the same VM thread
-and share the same variable state as their caller.
+synchronous higher-order functions) are unaffected: they still run inline on the same VM
+thread and always share caller state.
 
-A principled marshal-onto-VM-thread mechanism (event loop) is planned but not yet
-available. Until then, structure background callbacks as fire-and-forget workers that
-communicate via I/O, not by mutating captured state.
+**Contrast with `async fn`.** `async fn` bodies are deliberately isolated: they run on a
+real thread-pool thread, each gets a deep clone of captured state at fork time, and they
+communicate with the caller only through their return value and `await`. The asymmetry is
+not an inconsistency — parallel execution requires isolation; serial queued delivery does
+not. Both designs are coherent; mixed designs (a callback on a background thread with free
+access to shared mutable state) are not.
+
+##### Drain points
+
+The VM drains its callback queue at three **drain points** — places where the main script
+explicitly parks itself:
+
+| Drain point | Behavior |
+| --- | --- |
+| `time.sleep(secs)` | Waits until the duration elapses *or* the queue becomes non-empty, whichever comes first; drains all queued callbacks; recomputes remaining wait time; repeats until time is up. |
+| `event.poll()` | Drains everything currently queued and returns immediately without blocking. |
+| `event.loop()` | Blocks and drains indefinitely until the script's cancellation token fires, then throws `CancellationError`. |
+
+A script that never reaches a drain point — for example a tight `while(true){}` with no
+`time.sleep` — never drains. Insert a `time.sleep` or `event.poll()` to yield.
+
+##### Run-to-completion (reentrancy)
+
+The drain is **non-reentrant**: if a queued callback itself calls `time.sleep` or
+`event.poll`, those calls do their primitive thing (sleep, or return immediately) but do
+**not** trigger a nested drain. Each callback runs to completion before the next one fires.
+This is identical to the JS task model.
+
+Consequence: a slow callback delays the `time.sleep` that drained it from returning. If
+`time.sleep(0.1)` drains a callback that takes 200 ms, the sleep returns at ≥ 300 ms total.
+This is an inherent consequence of run-to-completion delivery, identical to JS, and is
+documented rather than avoided.
+
+##### Explicit-park lifetime
+
+End-of-script (returning from the main body) **exits** the VM: active watchers are torn
+down and any events still queued are **dropped**. There is no implicit "wait for the queue
+to drain" hook.
+
+To keep a script alive while events flow, hold the VM open with `event.loop()` or a
+`while`-loop that calls `time.sleep`:
+
+```stash
+// Config hot-reload — keep reacting until cancelled (e.g. Ctrl-C).
+let cfg = json.parse(fs.readFile("config.json"));
+fs.watch("config.json", (e) => {
+    cfg = json.parse(fs.readFile("config.json"));
+    io.println("Config reloaded.");
+});
+event.loop();   // blocks; drains on each wakeup; exits on CancellationError
+```
+
+To flush before a clean exit, call `event.poll()` explicitly:
+
+```stash
+event.poll();   // drain any last pending callbacks
+// now safe to return from main
+```
+
+##### File-watch example: closure mutation via the callback queue
+
+The following pattern is the canonical demonstration of the marshaling model. Before this
+feature, `running` would never flip for the parent because the callback ran in an isolated
+child VM. Now the callback is queued and delivered at each `time.sleep`, making the mutation
+visible.
+
+```stash
+let running = true;
+let watcher = fs.watch(watchDir, (e) => {
+    running = false;   // mutation reaches the parent at the next drain point
+});
+
+while (running) {
+    time.sleep(0.1);   // drain point — queued callbacks run here
+}
+fs.unwatch(watcher);
+```
+
+##### Documented races
+
+Two races are inherent to the model and are documented rather than eliminated:
+
+- **Sleep-skew.** A slow callback can make `time.sleep(d)` return later than `d`. This is
+  the same tradeoff as JS and is unavoidable with run-to-completion drain.
+- **Already-queued after unwatch/off.** Calling `fs.unwatch(w)` or `signal.off(SIG)` stops
+  *future* enqueues, but a callback that was already in the queue when `unwatch`/`off` was
+  called still fires at the next drain point.
+
+##### Signal callbacks — delivery mechanism vs. OS registration
+
+The marshaling mechanism above applies to any callback delivery path, including
+`signal.on`. The handler's body is enqueued and delivered on the VM thread at the next
+drain point, so the closure-mutation pattern works:
+
+```stash
+// The delivery mechanism is correct for this shape — the callback is marshaled
+// onto the VM thread and `stop` flips for the parent loop at the next time.sleep().
+let stop = false;
+signal.on(Signal.Term, () => { stop = true; });
+while (!stop) { time.sleep(0.1); }
+```
+
+Note: as of this release, `Signal.Term` and related `Signal.*` members are not wired to
+real OS-level POSIX signal registration due to a name-domain mismatch in the underlying
+implementation. Synthetic dispatch (used internally by tests) works correctly. For
+intercepting a real OS `SIGTERM` today, use `sys.onSignal(sys.Signal.SIGTERM, cb)`. The
+name-domain mismatch is tracked in the backlog and will be fixed in a future release.
+
+#### The `event` Namespace
+
+The `event` namespace provides the two explicit drain points: `event.poll()` and
+`event.loop()`. Neither function requires any capability — they operate purely on the VM's
+internal callback queue.
+
+**`event.poll()`** drains everything currently queued and returns immediately. It is
+infallible. When called from inside a queued callback (i.e. while a drain is already in
+progress), it is a no-op — the reentrancy guard prevents nested drains.
+
+**`event.loop()`** blocks and drains indefinitely. It parks the calling thread and wakes on
+each queue signal to drain, then parks again. It exits only when the script's cancellation
+token fires, at which point it throws `CancellationError`. When called from inside a queued
+callback, it is a no-op.
+
+```stash
+// event.poll() — drain and return immediately
+let polled = false;
+let w = fs.watch(dir, (e) => { polled = true; });
+fs.writeFile(path.join(dir, "f.txt"), "x");
+// spin until the watch debounce fires
+while (!polled) { event.poll(); }
+io.println("polled: " + conv.str(polled));   // "polled: true"
+fs.unwatch(w);
+
+// event.loop() — run until cancelled
+fs.watch(cfgPath, (e) => { io.println("Config changed."); });
+io.println("Watching — Ctrl-C to stop.");
+event.loop();   // throws CancellationError on Ctrl-C; script exits cleanly
+```
 
 ### Methods
 

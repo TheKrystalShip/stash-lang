@@ -1,0 +1,220 @@
+#!/usr/bin/env stash
+
+// ============================================================
+// event_loop_shutdown.stash — Callback-Marshaling Event Loop
+// ============================================================
+//
+// This example demonstrates the callback-marshaling event-loop
+// feature: a background-thread callback (fs.watch) that mutates
+// outer/parent state — the pattern that was silently broken by
+// the hermetic-VM isolation milestone and is now restored.
+//
+// KEY INSIGHT — WHY THIS WORKS NOW:
+//   Before this feature, callbacks fired by fs.watch ran on a
+//   background thread inside an *isolated child VM*. Their
+//   mutations were call-local and never reached the parent.
+//
+//   Now, background producers enqueue (callable, args) onto a
+//   per-VM callback queue. The VM thread drains that queue
+//   *inline* at coarse yield points (time.sleep, event.poll,
+//   event.loop) where the main thread is parked and there is
+//   zero concurrency. Because delivery happens only when the
+//   main thread is parked, queued callbacks run with
+//   shared-globals semantics (Branch-1) — mutations to captured
+//   variables ARE visible in the parent.
+//
+//   A tight while(running){} with no yield would NEVER drain;
+//   the time.sleep() call is not decoration — it IS what parks
+//   the VM thread to let queued callbacks run.
+//
+// EXPLICIT-PARK LIFETIME:
+//   Reaching the end of main() exits the VM and DROPS any
+//   pending queued events. To keep reacting, hold the VM alive
+//   with event.loop() or a sleep/poll loop (as shown here).
+//   Flush-before-exit is opt-in via event.poll().
+
+io.println("=" * 60);
+io.println("  Callback-Marshaling Event-Loop Demo");
+io.println("=" * 60);
+io.println();
+
+// ─── 1. fs.watch — closure mutation via the callback queue ──
+//
+// Classic hot-reload / graceful-shutdown pattern:
+//   A parent-scope flag starts true.
+//   An fs.watch callback flips it when a file is created.
+//   The drive loop yields at time.sleep(); the VM drains the
+//   queued callback there and the flip becomes visible.
+
+io.println("── 1. fs.watch — closure mutation (the restored pattern) ──");
+
+// Create a temporary directory to watch.  fs.tempDir() both
+// creates the directory and returns its absolute path.
+let watchDir = fs.tempDir();
+let triggerFile = path.join(watchDir, "stop.signal");
+
+io.println($"  Watching directory: {watchDir}");
+
+// --- Parent flag: starts true ----------------------------------
+let running = true;
+let eventCount = 0;
+
+// Register the watcher BEFORE firing events.
+// The callback captures `running` and `eventCount` by
+// reference — mutations will be visible to the parent because
+// the queued-delivery model runs callbacks on the VM thread.
+let watcher = fs.watch(watchDir, (e) => {
+    // This body executes on the VM thread at a drain point,
+    // NOT on the OS file-system event thread.  Shared globals
+    // and captured upvalues are safe to mutate here.
+    eventCount = eventCount + 1;
+    io.println($"  [callback] event #{eventCount}: {e.type} — {e.path}");
+    running = false;   // flip the parent flag — the loop will see this
+    io.println("  [callback] running = false; loop exits after this drain");
+});
+
+io.println("  Watcher registered. Spawning async trigger (fires in 0.3s)...");
+
+// Fire the event from an async fn so the main thread enters
+// its sleep/drain loop first.  Calling async fn without await
+// returns a Future immediately and runs the body on a thread
+// pool — we do not need the result here.
+async fn triggerShutdown(file) {
+    time.sleep(0.3);   // give the main loop time to start
+    fs.writeFile(file, "stop");
+}
+
+triggerShutdown(triggerFile);   // fire-and-forget; no await
+
+// ─── Drive loop ─────────────────────────────────────────────
+//
+// Each time.sleep() call is a drain point.  After sleeping the
+// requested duration (or on the queue-signal, whichever comes
+// first) the VM drains every queued callback before returning.
+// The callback above sets running = false; the while condition
+// is re-evaluated on the NEXT iteration and the loop exits.
+
+let ticks = 0;
+while (running && ticks < 20) {   // safety ceiling: 20 × 0.1s = 2s max
+    ticks = ticks + 1;
+    io.println($"  [loop] tick {ticks} — running = {running}");
+    time.sleep(0.1);   // <-- drain point: queued callback runs here
+}
+
+io.println($"  Loop exited after {ticks} tick(s). running = {running}");
+io.println($"  Total callbacks delivered: {eventCount}");
+
+// Stop the watcher and clean up.
+fs.unwatch(watcher);
+fs.delete(watchDir);
+
+io.println();
+
+// ─── 2. signal.on — intended pattern (noted caveat below) ────
+//
+// The intended graceful-shutdown shape is:
+//
+//   let stop = false;
+//   signal.on(Signal.Term, () => { stop = true; });
+//   while (!stop) { do_work(); time.sleep(0.1); }
+//
+// When an external SIGTERM arrives, the callback is enqueued
+// onto the VM's callback queue and delivered at the next
+// time.sleep() drain point — the closure mutation reaches the
+// parent and the loop exits cleanly.
+//
+// CAVEAT — OS signal registration not yet wired for Signal.*:
+//   signal.on registers the handler under the member name
+//   ("Term", "Hup", …) from GlobalBuiltIns.Signal.  But the
+//   PosixSignalRegistration lookup uses "SIGTERM"/"SIGHUP"/…
+//   — the names from the deprecated sys.Signal enum — so no
+//   OS-level registration is created for Signal.Term, Signal.Hup
+//   etc.  The default OS action (process termination) still
+//   fires.  Synthetic dispatch (SignalImpl.Dispatch("Term"))
+//   works correctly; only real OS SIGTERM delivery is affected.
+//
+//   Until the name-domain mismatch in SignalImpl.MapToPosixSignal
+//   is fixed, use sys.onSignal(sys.Signal.SIGTERM, ...) for
+//   real OS signal interception.
+//
+//   This is not demonstrated here to avoid a misleading example.
+//   Section 1 (fs.watch) proves the same closure-mutation
+//   mechanic using a background-thread source that is fully wired.
+
+io.println("── 2. signal.on — intended pattern ──");
+io.println("  The intended shape:");
+io.println("    signal.on(Signal.Term, () => { stop = true; });");
+io.println("    while (!stop) { do_work(); time.sleep(0.1); }");
+io.println("  The callback is marshaled onto the VM thread at each time.sleep().");
+io.println("  See comments in the source for the current OS-registration caveat.");
+io.println();
+
+// ─── 3. event.poll() — explicit drain point ─────────────────
+//
+// event.poll() drains everything currently queued and returns
+// immediately without blocking.  When event.poll() is the ONLY
+// drain point in a loop (no time.sleep), it is the sole way
+// queued callbacks get delivered.
+
+io.println("── 3. event.poll() — explicit drain ──");
+
+let pollDir = fs.tempDir();
+let polled = false;
+
+let pollWatcher = fs.watch(pollDir, (e) => {
+    io.println($"  [poll-callback] event type: {e.type}");
+    polled = true;
+});
+
+// Write the trigger file.  The fs.watch debounce window is
+// 100ms, so the callback is enqueued roughly 100ms later.
+// We spin on event.poll() with no time.sleep — event.poll() is
+// the SOLE drain point here.  The spin has a safety deadline.
+fs.writeFile(path.join(pollDir, "trigger.txt"), "hello");
+
+io.println($"  polled before any event.poll() = {polled}");
+
+// Spin-poll until the callback fires or 5s deadline expires.
+// event.poll() returns immediately each iteration (non-blocking).
+let deadline = time.millis() + 5000;
+while (!polled && time.millis() < deadline) {
+    event.poll();   // <-- sole drain point; delivers queued callback
+}
+
+io.println($"  polled after  event.poll() loop = {polled}");
+
+fs.unwatch(pollWatcher);
+fs.delete(pollDir);
+
+io.println();
+
+// ─── 4. event.loop() — block-and-drain until cancellation ───
+//
+// event.loop() blocks indefinitely, draining callbacks on each
+// wakeup, and exits only when the script is cancelled.  This is
+// the right primitive for a daemon that reacts to events
+// continuously (config-watch, file-sync, etc.).
+//
+// The loop CANNOT terminate on its own — it throws
+// CancellationError when the runtime cancels the script.
+//
+// Shown here as a comment only; running it would block forever
+// in this demo (there is no external cancellation source).
+//
+//   let cfgDir = fs.tempDir();
+//   let cfg = {};
+//   fs.watch(cfgDir, (e) => {
+//       io.println("Config changed — hot-reloading...");
+//       cfg = json.parse(fs.readFile(path.join(cfgDir, "config.json")));
+//   });
+//   io.println("Watching for config changes — press Ctrl-C to stop.");
+//   event.loop();   // blocks; drains watch callbacks; exits on Ctrl-C (SIGINT)
+//                   // => CancellationError is thrown, exits cleanly.
+
+io.println("── 4. event.loop() — (shown as comments; would block forever) ──");
+io.println("  See the inline comments above for the event.loop() pattern.");
+
+io.println();
+io.println("=" * 60);
+io.println("  Demo complete — clean shutdown");
+io.println("=" * 60);
