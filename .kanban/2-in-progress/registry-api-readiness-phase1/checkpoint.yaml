@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T11:06:33Z"
+updated: "2026-06-04T11:25:30Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "Added PackageSortOrder enum, keyword/license/deprecated/owner filters, license+ownerCount to PackageSummaryResponse, extended SearchPackagesAsync with single-query N+1-free ownerCount; rebaselined OpenAPI snapshot; 48 targeted tests green"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: cd6297413c41d0a2730959b80cea0c24145989c3
+    verified: true
+    started: "2026-06-04T11:10:55Z"
+    completed: "2026-06-04T11:25:30Z"
+    attempts: 1
+    notes: "CorsConfig added with Enabled/AllowedOrigins/AllowedMethods/AllowedHeaders/AllowCredentials; wired into RegistryConfig; appsettings.json Cors section off-by-default; 4 CorsMiddlewareTests prove both directions (disabled=inert, enabled=active); 11 CorsConfigTests prove parsing/defaults/round-trip; all 22 phase tests green"
   P7:
     status: pending
     commit: null
