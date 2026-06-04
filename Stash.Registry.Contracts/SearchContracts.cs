@@ -67,28 +67,3 @@ public sealed class PackageSummaryResponse
     public bool Deprecated { get; set; }
 }
 
-/// <summary>
-/// Response body returned by the <c>GET /api/v1/packages?q={query}</c> search endpoint.
-/// </summary>
-public sealed class SearchResponse
-{
-    /// <summary>The list of packages matching the search query for the current page.</summary>
-    [JsonPropertyName("packages")]
-    public required List<PackageSummaryResponse> Packages { get; set; }
-
-    /// <summary>The total number of packages that matched the query across all pages.</summary>
-    [JsonPropertyName("totalCount")]
-    public int TotalCount { get; set; }
-
-    /// <summary>The 1-based page index of the current result set.</summary>
-    [JsonPropertyName("page")]
-    public int Page { get; set; }
-
-    /// <summary>The number of results included per page.</summary>
-    [JsonPropertyName("pageSize")]
-    public int PageSize { get; set; }
-
-    /// <summary>The total number of pages available given <see cref="TotalCount"/> and <see cref="PageSize"/>.</summary>
-    [JsonPropertyName("totalPages")]
-    public int TotalPages { get; set; }
-}

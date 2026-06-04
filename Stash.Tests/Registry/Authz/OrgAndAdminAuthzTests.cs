@@ -483,7 +483,7 @@ public sealed class OrgAndAdminAuthzTests : RegistryAuthzTestBase
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         string body = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
-        var packages = doc.RootElement.GetProperty("packages");
+        var packages = doc.RootElement.GetProperty("items");
         Assert.Equal(0, packages.GetArrayLength());
     }
 
@@ -504,7 +504,7 @@ public sealed class OrgAndAdminAuthzTests : RegistryAuthzTestBase
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         string body = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
-        var packages = doc.RootElement.GetProperty("packages");
+        var packages = doc.RootElement.GetProperty("items");
         Assert.True(packages.GetArrayLength() >= 1);
     }
 
@@ -525,7 +525,7 @@ public sealed class OrgAndAdminAuthzTests : RegistryAuthzTestBase
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         string body = await resp.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(body);
-        var packages = doc.RootElement.GetProperty("packages");
+        var packages = doc.RootElement.GetProperty("items");
         Assert.True(packages.GetArrayLength() >= 1);
     }
 

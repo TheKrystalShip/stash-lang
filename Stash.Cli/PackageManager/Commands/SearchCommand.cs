@@ -59,7 +59,7 @@ public static class SearchCommand
             entry?.ExpiresAt, entry?.MachineId, registryUrl);
 
         var results = client.Search(query, page);
-        if (results == null || results.Packages.Count == 0)
+        if (results == null || results.Items.Count == 0)
         {
             Console.WriteLine("No packages found.");
             return;
@@ -68,7 +68,7 @@ public static class SearchCommand
         Console.WriteLine($"Found {results.TotalCount} packages (page {results.Page}/{results.TotalPages}):");
         Console.WriteLine();
 
-        foreach (var pkg in results.Packages)
+        foreach (var pkg in results.Items)
         {
             string desc = pkg.Description ?? "";
             if (desc.Length > 60)

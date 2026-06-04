@@ -144,8 +144,8 @@ public sealed class SearchControllerValidationTests
 
         string content = await response.Content.ReadAsStringAsync();
         using var doc = JsonDocument.Parse(content);
-        Assert.True(doc.RootElement.TryGetProperty("packages", out _),
-            "Expected 'packages' array in search response");
+        Assert.True(doc.RootElement.TryGetProperty("items", out _),
+            "Expected 'items' array in search response (PagedResponse<T> envelope)");
     }
 
     /// <summary>

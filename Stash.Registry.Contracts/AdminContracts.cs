@@ -186,28 +186,3 @@ public sealed class AuditEntryResponse
     public string? DenyReason { get; set; }
 }
 
-/// <summary>
-/// Response body returned by the <c>GET /api/v1/admin/audit-log</c> endpoint.
-/// </summary>
-public sealed class AuditLogResponse
-{
-    /// <summary>The list of audit log entries for the current page.</summary>
-    [JsonPropertyName("entries")]
-    public required List<AuditEntryResponse> Entries { get; set; }
-
-    /// <summary>The total number of audit log entries across all pages.</summary>
-    [JsonPropertyName("totalCount")]
-    public int TotalCount { get; set; }
-
-    /// <summary>The 1-based page index of the current result set.</summary>
-    [JsonPropertyName("page")]
-    public int Page { get; set; }
-
-    /// <summary>The number of entries included per page.</summary>
-    [JsonPropertyName("pageSize")]
-    public int PageSize { get; set; }
-
-    /// <summary>The total number of pages available given <see cref="TotalCount"/> and <see cref="PageSize"/>.</summary>
-    [JsonPropertyName("totalPages")]
-    public int TotalPages { get; set; }
-}

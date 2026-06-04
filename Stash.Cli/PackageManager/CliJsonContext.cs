@@ -50,7 +50,8 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(RefreshTokenRequest))]
 [JsonSerializable(typeof(DeprecatePackageRequest))]
 [JsonSerializable(typeof(DeprecateVersionRequest))]
-[JsonSerializable(typeof(SearchResponse))]
+// Pagination envelope — closed generic registered for AOT source-gen reachability
+[JsonSerializable(typeof(PagedResponse<PackageSummaryResponse>))]
 [JsonSerializable(typeof(PackageSummaryResponse))]
 [JsonSerializable(typeof(List<PackageSummaryResponse>))]
 // Package role DTOs (P2 parity additions)

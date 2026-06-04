@@ -54,14 +54,14 @@ public sealed class SearchController : ControllerBase
     /// No authentication required. Private packages are omitted for unauthenticated callers.
     /// </remarks>
     /// <returns>
-    /// <c>200</c> with a <see cref="SearchResponse"/> containing a list of
-    /// <see cref="PackageSummaryResponse"/> objects, pagination metadata, and the total
-    /// result count.
+    /// <c>200</c> with a <see cref="PagedResponse{T}"/> of <see cref="PackageSummaryResponse"/>
+    /// objects, pagination metadata, and the total result count.
+    /// The collection key is <c>"items"</c> (unified across all paginated endpoints).
     /// </returns>
     [PublicEndpoint("package search is a public discovery endpoint — unauthenticated callers see only public packages")]
     [RegistryAuthorize(RegistryAction.Search)]
     [HttpGet]
-    public async Task<Results<Ok<SearchResponse>, BadRequest<ErrorResponse>>> Search([FromQuery] SearchQuery query)
+    public async Task<Results<Ok<PagedResponse<PackageSummaryResponse>>, BadRequest<ErrorResponse>>> Search([FromQuery] SearchQuery query)
     {
         // [Range] on SearchQuery.page and SearchQuery.pageSize ensures valid values.
         // Out-of-range values return 400 InvalidRequest (replaces the previous silent clamp).
@@ -72,7 +72,7 @@ public sealed class SearchController : ControllerBase
         string? callerUsername = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
         SearchResult result = await _db.SearchPackagesAsync(query.q ?? "", query.page, query.pageSize, callerUsername);
 
-        List<PackageSummaryResponse> packages = result.Packages.Select(p =>
+        List<PackageSummaryResponse> items = result.Packages.Select(p =>
         {
             List<string>? keywords = null;
             if (p.Keywords != null)
@@ -94,9 +94,9 @@ public sealed class SearchController : ControllerBase
 
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
-        return TypedResults.Ok(new SearchResponse
+        return TypedResults.Ok(new PagedResponse<PackageSummaryResponse>
         {
-            Packages = packages,
+            Items = items,
             TotalCount = result.TotalCount,
             Page = query.page,
             PageSize = query.pageSize,
