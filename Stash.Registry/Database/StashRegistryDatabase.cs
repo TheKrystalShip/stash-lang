@@ -231,6 +231,23 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
+    public async Task<SearchResult<VersionRecord>> GetPackageVersionsAsync(string name, int page, int pageSize)
+    {
+        var queryable = _context.Versions
+            .AsNoTracking()
+            .Where(v => v.PackageName == name);
+
+        int totalCount = await queryable.CountAsync();
+        var items = await queryable
+            .OrderByDescending(v => v.PublishedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new SearchResult<VersionRecord> { Items = items, TotalCount = totalCount };
+    }
+
+    /// <inheritdoc/>
     public async Task UpdatePackageTimestampAsync(string name)
     {
         var package = await _context.Packages.FindAsync(name);

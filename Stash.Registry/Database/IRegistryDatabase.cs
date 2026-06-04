@@ -97,6 +97,16 @@ public interface IRegistryDatabase
     Task<List<string>> GetAllVersionsAsync(string name);
 
     /// <summary>
+    /// Returns a paginated list of version records for a package, ordered by publish date descending,
+    /// together with the total version count across all pages.
+    /// </summary>
+    /// <param name="name">The package name.</param>
+    /// <param name="page">The 1-based page number.</param>
+    /// <param name="pageSize">The maximum number of results per page.</param>
+    /// <returns>A <see cref="SearchResult{T}"/> of <see cref="VersionRecord"/> items with the total count.</returns>
+    Task<SearchResult<VersionRecord>> GetPackageVersionsAsync(string name, int page, int pageSize);
+
+    /// <summary>
     /// Updates the <c>updated_at</c> timestamp of a package to the current UTC time.
     /// </summary>
     /// <param name="name">The package name to touch.</param>

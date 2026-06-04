@@ -269,6 +269,34 @@ public sealed class PackageRolesListResponse
 }
 
 /// <summary>
+/// Query-string parameters for the <c>GET /api/v1/packages/{scope}/{name}/versions</c> endpoint.
+/// Bound via <c>[FromQuery]</c> — page and pageSize are validated via <c>[Range]</c>
+/// to reject out-of-range values rather than silently clamping them.
+/// </summary>
+public sealed class VersionsQuery
+{
+    /// <summary>The 1-based page index (minimum 1).</summary>
+    [Range(1, int.MaxValue)]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
+                        "IComparable/type-conversion reflection paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
+    [JsonPropertyName("page")]
+    public int page { get; set; } = 1;
+
+    /// <summary>The number of results per page (1–100).</summary>
+    [Range(1, 100)]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
+                        "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +
+                        "IComparable/type-conversion reflection paths, which are server-side concerns; " +
+                        "the CLI never calls Validator.* or ValidateObject.")]
+    [JsonPropertyName("pageSize")]
+    public int pageSize { get; set; } = 20;
+}
+
+/// <summary>
 /// Response body returned by deprecation and undeprecation endpoints.
 /// </summary>
 public sealed class DeprecationResponse
