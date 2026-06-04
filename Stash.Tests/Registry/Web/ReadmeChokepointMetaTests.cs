@@ -166,55 +166,6 @@ public sealed class ReadmeChokepointMetaTests
         return propType == typeof(HtmlString);
     }
 
-    // ── Scan-snippet helper (used directly by self-tests) ────────────────────
-
-    /// <summary>
-    /// Scans an in-memory <c>.cshtml</c> snippet (as if it were a file) for violations.
-    /// Uses a simplified check: considers <c>Model.X</c> safe only if the argument
-    /// matches the <see cref="SafeRenderCallPattern"/> or is a known
-    /// <c>Model.ReadmeHtml</c>-shaped property reference.
-    /// </summary>
-    /// <remarks>
-    /// This overload is used by the fail-path self-tests in <see cref="ReadmeChokepointMetaTests"/>
-    /// that need to verify the scanner trips on known-bad snippet text without a real file on disk.
-    /// It performs only the regex-level check (no reflection-based property-type resolution).
-    /// </remarks>
-    internal static IReadOnlyList<string> ScanSnippetForViolations(
-        string snippetText,
-        bool treatModelHtmlStringPropertyAsSafe = false)
-    {
-        var violations = new List<string>();
-        var lines = snippetText.Split('\n');
-
-        for (int lineIdx = 0; lineIdx < lines.Length; lineIdx++)
-        {
-            var line = lines[lineIdx];
-            var matches = HtmlRawPattern.Matches(line);
-            foreach (Match match in matches)
-            {
-                string argument = match.Groups[1].Value.Trim();
-
-                // Safe form 1: direct RenderToSafeHtml call
-                if (SafeRenderCallPattern.IsMatch(argument))
-                    continue;
-
-                // Safe form 2 (for snippet tests only): treat Model.X as safe when the
-                // caller opts in (to test the HtmlString-property path specifically).
-                if (treatModelHtmlStringPropertyAsSafe &&
-                    ModelPropertyPattern.IsMatch(argument))
-                    continue;
-
-                // Violation
-                violations.Add(
-                    $"<snippet>:{lineIdx + 1}: @Html.Raw({argument}) — " +
-                    "argument must be either IReadmeRenderer.RenderToSafeHtml(...) or a " +
-                    "Model property typed as HtmlString populated only from the renderer.");
-            }
-        }
-
-        return violations;
-    }
-
     // ── Project directory discovery ───────────────────────────────────────────
 
     private static string FindWebProjectSourceDir()
@@ -296,50 +247,128 @@ public sealed class ReadmeChokepointMetaTests
             string.Join("\n", allViolations));
     }
 
-    // ── Self-tests (scanner has teeth) ───────────────────────────────────────
+    // ── Self-tests (scanner has teeth — all using the production ScanFileForViolations) ──
 
     /// <summary>
-    /// The scan helper MUST trip on the known-bad snippet from
-    /// <see cref="ChokepointFailPathFixture.RogueHtmlRawSnippet"/>.
+    /// The PRODUCTION scanner (<see cref="ScanFileForViolations"/>) MUST trip on a real
+    /// <c>.cshtml</c> file containing a rogue <c>@Html.Raw(someUserControlledString)</c>.
+    /// This exercises the actual guard that runs in production compliance, not a parallel helper.
     /// </summary>
     [Fact]
-    public void FailPathFixture_RogueHtmlRaw_IsDetected()
+    public void FailPathFixture_RogueHtmlRaw_IsDetected_ByProductionScanner()
     {
-        var violations = ScanSnippetForViolations(ChokepointFailPathFixture.RogueHtmlRawSnippet);
+        // Write the known-bad snippet to a real temp .cshtml file so the production scanner runs.
+        string tempFile = Path.Combine(Path.GetTempPath(), $"chokepoint-rogue-{Guid.NewGuid():N}.cshtml");
+        try
+        {
+            File.WriteAllText(tempFile, ChokepointFailPathFixture.RogueHtmlRawSnippet);
 
-        Assert.True(
-            violations.Count > 0,
-            "The chokepoint scanner did NOT detect the rogue @Html.Raw(someUserControlledString) " +
-            "in the known-bad fixture snippet. The guard has lost its teeth — " +
-            "a real unsafe @Html.Raw would pass undetected.");
+            var violations = ScanFileForViolations(tempFile);
+
+            Assert.True(
+                violations.Count > 0,
+                "The PRODUCTION chokepoint scanner (ScanFileForViolations) did NOT detect " +
+                "the rogue @Html.Raw(someUserControlledString) in the known-bad fixture file. " +
+                "The guard has lost its teeth — a real unsafe @Html.Raw would pass undetected.");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
     }
 
     /// <summary>
-    /// The scan helper must NOT flag a snippet using <c>renderer.RenderToSafeHtml(...)</c>
-    /// as a violation (<see cref="ChokepointFailPathFixture.SafeRenderToSafeHtmlCallSnippet"/>).
+    /// The PRODUCTION scanner must NOT flag a <c>.cshtml</c> file whose <c>@Html.Raw</c>
+    /// argument is a direct <c>renderer.RenderToSafeHtml(...)</c> call — safe form 1.
     /// </summary>
     [Fact]
-    public void FailPathFixture_SafeRenderToSafeHtmlCall_IsNotFlagged()
+    public void FailPathFixture_SafeRenderToSafeHtmlCall_IsNotFlagged_ByProductionScanner()
     {
-        var violations = ScanSnippetForViolations(
-            ChokepointFailPathFixture.SafeRenderToSafeHtmlCallSnippet);
+        string tempFile = Path.Combine(Path.GetTempPath(), $"chokepoint-safe-call-{Guid.NewGuid():N}.cshtml");
+        try
+        {
+            File.WriteAllText(tempFile, ChokepointFailPathFixture.SafeRenderToSafeHtmlCallSnippet);
 
-        Assert.Empty(violations);
+            var violations = ScanFileForViolations(tempFile);
+
+            Assert.Empty(violations);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
     }
 
     /// <summary>
-    /// The scan helper must NOT flag a snippet using <c>Model.ReadmeHtml</c>
-    /// (the HtmlString-property safe form) when the caller opts in to treating it as safe
-    /// (<see cref="ChokepointFailPathFixture.SafeHtmlStringPropertySnippet"/>).
+    /// The PRODUCTION scanner must flag a <c>.cshtml</c> file whose <c>@Html.Raw</c> argument
+    /// is <c>Model.InstallCommand</c> — a <c>string</c> property on <see cref="PackageModel"/>,
+    /// NOT an <see cref="HtmlString"/>. This exercises the full reflection path (safe form 2
+    /// reject branch) and proves a non-HtmlString property triggers a violation.
     /// </summary>
     [Fact]
-    public void FailPathFixture_SafeHtmlStringProperty_IsNotFlagged_WhenTreatedAsSafe()
+    public void FailPathFixture_ModelStringProperty_IsFlagged_ByProductionScanner()
     {
-        var violations = ScanSnippetForViolations(
-            ChokepointFailPathFixture.SafeHtmlStringPropertySnippet,
-            treatModelHtmlStringPropertyAsSafe: true);
+        // A .cshtml that declares @model PackageModel and calls @Html.Raw(Model.InstallCommand),
+        // where InstallCommand is string (not HtmlString) — must be flagged.
+        const string snippet = """
+            @page "/test"
+            @model Stash.Registry.Web.Pages.PackageModel
+            <div>
+                @Html.Raw(Model.InstallCommand)
+            </div>
+            """;
 
-        Assert.Empty(violations);
+        string tempFile = Path.Combine(Path.GetTempPath(), $"chokepoint-str-prop-{Guid.NewGuid():N}.cshtml");
+        try
+        {
+            File.WriteAllText(tempFile, snippet);
+
+            var violations = ScanFileForViolations(tempFile);
+
+            Assert.True(
+                violations.Count > 0,
+                "The PRODUCTION chokepoint scanner did NOT flag @Html.Raw(Model.InstallCommand), " +
+                "where InstallCommand is typed as string — not HtmlString. " +
+                "The reflection-based reject branch has lost its teeth.");
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    /// <summary>
+    /// The PRODUCTION scanner must NOT flag a <c>.cshtml</c> file whose <c>@Html.Raw</c>
+    /// argument is <c>Model.ReadmeHtml</c> — the real <see cref="HtmlString"/>? property on
+    /// <see cref="PackageModel"/>. This exercises the full reflection path (safe form 2 accept
+    /// branch) and proves the real chokepoint is recognized as safe.
+    /// </summary>
+    [Fact]
+    public void ProductionPackageCshtml_ModelReadmeHtml_IsNotFlagged_ByProductionScanner()
+    {
+        // Mirror the actual Package.cshtml @model declaration so the production scanner resolves
+        // the PackageModel type and finds ReadmeHtml : HtmlString?.
+        const string snippet = """
+            @page "/packages/@{scope}/{name}"
+            @model Stash.Registry.Web.Pages.PackageModel
+            <div>
+                @Html.Raw(Model.ReadmeHtml)
+            </div>
+            """;
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"chokepoint-safe-prop-{Guid.NewGuid():N}.cshtml");
+        try
+        {
+            File.WriteAllText(tempFile, snippet);
+
+            var violations = ScanFileForViolations(tempFile);
+
+            Assert.Empty(violations);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
     }
 
     /// <summary>
