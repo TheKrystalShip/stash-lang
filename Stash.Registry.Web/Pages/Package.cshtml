@@ -16,6 +16,15 @@
         <a href="/search" class="btn-primary">Browse packages</a>
     </section>
 }
+else if (Model.ValidationError is not null)
+{
+    <section class="error-page">
+        <div class="alert alert-error" role="alert">
+            @Model.ValidationError
+        </div>
+        <a href="/search" class="btn-primary">Browse packages</a>
+    </section>
+}
 else if (Model.RegistryError is not null)
 {
     <section class="error-page">

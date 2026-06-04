@@ -66,12 +66,20 @@ public sealed class SearchModel : PageModel
     /// <summary>Error message when the registry is unreachable (502), or <c>null</c> on success.</summary>
     public string? RegistryError { get; private set; }
 
+    /// <summary>
+    /// Validation message when the registry rejected the request with 400, or <c>null</c> otherwise.
+    /// Distinct from <see cref="RegistryError"/> so the view can render a concise inline alert
+    /// without the "Registry Unavailable" framing that only belongs with 5xx responses.
+    /// </summary>
+    public string? ValidationError { get; private set; }
+
     // ── Page actions ──────────────────────────────────────────────────────────
 
     public async Task<IActionResult> OnGetAsync(CancellationToken cancellationToken)
     {
         if (Page < 1) Page = 1;
         if (PageSize < 1) PageSize = 20;
+        if (PageSize > PagingLimits.MaxPageSize) PageSize = PagingLimits.MaxPageSize;
 
         var query = new SearchQuery
         {
@@ -88,6 +96,11 @@ public sealed class SearchModel : PageModel
         try
         {
             Results = await _registryClient.SearchAsync(query, cancellationToken);
+        }
+        catch (RegistryClientException ex) when ((int)ex.StatusCode == StatusCodes.Status400BadRequest)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            ValidationError = ex.ErrorMessage ?? "The request was invalid.";
         }
         catch (RegistryClientException ex) when ((int)ex.StatusCode >= 500)
         {

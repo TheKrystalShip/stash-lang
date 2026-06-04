@@ -57,7 +57,13 @@
         </div>
     </form>
 
-    @if (Model.RegistryError is not null)
+    @if (Model.ValidationError is not null)
+    {
+        <div class="alert alert-error" role="alert">
+            @Model.ValidationError
+        </div>
+    }
+    else if (Model.RegistryError is not null)
     {
         <div class="alert alert-error" role="alert">
             <strong>Registry unavailable.</strong> @Model.RegistryError

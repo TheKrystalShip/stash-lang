@@ -366,6 +366,37 @@ public sealed class PackagePageTests
         Assert.Contains("href=\"https://github.com/org/repo\"", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    // ── Registry 400 → website 400 ────────────────────────────────────────────
+
+    [Fact]
+    public async Task PackagePage_RegistryReturns400_Returns400WithValidationMessage()
+    {
+        // Arrange — registry rejects with 400 InvalidRequest
+        var stub = new StubRegistryClient
+        {
+            GetPackageException = new RegistryClientException(
+                System.Net.HttpStatusCode.BadRequest,
+                "InvalidRequest",
+                "pageSize must be at most 100."),
+        };
+
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+        });
+
+        // Act
+        var response = await client.GetAsync("/packages/@org/pkg");
+
+        // Assert — 400 status, validation message present, no "Registry Unavailable" heading
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("pageSize must be at most 100.", html);
+        Assert.DoesNotContain("Registry Unavailable", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("502", html);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WebApplicationFactory<HealthModel> CreateFactory(IRegistryClient stub)

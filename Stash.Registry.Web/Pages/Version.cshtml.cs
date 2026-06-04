@@ -56,6 +56,13 @@ public sealed class VersionModel : PageModel
     /// </summary>
     public string? RegistryError { get; private set; }
 
+    /// <summary>
+    /// Validation message when the registry rejected the request with 400, or <c>null</c> otherwise.
+    /// Distinct from <see cref="RegistryError"/> so the view renders a concise inline alert
+    /// without the "Registry Unavailable" heading that only belongs with 5xx responses.
+    /// </summary>
+    public string? ValidationError { get; private set; }
+
     // ── Derived helpers ───────────────────────────────────────────────────────
 
     /// <summary>
@@ -82,6 +89,11 @@ public sealed class VersionModel : PageModel
                 Response.StatusCode = StatusCodes.Status404NotFound;
                 return Page();
             }
+        }
+        catch (RegistryClientException ex) when ((int)ex.StatusCode == StatusCodes.Status400BadRequest)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            ValidationError = ex.ErrorMessage ?? "The request was invalid.";
         }
         catch (RegistryClientException ex) when ((int)ex.StatusCode >= 500)
         {

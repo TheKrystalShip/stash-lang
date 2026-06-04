@@ -1,0 +1,19 @@
+@page
+@model ErrorModel
+@{
+    ViewData["Title"] = "Something Went Wrong";
+}
+
+<section class="error-page">
+    <h1 class="error-title">Something went wrong</h1>
+    <p class="error-message">
+        An unexpected error occurred. Please try again, or return to the home page.
+    </p>
+    @if (!string.IsNullOrEmpty(Model.RequestId))
+    {
+        <p class="error-request-id">
+            Request ID: <code>@Model.RequestId</code>
+        </p>
+    }
+    <a href="/" class="btn-primary">Return home</a>
+</section>

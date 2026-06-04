@@ -62,6 +62,13 @@ public sealed class PackageModel : PageModel
     public string? RegistryError { get; private set; }
 
     /// <summary>
+    /// Validation message when the registry rejected the request with 400, or <c>null</c> otherwise.
+    /// Distinct from <see cref="RegistryError"/> so the view renders a concise inline alert
+    /// without the "Registry Unavailable" heading that only belongs with 5xx responses.
+    /// </summary>
+    public string? ValidationError { get; private set; }
+
+    /// <summary>
     /// Sanitized README HTML, or <c>null</c> when the package has no README (empty or missing).
     /// This is the sole property in the project whose value is emitted via <c>@Html.Raw()</c>.
     /// It is populated <em>only</em> from <see cref="IReadmeRenderer.RenderToSafeHtml"/>.
@@ -151,6 +158,11 @@ public sealed class PackageModel : PageModel
                 ReadmeHtml = _readmeRenderer.RenderToSafeHtml(readme.Content);
             }
             // else: ReadmeHtml stays null → view shows "This package has no README." empty-state.
+        }
+        catch (RegistryClientException ex) when ((int)ex.StatusCode == StatusCodes.Status400BadRequest)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            ValidationError = ex.ErrorMessage ?? "The request was invalid.";
         }
         catch (RegistryClientException ex) when ((int)ex.StatusCode >= 500)
         {
