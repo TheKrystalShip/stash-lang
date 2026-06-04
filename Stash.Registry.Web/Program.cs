@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Stash.Registry.Web.Areas.Maintainer;
 using Stash.Registry.Web.Auth;
 using Stash.Registry.Web.Configuration;
 using Stash.Registry.Web.Rendering;
@@ -39,10 +40,29 @@ builder.Services.AddHttpClient(LogoutHttpClients.AuthRevoke, client =>
     client.BaseAddress = new Uri(registryClientConfig.BaseUrl);
 });
 
+// Phase 3 A2 — authenticated registry client (per-request scoped).
+// Base address is the same registry URL; Authorization is set per-request inside
+// HttpAuthenticatedRegistryClient.CreateRequest (C1 chokepoint — no opt-out).
+builder.Services.AddHttpClient(AuthenticatedRegistryHttpClients.AuthenticatedRegistry, client =>
+{
+    client.BaseAddress = new Uri(registryClientConfig.BaseUrl);
+});
+
 // ── Registry clients ──────────────────────────────────────────────────────────
 
 // Phase 2 — anonymous registry client (unchanged).
 builder.Services.AddScoped<IRegistryClient, HttpRegistryClient>();
+
+// Phase 3 A2 — authenticated registry client (Scoped: one per HTTP request).
+// The factory throws NoActiveSessionException if no session is in scope (C1 fail-closed backstop).
+// On anonymous requests, the [Authorize] page convention 302s to /login BEFORE the page model
+// is constructed — this factory throw is defense-in-depth, not the primary auth gate.
+builder.Services.AddScoped<IAuthenticatedRegistryClient>(sp =>
+{
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var sessionTokenAccessor = sp.GetRequiredService<ISessionTokenAccessor>();
+    return new HttpAuthenticatedRegistryClient(httpClientFactory, sessionTokenAccessor);
+});
 
 // ── README renderer (singleton — Markdig pipeline + HtmlSanitizer are thread-safe) ──────
 builder.Services.AddSingleton<IReadmeRenderer, ReadmeRenderer>();
@@ -81,6 +101,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.ConfigureFilter(new AutoValidateAntiforgeryTokenAttribute());
+
+    // Phase 3 A2 — apply Authorize convention to all Maintainer area pages.
+    // Anonymous requests are 302'd to /login?returnUrl=… BEFORE the page model is constructed.
+    MaintainerAreaConventions.Apply(options);
 });
 
 var app = builder.Build();
