@@ -1,7 +1,7 @@
 schema_version: 1
 feature: callback-marshaling
 current: null
-updated: "2026-06-04T11:58:19Z"
+updated: "2026-06-04T12:08:23Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "Spec rewritten: marshaling model, drain points, reentrancy, explicit-park lifetime, documented races, signal caveat; event namespace section added; reference regenerated with event namespace; example staged"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: cddda11b417e04e45d4ea2ec1314d536ea7e7a4e
+    verified: true
+    started: "2026-06-04T11:59:53Z"
+    completed: "2026-06-04T12:08:23Z"
+    attempts: 1
+    notes: "P4 complete: Wave2 event coverage, Playground tokenizer updated, completion snapshots re-baselined, tooling matrix fully verified (Playground change; 4 no-change-required)"
 review:
   status: not_started
   started: null
