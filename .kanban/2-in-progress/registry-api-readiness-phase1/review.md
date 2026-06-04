@@ -79,7 +79,8 @@ surfaces only under per-version deprecation flips.
 
 ## F01 — [MEDIUM] /versions ETag does not invalidate on version-level deprecate/undeprecate
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 07ad55e6
 **Files:** `Stash.Registry/Http/ConditionalResponse.cs:62-65`, `Stash.Registry/Controllers/PackagesController.cs:191`, `Stash.Registry/Database/StashRegistryDatabase.cs:393-417`, `Stash.Registry/Services/DeprecationService.cs:66-90`
 **Phase:** P3
 **Commit:** 3f10f7de

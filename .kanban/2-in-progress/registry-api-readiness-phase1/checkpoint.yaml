@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T12:07:40Z"
+updated: "2026-06-04T12:15:58Z"
 phases:
   P1:
     status: done
