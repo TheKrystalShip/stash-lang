@@ -1,7 +1,10 @@
 # Callback marshaling onto the VM thread (event-loop model)
 
-**Status:** Backlog — **design decided (2026-06-04), folds into embedding phase-3 (`Stash.Hosting`)**.
-Not a standalone `/spec`; the phase-3 architect consumes the "Decided design" section below.
+**Status:** **Design locked; being specced 2026-06-04 as its own focused feature** — the event-loop
+slice of embedding phase-3 (`Stash.Hosting`), tagged `milestone: embedding`. Zero open design
+questions. The host-SDK-proper (`StashEngine` facade, host objects, marshalling) stays a separate
+later phase-3 spec. The architect mechanizes the "Decided design" + "Resolved design questions"
+sections below into `brief.md` + `plan.yaml` — it implements these, it does not re-design them.
 **Created:** 2026-06-02
 **Discovery context:** Surfaced during the `embedding` milestone phase 2 (`hermetic-vm`) autopilot
 run. Phase 2A-2/2A-3 isolated cross-thread child-VM globals (freeze-or-clone) to kill a real data

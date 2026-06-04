@@ -82,8 +82,10 @@ each phase consumes the prior phase's artifacts). Detail the current phase; the 
   `.kanban/0-backlog/tools/Stash Embedding API — Host SDK Design Analysis.md` — read through the
   supersessions in the phase-2 note §5 (snapshot model, pool demotion, async-is-built). **Confirmed
   fold-in (user ruling 2026-06-04):** the callback-marshaling event-loop
-  (`.kanban/0-backlog/language/callback-vm-thread-marshaling.md`, "Decided design" section) is part
-  of this phase's spec, not a standalone feature — hybrid marshaling queue, v1 drain points
+  (`.kanban/0-backlog/language/callback-vm-thread-marshaling.md`, "Decided design" section) is being
+  **specced 2026-06-04 as its own focused child feature** (the event-loop slice, tagged
+  `milestone: embedding`) ahead of the host-SDK-proper (`StashEngine` facade, host objects,
+  marshalling), which stays a separate later phase-3 spec — hybrid marshaling queue, v1 drain points
   `time.sleep` + explicit `event.poll()`/`event.loop()` (**end-of-script exits and drops** under the
   explicit-park lifetime model — not a drain point), `await`-drain deferred to v2. The four sub-question
   contracts (FIFO/no-coalescing, run-to-completion drain, registry-mutation, async-vs-callback
