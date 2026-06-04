@@ -307,6 +307,65 @@ public sealed class PackagePageTests
         Assert.Contains("unreachable", html);
     }
 
+    // ── Repository URL — XSS gate (F01) ──────────────────────────────────────
+
+    [Fact]
+    public async Task PackagePage_RepositoryWithJavascriptScheme_DoesNotRenderAsHref()
+    {
+        // Arrange — malicious package-authored repository URL
+        var detail = new PackageDetailResponse
+        {
+            Name = "org/pkg",
+            Description = "Test",
+            Keywords = new System.Collections.Generic.List<string>(),
+            Versions = new System.Collections.Generic.Dictionary<string, VersionDetailResponse>(),
+            Latest = null,
+            CreatedAt = "2026-01-01T00:00:00Z",
+            UpdatedAt = "2026-06-04T00:00:00Z",
+            Repository = "javascript:alert(1)",
+        };
+
+        var stub = new StubRegistryClient { GetPackageResult = detail };
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var html = await (await client.GetAsync("/packages/@org/pkg")).Content.ReadAsStringAsync();
+
+        // The javascript: URL must NEVER appear as an href value — the gate must strip it.
+        Assert.DoesNotContain("href=\"javascript:", html, StringComparison.OrdinalIgnoreCase);
+
+        // The URL text itself may appear as plain (Razor-encoded) visible text, which is harmless;
+        // what must be absent is the attribute that would make it an executable link.
+    }
+
+    [Fact]
+    public async Task PackagePage_RepositoryWithHttpsUrl_RendersAsClickableLink()
+    {
+        // Arrange — legitimate repository URL
+        var detail = new PackageDetailResponse
+        {
+            Name = "org/pkg",
+            Description = "Test",
+            Keywords = new System.Collections.Generic.List<string>(),
+            Versions = new System.Collections.Generic.Dictionary<string, VersionDetailResponse>(),
+            Latest = null,
+            CreatedAt = "2026-01-01T00:00:00Z",
+            UpdatedAt = "2026-06-04T00:00:00Z",
+            Repository = "https://github.com/org/repo",
+        };
+
+        var stub = new StubRegistryClient { GetPackageResult = detail };
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var html = await (await client.GetAsync("/packages/@org/pkg")).Content.ReadAsStringAsync();
+
+        // Safe https URL must render as a clickable link (the gate passes it through).
+        Assert.Contains("href=\"https://github.com/org/repo\"", html, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WebApplicationFactory<HealthModel> CreateFactory(IRegistryClient stub)

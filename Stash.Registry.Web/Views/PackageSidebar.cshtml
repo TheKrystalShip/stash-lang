@@ -37,12 +37,23 @@
 
         @if (!string.IsNullOrWhiteSpace(Model.Repository))
         {
-            <div class="sidebar-meta-item">
-                <dt class="sidebar-meta-label">Repository</dt>
-                <dd class="sidebar-meta-value">
-                    <a href="@Model.Repository" target="_blank" rel="noopener noreferrer">@Model.Repository</a>
-                </dd>
-            </div>
+            var safeRepo = Stash.Registry.Web.Rendering.SafeUrl.AllowExternal(Model.Repository);
+            if (safeRepo is not null)
+            {
+                <div class="sidebar-meta-item">
+                    <dt class="sidebar-meta-label">Repository</dt>
+                    <dd class="sidebar-meta-value">
+                        <a href="@safeRepo" target="_blank" rel="noopener noreferrer">@Model.Repository</a>
+                    </dd>
+                </div>
+            }
+            else
+            {
+                <div class="sidebar-meta-item">
+                    <dt class="sidebar-meta-label">Repository</dt>
+                    <dd class="sidebar-meta-value">@Model.Repository</dd>
+                </div>
+            }
         }
 
         @if (Model.Keywords.Count > 0)
