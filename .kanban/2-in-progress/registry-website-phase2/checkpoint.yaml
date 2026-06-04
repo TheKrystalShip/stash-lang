@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T17:59:26Z"
+updated: "2026-06-04T18:06:46Z"
 phases:
   P1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: "Version detail page at /packages/@{scope}/{name}/v/{version}; VersionMetadataTable partial (version/publishedAt/publishedBy/stashVersion/integrity/dependencies); inline deprecation banner for VersionDetailResponse (no DeprecationAlternative field); VersionPageTests (6 tests: 200 full-metadata, no-deps empty-state, deprecated, non-deprecated, 404, 502); FieldDisciplineMetaTests extended with version page walk"
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 36229aafbcc41628c7534a77b7339d9c9f96c16e
+    verified: true
+    started: "2026-06-04T18:01:18Z"
+    completed: "2026-06-04T18:06:46Z"
+    attempts: 1
+    notes: "Stash.Registry.Web/README.md: what-it-is, dependency constraint, build/run/configure, 4 routes, no-CORS note, brand/CSS origin; docs/Registry—Package Registry.md: Clients section + companion-doc link; 13425 tests passed, 6 skipped, 0 failed"
 review:
   status: not_started
   started: null
