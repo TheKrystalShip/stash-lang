@@ -112,7 +112,8 @@ the race window, not from observing one fewer flake.)
 
 ## F02 — [MEDIUM] `CompiledScript` does not actually cache the compiled chunk
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ec797725
 **Files:** `Stash.Bytecode/StashEngine.cs:407-419`, `Stash.Bytecode/StashEngine.cs:597-610`, `Stash.Hosting/CompiledScript.cs:5-15`
 **Phase:** P1
 **Commit:** 26ba7dd0
