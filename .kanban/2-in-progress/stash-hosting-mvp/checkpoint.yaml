@@ -1,16 +1,16 @@
 schema_version: 1
 feature: stash-hosting-mvp
 current: null
-updated: "2026-06-04T18:01:33Z"
+updated: "2026-06-04T18:06:13Z"
 phases:
   P1:
     status: done
-    commit: 26ba7dd0006c714939da9465e80e5f49d49ce889
+    commit: 7fe4fa3709c1065b004aafcac60a74564de6c890
     verified: true
     started: "2026-06-04T17:47:31Z"
-    completed: "2026-06-04T18:01:33Z"
+    completed: "2026-06-04T18:06:13Z"
     attempts: 1
-    notes: "Stash.Hosting project created; StashEngine.RunRaw added; 8 tests green; plan correction: Stash.Tests.csproj added to scope and script adjusted for explicit return"
+    notes: "Stash.Hosting project created; StashEngine.RunRaw added; 8 tests green; isolation test strengthened after advisor review; plan correction: Stash.Tests.csproj added to scope; script adjusted for explicit return"
   P2:
     status: pending
     commit: null
