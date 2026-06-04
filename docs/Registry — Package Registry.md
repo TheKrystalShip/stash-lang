@@ -9,10 +9,18 @@
 > - [PKG - Package Manager CLI](PKG%20—%20Package%20Manager%20CLI.md) - the `stash pkg` client that consumes this API.
 > - [Language Specification](Stash%20—%20Language%20Specification.md) - import semantics and manifest grammar.
 > - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) - the `pkg` namespace and runtime APIs.
+> - [Stash.Registry.Web README](../Stash.Registry.Web/README.md) - the public browse-only web client for the registry.
 
 The Stash Package Registry is the server side of `stash pkg`. It is a self-hosted HTTP service that stores published package tarballs, exposes a versioned REST API, and authenticates clients with short-lived JWT access tokens and rotating refresh tokens. The default configuration (SQLite + filesystem storage + local password auth) requires no external dependencies; production deployments can swap in PostgreSQL, S3, and externally provisioned signing keys without code changes.
 
 This document defines the public contract of the registry. It intentionally omits implementation history, roadmap material, and engineering rationale except where a current limitation affects client behavior.
+
+## Clients
+
+The registry has two first-party clients:
+
+- **`stash pkg`** — the command-line package manager. It is the primary publishing and installation client and is documented in [PKG - Package Manager CLI](PKG%20—%20Package%20Manager%20CLI.md).
+- **`Stash.Registry.Web`** — the public browse-only web client. It is a server-rendered ASP.NET Core Razor Pages application that exposes package search, package detail, version detail, and README rendering to anyone with a browser. It calls the registry server-to-server via a typed `IRegistryClient`; the browser never reaches the registry directly. See [`Stash.Registry.Web/README.md`](../Stash.Registry.Web/README.md) for build, run, and configuration instructions.
 
 ## 1. Roles
 
