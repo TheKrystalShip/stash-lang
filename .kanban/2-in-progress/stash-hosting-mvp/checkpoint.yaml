@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stash-hosting-mvp
 current: null
-updated: "2026-06-04T19:26:13Z"
+updated: "2026-06-04T20:01:04Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "CallAsync/TryCallAsync + HostMarshaller + structured StashError; 36 tests green incl time.sleep cancellation; VM fixes: CallStack in RunUntilFrame + per-call CT propagation; full suite 13406/13412 green"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 5d5b7acce423e1e7f9237966661c299635699cb1
+    verified: true
+    started: "2026-06-04T19:28:18Z"
+    completed: "2026-06-04T20:01:04Z"
+    attempts: 1
+    notes: "DisposeAsync wires 7 cleanup hooks; InvokeAsync<T> bridges StashFuture to CLR Task; VirtualMachine.Functions.cs fixed for async fn inline-direct calls; 20 new tests green"
   P4:
     status: pending
     commit: null
