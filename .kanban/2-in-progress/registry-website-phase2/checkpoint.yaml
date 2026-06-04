@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T18:29:55Z"
+updated: "2026-06-04T18:39:39Z"
 phases:
   P1:
     status: done

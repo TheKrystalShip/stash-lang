@@ -103,7 +103,8 @@ dotnet test --filter "FullyQualifiedName~Registry.Web"
 
 ## F02 — [IMPORTANT] Registry 400 errors collapse to website 502 — acceptance criterion unmet
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 932c0e03
 **Files:** `Stash.Registry.Web/Pages/Search.cshtml.cs:92-113`, `Stash.Registry.Web/Pages/Package.cshtml.cs:155-164`, `Stash.Registry.Web/Pages/Version.cshtml.cs:86-95`
 **Phase:** P3, P4, P6
 **Commit:** f06ffda7, 8383de24, bfc5009a
@@ -248,7 +249,8 @@ dotnet test --filter "FullyQualifiedName~ReadmeChokepointMetaTests"
 
 ## F04 — [MINOR] `UseExceptionHandler("/Error")` references a page that does not exist
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 932c0e03
 **Files:** `Stash.Registry.Web/Program.cs:30-33`
 **Phase:** P1
 **Commit:** fdec81d1
