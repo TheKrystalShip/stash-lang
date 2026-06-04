@@ -38,6 +38,26 @@
         }
       }
     },
+    "/api/v1/.well-known/registry": {
+      "get": {
+        "tags": [
+          "StashRegistry"
+        ],
+        "operationId": "Discovery_GetRegistry",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/stats": {
       "get": {
         "tags": [
@@ -2766,6 +2786,113 @@
           },
           "deprecated": {
             "type": "boolean"
+          }
+        }
+      },
+      "DiscoveryFeatures": {
+        "type": "object",
+        "properties": {
+          "metrics": {
+            "type": "boolean"
+          },
+          "advisories": {
+            "type": "boolean"
+          },
+          "provenance": {
+            "type": "boolean"
+          },
+          "signatures": {
+            "type": "boolean"
+          },
+          "trustedPublishing": {
+            "type": "boolean"
+          },
+          "verifiedPublishers": {
+            "type": "boolean"
+          },
+          "organizations": {
+            "type": "boolean"
+          },
+          "privatePackages": {
+            "type": "boolean"
+          },
+          "cors": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DiscoveryLimits": {
+        "type": "object",
+        "properties": {
+          "maxPackageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "maxPageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "DiscoveryLinks": {
+        "required": [
+          "search",
+          "packages",
+          "openapi",
+          "wellKnown"
+        ],
+        "type": "object",
+        "properties": {
+          "search": {
+            "type": "string"
+          },
+          "packages": {
+            "type": "string"
+          },
+          "openapi": {
+            "type": "string"
+          },
+          "wellKnown": {
+            "type": "string"
+          }
+        }
+      },
+      "DiscoveryResponse": {
+        "required": [
+          "name",
+          "apiVersion",
+          "basePath",
+          "limits",
+          "links",
+          "features"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "basePath": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/DiscoveryLimits"
+          },
+          "links": {
+            "$ref": "#/components/schemas/DiscoveryLinks"
+          },
+          "features": {
+            "$ref": "#/components/schemas/DiscoveryFeatures"
           }
         }
       },

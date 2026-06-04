@@ -96,8 +96,8 @@ public sealed class SearchQuery
     [JsonPropertyName("page")]
     public int page { get; set; } = 1;
 
-    /// <summary>The number of results per page (1–100).</summary>
-    [Range(1, 100)]
+    /// <summary>The number of results per page (1–<see cref="PagingLimits.MaxPageSize"/>).</summary>
+    [Range(1, PagingLimits.MaxPageSize)]
     [UnconditionalSuppressMessage("Trimming", "IL2026",
         Justification = "AOT publish (Stash.Cli PublishAot=true) is empirically clean with this " +
                         "suppression. RangeAttribute is [RequiresUnreferencedCode] for its " +

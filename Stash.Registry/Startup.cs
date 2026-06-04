@@ -16,6 +16,7 @@ using Stash.Registry.Bootstrap;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
+using Stash.Registry.Endpoints;
 using Stash.Registry.Middleware;
 using Stash.Registry.Services;
 using Stash.Registry.OpenApi;
@@ -375,7 +376,11 @@ public sealed class Startup
             // P1: The OpenAPI document is public in every environment; bypass the JTI
             // revocation check entirely for /openapi/* paths so a caller presenting a stale
             // or revoked token can still fetch the API contract.
-            if (context.Request.Path.StartsWithSegments("/openapi"))
+            // P7: The discovery endpoint is similarly public — bypass revocation checks
+            // for /api/v1/.well-known/* paths so a revoked token does not block capability
+            // advertisement (static document, no database call, no PDP).
+            if (context.Request.Path.StartsWithSegments("/openapi") ||
+                context.Request.Path.StartsWithSegments("/api/v1/.well-known"))
             {
                 await next();
                 return;
@@ -423,6 +428,9 @@ public sealed class Startup
         // component schema; .WithName gives it a stable operationId.
         app.MapGet("/", () => TypedResults.Ok(new HealthCheckResponse { Status = "ok", Version = "1.0.0" }))
             .WithName("Health_Check");
+
+        // P7: Public discovery endpoint — GET /api/v1/.well-known/registry.
+        DiscoveryEndpoint.Map(app, _config);
 
         app.MapControllers();
     }
