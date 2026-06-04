@@ -544,3 +544,359 @@ pre code {
     font-size: 0.875rem;
     font-weight: 700;
 }
+
+/* ================================================================
+   ERROR / STATUS PAGES
+   ================================================================ */
+
+.error-page {
+    text-align: center;
+    padding: 4rem 1rem;
+}
+
+.error-title {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+.error-message {
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+}
+
+.btn-primary {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--accent-text);
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s;
+}
+
+.btn-primary:hover {
+    background: var(--accent-hover);
+    color: var(--accent-text);
+    text-decoration: none;
+}
+
+/* ================================================================
+   DEPRECATION BANNER
+   ================================================================ */
+
+.deprecation-banner {
+    background: color-mix(in srgb, var(--error) 10%, transparent);
+    border: 1px solid var(--error);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: baseline;
+    color: var(--error);
+}
+
+.deprecation-label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.deprecation-message {
+    font-size: 0.9rem;
+}
+
+.deprecation-alt {
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.deprecation-alt-link {
+    color: var(--accent);
+}
+
+/* ================================================================
+   PACKAGE DETAIL LAYOUT
+   ================================================================ */
+
+.package-detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 280px;
+    gap: 2rem;
+    align-items: start;
+}
+
+@media (max-width: 768px) {
+    .package-detail-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .package-detail-sidebar {
+        order: -1;
+    }
+}
+
+.package-detail-name {
+    font-size: 1.6rem;
+    font-family: var(--font-mono);
+    margin-bottom: 0.5rem;
+    word-break: break-all;
+}
+
+.package-detail-description {
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* ================================================================
+   INSTALL WIDGET
+   ================================================================ */
+
+.install-widget {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.install-widget-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.install-command-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.install-command {
+    flex: 1;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    color: var(--text);
+    user-select: all;
+    overflow-x: auto;
+}
+
+.btn-copy {
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.btn-copy:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
+.btn-copy:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+/* ================================================================
+   README SECTION
+   ================================================================ */
+
+.readme-section {
+    margin-bottom: 2rem;
+}
+
+.readme-placeholder {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 1.5rem 0;
+}
+
+/* ================================================================
+   VERSIONS TABLE
+   ================================================================ */
+
+.versions-section {
+    margin-bottom: 2rem;
+}
+
+.versions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.versions-table thead tr {
+    border-bottom: 2px solid var(--border);
+}
+
+.versions-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.versions-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+}
+
+.versions-table tbody tr:hover {
+    background: var(--surface);
+}
+
+.versions-table td {
+    padding: 0.5rem 0.75rem;
+    color: var(--text);
+}
+
+.version-row-deprecated td {
+    opacity: 0.65;
+}
+
+.version-string {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+}
+
+.badge-latest {
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+    border: 1px solid var(--success);
+}
+
+/* ================================================================
+   DEPENDENCIES SECTION
+   ================================================================ */
+
+.dependencies-section {
+    margin-bottom: 2rem;
+}
+
+.dependencies-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.dependency-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.3rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.875rem;
+}
+
+.dependency-item:last-child {
+    border-bottom: none;
+}
+
+.dependency-name {
+    font-family: var(--font-mono);
+    color: var(--accent);
+    flex: 1;
+}
+
+.dependency-version {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+}
+
+/* ================================================================
+   SIDEBAR WIDGET
+   ================================================================ */
+
+.package-detail-sidebar {
+    position: sticky;
+    top: 1.5rem;
+}
+
+.sidebar-widget {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.sidebar-widget-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.sidebar-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.sidebar-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.sidebar-meta-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.sidebar-meta-value {
+    font-size: 0.875rem;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.sidebar-version {
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--accent);
+}
+
+.sidebar-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.15rem;
+}
+
+.keyword-tag {
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}

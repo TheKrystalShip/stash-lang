@@ -228,4 +228,60 @@ public sealed class StubRegistryClient : IRegistryClient
             License = license,
             OwnerCount = ownerCount,
         };
+
+    /// <summary>
+    /// Creates a sample <see cref="PackageDetailResponse"/> for integration tests.
+    /// All <c>required</c> members are populated; optional fields have sensible defaults.
+    /// </summary>
+    public static PackageDetailResponse SamplePackageDetail(
+        string scope = "my-org",
+        string pkgName = "my-lib",
+        string? description = "A sample library package",
+        string? latest = "1.2.0",
+        string? license = "MIT",
+        bool deprecated = false,
+        string? deprecationMessage = null,
+        string? deprecationAlternative = null)
+    {
+        var versions = new Dictionary<string, VersionDetailResponse>();
+        if (latest is not null)
+        {
+            versions[latest] = SampleVersionDetail(latest);
+        }
+        // Add an older version for table completeness
+        versions["1.0.0"] = SampleVersionDetail("1.0.0");
+
+        return new PackageDetailResponse
+        {
+            Name = $"{scope}/{pkgName}",
+            Description = description,
+            License = license,
+            Keywords = new List<string> { "utility", "library" },
+            Versions = versions,
+            Latest = latest,
+            CreatedAt = "2026-01-01T00:00:00Z",
+            UpdatedAt = "2026-06-04T12:00:00Z",
+            Deprecated = deprecated,
+            DeprecationMessage = deprecationMessage,
+            DeprecationAlternative = deprecationAlternative,
+        };
+    }
+
+    /// <summary>Creates a sample <see cref="VersionDetailResponse"/> for tests.</summary>
+    public static VersionDetailResponse SampleVersionDetail(
+        string version = "1.0.0",
+        string? publishedBy = "test-user",
+        bool deprecated = false,
+        string? deprecationMessage = null,
+        Dictionary<string, object>? dependencies = null) =>
+        new()
+        {
+            Version = version,
+            PublishedAt = "2026-06-04T10:00:00Z",
+            PublishedBy = publishedBy ?? "test-user",
+            Dependencies = dependencies ?? new Dictionary<string, object> { ["@core/utils"] = "^1.0.0" },
+            Integrity = $"sha256-fakehash{version}",
+            Deprecated = deprecated,
+            DeprecationMessage = deprecationMessage,
+        };
 }

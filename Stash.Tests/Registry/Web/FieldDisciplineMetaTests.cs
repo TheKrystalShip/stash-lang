@@ -212,6 +212,40 @@ public sealed class FieldDisciplineMetaTests
             "Remove all Bucket-B placeholder chrome from the page template and card partial.");
     }
 
+    /// <summary>
+    /// Package detail page (<c>GET /packages/@{scope}/{name}</c>) with a populated package —
+    /// no Bucket-B label vocabulary appears in the rendered HTML.
+    /// </summary>
+    [Fact]
+    public async Task PackageDetailPage_WithPackage_ContainsNoBucketBLabels()
+    {
+        // Arrange — populate GetPackageResult so the binding floor passes
+        var detail = StubRegistryClient.SamplePackageDetail(
+            scope: "org",
+            pkgName: "alpha",
+            description: "Field discipline test package");
+
+        var stub = new StubRegistryClient { GetPackageResult = detail };
+
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/packages/@org/alpha");
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+
+        // ── Binding floor: description rendered (non-vacuous) ─────────────────
+        Assert.Contains("Field discipline test package", html);
+
+        // ── Forbidden label scan ──────────────────────────────────────────────
+        var violations = FindForbiddenTokens(html);
+        Assert.True(
+            violations.Count == 0,
+            $"Package detail page HTML contains forbidden Bucket-B label(s): [{string.Join(", ", violations)}]. " +
+            "Remove all Bucket-B placeholder chrome from the page template and partials.");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WebApplicationFactory<HealthModel> CreateFactory(IRegistryClient stub)
