@@ -1,0 +1,45 @@
+@using Stash.Registry.Contracts
+@model PackageSummaryResponse
+
+@{
+    var scope = Model.Name.Contains('/') ? Model.Name.Split('/')[0] : string.Empty;
+    var pkgName = Model.Name.Contains('/') ? Model.Name.Split('/')[1] : Model.Name;
+    var detailUrl = $"/packages/@{scope}/{pkgName}";
+}
+
+<article class="package-card">
+    <div class="package-card-header">
+        <a href="@detailUrl" class="package-card-name">@Model.Name</a>
+        @if (Model.Deprecated)
+        {
+            <span class="badge badge-deprecated">deprecated</span>
+        }
+        @if (Model.Latest is not null)
+        {
+            <span class="package-card-version">v@Model.Latest</span>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(Model.Description))
+    {
+        <p class="package-card-description">@Model.Description</p>
+    }
+
+    <dl class="package-card-meta">
+        @if (!string.IsNullOrWhiteSpace(Model.License))
+        {
+            <div class="package-card-meta-item">
+                <dt class="sr-only">License</dt>
+                <dd class="package-card-license">@Model.License</dd>
+            </div>
+        }
+        <div class="package-card-meta-item">
+            <dt class="sr-only">Owners</dt>
+            <dd class="package-card-owners">@Model.OwnerCount owner@(Model.OwnerCount == 1 ? "" : "s")</dd>
+        </div>
+        <div class="package-card-meta-item">
+            <dt class="sr-only">Updated</dt>
+            <dd class="package-card-updated">Updated @Model.UpdatedAt</dd>
+        </div>
+    </dl>
+</article>
