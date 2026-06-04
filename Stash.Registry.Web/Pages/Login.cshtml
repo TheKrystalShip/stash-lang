@@ -1,0 +1,40 @@
+@page "/login"
+@model Stash.Registry.Web.Pages.LoginModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Log In";
+}
+
+<div class="login-page">
+    <div class="login-card">
+        <h1 class="login-title">
+            <img src="~/images/stash-icon.svg" alt="" class="login-icon" width="32" height="32" />
+            Log in to Stash
+        </h1>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-error" role="alert">
+                @Model.ErrorMessage
+            </div>
+        }
+
+        <form asp-page="Login" method="post">
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <div class="form-group">
+                <label asp-for="Username">Username</label>
+                <input asp-for="Username" type="text" class="form-control" autocomplete="username" autofocus required />
+                <span asp-validation-for="Username" class="validation-error"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="Password">Password</label>
+                <input asp-for="Password" type="password" class="form-control" autocomplete="current-password" required />
+                <span asp-validation-for="Password" class="validation-error"></span>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Log in</button>
+        </form>
+    </div>
+</div>

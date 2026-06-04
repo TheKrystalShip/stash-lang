@@ -1,0 +1,15 @@
+@page "/logout"
+@model Stash.Registry.Web.Pages.LogoutModel
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Log Out";
+}
+
+<div class="logout-page">
+    <p>You have been logged out.</p>
+    <p><a href="/" class="btn btn-primary">Return to home</a></p>
+
+    @* Hidden form for POST /logout — the anti-forgery token is injected by the tag helper. *@
+    <form asp-page="Logout" method="post" style="display:none" id="logout-form">
+    </form>
+</div>

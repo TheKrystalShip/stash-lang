@@ -900,3 +900,103 @@ pre code {
     font-size: 0.78rem;
     color: var(--text-muted);
 }
+
+/* ================================================================
+   LOGIN PAGE
+   ================================================================ */
+
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 3rem 1rem;
+    min-height: 60vh;
+}
+
+.login-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 2rem 2.5rem;
+    width: 100%;
+    max-width: 420px;
+}
+
+.login-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.login-icon {
+    vertical-align: middle;
+}
+
+/* ── Form controls ──────────────────────────────────────────── */
+
+.form-group {
+    margin-bottom: 1.1rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: var(--text);
+}
+
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    background: var(--base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    border-color: var(--accent);
+}
+
+.validation-error {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--error);
+    margin-top: 0.25rem;
+}
+
+.btn-block {
+    display: block;
+    width: 100%;
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+    font-weight: 600;
+    background: var(--accent);
+    color: var(--accent-text);
+    transition: background 0.15s;
+    margin-top: 1.5rem;
+}
+
+.btn-block:hover {
+    background: var(--accent-hover);
+}
+
+/* ── Logout page ───────────────────────────────────────────── */
+
+.logout-page {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+}
