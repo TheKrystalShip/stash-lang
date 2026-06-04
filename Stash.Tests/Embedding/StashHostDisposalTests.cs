@@ -8,16 +8,16 @@ using Stash.Stdlib.BuiltIns;
 using Xunit;
 
 /// <summary>
-/// Collection definition that serializes <see cref="StashHostDisposalTests"/> and
-/// <see cref="StashHostStatefulnessTests"/> to avoid races on process-global static
-/// hook slots (PromptBuiltIns / ProcessBuiltIns / CompleteBuiltIns).
+/// Umbrella collection that serializes every test class that touches process-global
+/// static hook slots (PromptBuiltIns / ProcessBuiltIns / CompleteBuiltIns).
 ///
-/// These tests set and clear those static delegate slots. Running them in parallel
-/// with tests in "PromptTests", "ProcessHistoryHandlers", or "CompleteTests" could
-/// cause non-deterministic failures.
+/// Covers: all StashHost*Tests (disposal nulls those slots via DisposeAsync),
+/// PromptBuiltInsTests, PromptRendererTests, BootstrapLoaderIntegrationTests,
+/// ProcessHistoryTests, and CompleteBuiltInsTests — all in one
+/// DisableParallelization=true collection so xUnit serializes them against each other.
 /// </summary>
-[CollectionDefinition("StashHostStaticSlots", DisableParallelization = true)]
-public sealed class StashHostStaticSlotsCollection { }
+[CollectionDefinition("ProcessGlobalSlots", DisableParallelization = true)]
+public sealed class ProcessGlobalSlotsCollection { }
 
 /// <summary>
 /// Acceptance suite for P3 disposal behaviour of <see cref="StashHost"/>.
@@ -28,7 +28,7 @@ public sealed class StashHostStaticSlotsCollection { }
 ///   #3 — DisposeAsync_WithNullEngine_DoesNotThrow
 ///   #4 — DisposeAsync_ResetsPromptBootstrapHandler
 /// </summary>
-[Collection("StashHostStaticSlots")]
+[Collection("ProcessGlobalSlots")]
 public class StashHostDisposalTests
 {
     // ── Helpers ──────────────────────────────────────────────────────────────

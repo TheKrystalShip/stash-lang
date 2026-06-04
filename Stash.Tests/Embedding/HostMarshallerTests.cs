@@ -23,6 +23,7 @@ using Xunit;
 ///   — Unsupported arg type → ArgumentException
 ///   — Unsupported return type → InvalidCastException naming v2
 /// </summary>
+[Collection("ProcessGlobalSlots")]
 public class HostMarshallerTests
 {
     // ── Helpers ────────────────────────────────────────────────────────────

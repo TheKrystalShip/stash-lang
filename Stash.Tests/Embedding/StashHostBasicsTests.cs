@@ -18,6 +18,7 @@ using Xunit;
 ///   #5  — RunAsync_SucceedsTrue_AndSuccessFalse_AreCorrect
 ///   #6  — Host_IsHermetic_NoGlobalsFromPriorHost
 /// </summary>
+[Collection("ProcessGlobalSlots")]
 public class StashHostBasicsTests
 {
     // ── #1: basic round-trip ─────────────────────────────────────────────

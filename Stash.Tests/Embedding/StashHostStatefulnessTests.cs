@@ -11,9 +11,11 @@ using Xunit;
 /// There is no snapshot, no checkpoint, no reset short of disposing the host and creating
 /// a new one. This is documented in brief.md → Semantics → "Stateful — the deliberate lua_State contract".
 ///
-/// These tests are standalone (no collection) — each creates its own isolated StashHost
-/// instance and does not touch process-global static slots.
+/// These tests construct StashHost instances whose DisposeAsync nulls process-global
+/// static hook slots (PromptBuiltIns / ProcessBuiltIns / CompleteBuiltIns), so they
+/// join the ProcessGlobalSlots collection to serialize against other slot-touching tests.
 /// </summary>
+[Collection("ProcessGlobalSlots")]
 public class StashHostStatefulnessTests
 {
     // ── #1: sequential RunAsync calls accumulate global state ────────────────

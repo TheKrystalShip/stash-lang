@@ -22,6 +22,7 @@ using Xunit;
 ///   #7  — CallAsync_Cancellation_ThrowsOperationCanceledException (not StashScriptException)
 ///   #8  — RunAsync_StructuredErrors_RuntimeErrorHasKind
 /// </summary>
+[Collection("ProcessGlobalSlots")]
 public class StashHostStructuredErrorTests
 {
     // ── #1 + #2 + #3: ValueError with span and call stack ────────────────

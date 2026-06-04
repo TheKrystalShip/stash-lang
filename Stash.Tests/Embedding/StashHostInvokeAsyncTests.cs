@@ -17,6 +17,7 @@ using Xunit;
 ///   #3 — InvokeAsync_NoDrainContract_CancellationHonored
 ///   #4 — InvokeAsync_CancellationToken_AbortsPendingFuture
 /// </summary>
+[Collection("ProcessGlobalSlots")]
 public class StashHostInvokeAsyncTests
 {
     // ── Helpers ───────────────────────────────────────────────────────────────

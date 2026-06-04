@@ -8,9 +8,6 @@ using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Tests.Stdlib;
 
-[CollectionDefinition("ProcessHistoryHandlers", DisableParallelization = true)]
-public sealed class ProcessHistoryHandlersCollection { }
-
 /// <summary>
 /// Integration tests for the <c>process.historyList</c>, <c>process.historyClear</c>, and
 /// <c>process.historyAdd</c> built-in functions (spec §12.6).
@@ -18,7 +15,7 @@ public sealed class ProcessHistoryHandlersCollection { }
 /// <see cref="ProcessBuiltIns"/> so the tests exercise the full path from Stash source through
 /// the VM to the file layer.
 /// </summary>
-[Collection("ProcessHistoryHandlers")]
+[Collection("ProcessGlobalSlots")]
 public sealed class ProcessHistoryTests : Stash.Tests.Interpreting.StashTestBase, IDisposable
 {
     private readonly string _tempDir;

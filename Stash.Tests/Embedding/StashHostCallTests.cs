@@ -24,6 +24,7 @@ using Xunit;
 ///   #9  — CallAsync_StatefulEngine_AccumulatesGlobals (lua_State contract)
 ///   #10 — StashEngine_CallFunction_ReturnsCorrectValue (primitive verification)
 /// </summary>
+[Collection("ProcessGlobalSlots")]
 public class StashHostCallTests
 {
     // ── Helper: compile + run a script that defines a function, then call it. ──
