@@ -70,7 +70,7 @@ A `/health` page (not linked in the UI) calls `IRegistryClient.GetDiscoveryAsync
 
 ## Security Notes
 
-- **No login, sessions, or CSRF.** Anonymous browse only. Phase 3 owns the authenticated maintainer surface.
+- **Anonymous browse is session-free.** The home, search, package detail, and version detail pages carry no authentication, no CSRF token, and set no cookies. The authenticated maintainer area (see below) is entirely separate; anonymous pages are byte-unchanged on disk from Phase 2.
 - **No CORS.** The browser never calls the registry. The server-to-server boundary means a CORS misconfiguration on the registry side cannot expose data to a malicious page.
 - **README sanitization.** All package-authored README content passes through a single `IReadmeRenderer` chokepoint (`Stash.Registry.Web/Rendering/`) that runs Markdig then HtmlSanitizer before the view touches it. This is the **sole** `@Html.Raw` call site in the project, and the `ReadmeChokepointMetaTests` scan enforces it.
 - **Default HTML encoding everywhere else.** Every DTO field (description, keywords, license, version strings, publisher names, error messages) reaches the Razor view as a plain `@expression`, so Razor's default HTML encoding applies. The README is the one and only exception.
@@ -82,3 +82,55 @@ The visual identity is shared with the rest of the Stash family:
 - **Catppuccin palette.** The Catppuccin Mocha (dark) and Latte (light) CSS custom-property definitions are adapted from `Stash.Playground/wwwroot/css/app.css`. The website ships dark-by-default for Phase 2; a theme toggle is a later-phase addition.
 - **stash-icon.svg.** The brand mark in the top-left of every page is `stash-icon.svg`, sourced from `.vscode/extensions/stash-lang/images/` and copied into `Stash.Registry.Web/wwwroot/`.
 - The site is a visual sibling of the Playground and VS Code extension — not npm-red, not NuGet-blue.
+
+## Authenticated Maintainer Area
+
+In addition to the anonymous browse surface, the website provides an authenticated **maintainer area** for package owners. Authenticated pages are served from the `Areas/Maintainer/` Razor area and use a separate `_MaintainerLayout.cshtml`; the anonymous pages are completely unchanged.
+
+### BFF authentication model
+
+The website is a **backend-for-frontend (BFF)**: the browser never handles a JWT directly.
+
+Login works in two steps:
+
+1. The website posts the user's credentials to the registry's `POST /api/v1/auth/login`, which returns a short-lived read-ceiling JWT.
+2. The website immediately uses that read JWT to eagerly mint a **publish-ceiling** session token via `POST /api/v1/auth/tokens { "ceiling": "publish", "expiresIn": "8h" }`. The read JWT is discarded after this call and never persisted.
+
+The `BffSession` record (username, publish JWT, and token id) is stored **entirely server-side** in `ISessionStore`. The browser receives only an opaque session id in an HTTP-only, `SameSite=Strict`, `Secure` cookie (`stash_web_session`). The JWT string never reaches the browser. The registry required **zero changes** for this flow — a user-role caller holding a read token may mint a publish token by design.
+
+### Session lifetime
+
+The session lifetime defaults to **8 hours** and can be tuned via the `Bff:SessionLifetime` configuration key (a duration string, e.g. `"8h"`, `"24h"`). The publish token's `expiresIn` is set to the same value, so session expiry and token expiry are aligned. There is no refresh-token flow in v1; an expired session simply prompts for a fresh login.
+
+```json
+{
+  "Bff": {
+    "SessionLifetime": "8h"
+  }
+}
+```
+
+### Routes
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET`, `POST` | `/login` | Username/password login form. On success: mints the server-side session and sets the session cookie. On failure: re-renders the form with an error banner and sets no cookie. |
+| `POST` | `/logout` | Revokes the publish token (best-effort), removes the server-side session, clears the cookie, and redirects to `/`. |
+| `GET` | `/dashboard` | Authenticated user's owned packages, including private ones — the registry's visibility predicate includes private packages when a publish-ceiling token is threaded. |
+| `GET`, `POST` | `/manage/@{scope}/{name}` | Maintainer view for a single package. Supports: deprecate package, un-deprecate package, deprecate a specific version, un-deprecate a specific version, and change package visibility. A 403 from the registry surfaces as an inline error; a 404 renders the site's 404 page. |
+| `GET`, `POST` | `/settings/tokens` | API-token management: list active tokens, create a new token (read or publish ceiling; the token value is shown exactly once on the page immediately after creation, then never again), and revoke a token. The current-session token is displayed with a "current session" badge and has no revoke button — it can only be ended via `/logout`. |
+
+### What is deliberately out of scope (v1)
+
+The following features are not available in the authenticated maintainer area and have no planned route in this version:
+
+- **Version yank / delete.** Deferred; `DELETE /packages/{scope}/{name}/{version}` is not wired.
+- **Ownership and role management.** No UI for assigning or revoking collaborator roles (`/packages/.../roles`).
+- **Admin tooling.** No user management, audit search, advisory controls, quarantine, or webhook configuration.
+- **Self-service sign-up.** There is no `/register` route. Accounts are created via the CLI or by a registry operator.
+- **Profile and account settings.** The "Settings" surface covers API tokens only; there is no password-change or profile-edit UI.
+- **Download metrics, dependents, provenance, or verified labels.** These are Bucket-B features with no backing data in the registry at this time.
+
+### Operational note — single-instance hosting
+
+The default `InMemorySessionStore` is process-local: sessions are held in a `ConcurrentDictionary` in the web process. This means **multi-instance (load-balanced) hosting is not supported in v1** — a request routed to a different instance will not find the session and will redirect the user to login. To support multi-instance deployments, replace `InMemorySessionStore` with a distributed implementation (Redis, SQL Server, or Postgres) behind the `ISessionStore` interface. No other code changes are required.
