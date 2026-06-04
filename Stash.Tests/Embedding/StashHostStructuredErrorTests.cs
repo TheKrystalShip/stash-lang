@@ -82,31 +82,35 @@ public class StashHostStructuredErrorTests
     [Fact]
     public async Task CallAsync_Cancellation_ThrowsOperationCanceledException_NotStashScriptException()
     {
+        // Uses time.sleep so the WaitHandle-based cancellation path in VMContext is
+        // exercised (the done_when explicitly specifies time.sleep, not a busy-loop).
         await using var host = new StashHost();
         var s = await host.CompileAsync(
-            "fn spin() { let i = 0; while (true) { i = i + 1; } return i; }");
+            "fn sleeper() { time.sleep(999999); return 0; }");
         await host.RunAsync(s);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
         // Must throw OperationCanceledException (or TaskCanceledException),
         // NOT StashScriptException.
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => host.CallAsync<long>("spin", null, cts.Token));
+            () => host.CallAsync<long>("sleeper", null, cts.Token));
     }
 
     [Fact]
     public async Task TryCallAsync_Cancellation_ReturnsCancelledKind_NoThrow()
     {
+        // Uses time.sleep so the WaitHandle-based cancellation path in VMContext is
+        // exercised (the done_when explicitly specifies time.sleep, not a busy-loop).
         await using var host = new StashHost();
         var s = await host.CompileAsync(
-            "fn spin() { let i = 0; while (true) { i = i + 1; } return i; }");
+            "fn sleeper() { time.sleep(999999); return 0; }");
         await host.RunAsync(s);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
         // Must NOT throw — returns a failure result.
-        StashResult<long> result = await host.TryCallAsync<long>("spin", null, cts.Token);
+        StashResult<long> result = await host.TryCallAsync<long>("sleeper", null, cts.Token);
 
         Assert.False(result.Success);
         Assert.NotEmpty(result.Errors);

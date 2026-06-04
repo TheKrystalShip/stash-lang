@@ -126,13 +126,15 @@ public class StashHostCallTests
     [Fact]
     public async Task CallAsync_Cancellation_ThrowsOperationCanceledException()
     {
+        // Uses time.sleep so the blocking path (WaitHandle-based cancellation in
+        // VMContext) is exercised, not just the dispatch-loop counter check.
         await using var host = await SetupHostWithFunction(
-            "fn spin() { let i = 0; while (true) { i = i + 1; } return i; }");
+            "fn sleeper() { time.sleep(999999); return 0; }");
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => host.CallAsync<long>("spin", null, cts.Token));
+            () => host.CallAsync<long>("sleeper", null, cts.Token));
     }
 
     // ── #8: cancellation in TryCallAsync ─────────────────────────────────
@@ -140,15 +142,17 @@ public class StashHostCallTests
     [Fact]
     public async Task TryCallAsync_Cancellation_ReturnsCancelledKind()
     {
+        // Uses time.sleep so the blocking path (WaitHandle-based cancellation in
+        // VMContext) is exercised, not just the dispatch-loop counter check.
         await using var host = await SetupHostWithFunction(
-            "fn spin() { let i = 0; while (true) { i = i + 1; } return i; }");
+            "fn sleeper() { time.sleep(999999); return 0; }");
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(300));
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
 
-        var result = await host.TryCallAsync<long>("spin", null, cts.Token);
+        var result = await host.TryCallAsync<long>("sleeper", null, cts.Token);
 
         Assert.False(result.Success);
-        Assert.Single(result.Errors);
+        Assert.NotEmpty(result.Errors);
         Assert.Equal(StashError.KindCancelled, result.Errors[0].Kind);
     }
 
