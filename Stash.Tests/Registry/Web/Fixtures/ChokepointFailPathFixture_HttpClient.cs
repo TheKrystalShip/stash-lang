@@ -15,8 +15,10 @@ internal static class ChokepointFailPathFixture_HttpClient
     // ── Known-bad snippet: rogue SendAsync call outside an allowed type ────────
 
     /// <summary>
-    /// A C# snippet containing a rogue <c>SendAsync</c> call site OUTSIDE the three
-    /// allowed types. The chokepoint scanner MUST flag this as a violation.
+    /// A C# snippet containing a rogue <c>SendAsync</c> call site OUTSIDE the allowed types.
+    /// The chokepoint scanner MUST flag this as a violation.
+    /// The receiver is deliberately named <c>http</c> (not <c>client</c>) to prove the scan
+    /// discriminates by enclosing type, not receiver variable name.
     /// </summary>
     public const string RogueSendAsyncSnippet = """
         using System.Net.Http;
@@ -31,11 +33,11 @@ internal static class ChokepointFailPathFixture_HttpClient
 
             public async Task DoSomethingAsync(CancellationToken ct)
             {
-                var client = _factory.CreateClient("SomeClient");
+                // Receiver named "http" (not "client") — proves the scan does NOT use the
+                // receiver name as a discriminator; it uses the enclosing type name.
+                var http = _factory.CreateClient("SomeClient");
                 var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/search");
-                // This SendAsync is OUTSIDE HttpAuthenticatedRegistryClient / HttpRegistryClient
-                // / LoginService / LogoutService — the scan must flag it.
-                var response = await client.SendAsync(request, ct);
+                var response = await http.SendAsync(request, ct);
             }
         }
         """;

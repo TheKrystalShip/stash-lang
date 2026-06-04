@@ -139,15 +139,42 @@ public sealed class AuthClientChokepointMetaTests
     }
 
     /// <summary>
+    /// Known non-HttpClient call sites: (enclosing type name, method name) pairs that are
+    /// known to be <em>not</em> <see cref="System.Net.Http.HttpClient"/> calls, despite
+    /// matching the sink method name set.
+    /// These are excluded from both the violation count and the allowed-call-site count.
+    /// </summary>
+    /// <remarks>
+    /// This list is auditable and append-only: adding a new non-HttpClient sink is a
+    /// deliberate code-reviewed action. The list is intentionally narrow — if a new type
+    /// is added and happens to call a same-named method, it must be either added to
+    /// <see cref="AllowedTypes"/> (if it is an HttpClient caller) or to this denylist
+    /// (if it is definitively not).
+    /// </remarks>
+    private static readonly HashSet<(string Type, string Method)> KnownNonHttpClientCalls =
+        new(EqualityComparer<(string, string)>.Default)
+        {
+            // ISessionStore.GetAsync — reads a session from the in-memory store.
+            ("CookieSessionTokenAccessor", "GetAsync"),
+            // ISessionStore.GetAsync — reads a session in the auth handler.
+            ("SessionCookieAuthenticationHandler", "GetAsync"),
+            // InMemorySessionStore internal helpers — the store is not an HttpClient.
+            ("InMemorySessionStore", "GetAsync"),
+            ("InMemorySessionStore", "SetAsync"),
+        };
+
+    /// <summary>
     /// Scans one C# source file for HTTP sink call sites.
     /// Allowed call sites (inside the pinned types) increment <paramref name="allowedCallSitesFound"/>.
     /// Disallowed call sites outside the pinned types are added to <paramref name="violations"/>.
+    /// Known non-HttpClient calls (see <see cref="KnownNonHttpClientCalls"/>) are silently excluded.
     /// </summary>
     /// <remarks>
-    /// To avoid false positives from non-HTTP uses of the same method names (e.g.
-    /// <c>ISessionStore.GetAsync</c>), we only flag call sites where the receiver
-    /// expression looks like an <see cref="System.Net.Http.HttpClient"/>: the receiver
-    /// identifier must contain <c>client</c> or <c>Client</c>.
+    /// The discriminator is the <em>enclosing type name</em>, not the receiver variable name.
+    /// A rogue HttpClient call in any new type trips the scan regardless of how the variable is
+    /// named (e.g. <c>http</c>, <c>_registryHttp</c>, <c>client</c> — all flagged equally).
+    /// Only the auditable <see cref="KnownNonHttpClientCalls"/> denylist suppresses specific
+    /// known false-positives.
     /// </remarks>
     internal static void ScanSource(
         string source,
@@ -160,24 +187,25 @@ public sealed class AuthClientChokepointMetaTests
 
         foreach (var invocation in root.DescendantNodes().OfType<InvocationExpressionSyntax>())
         {
-            if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
-                continue;
+            string? methodName = invocation.Expression switch
+            {
+                MemberAccessExpressionSyntax ma => ma.Name.Identifier.Text,
+                IdentifierNameSyntax id => id.Identifier.Text,
+                _ => null
+            };
 
-            string methodName = memberAccess.Name.Identifier.Text;
-            if (!SinkMethods.Contains(methodName))
-                continue;
-
-            // Heuristic: only flag calls where the receiver identifier contains "client" or "Client".
-            // This filters out false positives like _sessionStore.GetAsync or _store.GetAsync.
-            string receiverText = memberAccess.Expression.ToString();
-            bool looksLikeHttpClient = receiverText.Contains("client", StringComparison.OrdinalIgnoreCase)
-                || receiverText.Contains("Client", StringComparison.Ordinal);
-
-            if (!looksLikeHttpClient)
+            if (methodName is null || !SinkMethods.Contains(methodName))
                 continue;
 
             // Find the enclosing class/struct/record declaration.
             string? enclosingType = GetEnclosingTypeName(invocation);
+
+            // Suppress known non-HttpClient call sites (e.g. ISessionStore.GetAsync).
+            if (enclosingType is not null &&
+                KnownNonHttpClientCalls.Contains((enclosingType, methodName)))
+            {
+                continue;
+            }
 
             if (enclosingType is not null && AllowedTypes.Contains(enclosingType))
             {
@@ -188,8 +216,8 @@ public sealed class AuthClientChokepointMetaTests
                 var lineSpan = invocation.GetLocation().GetLineSpan();
                 int line = lineSpan.StartLinePosition.Line + 1;
                 violations.Add(
-                    $"{label}:{line} — {methodName}() is called on a receiver '{receiverText}' " +
-                    $"outside an allowed type (enclosing type: '{enclosingType ?? "<unknown>"}')");
+                    $"{label}:{line} — {methodName}() is called outside an allowed type " +
+                    $"(enclosing type: '{enclosingType ?? "<unknown>"}')");
             }
         }
     }

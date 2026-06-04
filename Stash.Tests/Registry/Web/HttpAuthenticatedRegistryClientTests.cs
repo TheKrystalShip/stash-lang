@@ -191,6 +191,45 @@ public sealed class HttpAuthenticatedRegistryClientTests
     }
 
     [Fact]
+    public async Task DeprecateVersionAsync_SetsAuthorizationHeader()
+    {
+        var (client, captured) = CreateClientWithCapture(_ =>
+            JsonOk(new DeprecationResponse { Ok = true, Package = "org/my-lib", Version = "1.0.0", Deprecated = true }));
+
+        await client.DeprecateVersionAsync("org", "my-lib", "1.0.0",
+            new DeprecateVersionRequest { Message = "Use 2.0.0 instead." });
+
+        Assert.Single(captured);
+        AssertBearerToken(captured[0]);
+    }
+
+    [Fact]
+    public async Task UndeprecatePackageAsync_SetsAuthorizationHeader()
+    {
+        var (client, captured) = CreateClientWithCapture(_ =>
+            JsonOk(new DeprecationResponse { Ok = true, Package = "org/my-lib", Deprecated = false }));
+
+        await client.UndeprecatePackageAsync("org", "my-lib");
+
+        Assert.Single(captured);
+        AssertBearerToken(captured[0]);
+        Assert.Equal(HttpMethod.Delete, captured[0].Method);
+    }
+
+    [Fact]
+    public async Task UndeprecateVersionAsync_SetsAuthorizationHeader()
+    {
+        var (client, captured) = CreateClientWithCapture(_ =>
+            JsonOk(new DeprecationResponse { Ok = true, Package = "org/my-lib", Version = "1.0.0", Deprecated = false }));
+
+        await client.UndeprecateVersionAsync("org", "my-lib", "1.0.0");
+
+        Assert.Single(captured);
+        AssertBearerToken(captured[0]);
+        Assert.Equal(HttpMethod.Delete, captured[0].Method);
+    }
+
+    [Fact]
     public async Task SetVisibilityAsync_SetsAuthorizationHeader()
     {
         var (client, captured) = CreateClientWithCapture(_ =>
