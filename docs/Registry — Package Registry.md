@@ -43,23 +43,25 @@ All timestamps are ISO 8601 UTC. All sizes returned by the API are in bytes unle
 
 All package routes use the two-segment form `/packages/{scope}/{name}` where `{scope}` is the bare scope name without the leading `@`. The `@` is never part of the URL path; the server canonicalizes back to `@{scope}/{name}` in response bodies and DB lookups.
 
-| Method | Path                                                   | Auth                  | Description                              |
-| ------ | ------------------------------------------------------ | --------------------- | ---------------------------------------- |
-| GET    | `/api/v1/packages/{scope}/{name}`                      | None (public packages) | Package metadata and version list        |
-| GET    | `/api/v1/packages/{scope}/{name}/{version}`            | None (public packages) | Version details                          |
-| GET    | `/api/v1/packages/{scope}/{name}/{version}/download`   | None (public packages) | Download tarball                         |
-| PUT    | `/api/v1/packages/{scope}/{name}`                      | publish scope         | Publish a version                        |
-| DELETE | `/api/v1/packages/{scope}/{name}/{version}`            | publish scope         | Unpublish (within window)                |
-| PATCH  | `/api/v1/packages/{scope}/{name}/deprecate`            | publish scope         | Deprecate package                        |
-| DELETE | `/api/v1/packages/{scope}/{name}/deprecate`            | publish scope         | Undeprecate package                      |
-| PATCH  | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope         | Deprecate version                        |
-| DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`  | publish scope         | Undeprecate version                      |
-| GET    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | List package roles                       |
-| PUT    | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | Assign a role to a principal             |
-| DELETE | `/api/v1/packages/{scope}/{name}/roles`                | publish scope (owner) | Revoke a role from a principal           |
-| PATCH  | `/api/v1/packages/{scope}/{name}/visibility`           | publish scope (owner) | Change package visibility                |
+| Method | Path                                                       | Auth                         | Description                              |
+| ------ | ---------------------------------------------------------- | ---------------------------- | ---------------------------------------- |
+| GET    | `/api/v1/packages/{scope}/{name}`                          | None (public)                | Package metadata and version list        |
+| GET    | `/api/v1/packages/{scope}/{name}/{version}`                | None (public)                | Version details                          |
+| GET    | `/api/v1/packages/{scope}/{name}/{version}/download`       | None (public)                | Download tarball                         |
+| GET    | `/api/v1/packages/{scope}/{name}/versions`                 | None (public)                | Paginated version list (visibility-gated by PDP) |
+| GET    | `/api/v1/packages/{scope}/{name}/readme`                   | None (public)                | Package README as typed JSON (visibility-gated by PDP) |
+| PUT    | `/api/v1/packages/{scope}/{name}`                          | publish scope                | Publish a version                        |
+| DELETE | `/api/v1/packages/{scope}/{name}/{version}`                | publish scope                | Unpublish (within window)                |
+| PATCH  | `/api/v1/packages/{scope}/{name}/deprecate`                | publish scope                | Deprecate package                        |
+| DELETE | `/api/v1/packages/{scope}/{name}/deprecate`                | publish scope                | Undeprecate package                      |
+| PATCH  | `/api/v1/packages/{scope}/{name}/{version}/deprecate`      | publish scope                | Deprecate version                        |
+| DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`      | publish scope                | Undeprecate version                      |
+| GET    | `/api/v1/packages/{scope}/{name}/roles`                    | publish scope (owner)        | List package roles                       |
+| PUT    | `/api/v1/packages/{scope}/{name}/roles`                    | publish scope (owner)        | Assign a role to a principal             |
+| DELETE | `/api/v1/packages/{scope}/{name}/roles`                    | publish scope (owner)        | Revoke a role from a principal           |
+| PATCH  | `/api/v1/packages/{scope}/{name}/visibility`               | publish scope (owner)        | Change package visibility                |
 
-Read endpoints (`GET`) for private or internal packages require a `read`-scoped (or higher) token AND the caller must have at least `reader` permission. Unauthorized callers receive `404 Not Found`, not `403`, to avoid leaking package existence.
+Read endpoints (`GET`) for private or internal packages require a `read`-scoped (or higher) token AND the caller must have at least `reader` permission. Unauthorized callers receive `404 Not Found`, not `403`, to avoid leaking package existence. The `/versions` and `/readme` endpoints are publicly accessible for public packages but are visibility-gated by the PDP: unauthorized callers on private/internal packages receive `404 Not Found`.
 
 ### Auth Endpoints
 
@@ -81,6 +83,14 @@ Read endpoints (`GET`) for private or internal packages require a `read`-scoped 
 | GET    | `/api/v1/search`   | None | Search packages   |
 
 Search results are filtered by visibility. Unauthenticated callers see only `public` packages. Authenticated callers additionally see `private` and `internal` packages they have permission to read.
+
+### Discovery Endpoint
+
+| Method | Path                               | Auth          | Description                                     |
+| ------ | ---------------------------------- | ------------- | ----------------------------------------------- |
+| GET    | `/api/v1/.well-known/registry`     | None (public) | Registry capability advertisement (no database) |
+
+Returns static server capabilities (API version, paging limits, links, feature flags). No authentication required; revoked or invalid `Authorization` headers are tolerated. See [Section 10.10](#1010-well-knownregistry-discovery-endpoint).
 
 ### Organization and Scope Endpoints
 
@@ -615,32 +625,125 @@ Request:
 | 403    | Caller is not an owner of the package.         |
 | 404    | Package not found.                             |
 
+### 6.11 GET /api/v1/packages/{scope}/{name}/versions
+
+Returns a paginated list of all published versions for a package. No authentication is required for
+`public` packages. For `private` or `internal` packages the caller must supply a `read`-scoped (or
+higher) JWT and must have at least `reader` permission. Unauthorized callers receive
+`404 Not Found` — never `403` — to avoid leaking package existence.
+
+| Query parameter | Type    | Default | Description                                              |
+| --------------- | ------- | ------- | -------------------------------------------------------- |
+| `page`          | integer | `1`     | Page number (1-based, must be ≥ 1).                      |
+| `pageSize`      | integer | `20`    | Results per page (1–100); out-of-range returns `400`.    |
+
+Response `200 OK`:
+
+```json
+{
+  "items": [
+    {
+      "version": "1.2.0",
+      "stashVersion": ">=1.0.0",
+      "dependencies": {},
+      "integrity": "sha256-abc123...",
+      "publishedAt": "2026-03-10T14:00:00.000Z",
+      "publishedBy": "alice",
+      "deprecated": false,
+      "deprecationMessage": null
+    }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20,
+  "totalPages": 1
+}
+```
+
+**Conditional caching.** Every response includes `ETag`, `Last-Modified`, and
+`Cache-Control: public, max-age=60` headers. The ETag formula is
+`W/"<UpdatedAt-ticks>-<totalVersionCount>"` (a weak ETag keyed on the package's `updated_at`
+timestamp ticks and the total number of versions). Conditional requests using `If-None-Match`
+(weak ETag comparison) or `If-Modified-Since` (second-precision) may receive `304 Not Modified`
+with no body (RFC 7232 §4.1). Both headers are written on both `200` and `304` responses so
+clients always receive current validators.
+
+| Status | Meaning                                                                |
+| ------ | ---------------------------------------------------------------------- |
+| 304    | Not Modified — conditional headers matched; no body.                   |
+| 400    | `pageSize` out of range (1–100).                                       |
+| 404    | Package not found, or caller is unauthorized for a non-public package. |
+
+### 6.12 GET /api/v1/packages/{scope}/{name}/readme
+
+Returns the README content for a package as a typed JSON response. No authentication is required
+for `public` packages. For `private` or `internal` packages the caller must supply a `read`-scoped
+(or higher) JWT and must have at least `reader` permission. Unauthorized callers receive
+`404 Not Found`. If the package exists but has no README (no `README.md` was included in any
+published tarball), the endpoint also returns `404 Not Found`.
+
+Response `200 OK`:
+
+```json
+{
+  "content": "# stash-http\n\nHTTP client utilities...",
+  "contentType": "text/markdown",
+  "byteSize": 512,
+  "extractedFromVersion": "1.2.0"
+}
+```
+
+`extractedFromVersion` is the package's current `latest` version (the version from which the
+README was last extracted), or `null` if no version has been published yet.
+
+**Conditional caching.** Every response includes `ETag`, `Last-Modified`, and
+`Cache-Control: public, max-age=60` headers. The ETag formula is
+`W/"<UpdatedAt-ticks>-<readmeByteSize>"` (a weak ETag keyed on the package's `updated_at`
+timestamp ticks and the UTF-8 byte length of the README content). Conditional requests using
+`If-None-Match` or `If-Modified-Since` may receive `304 Not Modified` (RFC 7232 §4.1).
+
+| Status | Meaning                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------- |
+| 304    | Not Modified — conditional headers matched; no body.                                            |
+| 404    | Package not found, package has no README, or caller is unauthorized for a non-public package.   |
+
 ## 7. Search
 
 ### 7.1 GET /api/v1/search
 
 Search package names and descriptions.
 
-| Query parameter | Type    | Default | Description                                             |
-| --------------- | ------- | ------- | ------------------------------------------------------- |
-| `q`             | string  | -       | Search query (required).                                |
-| `page`          | integer | `1`     | Page number (1-based, must be ≥ 1).                     |
-| `pageSize`      | integer | `20`    | Results per page (1–100); out-of-range returns `400`. |
+| Query parameter | Type    | Default       | Description                                                                                   |
+| --------------- | ------- | ------------- | --------------------------------------------------------------------------------------------- |
+| `q`             | string  | -             | Free-text search query. Absent or empty returns all visible packages.                        |
+| `keyword`       | string  | -             | Keyword filter: exact match against one element of the package `keywords` array.              |
+| `license`       | string  | -             | SPDX license filter: exact match against the package `license` field (e.g. `MIT`).            |
+| `deprecated`    | boolean | -             | Deprecated filter: `true` = deprecated only; `false` = non-deprecated only; absent = both.   |
+| `owner`         | string  | -             | Owner filter: exact match against a user principal with the `owner` role on the package.      |
+| `sort`          | string  | `Relevance`   | Sort order. Valid values: `Relevance` (name ascending), `Name`, `Updated`, `Published`.       |
+| `page`          | integer | `1`           | Page number (1-based, must be ≥ 1).                                                           |
+| `pageSize`      | integer | `20`          | Results per page (1–100); out-of-range returns `400`.                                         |
+
+**Bucket-B filters (not yet supported):** `vulnerable` (security advisory filter), `verified` (verified-publisher filter), and `provenance` (attestation filter) are not accepted query parameters in this release. The `sort` parameter does not accept `downloads` — only `Relevance`, `Name`, `Updated`, and `Published` are valid; an unknown value (including `sort=downloads`) is rejected with `400 InvalidRequest`.
 
 Results are filtered by visibility:
 - Unauthenticated callers: only `public` packages.
 - Authenticated callers: `public` packages, plus `private` and `internal` packages the caller has at least `reader` permission on.
 
+Each item in the response includes `license` and `ownerCount` in addition to the fields present before P5.
+
 ```json
 {
-  "packages": [
+  "items": [
     {
       "name": "@stash/http",
       "description": "HTTP client utilities for Stash",
       "latest": "1.2.0",
       "keywords": ["http", "client"],
       "updatedAt": "2026-03-10T14:00:00.000Z",
-      "deprecated": false
+      "deprecated": false,
+      "license": "MIT",
+      "ownerCount": 1
     }
   ],
   "totalCount": 3,
@@ -828,7 +931,7 @@ Query the audit log. Entries are returned in descending chronological order.
 
 ```json
 {
-  "entries": [
+  "items": [
     {
       "id": 42,
       "action": "package.publish",
@@ -1002,6 +1105,122 @@ Duration strings accept the suffixes `m`, `h`, `d`.
 | `{Category}.MaxPerMinute`  | integer | Hard per-minute cap.                           |
 
 Rate-limited requests receive `429 Too Many Requests` with a `Retry-After` header indicating the earliest retry time.
+
+### 10.8 CORS
+
+CORS is **off by default**. When `Cors.Enabled` is `false`, the server emits no `Access-Control-*`
+headers and performs no `OPTIONS` preflight handling — it behaves byte-identically to a build
+without CORS support. To enable CORS, set `Cors.Enabled` to `true` and configure the policy:
+
+| Property           | Type             | Default                                                                   | Description                                                                                                                            |
+| ------------------ | ---------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `Enabled`          | bool             | `false`                                                                   | Whether CORS is active. When `false`, no `Access-Control-*` headers are emitted and no preflight handling is registered.              |
+| `AllowedOrigins`   | string[]         | `[]`                                                                      | Allowed origins. An empty list means no origin is permitted (even when `Enabled` is `true`).                                          |
+| `AllowedMethods`   | string[]         | `["GET", "HEAD"]`                                                         | Allowed HTTP methods.                                                                                                                  |
+| `AllowedHeaders`   | string[]         | `["Content-Type", "Authorization", "If-None-Match", "If-Modified-Since"]` | Allowed request headers.                                                                                                               |
+| `AllowCredentials` | bool             | `false`                                                                   | Whether `Access-Control-Allow-Credentials: true` is emitted (for cookie / HTTP auth scenarios).                                        |
+
+The `Cors.Enabled` flag is reflected in the discovery endpoint's `features.cors` field
+(see [Section 10.9](#109-well-knownregistry-discovery-endpoint) and
+[Section 3](#3-endpoint-summary)).
+
+```json
+"Cors": {
+  "Enabled": false,
+  "AllowedOrigins": [],
+  "AllowedMethods": [ "GET", "HEAD" ],
+  "AllowedHeaders": [ "Content-Type", "Authorization", "If-None-Match", "If-Modified-Since" ],
+  "AllowCredentials": false
+}
+```
+
+### 10.9 Pagination
+
+All paginated listing endpoints return a shared `PagedResponse<T>` envelope:
+
+```json
+{
+  "items": [ ... ],
+  "totalCount": 42,
+  "page": 1,
+  "pageSize": 20,
+  "totalPages": 3
+}
+```
+
+The collection key is always `"items"` across all paginated endpoints (`/search`,
+`/packages/{scope}/{name}/versions`, `/admin/audit-log`).
+
+Per-endpoint `pageSize` caps:
+
+| Endpoint                                           | Default | Maximum |
+| -------------------------------------------------- | ------- | ------- |
+| `GET /api/v1/search`                               | `20`    | `100`   |
+| `GET /api/v1/packages/{scope}/{name}/versions`     | `20`    | `100`   |
+| `GET /api/v1/admin/audit-log`                      | `50`    | `200`   |
+
+`pageSize` is validated via `[Range]` on the query DTO. Out-of-range values are rejected `400`
+with `{ "error": "InvalidRequest", ... }` — they are never silently clamped.
+
+### 10.10 .well-known/registry Discovery Endpoint
+
+`GET /api/v1/.well-known/registry` returns a static capability advertisement for the registry.
+No authentication is required; a revoked or invalid `Authorization` header does not block the
+response.
+
+Response `200 OK`:
+
+```json
+{
+  "name": "Stash Package Registry",
+  "apiVersion": "v1",
+  "basePath": "/api/v1",
+  "limits": {
+    "maxPackageSize": 10485760,
+    "maxPageSize": 100
+  },
+  "links": {
+    "search": "/api/v1/search",
+    "packages": "/api/v1/packages",
+    "openapi": "/openapi/v1.json",
+    "wellKnown": "/api/v1/.well-known/registry"
+  },
+  "features": {
+    "metrics": false,
+    "advisories": false,
+    "provenance": false,
+    "signatures": false,
+    "trustedPublishing": false,
+    "verifiedPublishers": false,
+    "organizations": true,
+    "privatePackages": true,
+    "cors": false
+  }
+}
+```
+
+`limits.maxPackageSize` is in bytes and reflects `Security.MaxPackageSize`. `limits.maxPageSize`
+is the compile-time constant `100` shared with the `[Range]` validators on `SearchQuery` and
+`VersionsQuery` — the advertised value cannot drift from the enforced value.
+
+**Feature flags:**
+
+| Flag                | Value   | Notes                                                                         |
+| ------------------- | ------- | ----------------------------------------------------------------------------- |
+| `organizations`     | `true`  | Organization-scoped packages are supported.                                   |
+| `privatePackages`   | `true`  | Private and internal package visibility is supported.                         |
+| `cors`              | dynamic | Reflects `Cors.Enabled` at server startup (default `false`).                  |
+| `metrics`           | `false` | Bucket-B — download metrics not yet implemented.                              |
+| `advisories`        | `false` | Bucket-B — security advisory data not yet implemented.                        |
+| `provenance`        | `false` | Bucket-B — provenance attestation not yet implemented.                        |
+| `signatures`        | `false` | Bucket-B — package signature verification not yet implemented.                |
+| `trustedPublishing` | `false` | Bucket-B — OIDC-based trusted publishing not yet implemented.                 |
+| `verifiedPublishers`| `false` | Bucket-B — publisher verification not yet implemented.                        |
+
+The Bucket-B flags (`metrics`, `advisories`, `provenance`, `signatures`, `trustedPublishing`,
+`verifiedPublishers`) are pinned `false` until their backing data and logic land. They are
+present as explicit future seams — clients should check these flags before attempting to use the
+corresponding functionality.
 
 ## 11. Database Schema
 
