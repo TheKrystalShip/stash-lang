@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase3
 current: null
-updated: "2026-06-04T22:13:42Z"
+updated: "2026-06-04T22:37:34Z"
 phases:
   A1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "IAuthenticatedRegistryClient + HttpAuthenticatedRegistryClient (fail-closed DI factory, SendAsync C1 chokepoint), Maintainer area with MaintainerAreaConventions ([Authorize] + own layout), GET /dashboard (SearchOwnedAsync), AuthClientChokepointMetaTests + SessionTokenLeakMetaTests; 39/39 tests green"
   A3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 277c685b07f9e5ee7697780e1e8b83da83977b24
+    verified: true
+    started: "2026-06-04T22:23:17Z"
+    completed: "2026-06-04T22:37:34Z"
+    attempts: 1
+    notes: "Added Manage.cshtml.cs (5 POST handlers + 401/403/404 error mapping), 3 partial views, ViewLabels.cs constants, ManagePageTests.cs (15 tests), FieldDisciplineMetaTests extension. No magic visibility strings; chokepoint guards all green."
   A4:
     status: pending
     commit: null
