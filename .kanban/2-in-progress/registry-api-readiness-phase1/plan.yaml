@@ -94,7 +94,7 @@ phases:
       - Stash.Registry/Http/ConditionalResponse.cs
       - Stash.Tests/Registry/VersionsEndpointTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~VersionsEndpointTests|FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
     done_when:
       - GET /api/v1/packages/{scope}/{name}/versions is reachable on PackagesController, carries [PublicEndpoint] AND [RegistryAuthorize(RegistryAction.ReadPackageMetadata)] (reusing the existing action — no new RegistryAction added), and binds VersionsQuery via [FromQuery].
@@ -119,7 +119,7 @@ phases:
       - Stash.Registry/Controllers/PackagesController.cs
       - Stash.Tests/Registry/ReadmeEndpointTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~ReadmeEndpointTests|FullyQualifiedName~PackagesControllerRegistryAuthorizeRequiredTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests"
     done_when:
       - GET /api/v1/packages/{scope}/{name}/readme is reachable on PackagesController and carries [PublicEndpoint] AND [RegistryAuthorize(RegistryAction.ReadPackageMetadata)].
@@ -141,7 +141,7 @@ phases:
       - Stash.Tests/Registry/SearchV2FiltersTests.cs
       - Stash.Tests/Registry/SearchV2SortTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~SearchV2FiltersTests|FullyQualifiedName~SearchV2SortTests|FullyQualifiedName~SearchControllerTests|FullyQualifiedName~NoMagicAuthStringsMetaTests|FullyQualifiedName~RequestModelBindingMetaTests|FullyQualifiedName~OpenApiCoverageMetaTests"
     done_when:
       - SearchQuery gains optional [FromQuery] properties keyword, license, deprecated, owner, and sort (typed as the new PackageSortOrder enum) — all bound via DataAnnotations, no Request.Query/Body reads.
@@ -185,7 +185,7 @@ phases:
       - Stash.Registry/Endpoints/DiscoveryEndpoint.cs
       - Stash.Tests/Registry/DiscoveryEndpointTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~DiscoveryEndpointTests|FullyQualifiedName~OpenApiCoverageMetaTests"
     done_when:
       - GET /api/v1/.well-known/registry returns 200 with a DiscoveryResponse JSON body containing name, apiVersion ("v1"), basePath ("/api/v1"), limits, links, and features.
