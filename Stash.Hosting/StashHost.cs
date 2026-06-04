@@ -325,8 +325,13 @@ public sealed class StashHost : IStashHost
             if (ct.CanBeCanceled && !rawTask.IsCompleted)
             {
                 // Race: await whichever of (future completion, cancellation) wins first.
-                // Task.Delay(Infinite, ct) completes as cancelled when ct fires.
-                var cancelTask = Task.Delay(Timeout.Infinite, ct);
+                // A linked CTS scoped to this call is used so that when rawTask wins we can
+                // cancel the Task.Delay immediately (via linked.Cancel()) and dispose the linked
+                // CTS (via `using`) to remove its registration from ct.  Without this, a
+                // Task.Delay(Infinite, ct) left as an orphan would hold a ct callback registration
+                // for the lifetime of ct — accumulating on every call against a long-lived token.
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var cancelTask = Task.Delay(Timeout.Infinite, linked.Token);
                 Task winner = await Task.WhenAny(rawTask, cancelTask).ConfigureAwait(false);
                 if (winner == cancelTask)
                 {
@@ -334,6 +339,14 @@ public sealed class StashHost : IStashHost
                     ct.ThrowIfCancellationRequested();
                     // If ThrowIfCancellationRequested doesn't throw (race: ct was reset),
                     // fall through to await rawTask normally.
+                }
+                else
+                {
+                    // rawTask won — cancel the Task.Delay so it reaches a terminal state
+                    // promptly rather than lingering until ct fires or is disposed.
+                    // The `using` above will dispose linked (and unregister from ct) when
+                    // the block exits.
+                    linked.Cancel();
                 }
             }
 
@@ -348,9 +361,10 @@ public sealed class StashHost : IStashHost
             throw new StashScriptException(BuildStashError(re));
         }
 
-        // Convert the raw CLR value (object?) back to StashValue, then to T.
-        StashValue stashResult = StashValue.FromObject(rawResult);
-        return HostMarshaller.FromStash<T>(stashResult)!;
+        // Convert the raw CLR value (object?) back to T via the single conversion chokepoint.
+        // HostMarshaller.FromStashObject<T> is the only place in Stash.Hosting that calls
+        // StashValue.FromObject, preserving the "single chokepoint" invariant.
+        return HostMarshaller.FromStashObject<T>(rawResult)!;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

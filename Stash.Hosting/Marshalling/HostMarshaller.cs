@@ -249,6 +249,18 @@ internal static class HostMarshaller
             $"Dictionary<string,object?>, List<StashValue>.");
     }
 
+    /// <summary>
+    /// Lifts a raw <c>object?</c> (as returned by a Stash VM execution) to a
+    /// <see cref="StashValue"/> via <see cref="StashValue.FromObject"/>, then
+    /// marshals it to <typeparamref name="T"/> via <see cref="FromStash{T}"/>.
+    ///
+    /// This is the single place in <c>Stash.Hosting</c> that calls
+    /// <see cref="StashValue.FromObject"/>; all callers route through here so the
+    /// "no inline <c>object?→StashValue</c> conversion outside <c>HostMarshaller</c>"
+    /// invariant is preserved.
+    /// </summary>
+    public static T? FromStashObject<T>(object? raw) => FromStash<T>(StashValue.FromObject(raw));
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     /// <summary>
