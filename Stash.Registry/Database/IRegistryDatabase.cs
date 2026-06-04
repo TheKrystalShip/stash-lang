@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Database;
@@ -494,7 +495,8 @@ public interface IRegistryDatabase
     Task AddTeamMemberAsync(string teamId, string username);
 
     /// <summary>
-    /// Searches packages by name or description with visibility filtering.
+    /// Searches packages by name, description, keyword, license, deprecation, and owner
+    /// with visibility filtering and sort order support.
     /// </summary>
     /// <param name="query">A partial name or description to match (SQL <c>LIKE</c> pattern).</param>
     /// <param name="page">The 1-based page number.</param>
@@ -503,8 +505,37 @@ public interface IRegistryDatabase
     /// The authenticated caller's username, or <c>null</c> if unauthenticated. Unauthenticated
     /// callers see only <c>public</c> packages.
     /// </param>
-    /// <returns>A <see cref="SearchResult"/> with the matching <see cref="PackageRecord"/> list and total count.</returns>
-    Task<SearchResult> SearchPackagesAsync(string query, int page, int pageSize, string? callerUsername);
+    /// <param name="keyword">
+    /// Optional keyword filter: exact match against one element of the package keywords JSON array.
+    /// Pass <c>null</c> or empty to skip this filter.
+    /// </param>
+    /// <param name="license">
+    /// Optional SPDX license identifier filter: exact match against <c>PackageRecord.License</c>.
+    /// Pass <c>null</c> or empty to skip this filter.
+    /// </param>
+    /// <param name="deprecated">
+    /// Optional deprecation filter: <c>true</c> for deprecated only, <c>false</c> for non-deprecated only,
+    /// <c>null</c> for all.
+    /// </param>
+    /// <param name="owner">
+    /// Optional owner filter: exact match against a user principal with <see cref="PackageRoles.Owner"/>
+    /// role on the package. Pass <c>null</c> or empty to skip this filter.
+    /// </param>
+    /// <param name="sort">The sort order for results. Defaults to <see cref="PackageSortOrder.Relevance"/>.</param>
+    /// <returns>
+    /// A <see cref="SearchResult"/> with the matching <see cref="PackageSearchRow"/> list (package + ownerCount)
+    /// and total count.
+    /// </returns>
+    Task<SearchResult> SearchPackagesAsync(
+        string query,
+        int page,
+        int pageSize,
+        string? callerUsername,
+        string? keyword = null,
+        string? license = null,
+        bool? deprecated = null,
+        string? owner = null,
+        PackageSortOrder sort = PackageSortOrder.Relevance);
 
     // Audit operations
     /// <summary>

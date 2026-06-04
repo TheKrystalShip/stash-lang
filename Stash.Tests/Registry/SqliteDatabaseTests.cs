@@ -163,7 +163,7 @@ public sealed class SqliteDatabaseTests
 
         Assert.Equal(1, result.TotalCount);
         Assert.Single(result.Packages);
-        Assert.Equal("search-alpha", result.Packages[0].Name);
+        Assert.Equal("search-alpha", result.Packages[0].Package.Name);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public sealed class SqliteDatabaseTests
         SearchResult result = await db.SearchPackagesAsync("unique-description", 1, 10, null);
 
         Assert.Equal(1, result.TotalCount);
-        Assert.Equal("pkg-x", result.Packages[0].Name);
+        Assert.Equal("pkg-x", result.Packages[0].Package.Name);
     }
 
     [Fact]

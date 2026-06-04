@@ -186,7 +186,7 @@ public sealed class RegistryVisibilityTests : IDisposable
         SearchResult result = await _db.SearchPackagesAsync("search-", 1, 20, null);
 
         Assert.Single(result.Packages);
-        Assert.Equal("search-pub", result.Packages[0].Name);
+        Assert.Equal("search-pub", result.Packages[0].Package.Name);
     }
 
     [Fact]
@@ -201,7 +201,7 @@ public sealed class RegistryVisibilityTests : IDisposable
         SearchResult result = await _db.SearchPackagesAsync("priv-", 1, 20, "alice");
 
         Assert.Single(result.Packages);
-        Assert.Equal("priv-mine", result.Packages[0].Name);
+        Assert.Equal("priv-mine", result.Packages[0].Package.Name);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public sealed class RegistryVisibilityTests : IDisposable
         SearchResult result = await _db.SearchPackagesAsync("vis-", 1, 20, "alice");
 
         Assert.Equal(2, result.TotalCount);
-        var names = result.Packages.ConvertAll(p => p.Name);
+        var names = result.Packages.ConvertAll(p => p.Package.Name);
         Assert.Contains("vis-pub-x", names);
         Assert.Contains("vis-priv-x", names);
     }
@@ -240,7 +240,7 @@ public sealed class RegistryVisibilityTests : IDisposable
         SearchResult result = await _db.SearchPackagesAsync("internal-accessible", 1, 20, "alice");
 
         Assert.Single(result.Packages);
-        Assert.Equal("internal-accessible", result.Packages[0].Name);
+        Assert.Equal("internal-accessible", result.Packages[0].Package.Name);
     }
 
     // ── F04: internal visibility — search branch (b): user-owned scope, no package_roles row ──
@@ -257,7 +257,7 @@ public sealed class RegistryVisibilityTests : IDisposable
         SearchResult result = await _db.SearchPackagesAsync("secret-lib", 1, 20, "alice");
 
         Assert.Single(result.Packages);
-        Assert.Equal("@alice/secret-lib", result.Packages[0].Name);
+        Assert.Equal("@alice/secret-lib", result.Packages[0].Package.Name);
     }
 
     [Fact]

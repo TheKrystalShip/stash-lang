@@ -2338,6 +2338,41 @@
             }
           },
           {
+            "name": "keyword",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "license",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "deprecated",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/PackageSortOrder"
+            }
+          },
+          {
             "name": "page",
             "in": "query",
             "schema": {
@@ -2989,6 +3024,9 @@
           }
         }
       },
+      "PackageSortOrder": {
+        "type": "integer"
+      },
       "PackageSummaryResponse": {
         "required": [
           "name",
@@ -3023,6 +3061,20 @@
           },
           "deprecated": {
             "type": "boolean"
+          },
+          "license": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ownerCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
           }
         }
       },
