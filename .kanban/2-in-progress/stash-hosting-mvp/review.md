@@ -30,7 +30,8 @@ correctness defect.
 
 ## F01 — [MINOR] `JsonStashBridge` loud-throw path is reachable but untested
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 24c89bd2
 **Files:** `Stash.Hosting/Marshalling/JsonStashBridge.cs:159-164`, `Stash.Tests/Embedding/HostMarshallerTests.cs:200-217`
 **Phase:** P3 (pass-2 fix follow-up)
 **Commit:** faf4a453
