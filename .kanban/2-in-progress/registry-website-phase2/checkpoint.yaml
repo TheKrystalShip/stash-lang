@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T15:27:10Z"
+updated: "2026-06-04T15:39:10Z"
 phases:
   P1:
     status: done
-    commit: fdec81d152e355db76d5a4097a132e8b9a745857
+    commit: 1d13ceb9edfc52ee3b7ffbdab5691122f9fd2629
     verified: true
     started: "2026-06-04T15:16:47Z"
-    completed: "2026-06-04T15:27:10Z"
+    completed: "2026-06-04T15:39:10Z"
     attempts: 1
-    notes: "Scaffold Stash.Registry.Web (net10.0 Razor Pages, Contracts-only ref); /health page wired to IRegistryClient.GetDiscoveryAsync; WebProjectIsolationMetaTests green (binding floor + Contracts present + Registry absent); fail-path fixture proves scan teeth via typeof-derived names"
+    notes: "Scaffold Stash.Registry.Web (net10.0 Razor Pages, Contracts-only ref); /health page; WebProjectIsolationMetaTests green (6 tests: reflection + csproj-parse, each with clean/stray fail-path fixtures); typeof-derived assembly names prevent vacuous pass"
   P2:
     status: pending
     commit: null
