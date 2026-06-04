@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Async facade for embedding the Stash scripting language in a .NET application.
@@ -82,4 +83,28 @@ public interface IStashHost : IAsyncDisposable
     /// <see cref="StashError.KindCancelled"/>.
     /// </returns>
     Task<StashResult<T>> TryCallAsync<T>(string fn, object? args = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Awaits an already-resolving <see cref="StashFuture"/> returned by an <c>async fn</c>
+    /// call and marshals the resolved value to <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// This method bridges a <see cref="StashFuture"/> that is already in flight (e.g. the
+    /// result of <c>CallAsync&lt;StashFuture&gt;("myAsyncFn", …)</c>) to a typed CLR
+    /// <c>Task&lt;T&gt;</c>. It does NOT drain the per-VM event-loop callback queue — if the
+    /// future's resolution depends on a callback being delivered without first hitting a
+    /// drain point (<c>await task.all(…)</c>, <c>time.sleep(…)</c>, etc.), the future will
+    /// never resolve and this call will hang until <paramref name="ct"/> is fired.
+    /// </remarks>
+    /// <typeparam name="T">Expected CLR type of the future's resolved value.</typeparam>
+    /// <param name="future">The <see cref="StashFuture"/> to await.</param>
+    /// <param name="ct">Optional cancellation token; cancels the await (not the future).</param>
+    /// <returns>The resolved value converted to <typeparamref name="T"/>.</returns>
+    /// <exception cref="StashScriptException">
+    /// Thrown when the future faulted with a Stash-level <c>RuntimeError</c>.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// Propagated when <paramref name="ct"/> fires before the future resolves.
+    /// </exception>
+    Task<T> InvokeAsync<T>(StashFuture future, CancellationToken ct = default);
 }

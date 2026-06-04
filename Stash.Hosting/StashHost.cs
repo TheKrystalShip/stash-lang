@@ -9,6 +9,8 @@ using Stash.Bytecode;
 using Stash.Hosting.Marshalling;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
+using Stash.Runtime.Types;
+using Stash.Stdlib.BuiltIns;
 
 /// <summary>
 /// Default implementation of <see cref="IStashHost"/>.
@@ -282,8 +284,71 @@ public sealed class StashHost : IStashHost
         if (_disposed) return ValueTask.CompletedTask;
         _disposed = true;
         _engine = null;
+
+        // Null process-global static hook slots so subsequent test fixtures (and future
+        // host instances) see a clean slate. These are CLI-only hooks; a pure embedder
+        // never sets them, so resetting on dispose is test-isolation–friendly and safe.
+        // (Decision logged in brief.md: "Disposal nulls process-global static hooks".)
+        PromptBuiltIns.ResetPromptFn();
+        PromptBuiltIns.ResetContinuationFn();
+        PromptBuiltIns.ResetBootstrapHandler = null;
+        ProcessBuiltIns.HistoryListProvider = null;
+        ProcessBuiltIns.HistoryClearHandler = null;
+        ProcessBuiltIns.HistoryAddHandler = null;
+        CompleteBuiltIns.ResetAllForTesting();
+
         _gate.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public async Task<T> InvokeAsync<T>(StashFuture future, CancellationToken ct = default)
+    {
+        if (future is null) throw new ArgumentNullException(nameof(future));
+
+        // Bridge an already-resolving future to CLR Task<T>.
+        // We do NOT drain the per-VM event-loop callback queue — this is deliberate
+        // v1 contract (see IStashHost.InvokeAsync XML doc and brief.md Non-Goals).
+        // If the future depends on an undelivered callback, this call will hang until
+        // ct fires.
+        Task<object?> rawTask = future.DotNetTask;
+
+        object? rawResult;
+        try
+        {
+            // Honor ct: check immediately (pre-cancelled token fires at the first opportunity),
+            // then race the future against cancellation if it has not resolved yet.
+            ct.ThrowIfCancellationRequested();
+
+            if (ct.CanBeCanceled && !rawTask.IsCompleted)
+            {
+                // Race: await whichever of (future completion, cancellation) wins first.
+                // Task.Delay(Infinite, ct) completes as cancelled when ct fires.
+                var cancelTask = Task.Delay(Timeout.Infinite, ct);
+                Task winner = await Task.WhenAny(rawTask, cancelTask).ConfigureAwait(false);
+                if (winner == cancelTask)
+                {
+                    // ct fired before the future resolved — propagate as OCE.
+                    ct.ThrowIfCancellationRequested();
+                    // If ThrowIfCancellationRequested doesn't throw (race: ct was reset),
+                    // fall through to await rawTask normally.
+                }
+            }
+
+            rawResult = await rawTask.ConfigureAwait(false);
+        }
+        catch (RuntimeError ex)
+        {
+            throw new StashScriptException(BuildStashError(ex));
+        }
+        catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
+        {
+            throw new StashScriptException(BuildStashError(re));
+        }
+
+        // Convert the raw CLR value (object?) back to StashValue, then to T.
+        StashValue stashResult = StashValue.FromObject(rawResult);
+        return HostMarshaller.FromStash<T>(stashResult)!;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

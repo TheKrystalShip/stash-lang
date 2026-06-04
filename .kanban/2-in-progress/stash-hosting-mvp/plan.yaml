@@ -121,8 +121,14 @@ phases:
     files:
       - Stash.Hosting/StashHost.cs
       - Stash.Hosting/IStashHost.cs
+      - Stash.Hosting/Marshalling/HostMarshaller.cs
+      # Plan correction: ExecuteVMFunctionInlineDirect did not handle async fn (no-frame path)
+      # which caused IndexOutOfRangeException when CallAsync<StashFuture> was called.
+      # Fix: added early-return check for _frameCount == savedFrameCount (async fn case).
+      - Stash.Bytecode/VM/VirtualMachine.Functions.cs
       - Stash.Tests/Embedding/StashHostDisposalTests.cs
       - Stash.Tests/Embedding/StashHostInvokeAsyncTests.cs
+      - Stash.Tests/Embedding/StashHostStatefulnessTests.cs
     verify:
       - dotnet build Stash.Hosting
       - dotnet test --filter "FullyQualifiedName~StashHostDisposalTests|FullyQualifiedName~StashHostInvokeAsyncTests|FullyQualifiedName~MultiEngineIsolationTests"

@@ -231,6 +231,16 @@ internal static class HostMarshaller
                 $"Cannot convert Stash value tag '{value.Tag}' to 'List<StashValue>'.");
         }
 
+        // StashFuture passthrough — returned by async fn calls; caller bridges via InvokeAsync<T>
+        if (typeof(T) == typeof(StashFuture))
+        {
+            if (value.Tag == StashValueTag.Obj && value.AsObj is StashFuture future)
+                return (T)(object)future;
+            throw new InvalidCastException(
+                $"Cannot convert Stash value tag '{value.Tag}' to 'StashFuture': " +
+                $"the value is not a Future. Ensure the Stash function is declared with 'async fn'.");
+        }
+
         // All other types (POCO, records, etc.) → v2
         throw new InvalidCastException(
             $"Cannot convert Stash value to '{typeof(T).Name}': reflection-based POCO/record " +
