@@ -52,14 +52,16 @@ public sealed class StashHost : IStashHost
     {
         if (source is null) throw new ArgumentNullException(nameof(source));
         ThrowIfDisposed();
+        ct.ThrowIfCancellationRequested();
 
         // Compilation is CPU-bound but fast (lex+parse+resolve), and it doesn't touch the
         // per-host engine — so it runs directly on the calling thread inside a completed task.
         StashScript? script = _engine!.Compile(source, out IReadOnlyList<string> errors);
         if (script is null || errors.Count > 0)
         {
-            string msg = errors.Count > 0 ? errors[0] : "Compilation failed.";
-            throw new InvalidOperationException($"Stash compilation failed: {msg}");
+            string msg = errors.Count > 0 ? string.Join("; ", errors) : "Compilation failed.";
+            throw new StashScriptException(new StashError(
+                StashError.KindParseError, msg, null, Array.Empty<StackFrameInfo>()));
         }
 
         return Task.FromResult(new CompiledScript(script));
@@ -99,7 +101,7 @@ public sealed class StashHost : IStashHost
                 {
                     return (StashValue.Null, (IReadOnlyList<StashError>)new[]
                     {
-                        new StashError("StepLimitExceeded", ex.Message,
+                        new StashError(StashError.KindStepLimitExceeded, ex.Message,
                             null, Array.Empty<StackFrameInfo>())
                     });
                 }
@@ -148,7 +150,7 @@ public sealed class StashHost : IStashHost
                 {
                     return (StashValue.Null, (IReadOnlyList<StashError>)new[]
                     {
-                        new StashError("StepLimitExceeded", ex.Message,
+                        new StashError(StashError.KindStepLimitExceeded, ex.Message,
                             null, Array.Empty<StackFrameInfo>())
                     });
                 }
@@ -253,7 +255,7 @@ public sealed class StashHost : IStashHost
                 {
                     return (StashValue.Null, (IReadOnlyList<StashError>)new[]
                     {
-                        new StashError("StepLimitExceeded", ex.Message,
+                        new StashError(StashError.KindStepLimitExceeded, ex.Message,
                             null, Array.Empty<StackFrameInfo>())
                     });
                 }

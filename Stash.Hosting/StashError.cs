@@ -25,4 +25,18 @@ public sealed record StashError(
     /// Defined here so it appears in exactly one place and callers can match it symbolically.
     /// </summary>
     public const string KindCancelled = "Cancelled";
+
+    /// <summary>
+    /// The synthetic error kind emitted when the VM exceeds the configured step limit
+    /// (<see cref="StashHostOptions.StepLimit"/>). Defined here so all three construction
+    /// sites in <see cref="StashHost"/> reference the same string from one place.
+    /// </summary>
+    public const string KindStepLimitExceeded = "StepLimitExceeded";
+
+    /// <summary>
+    /// The error kind emitted by <see cref="IStashHost.CompileAsync"/> when the source
+    /// fails lexing, parsing, or semantic resolution. Defined here so callers can match
+    /// it symbolically rather than comparing against a raw string literal.
+    /// </summary>
+    public const string KindParseError = "ParseError";
 }

@@ -26,7 +26,13 @@ public interface IStashHost : IAsyncDisposable
     /// <param name="source">Stash source code.</param>
     /// <param name="ct">Optional cancellation token.</param>
     /// <returns>A compiled script.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when compilation fails (parse/lex errors).</exception>
+    /// <exception cref="StashScriptException">
+    /// Thrown when compilation fails (parse/lex/semantic errors).
+    /// <see cref="StashScriptException.Error"/> will have <see cref="StashError.Kind"/> ==
+    /// <see cref="StashError.KindParseError"/> and <see cref="StashError.Message"/> containing the
+    /// first error (or all errors joined with "; "). The token is honored only as a pre-flight
+    /// check — compilation is fast enough that mid-operation cancellation is not meaningful.
+    /// </exception>
     Task<CompiledScript> CompileAsync(string source, CancellationToken ct = default);
 
     /// <summary>

@@ -2,6 +2,7 @@ namespace Stash.Tests.Embedding;
 
 using System;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using Stash.Hosting;
 using Stash.Runtime;
@@ -153,15 +154,31 @@ public class StashHostBasicsTests
         Assert.Equal(123L, r.Value.AsInt);
     }
 
-    // ── #7: compile error throws ──────────────────────────────────────────
+    // ── #7: compile error throws structured StashScriptException ─────────
 
     [Fact]
-    public async Task CompileAsync_InvalidSource_ThrowsInvalidOperationException()
+    public async Task CompileAsync_InvalidSource_ThrowsStashScriptException_WithParseErrorKind()
     {
         await using var host = new StashHost();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        var ex = await Assert.ThrowsAsync<StashScriptException>(
             () => host.CompileAsync("let = ;"));  // parse error
+        Assert.Equal(StashError.KindParseError, ex.Error.Kind);
+        Assert.NotEmpty(ex.Error.Message);
+    }
+
+    // ── #8b: pre-cancelled token is honored ──────────────────────────────
+
+    [Fact]
+    public async Task CompileAsync_PreCancelledToken_ThrowsOperationCanceledException()
+    {
+        await using var host = new StashHost();
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => host.CompileAsync("return 1;", cts.Token));
     }
 
     // ── #8: StashEngine.RunRaw non-swallowing ─────────────────────────────
