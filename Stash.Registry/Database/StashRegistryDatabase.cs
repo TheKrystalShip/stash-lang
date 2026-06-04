@@ -210,12 +210,20 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         // keyword: exact match against one element of the JSON-array keywords string.
         // The keywords column stores a JSON array (e.g. '["foo","bar"]'); we match
         // the quoted substring "%\"<keyword>\"%" to avoid false partial-word hits.
+        //
+        // The keyword is escaped so that LIKE metacharacters (%, _, \) in the input
+        // are treated as literals — preventing over-matching.  The ESCAPE '\' clause
+        // is supported by both SQLite and PostgreSQL.
         if (!string.IsNullOrEmpty(keyword))
         {
-            string kw = keyword;
+            string esc = keyword
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_")
+                .Replace("\"", "\\\"");
             queryable = queryable.Where(p =>
                 p.Keywords != null &&
-                EF.Functions.Like(p.Keywords, $"%\"{kw}\"%"));
+                EF.Functions.Like(p.Keywords, $"%\"{esc}\"%", "\\"));
         }
 
         // license: exact match against PackageRecord.License (SPDX identifier).
@@ -259,9 +267,11 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             PackageSortOrder.Name => queryable
                 .OrderBy(p => p.Name),
             PackageSortOrder.Updated => queryable
-                .OrderByDescending(p => p.UpdatedAt),
+                .OrderByDescending(p => p.UpdatedAt)
+                .ThenBy(p => p.Name),
             PackageSortOrder.Published => queryable
-                .OrderByDescending(p => p.CreatedAt),
+                .OrderByDescending(p => p.CreatedAt)
+                .ThenBy(p => p.Name),
             _ => queryable   // Relevance (default)
                 .OrderBy(p => p.Name),
         };
@@ -316,6 +326,7 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         int totalCount = await queryable.CountAsync();
         var items = await queryable
             .OrderByDescending(v => v.PublishedAt)
+            .ThenByDescending(v => v.Version)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

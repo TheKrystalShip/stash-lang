@@ -348,6 +348,65 @@ public sealed class VersionsEndpointTests : RegistryAuthzTestBase
         Assert.StartsWith("W/", etagHeader);
     }
 
+    // ── Tied PublishedAt — deterministic version ordering ──────────────────────
+
+    /// <summary>
+    /// When multiple versions share the same <c>PublishedAt</c> timestamp the
+    /// secondary tie-breaker (<c>Version</c> descending) must produce a deterministic
+    /// order across pages so that offset pagination does not repeat or skip rows.
+    ///
+    /// Seed three versions (<c>3.0.0</c>, <c>1.0.0</c>, <c>2.0.0</c>) all with the
+    /// same <c>PublishedAt</c> — inserted in non-semver order to detect any implicit
+    /// rowid/insertion ordering.  After fixing the tie-breaker, page 1 (pageSize=2)
+    /// must yield <c>3.0.0, 2.0.0</c> and page 2 must yield <c>1.0.0</c>.
+    /// </summary>
+    [Fact]
+    public async Task GetVersions_TiedPublishedAt_DeterministicOrder()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client = ctx.Factory.CreateClient();
+
+        string ownerToken = await RegisterAndGetTokenAsync(client, "tie-pub-m");
+        await SeedScopeAsync(ctx.Factory, "tie-pub-m", "tie-pub-m");
+        await SeedPackageAsync(ctx.Factory, "@tie-pub-m/pub-pkg", "tie-pub-m", visibility: "public");
+
+        // Seed all three versions with the SAME PublishedAt so ties are guaranteed.
+        var tiedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        using (var scope = ctx.Factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+            // Insert in non-version-sorted order: 3, 1, 2 — to detect implicit rowid ordering.
+            foreach (var ver in new[] { "3.0.0", "1.0.0", "2.0.0" })
+            {
+                await db.AddVersionAsync("@tie-pub-m/pub-pkg", new VersionRecord
+                {
+                    PackageName = "@tie-pub-m/pub-pkg",
+                    Version = ver,
+                    Integrity = "sha256-test",
+                    PublishedAt = tiedAt,
+                    PublishedBy = "seeder"
+                });
+            }
+        }
+
+        // Page 1: expect 3.0.0 then 2.0.0 (Version DESC tie-breaker).
+        var resp1 = await client.GetAsync("/api/v1/packages/tie-pub-m/pub-pkg/versions?page=1&pageSize=2");
+        Assert.Equal(HttpStatusCode.OK, resp1.StatusCode);
+        using var doc1 = JsonDocument.Parse(await resp1.Content.ReadAsStringAsync());
+        var items1 = doc1.RootElement.GetProperty("items");
+        Assert.Equal(2, items1.GetArrayLength());
+        Assert.Equal("3.0.0", items1[0].GetProperty("version").GetString());
+        Assert.Equal("2.0.0", items1[1].GetProperty("version").GetString());
+
+        // Page 2: expect 1.0.0.
+        var resp2 = await client.GetAsync("/api/v1/packages/tie-pub-m/pub-pkg/versions?page=2&pageSize=2");
+        Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+        using var doc2 = JsonDocument.Parse(await resp2.Content.ReadAsStringAsync());
+        var items2 = doc2.RootElement.GetProperty("items");
+        Assert.Equal(1, items2.GetArrayLength());
+        Assert.Equal("1.0.0", items2[0].GetProperty("version").GetString());
+    }
+
     // ── ETag invalidation on version deprecate/undeprecate ─────────────────────
 
     /// <summary>

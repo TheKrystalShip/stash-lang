@@ -255,6 +255,65 @@ public sealed class SearchV2SortTests
         Assert.Equal("older-updated", items[1].GetProperty("name").GetString());
     }
 
+    // ── sort=Updated tie-breaker ──────────────────────────────────────────────
+
+    /// <summary>
+    /// When multiple packages share the same <c>UpdatedAt</c> timestamp, the secondary
+    /// tie-breaker (<c>Name</c> ascending) must produce a deterministic order across
+    /// pages so that offset pagination does not repeat or skip rows.
+    ///
+    /// Seed three packages (<c>c-tied</c>, <c>a-tied</c>, <c>b-tied</c>) with the
+    /// same <c>UpdatedAt</c>, then request page 1 (pageSize=2) and page 2 (pageSize=2)
+    /// and assert the stable alphabetical secondary order.
+    /// </summary>
+    [Fact]
+    public async Task Sort_Updated_TiedTimestamps_DeterministicOrder()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        var tiedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        // Seed in non-alphabetical order to detect any implicit rowid/insertion ordering.
+        await SeedPackageAsync(factory, new PackageRecord
+        {
+            Name = "c-tied", Latest = "1.0.0",
+            CreatedAt = tiedAt, UpdatedAt = tiedAt,
+            Visibility = Visibilities.Public
+        });
+        await SeedPackageAsync(factory, new PackageRecord
+        {
+            Name = "a-tied", Latest = "1.0.0",
+            CreatedAt = tiedAt, UpdatedAt = tiedAt,
+            Visibility = Visibilities.Public
+        });
+        await SeedPackageAsync(factory, new PackageRecord
+        {
+            Name = "b-tied", Latest = "1.0.0",
+            CreatedAt = tiedAt, UpdatedAt = tiedAt,
+            Visibility = Visibilities.Public
+        });
+
+        // Page 1 (first 2 rows)
+        var resp1 = await client.GetAsync("/api/v1/search?sort=Updated&page=1&pageSize=2");
+        Assert.Equal(HttpStatusCode.OK, resp1.StatusCode);
+        using var doc1 = JsonDocument.Parse(await resp1.Content.ReadAsStringAsync());
+        var items1 = doc1.RootElement.GetProperty("items");
+        Assert.Equal(2, items1.GetArrayLength());
+        Assert.Equal("a-tied", items1[0].GetProperty("name").GetString());
+        Assert.Equal("b-tied", items1[1].GetProperty("name").GetString());
+
+        // Page 2 (third row)
+        var resp2 = await client.GetAsync("/api/v1/search?sort=Updated&page=2&pageSize=2");
+        Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+        using var doc2 = JsonDocument.Parse(await resp2.Content.ReadAsStringAsync());
+        var items2 = doc2.RootElement.GetProperty("items");
+        Assert.Equal(1, items2.GetArrayLength());
+        Assert.Equal("c-tied", items2[0].GetProperty("name").GetString());
+    }
+
     // ── sort=Published ────────────────────────────────────────────────────────
 
     /// <summary>
@@ -296,6 +355,61 @@ public sealed class SearchV2SortTests
         // Most recently published first
         Assert.Equal("newer-published", items[0].GetProperty("name").GetString());
         Assert.Equal("older-published", items[1].GetProperty("name").GetString());
+    }
+
+    // ── sort=Published tie-breaker ────────────────────────────────────────────
+
+    /// <summary>
+    /// When multiple packages share the same <c>CreatedAt</c> timestamp, the secondary
+    /// tie-breaker (<c>Name</c> ascending) must produce a deterministic order across
+    /// pages so that offset pagination does not repeat or skip rows.
+    ///
+    /// Same design as <see cref="Sort_Updated_TiedTimestamps_DeterministicOrder"/>
+    /// but exercises the <c>sort=Published</c> code path.
+    /// </summary>
+    [Fact]
+    public async Task Sort_Published_TiedTimestamps_DeterministicOrder()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        var tiedAt = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await SeedPackageAsync(factory, new PackageRecord
+        {
+            Name = "c-pub-tied", Latest = "1.0.0",
+            CreatedAt = tiedAt, UpdatedAt = tiedAt,
+            Visibility = Visibilities.Public
+        });
+        await SeedPackageAsync(factory, new PackageRecord
+        {
+            Name = "a-pub-tied", Latest = "1.0.0",
+            CreatedAt = tiedAt, UpdatedAt = tiedAt,
+            Visibility = Visibilities.Public
+        });
+        await SeedPackageAsync(factory, new PackageRecord
+        {
+            Name = "b-pub-tied", Latest = "1.0.0",
+            CreatedAt = tiedAt, UpdatedAt = tiedAt,
+            Visibility = Visibilities.Public
+        });
+
+        var resp1 = await client.GetAsync("/api/v1/search?sort=Published&page=1&pageSize=2");
+        Assert.Equal(HttpStatusCode.OK, resp1.StatusCode);
+        using var doc1 = JsonDocument.Parse(await resp1.Content.ReadAsStringAsync());
+        var items1 = doc1.RootElement.GetProperty("items");
+        Assert.Equal(2, items1.GetArrayLength());
+        Assert.Equal("a-pub-tied", items1[0].GetProperty("name").GetString());
+        Assert.Equal("b-pub-tied", items1[1].GetProperty("name").GetString());
+
+        var resp2 = await client.GetAsync("/api/v1/search?sort=Published&page=2&pageSize=2");
+        Assert.Equal(HttpStatusCode.OK, resp2.StatusCode);
+        using var doc2 = JsonDocument.Parse(await resp2.Content.ReadAsStringAsync());
+        var items2 = doc2.RootElement.GetProperty("items");
+        Assert.Equal(1, items2.GetArrayLength());
+        Assert.Equal("c-pub-tied", items2[0].GetProperty("name").GetString());
     }
 
     // ── sort=downloads returns 400 (Bucket-B not accepted) ────────────────────

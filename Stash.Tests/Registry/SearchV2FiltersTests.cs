@@ -312,6 +312,47 @@ public sealed class SearchV2FiltersTests
         Assert.Equal(0, doc.RootElement.GetProperty("totalCount").GetInt32());
     }
 
+    /// <summary>
+    /// A keyword containing a LIKE wildcard character (<c>%</c>) must be treated
+    /// as a literal — it must NOT wildcard-match packages whose keyword only starts
+    /// with the prefix before the <c>%</c>.
+    ///
+    /// Seed:
+    ///   pkg-percent  → keywords ["c%"]   (literal percent sign)
+    ///   pkg-cpp      → keywords ["cpp"]  (no percent)
+    ///
+    /// <c>keyword=c%</c> with the unescaped bug would return both rows (cpp matches
+    /// the <c>c*</c> wildcard pattern).  After escaping it returns only pkg-percent.
+    /// </summary>
+    [Fact]
+    public async Task Search_KeywordWithPercent_TreatedAsLiteral()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        var pkgPercent = MakePackage("pkg-percent");
+        pkgPercent.Keywords = "[\"c%\"]";
+        await SeedPackageAsync(factory, pkgPercent);
+
+        var pkgCpp = MakePackage("pkg-cpp");
+        pkgCpp.Keywords = "[\"cpp\"]";
+        await SeedPackageAsync(factory, pkgCpp);
+
+        var response = await client.GetAsync("/api/v1/search?keyword=c%25"); // c% URL-encoded
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string content = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(content);
+        var items = doc.RootElement.GetProperty("items");
+
+        // Without the escape fix: totalCount == 2 (% is a wildcard, matching "cpp").
+        // With the escape fix: totalCount == 1 (only the package whose keyword is literally "c%").
+        Assert.Equal(1, items.GetArrayLength());
+        Assert.Equal("pkg-percent", items[0].GetProperty("name").GetString());
+    }
+
     // ── deprecated filter ─────────────────────────────────────────────────────
 
     /// <summary>
