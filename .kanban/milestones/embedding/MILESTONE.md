@@ -75,20 +75,26 @@ each phase consumes the prior phase's artifacts). Detail the current phase; the 
   passes (pass 2 clean). final_verify green (12954 passed / 0 failed). Derived ledger:
   `done:2, in-flight:0`.
 
-- **Phase 3 — `Stash.Hosting` host SDK · NEXT (unblocked once phase 2 merges to `main`).** Consumes
-  a hermetic engine: `StashEngine` facade, host-objects-by-reference, marshalling hybrid,
-  `InvokeAsync` bridging `StashFuture`, `IAsyncDisposable`. **Do NOT `/spec` until `hermetic-vm`
-  is merged to `main`** (it's promoted on the branch but not yet integrated — run
-  `scripts/checkpoint/checkpoint.stash worktree-finish hermetic-vm` from main first). Prior analysis:
+- **Phase 3 — `Stash.Hosting` host SDK · NEXT (unblocked — phase 2 merged to `main` @ `975ffec8`).**
+  Consumes a hermetic engine: `StashEngine` facade, host-objects-by-reference, marshalling hybrid,
+  `InvokeAsync` bridging `StashFuture`, `IAsyncDisposable`. `hermetic-vm` is merged, so phase 3 is
+  now **`/spec`-able**. Prior analysis:
   `.kanban/0-backlog/tools/Stash Embedding API — Host SDK Design Analysis.md` — read through the
-  supersessions in the phase-2 note §5 (snapshot model, pool demotion, async-is-built). **Strong
-  candidate to fold in:** the callback-marshaling event-loop backlog item (the VM pool, if any,
-  also lives here per phase-2 note §9).
+  supersessions in the phase-2 note §5 (snapshot model, pool demotion, async-is-built). **Confirmed
+  fold-in (user ruling 2026-06-04):** the callback-marshaling event-loop
+  (`.kanban/0-backlog/language/callback-vm-thread-marshaling.md`, "Decided design" section) is part
+  of this phase's spec, not a standalone feature — hybrid marshaling queue, v1 drain points
+  `time.sleep` + explicit `event.poll()`/`event.loop()` (**end-of-script exits and drops** under the
+  explicit-park lifetime model — not a drain point), `await`-drain deferred to v2. The four sub-question
+  contracts (FIFO/no-coalescing, run-to-completion drain, registry-mutation, async-vs-callback
+  asymmetry, lifetime) are **resolved** in the backlog note's "Resolved design questions" section. (The
+  VM pool, if any, also lives here per phase-2 note §9.)
 
 ### Decisions & learnings (append as you go)
 
 | Date | Decision / learning | Why it changed the plan |
 | --- | --- | --- |
+| 2026-06-04 | **Callback-marshaling: design decided + folded into phase 3.** The hermetic-VM regression (background `fs.watch`/signal callbacks can't mutate outer state) gets the **marshaling** fix (per-VM `ConcurrentQueue`; VM thread drains while parked → zero-concurrency → safe shared mutation, dropping the child-VM clone for queued callbacks), NOT a Go-style channel. **Hybrid pump model**, v1 drain points = `time.sleep` + explicit `event.poll()`/`event.loop()` (end-of-script **exits + drops** under explicit-park, not a drain point); `await`-drain deferred to v2; tight-loop SIGTERM punted (stays on cancellation). **Sub-questions resolved 2026-06-04:** FIFO + no queue-coalescing (unbounded-v1, bounded-drop-newest as v2 seam); non-reentrant run-to-completion drain via `_isDraining` guard (`sleep` becomes a `WaitAny` drain-loop; drain-until-empty to avoid lost-wakeups); registry-mutation-from-callback works as-is; async stays parallel-isolated vs event-callback serial-shared (forced, not chosen — watchers bind to root VM); **lifetime = explicit-park** (no implicit keepalive). **Delivery must NOT fire from `RunInner`'s 256-iter safepoint** — keep cancellation (fail-fast, exists) separate from callback delivery (runs user bytecode, coarse yield points only). **Folded into phase 3**, not a standalone spec. Full design: the backlog note's "Decided design" section. | The autopilot-era ruling (ship isolated, backlog the fix) is now resolved into a concrete, spec-able design. User chose fold-into-phase-3 over standalone since the host SDK is the natural home for the event loop; chose hybrid (accepting the JS/Lua "surprise mutation at `sleep`" bargain) since restoring closure-mutation ergonomics is the whole point. |
 | 2026-06-02 | **Phase 2 (hermetic VM) DONE** (promoted on `feature/hermetic-vm`, awaiting merge). **Design ruling:** background-thread callbacks (`fs.watch`/signal/timer, via `InvokeCallbackDirect`'s pool-thread branch) are **isolated/call-local** like async spawns — Stash has no event-loop to marshal them onto the VM thread, so "share freely" (JS/Lua model) isn't available without building one. The marshaling event-loop is the principled long-term fix, backlogged at `.kanban/0-backlog/language/callback-vm-thread-marshaling.md` — a strong phase-3 candidate. | The autopilot hit a question the plan didn't anticipate: isolating async-child state (2A-2/2A-3) silently changed callback semantics (callbacks can no longer mutate outer state). Resolved by ruling rather than shipping a half-isolated race. Also exposed (and fixed) a parallel-task data race in `BuildChildGlobals` and an upvalue-isolation gap on the callback path — both full-suite-only, invisible to filtered per-phase verifies. |
 | 2026-06-01 | **Phase 1 (`readonly` modifier) DONE** — driven by the first real `/autopilot` run (6 impl phases + 8 review findings across two passes), merged `--no-ff` to `main` @ `822e6146` with green final_verify. Phase 2 (hermetic VM) is now **unblocked** and `/spec`-able. | Closes the strict-sequencing gate. Phase 2's async-child freeze-or-clone rule can now consume the concrete `IsFrozen`/`DeepFreeze` API instead of guessing against types that didn't exist. |
 | 2026-06-01 | Milestone created. User chose **strict sequencing** (readonly → *full* hermetic → host SDK) over splitting the readonly-independent hermetic slice (IC-slot cloning + cwd/env/signal virtualization) out as an early standalone spec. | Keeps phase 2 a single coherent spec and honors the design note's original "wait for phase 1" guidance. Accepted trade-off: the engine↔engine spilling fix **and** the *Critical* IC-slot corruption fix wait behind `readonly`'s 6 phases. (If the async race or IC corruption starts biting before readonly lands, revisit — the Scope-A slice is genuinely readonly-independent and could be pulled forward.) |
