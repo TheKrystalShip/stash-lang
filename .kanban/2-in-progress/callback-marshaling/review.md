@@ -254,7 +254,8 @@ implementation.
 
 ## F03 — [MINOR] `examples/event_loop_shutdown.stash` is over-complex for an example and trips multiple analyzer rules
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 5f3f40ca
 **Files:** `examples/event_loop_shutdown.stash` (220 lines)
 **Phase:** P3
 **Commit:** 3e1d14e2
