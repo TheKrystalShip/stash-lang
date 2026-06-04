@@ -56,6 +56,7 @@ Create or update a `.stash` file in `examples/` that showcases the new functiona
 - File name should clearly describe the feature (e.g., `durations.stash`, `ip_addresses.stash`).
 - Demonstrate the feature's key capabilities: core syntax, property access, operators, practical use cases.
 - Follow existing example style — use `io.println()` to show results, include comments explaining what's happening.
+- **Verify the example with the freshly-built binary, not the installed `stash`.** The PATH `stash` predates unmerged changes, so it runs OLD behavior (or hangs — e.g. an example relying on a not-yet-shipped semantic loops forever). Run via `dotnet run --project Stash.Cli/ -- examples/<file>.stash`; lint via `stash-check <file>` (the command is `stash-check`, not `stash lint`).
 
 ## 4. Tests (MANDATORY)
 

@@ -63,6 +63,8 @@ contract: `.claude/commands/autopilot.md`; tutorial: `.claude/WORKFLOW.md` → "
 
 The unfiltered `dotnet test` suite is **green** (0 failures). Author `final_verify` to run a full `dotnet test` (optionally a feature-scoped `--filter` for fast per-phase `verify:` steps, but the final gate runs everything). Do **not** add namespace-exclusion filters to "work around flakies" — there are none. If `dotnet test` fails, that is a real regression to investigate, not noise to filter. (A handful of tests are quarantined at the source with `[Fact(Skip = "<reason + backlog link>")]` for genuinely-deep deferred bugs; xUnit skips them automatically, so they never affect a run and need no filter.)
 
+**Background `run-verify` bare — never `| tail` it.** A shell pipeline's exit code is `tail`'s (≈always 0), so a fail-closed `FAIL` is reported as success, *and* `tail` truncates the `Failed: N` verdict line. Run it under the Bash tool's `run_in_background` with **no pipe** (the harness captures full output to the task file), then `grep`/read that file for the verdict. (A `| tail -40` once masked a 40-test regression as exit-0 here.)
+
 ### Workflow agents advance checkpoint state after the code commit
 
 `advance-checkpoint.stash` (called by implementer, reviewer, and resolver flows) rewrites `.kanban/2-in-progress/<slug>/checkpoint.yaml` *after* the corresponding code commit. Reviewer also writes a new `review.md`; resolver also flips finding statuses inside `review.md`. A turn that stops there ends dirty, and the next workflow command refuses on a dirty tree.
