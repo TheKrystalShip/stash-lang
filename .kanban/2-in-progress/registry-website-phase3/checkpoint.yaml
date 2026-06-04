@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase3
 current: null
-updated: "2026-06-04T22:37:34Z"
+updated: "2026-06-04T22:43:15Z"
 phases:
   A1:
     status: done
@@ -21,12 +21,12 @@ phases:
     notes: "IAuthenticatedRegistryClient + HttpAuthenticatedRegistryClient (fail-closed DI factory, SendAsync C1 chokepoint), Maintainer area with MaintainerAreaConventions ([Authorize] + own layout), GET /dashboard (SearchOwnedAsync), AuthClientChokepointMetaTests + SessionTokenLeakMetaTests; 39/39 tests green"
   A3:
     status: done
-    commit: 277c685b07f9e5ee7697780e1e8b83da83977b24
+    commit: 56899be3755e7cc894ef9447f4c9ab6ed979f823
     verified: true
     started: "2026-06-04T22:23:17Z"
-    completed: "2026-06-04T22:37:34Z"
+    completed: "2026-06-04T22:43:15Z"
     attempts: 1
-    notes: "Added Manage.cshtml.cs (5 POST handlers + 401/403/404 error mapping), 3 partial views, ViewLabels.cs constants, ManagePageTests.cs (15 tests), FieldDisciplineMetaTests extension. No magic visibility strings; chokepoint guards all green."
+    notes: "CSS fix applied: removed duplicate .badge/.btn-primary definitions; all 45 A3 tests pass."
   A4:
     status: pending
     commit: null
