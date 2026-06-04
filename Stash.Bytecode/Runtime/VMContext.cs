@@ -609,21 +609,83 @@ internal sealed class VMContext : IInterpreterContext
 
     public StashValue InvokeCallbackDirect(IStashCallable callable, System.ReadOnlySpan<StashValue> args)
     {
-        if (callable is VMFunction)
+        if (callable is VMFunction vmFn)
         {
             if (ActiveVM != null && System.Threading.Thread.CurrentThread.ManagedThreadId == MainThreadId)
             {
-                // Branch 1 — same thread: execute inline, shared semantics.
-                return ActiveVM.ExecuteVMFunctionInlineDirect((VMFunction)callable, args, null);
+                // Branch 1 — same thread, queue-owning root: execute inline, shared semantics.
+                return ActiveVM.ExecuteVMFunctionInlineDirect(vmFn, args, null);
             }
 
-            // Branch 2 — background thread: enqueue for delivery at the next drain point.
-            // We do NOT fork a child VM here — the queue delivers on the VM thread (zero
-            // concurrency) so shared semantics are safe without cloning.
-            // args must be copied because ReadOnlySpan<StashValue> is a ref struct and
-            // cannot be stored; the array is owned by the queue entry.
-            EnqueueCallback(callable, args.ToArray());
-            return StashValue.Null; // return value is discarded by both fs.watch and signal.on
+            if (ActiveVM != null)
+            {
+                // Branch 2 — background thread on the queue-owning root: ENQUEUE for delivery
+                // at the next drain point (fs.watch / signal.on path; serial-shared callback
+                // marshaling). We do NOT fork a child VM here — the queue delivers on the VM
+                // thread (zero concurrency) so shared semantics are safe without cloning.
+                // args must be copied because ReadOnlySpan<StashValue> is a ref struct and
+                // cannot be stored; the array is owned by the queue entry.
+                EnqueueCallback(callable, args.ToArray());
+                return StashValue.Null; // return value is discarded by both fs.watch and signal.on
+            }
+
+            // Branch 3 — forked child (ActiveVM == null): execute via a child VM fork.
+            // This path is taken by task.run / task.parMap / task.timeout / process.exec exit
+            // callbacks / TCP accept — all of which run on a forked child context where ActiveVM
+            // is null. These use the parallel-isolated async contract: real thread, cloned state,
+            // communicate via the awaited Future. The locked design Q3 asymmetry:
+            //   async = parallel-isolated (this branch)
+            //   event callback = serial-shared (Branch 2 above)
+            if (Globals != null)
+            {
+                // Cross-thread path: apply freeze-or-clone to globals so the child gets a
+                // private copy of any non-frozen mutable values (no cross-thread data races).
+                var childGlobals = IsolationHelpers.BuildChildGlobals(Globals);
+                // Snapshot upvalues so the child gets private copies of every reference-typed
+                // captured local.  Without this, the child's frame would share the parent's
+                // live Upvalue objects, letting a background-thread write race on a captured
+                // dict / array / struct.  Mirrors what SpawnAsyncFunction does for async forks.
+                var isolatedUpvalues = IsolationHelpers.SnapshotUpvalues(vmFn.Upvalues);
+                // Ensure ModuleGlobals on the isolated VMFunction points at the child-local
+                // globals copy when the callback was defined in the main module (i.e. when
+                // vmFn.ModuleGlobals is the parent's live _globals or null).  For callbacks
+                // imported from a separate module, keep the original module dict — same logic
+                // as SpawnAsyncFunction's capturedModuleGlobals computation.
+                var isolatedModuleGlobals = (vmFn.ModuleGlobals is null || ReferenceEquals(vmFn.ModuleGlobals, Globals))
+                    ? childGlobals
+                    : vmFn.ModuleGlobals;
+                var isolatedFn = new VMFunction(vmFn.Chunk, isolatedUpvalues) { ModuleGlobals = isolatedModuleGlobals };
+                var childVm = new VirtualMachine(childGlobals, CancellationToken);
+                childVm.Output = Output;
+                childVm.ErrorOutput = ErrorOutput;
+                childVm.Input = Input;
+                childVm.CurrentFile = CurrentFile;
+                childVm.ScriptArgs = ScriptArgs;
+                childVm.EmbeddedMode = EmbeddedMode;
+                if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
+                if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
+                if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
+                // Pass a snapshot of the parent's import stack so the child starts with an
+                // independent copy of any in-progress imports, not the parent's live set.
+                // This prevents spurious "circular import" errors from the parent's in-flight
+                // imports racing with the child's import calls on a background thread.
+                //
+                // MUST use IsolationHelpers.SnapshotImportStack (explicit foreach with version-
+                // checked enumerator) and NOT pass the live reference directly.  Passing the live
+                // ref enumerates the parent's HashSet on the background thread while Modules.cs
+                // may be calling _importStack.Add/Remove on the parent's main thread, causing a
+                // silent torn-snapshot or InvalidOperationException (swallowed by the callback's
+                // try/catch → silent callback loss).  The bounded-retry snapshot mirrors the
+                // SnapshotEntries guard added for globals in commit 224c52e3.
+                if (ImportStack != null)
+                    childVm.InitImportStack(IsolationHelpers.SnapshotImportStack(ImportStack));
+
+                childVm.InitGlobalSlots(vmFn.Chunk);
+                StashValue[] argsCopy = args.ToArray();
+                return childVm.CallClosureDirect(isolatedFn, argsCopy);
+                // Note: we no longer call ActiveVM?.RefreshGlobalSlots() because the child
+                // now has its own isolated globals dict — writes are call-local, not shared.
+            }
         }
 
         // Non-VMFunction callables (native delegates, etc.): fall through to fork path.

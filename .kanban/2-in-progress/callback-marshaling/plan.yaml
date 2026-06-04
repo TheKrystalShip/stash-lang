@@ -54,7 +54,7 @@ phases:
     verify:
       - dotnet build Stash.Bytecode/Stash.Bytecode.csproj
       - dotnet build Stash.Stdlib/Stash.Stdlib.csproj
-      - dotnet test --filter "FullyQualifiedName~FsWatchBuiltInsTests|FullyQualifiedName~SignalNamespaceTests|FullyQualifiedName~SignalImplTests|FullyQualifiedName~CallbackDeepCloneRaceStressTests|FullyQualifiedName~CallbackImportRaceStressTests|FullyQualifiedName~MultiEngineIsolationTests|FullyQualifiedName~AsyncIsolationTests"
+      - dotnet test --filter "FullyQualifiedName~FsWatchBuiltInsTests|FullyQualifiedName~SignalNamespaceTests|FullyQualifiedName~SignalImplTests|FullyQualifiedName~TaskBuiltInsTests|FullyQualifiedName~AsyncAwaitTests|FullyQualifiedName~CallbackDeepCloneRaceStressTests|FullyQualifiedName~CallbackImportRaceStressTests|FullyQualifiedName~MultiEngineIsolationTests|FullyQualifiedName~AsyncIsolationTests"
     done_when:
       - A signal.on handler that sets a parent `let stop = false` flips it to true for the parent loop after the next time.sleep returns (graceful-shutdown pattern works end-to-end via SignalImpl.Dispatch from a background thread).
       - A fs.watch callback that sets a parent `let changed = false` flips it to true after the parent's next time.sleep returns when the watched file is touched.
