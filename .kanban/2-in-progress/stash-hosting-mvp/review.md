@@ -307,7 +307,8 @@ Add at minimum: `CompileAsync_InvalidSource_ThrowsStashScriptException_WithParse
 
 ## F05 — [LOW] `InvokeAsync` cancellation-race path leaks a `Task.Delay(Infinite, ct)` when the future wins
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 035a96cd
 **Files:** `Stash.Hosting/StashHost.cs:323-336`
 **Phase:** P3
 **Commit:** 5d5b7acc
@@ -430,7 +431,8 @@ Add `CompileAsync_PreCancelledToken_ThrowsOperationCanceledException`.
 
 ## F07 — [LOW] `InvokeAsync` uses `StashValue.FromObject` inline — a small leak of the "single chokepoint" property
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 035a96cd
 **Files:** `Stash.Hosting/StashHost.cs:350`, `Stash.Hosting/Marshalling/HostMarshaller.cs:1-15`
 **Phase:** P3
 **Commit:** 5d5b7acc

@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stash-hosting-mvp
 current: null
-updated: "2026-06-04T21:05:27Z"
+updated: "2026-06-04T21:12:28Z"
 phases:
   P1:
     status: done
