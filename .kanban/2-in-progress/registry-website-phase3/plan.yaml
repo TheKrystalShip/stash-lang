@@ -1,0 +1,292 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>
+
+schema_version: 1
+
+feature: registry-website-phase3
+
+title: Registry Website Phase 3 — Authenticated Maintainer Site
+
+# This feature is Phase 3 of the `website` milestone (see
+# .kanban/milestones/website/MILESTONE.md). The tag is what
+# `milestone-status.stash` reads to derive the milestone's ledger.
+milestone: website
+
+brief: ./brief.md
+
+created: 2026-06-04
+architect_session: registry-website-phase3-spec-2026-06-04
+
+# Cheap default that runs on every phase. Heavier checks live in per-phase
+# verify; the unfiltered full-suite gate lives in final_verify.
+default_verify:
+  - dotnet build Stash.sln
+
+# Safety rail listing every subtree this feature may touch. Implementers may
+# make small documented corrections within the per-phase `files` list.
+#
+# NOTE: Phase 2's files are deliberately NOT in scope — they must stay
+# byte-unchanged ON DISK. The pinned Phase-2 file set (enforced by
+# PhaseTwoFilesByteUnchangedMetaTests) is: Pages/{Index,Search,Package,
+# Version,Health}.cshtml(.cs), Pages/Shared/_Layout.cshtml,
+# Pages/Shared/_ViewImports.cshtml, Pages/Shared/_ViewStart.cshtml,
+# Services/{IRegistryClient,HttpRegistryClient,RegistryClientException}.cs,
+# Configuration/RegistryClientConfig.cs, Rendering/{IReadmeRenderer,
+# ReadmeRenderer,SafeUrl}.cs. The Maintainer area ships its OWN
+# _MaintainerLayout under Areas/Maintainer/Pages/Shared/.
+scope:
+  - Stash.Registry.Web/Areas/**
+  - Stash.Registry.Web/Auth/**
+  - Stash.Registry.Web/Pages/Login.cshtml
+  - Stash.Registry.Web/Pages/Login.cshtml.cs
+  - Stash.Registry.Web/Pages/Logout.cshtml
+  - Stash.Registry.Web/Pages/Logout.cshtml.cs
+  - Stash.Registry.Web/Constants/**
+  - Stash.Registry.Web/wwwroot/css/site.css
+  - Stash.Registry.Web/Program.cs
+  - Stash.Registry.Web/Stash.Registry.Web.csproj
+  - Stash.Registry.Web/appsettings.json
+  - Stash.Registry.Web/appsettings.Development.json
+  - Stash.Registry.Web/README.md
+  - Stash.Tests/Registry/Web/**
+  - Stash.Tests/Stash.Tests.csproj
+  - docs/Registry — Package Registry.md
+
+phases:
+  - id: A1
+    title: BFF auth infrastructure — login + logout + cookie auth handler + global anti-forgery + byte-unchanged guard
+    deps: []
+    files:
+      - Stash.Registry.Web/Auth/BffSession.cs
+      - Stash.Registry.Web/Auth/ISessionStore.cs
+      - Stash.Registry.Web/Auth/InMemorySessionStore.cs
+      - Stash.Registry.Web/Auth/ISessionTokenAccessor.cs
+      - Stash.Registry.Web/Auth/CookieSessionTokenAccessor.cs
+      - Stash.Registry.Web/Auth/NoActiveSessionException.cs
+      - Stash.Registry.Web/Auth/SessionCookie.cs
+      - Stash.Registry.Web/Auth/SessionCookieAuthenticationOptions.cs
+      - Stash.Registry.Web/Auth/SessionCookieAuthenticationHandler.cs
+      - Stash.Registry.Web/Auth/LoginService.cs
+      - Stash.Registry.Web/Auth/LogoutService.cs
+      - Stash.Registry.Web/Pages/Login.cshtml
+      - Stash.Registry.Web/Pages/Login.cshtml.cs
+      - Stash.Registry.Web/Pages/Logout.cshtml
+      - Stash.Registry.Web/Pages/Logout.cshtml.cs
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Registry.Web/Program.cs
+      - Stash.Registry.Web/Stash.Registry.Web.csproj
+      - Stash.Registry.Web/appsettings.json
+      - Stash.Registry.Web/appsettings.Development.json
+      - Stash.Tests/Registry/Web/LoginPageTests.cs
+      - Stash.Tests/Registry/Web/LogoutPageTests.cs
+      - Stash.Tests/Registry/Web/SessionStoreTests.cs
+      - Stash.Tests/Registry/Web/SessionCookieAuthenticationHandlerTests.cs
+      - Stash.Tests/Registry/Web/AntiForgeryConstructMetaTests.cs
+      - Stash.Tests/Registry/Web/PhaseTwoFilesByteUnchangedMetaTests.cs
+      - Stash.Tests/Registry/Web/Fixtures/AntiForgeryFailPathFixture.cs
+      - Stash.Tests/Registry/Web/Fixtures/PhaseTwoFileSet.cs
+      - Stash.Tests/Stash.Tests.csproj
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~LoginPageTests|FullyQualifiedName~LogoutPageTests|FullyQualifiedName~SessionStoreTests|FullyQualifiedName~SessionCookieAuthenticationHandlerTests|FullyQualifiedName~AntiForgeryConstructMetaTests|FullyQualifiedName~PhaseTwoFilesByteUnchangedMetaTests|FullyQualifiedName~WebProjectIsolationMetaTests|FullyQualifiedName~FieldDisciplineMetaTests|FullyQualifiedName~ReadmeChokepointMetaTests"
+    done_when:
+      - "`GET /login` renders a form with username, password, and an anti-forgery token; `POST /login` with valid credentials establishes a server-side session and sets an HTTP-only `SameSite=Strict` cookie carrying an opaque session id (NOT a JWT)."
+      - "`POST /login` with bad credentials renders the login page with an error and sets NO cookie (verified — no `Set-Cookie` header)."
+      - "Login eager-mints a `publish`-ceiling token via `POST /api/v1/auth/tokens` using the read JWT returned by `/login`; the publish JWT and `TokenCreateResponse.TokenId` are stored only in `BffSession` (server-side), never returned to the browser. `BffSession` does NOT carry a `Role` field."
+      - "`POST /logout` calls `DELETE /api/v1/auth/tokens/{publishTokenId}` (best-effort; success and 4xx both proceed), removes the session from `ISessionStore`, clears the cookie, and redirects to `/`."
+      - "`SessionCookieAuthenticationHandler` is registered as authentication scheme `\"BffCookie\"` via `AddAuthentication().AddScheme<…>(\"BffCookie\", null)`; `app.UseAuthentication(); app.UseAuthorization();` are added to the pipeline before `app.MapRazorPages()`. A unit test proves the handler reads the session cookie, looks up `BffSession` in `ISessionStore`, and populates `HttpContext.User` with `Name = session.Username`."
+      - "The handler's challenge configuration 302s anonymous requests to `/login?returnUrl=<original>` (not 401 / no body). A unit test proves: an `[Authorize]`-decorated test endpoint with no cookie returns 302 to `/login?returnUrl=…`."
+      - "`AutoValidateAntiforgeryTokenAttribute` is registered globally via `AddRazorPages` page conventions; an integration POST to `/login` without a valid anti-forgery token returns 400."
+      - "`AntiForgeryConstructMetaTests` is green and the LOAD-BEARING assertion is behavioral: drives a `WebApplicationFactory` POST to `/login` (and any other state-changing route registered at this phase) WITHOUT an anti-forgery token and asserts 400. A best-effort structural check (page-convention filter list contains the attribute) is included as a secondary signal but the behavioral check is what the test guarantees. Ships a fail-path fixture proving the guard has teeth."
+      - "`PhaseTwoFilesByteUnchangedMetaTests` is green: shells out to `git diff --quiet <phase-2-base> -- <PhaseTwoFileSet.Paths>` and fails if non-empty. `PhaseTwoFileSet` is a pinned const containing every Phase-2 file (page .cshtml + .cshtml.cs, shared layout / view-imports / view-start, the three Services files, the four Configuration / Rendering files). Ships a fail-path fixture proving the diff comparator trips on a synthetic diff."
+      - "No Phase-2 file in `PhaseTwoFileSet` appears in this phase's `files` list (a phase-scope test that the implementer self-checks before commit)."
+      - "`WebProjectIsolationMetaTests` (Phase 2) is still green — the new Auth/ tree adds no forbidden `Stash.Registry` reference."
+    est_tokens: 80000
+    notes: |
+      A1 lands the chokepoint *infrastructure* before any authed call site:
+      session store, cookie semantics, the cookie-auth handler (the
+      user-facing auth gate — 302s anonymous to /login), the LoginService
+      that eager-mints the publish token, and global anti-forgery. CSRF MUST
+      land here (with the first POST) — deferring to A3 would ship a window
+      where /login itself runs unprotected.
+
+      `LoginService` uses two named anonymous `HttpClient`s — `AuthLogin` and
+      `AuthMint` — so the bootstrapping calls are an explicit allowlist for
+      the chokepoint scan that lands in A2. The `IAuthenticatedRegistryClient`
+      type does NOT exist yet in this phase.
+
+      Login/logout pages live at the project root (`Pages/Login.cshtml`,
+      `Pages/Logout.cshtml`), NOT in the Maintainer area — login is the
+      on-ramp and must be anonymously reachable. They do NOT carry
+      `[Authorize]`.
+
+      Phase-2 files are deliberately not edited. The shared `_Layout` stays
+      untouched; the Maintainer area in A2 brings its own `_MaintainerLayout`.
+      The auth-aware header on Maintainer pages lives in the Maintainer
+      layout only.
+
+  - id: A2
+    title: IAuthenticatedRegistryClient + Maintainer area (own layout + Authorize convention) + dashboard + chokepoint guards
+    deps: [A1]
+    files:
+      - Stash.Registry.Web/Auth/IAuthenticatedRegistryClient.cs
+      - Stash.Registry.Web/Auth/HttpAuthenticatedRegistryClient.cs
+      - Stash.Registry.Web/Areas/Maintainer/Pages/_ViewImports.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Pages/_ViewStart.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Shared/_MaintainerLayout.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Dashboard.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Dashboard.cshtml.cs
+      - Stash.Registry.Web/Areas/Maintainer/MaintainerAreaConventions.cs
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Registry.Web/Program.cs
+      - Stash.Tests/Registry/Web/HttpAuthenticatedRegistryClientTests.cs
+      - Stash.Tests/Registry/Web/DashboardPageTests.cs
+      - Stash.Tests/Registry/Web/MaintainerAreaAuthorizationTests.cs
+      - Stash.Tests/Registry/Web/AuthClientChokepointMetaTests.cs
+      - Stash.Tests/Registry/Web/SessionTokenLeakMetaTests.cs
+      - Stash.Tests/Registry/Web/Fixtures/StubAuthenticatedRegistryClient.cs
+      - Stash.Tests/Registry/Web/Fixtures/ChokepointFailPathFixture_HttpClient.cs
+      - Stash.Tests/Registry/Web/Fixtures/SessionLeakFailPathFixture.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~HttpAuthenticatedRegistryClientTests|FullyQualifiedName~DashboardPageTests|FullyQualifiedName~MaintainerAreaAuthorizationTests|FullyQualifiedName~AuthClientChokepointMetaTests|FullyQualifiedName~SessionTokenLeakMetaTests|FullyQualifiedName~PhaseTwoFilesByteUnchangedMetaTests|FullyQualifiedName~WebProjectIsolationMetaTests"
+    done_when:
+      - "`IAuthenticatedRegistryClient` declares the full method set listed in the brief's Surface section (search-owned, list/create/revoke tokens, deprecate/un-deprecate package+version, set visibility, whoami, get-package), all returning `Stash.Registry.Contracts` DTOs and accepting a `CancellationToken`."
+      - "`HttpAuthenticatedRegistryClient` is registered Scoped in `Program.cs` via a factory that calls `ISessionTokenAccessor.TryGetSession(out _)` and throws `NoActiveSessionException` when no session is in scope — fail-closed BACKSTOP, verified by a direct DI-resolution unit test."
+      - "Every method on `HttpAuthenticatedRegistryClient` sets `Authorization: Bearer <publish JWT>` from `ISessionTokenAccessor` before sending; a unit test asserts the header is present on every method (via a stubbed `HttpMessageHandler`)."
+      - "`MaintainerAreaConventions` applies `[Authorize(AuthenticationSchemes = \"BffCookie\")]` to every page under `Areas/Maintainer/Pages/` (via `PageConventionCollection.AuthorizeAreaFolder(\"Maintainer\", \"/\")`-style convention). An integration test (`MaintainerAreaAuthorizationTests`) proves: `GET /dashboard` with NO cookie returns **302** to `/login?returnUrl=/dashboard` (NOT 500 — the DI factory's throw is never reached on the anonymous path)."
+      - "The Maintainer area uses its own layout: `Areas/Maintainer/Pages/Shared/_MaintainerLayout.cshtml` set via `Areas/Maintainer/Pages/_ViewStart.cshtml`. The Maintainer layout reuses `wwwroot/css/site.css` and the stash brand mark, and carries the `<username> · Log out` header element. The Phase-2 `Pages/Shared/_Layout.cshtml` is byte-unchanged (enforced by `PhaseTwoFilesByteUnchangedMetaTests`)."
+      - "`GET /dashboard` with a session calls `SearchOwnedAsync(SearchQuery { owner = session.Username, sort = Updated })` and renders results via the Phase-2 `PackageCard.cshtml` (the partial is read-only from the Maintainer area — not edited)."
+      - "An integration test proves the visibility-aware read: with a fixture user owning one public + one private package, `GET /dashboard` (authed) lists BOTH packages, while an anonymous `GET /search?owner=<user>` lists ONLY the public one. This pins that the BFF surfaces private packages exclusively because the token is threaded."
+      - "`AuthClientChokepointMetaTests` is green: a Roslyn scan over `Stash.Registry.Web/**/*.cs` finds every `HttpClient` invocation (`SendAsync`, `GetAsync`, `PostAsync`, `PutAsync`, `PatchAsync`, `DeleteAsync`) and asserts each call site is inside one of three pinned types: `HttpAuthenticatedRegistryClient` (always-threaded), `HttpRegistryClient` (anonymous; unchanged), or `LoginService` (the bootstrapping anonymous calls — pinned with comments naming each). Ships a fail-path fixture introducing a rogue `HttpClient` call site that the scan flags. Has a binding-floor (at least one allowed call site must be found) so a vacuous pass fails loudly."
+      - "`SessionTokenLeakMetaTests` is green: (1) Roslyn scan over `.cshtml` and `Areas/**/*.cshtml.cs` files asserts no reference to `BffSession.PublishTokenJwt`; (2) a `WebApplicationFactory` walk of `/dashboard` with a known fixture JWT asserts the JWT string never appears in the response body OR in any `Set-Cookie` header. Ships a fail-path fixture (a page model that deliberately writes the JWT to ViewData) proving the leak detector trips."
+      - "`PhaseTwoFilesByteUnchangedMetaTests` and `WebProjectIsolationMetaTests` are still green — A2 adds no Phase-2 file edit and no forbidden reference."
+    est_tokens: 80000
+    notes: |
+      A2 is the load-bearing phase. The two new chokepoint meta-tests
+      (`AuthClientChokepointMetaTests`, `SessionTokenLeakMetaTests`) land HERE
+      with the first authed call site so A3 and A4 merge with the invariants
+      enforced — never schedule them as a final phase.
+
+      The user-facing auth gate is the cookie-auth handler from A1 + the
+      `[Authorize]` page convention added here. The DI factory's
+      `NoActiveSessionException` throw is the fail-closed backstop — it
+      should NEVER fire on a normal anonymous request (the convention 302s
+      first). The `MaintainerAreaAuthorizationTests` integration assertion
+      pins this: anonymous → 302, not 500.
+
+      The `StubAuthenticatedRegistryClient` fixture mirrors the shape of
+      `StubRegistryClient` (Phase 2) — same `Result` / `Exception` per-method
+      pattern; tests configure responses before driving the page.
+
+      The Maintainer area is wired via `MaintainerAreaConventions.cs`
+      (`PageConventionCollection.AddAreaPageRoute` + `AuthorizeAreaFolder`)
+      so `Areas/Maintainer/Pages/Dashboard.cshtml` is reachable at `/dashboard`
+      without polluting the public route set.
+
+  - id: A3
+    title: Owned-package management page — deprecate + visibility
+    deps: [A2]
+    files:
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Manage.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Manage.cshtml.cs
+      - Stash.Registry.Web/Areas/Maintainer/Views/MaintainerVersionsTable.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Views/MaintainerDeprecateForm.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Views/MaintainerVisibilityForm.cshtml
+      - Stash.Registry.Web/Constants/ViewLabels.cs
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Tests/Registry/Web/ManagePageTests.cs
+      - Stash.Tests/Registry/Web/Fixtures/StubAuthenticatedRegistryClient.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~ManagePageTests|FullyQualifiedName~AuthClientChokepointMetaTests|FullyQualifiedName~SessionTokenLeakMetaTests|FullyQualifiedName~AntiForgeryConstructMetaTests|FullyQualifiedName~PhaseTwoFilesByteUnchangedMetaTests|FullyQualifiedName~FieldDisciplineMetaTests"
+    done_when:
+      - "`GET /manage/@my-org/my-lib` (authed) calls `IAuthenticatedRegistryClient.GetPackageAsync` and renders read-only metadata + four controls: package-level deprecate / un-deprecate form, version-level deprecate / un-deprecate table, and a visibility dropdown. Anonymous `GET /manage/…` returns 302 to `/login?returnUrl=…` (via the area `[Authorize]` convention from A2)."
+      - "The visibility dropdown is bound to the `Visibilities` enum from `Stash.Registry.Contracts/BoundedDomains.cs` — option values come from `Enum.GetValues<Visibilities>()` and form binding produces a typed `Visibilities` value; `grep -nF '\"public\"' Stash.Registry.Web/Areas/` returns zero hits for the visibility values."
+      - "POST handlers for each control call the matching `IAuthenticatedRegistryClient` method (`DeprecatePackageAsync`, `UndeprecatePackageAsync`, `DeprecateVersionAsync`, `UndeprecateVersionAsync`, `SetVisibilityAsync`). Success → re-render with a success banner; the page re-reads `GetPackageAsync` to show the post-mutation state."
+      - "A registry 403 response on any write surfaces the registry's `ErrorResponse.Message` inline as a banner; the page does NOT pre-check ownership (the BFF does not duplicate the registry's PDP)."
+      - "A registry 404 response on the initial GET renders the website's 404 page; a registry 401 on any call clears the cookie/session and redirects to `/login?expired=1`."
+      - "An integration test proves the visibility-aware read: a private package the authed user owns loads via `GET /manage/@scope/name`; the same path under an anonymous request from `IRegistryClient` (Phase 2 client) returns 404."
+      - "All four chokepoint guards remain green: `AuthClientChokepointMetaTests`, `SessionTokenLeakMetaTests`, `AntiForgeryConstructMetaTests`, `PhaseTwoFilesByteUnchangedMetaTests`. `FieldDisciplineMetaTests` is extended to walk the Manage page and still passes (no Bucket-B labels leak in)."
+      - "Phase-2 files remain byte-unchanged — `PhaseTwoFilesByteUnchangedMetaTests` is green (covers this)."
+    est_tokens: 80000
+    notes: |
+      The page MUST NOT have a `if (user.Owns(package))` branch — that would
+      reintroduce client-side visibility logic (concern C5). Render the
+      controls; if the user lacks the role the registry returns 403 and the
+      BFF surfaces the message inline. A test pins this — a non-owner authed
+      request hits the registry's 403 path, not a BFF pre-check.
+
+      Forms POST to handlers like `OnPostDeprecatePackageAsync`,
+      `OnPostSetVisibilityAsync`. Anti-forgery is automatic via the global
+      filter; no per-form attribute needed.
+
+      Extend `FieldDisciplineMetaTests` to include the Manage page route in
+      its `WebApplicationFactory` walk.
+
+  - id: A4
+    title: Token management page — list / create / revoke
+    deps: [A3]
+    files:
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Settings/Tokens.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Pages/Settings/Tokens.cshtml.cs
+      - Stash.Registry.Web/Areas/Maintainer/Views/TokenCreateForm.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Views/TokenList.cshtml
+      - Stash.Registry.Web/Areas/Maintainer/Views/TokenJustCreated.cshtml
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Tests/Registry/Web/TokenSettingsPageTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~TokenSettingsPageTests|FullyQualifiedName~AuthClientChokepointMetaTests|FullyQualifiedName~SessionTokenLeakMetaTests|FullyQualifiedName~AntiForgeryConstructMetaTests|FullyQualifiedName~PhaseTwoFilesByteUnchangedMetaTests|FullyQualifiedName~FieldDisciplineMetaTests"
+    done_when:
+      - "`GET /settings/tokens` (authed) lists the user's active tokens via `IAuthenticatedRegistryClient.ListTokensAsync` showing token id, scope, description, createdAt, expiresAt. The token VALUE is never displayed for existing tokens (the registry doesn't return it on `GET /auth/tokens`). Anonymous `GET /settings/tokens` returns 302 to `/login?returnUrl=…`."
+      - "`POST /settings/tokens` (create) is bound to a `TokenCreateRequest`-shaped form. The ceiling dropdown is built from `[TokenScopes.Read, TokenScopes.Publish]` (no admin option in v1; reuse of the `TokenScopes` enum, not inlined strings). On success → 303 redirect to `/settings/tokens` with the new token VALUE flowed via `TempData` (single-use DataProtection-encrypted cookie); the page renders a 'copy and close' banner showing the value once with an explicit warning that it cannot be retrieved again."
+      - "`POST /settings/tokens/{id}/revoke` calls `IAuthenticatedRegistryClient.RevokeTokenAsync(id)`; on success the row is gone on refresh."
+      - "The session's own publish token row (whose `tokenId == BffSession.PublishTokenId`) is rendered with a 'current session' badge and NO revoke button; the only path to terminate the session is `POST /logout`. An integration test pins this."
+      - "An expiry test: when a token is created, the page's TempData carrying the value is consumed exactly once (a refresh after seeing it once does NOT re-display the value)."
+      - "All four chokepoint guards remain green: `AuthClientChokepointMetaTests`, `SessionTokenLeakMetaTests`, `AntiForgeryConstructMetaTests`, `PhaseTwoFilesByteUnchangedMetaTests`. `FieldDisciplineMetaTests` extended to walk the token settings page and still passes."
+    est_tokens: 70000
+    notes: |
+      The newly minted token VALUE is sensitive — it must be visible to the
+      user exactly once and never persisted server-side. Using `TempData`
+      (DataProtection-encrypted, single-use) is the standard ASP.NET pattern;
+      writing it to the session store or to a normal cookie would defeat
+      concern C4.
+
+      The "current session" badge keys off `BffSession.PublishTokenId`
+      surfaced through `ISessionTokenAccessor`. The dropdown for ceiling
+      uses the `TokenScopes` enum filtered to `Read` and `Publish` — admin
+      tooling is explicitly out of scope.
+
+  - id: A5
+    title: Docs — Web README + registry-doc cross-link for the authenticated area
+    deps: [A4]
+    files:
+      - Stash.Registry.Web/README.md
+      - docs/Registry — Package Registry.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test
+    done_when:
+      - "`Stash.Registry.Web/README.md` gains an 'Authenticated maintainer area' section that documents: the BFF auth model (login mints a publish-ceiling session token, session lives server-side in `ISessionStore`, cookie carries only an opaque session id), the five new routes (`/login`, `/logout`, `/dashboard`, `/manage/@scope/name`, `/settings/tokens`), what's deliberately out of scope (yank, ownership/role management, admin, sign-up, profile), and the operational note that `InMemorySessionStore` requires single-instance hosting (distributed store deferred)."
+      - "`docs/Registry — Package Registry.md` 'Clients' section is updated to note that the website now offers an authenticated maintainer area in addition to the anonymous browse surface (one line, cross-linking to the Web README)."
+      - "Full `dotnet test` suite is green and runs unfiltered."
+    est_tokens: 30000
+    notes: |
+      Pure docs phase — NOT a language/stdlib change, so the Stdlib Reference
+      generator (`dotnet run --project Stash.Docs/`) does NOT apply. No
+      throws-coverage or completion-snapshot regenerations needed. Both files
+      are explicitly in scope so `verify-phase-scope.stash` doesn't trip
+      (Phase 2 shipped a scope gap on a doc edit; this avoids it).
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# The unfiltered `dotnet test` is the gate; no namespace-exclude filter.
+# The two `checkpoint lint` lines are the standing omission guard.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

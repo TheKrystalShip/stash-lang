@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - stash-hosting-mvp — Stash.Hosting Host SDK MVP | .kanban/2-in-progress/stash-hosting-mvp/ | 4 phases | started 2026-06-04
+- registry-website-phase3 — Registry Website Phase 3 — Authenticated Maintainer Site | .kanban/2-in-progress/registry-website-phase3/ | 5 phases | started 2026-06-04
 ---
 
 ## Architecture Decisions (enduring)
