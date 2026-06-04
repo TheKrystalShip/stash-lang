@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Stash.Registry.Contracts;
+using Stash.Registry.Web.Auth;
 using Stash.Registry.Web.Pages;
 using Stash.Registry.Web.Services;
 using Stash.Tests.Registry.Web.Fixtures;
@@ -327,6 +328,78 @@ public sealed class FieldDisciplineMetaTests
             violations.Count == 0,
             $"Version detail page HTML contains forbidden Bucket-B label(s): [{string.Join(", ", violations)}]. " +
             "Remove all Bucket-B placeholder chrome from the page template and partials.");
+    }
+
+    /// <summary>
+    /// Manage page (<c>GET /manage/@{scope}/{name}</c>) with a populated package —
+    /// no Bucket-B label vocabulary appears in the rendered HTML.
+    /// </summary>
+    [Fact]
+    public async Task ManagePage_WithPackage_ContainsNoBucketBLabels()
+    {
+        // Arrange
+        const string FixtureSessionId = "test-session-manage-field-discipline";
+        const string FixtureScope = "my-org";
+        const string FixtureName = "my-lib";
+
+        var pkg = StubRegistryClient.SamplePackageDetail(
+            scope: FixtureScope,
+            pkgName: FixtureName,
+            description: "Field discipline manage page test.");
+
+        var authStub = new StubAuthenticatedRegistryClient
+        {
+            GetPackageResult = pkg,
+        };
+
+        using var factory = new WebApplicationFactory<HealthModel>().WithWebHostBuilder(builder =>
+        {
+            builder.UseSolutionRelativeContentRoot("Stash.Registry.Web");
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<ISessionStore>(sp =>
+                {
+                    var store = new InMemorySessionStore();
+                    store.SetAsync(
+                        FixtureSessionId,
+                        new BffSession
+                        {
+                            Username = "field-discipline-user",
+                            PublishTokenJwt = "field-discipline-jwt",
+                            PublishTokenId = "field-tok-001",
+                            ExpiresAt = DateTimeOffset.UtcNow.AddHours(8),
+                        },
+                        DateTimeOffset.UtcNow.AddHours(8))
+                        .GetAwaiter().GetResult();
+                    return store;
+                });
+
+                services.AddScoped<IAuthenticatedRegistryClient>(_ => authStub);
+            });
+        });
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = false,
+        });
+        client.DefaultRequestHeaders.Add("Cookie",
+            $"{SessionCookie.CookieName}={FixtureSessionId}");
+
+        // Act
+        var response = await client.GetAsync($"/manage/@{FixtureScope}/{FixtureName}");
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+
+        // ── Binding floor: description rendered (non-vacuous) ─────────────────
+        Assert.Contains("Field discipline manage page test", html);
+
+        // ── Forbidden label scan ──────────────────────────────────────────────
+        var violations = FindForbiddenTokens(html);
+        Assert.True(
+            violations.Count == 0,
+            $"Manage page HTML contains forbidden Bucket-B label(s): [{string.Join(", ", violations)}]. " +
+            "Remove all Bucket-B placeholder chrome from the manage page and its partials.");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

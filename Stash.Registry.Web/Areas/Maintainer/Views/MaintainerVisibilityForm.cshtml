@@ -1,0 +1,43 @@
+@using Stash.Registry.Contracts
+@using Stash.Registry.Web.Constants
+@model Stash.Registry.Contracts.PackageDetailResponse
+
+@* Package visibility dropdown control.
+   Option VALUES come from Enum.GetValues<Visibilities>() — no inline wire string literals.
+   Option LABELS come from ViewLabels.ForVisibility().
+   scope and name are passed via ViewData. *@
+
+@{
+    var scope = (string)ViewData["Scope"]!;
+    var name = (string)ViewData["Name"]!;
+    var allVisibilities = Enum.GetValues<Visibilities>();
+}
+
+<section class="manage-section" aria-labelledby="visibility-heading">
+    <h2 id="visibility-heading" class="manage-section-title">@ViewLabels.VisibilitySectionTitle</h2>
+
+    <form method="post"
+          asp-page="/Manage"
+          asp-page-handler="SetVisibility"
+          asp-route-scope="@scope"
+          asp-route-name="@name"
+          asp-area="Maintainer"
+          class="visibility-form">
+
+        <div class="form-field">
+            <label for="visibility-select" class="form-label">Visibility</label>
+            <select id="visibility-select"
+                    name="NewVisibility"
+                    class="select-control"
+                    aria-label="Package visibility">
+                @foreach (var vis in allVisibilities)
+                {
+                    @* value = enum member name (e.g. "Public") — model binder produces Visibilities value *@
+                    <option value="@vis.ToString()">@ViewLabels.ForVisibility(vis)</option>
+                }
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Update Visibility</button>
+    </form>
+</section>

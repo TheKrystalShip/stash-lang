@@ -1,0 +1,109 @@
+@page "/manage/@{scope}/{name}"
+@model ManageModel
+@using Stash.Registry.Web.Constants
+@{
+    ViewData["Title"] = Model.PackageNotFound
+        ? "Package Not Found"
+        : $"Manage {Model.FullDisplayName}";
+    ViewData["Scope"] = Model.Scope;
+    ViewData["Name"] = Model.Name;
+}
+
+@if (Model.PackageNotFound)
+{
+    <section class="error-page">
+        <h1 class="error-title">Package Not Found</h1>
+        <p class="error-message">
+            The package <strong>@Model.FullDisplayName</strong> does not exist or is not publicly available.
+        </p>
+        <a href="/dashboard" class="btn-primary">Back to dashboard</a>
+    </section>
+}
+else
+{
+    <section class="manage-page">
+
+        @* ── Page heading ─────────────────────────────────────────────── *@
+        <div class="manage-header">
+            <h1 class="manage-title">Manage <span class="package-name-highlight">@Model.FullDisplayName</span></h1>
+            <a href="/dashboard" class="btn-back">&laquo; Back to Dashboard</a>
+        </div>
+
+        @* ── Success banner ───────────────────────────────────────────── *@
+        @if (Model.SuccessBanner is not null)
+        {
+            <div class="alert alert-success" role="status" aria-live="polite">
+                @Model.SuccessBanner
+            </div>
+        }
+
+        @* ── Error banner (registry 403 / 5xx) ───────────────────────── *@
+        @if (Model.ErrorBanner is not null)
+        {
+            <div class="alert alert-error" role="alert">
+                @Model.ErrorBanner
+            </div>
+        }
+
+        @if (Model.Package is not null)
+        {
+            @* ── Read-only metadata ───────────────────────────────────── *@
+            <section class="manage-section manage-metadata" aria-labelledby="metadata-heading">
+                <h2 id="metadata-heading" class="manage-section-title">Package Info</h2>
+                <dl class="metadata-list">
+                    <dt>Name</dt>
+                    <dd>@Model.Package.Name</dd>
+
+                    @if (!string.IsNullOrWhiteSpace(Model.Package.Description))
+                    {
+                        <dt>Description</dt>
+                        <dd>@Model.Package.Description</dd>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Model.Package.License))
+                    {
+                        <dt>License</dt>
+                        <dd>@Model.Package.License</dd>
+                    }
+
+                    @if (!string.IsNullOrWhiteSpace(Model.Package.Latest))
+                    {
+                        <dt>Latest version</dt>
+                        <dd>@Model.Package.Latest</dd>
+                    }
+
+                    <dt>Created</dt>
+                    <dd>@Model.Package.CreatedAt</dd>
+
+                    <dt>Updated</dt>
+                    <dd>@Model.Package.UpdatedAt</dd>
+
+                    <dt>Status</dt>
+                    <dd>
+                        @if (Model.Package.Deprecated)
+                        {
+                            <span class="badge badge-deprecated">Deprecated</span>
+                        }
+                        else
+                        {
+                            <span class="badge badge-active">Active</span>
+                        }
+                    </dd>
+                </dl>
+            </section>
+
+            @* ── Deprecate / undeprecate package ─────────────────────── *@
+            <partial name="~/Areas/Maintainer/Views/MaintainerDeprecateForm.cshtml"
+                     model="Model.Package" />
+
+            @* ── Visibility control ───────────────────────────────────── *@
+            <partial name="~/Areas/Maintainer/Views/MaintainerVisibilityForm.cshtml"
+                     model="Model.Package" />
+
+            @* ── Version deprecation table ────────────────────────────── *@
+            <partial name="~/Areas/Maintainer/Views/MaintainerVersionsTable.cshtml"
+                     model="Model.Package" />
+        }
+
+    </section>
+}
