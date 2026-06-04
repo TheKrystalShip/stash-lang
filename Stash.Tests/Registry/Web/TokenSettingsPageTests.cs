@@ -377,11 +377,8 @@ public sealed class TokenSettingsPageTests
         createRequest.Headers.Add("Cookie", $"{sessionCookie}; {afCookie}");
         var createResponse = await client.SendAsync(createRequest);
 
-        // Step 3: Must redirect (302/303).
-        Assert.True(
-            createResponse.StatusCode == HttpStatusCode.Redirect ||
-            createResponse.StatusCode == HttpStatusCode.SeeOther,
-            $"Expected redirect after token create, got {createResponse.StatusCode}.");
+        // Step 3: Must be exactly 303 See Other (brief specifies 303 to force GET on the follow-up).
+        Assert.Equal(HttpStatusCode.SeeOther, createResponse.StatusCode);
 
         // Capture TempData cookie from the redirect response.
         var tempDataCookies = string.Join("; ", GetSetCookieValues(createResponse));
@@ -394,6 +391,9 @@ public sealed class TokenSettingsPageTests
 
         // The newly-minted token value must be visible exactly once.
         Assert.Contains(NewTokenValue, html, StringComparison.Ordinal);
+
+        // The copy-button script must be rendered (inline script, not @section — which is dropped in partials).
+        Assert.Contains("function copyTokenValue", html, StringComparison.Ordinal);
 
         // Step 5: Second GET must NOT show the value (TempData is consumed once).
         // After the first follow-up GET, the server issues updated Set-Cookie headers that

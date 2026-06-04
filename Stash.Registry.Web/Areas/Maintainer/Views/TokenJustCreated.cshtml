@@ -32,18 +32,18 @@
     </p>
 </div>
 
-@section Scripts {
-    <script>
-        function copyTokenValue() {
-            var val = document.getElementById('token-value-display').textContent;
-            navigator.clipboard.writeText(val).catch(function() {
-                // Fallback: select the text for manual copy
-                var el = document.getElementById('token-value-display');
-                var range = document.createRange();
-                range.selectNode(el);
-                window.getSelection().removeAllRanges();
-                window.getSelection().addRange(range);
-            });
-        }
-    </script>
-}
+@* Script is inline (not @section) because @section is silently dropped in partials.
+   Putting it here means it renders in-place, immediately after the banner. *@
+<script>
+    function copyTokenValue() {
+        var val = document.getElementById('token-value-display').textContent;
+        navigator.clipboard.writeText(val).catch(function() {
+            // Fallback: select the text for manual copy
+            var el = document.getElementById('token-value-display');
+            var range = document.createRange();
+            range.selectNode(el);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+        });
+    }
+</script>

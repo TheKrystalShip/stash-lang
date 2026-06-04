@@ -199,10 +199,12 @@ public sealed class TokensModel : PageModel
         TempData[JustCreatedTokenValueKey] = response.Token;
         TempData[JustCreatedTokenIdKey] = response.TokenId;
 
-        // POST-Redirect-GET: redirect to this page so the browser follows with a GET.
-        // TempData is committed automatically before the redirect response is sent,
-        // and consumed exactly once on the follow-up GET (TempData read marks it for deletion).
-        return RedirectToPage();
+        // 303 See Other — the POST-Redirect-GET pattern; 303 forces the follow-up to be a GET
+        // regardless of HTTP version. RedirectToPageResult cannot produce 303 (no flag combination),
+        // so we set Location + return StatusCode(303) directly.
+        // TempData is committed by the SaveTempData filter before the response is written.
+        Response.Headers.Location = Url.Page("/Settings/Tokens", new { area = "Maintainer" });
+        return StatusCode(StatusCodes.Status303SeeOther);
     }
 
     // ── POST: revoke token ────────────────────────────────────────────────────
