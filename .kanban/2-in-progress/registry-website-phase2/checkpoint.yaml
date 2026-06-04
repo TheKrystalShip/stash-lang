@@ -1,0 +1,67 @@
+schema_version: 1
+feature: registry-website-phase2
+current: null
+updated: "2026-06-04T15:02:08Z"
+phases:
+  P1:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P2:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P3:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P4:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P5:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P6:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P7:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+review:
+  status: not_started
+  started: null
+  resolved: null
+  findings_open: 0
+  findings_fixed: 0

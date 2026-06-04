@@ -1,0 +1,241 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec <feature>
+
+schema_version: 1
+
+feature: registry-website-phase2
+
+title: Registry Website Phase 2 — Public Browse-Only Website
+
+# This feature is Phase 2 of the `website` milestone (see
+# .kanban/milestones/website/MILESTONE.md). The tag is what
+# `milestone-status.stash` reads to derive the ledger.
+milestone: website
+
+brief: ./brief.md
+
+created: 2026-06-04
+architect_session: registry-website-phase2-spec-2026-06-04
+
+# Cheap default that runs on every phase. Heavier checks live in per-phase
+# verify; the unfiltered full-suite gate lives in final_verify.
+default_verify:
+  - dotnet build Stash.sln
+
+# Safety rail listing every subtree this feature may touch. Implementers may
+# make small documented corrections within the per-phase `files` list.
+scope:
+  - Stash.Registry.Web/**
+  - Stash.sln
+  - Stash.Tests/Registry/Web/**
+  - docs/Registry — Package Registry.md
+
+phases:
+  - id: P1
+    title: Scaffold project + Contracts-only reference + WebProjectIsolationMetaTests
+    deps: []
+    files:
+      - Stash.Registry.Web/Stash.Registry.Web.csproj
+      - Stash.Registry.Web/Program.cs
+      - Stash.Registry.Web/appsettings.json
+      - Stash.Registry.Web/appsettings.Development.json
+      - Stash.Registry.Web/Configuration/RegistryClientConfig.cs
+      - Stash.Registry.Web/Services/IRegistryClient.cs
+      - Stash.Registry.Web/Services/HttpRegistryClient.cs
+      - Stash.Registry.Web/Pages/Health.cshtml
+      - Stash.Registry.Web/Pages/Health.cshtml.cs
+      - Stash.sln
+      - Stash.Tests/Registry/Web/WebProjectIsolationMetaTests.cs
+      - Stash.Tests/Registry/Web/Fixtures/StrayReferenceFailPathFixture.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~WebProjectIsolationMetaTests"
+    done_when:
+      - "`Stash.Registry.Web` builds inside `Stash.sln` via `dotnet build Stash.sln`."
+      - "The csproj declares exactly one ProjectReference — to `Stash.Registry.Contracts` — and zero references to `Stash.Registry`."
+      - "`WebProjectIsolationMetaTests` is green and asserts three things: the `Stash.Registry.Web` assembly loaded (binding floor), it *does* reference `Stash.Registry.Contracts`, and it does *not* reference `Stash.Registry`."
+      - "A fail-path fixture under `Stash.Tests/Registry/Web/Fixtures/` proves the scan has teeth: deliberately introducing a `Stash.Registry` reference (via an isolated assembly the test inspects) causes the meta-test's underlying scan helper to fail."
+      - "A `/health` Razor page calls `IRegistryClient.GetDiscoveryAsync` and renders without binding any DTO field that does not exist on `DiscoveryResponse`."
+    est_tokens: 70000
+    notes: |
+      The architecture-test (Detect) MUST land in this phase, before any feature
+      page exists. The binding-floor check (assembly loaded + Contracts ref
+      present) is what defeats the "0 violations because nothing bound" failure
+      mode (see CliNoMagicWireStringsMetaTests precedent). The fail-path fixture
+      can be a tiny in-test compilation or a sibling test-only project — the
+      implementer chooses, but a fail-path that actually trips the scan is
+      mandatory.
+
+  - id: P2
+    title: Layout + brand (Catppuccin + stash-icon) + typed registry client methods
+    deps: [P1]
+    files:
+      - Stash.Registry.Web/Pages/Shared/_Layout.cshtml
+      - Stash.Registry.Web/Pages/Shared/_ViewImports.cshtml
+      - Stash.Registry.Web/Pages/Shared/_ViewStart.cshtml
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Registry.Web/wwwroot/images/stash-icon.svg
+      - Stash.Registry.Web/Services/IRegistryClient.cs
+      - Stash.Registry.Web/Services/HttpRegistryClient.cs
+      - Stash.Registry.Web/Services/RegistryClientException.cs
+      - Stash.Registry.Web/Program.cs
+      - Stash.Tests/Registry/Web/HttpRegistryClientTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~HttpRegistryClientTests|FullyQualifiedName~WebProjectIsolationMetaTests"
+    done_when:
+      - "`_Layout.cshtml` renders a header containing the stash-icon brand mark (copied from `.vscode/extensions/stash-lang/images/stash-icon.svg`) and a global search form whose action is `/search`."
+      - "`site.css` defines the Catppuccin Mocha (dark) and Latte (light) palette CSS custom properties, copied/adapted from `Stash.Playground/wwwroot/css/app.css`. The default body class is `theme-dark`."
+      - "`IRegistryClient` declares `SearchAsync`, `GetPackageAsync`, `GetVersionsAsync`, `GetReadmeAsync`, `GetVersionAsync`, `GetDiscoveryAsync` — all returning `Stash.Registry.Contracts` types, all accepting a `CancellationToken`."
+      - "`HttpRegistryClient` is registered via `IHttpClientFactory` with base address from `RegistryClientConfig.BaseUrl`, sends *no* `Authorization` header, and deserializes responses into the typed DTOs. 404 surfaces as a `null` return (not an exception); 5xx surfaces as `RegistryClientException` for the page-level error mapping."
+      - "Unit tests exercise the client against a stubbed `HttpMessageHandler` covering the 200/404/500 paths for at least one method."
+      - "No `@Html.Raw` call exists anywhere in the project (chokepoint deferred to phase P5)."
+    est_tokens: 80000
+    notes: |
+      The CSS is a copy/adapt of Playground's app.css palette block — not a fork.
+      Do not invent a parallel palette. The stash-icon.svg lives in
+      `.vscode/extensions/stash-lang/images/`; copy it into the web project's
+      wwwroot/images/.
+
+  - id: P3
+    title: Home + Search pages + FieldDisciplineMetaTests
+    deps: [P2]
+    files:
+      - Stash.Registry.Web/Pages/Index.cshtml
+      - Stash.Registry.Web/Pages/Index.cshtml.cs
+      - Stash.Registry.Web/Pages/Search.cshtml
+      - Stash.Registry.Web/Pages/Search.cshtml.cs
+      - Stash.Registry.Web/Views/PackageCard.cshtml
+      - Stash.Registry.Web/Constants/SortLabels.cs
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Tests/Registry/Web/HomePageTests.cs
+      - Stash.Tests/Registry/Web/SearchPageTests.cs
+      - Stash.Tests/Registry/Web/FieldDisciplineMetaTests.cs
+      - Stash.Tests/Registry/Web/Fixtures/StubRegistryClient.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Registry.Web"
+    done_when:
+      - "`GET /` renders the recently-updated rail with package cards populated from `IRegistryClient.SearchAsync(SearchQuery { sort = PackageSortOrder.Updated })`."
+      - "`GET /search?q=foo` renders a filter bar (keyword, license, deprecated, owner), a sort dropdown bound to `PackageSortOrder`, paged result cards, and pagination links that round-trip every query-string parameter."
+      - "The sort dropdown's option values come from the `PackageSortOrder` enum and its labels come from `SortLabels` — no inlined string literals in the `.cshtml`."
+      - "Cards bind only Bucket-A fields: name, description, latest, updatedAt, license, ownerCount, deprecated. None of `downloads`, `dependents`, `vulnerable`, `verified`, `provenance`, `signatures` appears as a label or a value placeholder."
+      - "`FieldDisciplineMetaTests` is green: it drives the home and search pages via `WebApplicationFactory` against a `StubRegistryClient`, scans the rendered HTML, and asserts every forbidden Bucket-B label vocabulary token (`Downloads`, `Dependents`, `Used by`, `Vulnerabilities`, `Provenance`, `Verified publisher`, `Signed`) is absent. Ships a fail-path fixture proving the scan trips when a forbidden label is reintroduced."
+      - "`HomePageTests` and `SearchPageTests` cover 200-with-results, empty results, and registry-5xx → 502 page rendering."
+    est_tokens: 80000
+    notes: |
+      The field-discipline guard must land HERE (with the first cards), not at
+      the end — otherwise phases P4-P6 merge with the invariant unenforced. The
+      fail-path fixture for FieldDisciplineMetaTests is a snapshot of the
+      scanner running against a known-bad HTML fragment.
+
+  - id: P4
+    title: Package detail shell — sidebar, versions, dependencies, install (no README rendering yet)
+    deps: [P3]
+    files:
+      - Stash.Registry.Web/Pages/Package.cshtml
+      - Stash.Registry.Web/Pages/Package.cshtml.cs
+      - Stash.Registry.Web/Views/PackageSidebar.cshtml
+      - Stash.Registry.Web/Views/VersionsSection.cshtml
+      - Stash.Registry.Web/Views/DependenciesSection.cshtml
+      - Stash.Registry.Web/Views/InstallWidget.cshtml
+      - Stash.Registry.Web/Views/DeprecationBanner.cshtml
+      - Stash.Registry.Web/wwwroot/css/site.css
+      - Stash.Registry.Web/wwwroot/js/copy-install.js
+      - Stash.Tests/Registry/Web/PackagePageTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~PackagePageTests|FullyQualifiedName~FieldDisciplineMetaTests"
+    done_when:
+      - "`GET /packages/@my-org/my-lib` renders successfully when the registry returns a `PackageDetailResponse`, showing: metadata sidebar (description, latest, updatedAt, license, ownerCount), versions section (table with version, publishedAt, publishedBy), dependencies section (latest version's deps), install widget (`stash pkg add @my-org/my-lib` + copy-to-clipboard)."
+      - "The two-segment scoped route resolves correctly: the `@` is in the URL template, the registry HTTP call uses `/api/v1/packages/{scope}/{name}` (no `@`), and `Uri.EscapeDataString` is applied to each segment before the call."
+      - "When `PackageDetailResponse.Deprecated == true`, the deprecation banner renders with `DeprecationMessage` and a link to `DeprecationAlternative` if present."
+      - "Registry 404 surfaces as the website's 404 page; registry 5xx surfaces as the website's 502 page."
+      - "The README column on the page is **explicitly stubbed** with a static empty-state placeholder (e.g. `<p>README rendering arrives in the next phase.</p>`) that contains zero `@Html.Raw` calls. `ReadmeChokepointMetaTests` does not exist yet, but a `grep '@Html.Raw' Stash.Registry.Web/` returning empty is a deliberate property of this phase."
+      - "`FieldDisciplineMetaTests` is extended to walk the package page in addition to home/search and still passes."
+    est_tokens: 80000
+    notes: |
+      Phase ordering hazard: the brief explicitly delays README rendering to
+      phase P5 so there is no window between "package page exists" and "sanitizer
+      wired." Do NOT call Markdig directly here. Do NOT add `@Html.Raw`. The
+      README column is an empty-state. The next phase wires the chokepoint.
+
+  - id: P5
+    title: README chokepoint — Markdig + HtmlSanitizer + ReadmeChokepointMetaTests + hostile-input tests
+    deps: [P4]
+    files:
+      - Stash.Registry.Web/Rendering/IReadmeRenderer.cs
+      - Stash.Registry.Web/Rendering/ReadmeRenderer.cs
+      - Stash.Registry.Web/Stash.Registry.Web.csproj
+      - Stash.Registry.Web/Pages/Package.cshtml
+      - Stash.Registry.Web/Pages/Package.cshtml.cs
+      - Stash.Registry.Web/Program.cs
+      - Stash.Tests/Registry/Web/ReadmeRendererTests.cs
+      - Stash.Tests/Registry/Web/ReadmeChokepointMetaTests.cs
+      - Stash.Tests/Registry/Web/Fixtures/ChokepointFailPathFixture.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~ReadmeRendererTests|FullyQualifiedName~ReadmeChokepointMetaTests|FullyQualifiedName~PackagePageTests|FullyQualifiedName~FieldDisciplineMetaTests"
+    done_when:
+      - "`IReadmeRenderer.RenderToSafeHtml(string markdown) → HtmlString` is the single rendering chokepoint. `ReadmeRenderer` uses Markdig + HtmlSanitizer."
+      - "Hostile-input xUnit tests pass: `<script>` is stripped, `<iframe>` is stripped, inline `onerror=`/`onclick=` are neutralized, `javascript:` URIs are blocked, `data:` URIs are blocked, and a benign sample (headings, lists, fenced code, inline code, links to `https://`) round-trips intact."
+      - "The package page's README column now binds `Html.Raw(renderer.RenderToSafeHtml(content))` and shows an empty-state ('This package has no README.') when `ReadmeResponse.Content` is empty or `GetReadmeAsync` returned null."
+      - "`ReadmeChokepointMetaTests` is green: it scans every `.cshtml` in the project for `@Html.Raw(...)` invocations and asserts the argument is either an `IReadmeRenderer.RenderToSafeHtml(...)` call or a model property whose declared type is `HtmlString` populated only from the renderer. Any other `Html.Raw` call fails the test with a precise file:line location."
+      - "A fail-path fixture (`ChokepointFailPathFixture.cs`) ships with a known-bad `.cshtml` snippet containing a rogue `@Html.Raw(someString)`. The meta-test asserts its scan helper, run over that fixture snippet, returns a violation — proving the scan has teeth."
+      - "Final-pass: `FieldDisciplineMetaTests` (extended to walk the now-populated README path) still passes — no Bucket-B labels leak in via README content."
+    est_tokens: 80000
+    notes: |
+      This is the phase that opens the SOLE `@Html.Raw` call site in the entire
+      project. The chokepoint test is the load-bearing invariant: any future
+      `Html.Raw` introduced elsewhere fails the build. Markdig configuration
+      should disable extensions that pass through raw HTML where possible — the
+      HtmlSanitizer is the second line, not the first.
+
+  - id: P6
+    title: Version detail page
+    deps: [P5]
+    files:
+      - Stash.Registry.Web/Pages/Version.cshtml
+      - Stash.Registry.Web/Pages/Version.cshtml.cs
+      - Stash.Registry.Web/Views/VersionMetadataTable.cshtml
+      - Stash.Tests/Registry/Web/VersionPageTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~VersionPageTests|FullyQualifiedName~FieldDisciplineMetaTests|FullyQualifiedName~ReadmeChokepointMetaTests"
+    done_when:
+      - "`GET /packages/@my-org/my-lib/v/1.2.3` renders version metadata: version, publishedAt, publishedBy, stashVersion, integrity, dependencies, deprecated/deprecationMessage."
+      - "Two-segment scoped route handling matches phase P4 (literal `@` in the URL template; `Uri.EscapeDataString` per segment when calling the registry)."
+      - "Registry 404 → website 404 page; registry 5xx → website 502 page."
+      - "`FieldDisciplineMetaTests` and `ReadmeChokepointMetaTests` still pass after the new page is added."
+    est_tokens: 50000
+
+  - id: P7
+    title: Docs — Stash.Registry.Web README + registry-doc cross-link
+    deps: [P6]
+    files:
+      - Stash.Registry.Web/README.md
+      - docs/Registry — Package Registry.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test
+    done_when:
+      - "`Stash.Registry.Web/README.md` documents: what the project is, the no-`Stash.Registry`-dependency constraint, how to build (`dotnet build Stash.sln`), how to run (`dotnet run --project Stash.Registry.Web/`), how to point at a registry (`Registry:BaseUrl` setting), the four user-visible routes, and where the brand/CSS originates."
+      - "`docs/Registry — Package Registry.md` gains a short 'Clients' section (or paragraph) linking out to `Stash.Registry.Web/README.md` and noting that the website is the public browse-only client of the registry."
+      - "Full `dotnet test` suite is green and runs unfiltered."
+    est_tokens: 30000
+    notes: |
+      Pure docs phase — this is NOT a language/stdlib change so the
+      Stdlib Reference generator (`dotnet run --project Stash.Docs/`) does NOT
+      apply. No throws-coverage / completion-snapshot regenerations needed.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# The unfiltered `dotnet test` is the gate; no namespace-exclude filter.
+# The two `checkpoint lint` lines are the standing omission guard.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

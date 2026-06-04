@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - callback-marshaling — Callback Marshaling Event-Loop | .kanban/2-in-progress/callback-marshaling/ | 4 phases | started 2026-06-04
+- registry-website-phase2 — Registry Website Phase 2 — Public Browse-Only Website | .kanban/2-in-progress/registry-website-phase2/ | 7 phases | started 2026-06-04
 ---
 
 ## Architecture Decisions (enduring)
