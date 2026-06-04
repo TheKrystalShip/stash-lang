@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T11:54:31Z"
+updated: "2026-06-04T12:07:40Z"
 phases:
   P1:
     status: done
@@ -68,8 +68,8 @@ phases:
     attempts: 1
     notes: "Documented new search filters (keyword/license/deprecated/owner/sort), sort vocab, Bucket-B exclusions; added 6.11 /versions and 6.12 /readme with response shapes, visibility rules, ETag/304 caching contract; new 10.8 CORS, 10.9 Pagination (shared items envelope + caps), 10.10 .well-known/registry discovery with features map; updated Endpoint Summary with 3 new endpoints; fixed stale packages/entries collection keys to items in search and audit-log examples"
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: "2026-06-04T12:07:40Z"
   resolved: null
   findings_open: 0
   findings_fixed: 0
