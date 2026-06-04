@@ -58,8 +58,8 @@ public sealed class PackagePageTests
         // Version in sidebar and table
         Assert.Contains("1.2.0", html);
 
-        // README placeholder — static text, no Html.Raw
-        Assert.Contains("README rendering arrives in the next phase", html);
+        // README is null (stub returns null) → empty-state shown
+        Assert.Contains("This package has no README.", html);
     }
 
     [Fact]
@@ -118,12 +118,12 @@ public sealed class PackagePageTests
         Assert.Contains("^1.0.0", html);
     }
 
-    // ── README placeholder ─────────────────────────────────────────────────────
+    // ── README column — P5 sanitized rendering ─────────────────────────────────
 
     [Fact]
-    public async Task PackagePage_ReadmeColumn_ContainsStaticPlaceholderAndNoHtmlRaw()
+    public async Task PackagePage_ReadmeColumn_WithNoReadme_ShowsEmptyState()
     {
-        // Arrange
+        // Arrange — GetReadmeResult is null (default), simulating no README
         var detail = StubRegistryClient.SamplePackageDetail();
         var stub = new StubRegistryClient { GetPackageResult = detail };
         using var factory = CreateFactory(stub);
@@ -132,18 +132,75 @@ public sealed class PackagePageTests
         // Act
         var html = await (await client.GetAsync("/packages/@my-org/my-lib")).Content.ReadAsStringAsync();
 
-        // README placeholder must appear
-        Assert.Contains("README rendering arrives in the next phase", html);
+        // Empty-state message shown when README is absent
+        Assert.Contains("This package has no README.", html);
+        Assert.Contains("readme-empty-state", html);
 
-        // No package-author injected HTML/markdown.
-        // The page does include a site script tag (copy-install.js) which is expected,
-        // but the README column contains only a static placeholder — no inline event handlers
-        // or javascript: URIs from package content.
+        // No hostile content from package README (there is none to inject)
         Assert.DoesNotContain("onerror=", html);
         Assert.DoesNotContain("javascript:", html);
-        // The readme-placeholder section must not contain any script/iframe tags
-        // (confirm the placeholder itself is clean static text)
-        Assert.Contains("readme-placeholder", html);
+    }
+
+    [Fact]
+    public async Task PackagePage_ReadmeColumn_WithReadme_RendersContent()
+    {
+        // Arrange — provide a README with benign content
+        var detail = StubRegistryClient.SamplePackageDetail();
+        var stub = new StubRegistryClient
+        {
+            GetPackageResult = detail,
+            GetReadmeResult = new Stash.Registry.Contracts.ReadmeResponse
+            {
+                Content = "# My Package\n\nA helpful description.",
+                ContentType = Stash.Registry.Contracts.ReadmeContentTypes.Markdown,
+                ByteSize = 40,
+                ExtractedFromVersion = "1.0.0",
+            },
+        };
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var html = await (await client.GetAsync("/packages/@my-org/my-lib")).Content.ReadAsStringAsync();
+
+        // README content rendered (heading → <h1>, paragraph text)
+        Assert.Contains("My Package", html);
+        Assert.Contains("A helpful description.", html);
+
+        // Not the empty-state
+        Assert.DoesNotContain("This package has no README.", html);
+
+        // README content class present
+        Assert.Contains("readme-content", html);
+    }
+
+    [Fact]
+    public async Task PackagePage_ReadmeColumn_WithHostileReadme_StripsScriptTags()
+    {
+        // Arrange — README containing a script injection attempt
+        var detail = StubRegistryClient.SamplePackageDetail();
+        var stub = new StubRegistryClient
+        {
+            GetPackageResult = detail,
+            GetReadmeResult = new Stash.Registry.Contracts.ReadmeResponse
+            {
+                Content = "Hello <script>alert('xss')</script> world",
+                ContentType = Stash.Registry.Contracts.ReadmeContentTypes.Markdown,
+                ByteSize = 44,
+                ExtractedFromVersion = "1.0.0",
+            },
+        };
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var html = await (await client.GetAsync("/packages/@my-org/my-lib")).Content.ReadAsStringAsync();
+
+        // The README content must not have introduced a live INLINE <script> opening tag.
+        // Markdig DisableHtml() encodes <script> to &lt;script&gt; (inert text).
+        // The page legitimately includes a <script src="..."> (external reference for copy-install.js)
+        // which is distinct: it uses an attribute. We only check for the dangerous inline open form.
+        Assert.DoesNotContain("<script>", html, StringComparison.OrdinalIgnoreCase);
     }
 
     // ── Deprecation banner ─────────────────────────────────────────────────────

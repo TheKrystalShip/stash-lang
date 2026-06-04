@@ -8,6 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Markdig" Version="1.2.0" />
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Stash.Registry.Contracts\Stash.Registry.Contracts.csproj" />
   </ItemGroup>
 

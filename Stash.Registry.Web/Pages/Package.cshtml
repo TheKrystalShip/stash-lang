@@ -49,12 +49,21 @@ else if (Model.Package is not null)
             @* ── Install widget ─────────────────────────────────── *@
             <partial name="~/Views/InstallWidget.cshtml" model="Model.InstallCommand" />
 
-            @* ── README column — EXPLICITLY STUBBED, P5 wires rendering *@
+            @* ── README column — sole @Html.Raw site in the project (chokepoint) *@
             <section class="readme-section">
                 <h2 class="section-title">README</h2>
-                <div class="readme-placeholder">
-                    <p>README rendering arrives in the next phase.</p>
-                </div>
+                @if (Model.ReadmeHtml is not null)
+                {
+                    <div class="readme-content">
+                        @Html.Raw(Model.ReadmeHtml)
+                    </div>
+                }
+                else
+                {
+                    <div class="readme-empty-state">
+                        <p>This package has no README.</p>
+                    </div>
+                }
             </section>
 
             @* ── Dependencies ─────────────────────────────────── *@

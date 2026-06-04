@@ -1,30 +1,37 @@
 using System.Linq;
 using System.Net;
+using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Stash.Registry.Contracts;
+using Stash.Registry.Web.Rendering;
 using Stash.Registry.Web.Services;
 
 namespace Stash.Registry.Web.Pages;
 
 /// <summary>
 /// Page model for the package detail page (<c>GET /packages/@{scope}/{name}</c>).
-/// Loads the package via <see cref="IRegistryClient.GetPackageAsync"/>.
+/// Loads the package and its README via <see cref="IRegistryClient"/> in parallel,
+/// then renders the README through <see cref="IReadmeRenderer.RenderToSafeHtml"/>.
 /// </summary>
 /// <remarks>
 /// <list type="bullet">
-///   <item>Registry 404 → sets <see cref="NotFound"/> = true; view shows 404 status.</item>
+///   <item>Registry 404 → sets <see cref="PackageNotFound"/> = true; view shows 404 status.</item>
 ///   <item><see cref="RegistryClientException"/> with 5xx → sets 502; view shows error banner.</item>
-///   <item>README rendering is explicitly deferred to phase P5. The README column is a static placeholder.</item>
+///   <item>README null or empty → <see cref="ReadmeHtml"/> is <see langword="null"/>; view shows empty-state.</item>
+///   <item>README present → <see cref="ReadmeHtml"/> is an <see cref="HtmlString"/> from
+///   <see cref="IReadmeRenderer.RenderToSafeHtml"/> — the sole <c>@Html.Raw</c> site in the project.</item>
 /// </list>
 /// </remarks>
 public sealed class PackageModel : PageModel
 {
     private readonly IRegistryClient _registryClient;
+    private readonly IReadmeRenderer _readmeRenderer;
 
-    public PackageModel(IRegistryClient registryClient)
+    public PackageModel(IRegistryClient registryClient, IReadmeRenderer readmeRenderer)
     {
         _registryClient = registryClient;
+        _readmeRenderer = readmeRenderer;
     }
 
     // ── Bound route values ────────────────────────────────────────────────────
@@ -53,6 +60,13 @@ public sealed class PackageModel : PageModel
     /// Error message to display when the registry is unreachable (502), or <c>null</c> on success.
     /// </summary>
     public string? RegistryError { get; private set; }
+
+    /// <summary>
+    /// Sanitized README HTML, or <c>null</c> when the package has no README (empty or missing).
+    /// This is the sole property in the project whose value is emitted via <c>@Html.Raw()</c>.
+    /// It is populated <em>only</em> from <see cref="IReadmeRenderer.RenderToSafeHtml"/>.
+    /// </summary>
+    public HtmlString? ReadmeHtml { get; private set; }
 
     // ── Derived helpers ───────────────────────────────────────────────────────
 
@@ -106,7 +120,11 @@ public sealed class PackageModel : PageModel
     {
         try
         {
-            Package = await _registryClient.GetPackageAsync(Scope, Name, cancellationToken);
+            // Fetch package metadata and README in parallel.
+            var packageTask = _registryClient.GetPackageAsync(Scope, Name, cancellationToken);
+            var readmeTask = _registryClient.GetReadmeAsync(Scope, Name, cancellationToken);
+
+            Package = await packageTask;
 
             if (Package is null)
             {
@@ -114,6 +132,25 @@ public sealed class PackageModel : PageModel
                 Response.StatusCode = StatusCodes.Status404NotFound;
                 return Page();
             }
+
+            // Fetch README — a missing or empty README is the empty-state, not an error.
+            ReadmeResponse? readme = null;
+            try
+            {
+                readme = await readmeTask;
+            }
+            catch
+            {
+                // README is secondary content; suppress any fetch error — show empty-state instead.
+                readme = null;
+            }
+
+            if (readme is not null && !string.IsNullOrWhiteSpace(readme.Content))
+            {
+                // The SOLE assignment of ReadmeHtml — always from IReadmeRenderer.RenderToSafeHtml.
+                ReadmeHtml = _readmeRenderer.RenderToSafeHtml(readme.Content);
+            }
+            // else: ReadmeHtml stays null → view shows "This package has no README." empty-state.
         }
         catch (RegistryClientException ex) when ((int)ex.StatusCode >= 500)
         {

@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
-using Stash.Registry.Web.Pages;
 using Stash.Registry.Contracts;
+using Stash.Registry.Web.Pages;
 using Stash.Registry.Web.Services;
 using Stash.Tests.Registry.Web.Fixtures;
 using Xunit;
@@ -244,6 +244,56 @@ public sealed class FieldDisciplineMetaTests
             violations.Count == 0,
             $"Package detail page HTML contains forbidden Bucket-B label(s): [{string.Join(", ", violations)}]. " +
             "Remove all Bucket-B placeholder chrome from the page template and partials.");
+    }
+
+    /// <summary>
+    /// Package detail page (<c>GET /packages/@{scope}/{name}</c>) with a populated README —
+    /// the README content is rendered through the sanitizer, and no Bucket-B label vocabulary
+    /// appears anywhere in the rendered HTML (including inside the README output).
+    /// </summary>
+    /// <remarks>
+    /// The README content used here is deliberately neutral (no forbidden tokens).
+    /// This test exercises the fully-populated README code path, not the empty-state path.
+    /// </remarks>
+    [Fact]
+    public async Task PackageDetailPage_WithPopulatedReadme_ContainsNoBucketBLabels()
+    {
+        // Arrange — package + a README with neutral content (no Bucket-B tokens)
+        var detail = StubRegistryClient.SamplePackageDetail(
+            scope: "org",
+            pkgName: "readme-test",
+            description: "Field discipline README test");
+
+        var stub = new StubRegistryClient
+        {
+            GetPackageResult = detail,
+            GetReadmeResult = new ReadmeResponse
+            {
+                Content = "# Installation\n\nRun `stash pkg add @org/readme-test` to install.\n\n## Usage\n\nSimple and effective.",
+                ContentType = ReadmeContentTypes.Markdown,
+                ByteSize = 90,
+                ExtractedFromVersion = "1.0.0",
+            },
+        };
+
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/packages/@org/readme-test");
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+
+        // ── Binding floor: README content rendered (non-vacuous) ─────────────
+        Assert.Contains("Installation", html);
+
+        // ── Forbidden label scan ──────────────────────────────────────────────
+        var violations = FindForbiddenTokens(html);
+        Assert.True(
+            violations.Count == 0,
+            $"Package detail page HTML (with populated README) contains forbidden Bucket-B label(s): " +
+            $"[{string.Join(", ", violations)}]. " +
+            "The README content or surrounding template contains Bucket-B placeholder chrome.");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
