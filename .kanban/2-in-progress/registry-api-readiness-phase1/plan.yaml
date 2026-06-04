@@ -16,7 +16,7 @@ architect_session: 2026-06-04-architect
 
 # Cheap default verify on every phase. Heavier per-phase work is in `verify:` below.
 default_verify:
-  - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Cli
+  - dotnet build Stash.sln
 
 # Broad scope — safety rail, not prison. Implementers may correct stale paths within phase intent.
 scope:
@@ -42,10 +42,14 @@ phases:
       - Stash.Tests/Registry/Contracts/PagedResponseTests.cs
       - Stash.Tests/Registry/SearchControllerTests.cs
       - Stash.Tests/Registry/AuditLogControllerTests.cs
+      - Stash.Tests/Cli/CliContractsConsumptionTests.cs
     verify:
-      - dotnet build Stash.Registry.Contracts Stash.Registry Stash.Cli
+      # Build the three involved projects via solution (dotnet build takes one project at a time)
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~PagedResponseTests|FullyQualifiedName~SearchControllerTests|FullyQualifiedName~AuditLogControllerTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
-      - dotnet publish Stash.Cli/ -c Release -o /tmp/stash-aot-readiness-p1 /p:PublishAot=true
+      # AOT publish: use -r linux-x64 so the netstandard2.0 Roslyn analyzer (Stash.Stdlib.Generators)
+      # skips AOT evaluation (it has DevelopmentDependency=true and is skipped with a runtime identifier)
+      - dotnet publish Stash.Cli/ -c Release -r linux-x64 -o /tmp/stash-aot-readiness-p1
     done_when:
       - PagedResponse<T> exists in Stash.Registry.Contracts with Items/TotalCount/Page/PageSize/TotalPages (collection key 'items').
       - SearchResponse and AuditLogResponse classes are deleted; SearchController and AdminController return PagedResponse<PackageSummaryResponse> and PagedResponse<AuditEntryResponse>.

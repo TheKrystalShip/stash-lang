@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T09:33:47Z"
+updated: "2026-06-04T09:59:29Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 21c1fec21852caa2ee6dedbf359e6fb8e1ed1d0d
+    verified: true
+    started: "2026-06-04T09:41:27Z"
+    completed: "2026-06-04T09:59:29Z"
+    attempts: 1
+    notes: "PagedResponse<T> in Contracts; SearchResponse/AuditLogResponse deleted; controllers migrated; CLI lockstep; AOT publish green; 30 phase tests pass; all 728 Registry tests pass"
   P2:
     status: pending
     commit: null
