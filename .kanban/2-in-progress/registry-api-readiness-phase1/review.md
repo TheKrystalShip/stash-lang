@@ -188,7 +188,8 @@ dotnet test
 
 ## F02 — [LOW] `keyword` search filter is vulnerable to LIKE-metacharacter / quote leakage
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** bdf8bf12
 **Files:** `Stash.Registry/Database/StashRegistryDatabase.cs:213-219`
 **Phase:** P5
 **Commit:** 0a6525bc
@@ -280,7 +281,8 @@ dotnet test
 
 ## F03 — [LOW] `Updated`/`Published` sort orders have no tie-breaker — pagination can repeat or skip rows
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** bdf8bf12
 **Files:** `Stash.Registry/Database/StashRegistryDatabase.cs:257-267`, `Stash.Registry/Database/StashRegistryDatabase.cs:317-321`
 **Phase:** P3, P5
 **Commit:** 3f10f7de, 0a6525bc
