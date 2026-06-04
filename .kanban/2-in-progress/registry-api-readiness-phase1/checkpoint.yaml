@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-api-readiness-phase1
 current: null
-updated: "2026-06-04T10:34:46Z"
+updated: "2026-06-04T10:50:53Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "GetVersions action on PackagesController: [PublicEndpoint]+[RegistryAuthorize(ReadPackageMetadata)], PagedResponse<VersionDetailResponse>, ETag/Last-Modified/Cache-Control, 304 conditional, visibility-enforced (anon/no-role → 404, reader+ → 200); ConditionalResponse helper in Stash.Registry/Http/"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 95496a472e68b0e521574b2643bc6a7f01419796
+    verified: true
+    started: "2026-06-04T10:42:01Z"
+    completed: "2026-06-04T10:50:53Z"
+    attempts: 1
+    notes: "GetReadme action on PackagesController: typed JSON ReadmeResponse, PDP-gated, ETag/Last-Modified/304 via ConditionalResponse helper; null/empty README → 404; OpenAPI snapshot rebaselined"
   P5:
     status: pending
     commit: null
