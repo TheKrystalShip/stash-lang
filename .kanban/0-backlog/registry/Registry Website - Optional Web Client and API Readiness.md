@@ -645,3 +645,122 @@ Expose advanced signals:
 - Changing registry auth semantics before a browser auth strategy is selected.
 - Merging website-only view models into the registry API.
 
+---
+
+## API Readiness Evaluation (2026-06-04)
+
+> Assessed against the actual code (`Stash.Registry/Controllers/*`, `Stash.Registry.Contracts/*`,
+> `Stash.Registry/Startup.cs`, `Database/Models/*`), not against this brief's assumptions. Where the
+> brief and the code disagree, the code wins.
+
+### Verdict (read this first)
+
+**The answer is phase-conditioned, not yes/no.**
+
+- **For an anonymous, browse-only website (this brief's Phase 2 — search, package page, version page,
+  README), the API is *close*.** The data already exists; it needs a small "reshape what's there"
+  polish slice plus a deployment decision (same-origin or a backend-for-frontend). It is **not**
+  buildable *as-is* with good UX, but the gap is days, not a quarter.
+- **For the maintainer / admin / trust-and-safety website (Phases 3–5), the API is *not ready*, and
+  the missing pieces are not API polish — they are product features that do not exist at all**
+  (download metrics, advisories, provenance, signatures, verified/trusted publishers, quarantine/yank
+  lifecycle, webhooks, user profiles, full admin surface). The website would *surface* those features;
+  it cannot be the reason they get built.
+
+So this brief's central thesis — *"the main work before the website is making the API
+web-client-friendly"* — is right for Phase 2 and **understated for Phases 3–5**: a large fraction of
+the checklist is "build a feature," not "expose existing data web-friendly." The single most useful
+reframe this evaluation adds is to **split the checklist into two buckets** (below), because lumping
+them on one list hides that one bucket is cheap and the other is a roadmap.
+
+### What the brief under-credits (already done — and these are the load-bearing ones)
+
+- **OpenAPI is published today.** `Startup.cs` calls `AddOpenApi()` + `MapOpenApi()`; the document is
+  served at `GET /openapi/v1.json`, **public in every environment** (the `IsDevelopment()` gate was
+  removed in "P1"), with an operation-id transformer, a metadata transformer, and an
+  `OpenApiCoverageMetaTests` gate. (One binary tarball-download operation is intentionally exempt from
+  the typed-schema coverage requirement — so the codegen claim is "complete except one stream
+  endpoint," not 100%.) Checklist item *"OpenAPI schema is published"* = **done**. The brief lists it
+  as needed (§12) — stale. Note the path is `/openapi/v1.json`, not the brief's `/api/v1/openapi.json`.
+- **The expensive architectural constraint is already satisfied.** Wire DTOs live in a dependency-free
+  `Stash.Registry.Contracts` assembly with no EF entities and no view models; the same types are
+  consumed by the CLI. The brief's core rule — *"any action available in the website must be available
+  to any API client; no website-only endpoints; no UI leakage"* — holds today. This is the costly
+  thing to retrofit, and it's done.
+- **Read-path visibility enforcement already exists.** Search passes `callerUsername` into a
+  PDP-backed predicate (anonymous callers see only public packages); package/version detail map
+  `VisibilityHidden → 404` to avoid leaking existence. The brief's biggest security worry (§Security →
+  Private Package Leakage) is **already handled on the surfaces that exist today.** Forward constraint:
+  every new Bucket-B listing/metrics endpoint MUST replicate this same predicate.
+
+These three are why a raw "1 of 14 checklist items done" score is misleading — the structural
+foundation a website needs is in place; what's missing is breadth, not architecture.
+
+### Bucket A — true API-readiness polish (data exists; reshape/expose it). Unblocks Phase 2.
+
+| # | Item | State today | Work |
+| - | ---- | ----------- | ---- |
+| 2 | Dedicated README endpoint + cache validators | README is embedded in `PackageDetailResponse.readme` only; no `/readme` route, no ETag/Last-Modified anywhere in the codebase | New thin GET endpoint over existing `PackageRecord.Readme` + ETag |
+| 3 | Version lists paginated/bounded | `PackageDetailResponse.versions` is an **unbounded dict** inlined in package detail; no dedicated versions route | Add `GET …/versions` with the shared envelope |
+| 4 (partial) | Search filters + sort — the **column-backed** half | Today only `q`/`page`/`pageSize`. Backed by existing columns: `keyword`, `license`, `deprecated`, `owner` (derivable from `PackageRoleEntry`); sorts `name`/`updated`/`published`/`relevance` | Extend `SearchQuery` + the SQL predicate |
+| 6 (partial) | Summary-row trust fields — the **reshape** half | `PackageSummaryResponse` lacks `license` and `ownerCount`, both of which exist on the records | Add to the summary DTO |
+| 3-wide | One consistent pagination envelope | Fields already match (`totalCount/page/pageSize/totalPages`) but the **collection key differs** (`packages` vs `entries`) and **caps differ** (search 100, audit 200); no shared base type | Extract a shared `PagedResponse<T>` |
+| 5-cfg | CORS configurable | **Absent** (no `AddCors`/`UseCors`). Only blocks the *separate-origins* deployment; a same-origin or BFF site needs nothing here | Add config-driven CORS (off by default) |
+| 5-disc | Discovery endpoint (`.well-known/registry`) | **Absent** | Small static-ish endpoint advertising features/limits |
+| 6/8 | Link fields + ETag/Cache-Control on read endpoints | **Absent** | Add headers/affordances over existing data |
+
+### Bucket B — new product features (no backing data exists). Blocks Phases 3–5; independent of "web-readiness."
+
+Confirmed absent from the schema and the entire registry source tree (grep: zero hits beyond
+incidental "signature"=JWT):
+
+| Checklist item | Reality |
+| -------------- | ------- |
+| 5. Package metrics / downloads | **No download counter, no metrics column, no endpoint.** Nothing tracks downloads at all. |
+| 7. Advisories queryable | No advisory model/table/endpoint. |
+| 8. Provenance / signature per version | No provenance or package-signing infrastructure. |
+| 9. User & org package-listing endpoints | No `GET /users/{username}`, no `…/packages`, no `GET /orgs/{org}/packages`. Only `GET /orgs/{org}` (detail) exists. |
+| 10. Admin completeness | Have: stats, user create/delete, package-role override, audit-log. Missing: role mgmt, advisories, reserved prefixes, quarantine/block, webhooks, storage health, integrity checks. |
+| 6 (rest) | Trust fields `vulnerable`/`verifiedPublisher`/`provenanceStatus`/`signatureStatus`/`quarantined`/`yanked`/`downloads*` | None exist. |
+| 4 (rest) | Search filters `vulnerable`/`verified`/`provenance` + sort-by-`downloads` | Wait on the features above — **do not scope these into "expand search."** |
+
+> **The straddle that matters for whoever specs Phase 1:** "Expand search" and "add trust fields" each
+> span *both* buckets. The column-backed half is cheap (Bucket A); the `vulnerable`/`verified`/
+> `provenance`/`downloads` half is gated on unbuilt features (Bucket B). Scope only the Bucket-A half
+> into an API-readiness phase, or it will look small and land half-impossible.
+
+### The one decision that isn't code: browser auth (checklist 14)
+
+The registry is bearer/JWT-only — correct for CLI, and **correct for this brief's own recommended
+architecture (a website backend-for-frontend).** Under a BFF (or same-origin) the registry needs *no*
+auth change: the BFF holds the browser session and calls the registry with a token. Only the
+*direct-to-registry-from-browser* alternative would force cookies/CSRF/CORS/session-revocation into the
+API. **Recommendation: don't treat "browser auth" as a registry blocker** — pick the BFF the brief
+already prefers, and this item costs the registry nothing.
+
+### Recommended minimal "Phase 1 — API Readiness" slice (all Bucket A)
+
+Smallest scope that makes Phase 2 a credible browse site, in dependency order:
+
+1. **Shared `PagedResponse<T>` envelope** (collapse `packages`/`entries`, unify caps) — everything else
+   that lists reuses it.
+2. **`GET …/versions`** (paginated) + **`GET …/readme`**, both with **ETag/Last-Modified**.
+3. **Search v2:** column-backed filters (`keyword`, `license`, `deprecated`, `owner`) + sorts
+   (`name`/`updated`/`published`/`relevance`); add `license`+`ownerCount` to summary rows.
+4. **CORS config** (off by default) — only if separate-origins is a target; skip for BFF/same-origin.
+5. **`GET /api/v1/.well-known/registry`** discovery endpoint (advertise features so the client can
+   feature-detect as Bucket-B lands incrementally).
+
+Defer everything in Bucket B to the existing self-hosted-registry roadmap; the website surfaces those
+as they ship, gated by the discovery endpoint's `features{}` map.
+
+### Minor corrections to this brief
+
+- §12 / checklist 13 (OpenAPI) is **already done** — see above.
+- Endpoint shapes assume single-segment names (`/packages/{name}`); the real routes are **two-segment
+  scoped** (`/packages/{scope}/{name}`). A web client/BFF must handle `@scope/name`.
+- The "Registry feature gap roadmap" reference points at `0-backlog/packages/…`; the file actually
+  lives at **`.kanban/0-backlog/registry/Registry Feature Gaps - Self-Hosted Registry Roadmap.md`**.
+- "Consistent Pagination" (§3) reads as net-new; in reality the *fields* already agree — it's a
+  shared-base-type extraction, not a redesign.
+
