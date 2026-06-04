@@ -121,6 +121,23 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         };
     }
 
+    /// <summary>
+    /// Gets or sets the cancellation token used by the VM's step-limit / loop-check guard.
+    /// Setting this after VM creation allows per-call cancellation from the embedding host
+    /// without constructing a new VM (the <c>Stash.Hosting</c> pattern).
+    /// Updates both the VM's own <c>_ct</c> and <see cref="VMContext"/>'s token so that
+    /// stdlib built-ins that await process I/O also see the updated token.
+    /// </summary>
+    public CancellationToken CancellationToken
+    {
+        get => _ct;
+        set
+        {
+            _ct = value;
+            _context.SetCancellationToken(value);
+        }
+    }
+
     // ── IVMTypeRegistrar ──
     public void RegisterTypeName<T>(string vmTypeName) where T : class
     {

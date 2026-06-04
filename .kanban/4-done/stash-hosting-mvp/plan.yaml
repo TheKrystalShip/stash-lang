@@ -29,8 +29,10 @@ scope:
   - Stash.Hosting.Benchmarks/**
   - Stash.Bytecode/StashEngine.cs
   - Stash.Tests/Embedding/**
+  - Stash.Tests/Stash.Tests.csproj
   - Stash.sln
   - .kanban/2-in-progress/stash-hosting-mvp/**
+  - .gitignore
 
 phases:
   - id: P1
@@ -46,6 +48,7 @@ phases:
       - Stash.Bytecode/StashEngine.cs
       - Stash.sln
       - Stash.Tests/Embedding/StashHostBasicsTests.cs
+      - Stash.Tests/Stash.Tests.csproj
     verify:
       - dotnet build Stash.Hosting
       - dotnet test --filter "FullyQualifiedName~StashHostBasicsTests"
@@ -81,6 +84,13 @@ phases:
       - Stash.Hosting/Marshalling/HostMarshaller.cs
       - Stash.Hosting/Marshalling/JsonStashBridge.cs
       - Stash.Bytecode/StashEngine.cs
+      # Plan correction: two small VM fixes required to satisfy done_when. (1) VirtualMachine.Debug.cs:
+      # RunUntilFrame lacked the CallStack-capture catch that Run() has — added to satisfy
+      # "RuntimeError.CallStack-populated invariant". (2) VirtualMachine.cs: added a public
+      # CancellationToken property so StashEngine.CancellationToken.set can propagate to the
+      # VM's _ct field — required for per-call ct to fire inside the dispatch loop.
+      - Stash.Bytecode/VM/VirtualMachine.Debug.cs
+      - Stash.Bytecode/VM/VirtualMachine.cs
       - Stash.Tests/Embedding/StashHostCallTests.cs
       - Stash.Tests/Embedding/HostMarshallerTests.cs
       - Stash.Tests/Embedding/StashHostStructuredErrorTests.cs
@@ -112,8 +122,14 @@ phases:
     files:
       - Stash.Hosting/StashHost.cs
       - Stash.Hosting/IStashHost.cs
+      - Stash.Hosting/Marshalling/HostMarshaller.cs
+      # Plan correction: ExecuteVMFunctionInlineDirect did not handle async fn (no-frame path)
+      # which caused IndexOutOfRangeException when CallAsync<StashFuture> was called.
+      # Fix: added early-return check for _frameCount == savedFrameCount (async fn case).
+      - Stash.Bytecode/VM/VirtualMachine.Functions.cs
       - Stash.Tests/Embedding/StashHostDisposalTests.cs
       - Stash.Tests/Embedding/StashHostInvokeAsyncTests.cs
+      - Stash.Tests/Embedding/StashHostStatefulnessTests.cs
     verify:
       - dotnet build Stash.Hosting
       - dotnet test --filter "FullyQualifiedName~StashHostDisposalTests|FullyQualifiedName~StashHostInvokeAsyncTests|FullyQualifiedName~MultiEngineIsolationTests"

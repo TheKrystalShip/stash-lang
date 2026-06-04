@@ -13,7 +13,7 @@ namespace Stash.Tests.Cli;
 /// fallback behavior, the one-shot warning, auto-reset after 5 failures, re-entry
 /// guard, and continuation prompt rendering.
 /// </summary>
-[Collection("PromptTests")]
+[Collection("ProcessGlobalSlots")]
 public class PromptRendererTests
 {
     // ── Helpers ───────────────────────────────────────────────────────────────

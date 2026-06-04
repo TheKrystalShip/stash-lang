@@ -13,15 +13,12 @@ using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Tests.Stdlib;
 
-[CollectionDefinition("CompleteTests", DisableParallelization = true)]
-public sealed class CompleteTestsCollection { }
-
 /// <summary>
 /// Unit tests for the <c>complete</c> namespace built-in functions in
 /// <see cref="CompleteBuiltIns"/> (spec §9, §15.7).
 /// Each test resets all static state via <c>ResetAllForTesting()</c> for isolation.
 /// </summary>
-[Collection("CompleteTests")]
+[Collection("ProcessGlobalSlots")]
 public class CompleteBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
 {
     // ── Helpers ───────────────────────────────────────────────────────────────

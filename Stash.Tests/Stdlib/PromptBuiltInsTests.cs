@@ -5,15 +5,12 @@ using Stash.Stdlib.BuiltIns;
 
 namespace Stash.Tests.Stdlib;
 
-[CollectionDefinition("PromptTests", DisableParallelization = true)]
-public sealed class PromptTestsCollection { }
-
 /// <summary>
 /// Unit tests for the <c>prompt</c> namespace built-in functions in
 /// <see cref="PromptBuiltIns"/>. Each test resets all static state via
 /// <c>ResetAllForTesting()</c> so tests are order-independent.
 /// </summary>
-[Collection("PromptTests")]
+[Collection("ProcessGlobalSlots")]
 public class PromptBuiltInsTests : Stash.Tests.Interpreting.StashTestBase
 {
     // =========================================================================

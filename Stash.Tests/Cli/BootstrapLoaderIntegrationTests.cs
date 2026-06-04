@@ -16,7 +16,7 @@ namespace Stash.Tests.Cli;
 /// Extracts bootstrap scripts to a temp dir, loads them into a VM, and
 /// verifies that the expected globals and prompt registrations are present.
 /// </summary>
-[Collection("PromptTests")]
+[Collection("ProcessGlobalSlots")]
 public sealed class BootstrapLoaderIntegrationTests : IDisposable
 {
     private readonly string _tempDir;

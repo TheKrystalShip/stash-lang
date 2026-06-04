@@ -318,6 +318,18 @@ public sealed partial class VirtualMachine
         }
 
         CallValue(fn, args.Length, span);
+
+        // If CallValue did not push a new frame (e.g. for async fn — SpawnAsyncFunction
+        // returns the future immediately and does not push a frame), the result is already
+        // on the top of the stack. Return it without entering RunUntilFrame, which would
+        // try to execute the outer frame's bytecode.
+        if (_frameCount == savedFrameCount)
+        {
+            StashValue immediate = _stack[_sp - 1];
+            _sp = savedSp;
+            return immediate;
+        }
+
         try
         {
             object? result = RunUntilFrame(savedFrameCount);

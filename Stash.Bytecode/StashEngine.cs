@@ -102,11 +102,19 @@ public class StashEngine
 
     /// <summary>
     /// Gets or sets a cancellation token to abort script execution.
+    /// When the VM is already created, this also updates the VM's per-step cancellation
+    /// token so that the check in the dispatch loop fires for the new token immediately.
+    /// This is the path used by <c>Stash.Hosting</c> to wire per-call cancellation.
     /// </summary>
     public CancellationToken CancellationToken
     {
         get => _cancellationToken;
-        set => _cancellationToken = value;
+        set
+        {
+            _cancellationToken = value;
+            if (_vm is not null)
+                _vm.CancellationToken = value;
+        }
     }
 
     /// <summary>
@@ -387,6 +395,77 @@ public class StashEngine
     }
 
     /// <summary>
+    /// Executes a pre-compiled script without swallowing errors.
+    /// Unlike <see cref="Run(StashScript)"/>, this method lets
+    /// <see cref="RuntimeError"/>, <see cref="OperationCanceledException"/>, and
+    /// <see cref="StepLimitExceededException"/> propagate to the caller unchanged.
+    /// Intended for host SDK consumers (e.g. <c>Stash.Hosting</c>) that need the
+    /// raw exception to construct structured error types.
+    /// </summary>
+    /// <param name="script">A pre-compiled script.</param>
+    /// <returns>The script's return value as a <see cref="StashValue"/>.</returns>
+    /// <exception cref="RuntimeError">When the script throws a Stash-level error.</exception>
+    /// <exception cref="OperationCanceledException">When the cancellation token is triggered.</exception>
+    /// <exception cref="StepLimitExceededException">When the configured step limit is exceeded.</exception>
+    public StashValue RunRaw(StashScript script)
+    {
+        if (!script.IsResolved)
+        {
+            SemanticResolver.Resolve(script.Statements);
+            script.IsResolved = true;
+        }
+
+        script.CompiledChunk ??= Compiler.Compile(script.Statements);
+        Chunk chunk = script.CompiledChunk;
+        var vm = EnsureVM();
+        SyncVMSettings(vm);
+        object? result = vm.Execute(chunk);
+        return StashValue.FromObject(result);
+    }
+
+    /// <summary>
+    /// Calls a named function previously defined in this engine's global scope.
+    /// Looks up the callable in <c>vm.Globals</c>, invokes it inline on the existing VM
+    /// (accumulating global state across calls — the deliberate v1 lua_State contract),
+    /// and returns the raw <see cref="StashValue"/> result.
+    /// </summary>
+    /// <remarks>
+    /// This method does NOT stringify errors: <see cref="RuntimeError"/>,
+    /// <see cref="OperationCanceledException"/>, and <see cref="StepLimitExceededException"/>
+    /// escape unchanged so that the caller (e.g. <c>Stash.Hosting</c>) can build structured
+    /// error types from the raw exception.
+    /// </remarks>
+    /// <param name="name">The global name of the function to call.</param>
+    /// <param name="args">Arguments passed positionally to the function.</param>
+    /// <returns>The function's return value as a <see cref="StashValue"/>.</returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when the function is not found, is not callable, or raises a Stash-level error.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">When the cancellation token is triggered.</exception>
+    /// <exception cref="StepLimitExceededException">When the configured step limit is exceeded.</exception>
+    public StashValue CallFunction(string name, ReadOnlySpan<StashValue> args)
+    {
+        VirtualMachine vm = EnsureVM();
+        SyncVMSettings(vm);
+
+        if (!vm.Globals.TryGetValue(name, out StashValue callable))
+        {
+            throw new RuntimeError($"Function '{name}' is not defined.");
+        }
+
+        if (callable.Tag != StashValueTag.Obj || callable.AsObj is not VMFunction fn)
+        {
+            string typeName = callable.Tag == StashValueTag.Obj && callable.AsObj is not null
+                ? callable.AsObj.GetType().Name
+                : callable.Tag.ToString();
+            throw new RuntimeError(
+                $"'{name}' is not a callable function (got {typeName}).");
+        }
+
+        return vm.ExecuteVMFunctionInlineDirect(fn, args, null);
+    }
+
+    /// <summary>
     /// Loads and executes a Stash script file. Sets the file path for import resolution.
     /// </summary>
     /// <param name="filePath">Absolute or relative path to the .stash file.</param>
@@ -514,7 +593,7 @@ public class ExecutionResult
 
 /// <summary>
 /// A pre-compiled Stash script that can be executed multiple times
-/// without re-lexing and re-parsing.
+/// without re-lexing, re-parsing, or re-compiling.
 /// </summary>
 public class StashScript
 {
@@ -522,6 +601,12 @@ public class StashScript
     internal List<Stmt> Statements { get; }
     /// <summary>Gets or sets whether the resolver has been run on these statements.</summary>
     internal bool IsResolved { get; set; }
+    /// <summary>
+    /// The compiled <see cref="Chunk"/> produced on the first execution.
+    /// Null until the first call to <see cref="StashEngine.RunRaw"/>; reused on
+    /// subsequent calls to avoid redundant AST-to-bytecode compilation.
+    /// </summary>
+    internal Chunk? CompiledChunk { get; set; }
 
     /// <summary>Creates a new pre-compiled script from parsed statements.</summary>
     /// <param name="statements">The parsed AST statements.</param>
