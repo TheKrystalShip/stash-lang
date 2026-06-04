@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - registry-api-readiness-phase1 — Registry API Readiness — Phase 1 | .kanban/2-in-progress/registry-api-readiness-phase1/ | 8 phases | started 2026-06-04
+- callback-marshaling — Callback Marshaling Event-Loop | .kanban/2-in-progress/callback-marshaling/ | 4 phases | started 2026-06-04
 
 ---
 
