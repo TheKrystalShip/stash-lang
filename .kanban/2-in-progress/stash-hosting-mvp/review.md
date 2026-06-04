@@ -485,7 +485,8 @@ dotnet test --filter "FullyQualifiedName~StashHostInvokeAsyncTests"
 
 ## F08 — [LOW] `JsonStashBridge.WriteValue` silently emits `null` for any non-string/list/dict object (including the documented `byte[]` type)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** faf4a453
 **Files:** `Stash.Hosting/Marshalling/JsonStashBridge.cs:111-158`
 **Phase:** P2
 **Commit:** 712a0875
