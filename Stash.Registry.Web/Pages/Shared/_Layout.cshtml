@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — Stash Registry</title>
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+<body class="theme-dark">
+
+    <header class="site-header">
+        <div class="site-header-inner">
+            <a href="/" class="site-brand">
+                <img src="/images/stash-icon.svg" alt="Stash" class="site-brand-icon" width="28" height="28" />
+                Stash Registry
+            </a>
+
+            <form class="site-search" action="/search" method="get" role="search">
+                <input type="search" name="q" placeholder="Search packages…" value="@ViewData["SearchQuery"]" aria-label="Search packages" />
+                <button type="submit">Search</button>
+            </form>
+        </div>
+    </header>
+
+    <main class="site-main">
+        @RenderBody()
+    </main>
+
+    <footer class="site-footer">
+        <p>Stash Package Registry</p>
+    </footer>
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
