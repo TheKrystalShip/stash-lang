@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase3
 current: null
-updated: "2026-06-04T22:43:15Z"
+updated: "2026-06-04T23:02:16Z"
 phases:
   A1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "CSS fix applied: removed duplicate .badge/.btn-primary definitions; all 45 A3 tests pass."
   A4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: f79972bff30e7f478dce121612f22d4d0d073bff
+    verified: true
+    started: "2026-06-04T22:45:20Z"
+    completed: "2026-06-04T23:02:16Z"
+    attempts: 1
+    notes: "Token management page (list/create/revoke): GET /settings/tokens, POST create with TempData single-use reveal, POST revoke with current-session guard, all four chokepoint guards green"
   A5:
     status: pending
     commit: null
