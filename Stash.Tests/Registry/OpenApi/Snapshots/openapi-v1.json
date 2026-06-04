@@ -1467,6 +1467,57 @@
         }
       }
     },
+    "/api/v1/packages/{scope}/{name}/readme": {
+      "get": {
+        "tags": [
+          "Packages"
+        ],
+        "operationId": "Packages_GetReadme",
+        "parameters": [
+          {
+            "name": "scope",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadmeResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          }
+        }
+      }
+    },
     "/api/v1/packages/{scope}/{name}/{version}/download": {
       "get": {
         "tags": [
@@ -3139,6 +3190,36 @@
           },
           "integrity": {
             "type": "string"
+          }
+        }
+      },
+      "ReadmeResponse": {
+        "required": [
+          "content",
+          "contentType",
+          "byteSize"
+        ],
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "byteSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "extractedFromVersion": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

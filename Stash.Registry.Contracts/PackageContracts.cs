@@ -297,6 +297,55 @@ public sealed class VersionsQuery
 }
 
 /// <summary>
+/// Named content-type constants for <see cref="ReadmeResponse"/>.
+/// </summary>
+public static class ReadmeContentTypes
+{
+    /// <summary>The MIME type for raw Markdown content (<c>text/markdown</c>).</summary>
+    public const string Markdown = "text/markdown";
+}
+
+/// <summary>
+/// Response body returned by the <c>GET /api/v1/packages/{scope}/{name}/readme</c> endpoint.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The endpoint returns a typed JSON DTO (not a raw <c>text/markdown</c> body).  Returning a
+/// raw body would require a new OpenAPI schema exemption in <c>OpenApiCoverageMetaTests</c>;
+/// wrapping the content in a JSON DTO preserves the "zero new exemptions" invariant.
+/// </para>
+/// <para>
+/// The <c>content</c> field carries the raw, un-sanitized Markdown stored in
+/// <c>PackageRecord.Readme</c>.  The registry stores and returns markdown verbatim; the
+/// downstream website is responsible for any sanitization or rendering.
+/// </para>
+/// </remarks>
+public sealed class ReadmeResponse
+{
+    /// <summary>The raw Markdown content of the package README (unsanitized, un-rendered).</summary>
+    [JsonPropertyName("content")]
+    public required string Content { get; set; }
+
+    /// <summary>
+    /// The MIME content type of the README (<c>"text/markdown"</c>).
+    /// Sourced from <see cref="ReadmeContentTypes.Markdown"/>; never inlined.
+    /// </summary>
+    [JsonPropertyName("contentType")]
+    public required string ContentType { get; set; }
+
+    /// <summary>The UTF-8 byte length of <see cref="Content"/>.</summary>
+    [JsonPropertyName("byteSize")]
+    public required int ByteSize { get; set; }
+
+    /// <summary>
+    /// The version from which this README was extracted (the package's <c>latest</c> field),
+    /// or <see langword="null"/> when no version has been published yet.
+    /// </summary>
+    [JsonPropertyName("extractedFromVersion")]
+    public string? ExtractedFromVersion { get; set; }
+}
+
+/// <summary>
 /// Response body returned by deprecation and undeprecation endpoints.
 /// </summary>
 public sealed class DeprecationResponse
