@@ -253,6 +253,14 @@ public sealed partial class VirtualMachine
                 _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
                 handlerFrame.IP = handler.CatchIP;
             }
+            catch (RuntimeError ex) when (ex.CallStack is null)
+            {
+                // Unhandled-at-this-frame boundary: capture the call stack before the
+                // finally block in ExecuteVMFunctionInlineDirect unwinds the frames.
+                // Mirrors the same pattern in the outer Run() loop for top-level scripts.
+                ex.CallStack = CaptureCallStack();
+                throw;
+            }
         }
     }
 

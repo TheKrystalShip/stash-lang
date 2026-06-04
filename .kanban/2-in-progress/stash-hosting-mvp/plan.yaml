@@ -83,6 +83,13 @@ phases:
       - Stash.Hosting/Marshalling/HostMarshaller.cs
       - Stash.Hosting/Marshalling/JsonStashBridge.cs
       - Stash.Bytecode/StashEngine.cs
+      # Plan correction: two small VM fixes required to satisfy done_when. (1) VirtualMachine.Debug.cs:
+      # RunUntilFrame lacked the CallStack-capture catch that Run() has — added to satisfy
+      # "RuntimeError.CallStack-populated invariant". (2) VirtualMachine.cs: added a public
+      # CancellationToken property so StashEngine.CancellationToken.set can propagate to the
+      # VM's _ct field — required for per-call ct to fire inside the dispatch loop.
+      - Stash.Bytecode/VM/VirtualMachine.Debug.cs
+      - Stash.Bytecode/VM/VirtualMachine.cs
       - Stash.Tests/Embedding/StashHostCallTests.cs
       - Stash.Tests/Embedding/HostMarshallerTests.cs
       - Stash.Tests/Embedding/StashHostStructuredErrorTests.cs

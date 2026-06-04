@@ -44,4 +44,42 @@ public interface IStashHost : IAsyncDisposable
     /// <param name="script">A compiled script produced by <see cref="CompileAsync"/>.</param>
     /// <param name="ct">Optional cancellation token.</param>
     Task<StashResult<T>> RunAsync<T>(CompiledScript script, CancellationToken ct = default);
+
+    /// <summary>
+    /// Calls a named Stash function previously defined by a <see cref="RunAsync"/> call.
+    /// Marshals <paramref name="args"/> to Stash values, invokes the function, and
+    /// marshals the return value to <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">Expected CLR type of the function's return value.</typeparam>
+    /// <param name="fn">The name of the function to call.</param>
+    /// <param name="args">
+    /// The argument to pass. An <c>object?[]</c> is treated as multiple positional arguments;
+    /// any other single value is wrapped as a single argument; <c>null</c> means no arguments.
+    /// </param>
+    /// <param name="ct">Optional cancellation token.</param>
+    /// <returns>The function's return value converted to <typeparamref name="T"/>.</returns>
+    /// <exception cref="StashScriptException">
+    /// Thrown when the Stash function raises a script-level error.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// Propagated when <paramref name="ct"/> is cancelled.
+    /// </exception>
+    Task<T> CallAsync<T>(string fn, object? args = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Calls a named Stash function previously defined by a <see cref="RunAsync"/> call.
+    /// Unlike <see cref="CallAsync{T}"/>, this overload never throws on script-level failure;
+    /// errors (including cancellation) are returned as <see cref="StashResult{T}.Errors"/>.
+    /// </summary>
+    /// <typeparam name="T">Expected CLR type of the function's return value.</typeparam>
+    /// <param name="fn">The name of the function to call.</param>
+    /// <param name="args">Arguments — same shape as <see cref="CallAsync{T}"/>.</param>
+    /// <param name="ct">Optional cancellation token.</param>
+    /// <returns>
+    /// A <see cref="StashResult{T}"/> with <see cref="StashResult{T}.Success"/> set to
+    /// <c>false</c> and <see cref="StashResult{T}.Errors"/> populated on any failure.
+    /// Cancellation produces a single error with <see cref="StashError.Kind"/> ==
+    /// <see cref="StashError.KindCancelled"/>.
+    /// </returns>
+    Task<StashResult<T>> TryCallAsync<T>(string fn, object? args = null, CancellationToken ct = default);
 }

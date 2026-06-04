@@ -6,7 +6,9 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Bytecode;
+using Stash.Hosting.Marshalling;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Default implementation of <see cref="IStashHost"/>.
@@ -73,27 +75,31 @@ public sealed class StashHost : IStashHost
             StashEngine engine = _engine!;
             var (value, errors) = await Task.Run(() =>
             {
-                // Best-effort per-call cancellation: setting the engine property updates
-                // _cancellationToken for any future VM creation; the VM's own _ct field is
-                // private and frozen at construction time.  The SemaphoreSlim(1,1) guarantees
-                // only one RunAsync is in-flight, so this assignment is safe.
                 engine.CancellationToken = ct;
                 try
                 {
                     StashValue rawValue = engine.RunRaw(script.Inner);
-                    return (rawValue, (IReadOnlyList<string>)Array.Empty<string>());
+                    return (rawValue, (IReadOnlyList<StashError>)Array.Empty<StashError>());
                 }
                 catch (RuntimeError ex)
                 {
-                    return (StashValue.Null, (IReadOnlyList<string>)new[] { ex.Message });
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[] { BuildStashError(ex) });
                 }
                 catch (OperationCanceledException)
                 {
-                    return (StashValue.Null, (IReadOnlyList<string>)new[] { "Script execution was cancelled." });
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[]
+                    {
+                        new StashError(StashError.KindCancelled, "Script execution was cancelled.",
+                            null, Array.Empty<StackFrameInfo>())
+                    });
                 }
                 catch (StepLimitExceededException ex)
                 {
-                    return (StashValue.Null, (IReadOnlyList<string>)new[] { ex.Message });
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[]
+                    {
+                        new StashError("StepLimitExceeded", ex.Message,
+                            null, Array.Empty<StackFrameInfo>())
+                    });
                 }
             }, ct).ConfigureAwait(false);
 
@@ -122,19 +128,27 @@ public sealed class StashHost : IStashHost
                 try
                 {
                     StashValue rawValue = engine.RunRaw(script.Inner);
-                    return (rawValue, (IReadOnlyList<string>)Array.Empty<string>());
+                    return (rawValue, (IReadOnlyList<StashError>)Array.Empty<StashError>());
                 }
                 catch (RuntimeError ex)
                 {
-                    return (StashValue.Null, (IReadOnlyList<string>)new[] { ex.Message });
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[] { BuildStashError(ex) });
                 }
                 catch (OperationCanceledException)
                 {
-                    return (StashValue.Null, (IReadOnlyList<string>)new[] { "Script execution was cancelled." });
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[]
+                    {
+                        new StashError(StashError.KindCancelled, "Script execution was cancelled.",
+                            null, Array.Empty<StackFrameInfo>())
+                    });
                 }
                 catch (StepLimitExceededException ex)
                 {
-                    return (StashValue.Null, (IReadOnlyList<string>)new[] { ex.Message });
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[]
+                    {
+                        new StashError("StepLimitExceeded", ex.Message,
+                            null, Array.Empty<StackFrameInfo>())
+                    });
                 }
             }, ct).ConfigureAwait(false);
 
@@ -142,13 +156,124 @@ public sealed class StashHost : IStashHost
             if (!success)
                 return new StashResult<T>(false, default, errors);
 
-            T? converted = ConvertValue<T>(value);
-            return new StashResult<T>(true, converted, Array.Empty<string>());
+            T? converted = HostMarshaller.FromStash<T>(value);
+            return new StashResult<T>(true, converted, Array.Empty<StashError>());
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    /// <inheritdoc/>
+    public async Task<T> CallAsync<T>(string fn, object? args = null, CancellationToken ct = default)
+    {
+        if (fn is null) throw new ArgumentNullException(nameof(fn));
+        ThrowIfDisposed();
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        // After WaitAsync returns without throwing, we own the semaphore.
+        try
+        {
+            StashEngine engine = _engine!;
+            StashValue[] marshalledArgs = HostMarshaller.ToStashArgs(args);
+            StashValue result = await Task.Run(() =>
+            {
+                engine.CancellationToken = ct;
+                // RuntimeError and OperationCanceledException propagate raw.
+                // RuntimeError is caught OUTSIDE the Task.Run (see catch below).
+                // OCE is let through as-is — CallAsync<T> propagates it to the caller.
+                return engine.CallFunction(fn, marshalledArgs);
+            }, ct).ConfigureAwait(false);
+
+            return HostMarshaller.FromStash<T>(result)!;
+        }
+        catch (RuntimeError ex)
+        {
+            throw new StashScriptException(BuildStashError(ex));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<StashResult<T>> TryCallAsync<T>(string fn, object? args = null, CancellationToken ct = default)
+    {
+        if (fn is null) throw new ArgumentNullException(nameof(fn));
+        ThrowIfDisposed();
+
+        // TryCallAsync never throws on script-level failure or cancellation.
+        // Use a two-phase cancel check: WaitAsync with the ct (may throw OCE if already
+        // cancelled), then run the body. Both OCE sources are caught below.
+        bool acquired = false;
+        try
+        {
+            try
+            {
+                await _gate.WaitAsync(ct).ConfigureAwait(false);
+                acquired = true;
+            }
+            catch (OperationCanceledException)
+            {
+                return MakeCancelledResult<T>("Semaphore wait was cancelled.");
+            }
+
+            StashEngine engine = _engine!;
+            StashValue[] marshalledArgs = HostMarshaller.ToStashArgs(args);
+
+            // Run in Task.Run without the ct so that inner OCE comes only from the
+            // CancellationToken the VM sees (engine.CancellationToken = ct), not from
+            // Task.Run's early-cancel fast path (which would also throw OCE but bypass
+            // the inner try/catch below).
+            var (value, errors) = await Task.Run(() =>
+            {
+                engine.CancellationToken = ct;
+                try
+                {
+                    StashValue raw = engine.CallFunction(fn, marshalledArgs);
+                    return (raw, (IReadOnlyList<StashError>)Array.Empty<StashError>());
+                }
+                catch (RuntimeError ex)
+                {
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[] { BuildStashError(ex) });
+                }
+                catch (OperationCanceledException)
+                {
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[]
+                    {
+                        new StashError(StashError.KindCancelled, "Operation was cancelled.",
+                            null, Array.Empty<StackFrameInfo>())
+                    });
+                }
+                catch (StepLimitExceededException ex)
+                {
+                    return (StashValue.Null, (IReadOnlyList<StashError>)new[]
+                    {
+                        new StashError("StepLimitExceeded", ex.Message,
+                            null, Array.Empty<StackFrameInfo>())
+                    });
+                }
+            }).ConfigureAwait(false);
+
+            bool success = errors.Count == 0;
+            if (!success)
+                return new StashResult<T>(false, default, errors);
+
+            T? converted = HostMarshaller.FromStash<T>(value);
+            return new StashResult<T>(true, converted, Array.Empty<StashError>());
+        }
+        finally
+        {
+            if (acquired) _gate.Release();
+        }
+    }
+
+    private static StashResult<T> MakeCancelledResult<T>(string message)
+    {
+        var errors = new[] { new StashError(StashError.KindCancelled, message, null, Array.Empty<StackFrameInfo>()) };
+        return new StashResult<T>(false, default, errors);
     }
 
     /// <inheritdoc/>
@@ -173,39 +298,38 @@ public sealed class StashHost : IStashHost
     }
 
     /// <summary>
-    /// Minimal P1 conversion: <typeparamref name="T"/> = <see cref="StashValue"/> is a passthrough;
-    /// primitives are unboxed from <see cref="StashValue.ToObject"/>.
-    /// The full <c>HostMarshaller</c> chokepoint (with anonymous-object, dict, list, JsonElement
-    /// support) lands in P2.
+    /// Converts a <see cref="RuntimeError"/> to a structured <see cref="StashError"/>.
+    /// The <see cref="StashError.Kind"/> is derived from
+    /// <see cref="RuntimeError.ErrorType"/> (which calls
+    /// <see cref="BuiltInErrorRegistry.NameOf"/> for built-in errors and returns the
+    /// user-supplied type name for <c>throw { type: "..." }</c> errors). The
+    /// <see cref="StashError.CallStack"/> is projected from
+    /// <see cref="RuntimeError.CallStack"/> if populated by the VM.
     /// </summary>
-    private static T? ConvertValue<T>(StashValue value)
+    private static StashError BuildStashError(RuntimeError error)
     {
-        if (typeof(T) == typeof(StashValue))
-            return (T)(object)value;
+        // Kind: error.ErrorType is the canonical name (BuiltInErrorRegistry.NameOf for
+        // built-ins, user-supplied type for UserRuntimeError). No inline string constant.
+        string kind = error.ErrorType;
 
-        object? raw = value.ToObject();
-        if (raw is null)
-            return default;
-
-        if (raw is T direct)
-            return direct;
-
-        // Allow widening numeric conversions for the common int → long case.
-        if (raw is IConvertible conv)
+        // CallStack: projected from the VM-captured List<StackFrame> if present.
+        IReadOnlyList<StackFrameInfo> callStack = Array.Empty<StackFrameInfo>();
+        if (error.CallStack is { Count: > 0 })
         {
-            try
+            var frames = new List<StackFrameInfo>(error.CallStack.Count);
+            foreach (Stash.Runtime.StackFrame sf in error.CallStack)
             {
-                return (T)System.Convert.ChangeType(conv, typeof(T),
-                    System.Globalization.CultureInfo.InvariantCulture);
+                if (sf.FunctionName == "<truncated>") continue; // skip sentinel
+                frames.Add(new StackFrameInfo(
+                    sf.Span.File,
+                    sf.Span.StartLine,
+                    sf.Span.StartColumn,
+                    sf.FunctionName));
             }
-            catch (InvalidCastException) { }
-            catch (OverflowException) { }
-            catch (FormatException) { }
+            callStack = frames;
         }
 
-        throw new InvalidCastException(
-            $"Cannot convert Stash value of type '{raw.GetType().Name}' to '{typeof(T).Name}'. " +
-            $"Full marshalling support (POCO, anonymous objects, JsonElement) lands in P2.");
+        return new StashError(kind, error.Message, error.Span, callStack);
     }
 
     private void ThrowIfDisposed()

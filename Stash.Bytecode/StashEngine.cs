@@ -102,11 +102,19 @@ public class StashEngine
 
     /// <summary>
     /// Gets or sets a cancellation token to abort script execution.
+    /// When the VM is already created, this also updates the VM's per-step cancellation
+    /// token so that the check in the dispatch loop fires for the new token immediately.
+    /// This is the path used by <c>Stash.Hosting</c> to wire per-call cancellation.
     /// </summary>
     public CancellationToken CancellationToken
     {
         get => _cancellationToken;
-        set => _cancellationToken = value;
+        set
+        {
+            _cancellationToken = value;
+            if (_vm is not null)
+                _vm.CancellationToken = value;
+        }
     }
 
     /// <summary>
@@ -412,6 +420,48 @@ public class StashEngine
         SyncVMSettings(vm);
         object? result = vm.Execute(chunk);
         return StashValue.FromObject(result);
+    }
+
+    /// <summary>
+    /// Calls a named function previously defined in this engine's global scope.
+    /// Looks up the callable in <c>vm.Globals</c>, invokes it inline on the existing VM
+    /// (accumulating global state across calls — the deliberate v1 lua_State contract),
+    /// and returns the raw <see cref="StashValue"/> result.
+    /// </summary>
+    /// <remarks>
+    /// This method does NOT stringify errors: <see cref="RuntimeError"/>,
+    /// <see cref="OperationCanceledException"/>, and <see cref="StepLimitExceededException"/>
+    /// escape unchanged so that the caller (e.g. <c>Stash.Hosting</c>) can build structured
+    /// error types from the raw exception.
+    /// </remarks>
+    /// <param name="name">The global name of the function to call.</param>
+    /// <param name="args">Arguments passed positionally to the function.</param>
+    /// <returns>The function's return value as a <see cref="StashValue"/>.</returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when the function is not found, is not callable, or raises a Stash-level error.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">When the cancellation token is triggered.</exception>
+    /// <exception cref="StepLimitExceededException">When the configured step limit is exceeded.</exception>
+    public StashValue CallFunction(string name, ReadOnlySpan<StashValue> args)
+    {
+        VirtualMachine vm = EnsureVM();
+        SyncVMSettings(vm);
+
+        if (!vm.Globals.TryGetValue(name, out StashValue callable))
+        {
+            throw new RuntimeError($"Function '{name}' is not defined.");
+        }
+
+        if (callable.Tag != StashValueTag.Obj || callable.AsObj is not VMFunction fn)
+        {
+            string typeName = callable.Tag == StashValueTag.Obj && callable.AsObj is not null
+                ? callable.AsObj.GetType().Name
+                : callable.Tag.ToString();
+            throw new RuntimeError(
+                $"'{name}' is not a callable function (got {typeName}).");
+        }
+
+        return vm.ExecuteVMFunctionInlineDirect(fn, args, null);
     }
 
     /// <summary>
