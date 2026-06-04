@@ -188,7 +188,8 @@ dotnet test --filter "FullyQualifiedName~SearchPageTests|FullyQualifiedName~Pack
 
 ## F03 — [MINOR] Chokepoint scanner has two narrow blind spots
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3669eee8
 **Files:** `Stash.Tests/Registry/Web/ReadmeChokepointMetaTests.cs:83-118`, `:126-167`
 **Phase:** P5
 **Commit:** 6f40b2ec
@@ -296,7 +297,8 @@ dotnet test --filter "FullyQualifiedName~Registry.Web"
 
 ## F05 — [MINOR] Per-segment `Uri.EscapeDataString` is implemented but never test-verified
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3669eee8
 **Files:** `Stash.Tests/Registry/Web/HttpRegistryClientTests.cs`
 **Phase:** P4
 **Commit:** 8383de24
