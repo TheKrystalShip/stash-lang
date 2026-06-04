@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T15:39:10Z"
+updated: "2026-06-04T15:56:49Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "Scaffold Stash.Registry.Web (net10.0 Razor Pages, Contracts-only ref); /health page; WebProjectIsolationMetaTests green (6 tests: reflection + csproj-parse, each with clean/stray fail-path fixtures); typeof-derived assembly names prevent vacuous pass"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c3be4c0fd952dbc308dba5479e727983940f81ed
+    verified: true
+    started: "2026-06-04T15:42:03Z"
+    completed: "2026-06-04T15:56:49Z"
+    attempts: 1
+    notes: "Layout + brand: _Layout.cshtml with stash-icon + global search form (GET /search); site.css with Catppuccin Mocha/Latte palette from Playground; _ViewStart at Pages/ (plan stale: Shared/ path incorrect for Razor Pages discovery); IRegistryClient expanded to 6 methods; HttpRegistryClient via IHttpClientFactory, 404->null, 5xx->RegistryClientException; 18 HttpRegistryClientTests green (200/404/500 paths, no Auth header)"
   P3:
     status: pending
     commit: null
