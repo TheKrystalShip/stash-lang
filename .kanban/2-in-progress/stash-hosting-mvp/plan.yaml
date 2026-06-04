@@ -32,6 +32,7 @@ scope:
   - Stash.Tests/Stash.Tests.csproj
   - Stash.sln
   - .kanban/2-in-progress/stash-hosting-mvp/**
+  - .gitignore
 
 phases:
   - id: P1
