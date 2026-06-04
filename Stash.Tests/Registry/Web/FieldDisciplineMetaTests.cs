@@ -296,6 +296,39 @@ public sealed class FieldDisciplineMetaTests
             "The README content or surrounding template contains Bucket-B placeholder chrome.");
     }
 
+    /// <summary>
+    /// Version detail page (<c>GET /packages/@{scope}/{name}/v/{version}</c>) with a populated
+    /// version — no Bucket-B label vocabulary appears in the rendered HTML.
+    /// </summary>
+    [Fact]
+    public async Task VersionDetailPage_WithVersion_ContainsNoBucketBLabels()
+    {
+        // Arrange — a version detail response for the binding floor
+        var versionDetail = StubRegistryClient.SampleVersionDetail(
+            version: "1.0.0",
+            publishedBy: "field-discipline-test-user");
+
+        var stub = new StubRegistryClient { GetVersionResult = versionDetail };
+
+        using var factory = CreateFactory(stub);
+        using var client = factory.CreateClient();
+
+        // Act
+        var response = await client.GetAsync("/packages/@org/alpha/v/1.0.0");
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+
+        // ── Binding floor: publisher rendered (non-vacuous) ───────────────────
+        Assert.Contains("field-discipline-test-user", html);
+
+        // ── Forbidden label scan ──────────────────────────────────────────────
+        var violations = FindForbiddenTokens(html);
+        Assert.True(
+            violations.Count == 0,
+            $"Version detail page HTML contains forbidden Bucket-B label(s): [{string.Join(", ", violations)}]. " +
+            "Remove all Bucket-B placeholder chrome from the page template and partials.");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static WebApplicationFactory<HealthModel> CreateFactory(IRegistryClient stub)
