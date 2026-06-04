@@ -1,6 +1,9 @@
 # Registry Website - Optional Web Client and API Readiness
 
-> **Status:** Backlog
+> **Status:** Formalized as the `website` milestone (2026-06-04) — charter at
+> `.kanban/milestones/website/MILESTONE.md`; run `/milestone website` for the derived ledger.
+> **Phase 1 (API Readiness / Bucket A) shipped** as `registry-api-readiness-phase1`. This doc
+> remains the design rationale; the milestone charter is the authority on what's next.
 > **Created:** 2026-05-28
 > **Priority:** Medium
 > **Discovery context:** Follow-up to the self-hosted registry feature gap analysis. Question: whether Stash should eventually provide a website where users can see, search, and interact with packages, similar to npmjs.com, NuGet.org, PyPI, or GitHub Packages, while keeping the registry as a standalone API.
