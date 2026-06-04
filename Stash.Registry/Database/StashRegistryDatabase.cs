@@ -399,6 +399,10 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             record.Deprecated = true;
             record.DeprecationMessage = message;
             record.DeprecatedBy = deprecatedBy;
+            // Bump the parent package timestamp so the /versions ETag reflects this change.
+            var package = await _context.Packages.FindAsync(name);
+            if (package != null)
+                package.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
     }
@@ -412,6 +416,10 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             record.Deprecated = false;
             record.DeprecationMessage = null;
             record.DeprecatedBy = null;
+            // Bump the parent package timestamp so the /versions ETag reflects this change.
+            var package = await _context.Packages.FindAsync(name);
+            if (package != null)
+                package.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
     }

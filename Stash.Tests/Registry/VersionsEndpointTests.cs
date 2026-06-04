@@ -347,4 +347,118 @@ public sealed class VersionsEndpointTests : RegistryAuthzTestBase
         string etagHeader = response.Headers.ETag!.ToString();
         Assert.StartsWith("W/", etagHeader);
     }
+
+    // ── ETag invalidation on version deprecate/undeprecate ─────────────────────
+
+    /// <summary>
+    /// After PATCH …/{version}/deprecate the /versions ETag must change so that
+    /// a client sending the pre-deprecation ETag via If-None-Match receives 200
+    /// (with the version now showing deprecated = true), not a stale 304.
+    /// </summary>
+    [Fact]
+    public async Task DeprecateVersion_ThenIfNoneMatchPriorETag_Returns200WithDeprecatedState()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client = ctx.Factory.CreateClient();
+
+        // The owner also gets a publish-ceiling token (RegisterAndGetTokenAsync always does).
+        string ownerToken = await RegisterAndGetTokenAsync(client, "etag-dep-k");
+        await SeedScopeAsync(ctx.Factory, "etag-dep-k", "etag-dep-k");
+        await SeedPackageAsync(ctx.Factory, "@etag-dep-k/pkg", "etag-dep-k", visibility: "public");
+        await SeedVersionAsync(ctx.Factory, "@etag-dep-k/pkg", "1.0.0");
+
+        // Step 1: fetch /versions and capture the pre-deprecation ETag.
+        var firstResponse = await client.GetAsync("/api/v1/packages/etag-dep-k/pkg/versions");
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.NotNull(firstResponse.Headers.ETag);
+        string oldEtag = firstResponse.Headers.ETag!.ToString();
+
+        // Step 2: deprecate version 1.0.0 (owner has the publish-ceiling token).
+        SetBearer(client, ownerToken);
+        var patchResp = await client.PatchAsync(
+            "/api/v1/packages/etag-dep-k/pkg/1.0.0/deprecate",
+            Json(new { message = "Deprecated for testing." }));
+        Assert.Equal(HttpStatusCode.OK, patchResp.StatusCode);
+
+        // Step 3: fetch /versions with the pre-deprecation ETag — must return 200
+        // (not 304) because the ETag has been invalidated by the deprecation.
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/packages/etag-dep-k/pkg/versions");
+        request.Headers.TryAddWithoutValidation("If-None-Match", oldEtag);
+        var conditionalResponse = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, conditionalResponse.StatusCode);
+
+        // The response must carry a new (different) ETag.
+        Assert.NotNull(conditionalResponse.Headers.ETag);
+        string newEtag = conditionalResponse.Headers.ETag!.ToString();
+        Assert.NotEqual(oldEtag, newEtag);
+
+        // The body must show the version as deprecated.
+        var body = await conditionalResponse.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var items = doc.RootElement.GetProperty("items");
+        Assert.Equal(1, items.GetArrayLength());
+        var v = items[0];
+        Assert.True(v.GetProperty("deprecated").GetBoolean(), "Version must be deprecated in the response body.");
+    }
+
+    /// <summary>
+    /// After DELETE …/{version}/deprecate (undeprecate) the /versions ETag must change
+    /// so that a client sending the pre-undeprecation ETag via If-None-Match receives 200
+    /// (with the version now showing deprecated = false), not a stale 304.
+    /// </summary>
+    [Fact]
+    public async Task UndeprecateVersion_ThenIfNoneMatchPriorETag_Returns200WithUndeprecatedState()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client = ctx.Factory.CreateClient();
+
+        string ownerToken = await RegisterAndGetTokenAsync(client, "etag-undep-l");
+        await SeedScopeAsync(ctx.Factory, "etag-undep-l", "etag-undep-l");
+        await SeedPackageAsync(ctx.Factory, "@etag-undep-l/pkg", "etag-undep-l", visibility: "public");
+        await SeedVersionAsync(ctx.Factory, "@etag-undep-l/pkg", "1.0.0");
+
+        // Pre-condition: deprecate the version first.
+        SetBearer(client, ownerToken);
+        var deprecateResp = await client.PatchAsync(
+            "/api/v1/packages/etag-undep-l/pkg/1.0.0/deprecate",
+            Json(new { message = "Initially deprecated." }));
+        Assert.Equal(HttpStatusCode.OK, deprecateResp.StatusCode);
+
+        // Step 1: fetch /versions in the deprecated state and capture the ETag.
+        var firstResponse = await client.GetAsync("/api/v1/packages/etag-undep-l/pkg/versions");
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        Assert.NotNull(firstResponse.Headers.ETag);
+        string oldEtag = firstResponse.Headers.ETag!.ToString();
+
+        // Verify the version shows deprecated = true before the undeprecation.
+        var firstBody = await firstResponse.Content.ReadAsStringAsync();
+        using var firstDoc = JsonDocument.Parse(firstBody);
+        Assert.True(firstDoc.RootElement.GetProperty("items")[0].GetProperty("deprecated").GetBoolean());
+
+        // Step 2: undeprecate version 1.0.0.
+        var undeprecateResp = await client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Delete, "/api/v1/packages/etag-undep-l/pkg/1.0.0/deprecate"));
+        Assert.Equal(HttpStatusCode.OK, undeprecateResp.StatusCode);
+
+        // Step 3: fetch /versions with the pre-undeprecation ETag — must return 200.
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/packages/etag-undep-l/pkg/versions");
+        request.Headers.TryAddWithoutValidation("If-None-Match", oldEtag);
+        var conditionalResponse = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, conditionalResponse.StatusCode);
+
+        // The response must carry a new (different) ETag.
+        Assert.NotNull(conditionalResponse.Headers.ETag);
+        string newEtag = conditionalResponse.Headers.ETag!.ToString();
+        Assert.NotEqual(oldEtag, newEtag);
+
+        // The body must show the version as no longer deprecated.
+        var body = await conditionalResponse.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var items = doc.RootElement.GetProperty("items");
+        Assert.Equal(1, items.GetArrayLength());
+        var v = items[0];
+        Assert.False(v.GetProperty("deprecated").GetBoolean(), "Version must not be deprecated in the response body.");
+    }
 }
