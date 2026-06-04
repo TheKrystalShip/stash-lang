@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-website-phase2
 current: null
-updated: "2026-06-04T15:56:49Z"
+updated: "2026-06-04T16:13:19Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "Layout + brand: _Layout.cshtml with stash-icon + global search form (GET /search); site.css with Catppuccin Mocha/Latte palette from Playground; _ViewStart at Pages/ (plan stale: Shared/ path incorrect for Razor Pages discovery); IRegistryClient expanded to 6 methods; HttpRegistryClient via IHttpClientFactory, 404->null, 5xx->RegistryClientException; 18 HttpRegistryClientTests green (200/404/500 paths, no Auth header)"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: f06ffda75604d9465d042034d35b3808ed6428f4
+    verified: true
+    started: "2026-06-04T15:57:45Z"
+    completed: "2026-06-04T16:13:19Z"
+    attempts: 1
+    notes: "Home+Search pages with filter/sort/pagination; SortLabels const class; PackageCard partial (Bucket-A only); StubRegistryClient fixture; FieldDisciplineMetaTests (word-boundary scan + fail-path fixture); HomePageTests + SearchPageTests covering 200/empty/502; plan corrections: _ViewImports added usings, WAF uses HealthModel not Program to avoid global-namespace ambiguity with Stash.Cli"
   P4:
     status: pending
     commit: null
