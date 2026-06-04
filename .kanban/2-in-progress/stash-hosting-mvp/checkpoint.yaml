@@ -1,7 +1,7 @@
 schema_version: 1
 feature: stash-hosting-mvp
 current: null
-updated: "2026-06-04T19:19:26Z"
+updated: "2026-06-04T19:26:13Z"
 phases:
   P1:
     status: done
@@ -13,12 +13,12 @@ phases:
     notes: "Stash.Hosting project created; StashEngine.RunRaw added; 8 tests green; isolation test strengthened after advisor review; plan correction: Stash.Tests.csproj added to scope; script adjusted for explicit return"
   P2:
     status: done
-    commit: 712a08750840a0b638b52082cac3afae5f385cba
+    commit: 05572d9f20019ebe2629e0c9e234d63e5b359e94
     verified: true
     started: "2026-06-04T18:07:17Z"
-    completed: "2026-06-04T19:19:26Z"
+    completed: "2026-06-04T19:26:13Z"
     attempts: 1
-    notes: "CallAsync/TryCallAsync + HostMarshaller chokepoint + structured StashError; 36 tests green; VM fixes: CallStack population in RunUntilFrame + per-call CancellationToken propagation"
+    notes: "CallAsync/TryCallAsync + HostMarshaller + structured StashError; 36 tests green incl time.sleep cancellation; VM fixes: CallStack in RunUntilFrame + per-call CT propagation; full suite 13406/13412 green"
   P3:
     status: pending
     commit: null
