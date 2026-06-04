@@ -17,7 +17,8 @@ loopback tests are **pre-existing flakes unrelated to this feature** — filed a
 
 ## F01 — [CRITICAL] Producer flip is too broad: task.run / task.parMap / task.timeout / process.exec exit callbacks / TCP-accept enqueue to an un-drained queue, callbacks never fire
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 2d1f2e87
 **Files:** `Stash.Bytecode/Runtime/VMContext.cs:610-631` (`InvokeCallbackDirect`), `Stash.Bytecode/VM/VirtualMachine.Async.cs` (the surviving routed site), `Stash.Stdlib/BuiltIns/TaskBuiltIns.cs:34-45` (`task.run`), `:295-306` (`task.timeout`), `Stash.Stdlib/BuiltIns/NetSocketImpl.cs:548-552` (TCP accept loop), `Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs:996` (`FireExitCallbacks`)
 **Phase:** P1
 **Commit:** d695c469 (the producer-flip commit)
