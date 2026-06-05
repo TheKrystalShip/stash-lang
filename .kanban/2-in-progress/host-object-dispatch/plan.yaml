@@ -80,7 +80,7 @@ phases:
       - "docs/Stash — Standard Library Reference.md"
       - Stash.Tests/Embedding/HostObjectPropertyTests.cs
     verify:
-      - dotnet build Stash.Hosting Stash.Core Stash.Docs
+      - dotnet build Stash.sln
       - dotnet run --project Stash.Docs/
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectPropertyTests"
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectRegistrationTests"

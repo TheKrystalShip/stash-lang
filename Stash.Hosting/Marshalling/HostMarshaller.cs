@@ -278,12 +278,30 @@ internal static class HostMarshaller
                 $"the value is not a Future. Ensure the Stash function is declared with 'async fn'.");
         }
 
+        // Host handle — unwrap when the wrapped CLR type matches T.
+        // This branch handles the case where a Stash script returns (or passes back) a
+        // registered host object. The HostHandle's ClrType must match typeof(T) exactly;
+        // a wrong-type handle is an unrecoverable contract violation, so we throw clearly.
+        if (typeof(T).IsClass && !typeof(T).IsAbstract)
+        {
+            if (value.Tag == StashValueTag.Obj && value.AsObj is HostHandle handle)
+            {
+                if (handle.ClrType == typeof(T))
+                    return (T)handle.Target;
+
+                throw new InvalidCastException(
+                    $"Cannot convert Stash HostHandle<{handle.ClrType.Name}> to '{typeof(T).Name}': " +
+                    $"the handle wraps a different registered host type. " +
+                    $"Expected handle for '{typeof(T).Name}', got '{handle.ClrType.Name}'.");
+            }
+        }
+
         // All other types (POCO, records, etc.) → v2
         throw new InvalidCastException(
             $"Cannot convert Stash value to '{typeof(T).Name}': reflection-based POCO/record " +
             $"marshalling is v2. Supported return types: StashValue, JsonElement, " +
             $"string, long, int, double, float, bool, byte, byte[], " +
-            $"Dictionary<string,object?>, List<StashValue>.");
+            $"Dictionary<string,object?>, List<StashValue>, registered host types.");
     }
 
     /// <summary>

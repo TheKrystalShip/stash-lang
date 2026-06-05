@@ -156,6 +156,7 @@ required. They can be thrown with struct-literal syntax and caught by typed `cat
 | `CliUnknownOption` | `message: string`, `option: string` | An option not declared in the schema was encountered. |
 | `CliValidationFailed` | `message: string`, `option: string?`, `message: string` | min/max/pattern/validate rejected the value. |
 | `CommandError` | `message: string`, `exitCode: int`, `stderr: string`, `stdout: string`, `command: string` | Strict command ($!(...)) exited with a non-zero exit code. |
+| `HostError` | `message: string` | A CLR exception escaped a host-registered member delegate during Stash-to-host dispatch. |
 | `IOError` | `message: string` | File or network I/O failure. |
 | `IndexError` | `message: string` | Array or string index is out of bounds. |
 | `LockError` | `message: string`, `path: string` | File-lock acquisition failed. |
