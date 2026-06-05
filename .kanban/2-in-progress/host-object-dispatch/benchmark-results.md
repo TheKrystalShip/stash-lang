@@ -43,9 +43,11 @@ statistical artifact of the 3-iteration budget; the larger sample eliminates it 
 
 `WarmPropertyRead` (1.33 μs median, Ratio = 1.01×) is statistically indistinguishable from the
 plain-Stash-function baseline (1.30 μs) — the getter delegate adds no measurable overhead above
-the `CallAsync` infra floor. `WarmMethodCall` (1.45 μs, Ratio = 1.12×) is ~12 % above baseline,
-consistent with the extra allocations and work it performs (HostBoundMethod alloc, arity check,
-arg marshal, `CallDirect` → `InvokeHostDelegate` → return marshal). The ordering
+the `CallAsync` infra floor. BDN flagged a mild multimodal distribution for `WarmPropertyRead`
+(mValue = 2.86, 4 outliers removed); the median and 0.061 μs StdDev keep it well within baseline
+noise and do not change the central-tendency conclusion. `WarmMethodCall` (1.45 μs, Ratio = 1.12×)
+is ~12 % above baseline, consistent with the extra allocations and work it performs (HostBoundMethod
+alloc, arity check, arg marshal, `CallDirect` → `InvokeHostDelegate` → return marshal). The ordering
 — baseline ≤ property-read < method-call — matches the expected work profile.
 
 **Verdict:** Host member access via delegate registration is comparable to the existing
