@@ -60,7 +60,7 @@
                                       asp-page-handler="UndeprecateVersion"
                                       asp-route-scope="@scope"
                                       asp-route-name="@name"
-                                      asp-area="Maintainer"
+                                      asp-area="@MaintainerAreaConventions.AreaName"
                                       class="inline-form">
                                     <input type="hidden" name="TargetVersion" value="@version.Version" />
                                     <button type="submit" class="btn btn-sm btn-secondary">Remove Deprecation</button>
@@ -74,7 +74,7 @@
                                       asp-page-handler="DeprecateVersion"
                                       asp-route-scope="@scope"
                                       asp-route-name="@name"
-                                      asp-area="Maintainer"
+                                      asp-area="@MaintainerAreaConventions.AreaName"
                                       class="deprecate-version-form">
                                     <input type="hidden" name="TargetVersion" value="@version.Version" />
                                     <input type="text"

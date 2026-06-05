@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Stash.Registry.Contracts;
+using Stash.Registry.Web.Areas.Maintainer;
 using Stash.Registry.Web.Auth;
 using Stash.Registry.Web.Services;
 
@@ -203,7 +204,7 @@ public sealed class TokensModel : PageModel
         // regardless of HTTP version. RedirectToPageResult cannot produce 303 (no flag combination),
         // so we set Location + return StatusCode(303) directly.
         // TempData is committed by the SaveTempData filter before the response is written.
-        Response.Headers.Location = Url.Page("/Settings/Tokens", new { area = "Maintainer" });
+        Response.Headers.Location = Url.Page("/Settings/Tokens", new { area = MaintainerAreaConventions.AreaName });
         return StatusCode(StatusCodes.Status303SeeOther);
     }
 

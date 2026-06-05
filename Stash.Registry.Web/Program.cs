@@ -91,7 +91,16 @@ builder.Services
         configureOptions: null);
 
 // ── Authorization ─────────────────────────────────────────────────────────────
-builder.Services.AddAuthorization();
+// Register a named policy that pins the BFF cookie scheme explicitly so the
+// Maintainer area's auth gate is stable regardless of the default scheme.
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(MaintainerAreaConventions.BffCookieAuthedPolicy, policy =>
+    {
+        policy.AuthenticationSchemes.Add(SessionCookie.AuthScheme);
+        policy.RequireAuthenticatedUser();
+    });
+});
 
 // ── Razor Pages + global anti-forgery ────────────────────────────────────────
 // AutoValidateAntiforgeryTokenAttribute is registered globally so every POST,

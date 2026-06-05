@@ -59,7 +59,7 @@
                                           asp-page="/Settings/Tokens"
                                           asp-page-handler="Revoke"
                                           asp-route-id="@token.TokenId"
-                                          asp-area="Maintainer"
+                                          asp-area="@MaintainerAreaConventions.AreaName"
                                           class="inline-form">
                                         <button type="submit"
                                                 class="btn btn-sm btn-warning"

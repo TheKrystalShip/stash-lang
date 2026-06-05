@@ -14,7 +14,7 @@
     <form method="post"
           asp-page="/Settings/Tokens"
           asp-page-handler=""
-          asp-area="Maintainer"
+          asp-area="@MaintainerAreaConventions.AreaName"
           class="create-token-form">
 
         @* Ceiling dropdown — values from named AllowedCeilings array, labels from ViewLabels *@

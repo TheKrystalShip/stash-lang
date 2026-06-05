@@ -35,7 +35,7 @@
               asp-page-handler="UndeprecatePackage"
               asp-route-scope="@scope"
               asp-route-name="@name"
-              asp-area="Maintainer">
+              asp-area="@MaintainerAreaConventions.AreaName">
             <button type="submit" class="btn btn-secondary">Remove Deprecation</button>
         </form>
     </section>
@@ -51,7 +51,7 @@ else
               asp-page-handler="DeprecatePackage"
               asp-route-scope="@scope"
               asp-route-name="@name"
-              asp-area="Maintainer"
+              asp-area="@MaintainerAreaConventions.AreaName"
               class="deprecate-package-form">
 
             <div class="form-field">
