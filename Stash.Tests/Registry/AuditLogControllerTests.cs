@@ -13,9 +13,12 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
+using Stash.Registry.Services;
+using System.Linq;
 using Xunit;
 
 namespace Stash.Tests.Registry;
@@ -489,6 +492,170 @@ public sealed class AuditLogControllerTests
         string body = await response.Content.ReadAsStringAsync();
         // The package field contains a comma, so it must appear quoted in the output
         Assert.Contains("\"@test/has,comma\"", body);
+    }
+
+    // ── A6: verify endpoint (HTTP-level) ─────────────────────────────────────
+
+    /// <summary>
+    /// Creates a <see cref="WebApplicationFactory{TEntryPoint}"/> with tamper-evidence enabled,
+    /// wiring a fresh <see cref="AuditChainHasher"/> (SHA-256, no secret) as a singleton.
+    /// </summary>
+    private static WebApplicationFactory<Stash.Registry.Program> CreateFactoryWithTamperEvidence(SqliteConnection conn)
+    {
+        return new WebApplicationFactory<Stash.Registry.Program>()
+            .WithWebHostBuilder(builder =>
+            {
+                builder.UseSolutionRelativeContentRoot("Stash.Registry");
+                builder.UseSetting("environment", "Development");
+                builder.ConfigureTestServices(services =>
+                {
+                    // Replace the DbContext with the in-memory connection.
+                    var descriptor = services.SingleOrDefault(d =>
+                        d.ServiceType == typeof(DbContextOptions<RegistryDbContext>));
+                    if (descriptor != null)
+                        services.Remove(descriptor);
+                    services.AddDbContext<RegistryDbContext>(options =>
+                        options.UseSqlite(conn));
+
+                    var sp = services.BuildServiceProvider();
+                    using var scope = sp.CreateScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+                    db.Initialize();
+
+                    // Replace the AuditChainHasher singleton with an enabled instance.
+                    var existing = services.SingleOrDefault(d => d.ServiceType == typeof(AuditChainHasher));
+                    if (existing != null)
+                        services.Remove(existing);
+                    services.AddSingleton(new AuditChainHasher(
+                        new AuditTamperEvidenceConfig { Enabled = true, HashSecret = null }));
+                });
+            });
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/verify with tamper-evidence on returns
+    /// <c>enabled=true, valid=true, checkedCount&gt;=3</c> after seeding 3 publish entries.
+    /// Registration/login events are also hashed (factory enables tamper-evidence globally), so
+    /// checkedCount includes more than the 3 seeded entries.
+    /// This is the end-to-end HTTP-level proof that the controller calls <see cref="AuditChainHasher.WalkChain"/>
+    /// (the same walker exercised by the unit tests in <c>AuditTamperEvidenceTests</c>).
+    /// </summary>
+    [Fact]
+    public async Task VerifyAuditLog_TamperEvidenceEnabled_ValidChain_ReturnsValidTrue()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactoryWithTamperEvidence(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-verify-valid");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        // Seed 3 hashed entries using the AuditService (goes through AuditChainHasher).
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db     = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+            var hasher = scope.ServiceProvider.GetRequiredService<AuditChainHasher>();
+            var audit  = new AuditService(db, new IpHasher(IpHandlingMode.Raw), hasher);
+            await audit.LogPublishAsync("@a/foo", "1.0.0", "alice", null);
+            await audit.LogPublishAsync("@a/foo", "1.0.1", "alice", null);
+            await audit.LogPublishAsync("@a/foo", "1.0.2", "alice", null);
+        }
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log/verify");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.True(root.GetProperty("enabled").GetBoolean(),   "enabled must be true");
+        Assert.True(root.GetProperty("valid").GetBoolean(),     "valid must be true for untampered chain");
+        // checkedCount includes audit events from registration/login (factory has tamper-evidence
+        // enabled globally), so there will be more than 3 hashed entries total.
+        Assert.True(root.GetProperty("checkedCount").GetInt32() >= 3,
+            "checkedCount must include at least the 3 seeded publish entries");
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("firstBrokenId").ValueKind);
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/verify after directly mutating one entry's <c>User</c>
+    /// column returns <c>valid=false, firstBrokenId=&lt;that entry's id&gt;</c>.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAuditLog_TamperedEntry_ReturnsValidFalseWithBrokenId()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactoryWithTamperEvidence(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-verify-tamper");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        // Seed 3 hashed entries.
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db     = scope.ServiceProvider.GetRequiredService<IRegistryDatabase>();
+            var hasher = scope.ServiceProvider.GetRequiredService<AuditChainHasher>();
+            var audit  = new AuditService(db, new IpHasher(IpHandlingMode.Raw), hasher);
+            await audit.LogPublishAsync("@a/foo", "1.0.0", "alice", null);
+            await audit.LogPublishAsync("@a/foo", "1.0.1", "alice", null);
+            await audit.LogPublishAsync("@a/foo", "1.0.2", "alice", null);
+        }
+
+        // Mutate the 2nd entry's User field directly (DB-level tamper).
+        int tamperedId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+            var entries = db.AuditLog.OrderBy(e => e.Id).ToList();
+            var target  = entries[1]; // 2nd entry
+            tamperedId  = target.Id;
+            target.User = "mallory";
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log/verify");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.True(root.GetProperty("enabled").GetBoolean(),    "enabled must be true");
+        Assert.False(root.GetProperty("valid").GetBoolean(),     "valid must be false after tamper");
+        Assert.Equal(tamperedId, root.GetProperty("firstBrokenId").GetInt32());
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/verify with tamper-evidence disabled returns
+    /// <c>enabled=false, valid=true, checkedCount=0</c>.
+    /// </summary>
+    [Fact]
+    public async Task VerifyAuditLog_TamperEvidenceDisabled_ReturnsEnabledFalse()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn); // default factory — tamper-evidence off
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-verify-off");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log/verify");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+
+        Assert.False(root.GetProperty("enabled").GetBoolean(), "enabled must be false when tamper-evidence is off");
+        Assert.True(root.GetProperty("valid").GetBoolean(),    "valid must be true when disabled (trivially)");
+        Assert.Equal(0, root.GetProperty("checkedCount").GetInt32());
     }
 
     // ── A3: widened filter tests (user, ip, from/to) ──────────────────────────

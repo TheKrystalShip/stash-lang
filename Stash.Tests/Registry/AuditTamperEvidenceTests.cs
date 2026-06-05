@@ -66,39 +66,16 @@ public sealed class AuditTamperEvidenceTests : IDisposable
 
     /// <summary>
     /// Walks the hashed entries in the DB using the provided <paramref name="hasher"/> and
-    /// returns (valid, firstBrokenId, genesisId, checkedCount) — mirroring the verify endpoint logic.
+    /// returns (valid, firstBrokenId, genesisId, checkedCount).
+    /// Delegates to <see cref="AuditChainHasher.WalkChain"/> — the <b>same</b> code path
+    /// called by <c>AdminController.VerifyAuditLog</c> so unit tests prove the real walker.
     /// </summary>
     private async Task<(bool valid, int? firstBrokenId, int? genesisId, int checkedCount)>
         VerifyChainAsync(AuditChainHasher hasher)
     {
         var entries = await _db.GetAllHashedAuditEntriesAsync();
-        if (entries.Count == 0)
-            return (true, null, null, 0);
-
-        int? firstBrokenId = null;
-        for (int i = 0; i < entries.Count; i++)
-        {
-            var entry = entries[i];
-            string expectedPreviousHash = i == 0
-                ? entry.PreviousHash!
-                : entries[i - 1].EntryHash!;
-
-            string recomputed = hasher.ComputeEntryHash(entry, expectedPreviousHash);
-
-            if (entry.EntryHash != recomputed)
-            {
-                firstBrokenId = entry.Id;
-                break;
-            }
-
-            if (i > 0 && entry.PreviousHash != entries[i - 1].EntryHash)
-            {
-                firstBrokenId = entry.Id;
-                break;
-            }
-        }
-
-        return (firstBrokenId == null, firstBrokenId, entries[0].Id, entries.Count);
+        var result = hasher.WalkChain(entries);
+        return (result.Valid, result.FirstBrokenId, result.GenesisId, result.CheckedCount);
     }
 
     private static async Task<AuditEntry> WriteEntry(AuditService audit, string action = "package.publish",

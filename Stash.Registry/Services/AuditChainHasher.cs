@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -164,5 +165,76 @@ public sealed class AuditChainHasher
             // Plain SHA-256.
             return Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant();
         }
+    }
+
+    // ── Chain verification ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The result of walking the tamper-evidence chain, as returned by
+    /// <see cref="WalkChain"/>.
+    /// </summary>
+    public sealed record ChainWalkResult(bool Valid, int? FirstBrokenId, int? GenesisId, int CheckedCount);
+
+    /// <summary>
+    /// Walks <paramref name="hashedEntries"/> (id-ascending, hashed only) and returns the
+    /// chain integrity result.  This is the <b>single source of truth</b> for the walk logic,
+    /// called by both <c>AdminController.VerifyAuditLog</c> and the unit tests — there must
+    /// be exactly one walker.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first entry in <paramref name="hashedEntries"/> is the <b>anchor</b>.  Its stored
+    /// <c>PreviousHash</c> is trusted without verification (it may point to a deleted genesis
+    /// after a retention sweep, or be the <see cref="GenesisSentinel"/>).  Only the content
+    /// check (<c>recomputed == stored EntryHash</c>) is performed for the anchor.
+    /// </para>
+    /// <para>
+    /// For all subsequent entries both the content check and the linkage check
+    /// (<c>entry.PreviousHash == prior.EntryHash</c>) are performed.
+    /// </para>
+    /// <para>
+    /// Pre-genesis entries (null-hash rows) must be excluded by the caller before passing to
+    /// this method.  <see cref="IRegistryDatabase.GetAllHashedAuditEntriesAsync"/> does this
+    /// automatically.
+    /// </para>
+    /// </remarks>
+    /// <param name="hashedEntries">
+    /// All hashed audit entries, ordered by <c>id</c> ascending.  Must be non-null; may be
+    /// empty (returns <c>CheckedCount=0, Valid=true</c>).
+    /// </param>
+    public ChainWalkResult WalkChain(IReadOnlyList<AuditEntry> hashedEntries)
+    {
+        if (hashedEntries.Count == 0)
+            return new ChainWalkResult(Valid: true, FirstBrokenId: null, GenesisId: null, CheckedCount: 0);
+
+        int? firstBrokenId = null;
+        for (int i = 0; i < hashedEntries.Count; i++)
+        {
+            var entry = hashedEntries[i];
+            string expectedPreviousHash = i == 0
+                ? entry.PreviousHash!   // anchor: trust the stored previousHash
+                : hashedEntries[i - 1].EntryHash!;
+
+            // Content check: recompute the entry hash from its canonical payload.
+            string recomputed = ComputeEntryHash(entry, expectedPreviousHash);
+            if (entry.EntryHash != recomputed)
+            {
+                firstBrokenId = entry.Id;
+                break;
+            }
+
+            // Linkage check (all entries after the anchor).
+            if (i > 0 && entry.PreviousHash != hashedEntries[i - 1].EntryHash)
+            {
+                firstBrokenId = entry.Id;
+                break;
+            }
+        }
+
+        return new ChainWalkResult(
+            Valid:         firstBrokenId == null,
+            FirstBrokenId: firstBrokenId,
+            GenesisId:     hashedEntries[0].Id,
+            CheckedCount:  hashedEntries.Count);
     }
 }

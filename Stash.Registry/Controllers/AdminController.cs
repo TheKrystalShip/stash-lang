@@ -434,57 +434,17 @@ public class AdminController : ControllerBase
 
         var entries = await _db.GetAllHashedAuditEntriesAsync();
 
-        if (entries.Count == 0)
-        {
-            return TypedResults.Ok(new AuditVerifyResponse
-            {
-                Enabled      = true,
-                CheckedCount = 0,
-                Valid        = true,
-                FirstBrokenId = null,
-                GenesisId    = null,
-            });
-        }
-
-        // Walk the chain id-ascending (insertion order).
-        // The first entry is the anchor: trust its stored previousHash (it may be the genesis
-        // sentinel or the link to a deleted pre-genesis predecessor after a retention sweep).
-        // For the anchor we check ONLY the content (recomputed hash == stored hash), NOT the
-        // linkage — there is no predecessor to link against.
-        int? firstBrokenId = null;
-        for (int i = 0; i < entries.Count; i++)
-        {
-            var entry = entries[i];
-            string expectedPreviousHash = i == 0
-                ? entry.PreviousHash!   // anchor: trust the stored previousHash
-                : entries[i - 1].EntryHash!;
-
-            // Recompute the entry hash from scratch using the canonical serializer.
-            string recomputed = _chainHasher.ComputeEntryHash(entry, expectedPreviousHash);
-
-            // Content check: stored entryHash must equal the recomputed hash.
-            if (entry.EntryHash != recomputed)
-            {
-                firstBrokenId = entry.Id;
-                break;
-            }
-
-            // Linkage check (all entries after the anchor): stored previousHash must equal the
-            // prior entry's stored entryHash.
-            if (i > 0 && entry.PreviousHash != entries[i - 1].EntryHash)
-            {
-                firstBrokenId = entry.Id;
-                break;
-            }
-        }
+        // Delegate to the single walker in AuditChainHasher — the same function the
+        // unit tests exercise so both call the identical code path.
+        var result = _chainHasher.WalkChain(entries);
 
         return TypedResults.Ok(new AuditVerifyResponse
         {
             Enabled       = true,
-            CheckedCount  = entries.Count,
-            Valid         = firstBrokenId == null,
-            FirstBrokenId = firstBrokenId,
-            GenesisId     = entries[0].Id,
+            CheckedCount  = result.CheckedCount,
+            Valid         = result.Valid,
+            FirstBrokenId = result.FirstBrokenId,
+            GenesisId     = result.GenesisId,
         });
     }
 
