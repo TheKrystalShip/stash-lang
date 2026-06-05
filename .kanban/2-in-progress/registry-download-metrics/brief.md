@@ -99,7 +99,7 @@ Package authors need adoption signals; registry operators need traffic and stora
   "Enabled": true,
   "IpMode": "hashed",              // raw | truncated | hashed | off  (D11)
   "IpHashSecret": "<base64>",      // operator-supplied; required when IpMode = hashed (warn + persist auto-gen if missing)
-  "Raw": { "RetentionDays": 30 },  // 0 disables raw capture
+  "Raw": { "RetentionDays": 30 },  // 0 disables only the nightly retention sweep, NOT capture (see F03 + backlog registry-metrics-capture-killswitch.md)
   "Rollup": { "IntervalMinutes": 60 }
 }
 ```
