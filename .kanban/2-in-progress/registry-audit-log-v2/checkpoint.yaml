@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T18:16:52Z"
+updated: "2026-06-05T18:46:27Z"
 phases:
   A1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 50b5f894f5339b34038d8ee63b7857022eb3f6e2
+    verified: true
+    started: "2026-06-05T18:33:19Z"
+    completed: "2026-06-05T18:46:27Z"
+    attempts: 1
+    notes: "Migrated 10 inline audit-action literals to AuditActions constants; shipped NoMagicAuditActionStringsMetaTests with binding-floor, file-count floor, 3 self-tests, and single RegistryAuthorizeFilter exemption; 21 tests green"
   A2:
     status: pending
     commit: null
