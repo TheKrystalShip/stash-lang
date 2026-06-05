@@ -100,20 +100,23 @@ public static partial class TaskBuiltIns
             catch { /* Exceptions captured in task */ }
         }
 
-        // Collect results — failed/cancelled tasks become StashError values
+        // Collect results — failed/cancelled tasks become StashError values.
+        // Route through f.GetResult() so the error type is identical to what `await` would throw
+        // (CancellationError for cancelled futures, original RuntimeError subclass for faulted ones),
+        // then convert to a StashError via FromRuntimeError to preserve .type and .message exactly.
         var results = new List<StashValue>(futures.Count);
         foreach (StashFuture f in futures)
         {
-            if (f.IsFaulted)
+            if (f.IsFaulted || f.IsCancelled)
             {
-                string? msg = null;
-                try { f.DotNetTask.GetAwaiter().GetResult(); }
-                catch (Exception ex) { msg = ex.Message; }
-                results.Add(StashValue.FromObj(new StashError(msg ?? "Task failed.", "TaskError")));
-            }
-            else if (f.IsCancelled)
-            {
-                results.Add(StashValue.FromObj(new StashError("Task was cancelled.", "TaskCancelled")));
+                try
+                {
+                    f.GetResult(); // always throws for faulted/cancelled futures
+                }
+                catch (RuntimeError re)
+                {
+                    results.Add(StashValue.FromObj(StashError.FromRuntimeError(re, (List<string>?)null)));
+                }
             }
             else
             {
