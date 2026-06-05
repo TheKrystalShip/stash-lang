@@ -309,7 +309,7 @@ dotnet test --filter "FullyQualifiedName~MetricsVisibilityBehaviorTests|FullyQua
 ## F07 — [MINOR] AC9 (hot-path latency variance test) has no corresponding test artifact
 
 **Status:** fixed
-**Fixed in:** TBD
+**Fixed in:** 090a4200
 **Note:** Amend-only resolution. AC9 in brief.md rewritten to accurately describe the structural guarantee (no `await _db.*` on request thread; `Channel.TryWrite` enqueue; off-request drain in `MetricsBackgroundService`) and cite the two test classes that together verify it (`DownloadCaptureSemanticsTests` for request-path enqueue, `MetricsBackgroundServiceTests` for off-request DB write). No guard test added — adding one would require removing the hosted service from DI to avoid a race with the live drain, which is disproportionate for a MINOR finding.
 **Files:** `.kanban/2-in-progress/registry-download-metrics/brief.md:185` (AC9), `Stash.Tests/Registry/Metrics/DownloadCaptureSemanticsTests.cs`
 **Phase:** M3 / cross-phase
