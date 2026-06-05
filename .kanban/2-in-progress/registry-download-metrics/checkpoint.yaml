@@ -1,16 +1,16 @@
 schema_version: 1
 feature: registry-download-metrics
 current: null
-updated: "2026-06-05T08:50:03Z"
+updated: "2026-06-05T09:22:16Z"
 phases:
   M1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: ca9bc2ef85e51e00bfce6505f3619fbcd200aeaa
+    verified: true
+    started: "2026-06-05T09:03:47Z"
+    completed: "2026-06-05T09:22:16Z"
+    attempts: 1
+    notes: "IpHandlingMode enum, MetricsConfig, IpHasher with HMAC-persist, IIpHasher DI singleton, NoMagicRemoteIpAccessMetaTests seeded with 6-file exemption list"
   M2:
     status: pending
     commit: null
