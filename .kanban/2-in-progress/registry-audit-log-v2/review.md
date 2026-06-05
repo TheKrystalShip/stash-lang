@@ -125,7 +125,8 @@ The new `TamperEvidence_EnabledDisabledEnabled_*` test must be green; if (a) is 
 
 ## F03 — [LOW] AuditEntry.Action XML doc examples reference non-existent wire values
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 22f0ae83
 **Files:** `Stash.Registry/Database/Models/AuditEntry.cs:19-20`
 **Phase:** A1
 **Commit:** 50b5f894 (predates A1 — example values were not refreshed during the consolidation sweep)
@@ -169,7 +170,8 @@ dotnet build Stash.Registry
 
 ## F04 — [LOW] HashSecret silently falls back from base64 to UTF-8 bytes on parse failure
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 22f0ae83
 **Files:** `Stash.Registry/Services/AuditChainHasher.cs:153-162`
 **Phase:** A6
 **Commit:** bb7094cd

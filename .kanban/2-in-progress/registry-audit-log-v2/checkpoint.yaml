@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T21:50:55Z"
+updated: "2026-06-05T21:58:22Z"
 phases:
   A1:
     status: done
