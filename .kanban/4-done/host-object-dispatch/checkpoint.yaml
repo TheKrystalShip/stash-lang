@@ -1,0 +1,51 @@
+schema_version: 1
+feature: host-object-dispatch
+current: null
+updated: "2026-06-05T02:31:32Z"
+phases:
+  P1:
+    status: done
+    commit: f80d8ef139ecfac40a063cafdcb2c6abba2b6699
+    verified: true
+    started: "2026-06-04T23:40:51Z"
+    completed: "2026-06-05T00:00:19Z"
+    attempts: 1
+    notes: HostTypeBuilder+HostHandle+registration map; typeof/is green; MultiEngineIsolation green; 10 new tests pass
+  P2:
+    status: done
+    commit: 22863217a3ca5d06da963aa3be254a38538b0b80
+    verified: true
+    started: "2026-06-05T00:01:16Z"
+    completed: "2026-06-05T00:19:18Z"
+    attempts: 1
+    notes: "Property dispatch (read/write), InvokeHostDelegate chokepoint, HostError registration, StashError.KindHostError const, HostMarshaller.FromStash<T> HostHandle branch, 11 new tests pass, docs regen green"
+  P3:
+    status: done
+    commit: 89104049b19a7590b3fced24ed7619591a8955bc
+    verified: true
+    started: "2026-06-05T00:20:43Z"
+    completed: "2026-06-05T00:54:59Z"
+    attempts: 1
+    notes: "Sync method dispatch complete: HostBoundMethod:IStashCallable, InvokeHostDelegate.InvokeMethod, arity/arg/CLR-exception as HostError; return-type error NOT HostError; MarshalArgToClr consolidated to HostMarshaller.FromStashArg; 14 tests pass"
+  P4:
+    status: done
+    commit: 4a35888b93707dd29ebcbf18873de17787365ec4
+    verified: true
+    started: "2026-06-05T00:56:02Z"
+    completed: "2026-06-05T01:32:31Z"
+    attempts: 1
+    notes: "Async method dispatch (Task→StashFuture, result marshalled via ToObject), linked-CTS cancellation with ct.ThrowIfCancellationRequested() fix for mid-await OCE; OnRelease+ConditionalWeakTable per-host lifetime hook; 10+9 tests green; all 135 Embedding tests pass"
+  P5:
+    status: done
+    commit: b64b41a4362b0a0d3c2f7fe8657c54fbb901d1f3
+    verified: true
+    started: "2026-06-05T01:34:10Z"
+    completed: "2026-06-05T01:45:13Z"
+    attempts: 1
+    notes: "End-to-end Player consolidation test + two-host isolation test; HostMemberAccessBenchmarks (property-read median 15.488 µs, method-call median 3.879 µs, baseline 2.503 µs); benchmark-results.md with verdict; plan verify-line corrected; Program.cs updated to run both benchmark classes; 137 embedding tests pass"
+review:
+  status: resolved
+  started: "2026-06-05T01:57:51Z"
+  resolved: "2026-06-05T02:31:32Z"
+  findings_open: 0
+  findings_fixed: 0

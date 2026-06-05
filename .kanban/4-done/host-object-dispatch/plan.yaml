@@ -80,7 +80,7 @@ phases:
       - "docs/Stash — Standard Library Reference.md"
       - Stash.Tests/Embedding/HostObjectPropertyTests.cs
     verify:
-      - dotnet build Stash.Hosting Stash.Core Stash.Docs
+      - dotnet build Stash.sln
       - dotnet run --project Stash.Docs/
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectPropertyTests"
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding.HostObjectRegistrationTests"
@@ -149,7 +149,7 @@ phases:
       - Stash.Hosting.Benchmarks/HostMemberAccessBenchmarks.cs
       - .kanban/2-in-progress/host-object-dispatch/benchmark-results.md
     verify:
-      - dotnet build Stash.Hosting Stash.Hosting.Benchmarks
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding"
     done_when:
       - HostObjectDispatchTests.cs ties together the end-to-end Player example from brief Acceptance Criteria (register Player + attack/hp/fetch, SetGlobal, CallAsync round-trip, verify CLR-side mutation observable).

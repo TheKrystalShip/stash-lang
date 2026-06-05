@@ -3,7 +3,9 @@ namespace Stash.Hosting.Marshalling;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Stash.Hosting.Internal;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 
@@ -15,6 +17,12 @@ using Stash.Runtime.Types;
 /// </summary>
 internal static class HostMarshaller
 {
+    // ── Per-host registration map ─────────────────────────────────────────
+    // The map is NOT static — registered types are per-host and must never bleed across
+    // host instances. HostMarshaller.ToStash is called only when a registration map is
+    // available; the overload without a map preserves backward-compat for paths that
+    // have no host context (e.g. standalone engine usage).
+
     // ── Arg marshalling: object? → StashValue ─────────────────────────────
 
     /// <summary>
@@ -25,6 +33,31 @@ internal static class HostMarshaller
     /// Thrown when <paramref name="arg"/> is of a type with no registered marshaller.
     /// </exception>
     public static StashValue ToStash(object? arg)
+        => ToStash(arg, registrations: null);
+
+    /// <summary>
+    /// Marshals a single CLR object to a <see cref="StashValue"/>, consulting the
+    /// per-host <paramref name="registrations"/> map to wrap registered host types as
+    /// <see cref="HostHandle"/> values before falling through to the generic marshallers.
+    /// </summary>
+    /// <param name="arg">The CLR value to marshal.</param>
+    /// <param name="registrations">
+    /// The per-host registration map, or <c>null</c> when called without a host context.
+    /// When non-null, a registered type is wrapped as a <see cref="HostHandle"/> rather
+    /// than throwing the generic <see cref="ArgumentException"/>.
+    /// </param>
+    /// <param name="observedTargets">
+    /// The per-host <see cref="ConditionalWeakTable{TKey,TValue}"/> that tracks which CLR
+    /// instances have been observed by the engine. When non-null, any new <see cref="HostHandle"/>
+    /// created here registers its target for <c>OnRelease</c> invocation at dispose time.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="arg"/> is of a type with no registered marshaller.
+    /// </exception>
+    public static StashValue ToStash(
+        object? arg,
+        IReadOnlyDictionary<Type, HostTypeRegistration>? registrations,
+        ConditionalWeakTable<object, HostTypeRegistration>? observedTargets = null)
     {
         if (arg is null) return StashValue.Null;
 
@@ -48,12 +81,23 @@ internal static class HostMarshaller
         if (arg is JsonElement je)
             return JsonStashBridge.ToStash(je);
 
+        // Registered host type → HostHandle.
+        // MUST precede IDictionary and IEnumerable: a registered host class that also
+        // implements IEnumerable or IDictionary would otherwise be misrouted to those
+        // branches and silently serialised as a collection instead of staying by-reference.
+        if (registrations is not null)
+        {
+            Type argType = arg.GetType();
+            if (registrations.TryGetValue(argType, out HostTypeRegistration? reg))
+                return StashValue.FromObj(new HostHandle(arg, reg, registrations, observedTargets));
+        }
+
         // IDictionary<string, object?> → StashDictionary
         if (arg is IDictionary<string, object?> dict)
         {
             var sd = new StashDictionary();
             foreach (KeyValuePair<string, object?> kv in dict)
-                sd.Set(kv.Key, ToStash(kv.Value));
+                sd.Set(kv.Key, ToStash(kv.Value, registrations, observedTargets));
             return StashValue.FromObj(sd);
         }
 
@@ -63,7 +107,7 @@ internal static class HostMarshaller
         {
             var sd = new StashDictionary();
             foreach (System.Reflection.PropertyInfo prop in type.GetProperties())
-                sd.Set(prop.Name, ToStash(prop.GetValue(arg)));
+                sd.Set(prop.Name, ToStash(prop.GetValue(arg), registrations, observedTargets));
             return StashValue.FromObj(sd);
         }
 
@@ -73,7 +117,7 @@ internal static class HostMarshaller
         {
             var list = new List<StashValue>();
             foreach (object? item in enumerable)
-                list.Add(ToStash(item));
+                list.Add(ToStash(item, registrations, observedTargets));
             return StashValue.FromObj(list);
         }
 
@@ -241,12 +285,30 @@ internal static class HostMarshaller
                 $"the value is not a Future. Ensure the Stash function is declared with 'async fn'.");
         }
 
+        // Host handle — unwrap when the wrapped CLR type matches T.
+        // This branch handles the case where a Stash script returns (or passes back) a
+        // registered host object. The HostHandle's ClrType must match typeof(T) exactly;
+        // a wrong-type handle is an unrecoverable contract violation, so we throw clearly.
+        if (typeof(T).IsClass && !typeof(T).IsAbstract)
+        {
+            if (value.Tag == StashValueTag.Obj && value.AsObj is HostHandle handle)
+            {
+                if (handle.ClrType == typeof(T))
+                    return (T)handle.Target;
+
+                throw new InvalidCastException(
+                    $"Cannot convert Stash HostHandle<{handle.ClrType.Name}> to '{typeof(T).Name}': " +
+                    $"the handle wraps a different registered host type. " +
+                    $"Expected handle for '{typeof(T).Name}', got '{handle.ClrType.Name}'.");
+            }
+        }
+
         // All other types (POCO, records, etc.) → v2
         throw new InvalidCastException(
             $"Cannot convert Stash value to '{typeof(T).Name}': reflection-based POCO/record " +
             $"marshalling is v2. Supported return types: StashValue, JsonElement, " +
             $"string, long, int, double, float, bool, byte, byte[], " +
-            $"Dictionary<string,object?>, List<StashValue>.");
+            $"Dictionary<string,object?>, List<StashValue>, registered host types.");
     }
 
     /// <summary>
@@ -260,6 +322,55 @@ internal static class HostMarshaller
     /// invariant is preserved.
     /// </summary>
     public static T? FromStashObject<T>(object? raw) => FromStash<T>(StashValue.FromObject(raw));
+
+    /// <summary>
+    /// Converts a <see cref="StashValue"/> to the specified <paramref name="targetType"/>
+    /// for use as a method argument. Delegates to the typed <see cref="FromStash{T}"/>
+    /// overload via a switch over common parameter types, keeping all StashValue→CLR
+    /// conversion in the single marshalling chokepoint.
+    /// </summary>
+    /// <remarks>
+    /// This overload exists so the baked method-invoker closures in
+    /// <see cref="HostTypeBuilder{T}.Method"/> can perform per-argument marshalling
+    /// without duplicating the type-switch logic inline (CLAUDE.md single-source rule).
+    /// Only covers types legal as host method parameters; throws
+    /// <see cref="InvalidCastException"/> for unsupported or mismatched combinations.
+    /// </remarks>
+    /// <exception cref="InvalidCastException">
+    /// Thrown when the Stash value's tag does not match <paramref name="targetType"/>,
+    /// or when <paramref name="targetType"/> has no registered arg-marshaller.
+    /// </exception>
+    public static object? FromStashArg(StashValue sv, Type targetType)
+    {
+        if (sv.IsNull) return null;
+
+        // Prefer exact type matches; fall through to registered host-type check last.
+        if (targetType == typeof(StashValue)) return sv;
+        if (targetType == typeof(long))   return FromStash<long>(sv);
+        if (targetType == typeof(int))    return FromStash<int>(sv);
+        if (targetType == typeof(double)) return FromStash<double>(sv);
+        if (targetType == typeof(float))  return FromStash<float>(sv);
+        if (targetType == typeof(bool))   return FromStash<bool>(sv);
+        if (targetType == typeof(string)) return FromStash<string>(sv);
+        if (targetType == typeof(byte))   return FromStash<byte>(sv);
+        if (targetType == typeof(byte[])) return FromStash<byte[]>(sv);
+
+        if (targetType == typeof(object)) return sv.ToObject();
+
+        // Registered host-handle types: HostHandle wrapped in a StashValue.
+        if (targetType.IsClass && sv.Tag == StashValueTag.Obj && sv.AsObj is HostHandle handle)
+        {
+            if (handle.ClrType == targetType || targetType.IsAssignableFrom(handle.ClrType))
+                return handle.Target;
+            throw new InvalidCastException(
+                $"Expected host type '{targetType.Name}', got HostHandle<{handle.ClrType.Name}>.");
+        }
+
+        throw new InvalidCastException(
+            $"No arg-marshaller for type '{targetType.Name}'. " +
+            $"Supported: StashValue, string, long, int, double, float, bool, byte, byte[], " +
+            $"registered host types, object.");
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 

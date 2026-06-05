@@ -39,4 +39,14 @@ public sealed record StashError(
     /// it symbolically rather than comparing against a raw string literal.
     /// </summary>
     public const string KindParseError = "ParseError";
+
+    /// <summary>
+    /// The error kind produced when a CLR exception escapes a host-registered member
+    /// delegate during Stash-to-host dispatch. Corresponds to the
+    /// <see cref="Stash.Runtime.Errors.HostError"/> built-in error type registered via
+    /// <c>[StashError]</c> in <c>Stash.Core</c>.
+    /// Defined here (beside the other Kind* constants) so every host-dispatch error
+    /// construction site can reference it symbolically — never inlined as a raw string.
+    /// </summary>
+    public const string KindHostError = "HostError";
 }

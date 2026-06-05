@@ -3,9 +3,11 @@ namespace Stash.Hosting;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Bytecode;
+using Stash.Hosting.Internal;
 using Stash.Hosting.Marshalling;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
@@ -27,6 +29,24 @@ public sealed class StashHost : IStashHost
     private readonly StashHostOptions _options;
     private bool _disposed;
 
+    // Per-host registration map: CLR Type → HostTypeRegistration.
+    // Keyed by CLR Type so SetGlobal and HostMarshaller.ToStash can look up registrations.
+    // Populated only via RegisterType<T> before VM materialisation; never mutated after the
+    // first script runs. Per-instance state — never static — for hermetic isolation.
+    private readonly Dictionary<Type, HostTypeRegistration> _typeRegistrations = new();
+
+    // Per-host observed-targets table for OnRelease lifetime hooks (P4).
+    // Keys: live CLR host instances seen by the engine (via SetGlobal or returned from a
+    // method/property call). Values: the HostTypeRegistration for that instance's type
+    // (carries the OnRelease callback, if any was registered).
+    //
+    // ConditionalWeakTable properties:
+    // - Keys are held by WEAK reference — a target GC'd before DisposeAsync is simply absent.
+    // - TryAdd is idempotent by reference identity — the same instance observed multiple
+    //   times is registered only once.
+    // - NOT static — per-host, so two hosts never share observed-target state.
+    private readonly ConditionalWeakTable<object, HostTypeRegistration> _observedTargets = new();
+
     /// <summary>
     /// Creates a new <see cref="StashHost"/> with default options
     /// (all capabilities, no step limit, output discarded).
@@ -46,6 +66,68 @@ public sealed class StashHost : IStashHost
     }
 
     // ── IStashHost ────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public void RegisterType<T>(Action<HostTypeBuilder<T>> configure) where T : class
+    {
+        if (configure is null) throw new ArgumentNullException(nameof(configure));
+        ThrowIfDisposed();
+        // After ThrowIfDisposed(), _engine is non-null.
+
+        var builder = new HostTypeBuilder<T>();
+        configure(builder);
+        HostTypeRegistration reg = builder.Build();
+
+        // Register with the VM engine for typeof / is support.
+        // Predicate: the VM always sees a HostHandle in the Obj slot — never a bare T.
+        // So the default predicate (obj => obj is T) would always return false.
+        // We must check that the handle wraps the correct CLR type.
+        try
+        {
+            _engine!.RegisterType<T>(
+                vmTypeName: reg.VmTypeName,
+                predicate:  obj => obj is HostHandle handle && handle.ClrType == typeof(T));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Re-surface with a clear host-level message that names the host contract.
+            throw new InvalidOperationException(
+                $"RegisterType<{typeof(T).Name}> must be called before the first " +
+                $"CompileAsync / RunAsync / CallAsync. " +
+                $"The underlying VM has already been created. ({ex.Message})",
+                ex);
+        }
+
+        // Store in the per-host registration map (keyed by CLR Type) so that
+        // HostMarshaller.ToStash and SetGlobal can look up registrations by instance type.
+        _typeRegistrations[typeof(T)] = reg;
+    }
+
+    /// <inheritdoc/>
+    public void SetGlobal(string name, object hostObject)
+    {
+        if (name is null) throw new ArgumentNullException(nameof(name));
+        if (hostObject is null) throw new ArgumentNullException(nameof(hostObject));
+        ThrowIfDisposed();
+
+        Type clrType = hostObject.GetType();
+        if (!_typeRegistrations.TryGetValue(clrType, out HostTypeRegistration? reg))
+        {
+            throw new ArgumentException(
+                $"Type '{clrType.FullName ?? clrType.Name}' has not been registered. " +
+                $"Call RegisterType<{clrType.Name}>(...) before SetGlobal.",
+                nameof(hostObject));
+        }
+
+        // Wrap in a HostHandle and bind as a VM global.
+        // Passing _observedTargets registers the target for OnRelease callbacks at dispose.
+        // StashValue.FromObject falls through to FromObj for unknown CLR types, so passing
+        // the HostHandle to SetGlobal(string, object?) stores it as an Obj-tagged StashValue —
+        // exactly what we need. The handle is always created here, keyed through the
+        // registration map, so the single-chokepoint invariant is preserved.
+        var handle = new HostHandle(hostObject, reg, _typeRegistrations, _observedTargets);
+        _engine!.SetGlobal(name, handle);
+    }
 
     /// <inheritdoc/>
     public Task<CompiledScript> CompileAsync(string source, CancellationToken ct = default)
@@ -194,6 +276,15 @@ public sealed class StashHost : IStashHost
         }
         catch (RuntimeError ex)
         {
+            // When a mid-await cancel fires (e.g. while awaiting an async host method),
+            // the VM's StashFuture.GetResult() converts OperationCanceledException to
+            // RuntimeError("Future was cancelled."). The ct here is the call's
+            // CancellationToken — if it fired, surface OCE rather than StashScriptException
+            // so callers get the standard cancellation signal.
+            // This does not affect the pure-script cancellation path (time.sleep etc.):
+            // that path throws OCE directly from Task.Run without going through RuntimeError,
+            // so it never reaches this catch.
+            ct.ThrowIfCancellationRequested();
             throw new StashScriptException(BuildStashError(ex));
         }
         finally
@@ -287,10 +378,33 @@ public sealed class StashHost : IStashHost
         _disposed = true;
         _engine = null;
 
+        // Invoke OnRelease callbacks for all host targets observed by this engine.
+        // Iterate the ConditionalWeakTable: only entries still reachable (non-GC'd) are
+        // visited, so GC'd targets are silently skipped.  Each target's registration
+        // carries the OnRelease callback (null when none was registered).
+        // Per-callback try/catch: a crashing release hook must not prevent the remaining
+        // hooks — or the MVP's process-global resets below — from running.
+        foreach (KeyValuePair<object, HostTypeRegistration> entry in _observedTargets)
+        {
+            if (entry.Value.OnRelease is { } release)
+            {
+                try
+                {
+                    release(entry.Key);
+                }
+                catch
+                {
+                    // Swallow — a crashing release hook is a host bug, but we must not
+                    // let it abort disposal of the remaining cleanup pipeline.
+                }
+            }
+        }
+
         // Null process-global static hook slots so subsequent test fixtures (and future
         // host instances) see a clean slate. These are CLI-only hooks; a pure embedder
         // never sets them, so resetting on dispose is test-isolation–friendly and safe.
         // (Decision logged in brief.md: "Disposal nulls process-global static hooks".)
+        // done_when #5: MVP resets still run after the OnRelease loop.
         PromptBuiltIns.ResetPromptFn();
         PromptBuiltIns.ResetContinuationFn();
         PromptBuiltIns.ResetBootstrapHandler = null;
