@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-download-metrics
 current: null
-updated: "2026-06-05T10:33:55Z"
+updated: "2026-06-05T11:14:28Z"
 phases:
   M1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "M4 complete + fix: RollupAsync (hourly+daily, closed-bucket only, skip-already-rolled) + SweepRetentionAsync (RetentionDays<=0 no-op), deferred first pass to avoid OpenAPI build regression, 20 tests green"
   M5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 2b8cdc80706d44a5ca15e73f59ab976f237632f2
+    verified: true
+    started: "2026-06-05T10:35:20Z"
+    completed: "2026-06-05T11:14:28Z"
+    attempts: 1
+    notes: "M5 complete: package+version metrics endpoints (ReadPackageMetadata/ReadPackageVersion PDP), admin top-packages endpoint (ReadAdminStats), read model (closed hourly rollups + open bucket from raw), 150 tests green including visibility matrix 4x2 + AuthzCoverage + Dispatch meta-tests"
   M6:
     status: pending
     commit: null
