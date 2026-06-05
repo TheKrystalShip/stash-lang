@@ -80,7 +80,8 @@ dotnet test --filter "FullyQualifiedName~AuditServiceTests|FullyQualifiedName~Ad
 
 ## F02 — [IMPORTANT] OpenAPI snapshot is stale (3 new metrics operations not baselined); M6 verify filter omitted OpenApiSnapshotTests
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** PLACEHOLDER
 **Files:** `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json`, `.kanban/2-in-progress/registry-download-metrics/plan.yaml:181`
 **Phase:** M6
 **Commit:** c2515b87
