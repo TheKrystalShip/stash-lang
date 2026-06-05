@@ -218,21 +218,22 @@ public class HostObjectMethodTests
     // ── #6: Unregistered return type → ArgumentException from marshaller ──────
 
     [Fact]
-    public async Task Method_ReturnValue_UnregisteredType_ThrowsArgumentException()
+    public async Task Method_ReturnValue_UnregisteredType_SurfacesMarshallerError()
     {
-        // Register a Player method that returns an UNREGISTERED type (Player).
-        // HostMarshaller.ToStash will throw ArgumentException because Player is not
-        // a registered host type in this host (we deliberately skip RegisterType<Player>).
+        // Register a Player method that returns an UNREGISTERED CLR type.
+        // HostMarshaller.ToStash throws ArgumentException for types with no marshaller.
+        //
+        // This exception is intentionally NOT caught-and-converted to HostError:
+        // an unregistered return type is a host configuration bug that must surface
+        // as a loud, uncatchable error — distinct from script-level HostError.
+        //
+        // The VM's ExecuteCall wrapper converts any non-RuntimeError into a RuntimeError
+        // ("Built-in function error: …"), so the surfaced kind is RuntimeError (not HostError),
+        // and the message contains the marshaller's original text about the unsupported type.
         await using var host = new StashHost();
 
-        // Register a type that returns an unregistered CLR class.
-        // We use a lambda that returns a new anonymous-object-like POCO — but since
-        // anonymous objects get marshalled as StashDictionary, we need a real class.
-        // We use "Player" (unregistered) as the return type.
+        // Register Player with a method that returns StringBuilder (unregistered CLR type).
         host.RegisterType<Player>(b => b
-            // 'self' returns a Player instance, but Player itself is registered here.
-            // To get the unregistered case, we wrap in a different host that doesn't
-            // register Player.
             .Method("bad_ret", (Player p) => new System.Text.StringBuilder("boom"))
         );
         var player = new Player();
@@ -241,16 +242,16 @@ public class HostObjectMethodTests
         var script = await host.CompileAsync("fn go() { return player.bad_ret(); }");
         await host.RunAsync(script);
 
-        // The marshaller's ArgumentException wraps into a HostError from the baked closure.
-        // At the TryCallAsync level, this manifests as a script error.
         var result = await host.TryCallAsync<object>("go");
         Assert.False(result.Success);
-        // Should be HostError (the ArgumentException from HostMarshaller.ToStash is caught
-        // by InvokeHostDelegate.InvokeMethod).
         Assert.Single(result.Errors);
-        // The error is not a HostError from arg-marshalling (that's arg-in); this is an
-        // ArgumentException from return-value marshalling, caught by InvokeHostDelegate.
-        Assert.Equal(StashError.KindHostError, result.Errors[0].Kind);
+
+        // Must NOT be HostError — the marshaller's ArgumentException is NOT converted.
+        // (The VM wraps it as a generic RuntimeError "Built-in function error: …".)
+        Assert.NotEqual(StashError.KindHostError, result.Errors[0].Kind);
+
+        // The error message must contain the marshaller's "No marshaller registered" text.
+        Assert.Contains("No marshaller registered", result.Errors[0].Message);
     }
 
     // ── #7: Zero-arity method works ───────────────────────────────────────────

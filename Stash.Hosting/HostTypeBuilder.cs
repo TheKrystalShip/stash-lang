@@ -192,7 +192,7 @@ public sealed class HostTypeBuilder<T> where T : class
                 StashValue sv = stashArgs[i];
                 try
                 {
-                    clrArgs[i + 1] = MarshalArgToClr(sv, argTypes[i]);
+                    clrArgs[i + 1] = HostMarshaller.FromStashArg(sv, argTypes[i]);
                 }
                 catch (Exception ex) when (ex is not RuntimeError)
                 {
@@ -217,115 +217,6 @@ public sealed class HostTypeBuilder<T> where T : class
             MethodArity: arity);
 
         return this;
-    }
-
-    // ── Private helpers ───────────────────────────────────────────────────
-
-    /// <summary>
-    /// Converts a <see cref="StashValue"/> to the expected CLR type for a method argument.
-    /// Used per-argument in the baked method invoker; runs at call time.
-    /// </summary>
-    /// <remarks>
-    /// Mirrors the type-switch in <see cref="HostMarshaller.FromStash{T}"/> but operates
-    /// on a runtime <see cref="Type"/> so it can be called from the non-generic invoker closure.
-    /// Covers only the types legal as method parameters; throws <see cref="InvalidCastException"/>
-    /// for unsupported or mismatched types.
-    /// </remarks>
-    private static object? MarshalArgToClr(StashValue sv, Type targetType)
-    {
-        if (sv.IsNull) return null;
-
-        // StashValue passthrough
-        if (targetType == typeof(StashValue)) return sv;
-
-        // string
-        if (targetType == typeof(string))
-        {
-            if (sv.Tag == StashValueTag.Obj && sv.AsObj is string s) return s;
-            throw new InvalidCastException(
-                $"expected string, got Stash {sv.Tag}");
-        }
-
-        // long (most common numeric type in Stash)
-        if (targetType == typeof(long))
-        {
-            if (sv.Tag == StashValueTag.Int)   return sv.AsInt;
-            if (sv.Tag == StashValueTag.Byte)  return (long)sv.AsByte;
-            if (sv.Tag == StashValueTag.Float) return (long)sv.AsFloat;
-            throw new InvalidCastException(
-                $"expected long, got Stash {sv.Tag}");
-        }
-
-        // int
-        if (targetType == typeof(int))
-        {
-            if (sv.Tag == StashValueTag.Int)  return (int)sv.AsInt;
-            if (sv.Tag == StashValueTag.Byte) return (int)sv.AsByte;
-            throw new InvalidCastException(
-                $"expected int, got Stash {sv.Tag}");
-        }
-
-        // double
-        if (targetType == typeof(double))
-        {
-            if (sv.Tag == StashValueTag.Float) return sv.AsFloat;
-            if (sv.Tag == StashValueTag.Int)   return (double)sv.AsInt;
-            if (sv.Tag == StashValueTag.Byte)  return (double)sv.AsByte;
-            throw new InvalidCastException(
-                $"expected double, got Stash {sv.Tag}");
-        }
-
-        // float
-        if (targetType == typeof(float))
-        {
-            if (sv.Tag == StashValueTag.Float) return (float)sv.AsFloat;
-            if (sv.Tag == StashValueTag.Int)   return (float)sv.AsInt;
-            throw new InvalidCastException(
-                $"expected float, got Stash {sv.Tag}");
-        }
-
-        // bool
-        if (targetType == typeof(bool))
-        {
-            if (sv.Tag == StashValueTag.Bool) return sv.AsBool;
-            throw new InvalidCastException(
-                $"expected bool, got Stash {sv.Tag}");
-        }
-
-        // byte
-        if (targetType == typeof(byte))
-        {
-            if (sv.Tag == StashValueTag.Byte) return sv.AsByte;
-            if (sv.Tag == StashValueTag.Int)  return (byte)sv.AsInt;
-            throw new InvalidCastException(
-                $"expected byte, got Stash {sv.Tag}");
-        }
-
-        // byte[]
-        if (targetType == typeof(byte[]))
-        {
-            if (sv.Tag == StashValueTag.Obj && sv.AsObj is byte[] buf) return buf;
-            throw new InvalidCastException(
-                $"expected byte[], got Stash {sv.Tag}");
-        }
-
-        // Host-handle types (registered CLR objects passed back to a method as arguments).
-        // Unwrap the HostHandle for the expected registered type.
-        if (targetType.IsClass && sv.Tag == StashValueTag.Obj && sv.AsObj is HostHandle handle)
-        {
-            if (handle.ClrType == targetType || targetType.IsAssignableFrom(handle.ClrType))
-                return handle.Target;
-            throw new InvalidCastException(
-                $"expected host type '{targetType.Name}', got HostHandle<{handle.ClrType.Name}>");
-        }
-
-        // Fallback: let the raw object pass through for object/dynamic parameters.
-        if (targetType == typeof(object)) return sv.ToObject();
-
-        throw new InvalidCastException(
-            $"No arg-marshaller for type '{targetType.Name}'. " +
-            $"Supported: StashValue, string, long, int, double, float, bool, byte, byte[], " +
-            $"registered host types, object.");
     }
 
     // ── Internal build ────────────────────────────────────────────────────

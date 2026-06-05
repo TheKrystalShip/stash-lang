@@ -125,12 +125,11 @@ internal static class InvokeHostDelegate
         IReadOnlyDictionary<Type, HostTypeRegistration>?   allRegistrations,
         SourceSpan?                                         span)
     {
+        object? rawResult;
+
         try
         {
-            object? result = invoker(target, stashArgs);
-            // Marshal return value using the full registrations map so registered CLR
-            // instances are wrapped as HostHandle values rather than causing an ArgumentException.
-            return HostMarshaller.ToStash(result, allRegistrations);
+            rawResult = invoker(target, stashArgs);
         }
         catch (RuntimeError)
         {
@@ -150,5 +149,17 @@ internal static class InvokeHostDelegate
         {
             throw new HostError(ex.Message, span);
         }
+
+        // Return-value marshalling is intentionally OUTSIDE the try/catch above.
+        //
+        // done_when #6: "an unregistered return type throws the existing ArgumentException
+        // from the marshaller chokepoint." If the host registers a method with an
+        // unrecognised CLR return type, ToStash throws ArgumentException. This is a HOST
+        // CONFIGURATION BUG — not a catchable Stash HostError. The ArgumentException must
+        // NOT be converted to HostError (which the VM's own ExecuteCall wrapper would then
+        // surface as a generic RuntimeError("Built-in function error: …"), keeping it
+        // uncatchable and distinct from HostError — exactly the "loud, uncatchable marshaller
+        // exception" the spec requires).
+        return HostMarshaller.ToStash(rawResult, allRegistrations);
     }
 }

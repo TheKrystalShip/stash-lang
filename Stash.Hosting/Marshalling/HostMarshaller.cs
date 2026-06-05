@@ -316,6 +316,55 @@ internal static class HostMarshaller
     /// </summary>
     public static T? FromStashObject<T>(object? raw) => FromStash<T>(StashValue.FromObject(raw));
 
+    /// <summary>
+    /// Converts a <see cref="StashValue"/> to the specified <paramref name="targetType"/>
+    /// for use as a method argument. Delegates to the typed <see cref="FromStash{T}"/>
+    /// overload via a switch over common parameter types, keeping all StashValue→CLR
+    /// conversion in the single marshalling chokepoint.
+    /// </summary>
+    /// <remarks>
+    /// This overload exists so the baked method-invoker closures in
+    /// <see cref="HostTypeBuilder{T}.Method"/> can perform per-argument marshalling
+    /// without duplicating the type-switch logic inline (CLAUDE.md single-source rule).
+    /// Only covers types legal as host method parameters; throws
+    /// <see cref="InvalidCastException"/> for unsupported or mismatched combinations.
+    /// </remarks>
+    /// <exception cref="InvalidCastException">
+    /// Thrown when the Stash value's tag does not match <paramref name="targetType"/>,
+    /// or when <paramref name="targetType"/> has no registered arg-marshaller.
+    /// </exception>
+    public static object? FromStashArg(StashValue sv, Type targetType)
+    {
+        if (sv.IsNull) return null;
+
+        // Prefer exact type matches; fall through to registered host-type check last.
+        if (targetType == typeof(StashValue)) return sv;
+        if (targetType == typeof(long))   return FromStash<long>(sv);
+        if (targetType == typeof(int))    return FromStash<int>(sv);
+        if (targetType == typeof(double)) return FromStash<double>(sv);
+        if (targetType == typeof(float))  return FromStash<float>(sv);
+        if (targetType == typeof(bool))   return FromStash<bool>(sv);
+        if (targetType == typeof(string)) return FromStash<string>(sv);
+        if (targetType == typeof(byte))   return FromStash<byte>(sv);
+        if (targetType == typeof(byte[])) return FromStash<byte[]>(sv);
+
+        if (targetType == typeof(object)) return sv.ToObject();
+
+        // Registered host-handle types: HostHandle wrapped in a StashValue.
+        if (targetType.IsClass && sv.Tag == StashValueTag.Obj && sv.AsObj is HostHandle handle)
+        {
+            if (handle.ClrType == targetType || targetType.IsAssignableFrom(handle.ClrType))
+                return handle.Target;
+            throw new InvalidCastException(
+                $"Expected host type '{targetType.Name}', got HostHandle<{handle.ClrType.Name}>.");
+        }
+
+        throw new InvalidCastException(
+            $"No arg-marshaller for type '{targetType.Name}'. " +
+            $"Supported: StashValue, string, long, int, double, float, bool, byte, byte[], " +
+            $"registered host types, object.");
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────
 
     /// <summary>
