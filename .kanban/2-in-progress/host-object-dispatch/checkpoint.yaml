@@ -1,7 +1,7 @@
 schema_version: 1
 feature: host-object-dispatch
 current: null
-updated: "2026-06-05T00:54:59Z"
+updated: "2026-06-05T01:32:31Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "Sync method dispatch complete: HostBoundMethod:IStashCallable, InvokeHostDelegate.InvokeMethod, arity/arg/CLR-exception as HostError; return-type error NOT HostError; MarshalArgToClr consolidated to HostMarshaller.FromStashArg; 14 tests pass"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 4a35888b93707dd29ebcbf18873de17787365ec4
+    verified: true
+    started: "2026-06-05T00:56:02Z"
+    completed: "2026-06-05T01:32:31Z"
+    attempts: 1
+    notes: "Async method dispatch (Task→StashFuture, result marshalled via ToObject), linked-CTS cancellation with ct.ThrowIfCancellationRequested() fix for mid-await OCE; OnRelease+ConditionalWeakTable per-host lifetime hook; 10+9 tests green; all 135 Embedding tests pass"
   P5:
     status: pending
     commit: null
