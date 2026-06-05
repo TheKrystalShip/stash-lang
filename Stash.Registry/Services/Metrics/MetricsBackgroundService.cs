@@ -82,9 +82,14 @@ public sealed class MetricsBackgroundService : BackgroundService
         _config = config;
         _logger = logger;
 
+        // Schedule the first passes to fire after one interval, NOT immediately.
+        // The dotnet-getdocument OpenAPI tool starts the full host briefly at build time;
+        // firing synchronously on startup would attempt a DB query against a non-existent
+        // schema, breaking `dotnet build`. Deferring is also operationally correct —
+        // rollup and retention passes run on their configured interval, not at cold-start.
         var now = DateTime.UtcNow;
-        _nextRollupAt = now;
-        _nextRetentionAt = now;
+        _nextRollupAt = now + TimeSpan.FromMinutes(_config.Metrics.Rollup.IntervalMinutes);
+        _nextRetentionAt = now + TimeSpan.FromDays(1);
     }
 
     /// <summary>
