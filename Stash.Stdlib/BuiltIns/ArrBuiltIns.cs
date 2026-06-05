@@ -1098,6 +1098,16 @@ public static partial class ArrBuiltIns
         return StashValue.FromObj(result);
     }
 
+    /// <summary>
+    /// Unwraps an async callback result: if the callable is async and returned a Future,
+    /// blocks until the inner computation completes and returns its value. Identical to the
+    /// pattern in TaskBuiltIns.Run — one shared rule for "async callback → resolved value".
+    /// </summary>
+    private static StashValue FlattenAsyncCallbackResult(IStashCallable callable, StashValue result)
+        => callable.IsAsync && result.ToObject() is StashFuture inner
+            ? StashValue.FromObject(inner.GetResult())
+            : result;
+
     private static object? ExecuteParMap(IInterpreterContext ctx, List<StashValue> args)
     {
         if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
@@ -1120,7 +1130,7 @@ public static partial class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                results[i] = child.InvokeCallbackDirect(callable, new StashValue[] { list[i] });
+                results[i] = FlattenAsyncCallbackResult(callable, child.InvokeCallbackDirect(callable, new StashValue[] { list[i] }));
             }
             catch (Exception ex)
             {
@@ -1168,7 +1178,7 @@ public static partial class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                StashValue result = child.InvokeCallbackDirect(callable, new StashValue[] { list[i] });
+                StashValue result = FlattenAsyncCallbackResult(callable, child.InvokeCallbackDirect(callable, new StashValue[] { list[i] }));
                 keep[i] = RuntimeValues.IsTruthy(result.ToObject());
             }
             catch (Exception ex)
@@ -1223,7 +1233,9 @@ public static partial class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                child.InvokeCallbackDirect(callable, new StashValue[] { list[i] });
+                // FlattenAsyncCallbackResult blocks until the inner Future resolves, ensuring
+                // all async callbacks run to completion before parForEach returns.
+                FlattenAsyncCallbackResult(callable, child.InvokeCallbackDirect(callable, new StashValue[] { list[i] }));
             }
             catch (Exception ex)
             {
