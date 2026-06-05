@@ -78,6 +78,60 @@ public sealed class AuditServiceTests : IDisposable
         Assert.Equal("alice", log.Items[0].User);
     }
 
+    // ── A2: auth event helpers ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LogAuthLoginSuccess_CreatesAllowEntry()
+    {
+        await _audit.LogAuthLoginSuccessAsync("alice", "127.0.0.1");
+
+        SearchResult<AuditEntry> log = await _db.GetAuditLogAsync(1, 10, null, "auth.login.success");
+
+        Assert.Equal(1, log.TotalCount);
+        Assert.Equal(AuditActions.AuthLoginSuccess, log.Items[0].Action);
+        Assert.Equal("alice", log.Items[0].User);
+        Assert.Equal("allow", log.Items[0].Decision);
+    }
+
+    [Fact]
+    public async Task LogAuthLoginFailure_CreatesDenyEntry()
+    {
+        await _audit.LogAuthLoginFailureAsync("bob", "10.0.0.1");
+
+        SearchResult<AuditEntry> log = await _db.GetAuditLogAsync(1, 10, null, "auth.login.failure");
+
+        Assert.Equal(1, log.TotalCount);
+        Assert.Equal(AuditActions.AuthLoginFailure, log.Items[0].Action);
+        Assert.Equal("bob", log.Items[0].User);
+        Assert.Equal("deny", log.Items[0].Decision);
+    }
+
+    [Fact]
+    public async Task LogAuthRefreshFailure_CreatesDenyEntry_NullUserAllowed()
+    {
+        await _audit.LogAuthRefreshFailureAsync(null, null);
+
+        SearchResult<AuditEntry> log = await _db.GetAuditLogAsync(1, 10, null, "auth.refresh.failure");
+
+        Assert.Equal(1, log.TotalCount);
+        Assert.Equal(AuditActions.AuthRefreshFailure, log.Items[0].Action);
+        Assert.Null(log.Items[0].User);
+        Assert.Equal("deny", log.Items[0].Decision);
+    }
+
+    [Fact]
+    public async Task LogAuthRegister_CreatesAllowEntry()
+    {
+        await _audit.LogAuthRegisterAsync("newuser", "192.168.1.1");
+
+        SearchResult<AuditEntry> log = await _db.GetAuditLogAsync(1, 10, null, "auth.register");
+
+        Assert.Equal(1, log.TotalCount);
+        Assert.Equal(AuditActions.AuthRegister, log.Items[0].Action);
+        Assert.Equal("newuser", log.Items[0].User);
+        Assert.Equal("allow", log.Items[0].Decision);
+    }
+
     [Fact]
     public async Task GetAuditLog_ReturnsPaginated()
     {

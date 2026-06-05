@@ -124,4 +124,18 @@ public static class AuditActions
 
     /// <summary>A request was denied because the presented JWT has been revoked (JTI check).</summary>
     public const string TokenRevoked = "token.revoked";
+
+    // ── Authentication events ─────────────────────────────────────────────────
+
+    /// <summary>A user authenticated successfully with valid credentials.</summary>
+    public const string AuthLoginSuccess = "auth.login.success";
+
+    /// <summary>A login attempt was rejected due to invalid credentials.</summary>
+    public const string AuthLoginFailure = "auth.login.failure";
+
+    /// <summary>A token refresh attempt failed (invalid, expired, or mismatched token).</summary>
+    public const string AuthRefreshFailure = "auth.refresh.failure";
+
+    /// <summary>A new user account was created via self-service registration.</summary>
+    public const string AuthRegister = "auth.register";
 }

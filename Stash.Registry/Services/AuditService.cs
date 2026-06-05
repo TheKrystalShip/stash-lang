@@ -285,6 +285,79 @@ public sealed class AuditService
         });
     }
 
+    // ── Authentication event helpers ──────────────────────────────────────────
+
+    /// <summary>
+    /// Records a successful login by <paramref name="user"/>.
+    /// </summary>
+    /// <param name="user">The username that authenticated.</param>
+    /// <param name="ip">The caller's IP address, or <c>null</c>.</param>
+    public async Task LogAuthLoginSuccessAsync(string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = AuditActions.AuthLoginSuccess,
+            User = user,
+            Decision = "allow",
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Records a failed login attempt (bad credentials).
+    /// </summary>
+    /// <param name="user">The username that was attempted.</param>
+    /// <param name="ip">The caller's IP address, or <c>null</c>.</param>
+    public async Task LogAuthLoginFailureAsync(string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = AuditActions.AuthLoginFailure,
+            User = user,
+            Decision = "deny",
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Records a failed token refresh attempt (invalid, expired, mismatched, or consumed token).
+    /// </summary>
+    /// <param name="user">The username associated with the token, or <c>null</c> if the token
+    /// could not be validated (e.g. invalid JWT signature — the principal is unknown).</param>
+    /// <param name="ip">The caller's IP address, or <c>null</c>.</param>
+    public async Task LogAuthRefreshFailureAsync(string? user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = AuditActions.AuthRefreshFailure,
+            User = user,
+            Decision = "deny",
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Records a successful self-service registration.  Written alongside
+    /// <see cref="LogUserCreateAsync"/> — both are intentional (the user-creation record
+    /// and the authentication registration event are distinct; this is not a double-write bug).
+    /// </summary>
+    /// <param name="user">The newly registered username.</param>
+    /// <param name="ip">The caller's IP address, or <c>null</c>.</param>
+    public async Task LogAuthRegisterAsync(string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = AuditActions.AuthRegister,
+            User = user,
+            Decision = "allow",
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
     public async Task<SearchResult<AuditEntry>> GetAuditLogAsync(int page, int pageSize, string? packageName = null, string? action = null)
     {
         return await _db.GetAuditLogAsync(page, pageSize, packageName, action);
