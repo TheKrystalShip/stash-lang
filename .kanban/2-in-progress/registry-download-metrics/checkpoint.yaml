@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-download-metrics
 current: null
-updated: "2026-06-05T13:20:38Z"
+updated: "2026-06-05T13:40:31Z"
 phases:
   M1:
     status: done
@@ -52,7 +52,7 @@ phases:
     attempts: 1
     notes: "M6 complete: discovery Metrics=true, StatsResponse+downloads+activity, AdminStatsExpandedTests, AuditActions bounded-domain constants, OpenApiCoverageMetaTests green 53 tests"
 review:
-  status: resolved
+  status: in_progress
   started: "2026-06-05T12:05:55Z"
   resolved: "2026-06-05T13:20:38Z"
   findings_open: 0
