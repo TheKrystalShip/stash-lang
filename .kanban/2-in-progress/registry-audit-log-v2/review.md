@@ -16,7 +16,8 @@
 
 ## F01 — [MEDIUM] verify endpoint materializes the entire hashed chain into memory
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3f3589dd
 **Files:** `Stash.Registry/Database/StashRegistryDatabase.cs:916-923`, `Stash.Registry/Controllers/AdminController.cs:435`, `Stash.Registry/Services/AuditChainHasher.cs:205-239`
 **Phase:** A6
 **Commit:** bb7094cd, 11cfbe5c
@@ -69,7 +70,8 @@ Add a stress test that seeds ≥10k hashed entries and asserts verify completes 
 
 ## F02 — [MEDIUM] enabled→disabled→enabled gap is silently bridged; brief's "new genesis at re-enable" rule is unimplemented and untested
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3f3589dd
 **Files:** `Stash.Registry/Services/AuditService.cs:75-92`, `Stash.Registry/Services/AuditChainHasher.cs:205-239`, `Stash.Tests/Registry/AuditTamperEvidenceTests.cs` (no covering test)
 **Phase:** A6
 **Commit:** bb7094cd
