@@ -195,7 +195,8 @@ Anonymous → 302 to `/login` must still hold; authed → 200 must still hold.
 
 ## F04 — [MINOR] CookieSessionTokenAccessor does sync-over-async on every authed request
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0db626c3
 **Files:** `Stash.Registry.Web/Auth/CookieSessionTokenAccessor.cs:36-46`
 **Phase:** A1
 **Commit:** 6c0035ff
@@ -284,7 +285,8 @@ The integration tests continue to drive `/manage/...` and `/settings/tokens` rou
 
 ## F06 — [MINOR] LoginService.IsLocalUrl is a weak hand-rolled validator — deviates from brief's `Url.IsLocalUrl` commitment
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 0db626c3
 **Files:** `Stash.Registry.Web/Auth/LoginService.cs:231-238`
 **Phase:** A1
 **Commit:** 6c0035ff
