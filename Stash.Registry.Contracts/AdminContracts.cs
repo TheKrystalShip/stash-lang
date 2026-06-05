@@ -119,6 +119,59 @@ public sealed class AuditLogQuery
 }
 
 /// <summary>
+/// Query-string parameters for the <c>GET /api/v1/admin/audit-log/export</c> endpoint.
+/// Bound via <c>[FromQuery]</c>.  This DTO carries only filter fields — export is unbounded
+/// and must not advertise pagination; do not reuse <see cref="AuditLogQuery"/> and silently
+/// ignore its <c>[Range]</c>-validated pagination fields.
+/// </summary>
+public sealed class AuditExportQuery
+{
+    /// <summary>
+    /// The export format.  Required — missing or unknown values return <c>400 InvalidRequest</c>.
+    /// <c>[Required]</c> forces model-binding to fail when the parameter is absent, preventing
+    /// a silent default to the CLR-zero enum member.
+    /// </summary>
+    [Required]
+    [JsonPropertyName("format")]
+    public AuditExportFormat? format { get; set; }
+
+    /// <summary>Optional package name filter.</summary>
+    [JsonPropertyName("package")]
+    public string? package { get; set; }
+
+    /// <summary>Optional action type filter (e.g. <c>"package.publish"</c>).</summary>
+    [JsonPropertyName("action")]
+    public string? action { get; set; }
+
+    /// <summary>Optional user (actor) filter — exact match against the <c>user</c> column.</summary>
+    [JsonPropertyName("user")]
+    public string? user { get; set; }
+
+    /// <summary>Optional secondary target filter — exact match against the <c>target</c> column.</summary>
+    [JsonPropertyName("target")]
+    public string? target { get; set; }
+
+    /// <summary>Optional version filter — exact match against the <c>version</c> column.</summary>
+    [JsonPropertyName("version")]
+    public string? version { get; set; }
+
+    /// <summary>
+    /// Optional IP filter — the operator supplies a raw IP; the registry transforms it through
+    /// <c>IIpHasher</c> before matching the stored (already-transformed) value.
+    /// </summary>
+    [JsonPropertyName("ip")]
+    public string? ip { get; set; }
+
+    /// <summary>Optional inclusive UTC lower-bound on the entry timestamp.</summary>
+    [JsonPropertyName("from")]
+    public DateTime? from { get; set; }
+
+    /// <summary>Optional inclusive UTC upper-bound on the entry timestamp.</summary>
+    [JsonPropertyName("to")]
+    public DateTime? to { get; set; }
+}
+
+/// <summary>
 /// Response body returned by the <c>POST /api/v1/admin/users</c> endpoint on success.
 /// </summary>
 public sealed class CreateUserResponse

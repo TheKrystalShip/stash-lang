@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Stash.Registry.Auth.Authorization;
 using Stash.Registry.Configuration;
@@ -367,6 +369,51 @@ public sealed class AuditService
             Decision = "allow",
             Timestamp = DateTime.UtcNow
         }, ip);
+    }
+
+    /// <summary>
+    /// Streams the full filtered audit log without pagination.
+    /// Shares the same filter semantics as <see cref="GetAuditLogAsync"/> (logical AND,
+    /// IP routed through <see cref="IIpHasher"/>, <c>IpMode=off</c> short-circuit) but
+    /// yields all matching entries via successive page fetches so that a large log does
+    /// not buffer entirely in memory.
+    /// </summary>
+    /// <param name="packageName">Optional exact-match package name filter.</param>
+    /// <param name="action">Optional exact-match action filter.</param>
+    /// <param name="user">Optional exact-match user filter.</param>
+    /// <param name="target">Optional exact-match target filter.</param>
+    /// <param name="version">Optional exact-match version filter.</param>
+    /// <param name="ip">Optional raw IP filter; transformed through <see cref="IIpHasher"/> before matching.</param>
+    /// <param name="from">Optional inclusive UTC lower-bound on timestamp.</param>
+    /// <param name="to">Optional inclusive UTC upper-bound on timestamp.</param>
+    /// <returns>
+    /// An async sequence of <see cref="AuditEntry"/> objects in descending timestamp order, or
+    /// an empty sequence when <c>IpMode=off</c> and an <paramref name="ip"/> filter is supplied.
+    /// </returns>
+    public async IAsyncEnumerable<AuditEntry> StreamAuditLogAsync(
+        string? packageName = null, string? action = null,
+        string? user = null, string? target = null, string? version = null,
+        string? ip = null, DateTime? from = null, DateTime? to = null)
+    {
+        string? transformedIp = null;
+        if (ip != null)
+        {
+            transformedIp = TransformQueryIp(ip);
+            if (transformedIp == null)
+                yield break;
+        }
+
+        const int pageSize = 200;
+        int page = 1;
+        while (true)
+        {
+            var result = await _db.GetAuditLogAsync(page, pageSize, packageName, action, user, target, version, transformedIp, from, to);
+            foreach (var entry in result.Items)
+                yield return entry;
+            if (result.Items.Count < pageSize)
+                break;
+            page++;
+        }
     }
 
     /// <summary>

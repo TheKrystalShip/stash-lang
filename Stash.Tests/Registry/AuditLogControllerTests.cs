@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -249,6 +251,244 @@ public sealed class AuditLogControllerTests
         // The 3 seeded entries plus any entries created by registration/login
         Assert.True(items.GetArrayLength() >= 3,
             "Expected at least 3 items in the 'items' array.");
+    }
+
+    // ── A4: export endpoint tests ─────────────────────────────────────────────
+
+    /// <summary>
+    /// Helper: seeds N audit entries and returns their action values for comparison.
+    /// </summary>
+    private static async Task SeedExportEntriesAsync(
+        WebApplicationFactory<Stash.Registry.Program> factory,
+        int count, string actionPrefix = "export.test")
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+        for (int i = 0; i < count; i++)
+        {
+            db.AuditLog.Add(new AuditEntry
+            {
+                Action    = $"{actionPrefix}.{i}",
+                User      = "export-user",
+                Package   = "@test/pkg",
+                Decision  = "allow",
+                Timestamp = DateTime.UtcNow.AddSeconds(-i),
+            });
+        }
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/export?format=jsonl returns 200 with
+    /// Content-Type: application/x-ndjson and each line parses as AuditEntryResponse.
+    /// </summary>
+    [Fact]
+    public async Task ExportAuditLog_FormatJsonl_Returns200WithNdJson()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-exp-jsonl");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        await SeedExportEntriesAsync(factory, 3);
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log/export?format=jsonl");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string contentType = response.Content.Headers.ContentType?.MediaType ?? "";
+        Assert.Equal("application/x-ndjson", contentType);
+
+        string body = await response.Content.ReadAsStringAsync();
+        var lines = body.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        Assert.True(lines.Length >= 3, $"Expected at least 3 JSONL lines, got {lines.Length}.");
+
+        // Each line must parse as an AuditEntryResponse with a non-empty action
+        foreach (string line in lines)
+        {
+            using var doc = JsonDocument.Parse(line);
+            Assert.True(doc.RootElement.TryGetProperty("action", out var actionProp));
+            Assert.False(string.IsNullOrEmpty(actionProp.GetString()), "Every JSONL line must have a non-empty 'action' field.");
+        }
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/export?format=csv returns 200 with
+    /// Content-Type: text/csv, a fixed-column header row, and data rows that equal
+    /// the filtered list.
+    /// </summary>
+    [Fact]
+    public async Task ExportAuditLog_FormatCsv_Returns200WithCsvHeaderAndRows()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-exp-csv");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        await SeedExportEntriesAsync(factory, 2, "csv.test");
+
+        var response = await client.GetAsync(
+            "/api/v1/admin/audit-log/export?format=csv&user=export-user&action=csv.test.0");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string contentType = response.Content.Headers.ContentType?.MediaType ?? "";
+        Assert.Equal("text/csv", contentType);
+
+        string body = await response.Content.ReadAsStringAsync();
+        var lines = body.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
+
+        // First line must be the fixed header
+        Assert.True(lines.Length >= 1, "CSV must have at least a header row.");
+        Assert.Equal("action,package,version,user,target,ip,timestamp,decision,denyReason", lines[0]);
+
+        // Data rows: filter matched exactly 1 entry (csv.test.0) — at least 1 data row
+        Assert.True(lines.Length >= 2, "Expected at least one data row.");
+
+        // The first data row must have the right action in the first column
+        string[] firstDataCols = lines[1].Split(',');
+        Assert.Equal("csv.test.0", firstDataCols[0]);
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/export?format=xml returns 400 (unknown format).
+    /// The bounded <see cref="AuditExportFormat"/> enum rejects unknown values at model-binding.
+    /// </summary>
+    [Fact]
+    public async Task ExportAuditLog_FormatXml_Returns400()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-exp-xml");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log/export?format=xml");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log/export with no ?format parameter returns 400
+    /// (<c>[Required]</c> on <see cref="AuditExportQuery.format"/> forces model-binding to reject it).
+    /// </summary>
+    [Fact]
+    public async Task ExportAuditLog_MissingFormat_Returns400()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-exp-nofmt");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log/export");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    /// <summary>
+    /// JSONL export honours filters: <c>?format=jsonl&amp;user=export-user</c> returns only
+    /// entries for that user; the set equals the same-filtered list response.
+    /// </summary>
+    [Fact]
+    public async Task ExportAuditLog_JsonlWithUserFilter_ReturnsFilteredEntries()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-exp-filter");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        // Seed 2 entries for "alice" and 2 for "bob"
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+            db.AuditLog.Add(new AuditEntry { Action = "filter.test", User = "alice-exp", Timestamp = DateTime.UtcNow.AddSeconds(-4) });
+            db.AuditLog.Add(new AuditEntry { Action = "filter.test", User = "bob-exp",   Timestamp = DateTime.UtcNow.AddSeconds(-3) });
+            db.AuditLog.Add(new AuditEntry { Action = "filter.test", User = "alice-exp", Timestamp = DateTime.UtcNow.AddSeconds(-2) });
+            db.AuditLog.Add(new AuditEntry { Action = "filter.test", User = "bob-exp",   Timestamp = DateTime.UtcNow.AddSeconds(-1) });
+            await db.SaveChangesAsync();
+        }
+
+        var exportResp = await client.GetAsync(
+            "/api/v1/admin/audit-log/export?format=jsonl&user=alice-exp");
+        Assert.Equal(HttpStatusCode.OK, exportResp.StatusCode);
+
+        string exportBody = await exportResp.Content.ReadAsStringAsync();
+        var exportLines = exportBody.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+        // All returned lines must be for alice-exp
+        foreach (string line in exportLines)
+        {
+            using var doc = JsonDocument.Parse(line);
+            Assert.True(doc.RootElement.TryGetProperty("user", out var u));
+            Assert.Equal("alice-exp", u.GetString());
+        }
+
+        // Export count must match the list endpoint count
+        var listResp = await client.GetAsync(
+            "/api/v1/admin/audit-log?user=alice-exp&pageSize=50");
+        Assert.Equal(HttpStatusCode.OK, listResp.StatusCode);
+        string listBody = await listResp.Content.ReadAsStringAsync();
+        using var listDoc = JsonDocument.Parse(listBody);
+        int listCount = listDoc.RootElement.GetProperty("totalCount").GetInt32();
+
+        Assert.Equal(listCount, exportLines.Length);
+    }
+
+    /// <summary>
+    /// CSV export contains a quoted field when the value contains a comma,
+    /// verifying RFC-4180 quoting.
+    /// </summary>
+    [Fact]
+    public async Task ExportAuditLog_Csv_QuotesFieldsWithCommas()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-exp-quote");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        // Seed an entry whose Package contains a comma
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+            db.AuditLog.Add(new AuditEntry
+            {
+                Action    = "quote.test",
+                Package   = "@test/has,comma",
+                User      = "quote-user",
+                Decision  = "allow",
+                Timestamp = DateTime.UtcNow,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.GetAsync(
+            "/api/v1/admin/audit-log/export?format=csv&action=quote.test&user=quote-user");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+        // The package field contains a comma, so it must appear quoted in the output
+        Assert.Contains("\"@test/has,comma\"", body);
     }
 
     // ── A3: widened filter tests (user, ip, from/to) ──────────────────────────

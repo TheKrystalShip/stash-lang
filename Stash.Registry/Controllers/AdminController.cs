@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -264,6 +268,130 @@ public class AdminController : ControllerBase
             PageSize = query.pageSize,
             TotalPages = totalPages
         });
+    }
+
+    // ── Audit export ─────────────────────────────────────────────────────────────
+
+    // RFC-4180 CSV column order (stable A4 shape; previousHash/entryHash added in A6).
+    private static readonly string[] CsvColumns =
+    [
+        "action", "package", "version", "user", "target", "ip", "timestamp", "decision", "denyReason"
+    ];
+
+    /// <summary>
+    /// Streams the full filtered audit log in either JSONL (<c>application/x-ndjson</c>) or
+    /// CSV (<c>text/csv</c>) format.  Honours all filter parameters from <see cref="AuditExportQuery"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Export is not paginated — it streams the full filtered set.  The <c>?format</c> parameter
+    /// is required; an absent or unknown value returns <c>400 InvalidRequest</c>.
+    /// </para>
+    /// <para>
+    /// The IP column carries the already-transformed stored value (export never reveals a raw IP
+    /// that was stored hashed, because <see cref="AuditService"/> applied the transform at write time).
+    /// </para>
+    /// </remarks>
+    [RegistryAuthorize(RegistryAction.ReadAuditLog)]
+    [HttpGet("audit-log/export")]
+    public async Task ExportAuditLog([FromQuery] AuditExportQuery query)
+    {
+        // [ApiController]'s ModelStateInvalidFilter handles the 400 for invalid/missing format
+        // before reaching this body — we only run when ModelState is valid.
+        if (!ModelState.IsValid)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        AuditExportFormat format = query.format!.Value;
+
+        if (format == AuditExportFormat.Jsonl)
+        {
+            Response.StatusCode = StatusCodes.Status200OK;
+            Response.ContentType = "application/x-ndjson";
+            await Response.StartAsync();
+
+            var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
+            await foreach (var entry in _auditService.StreamAuditLogAsync(
+                query.package, query.action,
+                query.user, query.target, query.version,
+                query.ip, query.from, query.to))
+            {
+                var dto = MapToResponse(entry);
+                string line = JsonSerializer.Serialize(dto, jsonOptions);
+                await Response.WriteAsync(line + "\n");
+            }
+        }
+        else // AuditExportFormat.Csv
+        {
+            Response.StatusCode = StatusCodes.Status200OK;
+            Response.ContentType = "text/csv";
+            await Response.StartAsync();
+
+            // Header row
+            await Response.WriteAsync(string.Join(",", CsvColumns) + "\r\n");
+
+            await foreach (var entry in _auditService.StreamAuditLogAsync(
+                query.package, query.action,
+                query.user, query.target, query.version,
+                query.ip, query.from, query.to))
+            {
+                var dto = MapToResponse(entry);
+                string row = ToCsvRow(dto);
+                await Response.WriteAsync(row + "\r\n");
+            }
+        }
+    }
+
+    /// <summary>Maps an <see cref="AuditEntry"/> entity to its wire DTO, reusing the same
+    /// projection used by the <see cref="GetAuditLog"/> list endpoint.</summary>
+    private static AuditEntryResponse MapToResponse(AuditEntry e) => new()
+    {
+        Action     = e.Action,
+        Package    = e.Package,
+        Version    = e.Version,
+        User       = e.User,
+        Target     = e.Target,
+        Ip         = e.Ip,
+        Timestamp  = e.Timestamp,
+        Decision   = e.Decision,
+        DenyReason = e.DenyReason,
+    };
+
+    /// <summary>
+    /// Serializes an <see cref="AuditEntryResponse"/> to a single RFC-4180 CSV data row.
+    /// Fields are double-quoted when they contain a comma, double-quote, or line ending;
+    /// embedded double-quotes are escaped by doubling them.
+    /// </summary>
+    private static string ToCsvRow(AuditEntryResponse dto)
+    {
+        return string.Join(",", new[]
+        {
+            CsvField(dto.Action),
+            CsvField(dto.Package),
+            CsvField(dto.Version),
+            CsvField(dto.User),
+            CsvField(dto.Target),
+            CsvField(dto.Ip),
+            CsvField(dto.Timestamp.ToString("o", CultureInfo.InvariantCulture)),
+            CsvField(dto.Decision),
+            CsvField(dto.DenyReason),
+        });
+    }
+
+    /// <summary>
+    /// Returns the RFC-4180 representation of a single field value.
+    /// <c>null</c> → empty string (no quotes).  Values containing a comma, double-quote,
+    /// CR, or LF are wrapped in double-quotes with internal quotes doubled.
+    /// </summary>
+    private static string CsvField(string? value)
+    {
+        if (value == null)
+            return "";
+        if (value.IndexOfAny([',', '"', '\r', '\n']) < 0)
+            return value;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     /// <summary>
