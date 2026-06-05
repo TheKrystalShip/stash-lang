@@ -9,7 +9,12 @@ namespace Stash.Registry.Configuration;
 public sealed class MetricsConfig
 {
     /// <summary>
-    /// Whether metrics collection is enabled.  Defaults to <c>true</c>.
+    /// RESERVED — intended master on/off switch for metrics collection.
+    /// NOT YET WIRED: no code reads this property, so setting it <c>false</c> does
+    /// not currently disable capture, rollup, or retention.
+    /// See backlog <c>registry-metrics-capture-killswitch.md</c> for the pending
+    /// design decision.
+    /// Defaults to <c>true</c>.
     /// </summary>
     public bool Enabled { get; set; } = true;
 
@@ -50,8 +55,12 @@ public sealed class MetricsRawConfig
 {
     /// <summary>
     /// How many days raw download events are retained before the nightly retention
-    /// sweep deletes them.  <c>0</c> disables raw capture entirely.
-    /// Defaults to <c>30</c>.
+    /// sweep deletes them.  Defaults to <c>30</c>.
+    /// A value of <c>0</c> (or negative) disables ONLY the nightly retention sweep —
+    /// raw events are still captured and will accumulate until a positive
+    /// <c>RetentionDays</c> is configured to sweep them.  It does NOT disable capture.
+    /// There is currently no capture kill-switch; see backlog
+    /// <c>registry-metrics-capture-killswitch.md</c>.
     /// </summary>
     public int RetentionDays { get; set; } = 30;
 }

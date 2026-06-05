@@ -137,7 +137,7 @@ phases:
       - "Hourly rollup pass aggregates closed `download_events` buckets into `download_rollup_hourly` (and daily rollup into `download_rollup_daily`)."
       - "Nightly retention sweep deletes raw rows older than `Raw.RetentionDays` (default 30d)."
       - "After running rollup over a known input set, SUM(downloads) across rollups equals the seeded raw-event count for closed buckets; the current open bucket is excluded from rollup writes."
-      - "Retention sweep with `RetentionDays=0` is a no-op (raw capture disabled)."
+      - "Retention sweep with `RetentionDays<=0` is a no-op (only the sweep is disabled; raw capture is unaffected — there is no capture kill-switch yet, see backlog registry-metrics-capture-killswitch.md)."
 
   - id: M5
     title: Package + version + admin top-packages metrics endpoints (visibility-gated)
