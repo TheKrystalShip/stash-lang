@@ -13,9 +13,15 @@ namespace Stash.Registry.Services;
 /// is impossible.
 /// </para>
 /// <para>
-/// The constants live in <c>Stash.Registry</c> (server-internal), not in
-/// <c>Stash.Registry.Contracts</c> (wire-only), because action strings are never
-/// exposed as wire values.
+/// Action strings <b>are</b> wire-exposed in two places:
+/// <list type="bullet">
+///   <item><description><c>AuditEntryResponse.Action</c> returned by <c>GET /api/v1/admin/audit-log</c>.</description></item>
+///   <item><description><c>AuditLogQuery.action</c> filter on the same endpoint.</description></item>
+/// </list>
+/// These constants are server-internal for co-location reasons only.  A constant <b>NAME</b>
+/// may be freely renamed (callers reference the symbol, not the string), but changing a
+/// constant <b>VALUE</b> is a wire-breaking change and must never be done without a
+/// coordinated migration.
 /// </para>
 /// </remarks>
 public static class AuditActions
@@ -26,10 +32,10 @@ public static class AuditActions
     public const string PackageCreate = "package.create";
 
     /// <summary>A new version was published onto an existing package.</summary>
-    public const string PackagePublish = "package.publish";
+    public const string PackagePublish = "publish";
 
     /// <summary>A version was unpublished (within the unpublish window).</summary>
-    public const string PackageUnpublish = "package.unpublish";
+    public const string PackageUnpublish = "unpublish";
 
     /// <summary>A package was marked as deprecated.</summary>
     public const string PackageDeprecate = "package.deprecate";
