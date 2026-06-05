@@ -31,6 +31,10 @@ Examples:
 - `Compiler_ClosureCapture_ClosesOverCorrectVariable()`
 - `SemanticValidator_UndeclaredVariable_EmitsSA0201()`
 
+## Imports — global usings are on
+
+`Stash.Tests.csproj` sets `<ImplicitUsings>enable</ImplicitUsings>` + `<Using Include="Xunit" />`, so `System.*` and `Xunit` are already global. Do **not** re-declare `using System;`/`using System.Linq;`/`using Xunit;`/etc. in new test files — they trigger CS8933 (duplicate global using) + CS8019 (unnecessary using) warnings. Only `using` project-specific namespaces.
+
 ## Running Tests
 
 ```bash
