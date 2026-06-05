@@ -263,7 +263,8 @@ dotnet run -c Release --project Stash.Hosting.Benchmarks
 
 ## F03 — [MINOR] "Construct-lite chokepoint" guarantee is weaker than the brief claims — the baked-closure DynamicInvoke is structurally reachable
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 982383dc
 **Files:** `Stash.Hosting/HostTypeBuilder.cs:209`, `Stash.Hosting/HostTypeBuilder.cs:338`, `Stash.Hosting/Internal/InvokeHostDelegate.cs:20-26`, `Stash.Hosting/Internal/HostMemberDescriptor.cs:63-69`
 **Phase:** P3 (sync invoker) / P4 (async invoker)
 **Commit:** b6db63ab, 4a35888b
