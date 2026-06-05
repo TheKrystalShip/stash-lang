@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T19:22:35Z"
+updated: "2026-06-05T19:57:18Z"
 phases:
   A1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: Write-time IP transform in AuditService (single chokepoint); filters widened by user/target/version/ip/from/to; ip filter routes through same IIpHasher; NoMagicRemoteIpAccess rationale flipped; 83 tests green
   A4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: afb9ca38d6be0eb446b92661def7d99f6e6f7208
+    verified: true
+    started: "2026-06-05T19:38:25Z"
+    completed: "2026-06-05T19:57:18Z"
+    attempts: 1
+    notes: "Export endpoint: AuditExportFormat enum (jsonl/csv) in BoundedDomains; AuditExportQuery DTO (no pagination); AdminController.ExportAuditLog streams JSONL/CSV; AuditService.StreamAuditLogAsync; 7 new tests all green"
   A5:
     status: pending
     commit: null
