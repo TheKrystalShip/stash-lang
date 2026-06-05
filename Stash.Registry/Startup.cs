@@ -188,6 +188,16 @@ public sealed class Startup
             };
         });
 
+        // IIpHasher — singleton: the HMAC key is loaded once at startup and shared
+        // across all requests.  Construction logs a warning and writes the secret file
+        // if the key is absent.  Registered BEFORE the startup warning check below so
+        // the logger is available when the singleton is first resolved.
+        services.AddSingleton<IIpHasher>(sp =>
+        {
+            var hasherLogger = sp.GetRequiredService<ILogger<IpHasher>>();
+            return new IpHasher(_config.Metrics, hasherLogger);
+        });
+
         services.AddScoped<PackageService>();
         services.AddScoped<PackageRoleService>();
         services.AddScoped<AuditService>();

@@ -10,4 +10,10 @@ public sealed class RegistryConfig
     public RateLimitingConfig RateLimiting { get; set; } = new();
     public BootstrapConfig Bootstrap { get; set; } = new();
     public CorsConfig Cors { get; set; } = new();
+
+    /// <summary>
+    /// Operator-configurable download-metrics settings (IP handling mode, raw
+    /// retention, rollup interval).  Bound from <c>Registry:Metrics</c>.
+    /// </summary>
+    public MetricsConfig Metrics { get; set; } = new();
 }

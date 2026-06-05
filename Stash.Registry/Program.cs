@@ -81,6 +81,20 @@ public class Program
             return;
         }
 
+        try
+        {
+            // Re-read the raw IpMode string so MetricsConfigValidator can reject
+            // unknown values that ConfigurationBinder silently maps to a default.
+            string? rawIpMode = builder.Configuration["Registry:Metrics:IpMode"];
+            MetricsConfigValidator.Validate(config.Metrics, rawIpMode);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine($"stash-registry: configuration error: {ex.Message}");
+            Environment.Exit(1);
+            return;
+        }
+
         var startup = new Startup(config);
         startup.ConfigureServices(builder.Services);
 
