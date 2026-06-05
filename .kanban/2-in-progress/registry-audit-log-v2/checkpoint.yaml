@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T19:57:18Z"
+updated: "2026-06-05T20:07:49Z"
 phases:
   A1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "Export endpoint: AuditExportFormat enum (jsonl/csv) in BoundedDomains; AuditExportQuery DTO (no pagination); AdminController.ExportAuditLog streams JSONL/CSV; AuditService.StreamAuditLogAsync; 7 new tests all green"
   A5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: a6234b4a635dcbe6d270a330076d632f602765a6
+    verified: true
+    started: "2026-06-05T19:58:33Z"
+    completed: "2026-06-05T20:07:49Z"
+    attempts: 1
+    notes: "AuditConfig (RetentionDays=0 default + TamperEvidence shape); AuditBackgroundService (deferred-first-sweep, scope-per-cycle); DeleteAuditEntriesOlderThanAsync; 20 tests green"
   A6:
     status: pending
     commit: null
