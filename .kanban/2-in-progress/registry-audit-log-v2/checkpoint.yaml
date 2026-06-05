@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T21:26:03Z"
+updated: "2026-06-05T21:39:28Z"
 phases:
   A1:
     status: done
@@ -60,8 +60,8 @@ phases:
     attempts: 1
     notes: Audit=true in DiscoveryFeatures; Admin_ExportAuditLog joins permanent stream exemption; Admin_VerifyAuditLog carries full schema (no exemption); snapshot diff purely additive (A3+A4+A6+A7 deltas only); docs updated
 review:
-  status: not_started
-  started: null
+  status: in_progress
+  started: "2026-06-05T21:39:28Z"
   resolved: null
   findings_open: 0
   findings_fixed: 0
