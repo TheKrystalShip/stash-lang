@@ -18,6 +18,44 @@ using Stash.Runtime.Types;
 public interface IStashHost : IAsyncDisposable
 {
     /// <summary>
+    /// Registers a CLR type for host-object-by-reference dispatch.
+    /// </summary>
+    /// <typeparam name="T">The CLR class to register. Must be a reference type.</typeparam>
+    /// <param name="configure">
+    /// Delegate that configures the type's VM name and member dispatch table
+    /// via the supplied <see cref="HostTypeBuilder{T}"/>.
+    /// </param>
+    /// <remarks>
+    /// Must be called before the first <c>CompileAsync</c> / <c>RunAsync</c> / <c>CallAsync</c>.
+    /// The underlying engine only accepts type registrations before VM creation; calling
+    /// <c>RegisterType</c> after the engine has materialised throws
+    /// <see cref="InvalidOperationException"/>.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the host has already materialised its VM (i.e. a script has already run).
+    /// </exception>
+    void RegisterType<T>(Action<HostTypeBuilder<T>> configure) where T : class;
+
+    /// <summary>
+    /// Binds a registered host instance as a named Stash global, making it
+    /// directly accessible to scripts (e.g. <c>request.path</c>).
+    /// </summary>
+    /// <param name="name">The global name visible to scripts.</param>
+    /// <param name="hostObject">
+    /// A CLR instance whose type was previously registered via
+    /// <see cref="RegisterType{T}"/>.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="name"/> or <paramref name="hostObject"/> is <c>null</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when the type of <paramref name="hostObject"/> has not been registered via
+    /// <see cref="RegisterType{T}"/>. The error message names the unregistered type.
+    /// </exception>
+    void SetGlobal(string name, object hostObject);
+
+
+    /// <summary>
     /// Compiles Stash source code into a reusable <see cref="CompiledScript"/>.
     /// The source is lexed, parsed, and semantically resolved once; the compiled
     /// script may be passed to <see cref="RunAsync(CompiledScript, CancellationToken)"/>

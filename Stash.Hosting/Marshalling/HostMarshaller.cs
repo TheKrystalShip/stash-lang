@@ -4,6 +4,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.Json;
+using Stash.Hosting.Internal;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 
@@ -15,6 +16,12 @@ using Stash.Runtime.Types;
 /// </summary>
 internal static class HostMarshaller
 {
+    // ── Per-host registration map ─────────────────────────────────────────
+    // The map is NOT static — registered types are per-host and must never bleed across
+    // host instances. HostMarshaller.ToStash is called only when a registration map is
+    // available; the overload without a map preserves backward-compat for paths that
+    // have no host context (e.g. standalone engine usage).
+
     // ── Arg marshalling: object? → StashValue ─────────────────────────────
 
     /// <summary>
@@ -25,6 +32,25 @@ internal static class HostMarshaller
     /// Thrown when <paramref name="arg"/> is of a type with no registered marshaller.
     /// </exception>
     public static StashValue ToStash(object? arg)
+        => ToStash(arg, registrations: null);
+
+    /// <summary>
+    /// Marshals a single CLR object to a <see cref="StashValue"/>, consulting the
+    /// per-host <paramref name="registrations"/> map to wrap registered host types as
+    /// <see cref="HostHandle"/> values before falling through to the generic marshallers.
+    /// </summary>
+    /// <param name="arg">The CLR value to marshal.</param>
+    /// <param name="registrations">
+    /// The per-host registration map, or <c>null</c> when called without a host context.
+    /// When non-null, a registered type is wrapped as a <see cref="HostHandle"/> rather
+    /// than throwing the generic <see cref="ArgumentException"/>.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="arg"/> is of a type with no registered marshaller.
+    /// </exception>
+    public static StashValue ToStash(
+        object? arg,
+        IReadOnlyDictionary<Type, HostTypeRegistration>? registrations)
     {
         if (arg is null) return StashValue.Null;
 
@@ -48,12 +74,23 @@ internal static class HostMarshaller
         if (arg is JsonElement je)
             return JsonStashBridge.ToStash(je);
 
+        // Registered host type → HostHandle.
+        // MUST precede IDictionary and IEnumerable: a registered host class that also
+        // implements IEnumerable or IDictionary would otherwise be misrouted to those
+        // branches and silently serialised as a collection instead of staying by-reference.
+        if (registrations is not null)
+        {
+            Type argType = arg.GetType();
+            if (registrations.TryGetValue(argType, out HostTypeRegistration? reg))
+                return StashValue.FromObj(new HostHandle(arg, reg));
+        }
+
         // IDictionary<string, object?> → StashDictionary
         if (arg is IDictionary<string, object?> dict)
         {
             var sd = new StashDictionary();
             foreach (KeyValuePair<string, object?> kv in dict)
-                sd.Set(kv.Key, ToStash(kv.Value));
+                sd.Set(kv.Key, ToStash(kv.Value, registrations));
             return StashValue.FromObj(sd);
         }
 
@@ -63,7 +100,7 @@ internal static class HostMarshaller
         {
             var sd = new StashDictionary();
             foreach (System.Reflection.PropertyInfo prop in type.GetProperties())
-                sd.Set(prop.Name, ToStash(prop.GetValue(arg)));
+                sd.Set(prop.Name, ToStash(prop.GetValue(arg), registrations));
             return StashValue.FromObj(sd);
         }
 
@@ -73,7 +110,7 @@ internal static class HostMarshaller
         {
             var list = new List<StashValue>();
             foreach (object? item in enumerable)
-                list.Add(ToStash(item));
+                list.Add(ToStash(item, registrations));
             return StashValue.FromObj(list);
         }
 

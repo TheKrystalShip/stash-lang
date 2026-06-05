@@ -6,6 +6,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Bytecode;
+using Stash.Hosting.Internal;
 using Stash.Hosting.Marshalling;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
@@ -27,6 +28,12 @@ public sealed class StashHost : IStashHost
     private readonly StashHostOptions _options;
     private bool _disposed;
 
+    // Per-host registration map: CLR Type → HostTypeRegistration.
+    // Keyed by CLR Type so SetGlobal and HostMarshaller.ToStash can look up registrations.
+    // Populated only via RegisterType<T> before VM materialisation; never mutated after the
+    // first script runs. Per-instance state — never static — for hermetic isolation.
+    private readonly Dictionary<Type, HostTypeRegistration> _typeRegistrations = new();
+
     /// <summary>
     /// Creates a new <see cref="StashHost"/> with default options
     /// (all capabilities, no step limit, output discarded).
@@ -46,6 +53,67 @@ public sealed class StashHost : IStashHost
     }
 
     // ── IStashHost ────────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public void RegisterType<T>(Action<HostTypeBuilder<T>> configure) where T : class
+    {
+        if (configure is null) throw new ArgumentNullException(nameof(configure));
+        ThrowIfDisposed();
+        // After ThrowIfDisposed(), _engine is non-null.
+
+        var builder = new HostTypeBuilder<T>();
+        configure(builder);
+        HostTypeRegistration reg = builder.Build();
+
+        // Register with the VM engine for typeof / is support.
+        // Predicate: the VM always sees a HostHandle in the Obj slot — never a bare T.
+        // So the default predicate (obj => obj is T) would always return false.
+        // We must check that the handle wraps the correct CLR type.
+        try
+        {
+            _engine!.RegisterType<T>(
+                vmTypeName: reg.VmTypeName,
+                predicate:  obj => obj is HostHandle handle && handle.ClrType == typeof(T));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Re-surface with a clear host-level message that names the host contract.
+            throw new InvalidOperationException(
+                $"RegisterType<{typeof(T).Name}> must be called before the first " +
+                $"CompileAsync / RunAsync / CallAsync. " +
+                $"The underlying VM has already been created. ({ex.Message})",
+                ex);
+        }
+
+        // Store in the per-host registration map (keyed by CLR Type) so that
+        // HostMarshaller.ToStash and SetGlobal can look up registrations by instance type.
+        _typeRegistrations[typeof(T)] = reg;
+    }
+
+    /// <inheritdoc/>
+    public void SetGlobal(string name, object hostObject)
+    {
+        if (name is null) throw new ArgumentNullException(nameof(name));
+        if (hostObject is null) throw new ArgumentNullException(nameof(hostObject));
+        ThrowIfDisposed();
+
+        Type clrType = hostObject.GetType();
+        if (!_typeRegistrations.TryGetValue(clrType, out HostTypeRegistration? reg))
+        {
+            throw new ArgumentException(
+                $"Type '{clrType.FullName ?? clrType.Name}' has not been registered. " +
+                $"Call RegisterType<{clrType.Name}>(...) before SetGlobal.",
+                nameof(hostObject));
+        }
+
+        // Wrap in a HostHandle and bind as a VM global.
+        // StashValue.FromObject falls through to FromObj for unknown CLR types, so passing
+        // the HostHandle to SetGlobal(string, object?) stores it as an Obj-tagged StashValue —
+        // exactly what we need. The handle is always created here, keyed through the
+        // registration map, so the single-chokepoint invariant is preserved.
+        var handle = new HostHandle(hostObject, reg);
+        _engine!.SetGlobal(name, handle);
+    }
 
     /// <inheritdoc/>
     public Task<CompiledScript> CompileAsync(string source, CancellationToken ct = default)
