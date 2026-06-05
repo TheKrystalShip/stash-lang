@@ -52,28 +52,38 @@ static void RunBdnFull()
 {
     Console.WriteLine("--- HostConstructionBenchmarks (BenchmarkDotNet full protocol) ---");
     BenchmarkRunner.Run<HostConstructionBenchmarks>();
+
+    Console.WriteLine();
+    Console.WriteLine("--- HostMemberAccessBenchmarks (BenchmarkDotNet full protocol) ---");
+    BenchmarkRunner.Run<HostMemberAccessBenchmarks>();
 }
 
 static void RunBdnQuick()
 {
-    Console.WriteLine("--- HostConstructionBenchmarks (BDN dry-run, in-process) ---");
-
     // InProcess + single dry iteration so it completes in seconds.
     var config = ManualConfig.Create(DefaultConfig.Instance)
         .AddJob(Job.Dry
             .WithToolchain(InProcessEmitToolchain.Instance)
             .WithId("Quick"));
 
-    var summary = BenchmarkRunner.Run<HostConstructionBenchmarks>(config);
+    Console.WriteLine("--- HostConstructionBenchmarks (BDN dry-run, in-process) ---");
+    var constructionSummary = BenchmarkRunner.Run<HostConstructionBenchmarks>(config);
+
+    Console.WriteLine();
+    Console.WriteLine("--- HostMemberAccessBenchmarks (BDN dry-run, in-process) ---");
+    var memberSummary = BenchmarkRunner.Run<HostMemberAccessBenchmarks>(config);
 
     // Print condensed results.
     Console.WriteLine();
     Console.WriteLine("BDN quick results:");
-    foreach (var report in summary.Reports)
+    foreach (var summary in new[] { constructionSummary, memberSummary })
     {
-        if (report.ResultStatistics is null) continue;
-        double meanUs = report.ResultStatistics.Mean / 1000.0; // ns → µs
-        Console.WriteLine($"  {report.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo}: mean ≈ {meanUs:F1} µs");
+        foreach (var report in summary.Reports)
+        {
+            if (report.ResultStatistics is null) continue;
+            double meanUs = report.ResultStatistics.Mean / 1000.0; // ns → µs
+            Console.WriteLine($"  {report.BenchmarkCase.Descriptor.WorkloadMethodDisplayInfo}: mean ≈ {meanUs:F1} µs");
+        }
     }
     Console.WriteLine();
 }

@@ -149,7 +149,7 @@ phases:
       - Stash.Hosting.Benchmarks/HostMemberAccessBenchmarks.cs
       - .kanban/2-in-progress/host-object-dispatch/benchmark-results.md
     verify:
-      - dotnet build Stash.Hosting Stash.Hosting.Benchmarks
+      - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding"
     done_when:
       - HostObjectDispatchTests.cs ties together the end-to-end Player example from brief Acceptance Criteria (register Player + attack/hp/fetch, SetGlobal, CallAsync round-trip, verify CLR-side mutation observable).
