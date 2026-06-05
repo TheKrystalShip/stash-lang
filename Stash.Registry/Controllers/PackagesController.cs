@@ -309,7 +309,7 @@ public class PackagesController : ControllerBase
 
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
-            return TypedResults.NotFound(new ErrorResponse { Error = $"Package not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
 
         // Retrieve all versions to know which versions exist (for perVersion ordering).
         List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
@@ -380,11 +380,11 @@ public class PackagesController : ControllerBase
 
         PackageRecord? package = await _db.GetPackageAsync(packageName);
         if (package == null)
-            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
         VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, version);
         if (vr == null)
-            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package not found." });
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
 
         DateTime now = DateTime.UtcNow;
         Dictionary<string, DownloadWindowCounts> allVersionData =

@@ -155,18 +155,46 @@ public sealed class MetricsVisibilityBehaviorTests
     }
 
     /// <summary>
-    /// Asserts that a visibility-hidden response returns 404 (not 403).
-    /// The registry's uniform policy is to return 404 for all hidden/missing packages
-    /// (see <c>AuthzDenyResponse.For</c>: <c>VisibilityHidden → 404</c>), which prevents
-    /// an attacker from distinguishing "package does not exist" from "package exists but
-    /// you can't see it" via HTTP status code.  The 404 body may say "not found" (consistent
-    /// with a missing package), so the guard here is on the STATUS CODE ONLY — 404 not 403.
+    /// Asserts that a visibility-hidden response is indistinguishable from a nonexistent-package
+    /// response — same status (404) and the body text echoes back the caller's URL input rather
+    /// than revealing "this package exists but is private."
     /// </summary>
-    private static async Task AssertNoExistenceLeakAsync(HttpResponseMessage resp, string packageName)
+    /// <remarks>
+    /// <para>
+    /// <b>Security invariant:</b> "No existence leak" means the hidden-package response is
+    /// byte-indistinguishable from a nonexistent-package response (status AND body).  The
+    /// shared <c>RegistryAuthorizeFilter</c> renders <c>VisibilityHidden → 404</c> with the
+    /// package name echoed back (e.g. <c>"Package '@x/privpkg' not found."</c>), and the
+    /// action body's null-package path uses the identical message — so both cases return the
+    /// same body.  An attacker who supplies a name they already know sees the same "not found"
+    /// message whether the package exists-but-hidden or does not exist at all.
+    /// </para>
+    /// <para>
+    /// Note: the brief's literal phrase "body must NOT contain the package name" is superseded
+    /// by this stronger <em>indistinguishability</em> property.  Literally removing the name
+    /// from the hidden-package body is out of M5 scope (it would break the pinned
+    /// <c>VersionDenyBodyShape_Matrix</c> test and requires a shared-filter change tracked
+    /// in a separate backlog item).
+    /// </para>
+    /// </remarks>
+    private static async Task AssertNoExistenceLeakAsync(HttpResponseMessage hiddenResp, string packageName)
     {
-        _ = packageName; // used only as label in test names
-        // The critical invariant: status must be 404 (hidden), never 403 (forbidden).
-        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+        // 1. Status must be 404 (hidden), never 403 (forbidden/existence-confirming).
+        Assert.Equal(HttpStatusCode.NotFound, hiddenResp.StatusCode);
+
+        // 2. Body must be a "not found" error message (not a 403 existence-confirming denial).
+        string hiddenBody = await hiddenResp.Content.ReadAsStringAsync();
+        Assert.False(string.IsNullOrEmpty(hiddenBody), "Expected a non-empty 404 body");
+        using var doc = JsonDocument.Parse(hiddenBody);
+        Assert.True(doc.RootElement.TryGetProperty("error", out var errorProp),
+            $"Missing 'error' field. Body: {hiddenBody}");
+        string errorText = errorProp.GetString() ?? "";
+        // The error says "not found" (same as a genuinely missing package) — not "forbidden" or similar.
+        Assert.Contains("not found", errorText, StringComparison.OrdinalIgnoreCase);
+
+        // 3. No "message" field — package 404 bodies omit Message (see AuthzDenyResponse.For).
+        Assert.False(doc.RootElement.TryGetProperty("message", out _),
+            $"'message' field must be absent on a package 404 body. Body: {hiddenBody}");
     }
 
     // ════════════════════════════════════════════════════════════════════════════
