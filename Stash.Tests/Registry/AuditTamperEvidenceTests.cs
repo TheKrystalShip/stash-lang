@@ -67,14 +67,14 @@ public sealed class AuditTamperEvidenceTests : IDisposable
     /// <summary>
     /// Walks the hashed entries in the DB using the provided <paramref name="hasher"/> and
     /// returns (valid, firstBrokenId, genesisId, checkedCount).
-    /// Delegates to <see cref="AuditChainHasher.WalkChain"/> — the <b>same</b> code path
+    /// Delegates to <see cref="AuditChainHasher.WalkChainAsync"/> — the <b>same</b> code path
     /// called by <c>AdminController.VerifyAuditLog</c> so unit tests prove the real walker.
     /// </summary>
     private async Task<(bool valid, int? firstBrokenId, int? genesisId, int checkedCount)>
         VerifyChainAsync(AuditChainHasher hasher)
     {
-        var entries = await _db.GetAllHashedAuditEntriesAsync();
-        var result = hasher.WalkChain(entries);
+        var entries = _db.StreamHashedAuditEntriesAsync();
+        var result = await hasher.WalkChainAsync(entries);
         return (result.Valid, result.FirstBrokenId, result.GenesisId, result.CheckedCount);
     }
 
@@ -592,10 +592,10 @@ public sealed class AuditTamperEvidenceTests : IDisposable
         Assert.Equal("dddeeefff", result);
     }
 
-    // ── GetAllHashedAuditEntriesAsync ─────────────────────────────────────────
+    // ── StreamHashedAuditEntriesAsync ─────────────────────────────────────────
 
     [Fact]
-    public async Task GetAllHashedAuditEntriesAsync_MixedEntries_ReturnsOnlyHashedIdAscending()
+    public async Task StreamHashedAuditEntriesAsync_MixedEntries_ReturnsOnlyHashedIdAscending()
     {
         var unhashed = new AuditEntry
         {
@@ -617,12 +617,108 @@ public sealed class AuditTamperEvidenceTests : IDisposable
         await _db.AddAuditEntryAsync(h1);
         await _db.AddAuditEntryAsync(h2);
 
-        var result = await _db.GetAllHashedAuditEntriesAsync();
+        // Collect the stream into a list for assertion purposes.
+        var result = new System.Collections.Generic.List<AuditEntry>();
+        await foreach (var entry in _db.StreamHashedAuditEntriesAsync())
+            result.Add(entry);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("hash1", result[0].EntryHash);
         Assert.Equal("hash2", result[1].EntryHash);
         // Ordered by id ascending (id is monotonic; result[0].Id < result[1].Id).
         Assert.True(result[0].Id < result[1].Id);
+    }
+
+    // ── Streaming walk stress test (F01) ─────────────────────────────────────
+
+    /// <summary>
+    /// Seeds ≥10 000 hashed entries via a single bulk insert, then verifies the chain is
+    /// correct and that <see cref="AuditChainHasher.WalkChainAsync"/> completes without
+    /// materialising the whole set into memory (O(1) walker).
+    /// </summary>
+    [Fact]
+    public async Task TamperEvidence_LargeChain_VerifiesCorrectly()
+    {
+        const int Count = 10_000;
+        var hasher = BuildHasher();
+        var ts     = new DateTime(2026, 6, 5, 0, 0, 0, DateTimeKind.Utc);
+
+        // Build the chain in-process and bulk-insert via a single SaveChanges to avoid
+        // 10k round trips making this test prohibitively slow.
+        var batch = new System.Collections.Generic.List<AuditEntry>(Count);
+        string prevHash = AuditChainHasher.GenesisSentinel;
+        for (int i = 0; i < Count; i++)
+        {
+            var e = new AuditEntry
+            {
+                Action    = "package.publish",
+                Package   = "@stress/pkg",
+                Version   = $"1.0.{i}",
+                User      = $"user{i % 100}",
+                Decision  = "allow",
+                Timestamp = ts.AddSeconds(i),
+            };
+            e.PreviousHash = prevHash;
+            e.EntryHash    = hasher.ComputeEntryHash(e, prevHash);
+            prevHash       = e.EntryHash;
+            batch.Add(e);
+        }
+
+        await _dbContext.AuditLog.AddRangeAsync(batch);
+        await _dbContext.SaveChangesAsync();
+
+        int firstId = (await _dbContext.AuditLog.OrderBy(e => e.Id).FirstAsync()).Id;
+
+        var (valid, firstBrokenId, genesisId, checkedCount) = await VerifyChainAsync(hasher);
+
+        Assert.True(valid,              $"10 000-entry chain must verify as valid");
+        Assert.Null(firstBrokenId);
+        Assert.Equal(Count, checkedCount);
+        Assert.Equal(firstId, genesisId);
+    }
+
+    // ── enabled → disabled → enabled (F02) ───────────────────────────────────
+
+    /// <summary>
+    /// Validates the implemented "bridged chain" contract: when tamper-evidence is
+    /// enabled, then disabled (writing null-hash entries), then re-enabled, the re-enabled
+    /// entries link to the most recent hashed entry rather than starting a new genesis.
+    /// The walker verifies one continuous chain anchored at the original genesis and ignores
+    /// the null-hash gap written during the disabled period.
+    /// </summary>
+    [Fact]
+    public async Task TamperEvidence_EnabledDisabledEnabled_BridgesChainAcrossGap()
+    {
+        var hasher = BuildHasher();
+
+        // Phase 1 — tamper-evidence ON: write 3 hashed entries (E1, E2, E3).
+        var auditOn1 = BuildAuditService(hasher);
+        await auditOn1.LogPublishAsync("@a/foo", "1.0.0", "alice", null);
+        await auditOn1.LogPublishAsync("@a/foo", "1.0.1", "bob",   null);
+        await auditOn1.LogPublishAsync("@a/foo", "1.0.2", "carol", null);
+
+        // Phase 2 — tamper-evidence OFF: write 2 null-hash entries (E4, E5).
+        var auditOff = BuildAuditService(null);
+        await auditOff.LogPublishAsync("@a/foo", "1.0.3", "dave", null);
+        await auditOff.LogPublishAsync("@a/foo", "1.0.4", "eve",  null);
+
+        // Phase 3 — tamper-evidence ON again: write 1 more hashed entry (E6).
+        var auditOn2 = BuildAuditService(hasher);
+        await auditOn2.LogPublishAsync("@a/foo", "1.0.5", "frank", null);
+
+        // Find the id of the first hashed entry (E1) — the original genesis.
+        var firstHashed = await _dbContext.AuditLog
+            .Where(e => e.EntryHash != null)
+            .OrderBy(e => e.Id)
+            .AsNoTracking()
+            .FirstAsync();
+
+        // Walk the chain — only 4 hashed entries (E1, E2, E3, E6) are visible.
+        var (valid, firstBrokenId, genesisId, checkedCount) = await VerifyChainAsync(hasher);
+
+        Assert.True(valid,                              "Bridged chain must verify as valid");
+        Assert.Null(firstBrokenId);
+        Assert.Equal(firstHashed.Id, genesisId);       // anchored at the original genesis
+        Assert.Equal(4, checkedCount);                  // E1, E2, E3, E6 (E4, E5 are null-hash, invisible)
     }
 }

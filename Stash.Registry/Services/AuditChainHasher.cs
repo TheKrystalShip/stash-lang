@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Stash.Registry.Configuration;
 using Stash.Registry.Database.Models;
 
@@ -176,17 +177,17 @@ public sealed class AuditChainHasher
     public sealed record ChainWalkResult(bool Valid, int? FirstBrokenId, int? GenesisId, int CheckedCount);
 
     /// <summary>
-    /// Walks <paramref name="hashedEntries"/> (id-ascending, hashed only) and returns the
+    /// Walks the hashed-entry stream (id-ascending, hashed only) and returns the
     /// chain integrity result.  This is the <b>single source of truth</b> for the walk logic,
     /// called by both <c>AdminController.VerifyAuditLog</c> and the unit tests — there must
     /// be exactly one walker.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The first entry in <paramref name="hashedEntries"/> is the <b>anchor</b>.  Its stored
-    /// <c>PreviousHash</c> is trusted without verification (it may point to a deleted genesis
-    /// after a retention sweep, or be the <see cref="GenesisSentinel"/>).  Only the content
-    /// check (<c>recomputed == stored EntryHash</c>) is performed for the anchor.
+    /// The first entry yielded by <paramref name="hashedEntries"/> is the <b>anchor</b>.  Its
+    /// stored <c>PreviousHash</c> is trusted without verification (it may point to a deleted
+    /// genesis after a retention sweep, or be the <see cref="GenesisSentinel"/>).  Only the
+    /// content check (<c>recomputed == stored EntryHash</c>) is performed for the anchor.
     /// </para>
     /// <para>
     /// For all subsequent entries both the content check and the linkage check
@@ -194,47 +195,60 @@ public sealed class AuditChainHasher
     /// </para>
     /// <para>
     /// Pre-genesis entries (null-hash rows) must be excluded by the caller before passing to
-    /// this method.  <see cref="IRegistryDatabase.GetAllHashedAuditEntriesAsync"/> does this
+    /// this method.  <see cref="IRegistryDatabase.StreamHashedAuditEntriesAsync"/> does this
     /// automatically.
+    /// </para>
+    /// <para>
+    /// Memory usage is O(1) — only the prior entry's <c>EntryHash</c>, the genesis id, the
+    /// first-broken id, and the running count are retained.  The stream is consumed once and
+    /// is not buffered.
     /// </para>
     /// </remarks>
     /// <param name="hashedEntries">
-    /// All hashed audit entries, ordered by <c>id</c> ascending.  Must be non-null; may be
-    /// empty (returns <c>CheckedCount=0, Valid=true</c>).
+    /// Lazily-streamed hashed audit entries, ordered by <c>id</c> ascending.  Must be
+    /// non-null; may be empty (returns <c>CheckedCount=0, Valid=true</c>).
     /// </param>
-    public ChainWalkResult WalkChain(IReadOnlyList<AuditEntry> hashedEntries)
+    public async Task<ChainWalkResult> WalkChainAsync(IAsyncEnumerable<AuditEntry> hashedEntries)
     {
-        if (hashedEntries.Count == 0)
-            return new ChainWalkResult(Valid: true, FirstBrokenId: null, GenesisId: null, CheckedCount: 0);
+        int?   genesisId    = null;
+        int?   firstBrokenId = null;
+        int    checkedCount = 0;
+        string? priorEntryHash = null; // EntryHash of the previous entry (null before first)
 
-        int? firstBrokenId = null;
-        for (int i = 0; i < hashedEntries.Count; i++)
+        await foreach (var entry in hashedEntries)
         {
-            var entry = hashedEntries[i];
-            string expectedPreviousHash = i == 0
-                ? entry.PreviousHash!   // anchor: trust the stored previousHash
-                : hashedEntries[i - 1].EntryHash!;
+            checkedCount++;
 
-            // Content check: recompute the entry hash from its canonical payload.
-            string recomputed = ComputeEntryHash(entry, expectedPreviousHash);
-            if (entry.EntryHash != recomputed)
+            if (genesisId == null)
             {
-                firstBrokenId = entry.Id;
-                break;
+                // First entry — it is the anchor.  Trust its stored PreviousHash (window anchor).
+                genesisId = entry.Id;
+                string anchorPrev = entry.PreviousHash!;
+                string recomputed = ComputeEntryHash(entry, anchorPrev);
+                if (entry.EntryHash != recomputed && firstBrokenId == null)
+                    firstBrokenId = entry.Id;
+            }
+            else
+            {
+                // Non-anchor: linkage check then content check.
+                if (entry.PreviousHash != priorEntryHash && firstBrokenId == null)
+                    firstBrokenId = entry.Id;
+
+                string recomputed = ComputeEntryHash(entry, priorEntryHash!);
+                if (entry.EntryHash != recomputed && firstBrokenId == null)
+                    firstBrokenId = entry.Id;
             }
 
-            // Linkage check (all entries after the anchor).
-            if (i > 0 && entry.PreviousHash != hashedEntries[i - 1].EntryHash)
-            {
-                firstBrokenId = entry.Id;
-                break;
-            }
+            priorEntryHash = entry.EntryHash;
         }
 
+        if (checkedCount == 0)
+            return new ChainWalkResult(Valid: true, FirstBrokenId: null, GenesisId: null, CheckedCount: 0);
+
         return new ChainWalkResult(
-            Valid:         firstBrokenId == null,
+            Valid:          firstBrokenId == null,
             FirstBrokenId: firstBrokenId,
-            GenesisId:     hashedEntries[0].Id,
-            CheckedCount:  hashedEntries.Count);
+            GenesisId:     genesisId,
+            CheckedCount:  checkedCount);
     }
 }

@@ -432,11 +432,12 @@ public class AdminController : ControllerBase
             });
         }
 
-        var entries = await _db.GetAllHashedAuditEntriesAsync();
+        var entries = _db.StreamHashedAuditEntriesAsync();
 
         // Delegate to the single walker in AuditChainHasher — the same function the
         // unit tests exercise so both call the identical code path.
-        var result = _chainHasher.WalkChain(entries);
+        // WalkChainAsync processes entries one at a time (O(1) memory) via IAsyncEnumerable.
+        var result = await _chainHasher.WalkChainAsync(entries);
 
         return TypedResults.Ok(new AuditVerifyResponse
         {

@@ -574,11 +574,16 @@ public interface IRegistryDatabase
     Task<string?> GetLatestHashedEntryHashAsync();
 
     /// <summary>
-    /// Returns ALL audit entries that have a non-null <c>entry_hash</c>, ordered by <c>id</c>
+    /// Streams ALL audit entries that have a non-null <c>entry_hash</c>, ordered by <c>id</c>
     /// ascending (insertion order).  Used by the verify endpoint to walk the full chain.
     /// </summary>
-    /// <returns>A list of hashed <see cref="AuditEntry"/> objects, oldest first.</returns>
-    Task<List<AuditEntry>> GetAllHashedAuditEntriesAsync();
+    /// <remarks>
+    /// Returns an <see cref="IAsyncEnumerable{T}"/> so callers can process the chain
+    /// incrementally without materialising all rows into memory.  The caller must enumerate
+    /// this inside the owning <see cref="Microsoft.EntityFrameworkCore.DbContext"/> lifetime.
+    /// </remarks>
+    /// <returns>A lazily-streamed sequence of hashed <see cref="AuditEntry"/> objects, oldest first.</returns>
+    IAsyncEnumerable<AuditEntry> StreamHashedAuditEntriesAsync();
 
     /// <summary>
     /// Counts audit entries whose <c>Action</c> is in <paramref name="actions"/>,

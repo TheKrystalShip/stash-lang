@@ -913,13 +913,13 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
-    public async Task<List<AuditEntry>> GetAllHashedAuditEntriesAsync()
+    public IAsyncEnumerable<AuditEntry> StreamHashedAuditEntriesAsync()
     {
-        return await _context.AuditLog
+        return _context.AuditLog
             .Where(e => e.EntryHash != null)
             .OrderBy(e => e.Id)
             .AsNoTracking()
-            .ToListAsync();
+            .AsAsyncEnumerable();
     }
 
     // ── Organization operations ───────────────────────────────────────────────
