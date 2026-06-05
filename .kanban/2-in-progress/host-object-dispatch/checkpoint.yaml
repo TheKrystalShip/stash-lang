@@ -1,7 +1,7 @@
 schema_version: 1
 feature: host-object-dispatch
 current: null
-updated: "2026-06-05T00:00:19Z"
+updated: "2026-06-05T00:19:18Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: HostTypeBuilder+HostHandle+registration map; typeof/is green; MultiEngineIsolation green; 10 new tests pass
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 22863217a3ca5d06da963aa3be254a38538b0b80
+    verified: true
+    started: "2026-06-05T00:01:16Z"
+    completed: "2026-06-05T00:19:18Z"
+    attempts: 1
+    notes: "Property dispatch (read/write), InvokeHostDelegate chokepoint, HostError registration, StashError.KindHostError const, HostMarshaller.FromStash<T> HostHandle branch, 11 new tests pass, docs regen green"
   P3:
     status: pending
     commit: null
