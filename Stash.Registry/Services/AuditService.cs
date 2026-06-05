@@ -135,7 +135,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "role.assign",
+            Action = AuditActions.RoleAssign,
             Package = package,
             User = user,
             Target = target,
@@ -149,7 +149,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "role.revoke",
+            Action = AuditActions.RoleRevoke,
             Package = package,
             User = user,
             Target = target,
@@ -163,7 +163,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "user.create",
+            Action = AuditActions.UserCreate,
             User = user,
             Ip = ip,
             Timestamp = DateTime.UtcNow
@@ -174,7 +174,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "user.disable",
+            Action = AuditActions.UserDisable,
             User = user,
             Target = target,
             Ip = ip,
@@ -186,7 +186,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "token.create",
+            Action = AuditActions.TokenCreate,
             User = user,
             Ip = ip,
             Timestamp = DateTime.UtcNow
@@ -197,7 +197,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "token.revoke",
+            Action = AuditActions.TokenRevoke,
             User = user,
             Target = tokenId,
             Ip = ip,
@@ -209,7 +209,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "token.refresh",
+            Action = AuditActions.TokenRefresh,
             User = user,
             Ip = ip,
             Timestamp = DateTime.UtcNow
@@ -223,7 +223,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "token_theft_detected",
+            Action = AuditActions.TokenTheftDetected,
             User = user,
             Target = familyId,
             Ip = ip,

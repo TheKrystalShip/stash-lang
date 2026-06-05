@@ -187,7 +187,7 @@ public class AdminController : ControllerBase
 
         // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
         await _db.AssignPackageRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId, request.Role.ToWire());
-        await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, request.PrincipalId, ip);
+        await _auditService.LogRoleMutationAllowAsync(AuditActions.RoleAssign, username, packageName, request.PrincipalId, ip);
 
         return TypedResults.Ok(new SuccessResponse());
     }
@@ -217,7 +217,7 @@ public class AdminController : ControllerBase
         try
         {
             await _roleService.RevokeRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId);
-            await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
+            await _auditService.LogRoleMutationAllowAsync(AuditActions.RoleRevoke, username, packageName, request.PrincipalId, ip);
             return TypedResults.NoContent();
         }
         catch (RoleNotFoundException)

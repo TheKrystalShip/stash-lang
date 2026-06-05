@@ -423,7 +423,7 @@ public sealed class Startup
                         var auditService = context.RequestServices.GetRequiredService<AuditService>();
                         string ip = context.Connection.RemoteIpAddress?.ToString() ?? "";
                         await auditService.LogAuthzDenyAsync(
-                            "token.revoked",
+                            AuditActions.TokenRevoked,
                             principalId,
                             context.Request.Path.Value ?? "",
                             Auth.Authorization.AuthzDenyReason.TokenRevoked,
