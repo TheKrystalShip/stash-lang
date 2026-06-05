@@ -1,7 +1,7 @@
 schema_version: 1
 feature: host-object-dispatch
 current: null
-updated: "2026-06-05T01:32:31Z"
+updated: "2026-06-05T01:45:13Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "Async method dispatch (Task→StashFuture, result marshalled via ToObject), linked-CTS cancellation with ct.ThrowIfCancellationRequested() fix for mid-await OCE; OnRelease+ConditionalWeakTable per-host lifetime hook; 10+9 tests green; all 135 Embedding tests pass"
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b64b41a4362b0a0d3c2f7fe8657c54fbb901d1f3
+    verified: true
+    started: "2026-06-05T01:34:10Z"
+    completed: "2026-06-05T01:45:13Z"
+    attempts: 1
+    notes: "End-to-end Player consolidation test + two-host isolation test; HostMemberAccessBenchmarks (property-read median 15.488 µs, method-call median 3.879 µs, baseline 2.503 µs); benchmark-results.md with verdict; plan verify-line corrected; Program.cs updated to run both benchmark classes; 137 embedding tests pass"
 review:
   status: not_started
   started: null
