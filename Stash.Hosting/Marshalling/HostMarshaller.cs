@@ -3,6 +3,7 @@ namespace Stash.Hosting.Marshalling;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Stash.Hosting.Internal;
 using Stash.Runtime;
@@ -45,12 +46,18 @@ internal static class HostMarshaller
     /// When non-null, a registered type is wrapped as a <see cref="HostHandle"/> rather
     /// than throwing the generic <see cref="ArgumentException"/>.
     /// </param>
+    /// <param name="observedTargets">
+    /// The per-host <see cref="ConditionalWeakTable{TKey,TValue}"/> that tracks which CLR
+    /// instances have been observed by the engine. When non-null, any new <see cref="HostHandle"/>
+    /// created here registers its target for <c>OnRelease</c> invocation at dispose time.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="arg"/> is of a type with no registered marshaller.
     /// </exception>
     public static StashValue ToStash(
         object? arg,
-        IReadOnlyDictionary<Type, HostTypeRegistration>? registrations)
+        IReadOnlyDictionary<Type, HostTypeRegistration>? registrations,
+        ConditionalWeakTable<object, HostTypeRegistration>? observedTargets = null)
     {
         if (arg is null) return StashValue.Null;
 
@@ -82,7 +89,7 @@ internal static class HostMarshaller
         {
             Type argType = arg.GetType();
             if (registrations.TryGetValue(argType, out HostTypeRegistration? reg))
-                return StashValue.FromObj(new HostHandle(arg, reg, registrations));
+                return StashValue.FromObj(new HostHandle(arg, reg, registrations, observedTargets));
         }
 
         // IDictionary<string, object?> → StashDictionary

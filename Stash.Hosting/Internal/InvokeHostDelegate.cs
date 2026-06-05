@@ -3,10 +3,13 @@ namespace Stash.Hosting.Internal;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using System.Threading;
+using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Hosting.Marshalling;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// The single function in <c>Stash.Hosting</c> that invokes a registered host delegate.
@@ -119,11 +122,13 @@ internal static class InvokeHostDelegate
     /// The original exception's message is preserved.
     /// </exception>
     internal static StashValue InvokeMethod(
-        HostMethodInvoker                                   invoker,
-        object                                              target,
-        StashValue[]                                        stashArgs,
-        IReadOnlyDictionary<Type, HostTypeRegistration>?   allRegistrations,
-        SourceSpan?                                         span)
+        HostMethodInvoker                                               invoker,
+        object                                                          target,
+        StashValue[]                                                    stashArgs,
+        IReadOnlyDictionary<Type, HostTypeRegistration>?               allRegistrations,
+        SourceSpan?                                                     span,
+        System.Runtime.CompilerServices.ConditionalWeakTable<object,
+            HostTypeRegistration>?                                      observedTargets = null)
     {
         object? rawResult;
 
@@ -160,6 +165,120 @@ internal static class InvokeHostDelegate
         // surface as a generic RuntimeError("Built-in function error: …"), keeping it
         // uncatchable and distinct from HostError — exactly the "loud, uncatchable marshaller
         // exception" the spec requires).
-        return HostMarshaller.ToStash(rawResult, allRegistrations);
+        return HostMarshaller.ToStash(rawResult, allRegistrations, observedTargets);
+    }
+
+    /// <summary>
+    /// Invokes a baked async method invoker on <paramref name="target"/> with the given
+    /// Stash arguments, creating and returning a <see cref="StashFuture"/> that the VM's
+    /// existing <c>await</c> opcode can block on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the <b>only</b> place in <c>Stash.Hosting</c> that starts an async host
+    /// delegate invocation — maintaining the Construct-lite chokepoint.
+    /// </para>
+    /// <para>
+    /// The bridged <c>Task&lt;object?&gt;</c> resolves with a marshalled
+    /// <see cref="StashValue"/> boxed as <c>object?</c>, so
+    /// <c>ExecuteAwait → StashFuture.GetResult()</c> sees the correct shape.
+    /// Faults are mapped to <see cref="HostError"/> INSIDE the bridge task (not in
+    /// <c>GetResult()</c>), so <c>GetResult()</c>'s <c>catch(RuntimeError){throw;}</c>
+    /// surfaces the structured <see cref="HostError"/> intact with
+    /// <c>Kind = StashError.KindHostError</c>.
+    /// </para>
+    /// <para>
+    /// Arg-marshalling errors (kind = <see cref="HostError"/>) are thrown synchronously
+    /// inside the baked invoker before any <c>Task</c> is started; they propagate from
+    /// here (before returning to the VM) as a sync <see cref="HostError"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="asyncInvoker">The baked async method invoker from the descriptor.</param>
+    /// <param name="target">The live CLR host object (first delegate parameter).</param>
+    /// <param name="stashArgs">
+    /// Stash-value arguments for the method (excluding the target and optional CT).
+    /// Arity was already validated by <see cref="HostBoundMethod.CallDirect"/> before this call.
+    /// </param>
+    /// <param name="ct">
+    /// The engine's call cancellation token; threaded into the delegate when it declared
+    /// a trailing <see cref="CancellationToken"/> parameter at registration time.
+    /// </param>
+    /// <param name="span">The call site span, forwarded to any thrown error.</param>
+    /// <returns>A <see cref="StashValue"/> wrapping a new <see cref="StashFuture"/>.</returns>
+    /// <exception cref="HostError">
+    /// Thrown synchronously when argument marshalling fails or the delegate start throws.
+    /// </exception>
+    internal static StashValue InvokeAsyncMethod(
+        HostAsyncMethodInvoker                                              asyncInvoker,
+        object                                                              target,
+        StashValue[]                                                        stashArgs,
+        CancellationToken                                                   ct,
+        SourceSpan?                                                         span,
+        IReadOnlyDictionary<Type, HostTypeRegistration>?                   allRegistrations = null,
+        System.Runtime.CompilerServices.ConditionalWeakTable<object,
+            HostTypeRegistration>?                                          observedTargets = null)
+    {
+        // Create a linked CTS: when the engine's call CT fires, the delegate CT fires.
+        // Per-call scope — disposed when the future completes or is GC'd.
+        var cts = ct.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(ct)
+            : new CancellationTokenSource();
+
+        // Wrap the raw invoker result in a bridge task that marshals the CLR result to
+        // a StashValue (boxed as object?) using the full registrations map.
+        // This approach keeps marshalling out of the registration-time closure and ensures
+        // registered CLR return types are correctly wrapped as HostHandle values.
+        Task<object?> bridgedTask;
+        try
+        {
+            // Start the async delegate. Sync throws (arg marshalling, delegate start) map to HostError.
+            // The raw invoker returns a Task<object?> whose result is the raw CLR value.
+            Task<object?> rawTask = asyncInvoker(target, stashArgs, cts.Token);
+
+            // Wrap with a continuation that marshals the raw result to StashValue.
+            // Faults from the raw task are already mapped to HostError (or OCE) by the baked closure.
+            bridgedTask = rawTask.ContinueWith(
+                t =>
+                {
+                    // Re-throw to surface faults (including HostError and OCE).
+                    if (t.IsFaulted)
+                    {
+                        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(
+                            t.Exception!.InnerException ?? t.Exception!).Throw();
+                    }
+                    if (t.IsCanceled)
+                        throw new OperationCanceledException(cts.Token);
+
+                    object? rawResult = t.Result;
+                    // Marshal the raw CLR result: first to a StashValue (so registered host
+                    // types become HostHandle values), then extract the object? representation
+                    // via ToObject().  This is the shape the VM's ExecuteAwait handler expects:
+                    //   GetResult() returns the Task's object? result
+                    //   ExecuteAwait does StashValue.FromObject(GetResult()) to re-box it.
+                    // If we return a StashValue directly, FromObject wraps it again (double-box).
+                    StashValue marshalled = HostMarshaller.ToStash(rawResult, allRegistrations, observedTargets);
+                    return marshalled.ToObject();
+                },
+                TaskContinuationOptions.ExecuteSynchronously);
+        }
+        catch (RuntimeError)
+        {
+            cts.Dispose();
+            throw;
+        }
+        catch (TargetInvocationException tie) when (tie.InnerException is not null)
+        {
+            cts.Dispose();
+            Exception inner = tie.InnerException;
+            if (inner is RuntimeError re) throw re;
+            throw new HostError(inner.Message, span);
+        }
+        catch (Exception ex)
+        {
+            cts.Dispose();
+            throw new HostError(ex.Message, span);
+        }
+
+        return StashValue.FromObj(new StashFuture(bridgedTask, cts));
     }
 }

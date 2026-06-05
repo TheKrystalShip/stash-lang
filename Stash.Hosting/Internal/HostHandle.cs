@@ -2,6 +2,8 @@ namespace Stash.Hosting.Internal;
 
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
@@ -42,14 +44,30 @@ internal sealed class HostHandle : IVMFieldAccessible, IVMFieldMutable, IVMTyped
     /// </summary>
     private readonly IReadOnlyDictionary<Type, HostTypeRegistration>? _allRegistrations;
 
+    /// <summary>
+    /// Per-host observed-targets table. Forwarded to <see cref="HostBoundMethod"/> so that
+    /// any host instance returned from a method call is also observed.
+    /// </summary>
+    private readonly ConditionalWeakTable<object, HostTypeRegistration>? _observedTargets;
+
     internal HostHandle(
         object target,
         HostTypeRegistration registration,
-        IReadOnlyDictionary<Type, HostTypeRegistration>? allRegistrations = null)
+        IReadOnlyDictionary<Type, HostTypeRegistration>? allRegistrations = null,
+        ConditionalWeakTable<object, HostTypeRegistration>? observedTargets = null)
     {
         _target           = target       ?? throw new ArgumentNullException(nameof(target));
         _registration     = registration ?? throw new ArgumentNullException(nameof(registration));
         _allRegistrations = allRegistrations;
+        _observedTargets  = observedTargets;
+
+        // Register the target in the host's "observed targets" table so DisposeAsync can
+        // invoke OnRelease exactly once per unique live target.  The CWT uses reference
+        // equality for keys and does not prevent GC — a target collected before DisposeAsync
+        // is simply absent from the enumeration (never-twice, never-for-unseen guaranteed).
+        // TryAdd is idempotent by key: if the same target was already observed (e.g. returned
+        // from a method call and wrapped again), the second call is a no-op.
+        observedTargets?.TryAdd(target, registration);
     }
 
     /// <summary>The live CLR instance carried by this handle.</summary>
@@ -100,12 +118,31 @@ internal sealed class HostHandle : IVMFieldAccessible, IVMFieldMutable, IVMTyped
                     // path can invoke it via CallDirect — zero bytecode changes needed.
                     value = StashValue.FromObj(
                         new HostBoundMethod(
-                            target:           _target,
-                            typeName:         _registration.VmTypeName,
-                            methodName:       name,
-                            arity:            desc.MethodArity,
-                            invoker:          desc.Invoke,
-                            allRegistrations: _allRegistrations));
+                            target:          _target,
+                            typeName:        _registration.VmTypeName,
+                            methodName:      name,
+                            arity:           desc.MethodArity,
+                            invoker:         desc.Invoke,
+                            allRegistrations: _allRegistrations,
+                            isAsync:         false,
+                            asyncInvoker:    null,
+                            observedTargets: _observedTargets));
+                    return true;
+
+                case HostMemberKind.AsyncMethod when desc.AsyncInvoke is not null:
+                    // Return a HostBoundMethod with isAsync=true; CallDirect will call
+                    // InvokeHostDelegate.InvokeAsyncMethod and return a StashFuture.
+                    value = StashValue.FromObj(
+                        new HostBoundMethod(
+                            target:          _target,
+                            typeName:        _registration.VmTypeName,
+                            methodName:      name,
+                            arity:           desc.MethodArity,
+                            invoker:         null,
+                            allRegistrations: _allRegistrations,
+                            isAsync:         true,
+                            asyncInvoker:    desc.AsyncInvoke,
+                            observedTargets: _observedTargets));
                     return true;
             }
         }
