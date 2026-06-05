@@ -575,6 +575,17 @@ public interface IRegistryDatabase
     Task<int> CountAuditEntriesByActionSinceAsync(IReadOnlyCollection<string> actions, DateTime since);
 
     /// <summary>
+    /// Deletes all audit entries whose <c>Timestamp</c> is strictly before
+    /// <paramref name="cutoff"/> (i.e. entries older than the retention window).
+    /// </summary>
+    /// <param name="cutoff">
+    /// The UTC cutoff datetime. Entries with <c>Timestamp &lt; cutoff</c> are removed.
+    /// The caller is responsible for computing <c>cutoff = now - RetentionDays</c>.
+    /// </param>
+    /// <returns>The number of rows deleted.</returns>
+    Task<int> DeleteAuditEntriesOlderThanAsync(DateTime cutoff);
+
+    /// <summary>
     /// Returns a paginated, filtered view of the audit log, ordered by timestamp descending.
     /// All filter parameters are combined with logical AND; omitted (null) filters are inert.
     /// </summary>

@@ -882,6 +882,25 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .CountAsync();
     }
 
+    /// <inheritdoc/>
+    public async Task<int> DeleteAuditEntriesOlderThanAsync(DateTime cutoff)
+    {
+        // Load candidates into memory then remove — mirrors the DownloadMetricsStore
+        // pattern for in-memory-SQLite testability (the same DbContext is reused
+        // across the test's seed + sweep calls, so ExecuteDeleteAsync on a separate
+        // DbContext context would not see the in-memory data).
+        var stale = await _context.AuditLog
+            .Where(e => e.Timestamp < cutoff)
+            .ToListAsync();
+
+        if (stale.Count == 0)
+            return 0;
+
+        _context.AuditLog.RemoveRange(stale);
+        await _context.SaveChangesAsync();
+        return stale.Count;
+    }
+
     // ── Organization operations ───────────────────────────────────────────────
 
     /// <inheritdoc/>

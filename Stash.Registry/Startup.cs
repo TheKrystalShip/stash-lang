@@ -210,6 +210,11 @@ public sealed class Startup
         // Background drain service — singleton lifecycle (ASP.NET Core requirement for IHostedService).
         services.AddHostedService<MetricsBackgroundService>();
 
+        // Nightly audit-log retention sweep — independent of the metrics sweep.
+        // RetentionDays=0 (default) disables the sweep; the service is always
+        // registered so operators can flip the knob via config without a restart.
+        services.AddHostedService<AuditBackgroundService>();
+
         services.AddScoped<PackageService>();
         services.AddScoped<PackageRoleService>();
         services.AddScoped<AuditService>();

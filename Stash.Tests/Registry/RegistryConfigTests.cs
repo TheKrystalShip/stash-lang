@@ -76,6 +76,49 @@ public sealed class RegistryConfigTests : IDisposable
     }
 
     [Fact]
+    public void DefaultConfig_AuditRetentionDays_IsZero()
+    {
+        // RetentionDays=0 is the safe default: never-delete for a compliance log.
+        var config = new RegistryConfig();
+
+        Assert.Equal(0, config.Audit.RetentionDays);
+    }
+
+    [Fact]
+    public void DefaultConfig_AuditTamperEvidence_DisabledByDefault()
+    {
+        // TamperEvidence is an opt-in; must default to off.
+        var config = new RegistryConfig();
+
+        Assert.False(config.Audit.TamperEvidence.Enabled);
+        Assert.Null(config.Audit.TamperEvidence.HashSecret);
+    }
+
+    [Fact]
+    public void Load_AuditSection_ParsesRetentionDaysAndTamperEvidence()
+    {
+        string path = Path.Combine(_tempDir, "appsettings_audit.json");
+        var json = new
+        {
+            Audit = new
+            {
+                RetentionDays = 365,
+                TamperEvidence = new { Enabled = true, HashSecret = "c2VjcmV0" }
+            }
+        };
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(json));
+
+        var configuration = new ConfigurationBuilder()
+            .AddJsonFile(path)
+            .Build();
+        RegistryConfig config = configuration.Get<RegistryConfig>() ?? new RegistryConfig();
+
+        Assert.Equal(365, config.Audit.RetentionDays);
+        Assert.True(config.Audit.TamperEvidence.Enabled);
+        Assert.Equal("c2VjcmV0", config.Audit.TamperEvidence.HashSecret);
+    }
+
+    [Fact]
     public void MaxPackageSizeBytes_ParsesMB()
     {
         var config = new RegistryConfig();
