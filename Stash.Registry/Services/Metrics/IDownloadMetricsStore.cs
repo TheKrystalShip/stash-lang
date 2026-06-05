@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Services.Metrics;
@@ -27,6 +28,70 @@ public interface IDownloadMetricsStore
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     Task InsertEventsAsync(
         IEnumerable<DownloadEventRecord> events,
+        CancellationToken cancellationToken = default);
+
+    // ── Read model (M5) ───────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns aggregate download counts for every version of <paramref name="packageName"/>
+    /// across four rolling windows (total, 24 h, 7 d, 30 d).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Read-model contract (D8 brief).</b>
+    /// Closed hourly-rollup buckets are authoritative.  The current open bucket (the in-progress
+    /// hour whose <c>bucket_start = truncate(now, hour)</c>) is computed on-demand from the
+    /// raw <c>download_events</c> table and added to the closed-bucket sum to avoid
+    /// double-counting (M4's rollup job deliberately excludes the open bucket, so raw is its
+    /// only source).  Only <c>status = 'success'</c> raw events are counted.
+    /// </para>
+    /// </remarks>
+    /// <param name="packageName">The fully-qualified package name (e.g. <c>@scope/name</c>).</param>
+    /// <param name="now">
+    /// The reference "current" time used to compute window cutoffs and the open-bucket boundary.
+    /// Injected rather than derived from <see cref="DateTime.UtcNow"/> so tests can
+    /// control time without wall-clock dependency.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>
+    /// A dictionary keyed by <c>version</c> string, each value containing
+    /// <see cref="DownloadWindowCounts"/> for that version.  Versions with no downloads
+    /// are absent from the dictionary.
+    /// </returns>
+    Task<Dictionary<string, DownloadWindowCounts>> GetPackageDownloadsAsync(
+        string packageName,
+        DateTime now,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns top packages ordered by download count over a rolling window of
+    /// <paramref name="windowDays"/> days, with pagination.
+    /// </summary>
+    /// <remarks>
+    /// Uses the same read-model contract as <see cref="GetPackageDownloadsAsync"/>:
+    /// closed hourly rollups are authoritative; the current open bucket is computed
+    /// from raw events and added.  Only <c>status = 'success'</c> raw events are counted.
+    /// </remarks>
+    /// <param name="windowDays">
+    /// The rolling window in days.  Must be positive (≥ 1).  The window starts at
+    /// <c>now - windowDays days</c> and ends at <c>now</c>.
+    /// </param>
+    /// <param name="page">The 1-based page index.</param>
+    /// <param name="pageSize">The number of entries per page.</param>
+    /// <param name="now">
+    /// The reference "current" time used to compute the window cutoff and open-bucket boundary.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>
+    /// A tuple of (<c>entries</c>, <c>totalCount</c>): <c>entries</c> is the page of
+    /// <see cref="TopPackageDownloadsEntry"/> items ordered by <c>downloads</c> descending;
+    /// <c>totalCount</c> is the total number of distinct packages with downloads in the window.
+    /// </returns>
+    Task<(List<TopPackageDownloadsEntry> Entries, int TotalCount)> GetTopPackagesAsync(
+        int windowDays,
+        int page,
+        int pageSize,
+        DateTime now,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -51,6 +51,7 @@ public class PackagesController : ControllerBase
     private readonly RegistryConfig _config;
     private readonly IDownloadEventQueue _downloadEventQueue;
     private readonly IIpHasher _ipHasher;
+    private readonly IDownloadMetricsStore _metricsStore;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -66,7 +67,8 @@ public class PackagesController : ControllerBase
         IRegistryAuthzPrincipalFactory principalFactory,
         RegistryConfig config,
         IDownloadEventQueue downloadEventQueue,
-        IIpHasher ipHasher)
+        IIpHasher ipHasher,
+        IDownloadMetricsStore metricsStore)
     {
         _db = db;
         _storage = storage;
@@ -79,6 +81,7 @@ public class PackagesController : ControllerBase
         _config = config;
         _downloadEventQueue = downloadEventQueue;
         _ipHasher = ipHasher;
+        _metricsStore = metricsStore;
     }
 
     // ── Read endpoints ────────────────────────────────────────────────────────
@@ -275,6 +278,127 @@ public class PackagesController : ControllerBase
             ContentType = ReadmeContentTypes.Markdown,
             ByteSize = byteSize,
             ExtractedFromVersion = package.Latest
+        });
+    }
+
+    /// <summary>
+    /// Returns download metrics for a package across all versions and four rolling windows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Visibility is enforced by the same PDP chokepoint as <see cref="GetPackage"/>:
+    /// <c>[RegistryAuthorize(RegistryAction.ReadPackageMetadata)]</c> runs
+    /// <c>AuthorizePackageReadAsync</c> before the action body executes.  Anonymous callers
+    /// on private or internal packages receive <c>404 Not Found</c> — never 403 — to avoid
+    /// leaking the package's existence.  The body of the 404 from the filter does NOT
+    /// include the package name.
+    /// </para>
+    /// <para>
+    /// The read model follows the D8 brief decision: closed hourly rollups are authoritative;
+    /// the current open bucket (current hour) is computed from raw <c>download_events</c>
+    /// and added to the closed-bucket sum to avoid double-counting.
+    /// </para>
+    /// </remarks>
+    [PublicEndpoint("package metrics are public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]
+    [HttpGet("{scope}/{name}/metrics")]
+    public async Task<Results<Ok<PackageMetricsResponse>, NotFound<ErrorResponse>>> GetPackageMetrics(string scope, string name)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
+        if (package == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package not found." });
+
+        // Retrieve all versions to know which versions exist (for perVersion ordering).
+        List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
+
+        DateTime now = DateTime.UtcNow;
+        Dictionary<string, DownloadWindowCounts> perVersionData =
+            await _metricsStore.GetPackageDownloadsAsync(packageName, now);
+
+        // Aggregate total across all versions.
+        var aggregate = new DownloadWindowCounts();
+        foreach (var counts in perVersionData.Values)
+        {
+            aggregate.Total   += counts.Total;
+            aggregate.Last24h += counts.Last24h;
+            aggregate.Last7d  += counts.Last7d;
+            aggregate.Last30d += counts.Last30d;
+        }
+
+        // Build per-version list — include ALL known versions (even zero-download ones).
+        var perVersionList = allVersions
+            .Select(v =>
+            {
+                if (!perVersionData.TryGetValue(v, out var c))
+                    c = new DownloadWindowCounts();
+                return new VersionDownloadCounts
+                {
+                    Version  = v,
+                    Total    = c.Total,
+                    Last24h  = c.Last24h,
+                    Last7d   = c.Last7d,
+                    Last30d  = c.Last30d,
+                };
+            })
+            .OrderByDescending(v => v.Total)
+            .ToList();
+
+        return TypedResults.Ok(new PackageMetricsResponse
+        {
+            Package     = packageName,
+            Downloads   = aggregate,
+            PerVersion  = perVersionList,
+            GeneratedAt = now,
+        });
+    }
+
+    /// <summary>
+    /// Returns download metrics for a specific package version across four rolling windows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Visibility is enforced by the same PDP chokepoint as <see cref="GetVersion"/>:
+    /// <c>[RegistryAuthorize(RegistryAction.ReadPackageVersion)]</c> runs the PDP before
+    /// the action body executes.  Anonymous callers on private or internal packages receive
+    /// <c>404 Not Found</c> — never 403.
+    /// </para>
+    /// <para>
+    /// The read model follows the D8 brief: closed hourly rollups are authoritative;
+    /// the current open bucket is computed from raw events and added.
+    /// </para>
+    /// </remarks>
+    [PublicEndpoint("version metrics are public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageVersion)]
+    [HttpGet("{scope}/{name}/{version}/metrics")]
+    public async Task<Results<Ok<VersionMetricsResponse>, NotFound<ErrorResponse>>> GetVersionMetrics(string scope, string name, string version)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
+        if (package == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package not found." });
+
+        VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, version);
+        if (vr == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package not found." });
+
+        DateTime now = DateTime.UtcNow;
+        Dictionary<string, DownloadWindowCounts> allVersionData =
+            await _metricsStore.GetPackageDownloadsAsync(packageName, now);
+
+        allVersionData.TryGetValue(version, out var counts);
+        counts ??= new DownloadWindowCounts();
+
+        return TypedResults.Ok(new VersionMetricsResponse
+        {
+            Package     = packageName,
+            Version     = version,
+            Downloads   = counts,
+            GeneratedAt = now,
         });
     }
 

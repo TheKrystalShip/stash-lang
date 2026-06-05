@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 
@@ -166,6 +167,140 @@ public sealed class DownloadMetricsStore : IDownloadMetricsStore
             await _db.SaveChangesAsync(cancellationToken);
 
         return inserted;
+    }
+
+    // ── Read model (M5) ───────────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<Dictionary<string, DownloadWindowCounts>> GetPackageDownloadsAsync(
+        string packageName,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+    {
+        // Window cutoffs (rolling, ending at now).
+        var cutoff24h = now - TimeSpan.FromHours(24);
+        var cutoff7d  = now - TimeSpan.FromDays(7);
+        var cutoff30d = now - TimeSpan.FromDays(30);
+
+        // The current open hourly bucket starts at the most recent full-hour boundary.
+        var currentHourStart = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc);
+
+        // ── Closed buckets from hourly rollups ────────────────────────────────
+        // Only rows with BucketStart < currentHourStart are in closed buckets.
+        // We do NOT use daily rollups — hourly already covers all closed-day buckets
+        // (daily is a subset), so mixing both would double-count closed-day hours.
+        var closedRollups = await _db.DownloadRollupHourly
+            .AsNoTracking()
+            .Where(r => r.PackageName == packageName && r.BucketStart < currentHourStart)
+            .ToListAsync(cancellationToken);
+
+        // ── Current open bucket from raw events ──────────────────────────────
+        // Events in [currentHourStart, now) are in the open bucket and not yet rolled up.
+        // Mirror M4's status filter: only success events contribute.
+        var openBucketEvents = await _db.DownloadEvents
+            .AsNoTracking()
+            .Where(e => e.PackageName == packageName
+                        && e.Ts >= currentHourStart
+                        && e.Status == DownloadEventStatus.Success)
+            .ToListAsync(cancellationToken);
+
+        // Merge both sources into per-version, per-bucket-start entries for counting.
+        // For rollups, BucketStart is the hour boundary.
+        // For raw open events, we use Ts as the effective timestamp.
+
+        var result = new Dictionary<string, DownloadWindowCounts>(StringComparer.Ordinal);
+
+        // Accumulate from closed hourly rollups.
+        foreach (var r in closedRollups)
+        {
+            if (!result.TryGetValue(r.Version, out var counts))
+            {
+                counts = new DownloadWindowCounts();
+                result[r.Version] = counts;
+            }
+            counts.Total += r.Downloads;
+            // For windowed counts, use the bucket start as the representative timestamp.
+            if (r.BucketStart >= cutoff24h) counts.Last24h += r.Downloads;
+            if (r.BucketStart >= cutoff7d)  counts.Last7d  += r.Downloads;
+            if (r.BucketStart >= cutoff30d) counts.Last30d += r.Downloads;
+        }
+
+        // Accumulate from open-bucket raw events.
+        foreach (var e in openBucketEvents)
+        {
+            if (!result.TryGetValue(e.Version, out var counts))
+            {
+                counts = new DownloadWindowCounts();
+                result[e.Version] = counts;
+            }
+            counts.Total += 1;
+            if (e.Ts >= cutoff24h) counts.Last24h += 1;
+            if (e.Ts >= cutoff7d)  counts.Last7d  += 1;
+            if (e.Ts >= cutoff30d) counts.Last30d += 1;
+        }
+
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public async Task<(List<TopPackageDownloadsEntry> Entries, int TotalCount)> GetTopPackagesAsync(
+        int windowDays,
+        int page,
+        int pageSize,
+        DateTime now,
+        CancellationToken cancellationToken = default)
+    {
+        var windowStart   = now - TimeSpan.FromDays(windowDays);
+        var currentHourStart = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc);
+
+        // ── Closed-bucket sums (hourly rollups) ───────────────────────────────
+        // Rows where BucketStart is in the window [windowStart, currentHourStart).
+        var closedRollups = await _db.DownloadRollupHourly
+            .AsNoTracking()
+            .Where(r => r.BucketStart >= windowStart && r.BucketStart < currentHourStart)
+            .ToListAsync(cancellationToken);
+
+        // ── Open-bucket raw events (current hour, within the window) ─────────
+        var openBucketEvents = await _db.DownloadEvents
+            .AsNoTracking()
+            .Where(e => e.Ts >= currentHourStart
+                        && e.Ts >= windowStart
+                        && e.Status == DownloadEventStatus.Success)
+            .ToListAsync(cancellationToken);
+
+        // Aggregate into per-package totals.
+        var totals = new Dictionary<string, long>(StringComparer.Ordinal);
+
+        foreach (var r in closedRollups)
+        {
+            totals.TryGetValue(r.PackageName, out long existing);
+            totals[r.PackageName] = existing + r.Downloads;
+        }
+        foreach (var e in openBucketEvents)
+        {
+            totals.TryGetValue(e.PackageName, out long existing);
+            totals[e.PackageName] = existing + 1;
+        }
+
+        // Sort descending by total, then page.
+        var sorted = totals
+            .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => kv.Key) // deterministic secondary order
+            .ToList();
+
+        int totalCount = sorted.Count;
+        var pageEntries = sorted
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(kv => new TopPackageDownloadsEntry
+            {
+                Package   = kv.Key,
+                Downloads = kv.Value,
+                WindowDays = windowDays,
+            })
+            .ToList();
+
+        return (pageEntries, totalCount);
     }
 
     /// <inheritdoc/>

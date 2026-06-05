@@ -13,6 +13,7 @@ using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
+using Stash.Registry.Services.Metrics;
 
 namespace Stash.Registry.Controllers;
 
@@ -38,6 +39,7 @@ public class AdminController : ControllerBase
     private readonly AuditService _auditService;
     private readonly PackageRoleService _roleService;
     private readonly RegistryConfig _config;
+    private readonly IDownloadMetricsStore _metricsStore;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -47,13 +49,15 @@ public class AdminController : ControllerBase
         IAuthProvider authProvider,
         AuditService auditService,
         PackageRoleService roleService,
-        RegistryConfig config)
+        RegistryConfig config,
+        IDownloadMetricsStore metricsStore)
     {
         _db = db;
         _authProvider = authProvider;
         _auditService = auditService;
         _roleService = roleService;
         _config = config;
+        _metricsStore = metricsStore;
     }
 
     /// <summary>
@@ -210,6 +214,42 @@ public class AdminController : ControllerBase
             Page = query.page,
             PageSize = query.pageSize,
             TotalPages = totalPages
+        });
+    }
+
+    /// <summary>
+    /// Returns the top packages by download count over a configurable rolling window.
+    /// Packages are ordered descending by download count for the requested window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses the same read-model contract as the per-package metrics endpoints: closed
+    /// hourly rollups are authoritative; the current open bucket is computed from raw
+    /// <c>download_events</c> and added to avoid double-counting.
+    /// </para>
+    /// <para>
+    /// Requires an <c>admin</c>-ceiling JWT with an admin token ceiling and admin role.
+    /// The class-level <c>[Authorize]</c> handles authentication; this action carries
+    /// <c>[RegistryAuthorize(RegistryAction.ReadAdminStats)]</c> for PDP dispatch.
+    /// </para>
+    /// </remarks>
+    [RegistryAuthorize(RegistryAction.ReadAdminStats)]
+    [HttpGet("metrics/downloads")]
+    public async Task<Ok<PagedResponse<TopPackageDownloadsEntry>>> GetDownloadsMetrics([FromQuery] TopPackagesQuery query)
+    {
+        DateTime now = DateTime.UtcNow;
+        var (entries, totalCount) = await _metricsStore.GetTopPackagesAsync(
+            query.windowDays, query.page, query.pageSize, now);
+
+        int totalPages = (int)Math.Ceiling(totalCount / (double)query.pageSize);
+
+        return TypedResults.Ok(new PagedResponse<TopPackageDownloadsEntry>
+        {
+            Items      = entries,
+            TotalCount = totalCount,
+            Page       = query.page,
+            PageSize   = query.pageSize,
+            TotalPages = totalPages,
         });
     }
 }
