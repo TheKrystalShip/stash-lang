@@ -177,7 +177,7 @@ dotnet test --filter "FullyQualifiedName~Registry.Metrics.DownloadCaptureSemanti
 ## F04 — [IMPORTANT] `StatsResponse` omits `packages` and `versions` totals enumerated in the brief Goals
 
 **Status:** fixed
-**Fixed in:** placeholder
+**Fixed in:** 97d7fd40
 **Files:** `Stash.Registry.Contracts/AdminContracts.cs:180-208`, `Stash.Registry/Controllers/AdminController.cs:82-114`
 **Phase:** M6
 **Commit:** c2515b87
