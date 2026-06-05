@@ -157,6 +157,16 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         _context.MainThreadId = -1;
     }
 
+    /// <summary>
+    /// When true, the VM is running as an async child (spawned via task.run or async fn).
+    /// In this mode, an <see cref="OperationCanceledException"/> is propagated directly
+    /// (rather than converted to <see cref="Stash.Runtime.Errors.CancellationError"/>) so
+    /// the enclosing .NET Task transitions to the Canceled state instead of Faulted.
+    /// The main VM always leaves this false, preserving <c>CancellationError</c> for the
+    /// host (Ctrl-C / event.loop cancellation).
+    /// </summary>
+    internal bool IsAsyncChild { get; set; }
+
 
     public void RegisterTypeCheck(string vmTypeName, Func<object, bool> predicate)
     {

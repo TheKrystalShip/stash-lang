@@ -3,6 +3,7 @@ namespace Stash.Runtime.Types;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 
 /// <summary>
@@ -43,7 +44,7 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
         }
         catch (OperationCanceledException)
         {
-            throw new RuntimeError("Future was cancelled.");
+            throw new CancellationError("Task was cancelled.");
         }
         catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
         {
@@ -51,7 +52,7 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
         }
         catch (AggregateException ae) when (ae.InnerException is OperationCanceledException)
         {
-            throw new RuntimeError("Future was cancelled.");
+            throw new CancellationError("Task was cancelled.");
         }
         catch (Exception ex)
         {

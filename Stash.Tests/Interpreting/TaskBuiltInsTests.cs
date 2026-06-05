@@ -3,6 +3,7 @@ using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
 
@@ -972,5 +973,61 @@ let result = task.await(handle);
 ");
         Assert.Equal(105L, result);
         Assert.NotNull(result);
+    }
+
+    // ── D3: Genuine cancellation — Status.Cancelled + CancellationError ───────
+    // task.cancel(f) must transition the task to Canceled (IsCanceled=true) so
+    // task.status returns "Cancelled" and await throws CancellationError.
+
+    [Fact]
+    public void Cancel_Status_BecomesCancel_AfterCooperativeExit()
+    {
+        // Poll until the child cooperatively exits at its time.sleep park point.
+        // Cancellation is cooperative — do NOT assert status synchronously after cancel.
+        var result = Run(@"
+let f = task.run(() => { time.sleep(10); });
+task.cancel(f);
+let i = 0;
+while (task.status(f) == task.Status.Running && i < 40) {
+    time.sleep(0.05);
+    i = i + 1;
+}
+let result = task.status(f);
+");
+        var status = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Cancelled", status.MemberName);
+    }
+
+    [Fact]
+    public void Cancel_Await_ThrowsCancellationError()
+    {
+        // After cancel + cooperative exit, awaiting the future must throw CancellationError.
+        var error = RunCapturingError(@"
+let f = task.run(() => { time.sleep(10); });
+task.cancel(f);
+let i = 0;
+while (task.status(f) == task.Status.Running && i < 40) {
+    time.sleep(0.05);
+    i = i + 1;
+}
+await f;
+");
+        Assert.IsType<CancellationError>(error);
+    }
+
+    [Fact]
+    public void Cancel_TaskAwait_ThrowsCancellationError()
+    {
+        var error = RunCapturingError(@"
+let f = task.run(() => { time.sleep(10); });
+task.cancel(f);
+let i = 0;
+while (task.status(f) == task.Status.Running && i < 40) {
+    time.sleep(0.05);
+    i = i + 1;
+}
+task.await(f);
+");
+        Assert.IsType<CancellationError>(error);
     }
 }

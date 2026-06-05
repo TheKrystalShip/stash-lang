@@ -92,6 +92,8 @@ public sealed partial class VirtualMachine
                 ModuleCache = capturedModuleCache,
                 ModuleLocks = capturedModuleLocks,
                 EmbeddedMode = capturedEmbedded,
+                // Allow OCE to propagate so the Task ends Canceled (not Faulted) on cancel.
+                IsAsyncChild = true,
             };
             // InitImportStack sets both _importStack and _context.ImportStack in one call —
             // single chokepoint so a future refactor cannot forget to sync the context reference.

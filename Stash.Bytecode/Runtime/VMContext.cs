@@ -665,6 +665,9 @@ internal sealed class VMContext : IInterpreterContext
                 childVm.CurrentFile = CurrentFile;
                 childVm.ScriptArgs = ScriptArgs;
                 childVm.EmbeddedMode = EmbeddedMode;
+                // Allow OCE to propagate so the enclosing Task ends Canceled (not Faulted)
+                // when task.cancel fires the linked CTS. The main VM keeps IsAsyncChild=false.
+                childVm.IsAsyncChild = true;
                 if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
                 if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
                 if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;

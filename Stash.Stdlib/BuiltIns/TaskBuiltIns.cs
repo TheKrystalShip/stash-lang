@@ -46,7 +46,7 @@ public static partial class TaskBuiltIns
             {
                 child.CleanupTrackedProcesses();
             }
-        });
+        }, cts.Token); // Pass the token so the Task transitions to Canceled (not Faulted) on OCE
 
         return StashValue.FromObj(new StashFuture(dotnetTask, cts));
     }

@@ -1,5 +1,7 @@
 namespace Stash.Tests.Interpreting;
 
+using Stash.Runtime.Errors;
+
 public class AsyncAwaitTests : StashTestBase
 {
     // ── Category 1: Basic async fn declaration and await ─────────────────────
@@ -529,5 +531,25 @@ async fn greet(name) {
 await greet(""world"");
 ");
         Assert.Equal("hello world\n", output);
+    }
+
+    // ── D3: await on cancelled future throws CancellationError ───────────────
+
+    [Fact]
+    public void Await_CancelledFuture_ThrowsCancellationError()
+    {
+        // D3: await f after task.cancel(f) must throw CancellationError, not bare RuntimeError.
+        // Bounded: poll until the child cooperatively exits, then await (can't hang).
+        var error = RunCapturingError(@"
+let f = task.run(() => { time.sleep(10); });
+task.cancel(f);
+let i = 0;
+while (task.status(f) == task.Status.Running && i < 40) {
+    time.sleep(0.05);
+    i = i + 1;
+}
+await f;
+");
+        Assert.IsType<CancellationError>(error);
     }
 }
