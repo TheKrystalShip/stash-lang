@@ -21,7 +21,8 @@
 
 ## F01 — [MAJOR] C1 chokepoint scan has a sink-coverage hole — extension-method HTTP calls bypass the guard
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** a46c6a22
 **Files:** `Stash.Tests/Registry/Web/AuthClientChokepointMetaTests.cs:57-65`, `Stash.Registry.Web/Auth/LoginService.cs:97`, `Stash.Registry.Web/Auth/LoginService.cs:146`
 **Phase:** A2
 **Commit:** 36a20bc4
