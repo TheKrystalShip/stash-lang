@@ -74,6 +74,9 @@ public static class DiscoveryEndpoint
 
                     // Reflects live CORS configuration.
                     Cors = config.Cors.Enabled,
+
+                    // Bucket-A — audit log (widened filters, export, verify, tamper-evidence) shipped in registry-audit-log-v2.
+                    Audit = true,
                 },
             };
 

@@ -89,6 +89,14 @@ public sealed class OpenApiCoverageMetaTests
         // (application/octet-stream + X-Integrity header), not a JSON DTO.
         // Typed Results<> over a body schema does not apply.
         "Packages_DownloadVersion",
+
+        // AdminController.ExportAuditLog streams raw to HttpContext.Response
+        // (application/x-ndjson or text/csv) without a declared return type.
+        // The method signature is Task (void), so no TypedResults wrapper is
+        // possible — the stream is written directly via Response.WriteAsync.
+        // Same pattern as Packages_DownloadVersion: binary/stream output where
+        // a $ref response schema cannot be expressed.
+        "Admin_ExportAuditLog",
     };
 
     // ─── Scanner (pure function over parsed JSON) ────────────────────────────
