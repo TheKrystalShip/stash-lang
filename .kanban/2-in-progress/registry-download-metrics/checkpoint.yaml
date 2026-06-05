@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-download-metrics
 current: null
-updated: "2026-06-05T12:10:16Z"
+updated: "2026-06-05T12:23:46Z"
 phases:
   M1:
     status: done

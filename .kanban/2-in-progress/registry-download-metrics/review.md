@@ -125,7 +125,7 @@ dotnet test --filter "FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName
 ## F03 — [IMPORTANT] `RetentionDays=0` does NOT disable raw capture as the config docstring and M4 done_when promise
 
 **Status:** fixed
-**Fixed in:** (see chore commit below)
+**Fixed in:** f42eb4b6
 **Note:** Resolved as documentation-truth fix. Both docstrings corrected to reflect actual behavior; plan.yaml M4 done_when #4 corrected. The design question (which knob should disable capture) is deferred to `.kanban/0-backlog/registry/registry-metrics-capture-killswitch.md`. No runtime behavior changed.
 **Files:** `Stash.Registry/Configuration/MetricsConfig.cs:51-56`, `Stash.Registry/Controllers/PackagesController.cs:472-491`, `Stash.Tests/Registry/Metrics/RetentionSweepTests.cs:93-106`
 **Phase:** M3 + M4 (capture path + retention semantics gap)
