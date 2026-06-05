@@ -1,0 +1,538 @@
+#!/usr/bin/env stash
+// scripts/lsp-warmd/daemon.stash
+// Content-routing LSP daemon: one daemon serves multiple language servers,
+// routing each request by textDocument.uri file extension.
+//
+// Architecture: serial, single-VM (see CONCURRENCY-PLAN.md for the future
+// concurrent upgrade). All LSP server handles stay in the main VM, satisfying
+// the Stash constraint that Process handles don't cross task-VM boundaries.
+//
+// Usage: stash daemon.stash [root]
+//   root — project root directory (default: /home/heisen/stash-lang)
+//
+// KNOWN LIMITATIONS (see CONCURRENCY-PLAN.md):
+//   - Serial: one dispatcher connection at a time. Invisible for short-lived
+//     per-call connections (each connect→query→disconnect is sub-100ms).
+//   - Blocking reads: process.readBytes (server stdout) and tcp.recv (client
+//     socket) both block on an idle source (gotcha: process-read-blocks-empty-pipe).
+//     Worked around: only read after forwarding a request, so the source always
+//     has pending data.
+//   - Server stdout is read byte-exact via process.readBytes, so multibyte UTF-8
+//     in backend responses frames correctly (this is what fixed the stash-lsp
+//     0-symbol path — Content-Length is a byte count, and readBytes keeps the
+//     accumulator in byte-space). The client→daemon path still decodes via
+//     tcp.recv (string), so a multibyte LSP request body (e.g. a didOpen with
+//     non-ASCII source) round-trips only as faithfully as the UTF-8 decode/
+//     re-encode; a byte-exact client read (sync tcp.recvBytes, or async
+//     tcp.recvBytesAsync) is the follow-up if that ever bites.
+
+// ─── Configuration ────────────────────────────────────────────────────────────
+
+let ROOT = cli.argc > 0 ? cli.argv[0] : "/home/heisen/stash-lang";
+let BRIDGE_PORT = 8787;
+let READY_FILE  = "/tmp/lsp_warmd.ready";
+let WARMUP_CS_URI = $"file://{ROOT}/Stash.Cli/Program.cs";
+let WARMUP_BUDGET_S = 120.0;
+let POLL_INTERVAL_S = 2.0;
+let RESPONSE_BUDGET_S = 30.0;
+
+// ─── Server registry ──────────────────────────────────────────────────────────
+// Each entry: name, extensions, spawnCommand, warmupKind
+//
+// warmupKind:
+//   "poll-documentsymbol" — workspace-backed server (csharp-ls): send initialize,
+//     poll documentSymbol on a known file until non-empty. No didOpen needed; the
+//     server indexes the whole workspace and answers any file from disk.
+//   "initialize-only"     — open-document server (stash-lsp): initialize is enough.
+//     The client sends didOpen per document; the daemon just forwards it.
+//
+// spawnCommand is run under env.withDir(ROOT).
+
+let REGISTRY = [
+    {
+        "name":         "csharp",
+        "extensions":   [".cs", ".csx"],
+        "spawnCommand": "csharp-ls --solution Stash.sln",
+        "warmupKind":   "poll-documentsymbol",
+        "warmupUri":    WARMUP_CS_URI
+    },
+    {
+        "name":         "stash",
+        "extensions":   [".stash"],
+        "spawnCommand": "stash-lsp",
+        "warmupKind":   "initialize-only",
+        "warmupUri":    null
+    }
+];
+
+// Runtime state per server: { proc, acc }
+// Built during startup, carried through the serve loop.
+let servers = {};   // keyed by name
+
+// ─── Synthetic InitializeResult ───────────────────────────────────────────────
+// Returned to every client's initialize request, advertising a superset of
+// capabilities covering both csharp-ls and stash-lsp. textDocumentSync must be
+// present so LSP clients send didOpen/didChange (stash-lsp requires them).
+// Note: stash-lsp itself reports a full capability set — the synthetic result
+// is a superset for the two-backend case, not a workaround for under-reporting.
+
+let SYNTHETIC_CAPABILITIES = {
+    "textDocumentSync":         {"openClose": true, "change": 2},
+    "documentSymbolProvider":   true,
+    "definitionProvider":       true,
+    "referencesProvider":       true,
+    "hoverProvider":            true,
+    "completionProvider":       {"triggerCharacters": [".", "("]},
+    "signatureHelpProvider":    {"triggerCharacters": ["(", ","]},
+    "renameProvider":           {"prepareProvider": true},
+    "documentHighlightProvider": true,
+    "codeActionProvider":       true,
+    "documentFormattingProvider": true,
+    "typeDefinitionProvider":   true,
+    "implementationProvider":   true,
+    "callHierarchyProvider":    true,
+    "semanticTokensProvider": {
+        "legend": {
+            "tokenTypes": ["namespace","type","struct","enum","interface","function",
+                           "method","parameter","variable","property","enumMember","keyword"],
+            "tokenModifiers": ["declaration","readonly","defaultLibrary","async"]
+        },
+        "range": false,
+        "full": {}
+    },
+    "workspace": {"workspaceFolders": {"changeNotifications": false}}
+};
+
+// ─── LSP framing helpers ──────────────────────────────────────────────────────
+
+fn lspSend(proc_handle, obj) {
+    let body = json.stringify(obj);
+    let n = buf.len(buf.from(body));
+    process.write(proc_handle, $"Content-Length: {n}\r\n\r\n{body}");
+}
+
+fn tcpSendObj(conn, obj) {
+    let body = json.stringify(obj);
+    let n = buf.len(buf.from(body));
+    tcp.send(conn, $"Content-Length: {n}\r\n\r\n{body}");
+}
+
+fn tcpSendRaw(conn, raw_str) {
+    tcp.send(conn, raw_str);
+}
+
+// ─── Frame parser — linear O(n) byte-cursor ──────────────────────────────────
+// Input: acc_bytes (buffer). Output: {frames: [{raw, msg}], rest_bytes}.
+// 'raw' is the verbatim frame string for zero-copy forwarding.
+
+fn parseAllFrames(acc_bytes) {
+    let frames = [];
+    let cursor = 0;
+    let total  = buf.len(acc_bytes);
+    let sep    = buf.from("\r\n\r\n");
+
+    while (cursor < total) {
+        let rel_sep = buf.indexOf(buf.slice(acc_bytes, cursor), sep);
+        if (rel_sep == -1) { break; }
+        let sep_pos = cursor + rel_sep;
+
+        let header_str = buf.toString(buf.slice(acc_bytes, cursor, sep_pos));
+        let content_length = -1;
+        for (let line in str.split(header_str, "\r\n")) {
+            let t = str.trim(line);
+            if (str.startsWith(t, "Content-Length:")) {
+                content_length = conv.toInt(str.trim(str.substring(t, 15)));
+            }
+        }
+        if (content_length == -1) { break; }
+
+        let body_start = sep_pos + 4;
+        let body_end   = body_start + content_length;
+        if (body_end > total) { break; }
+
+        let body_str = buf.toString(buf.slice(acc_bytes, body_start, body_end));
+        let raw_str  = buf.toString(buf.slice(acc_bytes, cursor, body_end));
+        arr.push(frames, {"raw": raw_str, "msg": json.parse(body_str)});
+        cursor = body_end;
+    }
+
+    return {"frames": frames, "rest_bytes": buf.slice(acc_bytes, cursor)};
+}
+
+// ─── Server→client request handler ───────────────────────────────────────────
+// The daemon answers server→client requests (e.g. workspace/configuration) so
+// the backend doesn't stall. Returns the acc after consuming any data.
+
+fn replyServerRequest(server_proc, msg) {
+    let method = msg["method"];
+    let msg_id = msg["id"];
+    let reply_result = null;
+    if (method == "workspace/configuration") {
+        let items = msg["params"] != null ? msg["params"]["items"] : null;
+        let n = items != null ? len(items) : 1;
+        let empties = [];
+        let i = 0;
+        while (i < n) { arr.push(empties, {}); i = i + 1; }
+        reply_result = empties;
+    }
+    lspSend(server_proc, {"jsonrpc": "2.0", "id": msg_id, "result": reply_result});
+}
+
+// ─── pumpServer (warmup) ──────────────────────────────────────────────────────
+// Pump server stdout until we get the response matching match_id.
+// Handles server→client requests inline; ignores notifications.
+// Returns {ok, msg, acc}.
+
+fn pumpServer(server_proc, acc_bytes, match_id, timeout_s) {
+    let deadline = time.now() + timeout_s;
+    let acc      = acc_bytes;
+    let found    = null;
+
+    while (time.now() < deadline) {
+        // process.readBytes returns RAW bytes (no text decode), so the byte stream is
+        // byte-exact and parseAllFrames' Content-Length (a byte count) always matches.
+        // process.read decodes stdout into 4096-CHAR chunks; that chunked decode→re-encode
+        // is not byte-faithful for non-ASCII (a multibyte UTF-8 seq split across chunks can
+        // decode lossily), desyncing the byte-framed Content-Length and hanging the parser
+        // (the stash-lsp 0-symbol bug). readBytes removes the decode hop entirely.
+        let chunk = process.readBytes(server_proc);
+        if (chunk != null && buf.len(chunk) > 0) {
+            acc = buf.concat(acc, chunk);
+        }
+
+        let parsed = parseAllFrames(acc);
+        acc = parsed["rest_bytes"];
+
+        for (let frame in parsed["frames"]) {
+            let msg = frame["msg"];
+            let has_method = msg["method"] != null;
+            let msg_id     = msg["id"];
+
+            if (has_method && msg_id != null) {
+                replyServerRequest(server_proc, msg);
+            } else if (!has_method && msg_id != null) {
+                if (conv.toStr(msg_id) == conv.toStr(match_id)) {
+                    found = msg;
+                }
+            }
+        }
+
+        if (found != null) { return {"ok": true, "msg": found, "acc": acc}; }
+        if (chunk == null)  { time.sleep(0.05); }
+    }
+
+    return {"ok": false, "msg": null, "acc": acc};
+}
+
+// ─── pumpServerBridge (serve loop) ───────────────────────────────────────────
+// Pump server stdout until we get the response matching match_id.
+// - Server→client requests: daemon answers directly (never forwarded to client).
+// - Notifications: forwarded to client verbatim.
+// - Responses matching match_id: returned as raw string for verbatim forward.
+// Returns {ok, raw, acc}.
+
+fn pumpServerBridge(server_proc, acc_bytes, match_id, conn, timeout_s) {
+    let deadline   = time.now() + timeout_s;
+    let acc        = acc_bytes;
+    let found_raw  = null;
+
+    while (time.now() < deadline) {
+        // process.readBytes returns RAW bytes (no text decode), so the byte stream is
+        // byte-exact and parseAllFrames' Content-Length (a byte count) always matches.
+        // process.read decodes stdout into 4096-CHAR chunks; that chunked decode→re-encode
+        // is not byte-faithful for non-ASCII (a multibyte UTF-8 seq split across chunks can
+        // decode lossily), desyncing the byte-framed Content-Length and hanging the parser
+        // (the stash-lsp 0-symbol bug). readBytes removes the decode hop entirely.
+        let chunk = process.readBytes(server_proc);
+        if (chunk != null && buf.len(chunk) > 0) {
+            acc = buf.concat(acc, chunk);
+        }
+
+        let parsed = parseAllFrames(acc);
+        acc = parsed["rest_bytes"];
+
+        for (let frame in parsed["frames"]) {
+            let msg = frame["msg"];
+            let has_method = msg["method"] != null;
+            let msg_id     = msg["id"];
+
+            if (has_method && msg_id != null) {
+                replyServerRequest(server_proc, msg);
+            } else if (has_method) {
+                tcpSendRaw(conn, frame["raw"]);  // notification → client
+            } else if (msg_id != null) {
+                if (conv.toStr(msg_id) == conv.toStr(match_id)) {
+                    found_raw = frame["raw"];
+                } else {
+                    tcpSendRaw(conn, frame["raw"]);  // out-of-order → client
+                }
+            }
+        }
+
+        if (found_raw != null) { return {"ok": true, "raw": found_raw, "acc": acc}; }
+        if (chunk == null)      { time.sleep(0.02); }
+    }
+
+    return {"ok": false, "raw": null, "acc": acc};
+}
+
+// ─── Routing ──────────────────────────────────────────────────────────────────
+// Extract file extension from an LSP textDocument.uri (e.g. ".cs", ".stash").
+
+fn uriExtension(uri) {
+    let dot_pos = str.lastIndexOf(uri, ".");
+    let slash_pos = str.lastIndexOf(uri, "/");
+    // Only treat a dot after the last slash as an extension marker
+    if (dot_pos > slash_pos) {
+        return str.substring(uri, dot_pos);
+    }
+    return "";
+}
+
+// Route a parsed message to a server name. Returns the server name string,
+// or null if no match. Falls back to last_routed for messages without a uri.
+
+fn routeMessage(msg, last_routed) {
+    let params = msg["params"];
+    let uri = null;
+    if (params != null) {
+        let td = params["textDocument"];
+        if (td != null) { uri = td["uri"]; }
+        // didOpen uses textDocument.uri; definition/references use same
+        if (uri == null) {
+            // Some methods nest uri differently — check top-level uri too
+            uri = params["uri"];
+        }
+    }
+
+    if (uri != null) {
+        let ext = uriExtension(uri);
+        for (let spec in REGISTRY) {
+            for (let srv_ext in spec["extensions"]) {
+                if (srv_ext == ext) {
+                    return spec["name"];
+                }
+            }
+        }
+    }
+
+    return last_routed;  // fallback: same server as last request
+}
+
+// ─── Phase 1: Spawn and warm all registered servers ───────────────────────────
+
+let t0     = time.now();
+let my_pid = sys.pid();
+let req_id = 1;
+
+io.eprintln($"[daemon] root={ROOT}");
+
+for (let spec in REGISTRY) {
+    let name = spec["name"];
+    let spawn_cmd = spec["spawnCommand"];
+    io.eprintln($"[daemon] spawning {name}: {spawn_cmd}");
+
+    let srv_proc = null;
+    env.withDir(ROOT, () => {
+        srv_proc = process.spawn(spec["spawnCommand"]);
+    });
+    io.eprintln($"[daemon] {name} PID={process.pid(srv_proc)}");
+
+    let acc = buf.alloc(0);
+
+    // Send initialize to this server
+    lspSend(srv_proc, {
+        "jsonrpc": "2.0", "id": req_id, "method": "initialize",
+        "params": {
+            "processId": my_pid,
+            "rootUri":   $"file://{ROOT}",
+            "workspaceFolders": [{"uri": $"file://{ROOT}", "name": "stash-lang"}],
+            "capabilities": {
+                "window":       {"workDoneProgress": true},
+                "textDocument": {"documentSymbol": {}, "definition": {}, "references": {}, "hover": {}}
+            }
+        }
+    });
+
+    let init_pump = pumpServer(srv_proc, acc, req_id, 60.0);
+    acc = init_pump["acc"];
+    req_id = req_id + 1;
+
+    if (!init_pump["ok"]) {
+        io.eprintln($"[daemon] FAIL: {name} initialize timed out");
+        process.kill(srv_proc);
+        env.exit(1);
+    }
+
+    io.eprintln($"[daemon] {name} initialized at {time.now() - t0}s");
+
+    // Send initialized notification (required before any other method)
+    lspSend(srv_proc, {"jsonrpc": "2.0", "method": "initialized", "params": {}});
+
+    // Warmup phase — strategy depends on warmupKind
+    let warmup_kind = spec["warmupKind"];
+
+    if (warmup_kind == "poll-documentsymbol") {
+        // Workspace-backed server: poll documentSymbol until solution is indexed.
+        // No didOpen needed — server reads from disk.
+        let warmup_uri     = spec["warmupUri"];
+        let warm_deadline  = t0 + WARMUP_BUDGET_S;
+        let warmed         = false;
+        let symbol_count   = 0;
+
+        io.eprintln($"[daemon] {name} polling documentSymbol (no didOpen)...");
+
+        while (time.now() < warm_deadline) {
+            lspSend(srv_proc, {
+                "jsonrpc": "2.0", "id": req_id,
+                "method": "textDocument/documentSymbol",
+                "params": {"textDocument": {"uri": warmup_uri}}
+            });
+
+            let ds_pump = pumpServer(srv_proc, acc, req_id, 20.0);
+            acc = ds_pump["acc"];
+            req_id = req_id + 1;
+
+            if (ds_pump["ok"]) {
+                let result = ds_pump["msg"]["result"];
+                if (result != null && len(result) > 0) {
+                    symbol_count = len(result);
+                    warmed       = true;
+                    break;
+                }
+                io.eprintln($"[daemon] {name} not warm yet...");
+            }
+            time.sleep(POLL_INTERVAL_S);
+        }
+
+        if (!warmed) {
+            io.eprintln($"[daemon] FAIL: {name} never warmed");
+            process.kill(srv_proc);
+            env.exit(2);
+        }
+
+        io.eprintln($"[daemon] {name} WARM: {symbol_count} symbols at {time.now() - t0}s");
+
+    } else if (warmup_kind == "initialize-only") {
+        // Open-document server: initialize + initialized is sufficient.
+        // Clients send didOpen per document — daemon just forwards those.
+        io.eprintln($"[daemon] {name} ready (initialize-only warmup)");
+    }
+
+    // Store server runtime state — each server owns its own stdout accumulator
+    servers[name] = {"proc": srv_proc, "acc": acc};
+}
+
+// ─── Phase 2: Write ready marker and start listening ─────────────────────────
+
+let ready_at = time.now() - t0;
+fs.writeFile(READY_FILE, $"ready\nwarm_time={ready_at}s\n");
+io.eprintln($"[daemon] READY at {ready_at}s — wrote {READY_FILE}");
+io.eprintln($"[daemon] listening on 127.0.0.1:{BRIDGE_PORT}");
+
+// ─── Phase 3: Serial serve loop ──────────────────────────────────────────────
+// Accept one dispatcher connection at a time. Keep all servers alive across
+// connections. See CONCURRENCY-PLAN.md for the concurrent upgrade path.
+
+while (true) {
+    tcp.listen(BRIDGE_PORT, (conn) => {
+        io.eprintln("[daemon] client connected");
+
+        let client_acc    = buf.alloc(0);
+        let client_done   = false;
+        let last_routed   = "csharp";   // default server for uri-less messages
+
+        while (!client_done) {
+            // ── Read one complete frame from client (blocking accumulate) ───
+            let client_frame = null;
+            let client_msg   = null;
+
+            while (client_frame == null) {
+                let parsed = parseAllFrames(client_acc);
+                client_acc = parsed["rest_bytes"];
+
+                if (len(parsed["frames"]) > 0) {
+                    client_frame = parsed["frames"][0]["raw"];
+                    client_msg   = parsed["frames"][0]["msg"];
+                    // Re-queue any extra frames (beyond [0]) to the front of acc
+                    let i = 1;
+                    while (i < len(parsed["frames"])) {
+                        client_acc = buf.concat(buf.from(parsed["frames"][i]["raw"]), client_acc);
+                        i = i + 1;
+                    }
+                } else {
+                    let chunk = tcp.recv(conn, 65536);
+                    if (chunk == "") {
+                        io.eprintln("[daemon] client disconnected");
+                        client_done = true;
+                        break;
+                    }
+                    client_acc = buf.concat(client_acc, buf.from(chunk));
+                }
+            }
+
+            if (client_done || client_msg == null) { break; }
+
+            let method    = client_msg["method"];
+            let client_id = client_msg["id"];
+
+            // ── Intercept ─────────────────────────────────────────────────
+            if (method == "initialize") {
+                io.eprintln($"[daemon] intercept initialize (id={client_id})");
+                tcpSendObj(conn, {
+                    "jsonrpc": "2.0",
+                    "id":      client_id,
+                    "result":  {"capabilities": SYNTHETIC_CAPABILITIES, "serverInfo": {"name": "lsp-warmd", "version": "0.1.0"}}
+                });
+
+            } else if (method == "initialized") {
+                io.eprintln("[daemon] swallow initialized");
+
+            } else if (method == "shutdown") {
+                io.eprintln("[daemon] intercept shutdown");
+                tcpSendObj(conn, {"jsonrpc": "2.0", "id": client_id, "result": null});
+
+            } else if (method == "exit") {
+                io.eprintln("[daemon] intercept exit — closing client");
+                client_done = true;
+
+            } else {
+                // ── Route by textDocument.uri extension ──────────────────
+                let routed_name = routeMessage(client_msg, last_routed);
+                if (routed_name == null) { routed_name = "csharp"; }  // hard default
+                last_routed = routed_name;
+
+                let server_entry = servers[routed_name];
+                if (server_entry == null) {
+                    io.eprintln($"[daemon] WARN: no server for '{routed_name}', dropping");
+                } else {
+                    let srv_proc = server_entry["proc"];
+                    let srv_acc  = server_entry["acc"];
+
+                    io.eprintln($"[daemon] -> {routed_name}: {method} (id={client_id})");
+                    process.write(srv_proc, client_frame);
+
+                    if (client_id != null) {
+                        let pump = pumpServerBridge(srv_proc, srv_acc, client_id, conn, RESPONSE_BUDGET_S);
+                        server_entry["acc"] = pump["acc"];
+                        if (pump["ok"]) {
+                            tcpSendRaw(conn, pump["raw"]);
+                        } else {
+                            io.eprintln($"[daemon] WARN: no response from {routed_name} for id={client_id}");
+                        }
+                    } else {
+                        // Notification (no id, e.g. didOpen, didChange) — forward, don't pump
+                        // Server will emit publishDiagnostics/semanticTokens/refresh which are
+                        // picked up in the NEXT pumpServerBridge call for the next request.
+                        // Keep acc unchanged since we can't read without blocking on empty pipe.
+                    }
+                }
+            }
+        }
+
+        tcp.close(conn);
+        io.eprintln("[daemon] session done");
+    });
+
+    io.eprintln("[daemon] ready for next client...");
+}
