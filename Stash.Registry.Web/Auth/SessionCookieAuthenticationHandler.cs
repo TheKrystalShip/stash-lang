@@ -61,6 +61,11 @@ public sealed class SessionCookieAuthenticationHandler
         if (session is null)
             return AuthenticateResult.NoResult();
 
+        // Store the resolved session in HttpContext.Items so that
+        // CookieSessionTokenAccessor.TryGetSession can read it synchronously,
+        // avoiding any sync-over-async call to ISessionStore on the request thread.
+        Context.Items[SessionCookie.SessionItemsKey] = session;
+
         var claims = new[]
         {
             new Claim(ClaimTypes.Name, session.Username),

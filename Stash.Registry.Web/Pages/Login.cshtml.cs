@@ -40,7 +40,9 @@ public sealed class LoginModel : PageModel
 
     /// <summary>
     /// Optional return URL from the <c>[Authorize]</c> challenge redirect.
-    /// Only honored if it is a same-origin relative path (enforced in <see cref="LoginService"/>).
+    /// Only honored if it is a same-origin relative path — validated here with
+    /// <see cref="Microsoft.AspNetCore.Mvc.IUrlHelper.IsLocalUrl"/> before being passed
+    /// to <see cref="LoginService.LoginAsync"/>.
     /// </summary>
     [BindProperty(SupportsGet = true)]
     public string? ReturnUrl { get; set; }
@@ -58,10 +60,16 @@ public sealed class LoginModel : PageModel
         if (!ModelState.IsValid)
             return Page();
 
+        // Validate returnUrl with the framework's IsLocalUrl helper before passing to the
+        // service — prevents open-redirect (e.g. /\evil.com passes a simple StartsWith('/')
+        // check but is rejected by IsLocalUrl). Pass null if not local; the service falls
+        // back to /dashboard.
+        var safeReturnUrl = Url.IsLocalUrl(ReturnUrl) ? ReturnUrl : null;
+
         var result = await _loginService.LoginAsync(
             Username!,
             Password!,
-            ReturnUrl,
+            safeReturnUrl,
             HttpContext);
 
         if (!result.Success)

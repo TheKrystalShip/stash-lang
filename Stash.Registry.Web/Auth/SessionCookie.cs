@@ -53,4 +53,13 @@ public static class SessionCookie
     /// Sent as <c>name</c> in the <c>POST /api/v1/auth/tokens</c> request body.
     /// </summary>
     public const string PublishTokenName = "stash-web session";
+
+    /// <summary>
+    /// Key used to store the resolved <see cref="BffSession"/> in
+    /// <see cref="Microsoft.AspNetCore.Http.HttpContext.Items"/> by
+    /// <see cref="SessionCookieAuthenticationHandler"/> during authentication.
+    /// <see cref="CookieSessionTokenAccessor"/> reads this entry synchronously so that
+    /// <c>TryGetSession</c> never needs to call the session store on the request thread.
+    /// </summary>
+    public const string SessionItemsKey = "Stash.Registry.Web.Auth.BffSession";
 }

@@ -187,6 +187,43 @@ public sealed class LoginPageTests
         Assert.Equal("/dashboard", response.Headers.Location?.ToString());
     }
 
+    /// <summary>
+    /// Verifies that a backslash returnUrl (<c>/\evil.com</c>) is rejected by
+    /// <c>Url.IsLocalUrl</c> in <c>LoginModel</c> and the user is redirected to
+    /// <c>/dashboard</c> instead of receiving a 500 from <c>LocalRedirect</c>.
+    /// </summary>
+    [Fact]
+    public async Task Login_WithBackslashReturnUrl_RedirectsToDashboard()
+    {
+        using var factory = CreateFactory();
+        using var client = CreateManualCookieClient(factory, allowAutoRedirect: false);
+
+        // Fetch GET /login to obtain the anti-forgery token and cookies.
+        var getResponse = await client.GetAsync("/login");
+        getResponse.EnsureSuccessStatusCode();
+        var html = await getResponse.Content.ReadAsStringAsync();
+        var antiForgeryToken = ExtractAntiForgeryToken(html);
+        var cookies = GetCookiesFromResponse(getResponse);
+
+        // Submit with a backslash returnUrl that would bypass a naive StartsWith('/') check.
+        var formContent = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["Username"] = "alice",
+            ["Password"] = "correct",
+            ["ReturnUrl"] = @"/\evil.com",
+            ["__RequestVerificationToken"] = antiForgeryToken,
+        });
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/login") { Content = formContent };
+        request.Headers.Add("Cookie", FormatCookies(cookies));
+
+        var response = await client.SendAsync(request);
+
+        // Must redirect (not 500) and must go to /dashboard, not the attacker's domain.
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Equal("/dashboard", response.Headers.Location?.ToString());
+    }
+
     [Fact]
     public async Task PostLogin_WithValidCredentials_SessionIsStoredServerSide_NotJwtInCookie()
     {

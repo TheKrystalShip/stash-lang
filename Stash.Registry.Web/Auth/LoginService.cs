@@ -211,8 +211,10 @@ public sealed class LoginService
                 Expires = expiresAt,
             });
 
-        // Only honor same-origin relative returnUrls to prevent open-redirect.
-        var redirectTo = IsLocalUrl(returnUrl) ? returnUrl! : "/dashboard";
+        // The caller is responsible for validating that returnUrl is a same-origin relative
+        // path (open-redirect prevention). Pass null here if the URL is not local; the
+        // service falls back to /dashboard.
+        var redirectTo = returnUrl ?? "/dashboard";
         return LoginResult.Ok(redirectTo);
     }
 
@@ -226,15 +228,6 @@ public sealed class LoginService
             .Replace('+', '-')
             .Replace('/', '_')
             .TrimEnd('=');
-    }
-
-    private static bool IsLocalUrl(string? url)
-    {
-        if (string.IsNullOrEmpty(url))
-            return false;
-
-        // Must start with / but NOT with // (protocol-relative) and not be an absolute URL.
-        return url.StartsWith('/') && !url.StartsWith("//", StringComparison.Ordinal);
     }
 
     private static bool IsEnvironmentDevelopment(HttpContext httpContext)
