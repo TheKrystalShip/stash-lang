@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T20:07:49Z"
+updated: "2026-06-05T20:27:48Z"
 phases:
   A1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "AuditConfig (RetentionDays=0 default + TamperEvidence shape); AuditBackgroundService (deferred-first-sweep, scope-per-cycle); DeleteAuditEntriesOlderThanAsync; 20 tests green"
   A6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: bb7094cd23819308efc7769ec7a100181809def7
+    verified: true
+    started: "2026-06-05T20:08:59Z"
+    completed: "2026-06-05T20:27:48Z"
+    attempts: 1
+    notes: AuditChainHasher canonical serializer (fixed-field JSON); process-global SemaphoreSlim write lock; HMAC-SHA256/SHA-256 chain; disabled-on genesis handling; retention-window anchor in verify walker; AuditVerifyResponse DTO; VerifyAuditLog endpoint; 22 new tests
   A7:
     status: pending
     commit: null
