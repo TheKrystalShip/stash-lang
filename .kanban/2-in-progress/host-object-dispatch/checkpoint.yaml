@@ -1,16 +1,16 @@
 schema_version: 1
 feature: host-object-dispatch
 current: null
-updated: "2026-06-04T22:28:40Z"
+updated: "2026-06-05T00:00:19Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: f80d8ef139ecfac40a063cafdcb2c6abba2b6699
+    verified: true
+    started: "2026-06-04T23:40:51Z"
+    completed: "2026-06-05T00:00:19Z"
+    attempts: 1
+    notes: HostTypeBuilder+HostHandle+registration map; typeof/is green; MultiEngineIsolation green; 10 new tests pass
   P2:
     status: pending
     commit: null
