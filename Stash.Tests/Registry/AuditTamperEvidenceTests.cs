@@ -686,6 +686,42 @@ public sealed class AuditTamperEvidenceTests : IDisposable
     /// The walker verifies one continuous chain anchored at the original genesis and ignores
     /// the null-hash gap written during the disabled period.
     /// </summary>
+    // ── F04: strict base64 validation at construction ─────────────────────────
+
+    [Fact]
+    public void TamperEvidence_InvalidBase64HashSecret_FailsClosed()
+    {
+        // Arrange — non-base64 secret with Enabled=true (the "!" is outside the base64 alphabet).
+        var config = new AuditTamperEvidenceConfig { Enabled = true, HashSecret = "not valid base64!" };
+
+        // Act & Assert — constructor must throw, not silently fall back to UTF-8 bytes.
+        var ex = Assert.Throws<InvalidOperationException>(() => new AuditChainHasher(config));
+        Assert.Contains("base64", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TamperEvidence_ValidBase64HashSecret_DoesNotThrow()
+    {
+        // Regression guard: a correctly-encoded secret must still construct without error.
+        string validSecret = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("my-secret-key"));
+        var config = new AuditTamperEvidenceConfig { Enabled = true, HashSecret = validSecret };
+
+        // Act & Assert — no throw.
+        var hasher = new AuditChainHasher(config);
+        Assert.True(hasher.IsEnabled);
+    }
+
+    [Fact]
+    public void TamperEvidence_InvalidBase64_WhenDisabled_DoesNotThrow()
+    {
+        // Guard: if Enabled=false, the bad secret must be ignored at construction (silent no-op config).
+        var config = new AuditTamperEvidenceConfig { Enabled = false, HashSecret = "not valid base64!" };
+
+        // Act & Assert — disabled hasher with a bad secret is fine; HashSecret is irrelevant when disabled.
+        var hasher = new AuditChainHasher(config);
+        Assert.False(hasher.IsEnabled);
+    }
+
     [Fact]
     public async Task TamperEvidence_EnabledDisabledEnabled_BridgesChainAcrossGap()
     {

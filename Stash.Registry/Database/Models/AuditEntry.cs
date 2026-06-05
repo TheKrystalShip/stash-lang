@@ -16,7 +16,7 @@ public sealed class AuditEntry
     /// <summary>The auto-incrementing integer primary key (mapped to <c>id</c> column).</summary>
     public int Id { get; set; }
 
-    /// <summary>The action type string, e.g. <c>"publish"</c>, <c>"unpublish"</c>, <c>"user_create"</c>, <c>"token_revoke"</c>.</summary>
+    /// <summary>The action type string from <see cref="Services.AuditActions"/>, e.g. <c>"package.publish"</c>, <c>"user.create"</c>, <c>"token.revoke"</c>, <c>"auth.login.success"</c>.</summary>
     public string Action { get; set; } = "";
 
     /// <summary>The package name involved in this action, or <c>null</c> for non-package events.</summary>

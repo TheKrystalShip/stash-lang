@@ -67,8 +67,28 @@ public sealed class AuditChainHasher
     /// <summary>
     /// Initialises the hasher with the tamper-evidence configuration.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown at construction time when <paramref name="config"/> has
+    /// <see cref="AuditTamperEvidenceConfig.Enabled"/> set to <c>true</c> and
+    /// <see cref="AuditTamperEvidenceConfig.HashSecret"/> is a non-empty string
+    /// that is not valid base64.  Because the hasher is registered as a singleton
+    /// in DI via <c>Startup.ConfigureServices</c>, this failure surfaces at
+    /// process startup — not on the first audit write — so an operator can see
+    /// and fix the misconfiguration immediately.
+    /// </exception>
     public AuditChainHasher(AuditTamperEvidenceConfig config)
     {
+        if (config.Enabled && !string.IsNullOrEmpty(config.HashSecret))
+        {
+            try   { Convert.FromBase64String(config.HashSecret); }
+            catch (FormatException ex)
+            {
+                throw new InvalidOperationException(
+                    "Audit.TamperEvidence.HashSecret is not valid base64. " +
+                    "Supply a base64-encoded key (e.g. the output of `openssl rand -base64 32`).",
+                    ex);
+            }
+        }
         _config = config;
     }
 
@@ -154,9 +174,9 @@ public sealed class AuditChainHasher
         if (!string.IsNullOrEmpty(_config.HashSecret))
         {
             // HMAC-SHA256 keyed with the operator-supplied base64 secret.
-            byte[] key;
-            try   { key = Convert.FromBase64String(_config.HashSecret); }
-            catch { key = Encoding.UTF8.GetBytes(_config.HashSecret); }
+            // The constructor has already validated that HashSecret is valid base64,
+            // so this decode is known-safe and needs no try/catch.
+            byte[] key = Convert.FromBase64String(_config.HashSecret);
 
             using var hmac = new HMACSHA256(key);
             return Convert.ToHexString(hmac.ComputeHash(input)).ToLowerInvariant();
