@@ -1,16 +1,16 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-05T21:55:05Z"
+updated: "2026-06-05T22:11:33Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 410ef8feee3e379e6486e3b4e28e4a39b1802998
+    verified: true
+    started: "2026-06-05T21:57:31Z"
+    completed: "2026-06-05T22:11:33Z"
+    attempts: 1
+    notes: Spec §Async rewritten with two-systems model + D6-D11; task/arr/process metadata updated; reference regenerated; Async/ test scaffold created
   P2:
     status: pending
     commit: null
