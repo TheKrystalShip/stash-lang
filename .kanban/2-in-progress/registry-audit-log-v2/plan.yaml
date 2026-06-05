@@ -1,0 +1,258 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec registry-audit-log-v2
+
+schema_version: 1
+
+feature: registry-audit-log-v2
+
+title: Registry Audit Log v2 — Filters, Event Coverage, Export, Retention, Tamper-Evidence
+
+# This feature is the P3 unit of the self-hosted-registry milestone.
+# See .kanban/milestones/self-hosted-registry/MILESTONE.md.
+milestone: self-hosted-registry
+
+brief: ./brief.md
+
+created: 2026-06-05
+architect_session: registry-audit-log-v2
+
+# Per-phase verify steps already cover the relevant subsuite; keep default cheap.
+default_verify:
+  - dotnet build Stash.Registry
+
+# Safety rail — audit work touches the registry, its shared contracts, and the
+# corresponding test subtree. No CLI / language layer changes.
+scope:
+  - Stash.Registry/**
+  - Stash.Registry.Contracts/**
+  - Stash.Tests/Registry/**
+  - docs/Registry — Package Registry.md
+
+phases:
+  - id: A1
+    title: Action-string consolidation into AuditActions + NoMagicAuditActionStringsMetaTests chokepoint
+    deps: []
+    files:
+      - Stash.Registry/Services/AuditActions.cs
+      - Stash.Registry/Services/AuditService.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Tests/Registry/Authz/NoMagicAuditActionStringsMetaTests.cs
+      - Stash.Tests/Registry/AuditServiceTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~NoMagicAuditActionStringsMetaTests|FullyQualifiedName~AuditServiceTests|FullyQualifiedName~RegistryAuthzAuditMutationTests"
+    done_when:
+      - "Every inline audit-action string literal (`role.assign`, `role.revoke`, `package.visibility_change`, `user.create`, `user.disable`, `token.create`, `token.revoke`, `token.refresh`, `token_theft_detected`, `token.revoked`) is migrated to a named `AuditActions` constant whose VALUE equals the prior literal byte-for-byte; no existing `AuditActions` value is changed."
+      - "`NoMagicAuditActionStringsMetaTests` ships GREEN-enforcing: a Roslyn sink-scan flags any string literal reaching an audit-action sink (an `AuditEntry { Action = ... }` object-initializer assignment, or an `action`-named parameter of an `AuditService.Log*` method). It carries a positive fail-path self-test (a fixture literal that trips it, and does), a negative self-test (a constant reference that does not), and a binding-floor + file-count floor per the CLAUDE.md Roslyn-determinism rule."
+      - "The meta-test's pinned exemption list contains exactly the legitimate non-literal sink: `RegistryAuthorizeFilter` (the deny path writes `_action.ToString()` from the `RegistryAction` enum — enum-derived, not a literal). Adding any new exemption forces a test edit."
+      - "`AuditServiceTests` (`role.assign`, `token.create`) and `RegistryAuthzAuditMutationTests` (`role.assign`, `role.revoke`) stay green — proving no wire value changed."
+    notes: |
+      CHOKEPOINT PHASE — must land FIRST so every later phase routes through an
+      enforced home. The meta-test is the Detect-level umbrella; the deny path's
+      RegistryAction.ToString() is the one permanent exemption (enum-derived
+      vocabulary that AuditActions cannot fold). OPTIONAL Construct upgrade: the
+      A1 implementer MAY model the literal-event portion as an `enum AuditAction`
+      with `.ToWire()` (mirroring BoundedDomains enums) IF it changes no wire
+      value and keeps the meta-test as the umbrella over the dynamic deny
+      vocabulary — but the byte-for-byte value preservation is the hard
+      requirement, the enum is not. Do NOT "fix" `package.visibility_change` to
+      `visibility.update` or `token_theft_detected` to dotted form — those are
+      live wire values, not typos.
+
+  - id: A2
+    title: Instrument live-but-unaudited auth events (login success/failure, refresh-failure, register)
+    deps: [A1]
+    files:
+      - Stash.Registry/Services/AuditActions.cs
+      - Stash.Registry/Services/AuditService.cs
+      - Stash.Registry/Controllers/AuthController.cs
+      - Stash.Tests/Registry/AuditServiceTests.cs
+      - Stash.Tests/Registry/AuthEndpointTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~AuthEndpointTests|FullyQualifiedName~AuditServiceTests|FullyQualifiedName~NoMagicAuditActionStringsMetaTests"
+    done_when:
+      - "A successful `POST /api/v1/auth/login` writes exactly one audit entry with action `auth.login.success` and `decision=allow`."
+      - "A bad-credential `POST /api/v1/auth/login` writes exactly one audit entry with action `auth.login.failure` and `decision=deny`."
+      - "A failed `POST /api/v1/auth/tokens/refresh` writes one audit entry with action `auth.refresh.failure` and `decision=deny`."
+      - "A successful `POST /api/v1/auth/register` writes an `auth.register` entry (alongside the pre-existing `user.create` entry — two entries, the documented exception per brief OQ1)."
+      - "All four new action constants live in `AuditActions`; `NoMagicAuditActionStringsMetaTests` stays green (no new inline literal)."
+    notes: |
+      Instrumentation only — no new endpoints. Writes go through AuditService
+      (extend it with the four log helpers, each using an AuditActions constant).
+      OQ1 in the brief allows collapsing auth.register into the existing
+      user.create if the user prefers a single entry; default is two.
+      TEST CHURN: many existing tests log in during setup, so once
+      auth.login.success fires, each login writes an audit entry. Tests that
+      assert a TOTAL audit-log count (e.g. RegistryAuthzAuditMutationTests'
+      "exactly one entry" patterns) may shift — scope those assertions to a
+      specific action/decision rather than a global count. Expect to adjust
+      count-asserting tests in this phase.
+
+  - id: A3
+    title: Audit IP under the pipeline (write-time transform) + widen filters (user/target/version/ip/from/to)
+    deps: [A2]
+    files:
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry/Services/AuditService.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Tests/Registry/AuditLogControllerTests.cs
+      - Stash.Tests/Registry/AuditServiceTests.cs
+      - Stash.Tests/Registry/SqliteDatabaseTests.cs
+      - Stash.Tests/Registry/Authz/NoMagicRemoteIpAccessMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~AuditLogControllerTests|FullyQualifiedName~AuditServiceTests|FullyQualifiedName~SqliteDatabaseTests|FullyQualifiedName~RequestModelBindingMetaTests|FullyQualifiedName~NoMagicRemoteIpAccessMetaTests"
+    done_when:
+      - "Audit IPs are transformed at WRITE time: `AuditService` applies `IIpHasher.Apply(...)` ONCE before constructing every `AuditEntry` (the `Log*` helpers take the raw request IP; controllers/middleware keep obtaining it from `HttpContext`). With `IpMode=hashed`, the stored `Ip` column holds the HASH, not the raw IP — asserted directly. This implements D11 ('applies to both metrics and audit') and retires P2's 'audit keeps raw IP' stopgap."
+      - "`NoMagicRemoteIpAccessMetaTests` stays GREEN with the audit-write files (`AuthController`, `AdminController`, `Startup`, `RegistryAuthorizeFilter`) STILL on the pinned exemption list — but their documented rationale is flipped from 'keeps raw IP' to 'obtains raw IP, transformed downstream in `AuditService`'. Rate-limit keying stays raw and exempt. No exemption is added or removed; only the rationale text changes."
+      - "`AuditLogQuery` gains `user`, `target`, `version`, `ip`, `from` (UTC `DateTime?`), `to` (UTC `DateTime?`) — all optional, bound via `[FromQuery]`; the existing `page`/`pageSize`/`package`/`action` are unchanged."
+      - "`AuditService.GetAuditLogAsync` and `StashRegistryDatabase.GetAuditLogAsync` filter by every supplied field with logical AND; `user`/`target`/`version`/`package`/`action` are exact-match; `from`/`to` are inclusive `Timestamp` bounds."
+      - "`GET /api/v1/admin/audit-log?user=alice` returns only alice's entries; `?action=X&from=t0&to=t1` returns only X within [t0,t1]."
+      - "The `ip` filter transforms the operator-supplied IP through the SAME `IIpHasher.Apply(...)` and matches the stored transformed value: with `IpMode=hashed`, `?ip=<raw-ip>` matches the entries written from that source IP; with `IpMode=off` the filter matches nothing (column null). The filter reads the query IP via `IIpHasher`, NOT `HttpContext.Connection.RemoteIpAddress`."
+      - "`RequestModelBindingMetaTests` stays green (the widened query is `[FromQuery]`-bound; no `Request.Query` reads)."
+    notes: |
+      THE one design decision beyond the locked set (surfaced to the user): audit
+      IPs move from raw storage to write-time transform, because D11 ('applies to
+      both metrics and audit') is locked and the `ip` filter is impossible against
+      raw storage (HMAC-in-SQL). The transform lives in ONE place (AuditService) so
+      a new audit event cannot forget it (Construct). AuthController is NOT in the
+      file list because it keeps obtaining the raw IP unchanged — only the
+      AuditService write site and the filter change. AdminController/Startup appear
+      only if their inline audit-IP reads need to pass the raw IP through unchanged
+      (they already do `?.ToString()` then hand to AuditService — likely no edit, but
+      listed for scope safety). The P2 brief/test's 'their reads keep the raw IP'
+      line is now false; correcting the rationale is part of this phase.
+
+  - id: A4
+    title: Audit-log export endpoint (jsonl/csv) with bounded AuditExportFormat
+    deps: [A3]
+    files:
+      - Stash.Registry.Contracts/BoundedDomains.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Services/AuditService.cs
+      - Stash.Tests/Registry/AuditLogControllerTests.cs
+      - Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~AuditLogControllerTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~RequestModelBindingMetaTests"
+    done_when:
+      - "`GET /api/v1/admin/audit-log/export?format=jsonl&<filters>` returns `Content-Type: application/x-ndjson`; each line parses as an `AuditEntryResponse` JSON object; the streamed set equals the same-filtered list. Export binds a DEDICATED `AuditExportQuery` DTO (the filter fields WITHOUT `page`/`pageSize`) — a streaming endpoint must not advertise pagination; do NOT reuse `AuditLogQuery` and silently ignore its `[Range]`'d pagination fields."
+      - "`?format=csv` returns `Content-Type: text/csv` with a fixed-column header row and RFC-4180-quoted fields; the rows equal the filtered set."
+      - "`?format=xml` (or any value outside `{jsonl,csv}`) returns `400 InvalidRequest` — `AuditExportFormat` is a real C# enum in `Stash.Registry.Contracts/BoundedDomains.cs` with `[JsonStringEnumMemberName]` parsed at the `[FromQuery]` boundary, not a silent default."
+      - "The export endpoint carries `[Authorize]` (class-level) + `[RegistryAuthorize(RegistryAction.ReadAuditLog)]`; `AuthzCoverageMetaTests` + `AuthzDispatchCoverageMetaTests` stay green (the new action classified)."
+      - "The exported IP column carries the already-transformed stored value (export never reveals a raw IP that was stored hashed)."
+
+  - id: A5
+    title: Audit retention config + nightly background sweep (separate knob from metrics retention)
+    deps: [A4]
+    files:
+      - Stash.Registry/Configuration/AuditConfig.cs
+      - Stash.Registry/Configuration/RegistryConfig.cs
+      - Stash.Registry/Services/AuditBackgroundService.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/appsettings.json
+      - Stash.Tests/Registry/RegistryConfigTests.cs
+      - Stash.Tests/Registry/AuditRetentionTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~AuditRetention|FullyQualifiedName~RegistryConfigTests|FullyQualifiedName~AppsettingsDefaultsTests"
+    done_when:
+      - "`AuditConfig` binds an `Audit` section from appsettings.json with `RetentionDays` (default 0 = never delete) and the `TamperEvidence` sub-section (Enabled default false); `RegistryConfig` exposes it. This is a SEPARATE knob from `Metrics.Raw.RetentionDays`."
+      - "`AuditBackgroundService` (a `BackgroundService`) runs a nightly sweep that deletes audit entries with `Timestamp < now - RetentionDays` when `RetentionDays > 0`, opening its OWN DI scope per cycle (never a request-scoped DbContext)."
+      - "With `RetentionDays=30`: a seeded 40-day-old entry is deleted by the sweep and a now-stamped entry is retained. With `RetentionDays=0`: the sweep deletes nothing (no-op)."
+      - "`IRegistryDatabase` gains a `DeleteAuditEntriesOlderThanAsync(DateTime cutoff)` method used by the sweep."
+    notes: |
+      The TamperEvidence sub-section is DEFINED here (config shape) but its
+      behavior lands in A6. Defining the whole Audit config in one place avoids a
+      second appsettings edit. A5 only wires RetentionDays behavior; A6 wires
+      TamperEvidence behavior.
+
+  - id: A6
+    title: Tamper-evidence hash chain (previous_hash/entry_hash) + verify endpoint
+    deps: [A5]
+    files:
+      - Stash.Registry/Database/Models/AuditEntry.cs
+      - Stash.Registry/Database/RegistryDbContext.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Services/AuditChainHasher.cs
+      - Stash.Registry/Services/AuditService.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Tests/Registry/AuditTamperEvidenceTests.cs
+      - Stash.Tests/Registry/Authz/AuthzDispatchCoverageMetaTests.cs
+      - Stash.Tests/Registry/SqliteDatabaseTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~AuditTamperEvidence|FullyQualifiedName~SqliteDatabaseTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests|FullyQualifiedName~AuditLogControllerTests"
+    done_when:
+      - "EF migration adds `audit_log.previous_hash TEXT NULL` and `audit_log.entry_hash TEXT NULL`; the log stays append-only (no UPDATE/DELETE outside the retention sweep)."
+      - "`AuditChainHasher.CanonicalPayload(AuditEntry)` is the SINGLE serializer (fixed-field-order over action/package/version/user/target/ip/timestamp/decision/denyReason, excluding `id` and the hash fields); it is called by BOTH the append path and the verify endpoint."
+      - "When `TamperEvidence.Enabled=true`, `AddAuditEntryAsync` computes `entryHash = H(CanonicalPayload(entry) || previousHash)` (HMAC-SHA256 if `HashSecret` set, else SHA-256) under a process-global async lock so concurrent appends cannot fork the chain; the write is durable before the HTTP response (NOT the metrics Channel fire-and-forget pattern)."
+      - "`GET /api/v1/admin/audit-log/verify` returns `AuditVerifyResponse { enabled, checkedCount, valid, firstBrokenId, genesisId }`; carries `[Authorize] + [RegistryAuthorize(RegistryAction.ReadAuditLog)]`."
+      - "End-to-end: after 5 audited actions with tamper-evidence on, `verify` returns `valid=true, checkedCount=5`. Directly mutating one entry's `User` column in the DB makes `verify` return `valid=false, firstBrokenId=<that id>`."
+      - "disabled→enabled mid-stream: 2 entries written off (null hashes) then 3 with it on → `verify` returns `valid=true, checkedCount=3, genesisId=<3rd entry>`; the pre-genesis entries are excluded, not reported broken."
+      - "Retention × tamper: with `RetentionDays` deleting the genesis + pre-genesis rows, `verify` still returns `valid=true` over the retained window (earliest retained hashed row's stored `previousHash` is the trusted anchor)."
+      - "`AuditEntryResponse` gains optional `previousHash`/`entryHash` fields (null when tamper-evidence disabled); the list endpoint returns them."
+    notes: |
+      The genuinely-novel/risky phase. Ordering + concurrency is the core
+      correctness concern — the serialized-append lock and the single canonical
+      serializer are non-negotiable (brief Decision Log). OQ2 (concat vs canonical
+      JSON) and OQ3 (own HashSecret vs reuse P2 IP-secret infra) are decided here;
+      the only hard requirement is one serializer used by both write and verify.
+      The retention sweep from A5 and this verify walker must agree on the
+      "retained ∧ hashed" verifiable window.
+
+  - id: A7
+    title: Audit discovery flag flip + OpenAPI re-baseline + docs
+    deps: [A6]
+    files:
+      - Stash.Registry.Contracts/CommonContracts.cs
+      - Stash.Registry/Endpoints/DiscoveryEndpoint.cs
+      - Stash.Registry/CLAUDE.md
+      - docs/Registry — Package Registry.md
+      - Stash.Tests/Registry/DiscoveryEndpointTests.cs
+      - Stash.Tests/Registry/Web/HttpRegistryClientTests.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+      - Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~DiscoveryEndpointTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~OpenApiSnapshotTests|FullyQualifiedName~HttpRegistryClientTests"
+    done_when:
+      - "`DiscoveryFeatures` gains an `Audit` bool property (JSON `audit`); `DiscoveryEndpoint` sets it `true`."
+      - "`DiscoveryEndpointTests` is re-baselined: `audit` asserted `true` (Bucket-A); the remaining Bucket-B flags (`advisories`, `provenance`, `signatures`, `trustedPublishing`, `verifiedPublishers`) stay pinned false; `metrics`, `organizations`, `privatePackages` stay true."
+      - "`OpenApiCoverageMetaTests` is green with the two new operations (`Admin_ExportAuditLog`, `Admin_VerifyAuditLog`) and ZERO new exemptions — UNLESS the streamed export operation cannot carry a `$ref` response schema (binary/stream), in which case it joins the permanent stream exemption alongside `Packages_DownloadVersion` with a recorded reason."
+      - "`OpenApiSnapshotTests` (pins the FULL generated doc against `Stash.Tests/Registry/OpenApi/Snapshots/openapi-v1.json`) is RE-BASELINED: run `STASH_SNAPSHOT_REGEN=1 dotnet test --filter FullyQualifiedName~OpenApiSnapshotTests`, then commit the regenerated snapshot. The two new operations + the new `audit` discovery field change the doc — the regen is expected, not a regression."
+      - "`Stash.Registry/CLAUDE.md` endpoints table, configuration table, and meta-test table updated (audit export/verify endpoints, `Audit` config section, `NoMagicAuditActionStringsMetaTests`)."
+      - "`docs/Registry — Package Registry.md` documents the widened filters, the export + verify endpoints, the `Audit` config section, the tamper-evidence chain semantics, and the new audit event types."
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The two `checkpoint lint` lines are
+# the standing omission guard: every feature's promotion gate confirms the live doc
+# surface has no raw `scripts/checkpoint/<sub>.stash` reference (it routes through the
+# facade) and that the guard still has teeth. Keep them — dropping them makes the
+# guard one-shot instead of perpetual.
+#
+# The FULL unfiltered `dotnet test` is non-negotiable here: A1 changes a shared
+# constants file (AuditActions) and A3/A6 touch shared query + entity surfaces; a
+# filtered verify is exactly what let the download-metrics shared-constant
+# regression through (it broke the RegistryAuthz* wire contract while passing its
+# own filter). The full suite catches cross-family regressions.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

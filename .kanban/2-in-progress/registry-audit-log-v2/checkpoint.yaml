@@ -1,0 +1,67 @@
+schema_version: 1
+feature: registry-audit-log-v2
+current: null
+updated: "2026-06-05T18:16:52Z"
+phases:
+  A1:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  A2:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  A3:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  A4:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  A5:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  A6:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  A7:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+review:
+  status: not_started
+  started: null
+  resolved: null
+  findings_open: 0
+  findings_fixed: 0

@@ -27,6 +27,8 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- registry-audit-log-v2 — Registry Audit Log v2 — Filters, Event Coverage, Export, Retention, Tamper-Evidence | .kanban/2-in-progress/registry-audit-log-v2/ | 7 phases | started 2026-06-05
+
 ---
 
 ## Architecture Decisions (enduring)
