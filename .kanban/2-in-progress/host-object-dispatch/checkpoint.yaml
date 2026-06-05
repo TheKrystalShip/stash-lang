@@ -1,7 +1,7 @@
 schema_version: 1
 feature: host-object-dispatch
 current: null
-updated: "2026-06-05T02:14:34Z"
+updated: "2026-06-05T02:21:25Z"
 phases:
   P1:
     status: done
@@ -44,8 +44,8 @@ phases:
     attempts: 1
     notes: "End-to-end Player consolidation test + two-host isolation test; HostMemberAccessBenchmarks (property-read median 15.488 µs, method-call median 3.879 µs, baseline 2.503 µs); benchmark-results.md with verdict; plan verify-line corrected; Program.cs updated to run both benchmark classes; 137 embedding tests pass"
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-05T01:57:51Z"
-  resolved: null
+  resolved: "2026-06-05T02:21:25Z"
   findings_open: 0
   findings_fixed: 0

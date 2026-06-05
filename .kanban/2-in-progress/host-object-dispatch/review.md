@@ -180,7 +180,8 @@ dotnet test --filter "FullyQualifiedName~Stash.Tests.Embedding"
 
 ## F02 — [MINOR] benchmark-results.md interpretation is internally inconsistent; ShortRun (3 iterations) is too thin to support the property-read number
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** acf41c1a
 **Files:** `.kanban/2-in-progress/host-object-dispatch/benchmark-results.md:33`, `.kanban/2-in-progress/host-object-dispatch/benchmark-results.md:48-55`, `Stash.Hosting.Benchmarks/HostMemberAccessBenchmarks.cs:30-31`
 **Phase:** P5
 **Commit:** b64b41a4
