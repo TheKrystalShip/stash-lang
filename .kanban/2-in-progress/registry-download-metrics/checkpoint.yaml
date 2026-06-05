@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-download-metrics
 current: null
-updated: "2026-06-05T10:14:04Z"
+updated: "2026-06-05T10:27:04Z"
 phases:
   M1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "M3 complete: IDownloadEventQueue (bounded Channel), MetricsBackgroundService (own scope per batch), DownloadVersion OnCompleted enqueue (200 only), 22 tests green, NoMagicRemoteIpAccessMetaTests GREEN with doc comments corrected"
   M4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 6ee722c48947ec3dee6dbb917e08a3e1f193f3f7
+    verified: true
+    started: "2026-06-05T10:15:13Z"
+    completed: "2026-06-05T10:27:04Z"
+    attempts: 1
+    notes: "M4 complete: RollupAsync (hourly+daily, closed-bucket only, skip-already-rolled idempotent) + SweepRetentionAsync (0=no-op guard), 20 tests green"
   M5:
     status: pending
     commit: null
