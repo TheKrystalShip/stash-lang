@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-download-metrics
 current: null
-updated: "2026-06-05T09:29:28Z"
+updated: "2026-06-05T09:44:20Z"
 phases:
   M1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "M1 complete + fix: ConfigurationBinder catch for illegal IpMode, secret path sibling to DB dir, 48 tests green"
   M2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: bc44c589a9698595b81fad23a223ac496bf5d003
+    verified: true
+    started: "2026-06-05T09:32:37Z"
+    completed: "2026-06-05T09:44:20Z"
+    attempts: 1
+    notes: "Schema (download_events, rollup tables, storage_bytes column) + publish write + admin stats read, 79 tests green"
   M3:
     status: pending
     commit: null
