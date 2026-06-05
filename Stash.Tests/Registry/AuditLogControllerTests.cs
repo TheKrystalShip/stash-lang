@@ -344,9 +344,9 @@ public sealed class AuditLogControllerTests
         string body = await response.Content.ReadAsStringAsync();
         var lines = body.Split(new[] { "\r\n" }, StringSplitOptions.RemoveEmptyEntries);
 
-        // First line must be the fixed header
+        // First line must be the fixed header (A6 adds previousHash,entryHash).
         Assert.True(lines.Length >= 1, "CSV must have at least a header row.");
-        Assert.Equal("action,package,version,user,target,ip,timestamp,decision,denyReason", lines[0]);
+        Assert.Equal("action,package,version,user,target,ip,timestamp,decision,denyReason,previousHash,entryHash", lines[0]);
 
         // Data rows: filter matched exactly 1 entry (csv.test.0) — at least 1 data row
         Assert.True(lines.Length >= 2, "Expected at least one data row.");

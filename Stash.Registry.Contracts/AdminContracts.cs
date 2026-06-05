@@ -339,5 +339,67 @@ public sealed class AuditEntryResponse
     /// <summary>The typed deny reason when <see cref="Decision"/> is <c>"deny"</c>, or <c>null</c> for allow entries.</summary>
     [JsonPropertyName("denyReason")]
     public string? DenyReason { get; set; }
+
+    /// <summary>
+    /// The hash of the immediately preceding hashed entry's <see cref="EntryHash"/>, or the
+    /// genesis sentinel for the first hashed entry in a tamper-evidence run.
+    /// <c>null</c> when tamper-evidence was disabled at write time.
+    /// </summary>
+    [JsonPropertyName("previousHash")]
+    public string? PreviousHash { get; set; }
+
+    /// <summary>
+    /// The HMAC-SHA256 or SHA-256 hash of this entry's canonical payload concatenated with
+    /// <see cref="PreviousHash"/>, computed at write time.
+    /// <c>null</c> when tamper-evidence was disabled at write time.
+    /// </summary>
+    [JsonPropertyName("entryHash")]
+    public string? EntryHash { get; set; }
+}
+
+/// <summary>
+/// Response body returned by <c>GET /api/v1/admin/audit-log/verify</c>.
+/// Reports the result of walking the tamper-evidence hash chain.
+/// </summary>
+public sealed class AuditVerifyResponse
+{
+    /// <summary>
+    /// Whether tamper-evidence is enabled (<c>Audit.TamperEvidence.Enabled = true</c>).
+    /// When <c>false</c>, <see cref="CheckedCount"/> is 0 and <see cref="Valid"/> is
+    /// <c>true</c> (trivially — there is no chain to verify).
+    /// </summary>
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// The number of hashed entries that were walked during verification.
+    /// Equals the count of entries with a non-null <c>entry_hash</c> in the retained window.
+    /// Pre-genesis (null-hash) entries are excluded from the count.
+    /// </summary>
+    [JsonPropertyName("checkedCount")]
+    public int CheckedCount { get; set; }
+
+    /// <summary>
+    /// <c>true</c> if all checked entries verify cleanly (no broken links), or if
+    /// <see cref="CheckedCount"/> is 0 (no hashed entries exist yet).
+    /// <c>false</c> if at least one entry's recomputed hash does not match the stored hash.
+    /// </summary>
+    [JsonPropertyName("valid")]
+    public bool Valid { get; set; }
+
+    /// <summary>
+    /// The database <c>id</c> of the first entry whose recomputed hash does not match the
+    /// stored hash, or <c>null</c> when <see cref="Valid"/> is <c>true</c>.
+    /// </summary>
+    [JsonPropertyName("firstBrokenId")]
+    public int? FirstBrokenId { get; set; }
+
+    /// <summary>
+    /// The database <c>id</c> of the first hashed entry in the verified run (the genesis
+    /// or the earliest retained hashed entry when pre-genesis rows have been deleted).
+    /// <c>null</c> when <see cref="CheckedCount"/> is 0.
+    /// </summary>
+    [JsonPropertyName("genesisId")]
+    public int? GenesisId { get; set; }
 }
 

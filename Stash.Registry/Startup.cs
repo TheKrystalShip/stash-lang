@@ -215,6 +215,12 @@ public sealed class Startup
         // registered so operators can flip the knob via config without a restart.
         services.AddHostedService<AuditBackgroundService>();
 
+        // AuditChainHasher — singleton so the process-global WriteLock and HMAC key are
+        // shared across all AuditService scopes. Always registered (even when disabled)
+        // so AuditService and AdminController can safely inject it without nullable-type
+        // complications; IsEnabled=false is the no-op signal.
+        services.AddSingleton(new AuditChainHasher(_config.Audit.TamperEvidence));
+
         services.AddScoped<PackageService>();
         services.AddScoped<PackageRoleService>();
         services.AddScoped<AuditService>();

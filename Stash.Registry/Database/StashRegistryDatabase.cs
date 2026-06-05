@@ -901,6 +901,27 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         return stale.Count;
     }
 
+    /// <inheritdoc/>
+    public async Task<string?> GetLatestHashedEntryHashAsync()
+    {
+        // Max(id) among rows with a non-null entry_hash gives the most recently inserted hashed entry.
+        var entry = await _context.AuditLog
+            .Where(e => e.EntryHash != null)
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        return entry?.EntryHash;
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<AuditEntry>> GetAllHashedAuditEntriesAsync()
+    {
+        return await _context.AuditLog
+            .Where(e => e.EntryHash != null)
+            .OrderBy(e => e.Id)
+            .AsNoTracking()
+            .ToListAsync();
+    }
+
     // ── Organization operations ───────────────────────────────────────────────
 
     /// <inheritdoc/>

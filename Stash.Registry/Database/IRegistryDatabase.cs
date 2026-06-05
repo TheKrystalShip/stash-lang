@@ -566,6 +566,21 @@ public interface IRegistryDatabase
     Task AddAuditEntryAsync(AuditEntry entry);
 
     /// <summary>
+    /// Returns the <see cref="AuditEntry.EntryHash"/> of the most recently inserted hashed
+    /// entry (i.e. the entry with the highest <c>id</c> whose <c>entry_hash</c> is non-null),
+    /// or <c>null</c> when no hashed entry exists yet.
+    /// Called under the process-global write lock to read the chain's tail before appending.
+    /// </summary>
+    Task<string?> GetLatestHashedEntryHashAsync();
+
+    /// <summary>
+    /// Returns ALL audit entries that have a non-null <c>entry_hash</c>, ordered by <c>id</c>
+    /// ascending (insertion order).  Used by the verify endpoint to walk the full chain.
+    /// </summary>
+    /// <returns>A list of hashed <see cref="AuditEntry"/> objects, oldest first.</returns>
+    Task<List<AuditEntry>> GetAllHashedAuditEntriesAsync();
+
+    /// <summary>
     /// Counts audit entries whose <c>Action</c> is in <paramref name="actions"/>,
     /// <c>Decision = "allow"</c>, and <c>Timestamp &gt;= since</c>.
     /// </summary>

@@ -27,12 +27,27 @@ public sealed class AuditService
 {
     private readonly IRegistryDatabase _db;
     private readonly IIpHasher _ipHasher;
+    private readonly AuditChainHasher _chainHasher;
 
-    /// <summary>Initialises the service with the registry database and IP-handling pipeline.</summary>
-    public AuditService(IRegistryDatabase db, IIpHasher ipHasher)
+    /// <summary>
+    /// Initialises the service with the registry database, IP-handling pipeline, and the
+    /// tamper-evidence chain hasher.  The hasher is always provided (never null) — its
+    /// <see cref="AuditChainHasher.IsEnabled"/> property signals whether hashing is active.
+    /// </summary>
+    public AuditService(IRegistryDatabase db, IIpHasher ipHasher, AuditChainHasher chainHasher)
     {
         _db = db;
         _ipHasher = ipHasher;
+        _chainHasher = chainHasher;
+    }
+
+    /// <summary>
+    /// Convenience constructor for tests and simple scenarios where tamper-evidence is disabled.
+    /// Uses a disabled <see cref="AuditChainHasher"/> (no hash computation).
+    /// </summary>
+    internal AuditService(IRegistryDatabase db, IIpHasher ipHasher)
+        : this(db, ipHasher, new AuditChainHasher(new Configuration.AuditTamperEvidenceConfig { Enabled = false }))
+    {
     }
 
     // ── Internal helpers ──────────────────────────────────────────────────────
@@ -44,11 +59,41 @@ public sealed class AuditService
     /// This is the one place the IP transform runs so a new audit event physically
     /// cannot forget it.
     /// </summary>
+    /// <remarks>
+    /// When tamper-evidence is enabled (<see cref="AuditChainHasher"/> is non-null), this
+    /// method acquires the <see cref="AuditChainHasher.WriteLock"/> before reading the tail
+    /// hash, computing <c>entryHash = H(CanonicalPayload || previousHash)</c>, and inserting
+    /// — all under the lock.  Audit writes are durable before the HTTP response returns;
+    /// the <see cref="System.Threading.Channels.Channel"/>-based fire-and-forget pattern used
+    /// by download metrics is deliberately <b>not</b> copied here.
+    /// </remarks>
     private async Task AddEntryAsync(AuditEntry entry, string? rawIp)
     {
         IPAddress.TryParse(rawIp, out var address);
         entry.Ip = _ipHasher.Apply(address);
-        await _db.AddAuditEntryAsync(entry);
+
+        if (_chainHasher.IsEnabled)
+        {
+            // Serialized append: acquire the process-global lock so that no two concurrent
+            // requests can interleave their "read last hash → compute → insert" critical sections.
+            await AuditChainHasher.WriteLock.WaitAsync();
+            try
+            {
+                string? latestHash = await _db.GetLatestHashedEntryHashAsync();
+                string previousHash = latestHash ?? AuditChainHasher.GenesisSentinel;
+                entry.PreviousHash = previousHash;
+                entry.EntryHash    = _chainHasher.ComputeEntryHash(entry, previousHash);
+                await _db.AddAuditEntryAsync(entry);
+            }
+            finally
+            {
+                AuditChainHasher.WriteLock.Release();
+            }
+        }
+        else
+        {
+            await _db.AddAuditEntryAsync(entry);
+        }
     }
 
     /// <summary>

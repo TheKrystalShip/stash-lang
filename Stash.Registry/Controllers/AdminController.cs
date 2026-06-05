@@ -44,6 +44,7 @@ public class AdminController : ControllerBase
     private readonly PackageRoleService _roleService;
     private readonly RegistryConfig _config;
     private readonly IDownloadMetricsStore _metricsStore;
+    private readonly AuditChainHasher _chainHasher;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -54,7 +55,8 @@ public class AdminController : ControllerBase
         AuditService auditService,
         PackageRoleService roleService,
         RegistryConfig config,
-        IDownloadMetricsStore metricsStore)
+        IDownloadMetricsStore metricsStore,
+        AuditChainHasher chainHasher)
     {
         _db = db;
         _authProvider = authProvider;
@@ -62,6 +64,7 @@ public class AdminController : ControllerBase
         _roleService = roleService;
         _config = config;
         _metricsStore = metricsStore;
+        _chainHasher = chainHasher;
     }
 
     /// <summary>
@@ -251,18 +254,7 @@ public class AdminController : ControllerBase
 
         return TypedResults.Ok(new PagedResponse<AuditEntryResponse>
         {
-            Items = result.Items.Select(e => new AuditEntryResponse
-            {
-                Action = e.Action,
-                Package = e.Package,
-                Version = e.Version,
-                User = e.User,
-                Target = e.Target,
-                Ip = e.Ip,
-                Timestamp = e.Timestamp,
-                Decision = e.Decision,
-                DenyReason = e.DenyReason
-            }).ToList(),
+            Items = result.Items.Select(MapToResponse).ToList(),
             TotalCount = result.TotalCount,
             Page = query.page,
             PageSize = query.pageSize,
@@ -272,10 +264,11 @@ public class AdminController : ControllerBase
 
     // ── Audit export ─────────────────────────────────────────────────────────────
 
-    // RFC-4180 CSV column order (stable A4 shape; previousHash/entryHash added in A6).
+    // RFC-4180 CSV column order — stable shape with tamper-evidence hash columns.
     private static readonly string[] CsvColumns =
     [
-        "action", "package", "version", "user", "target", "ip", "timestamp", "decision", "denyReason"
+        "action", "package", "version", "user", "target", "ip", "timestamp", "decision", "denyReason",
+        "previousHash", "entryHash"
     ];
 
     /// <summary>
@@ -348,15 +341,17 @@ public class AdminController : ControllerBase
     /// projection used by the <see cref="GetAuditLog"/> list endpoint.</summary>
     private static AuditEntryResponse MapToResponse(AuditEntry e) => new()
     {
-        Action     = e.Action,
-        Package    = e.Package,
-        Version    = e.Version,
-        User       = e.User,
-        Target     = e.Target,
-        Ip         = e.Ip,
-        Timestamp  = e.Timestamp,
-        Decision   = e.Decision,
-        DenyReason = e.DenyReason,
+        Action       = e.Action,
+        Package      = e.Package,
+        Version      = e.Version,
+        User         = e.User,
+        Target       = e.Target,
+        Ip           = e.Ip,
+        Timestamp    = e.Timestamp,
+        Decision     = e.Decision,
+        DenyReason   = e.DenyReason,
+        PreviousHash = e.PreviousHash,
+        EntryHash    = e.EntryHash,
     };
 
     /// <summary>
@@ -377,6 +372,8 @@ public class AdminController : ControllerBase
             CsvField(dto.Timestamp.ToString("o", CultureInfo.InvariantCulture)),
             CsvField(dto.Decision),
             CsvField(dto.DenyReason),
+            CsvField(dto.PreviousHash),
+            CsvField(dto.EntryHash),
         });
     }
 
@@ -392,6 +389,103 @@ public class AdminController : ControllerBase
         if (value.IndexOfAny([',', '"', '\r', '\n']) < 0)
             return value;
         return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
+    /// <summary>
+    // ── Audit chain verification ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies the tamper-evidence hash chain for the audit log.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When tamper-evidence is enabled, walks the chain from the earliest retained hashed entry
+    /// (the genesis or the oldest retained entry after a retention sweep) to the most recent,
+    /// recomputing each entry's hash and comparing it to the stored value. Returns the id of the
+    /// first broken link, or <c>null</c> when the entire chain is intact.
+    /// </para>
+    /// <para>
+    /// Pre-genesis entries (with <c>null</c> hashes) are excluded from the walk entirely — they
+    /// are not reported as broken.  The earliest retained hashed row's stored <c>previousHash</c>
+    /// is used as the trusted anchor (so the verify endpoint still reports <c>valid=true</c> after
+    /// a retention sweep deletes the original genesis row).
+    /// </para>
+    /// <para>
+    /// When tamper-evidence is disabled (<c>Audit.TamperEvidence.Enabled = false</c>), returns
+    /// <c>enabled=false, checkedCount=0, valid=true</c>.
+    /// </para>
+    /// </remarks>
+    [RegistryAuthorize(RegistryAction.ReadAuditLog)]
+    [HttpGet("audit-log/verify")]
+    public async Task<Ok<AuditVerifyResponse>> VerifyAuditLog()
+    {
+        if (!_chainHasher.IsEnabled)
+        {
+            // Tamper-evidence disabled — trivially valid.
+            return TypedResults.Ok(new AuditVerifyResponse
+            {
+                Enabled      = false,
+                CheckedCount = 0,
+                Valid        = true,
+                FirstBrokenId = null,
+                GenesisId    = null,
+            });
+        }
+
+        var entries = await _db.GetAllHashedAuditEntriesAsync();
+
+        if (entries.Count == 0)
+        {
+            return TypedResults.Ok(new AuditVerifyResponse
+            {
+                Enabled      = true,
+                CheckedCount = 0,
+                Valid        = true,
+                FirstBrokenId = null,
+                GenesisId    = null,
+            });
+        }
+
+        // Walk the chain id-ascending (insertion order).
+        // The first entry is the anchor: trust its stored previousHash (it may be the genesis
+        // sentinel or the link to a deleted pre-genesis predecessor after a retention sweep).
+        // For the anchor we check ONLY the content (recomputed hash == stored hash), NOT the
+        // linkage — there is no predecessor to link against.
+        int? firstBrokenId = null;
+        for (int i = 0; i < entries.Count; i++)
+        {
+            var entry = entries[i];
+            string expectedPreviousHash = i == 0
+                ? entry.PreviousHash!   // anchor: trust the stored previousHash
+                : entries[i - 1].EntryHash!;
+
+            // Recompute the entry hash from scratch using the canonical serializer.
+            string recomputed = _chainHasher.ComputeEntryHash(entry, expectedPreviousHash);
+
+            // Content check: stored entryHash must equal the recomputed hash.
+            if (entry.EntryHash != recomputed)
+            {
+                firstBrokenId = entry.Id;
+                break;
+            }
+
+            // Linkage check (all entries after the anchor): stored previousHash must equal the
+            // prior entry's stored entryHash.
+            if (i > 0 && entry.PreviousHash != entries[i - 1].EntryHash)
+            {
+                firstBrokenId = entry.Id;
+                break;
+            }
+        }
+
+        return TypedResults.Ok(new AuditVerifyResponse
+        {
+            Enabled       = true,
+            CheckedCount  = entries.Count,
+            Valid         = firstBrokenId == null,
+            FirstBrokenId = firstBrokenId,
+            GenesisId     = entries[0].Id,
+        });
     }
 
     /// <summary>
