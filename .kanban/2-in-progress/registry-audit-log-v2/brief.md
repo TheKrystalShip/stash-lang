@@ -499,6 +499,12 @@ The phase list lives in `plan.yaml`. Seven phases:
 
 ## Open Questions
 
+> **RESOLVED 2026-06-05 (user decision): all four open questions take their stated default.**
+> OQ1 → two entries (creation record + `auth.register` event). OQ2 → canonical JSON. OQ3 → its own
+> `Audit.TamperEvidence.HashSecret` knob (HMAC-SHA256 when set, plain SHA-256 otherwise). OQ4 →
+> stream export unbounded. The implementer must build to these defaults and **not** re-surface these
+> as undecided. Each item below is retained for rationale only.
+
 - **OQ1 — `auth.register` vs `user.create` double-write.** `Register` already emits `user.create`
   via `LogUserCreateAsync`. The brief adds a distinct `auth.register` event for the self-service
   registration semantic. If the operator prefers a single entry, collapse `auth.register` into the
