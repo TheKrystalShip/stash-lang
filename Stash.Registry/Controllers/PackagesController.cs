@@ -17,6 +17,7 @@ using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Http;
 using Stash.Registry.Services;
+using Stash.Registry.Services.Metrics;
 using Stash.Registry.Storage;
 
 namespace Stash.Registry.Controllers;
@@ -48,6 +49,9 @@ public class PackagesController : ControllerBase
     private readonly IRegistryAuthorizer _authorizer;
     private readonly IRegistryAuthzPrincipalFactory _principalFactory;
     private readonly RegistryConfig _config;
+    private readonly IDownloadEventQueue _downloadEventQueue;
+    private readonly IIpHasher _ipHasher;
+    private readonly IDownloadMetricsStore _metricsStore;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -61,7 +65,10 @@ public class PackagesController : ControllerBase
         DeprecationService deprecationService,
         IRegistryAuthorizer authorizer,
         IRegistryAuthzPrincipalFactory principalFactory,
-        RegistryConfig config)
+        RegistryConfig config,
+        IDownloadEventQueue downloadEventQueue,
+        IIpHasher ipHasher,
+        IDownloadMetricsStore metricsStore)
     {
         _db = db;
         _storage = storage;
@@ -72,6 +79,9 @@ public class PackagesController : ControllerBase
         _authorizer = authorizer;
         _principalFactory = principalFactory;
         _config = config;
+        _downloadEventQueue = downloadEventQueue;
+        _ipHasher = ipHasher;
+        _metricsStore = metricsStore;
     }
 
     // ── Read endpoints ────────────────────────────────────────────────────────
@@ -272,12 +282,149 @@ public class PackagesController : ControllerBase
     }
 
     /// <summary>
+    /// Returns download metrics for a package across all versions and four rolling windows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Visibility is enforced by the same PDP chokepoint as <see cref="GetPackage"/>:
+    /// <c>[RegistryAuthorize(RegistryAction.ReadPackageMetadata)]</c> runs
+    /// <c>AuthorizePackageReadAsync</c> before the action body executes.  Anonymous callers
+    /// on private or internal packages receive <c>404 Not Found</c> — never 403 — to avoid
+    /// leaking the package's existence.  The body of the 404 from the filter does NOT
+    /// include the package name.
+    /// </para>
+    /// <para>
+    /// The read model follows the D8 brief decision: closed hourly rollups are authoritative;
+    /// the current open bucket (current hour) is computed from raw <c>download_events</c>
+    /// and added to the closed-bucket sum to avoid double-counting.
+    /// </para>
+    /// </remarks>
+    [PublicEndpoint("package metrics are public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]
+    [HttpGet("{scope}/{name}/metrics")]
+    public async Task<Results<Ok<PackageMetricsResponse>, NotFound<ErrorResponse>>> GetPackageMetrics(string scope, string name)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
+        if (package == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Package '{packageName}' not found." });
+
+        // Retrieve all versions to know which versions exist (for perVersion ordering).
+        List<string> allVersions = await _db.GetAllVersionsAsync(packageName);
+
+        DateTime now = DateTime.UtcNow;
+        Dictionary<string, DownloadWindowCounts> perVersionData =
+            await _metricsStore.GetPackageDownloadsAsync(packageName, now);
+
+        // Aggregate total across all versions.
+        var aggregate = new DownloadWindowCounts();
+        foreach (var counts in perVersionData.Values)
+        {
+            aggregate.Total   += counts.Total;
+            aggregate.Last24h += counts.Last24h;
+            aggregate.Last7d  += counts.Last7d;
+            aggregate.Last30d += counts.Last30d;
+        }
+
+        // Build per-version list — include ALL known versions (even zero-download ones).
+        var perVersionList = allVersions
+            .Select(v =>
+            {
+                if (!perVersionData.TryGetValue(v, out var c))
+                    c = new DownloadWindowCounts();
+                return new VersionDownloadCounts
+                {
+                    Version  = v,
+                    Total    = c.Total,
+                    Last24h  = c.Last24h,
+                    Last7d   = c.Last7d,
+                    Last30d  = c.Last30d,
+                };
+            })
+            .OrderByDescending(v => v.Total)
+            .ToList();
+
+        return TypedResults.Ok(new PackageMetricsResponse
+        {
+            Package     = packageName,
+            Downloads   = aggregate,
+            PerVersion  = perVersionList,
+            GeneratedAt = now,
+        });
+    }
+
+    /// <summary>
+    /// Returns download metrics for a specific package version across four rolling windows.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Visibility is enforced by the same PDP chokepoint as <see cref="GetVersion"/>:
+    /// <c>[RegistryAuthorize(RegistryAction.ReadPackageVersion)]</c> runs the PDP before
+    /// the action body executes.  Anonymous callers on private or internal packages receive
+    /// <c>404 Not Found</c> — never 403.
+    /// </para>
+    /// <para>
+    /// The read model follows the D8 brief: closed hourly rollups are authoritative;
+    /// the current open bucket is computed from raw events and added.
+    /// </para>
+    /// </remarks>
+    [PublicEndpoint("version metrics are public for public packages; visibility enforced by IRegistryAuthorizer")]
+    [RegistryAuthorize(RegistryAction.ReadPackageVersion)]
+    [HttpGet("{scope}/{name}/{version}/metrics")]
+    public async Task<Results<Ok<VersionMetricsResponse>, NotFound<ErrorResponse>>> GetVersionMetrics(string scope, string name, string version)
+    {
+        var resource = PackageRoute.From(Uri.UnescapeDataString(scope), Uri.UnescapeDataString(name));
+        string packageName = resource.FullName;
+
+        PackageRecord? package = await _db.GetPackageAsync(packageName);
+        if (package == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
+
+        VersionRecord? vr = await _db.GetPackageVersionAsync(packageName, version);
+        if (vr == null)
+            return TypedResults.NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{packageName}' not found." });
+
+        DateTime now = DateTime.UtcNow;
+        Dictionary<string, DownloadWindowCounts> allVersionData =
+            await _metricsStore.GetPackageDownloadsAsync(packageName, now);
+
+        allVersionData.TryGetValue(version, out var counts);
+        counts ??= new DownloadWindowCounts();
+
+        return TypedResults.Ok(new VersionMetricsResponse
+        {
+            Package     = packageName,
+            Version     = version,
+            Downloads   = counts,
+            GeneratedAt = now,
+        });
+    }
+
+    /// <summary>
     /// Downloads the tarball for a specific package version.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Returns a binary tarball stream (application/octet-stream + X-Integrity header).
     /// Permanently exempt from the typed Results refactor — binary streams do not have
     /// a JSON DTO schema; see <c>OpenApiCoverageMetaTests.PermanentlyExemptOperations</c>.
+    /// </para>
+    /// <para>
+    /// A single download event is enqueued via <see cref="IDownloadEventQueue"/> using
+    /// <c>Response.OnCompleted</c> — exactly when the response stream finishes writing
+    /// to the client with HTTP 200. A 404 (missing version), a
+    /// <c>VisibilityHidden</c> 404 (anonymous on a private package), or a mid-stream
+    /// client disconnect each result in ZERO enqueued events.
+    /// </para>
+    /// <para>
+    /// The IP is read from <c>HttpContext.Connection.RemoteIpAddress</c> here (this
+    /// file is in the <c>NoMagicRemoteIpAccessMetaTests</c> permanent-exempt list for
+    /// its audit reads) and immediately transformed via
+    /// <see cref="IIpHasher.Apply"/>. The transformed string — never the raw IP — is
+    /// placed in the <see cref="DownloadEvent"/> and persisted by the background service.
+    /// </para>
     /// </remarks>
     [PublicEndpoint("tarball download is public for public packages; visibility gated by IRegistryAuthorizer")]
     [RegistryAuthorize(RegistryAction.DownloadPackageVersion)]
@@ -301,6 +448,47 @@ public class PackagesController : ControllerBase
 
         if (!string.IsNullOrEmpty(versionRecord.Integrity))
             Response.Headers["X-Integrity"] = versionRecord.Integrity;
+
+        // Capture all fields needed for the download event BEFORE the OnCompleted hook
+        // fires — HttpContext is in teardown at that point and must not be accessed.
+        // The IP is transformed here (PackagesController.cs is in the permanent-exempt
+        // list for its audit-log reads; the download-metrics read is proven compliant by
+        // DownloadCaptureSemanticsTests asserting ip is populated via IIpHasher.Apply).
+        string capturedPackageName = packageName;
+        string capturedVersion = version;
+        string? capturedIp = _ipHasher.Apply(HttpContext.Connection.RemoteIpAddress);
+        string? capturedUserAgent = Request.Headers.UserAgent.Count > 0
+            ? Request.Headers.UserAgent.ToString()
+            : null;
+        long capturedBytesServed = versionRecord.StorageBytes;
+        string? capturedUser = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
+
+        // Register the capture callback.  OnCompleted fires after the response stream
+        // has been fully written to the client with the committed status code.
+        // We check RequestAborted to exclude mid-stream disconnects (the stream may
+        // still reach OnCompleted with partial bytes if the OS write buffer absorbed the
+        // remaining data before the disconnect was detected, so we also rely on the
+        // CancellationToken to exclude those cases).
+        var capturedContext = HttpContext;
+        var capturedQueue = _downloadEventQueue;
+        Response.OnCompleted(() =>
+        {
+            if (capturedContext.Response.StatusCode == StatusCodes.Status200OK &&
+                !capturedContext.RequestAborted.IsCancellationRequested)
+            {
+                capturedQueue.Enqueue(new DownloadEvent
+                {
+                    PackageName = capturedPackageName,
+                    Version = capturedVersion,
+                    Ts = DateTime.UtcNow,
+                    Ip = capturedIp,
+                    UserAgent = capturedUserAgent,
+                    BytesServed = capturedBytesServed,
+                    RequesterUser = capturedUser,
+                });
+            }
+            return Task.CompletedTask;
+        });
 
         return File(stream, "application/gzip", $"{packageName.Replace('/', '-').TrimStart('@', '-')}-{version}.tgz");
     }
@@ -345,7 +533,7 @@ public class PackagesController : ControllerBase
                 resource, Request.Body, principal, clientIntegrity, expectedVersion);
 
             // Audit: emit one allow entry per successful mutation
-            string auditAction = isNewPackage ? "package.create" : "package.publish";
+            string auditAction = isNewPackage ? AuditActions.PackageCreate : AuditActions.PackagePublish;
             await _auditService.LogMutationAllowAsync(auditAction, username, packageName, ip);
 
             return TypedResults.Created((string?)null, new PublishResponse
@@ -389,7 +577,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _packageService.UnpublishAsync(packageName, version, username);
-            await _auditService.LogMutationAllowAsync("package.unpublish", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.PackageUnpublish, username, packageName, ip);
             return TypedResults.Ok(new UnpublishResponse { Package = packageName, Version = version });
         }
         catch (InvalidOperationException ex)
@@ -420,7 +608,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.DeprecatePackageAsync(packageName, request.Message, request.Alternative, username);
-            await _auditService.LogMutationAllowAsync("package.deprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.PackageDeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Deprecated = true });
         }
         catch (InvalidOperationException ex)
@@ -449,7 +637,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.UndeprecatePackageAsync(packageName);
-            await _auditService.LogMutationAllowAsync("package.undeprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.PackageUndeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Deprecated = false });
         }
         catch (InvalidOperationException ex)
@@ -478,7 +666,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.DeprecateVersionAsync(packageName, version, request.Message, username);
-            await _auditService.LogMutationAllowAsync("version.deprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.VersionDeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = true });
         }
         catch (InvalidOperationException ex)
@@ -507,7 +695,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.UndeprecateVersionAsync(packageName, version);
-            await _auditService.LogMutationAllowAsync("version.undeprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.VersionUndeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = false });
         }
         catch (InvalidOperationException ex)

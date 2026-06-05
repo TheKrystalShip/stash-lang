@@ -801,6 +801,26 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .ToListAsync();
     }
 
+    // ── Metrics operations (M2) ───────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task<int> CountAllPackagesAsync()
+    {
+        return await _context.Packages.CountAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CountAllVersionsAsync()
+    {
+        return await _context.Versions.CountAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<long> GetTotalStorageBytesAsync()
+    {
+        return await _context.Versions.SumAsync(v => (long?)v.StorageBytes) ?? 0L;
+    }
+
     // ── Audit operations ──────────────────────────────────────────────────────
 
     /// <inheritdoc/>
@@ -834,6 +854,14 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
             .ToListAsync();
 
         return new SearchResult<AuditEntry> { Items = items, TotalCount = totalCount };
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CountAuditEntriesByActionSinceAsync(IReadOnlyCollection<string> actions, DateTime since)
+    {
+        return await _context.AuditLog
+            .Where(e => actions.Contains(e.Action) && e.Decision == "allow" && e.Timestamp >= since)
+            .CountAsync();
     }
 
     // ── Organization operations ───────────────────────────────────────────────

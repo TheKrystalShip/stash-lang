@@ -58,8 +58,10 @@ public static class DiscoveryEndpoint
                 },
                 Features = new DiscoveryFeatures
                 {
+                    // Bucket-A — Metrics implemented in the registry-download-metrics feature.
+                    Metrics = true,
+
                     // Bucket-B — not yet implemented, pinned false.
-                    Metrics = false,
                     Advisories = false,
                     Provenance = false,
                     Signatures = false,

@@ -133,13 +133,87 @@ public sealed class OwnerListResponse
 }
 
 /// <summary>
+/// Registry-wide download count summary, nested inside <see cref="StatsResponse.Downloads"/>.
+/// </summary>
+public sealed class AdminDownloadsSummary
+{
+    /// <summary>Total download count across all packages and all time.</summary>
+    [JsonPropertyName("total")]
+    public long Total { get; set; }
+
+    /// <summary>Total download count over the rolling 24-hour window.</summary>
+    [JsonPropertyName("last24h")]
+    public long Last24h { get; set; }
+}
+
+/// <summary>
+/// Registry activity counts over the past 24 hours, nested inside <see cref="StatsResponse.Activity"/>.
+/// Counts are derived from the audit log's <c>allow</c> entries.
+/// </summary>
+public sealed class AdminActivitySummary
+{
+    /// <summary>Number of package or version publishes logged in the last 24 hours.</summary>
+    [JsonPropertyName("publishesLast24h")]
+    public int PublishesLast24h { get; set; }
+
+    /// <summary>Number of version unpublishes logged in the last 24 hours.</summary>
+    [JsonPropertyName("unpublishesLast24h")]
+    public int UnpublishesLast24h { get; set; }
+
+    /// <summary>
+    /// Number of package or version deprecations logged in the last 24 hours.
+    /// Counts both <c>package.deprecate</c> and <c>version.deprecate</c> audit entries
+    /// with <c>decision = "allow"</c>.
+    /// </summary>
+    [JsonPropertyName("deprecationsLast24h")]
+    public int DeprecationsLast24h { get; set; }
+}
+
+/// <summary>
 /// Response body returned by the <c>GET /api/v1/admin/stats</c> endpoint.
 /// </summary>
+/// <remarks>
+/// M2 adds <see cref="StorageBytes"/> (sum of all version tarball sizes from
+/// <c>version_records.storage_bytes</c>). M6 adds <see cref="Packages"/>,
+/// <see cref="Versions"/>, <see cref="Downloads"/>, and <see cref="Activity"/>
+/// (registry-wide totals + last-24h activity counts).
+/// </remarks>
 public sealed class StatsResponse
 {
     /// <summary>The total number of registered user accounts.</summary>
     [JsonPropertyName("users")]
     public int Users { get; set; }
+
+    /// <summary>The total number of packages in the registry.</summary>
+    [JsonPropertyName("packages")]
+    public int Packages { get; set; }
+
+    /// <summary>The total number of published versions across all packages.</summary>
+    [JsonPropertyName("versions")]
+    public int Versions { get; set; }
+
+    /// <summary>
+    /// The total number of bytes occupied by all published tarballs, summed from
+    /// <c>version_records.storage_bytes</c>. Written at publish time by
+    /// <c>PackageService.PublishAsync</c> (D10 — a real persisted column, not a
+    /// runtime filesystem stat).
+    /// </summary>
+    [JsonPropertyName("storageBytes")]
+    public long StorageBytes { get; set; }
+
+    /// <summary>
+    /// Registry-wide download totals (all-time total and last-24h rolling count).
+    /// Derived from closed hourly rollups plus the current open bucket.
+    /// </summary>
+    [JsonPropertyName("downloads")]
+    public AdminDownloadsSummary Downloads { get; set; } = new();
+
+    /// <summary>
+    /// Recent activity counts for publishes, unpublishes, and deprecations over the
+    /// rolling 24-hour window, derived from the audit log's <c>allow</c> entries.
+    /// </summary>
+    [JsonPropertyName("activity")]
+    public AdminActivitySummary Activity { get; set; } = new();
 }
 
 /// <summary>

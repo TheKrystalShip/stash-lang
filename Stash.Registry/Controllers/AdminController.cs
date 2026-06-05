@@ -13,6 +13,7 @@ using Stash.Registry.Contracts;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services;
+using Stash.Registry.Services.Metrics;
 
 namespace Stash.Registry.Controllers;
 
@@ -38,6 +39,7 @@ public class AdminController : ControllerBase
     private readonly AuditService _auditService;
     private readonly PackageRoleService _roleService;
     private readonly RegistryConfig _config;
+    private readonly IDownloadMetricsStore _metricsStore;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -47,24 +49,72 @@ public class AdminController : ControllerBase
         IAuthProvider authProvider,
         AuditService auditService,
         PackageRoleService roleService,
-        RegistryConfig config)
+        RegistryConfig config,
+        IDownloadMetricsStore metricsStore)
     {
         _db = db;
         _authProvider = authProvider;
         _auditService = auditService;
         _roleService = roleService;
         _config = config;
+        _metricsStore = metricsStore;
     }
 
     /// <summary>
-    /// Returns high-level registry statistics.
+    /// Returns high-level registry statistics including storage bytes, download totals,
+    /// and recent publish/unpublish/deprecation activity.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Download totals follow the D8 read-model contract: closed hourly rollups are
+    /// authoritative; the current open bucket is computed from raw <c>download_events</c>
+    /// and added.
+    /// </para>
+    /// <para>
+    /// Activity counts are derived from audit-log entries with <c>decision = "allow"</c>
+    /// over a rolling 24-hour window.  Publish counts include both <c>package.create</c>
+    /// (first publish) and <c>package.publish</c> (subsequent versions).  Deprecation
+    /// counts sum <c>package.deprecate</c> and <c>version.deprecate</c>.
+    /// </para>
+    /// </remarks>
     [RegistryAuthorize(RegistryAction.ReadAdminStats)]
     [HttpGet("stats")]
     public async Task<Ok<StatsResponse>> GetStats()
     {
-        int users = (await _db.ListUsersAsync()).Count;
-        return TypedResults.Ok(new StatsResponse { Users = users });
+        DateTime now     = DateTime.UtcNow;
+        DateTime since24h = now - TimeSpan.FromHours(24);
+
+        int  users        = (await _db.ListUsersAsync()).Count;
+        int  packages     = await _db.CountAllPackagesAsync();
+        int  versions     = await _db.CountAllVersionsAsync();
+        long storageBytes = await _db.GetTotalStorageBytesAsync();
+
+        var (dlTotal, dlLast24h) =
+            await _metricsStore.GetRegistryDownloadTotalsAsync(now);
+
+        int publishes = await _db.CountAuditEntriesByActionSinceAsync(
+            new[] { AuditActions.PackageCreate, AuditActions.PackagePublish }, since24h);
+
+        int unpublishes = await _db.CountAuditEntriesByActionSinceAsync(
+            new[] { AuditActions.PackageUnpublish }, since24h);
+
+        int deprecations = await _db.CountAuditEntriesByActionSinceAsync(
+            new[] { AuditActions.PackageDeprecate, AuditActions.VersionDeprecate }, since24h);
+
+        return TypedResults.Ok(new StatsResponse
+        {
+            Users        = users,
+            Packages     = packages,
+            Versions     = versions,
+            StorageBytes = storageBytes,
+            Downloads    = new AdminDownloadsSummary { Total = dlTotal, Last24h = dlLast24h },
+            Activity     = new AdminActivitySummary
+            {
+                PublishesLast24h     = publishes,
+                UnpublishesLast24h   = unpublishes,
+                DeprecationsLast24h  = deprecations,
+            },
+        });
     }
 
     /// <summary>
@@ -209,6 +259,42 @@ public class AdminController : ControllerBase
             Page = query.page,
             PageSize = query.pageSize,
             TotalPages = totalPages
+        });
+    }
+
+    /// <summary>
+    /// Returns the top packages by download count over a configurable rolling window.
+    /// Packages are ordered descending by download count for the requested window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Uses the same read-model contract as the per-package metrics endpoints: closed
+    /// hourly rollups are authoritative; the current open bucket is computed from raw
+    /// <c>download_events</c> and added to avoid double-counting.
+    /// </para>
+    /// <para>
+    /// Requires an <c>admin</c>-ceiling JWT with an admin token ceiling and admin role.
+    /// The class-level <c>[Authorize]</c> handles authentication; this action carries
+    /// <c>[RegistryAuthorize(RegistryAction.ReadAdminStats)]</c> for PDP dispatch.
+    /// </para>
+    /// </remarks>
+    [RegistryAuthorize(RegistryAction.ReadAdminStats)]
+    [HttpGet("metrics/downloads")]
+    public async Task<Ok<PagedResponse<TopPackageDownloadsEntry>>> GetDownloadsMetrics([FromQuery] TopPackagesQuery query)
+    {
+        DateTime now = DateTime.UtcNow;
+        var (entries, totalCount) = await _metricsStore.GetTopPackagesAsync(
+            query.windowDays, query.page, query.pageSize, now);
+
+        int totalPages = (int)Math.Ceiling(totalCount / (double)query.pageSize);
+
+        return TypedResults.Ok(new PagedResponse<TopPackageDownloadsEntry>
+        {
+            Items      = entries,
+            TotalCount = totalCount,
+            Page       = query.page,
+            PageSize   = query.pageSize,
+            TotalPages = totalPages,
         });
     }
 }

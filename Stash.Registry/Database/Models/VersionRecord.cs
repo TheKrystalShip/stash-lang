@@ -50,4 +50,11 @@ public sealed class VersionRecord
 
     /// <summary>The username of the user who deprecated this version, or <c>null</c> if not deprecated.</summary>
     public string? DeprecatedBy { get; set; }
+
+    /// <summary>
+    /// The size in bytes of the published tarball, written at publish time from the
+    /// in-memory tarball buffer (D10). NOT a runtime filesystem stat — it is a
+    /// persisted column that can be summed for storage-bytes accounting.
+    /// </summary>
+    public long StorageBytes { get; set; }
 }

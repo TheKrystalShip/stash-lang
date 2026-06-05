@@ -1,0 +1,59 @@
+schema_version: 1
+feature: registry-download-metrics
+current: null
+updated: "2026-06-05T13:48:29Z"
+phases:
+  M1:
+    status: done
+    commit: 4f9b5e0091f06f7426a83e533abfad42ecd7c0af
+    verified: true
+    started: "2026-06-05T09:03:47Z"
+    completed: "2026-06-05T09:29:28Z"
+    attempts: 1
+    notes: "M1 complete + fix: ConfigurationBinder catch for illegal IpMode, secret path sibling to DB dir, 48 tests green"
+  M2:
+    status: done
+    commit: bc44c589a9698595b81fad23a223ac496bf5d003
+    verified: true
+    started: "2026-06-05T09:32:37Z"
+    completed: "2026-06-05T09:44:20Z"
+    attempts: 1
+    notes: "Schema (download_events, rollup tables, storage_bytes column) + publish write + admin stats read, 79 tests green"
+  M3:
+    status: done
+    commit: 98439efcebf7efd850177a4d2fe4c662281284ad
+    verified: true
+    started: "2026-06-05T09:59:40Z"
+    completed: "2026-06-05T10:14:04Z"
+    attempts: 1
+    notes: "M3 complete: IDownloadEventQueue (bounded Channel), MetricsBackgroundService (own scope per batch), DownloadVersion OnCompleted enqueue (200 only), 22 tests green, NoMagicRemoteIpAccessMetaTests GREEN with doc comments corrected"
+  M4:
+    status: done
+    commit: 0775ca8ea9548eb22c737c89c28f821b011ad3a3
+    verified: true
+    started: "2026-06-05T10:15:13Z"
+    completed: "2026-06-05T10:33:55Z"
+    attempts: 1
+    notes: "M4 complete + fix: RollupAsync (hourly+daily, closed-bucket only, skip-already-rolled) + SweepRetentionAsync (RetentionDays<=0 no-op), deferred first pass to avoid OpenAPI build regression, 20 tests green"
+  M5:
+    status: done
+    commit: 9e496091eef89033841b70f8da67a6d525e88813
+    verified: true
+    started: "2026-06-05T10:35:20Z"
+    completed: "2026-06-05T11:26:04Z"
+    attempts: 1
+    notes: "M5 complete + fix: body string mirrors GetPackage (indistinguishability), visibility test asserts 404+not-found text+no-message field; 150 tests green"
+  M6:
+    status: done
+    commit: c2515b87664765954b9157cbad76728f854a6aa9
+    verified: true
+    started: "2026-06-05T11:27:53Z"
+    completed: "2026-06-05T11:49:08Z"
+    attempts: 1
+    notes: "M6 complete: discovery Metrics=true, StatsResponse+downloads+activity, AdminStatsExpandedTests, AuditActions bounded-domain constants, OpenApiCoverageMetaTests green 53 tests"
+review:
+  status: resolved
+  started: "2026-06-05T12:05:55Z"
+  resolved: "2026-06-05T13:48:29Z"
+  findings_open: 0
+  findings_fixed: 0

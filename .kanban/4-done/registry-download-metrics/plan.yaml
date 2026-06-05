@@ -54,12 +54,20 @@ phases:
       - "`IpHasher.Apply(IPAddress?)` returns the raw string for `raw`, the IPv4-/24 / IPv6-/64 prefix for `truncated`, a 32-char hex HMAC-SHA256 hash for `hashed`, and `null` for `off`."
       - "The HMAC secret persists across registry restarts (auto-generated once on first run if missing, written to disk, logged warning naming the file)."
       - "`IIpHasher` registered in DI as a singleton; `RegistryConfig` exposes the new `Metrics` section."
-      - "`NoMagicRemoteIpAccessMetaTests` ships RED with an exemption list seeded with the current call sites that read `HttpContext.Connection.RemoteIpAddress` directly (the ~7 existing callers); the list shrinks across M3/later phases. Ships a self-test (a fixture that should trip it, and does) and a binding-floor / file-count floor per CLAUDE.md Roslyn-determinism rule."
+      - "`NoMagicRemoteIpAccessMetaTests` ships green-enforcing with an exemption list seeded with the files that currently read `HttpContext.Connection.RemoteIpAddress` directly: `IpHasher.cs` (the permanent transform home) plus 6 legitimate non-metrics readers — auth/admin audit, rate-limit keying, authz audit. The 6 non-`IpHasher` files are PERMANENT exemptions (their reads keep the raw IP and are out of every phase's scope); the list does NOT shrink to a single entry. Ships a positive self-test (a fixture that trips it, and does), a negative self-test, and a binding-floor / file-count floor per CLAUDE.md Roslyn-determinism rule."
     notes: |
       The `NoMagicRemoteIpAccessMetaTests` exemption list is the omission guard for the
       cross-cutting IP-transform concern. It MUST land in M1 with a seeded list (NOT
-      empty); M3 / M6 will shrink it. A final-phase RED-from-empty would mean every
-      prior phase merged with the invariant unenforced.
+      empty). The 6 non-`IpHasher` entries are PERMANENT — they are legitimate
+      non-metrics raw-IP readers (audit/rate-limit/authz) that keep the raw IP and are
+      out of every phase's scope; the list does NOT shrink to a single entry. M3 routes
+      only the DownloadVersion metrics read through `IIpHasher` and adds no new
+      unexempted reader. KNOWN LIMITATION (file-level granularity): because
+      `PackagesController.cs` stays exempt for its 8 audit reads, this meta-test cannot
+      catch a future raw-IP regression inside the DownloadVersion metrics path itself —
+      that path's compliance is proven by `DownloadCaptureSemanticsTests` (asserts
+      `download_events.ip` is populated through `IIpHasher`). See backlog stub
+      `registry-no-magic-ip-file-level-granularity.md`.
 
   - id: M2
     title: Schema (download_events + rollups) + storage_bytes column with publish-path write/read
@@ -111,7 +119,7 @@ phases:
       - "`PackagesController.DownloadVersion` enqueues exactly one event AT SUCCESSFUL RESPONSE COMPLETION when status is 200 and the stream wrote to completion."
       - "A 404 (missing version), a `VisibilityHidden` 404 (anonymous on a private package), and a simulated mid-stream disconnect each enqueue ZERO events (asserted by `DownloadCaptureSemanticsTests`)."
       - "After draining: `download_events` carries one row per successful download, with `ip` populated through `IIpHasher.Apply(...)` — never read via direct `HttpContext.Connection.RemoteIpAddress`."
-      - "`NoMagicRemoteIpAccessMetaTests` exemption list shrinks to a single entry: `IpHasher.cs`."
+      - "`NoMagicRemoteIpAccessMetaTests` stays GREEN: the `DownloadVersion` capture path reads IP only via `IIpHasher.Apply(...)` (it adds no new direct `RemoteIpAddress` read), and the exemption list retains `IpHasher.cs` plus the 6 PERMANENT non-metrics readers — it does NOT shrink to a single entry (file-level granularity; see plan notes + backlog stub). Metrics-path IP compliance is proven by `DownloadCaptureSemanticsTests` asserting `download_events.ip` is populated through `IIpHasher`. The meta-test's XML doc comments are corrected in this phase to drop the now-removed 'shrinks to only IpHasher.cs by M3' claim."
 
   - id: M4
     title: Hourly rollup + nightly raw-event retention sweep
@@ -129,7 +137,7 @@ phases:
       - "Hourly rollup pass aggregates closed `download_events` buckets into `download_rollup_hourly` (and daily rollup into `download_rollup_daily`)."
       - "Nightly retention sweep deletes raw rows older than `Raw.RetentionDays` (default 30d)."
       - "After running rollup over a known input set, SUM(downloads) across rollups equals the seeded raw-event count for closed buckets; the current open bucket is excluded from rollup writes."
-      - "Retention sweep with `RetentionDays=0` is a no-op (raw capture disabled)."
+      - "Retention sweep with `RetentionDays<=0` is a no-op (only the sweep is disabled; raw capture is unaffected — there is no capture kill-switch yet, see backlog registry-metrics-capture-killswitch.md)."
 
   - id: M5
     title: Package + version + admin top-packages metrics endpoints (visibility-gated)

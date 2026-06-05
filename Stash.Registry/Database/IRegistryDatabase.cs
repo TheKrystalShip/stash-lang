@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stash.Registry.Contracts;
@@ -537,12 +538,41 @@ public interface IRegistryDatabase
         string? owner = null,
         PackageSortOrder sort = PackageSortOrder.Relevance);
 
+    // Metrics operations (M2 — storage bytes)
+
+    /// <summary>
+    /// Returns the total number of packages registered in the registry.
+    /// Returns <c>0</c> when no packages exist.
+    /// </summary>
+    Task<int> CountAllPackagesAsync();
+
+    /// <summary>
+    /// Returns the total number of published version records across all packages.
+    /// Returns <c>0</c> when no versions exist.
+    /// </summary>
+    Task<int> CountAllVersionsAsync();
+
+    /// <summary>
+    /// Returns the sum of <c>storage_bytes</c> across all version records.
+    /// Returns <c>0</c> when no versions exist.
+    /// </summary>
+    Task<long> GetTotalStorageBytesAsync();
+
     // Audit operations
     /// <summary>
     /// Appends a new audit entry to the audit log.
     /// </summary>
     /// <param name="entry">The <see cref="AuditEntry"/> to persist.</param>
     Task AddAuditEntryAsync(AuditEntry entry);
+
+    /// <summary>
+    /// Counts audit entries whose <c>Action</c> is in <paramref name="actions"/>,
+    /// <c>Decision = "allow"</c>, and <c>Timestamp &gt;= since</c>.
+    /// </summary>
+    /// <param name="actions">The set of action strings to match (e.g. <c>{ "package.publish", "package.create" }</c>).</param>
+    /// <param name="since">The UTC lower-bound (inclusive) for the timestamp filter.</param>
+    /// <returns>The count of matching audit entries.</returns>
+    Task<int> CountAuditEntriesByActionSinceAsync(IReadOnlyCollection<string> actions, DateTime since);
 
     /// <summary>
     /// Returns a paginated, filtered view of the audit log, ordered by timestamp descending.

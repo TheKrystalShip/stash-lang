@@ -78,6 +78,14 @@ public sealed class DiscoveryEndpointTests : RegistryAuthzTestBase
 
     // ── Bucket-B feature flags are pinned false ──────────────────────────────
 
+    /// <summary>
+    /// Pins the remaining unimplemented (Bucket-B) feature flags to false.
+    /// <c>metrics</c> was removed from this set when it was promoted to Bucket-A
+    /// in the <c>registry-download-metrics</c> feature (M6). The five remaining
+    /// flags (<c>advisories</c>, <c>provenance</c>, <c>signatures</c>,
+    /// <c>trustedPublishing</c>, <c>verifiedPublishers</c>) stay false until their
+    /// respective features ship.
+    /// </summary>
     [Fact]
     public async Task GetDiscovery_BucketBFlags_ArePinnedFalse()
     {
@@ -91,12 +99,34 @@ public sealed class DiscoveryEndpointTests : RegistryAuthzTestBase
         using var doc = JsonDocument.Parse(body);
         var features = doc.RootElement.GetProperty("features");
 
-        Assert.False(features.GetProperty("metrics").GetBoolean(),        "metrics must be false (Bucket-B).");
         Assert.False(features.GetProperty("advisories").GetBoolean(),     "advisories must be false (Bucket-B).");
         Assert.False(features.GetProperty("provenance").GetBoolean(),     "provenance must be false (Bucket-B).");
         Assert.False(features.GetProperty("signatures").GetBoolean(),     "signatures must be false (Bucket-B).");
         Assert.False(features.GetProperty("trustedPublishing").GetBoolean(), "trustedPublishing must be false (Bucket-B).");
         Assert.False(features.GetProperty("verifiedPublishers").GetBoolean(), "verifiedPublishers must be false (Bucket-B).");
+    }
+
+    // ── Metrics feature flag is true (Bucket-A) ──────────────────────────────
+
+    /// <summary>
+    /// Pins <c>features.metrics = true</c> now that the <c>registry-download-metrics</c>
+    /// feature is complete (M6 acceptance criterion 7).
+    /// </summary>
+    [Fact]
+    public async Task GetDiscovery_MetricsFlag_IsTrue()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client = ctx.Factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/.well-known/registry");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var features = doc.RootElement.GetProperty("features");
+
+        Assert.True(features.GetProperty("metrics").GetBoolean(),
+            "features.metrics must be true — the download-metrics feature is complete (M6).");
     }
 
     // ── Bucket-A feature flags are true ─────────────────────────────────────

@@ -962,4 +962,82 @@ public sealed class SqliteDatabaseTests
         Assert.Equal("user",   default(UserRoles).ToWire());    // users.role         DEFAULT 'user'
         Assert.Equal("member", default(OrgRoles).ToWire());     // org_members.org_role DEFAULT 'member'
     }
+
+    // ── M2: Download metrics schema ────────────────────────────────────
+
+    /// <summary>
+    /// <c>EnsureCreated</c> creates the three new M2 tables
+    /// (<c>download_events</c>, <c>download_rollup_hourly</c>, <c>download_rollup_daily</c>)
+    /// and the <c>versions.storage_bytes</c> column without error.
+    /// </summary>
+    [Fact]
+    public async Task Initialize_CreatesDownloadMetricsTables()
+    {
+        var db = CreateTestDb();
+
+        // If EnsureCreated succeeded, we can enumerate the tables via sqlite_master.
+        using var conn = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        var opts = new DbContextOptionsBuilder<RegistryDbContext>().UseSqlite(conn).Options;
+        using var ctx = new RegistryDbContext(opts);
+        ctx.Database.EnsureCreated();
+
+        var tableNames = new System.Collections.Generic.List<string>();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                tableNames.Add(reader.GetString(0));
+        }
+
+        Assert.Contains("download_events", tableNames);
+        Assert.Contains("download_rollup_hourly", tableNames);
+        Assert.Contains("download_rollup_daily", tableNames);
+
+        // Verify storage_bytes column exists on versions table
+        string? versionsDdl = null;
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT sql FROM sqlite_master WHERE type='table' AND name='versions'";
+            versionsDdl = await cmd.ExecuteScalarAsync() as string;
+        }
+
+        Assert.NotNull(versionsDdl);
+        Assert.Contains("storage_bytes", versionsDdl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// <c>GetTotalStorageBytesAsync</c> returns 0 when no versions exist.
+    /// Guards the NULL-safe SUM pattern (SUM over empty table returns NULL in SQL).
+    /// </summary>
+    [Fact]
+    public async Task GetTotalStorageBytes_NoVersions_ReturnsZero()
+    {
+        var db = CreateTestDb();
+
+        long total = await db.GetTotalStorageBytesAsync();
+
+        Assert.Equal(0L, total);
+    }
+
+    /// <summary>
+    /// <c>GetTotalStorageBytesAsync</c> sums <c>storage_bytes</c> across all versions.
+    /// </summary>
+    [Fact]
+    public async Task GetTotalStorageBytes_MultipleVersions_ReturnsSum()
+    {
+        var db = CreateTestDb();
+        await db.CreatePackageAsync(MakePackage("@scope/pkg-bytes"));
+        var v1 = MakeVersion("@scope/pkg-bytes", "1.0.0");
+        v1.StorageBytes = 1000L;
+        var v2 = MakeVersion("@scope/pkg-bytes", "2.0.0");
+        v2.StorageBytes = 2500L;
+        await db.AddVersionAsync("@scope/pkg-bytes", v1);
+        await db.AddVersionAsync("@scope/pkg-bytes", v2);
+
+        long total = await db.GetTotalStorageBytesAsync();
+
+        Assert.Equal(3500L, total);
+    }
 }

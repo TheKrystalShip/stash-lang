@@ -107,7 +107,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "publish",
+            Action = AuditActions.Publish,
             Package = package,
             Version = version,
             User = user,
@@ -121,7 +121,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "unpublish",
+            Action = AuditActions.Unpublish,
             Package = package,
             Version = version,
             User = user,
@@ -235,7 +235,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "package.deprecate",
+            Action = AuditActions.PackageDeprecate,
             Package = package,
             User = user,
             Decision = "allow",
@@ -248,7 +248,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "package.undeprecate",
+            Action = AuditActions.PackageUndeprecate,
             Package = package,
             User = user,
             Decision = "allow",
@@ -261,7 +261,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "version.deprecate",
+            Action = AuditActions.VersionDeprecate,
             Package = package,
             Version = version,
             User = user,
@@ -275,7 +275,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = "version.undeprecate",
+            Action = AuditActions.VersionUndeprecate,
             Package = package,
             Version = version,
             User = user,
