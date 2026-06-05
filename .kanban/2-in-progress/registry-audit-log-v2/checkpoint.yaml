@@ -1,7 +1,7 @@
 schema_version: 1
 feature: registry-audit-log-v2
 current: null
-updated: "2026-06-05T20:27:48Z"
+updated: "2026-06-05T21:26:03Z"
 phases:
   A1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: AuditChainHasher canonical serializer (fixed-field JSON); process-global SemaphoreSlim write lock; HMAC-SHA256/SHA-256 chain; disabled-on genesis handling; retention-window anchor in verify walker; AuditVerifyResponse DTO; VerifyAuditLog endpoint; 22 new tests
   A7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 9584b98ab97267f2bb030287049e82efe61d3647
+    verified: true
+    started: "2026-06-05T20:51:59Z"
+    completed: "2026-06-05T21:26:03Z"
+    attempts: 1
+    notes: Audit=true in DiscoveryFeatures; Admin_ExportAuditLog joins permanent stream exemption; Admin_VerifyAuditLog carries full schema (no exemption); snapshot diff purely additive (A3+A4+A6+A7 deltas only); docs updated
 review:
   status: not_started
   started: null
