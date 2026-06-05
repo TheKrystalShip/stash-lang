@@ -677,15 +677,6 @@ public sealed class AuditTamperEvidenceTests : IDisposable
         Assert.Equal(firstId, genesisId);
     }
 
-    // ── enabled → disabled → enabled (F02) ───────────────────────────────────
-
-    /// <summary>
-    /// Validates the implemented "bridged chain" contract: when tamper-evidence is
-    /// enabled, then disabled (writing null-hash entries), then re-enabled, the re-enabled
-    /// entries link to the most recent hashed entry rather than starting a new genesis.
-    /// The walker verifies one continuous chain anchored at the original genesis and ignores
-    /// the null-hash gap written during the disabled period.
-    /// </summary>
     // ── F04: strict base64 validation at construction ─────────────────────────
 
     [Fact]
@@ -722,6 +713,15 @@ public sealed class AuditTamperEvidenceTests : IDisposable
         Assert.False(hasher.IsEnabled);
     }
 
+    // ── enabled → disabled → enabled (F02) ───────────────────────────────────
+
+    /// <summary>
+    /// Validates the implemented "bridged chain" contract: when tamper-evidence is
+    /// enabled, then disabled (writing null-hash entries), then re-enabled, the re-enabled
+    /// entries link to the most recent hashed entry rather than starting a new genesis.
+    /// The walker verifies one continuous chain anchored at the original genesis and ignores
+    /// the null-hash gap written during the disabled period.
+    /// </summary>
     [Fact]
     public async Task TamperEvidence_EnabledDisabledEnabled_BridgesChainAcrossGap()
     {

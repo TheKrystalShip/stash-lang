@@ -537,7 +537,7 @@ public sealed class AuditLogControllerTests
     /// <c>enabled=true, valid=true, checkedCount&gt;=3</c> after seeding 3 publish entries.
     /// Registration/login events are also hashed (factory enables tamper-evidence globally), so
     /// checkedCount includes more than the 3 seeded entries.
-    /// This is the end-to-end HTTP-level proof that the controller calls <see cref="AuditChainHasher.WalkChain"/>
+    /// This is the end-to-end HTTP-level proof that the controller calls <see cref="AuditChainHasher.WalkChainAsync"/>
     /// (the same walker exercised by the unit tests in <c>AuditTamperEvidenceTests</c>).
     /// </summary>
     [Fact]

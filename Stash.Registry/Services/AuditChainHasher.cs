@@ -192,7 +192,7 @@ public sealed class AuditChainHasher
 
     /// <summary>
     /// The result of walking the tamper-evidence chain, as returned by
-    /// <see cref="WalkChain"/>.
+    /// <see cref="WalkChainAsync"/>.
     /// </summary>
     public sealed record ChainWalkResult(bool Valid, int? FirstBrokenId, int? GenesisId, int CheckedCount);
 
