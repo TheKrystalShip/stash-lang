@@ -6,21 +6,32 @@ using System.Threading.Tasks;
 using Stash.Runtime;
 
 /// <summary>
-/// Type-erased synchronous method invoker baked at registration time.
+/// Type-erased synchronous method marshaller baked at registration time.
 /// The first argument is the live CLR target (typed as <c>object</c>); the second is the
 /// Stash-value arguments array (NOT including the target).
-/// Returns the raw CLR result (<c>object?</c>) — return-value marshalling to
-/// <see cref="Stash.Runtime.StashValue"/> is handled by
-/// <see cref="InvokeHostDelegate.InvokeMethod"/> after the call, so it has access to the
-/// full host registration map for wrapping registered CLR instances as
-/// <see cref="HostHandle"/> values.
+/// Returns a <c>(object?[] clrArgs, Delegate handler)</c> tuple: the marshalled CLR argument
+/// array (target at index 0, marshalled Stash args at indices 1..N) and the original registered
+/// delegate. <see cref="InvokeHostDelegate.InvokeMethod"/> performs the actual
+/// <c>handler.DynamicInvoke(clrArgs)</c> inside its try/catch — that call site is the
+/// <b>structural chokepoint</b> for CLR-exception → <see cref="Stash.Runtime.Errors.HostError"/>
+/// mapping.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Reflection to determine parameter types happens ONCE at host setup (registration time),
 /// never in the VM hot path. This is the same "reflection at setup, delegates at call time"
 /// pattern approved in the brief's Q1 async-method delegate-signature note.
+/// </para>
+/// <para>
+/// <b>Structural chokepoint contract.</b> The <c>Invoke</c> field on
+/// <see cref="HostMemberDescriptor"/> MUST be dereferenced ONLY by
+/// <see cref="InvokeHostDelegate.InvokeMethod"/>. Calling the closure directly bypasses
+/// the CLR-exception → <see cref="Stash.Runtime.Errors.HostError"/> mapping that the
+/// chokepoint's try/catch enforces — and, since the closure no longer calls
+/// <c>DynamicInvoke</c> itself, would not even invoke the registered handler.
+/// </para>
 /// </remarks>
-internal delegate object? HostMethodInvoker(object target, StashValue[] stashArgs);
+internal delegate (object?[] clrArgs, Delegate handler) HostMethodInvoker(object target, StashValue[] stashArgs);
 
 /// <summary>
 /// Type-erased async method invoker baked at registration time.
@@ -36,6 +47,16 @@ internal delegate object? HostMethodInvoker(object target, StashValue[] stashArg
 /// mapped to <see cref="Stash.Runtime.Errors.HostError"/> by the baked closure so that
 /// <c>StashFuture.GetResult()</c>'s <c>catch(RuntimeError){throw;}</c> surfaces them intact.
 /// </summary>
+/// <remarks>
+/// <b>Convention-enforced chokepoint.</b> The <c>AsyncInvoke</c> field on
+/// <see cref="HostMemberDescriptor"/> MUST be dereferenced ONLY by
+/// <see cref="InvokeHostDelegate.InvokeAsyncMethod"/>. Calling the closure directly bypasses
+/// the CLR-exception → <see cref="Stash.Runtime.Errors.HostError"/> mapping (the
+/// CancellationToken-linked CTS setup, the sync-throw-at-start catch, and the bridge-task
+/// fault mapping) that the chokepoint provides. This is a convention — not structural —
+/// because the async closure performs the <c>DynamicInvoke</c> + <c>await</c> itself,
+/// requiring the CancellationToken and task-bridging logic to remain inside the closure.
+/// </remarks>
 internal delegate Task<object?> HostAsyncMethodInvoker(object target, StashValue[] stashArgs, System.Threading.CancellationToken ct);
 
 /// <summary>
@@ -44,15 +65,18 @@ internal delegate Task<object?> HostAsyncMethodInvoker(object target, StashValue
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>Invoke</c>: baked synchronous method invoker, non-null for
+/// <c>Invoke</c>: baked synchronous method marshaller, non-null for
 /// <see cref="HostMemberKind.Method"/>. Signature:
-/// <c>(object target, StashValue[] stashArgs) → object?</c>.
+/// <c>(object target, StashValue[] stashArgs) → (object?[] clrArgs, Delegate handler)</c>.
+/// The closure marshals Stash args to CLR types; <see cref="InvokeHostDelegate.InvokeMethod"/>
+/// performs the actual <c>DynamicInvoke</c> — that call site is the structural chokepoint.
 /// </para>
 /// <para>
 /// <c>AsyncInvoke</c>: baked asynchronous method invoker, non-null for
 /// <see cref="HostMemberKind.AsyncMethod"/>. Signature:
 /// <c>(object target, StashValue[] stashArgs, CancellationToken) → Task&lt;object?&gt;</c>.
-/// The task resolves with a marshalled <see cref="StashValue"/> boxed as <c>object?</c>.
+/// The task resolves with the raw CLR return value. <b>Must be dereferenced only by
+/// <see cref="InvokeHostDelegate.InvokeAsyncMethod"/>.</b>
 /// </para>
 /// <para>
 /// <c>MethodArity</c>: Stash-visible argument count (parameter count minus the target,

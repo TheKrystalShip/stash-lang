@@ -173,14 +173,19 @@ public sealed class HostTypeBuilder<T> where T : class
         string typeName   = typeof(T).Name;
         string memberName = name;
 
-        // Bake the invoker closure.
+        // Bake the marshaller closure.
+        // This closure marshals Stash args to CLR types and returns
+        // (clrArgs, handler) — the structural chokepoint InvokeHostDelegate.InvokeMethod
+        // performs the actual DynamicInvoke(clrArgs) inside its own try/catch, making it
+        // the sole call site for invoking the registered delegate.
+        //
         // Per-arg marshalling (StashValue → expected CLR type) produces "arg N to T.m: ..."
         // messages when conversion fails, satisfying the P3 done_when requirement.
         //
-        // DynamicInvoke is used here because the delegate's parameter types are only known
-        // at registration time. This is acceptable in Stash.Hosting (an embedding host SDK
-        // for managed-JIT consumers — not the VM dispatch loop or a NAOT-published binary
-        // path). The per-arg marshalling above ensures type errors surface before DynamicInvoke.
+        // DynamicInvoke is used by the chokepoint because the delegate's parameter types are
+        // only known at registration time. This is acceptable in Stash.Hosting (an embedding
+        // host SDK for managed-JIT consumers — not the VM dispatch loop or a NAOT-published
+        // binary path). The per-arg marshalling ensures type errors surface before DynamicInvoke.
         HostMethodInvoker baked = (target, stashArgs) =>
         {
             // Marshal each Stash arg to the expected CLR type.
@@ -201,12 +206,11 @@ public sealed class HostTypeBuilder<T> where T : class
                 }
             }
 
-            // Invoke the typed delegate with the marshalled args.
-            // Return the raw CLR result — InvokeHostDelegate.InvokeMethod handles
-            // return-value marshalling using the full host registrations map, which
-            // correctly wraps registered CLR instances as HostHandle values.
-            // Any CLR exception from the body is caught by InvokeHostDelegate.InvokeMethod.
-            return handler.DynamicInvoke(clrArgs);
+            // Return the marshalled args and the original handler.
+            // InvokeHostDelegate.InvokeMethod performs the actual DynamicInvoke(clrArgs)
+            // inside its try/catch — that is the structural chokepoint for CLR-exception
+            // → HostError mapping.
+            return (clrArgs, handler);
         };
 
         _members[name] = new HostMemberDescriptor(

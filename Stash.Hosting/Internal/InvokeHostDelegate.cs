@@ -19,10 +19,30 @@ using Stash.Runtime.Types;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Construct-lite chokepoint.</b> No other code in <c>Stash.Hosting</c> may invoke
-/// a registered delegate directly. This design mirrors the MVP's <c>HostMarshaller</c>
-/// pattern: the wrapping try/catch cannot be skipped because there is no other API to
-/// call a delegate through.
+/// <b>Construct-lite chokepoint.</b> No API in <c>Stash.Hosting</c> reachable today
+/// invokes a registered host delegate other than through this class. This design mirrors
+/// the MVP's <c>HostMarshaller</c> pattern: the wrapping try/catch cannot be bypassed
+/// without inventing a parallel invoker.
+/// </para>
+/// <para>
+/// <b>Structural guarantee (sync method dispatch).</b>
+/// <see cref="InvokeMethod"/> is the <em>only</em> call site for
+/// <c>Delegate.DynamicInvoke</c> on a registered sync method handler.
+/// The <see cref="HostMethodInvoker"/> closure stored on the descriptor marshals Stash
+/// args to CLR types and returns <c>(object?[] clrArgs, Delegate handler)</c>; it does
+/// not itself call <c>DynamicInvoke</c>. Calling the closure directly therefore does not
+/// invoke the registered handler and bypasses nothing — the chokepoint is structural.
+/// </para>
+/// <para>
+/// <b>Convention-enforced chokepoint (async method, getter, setter dispatch).</b>
+/// For <see cref="InvokeAsyncMethod"/>, <see cref="InvokeGetter"/>, and
+/// <see cref="InvokeSetter"/> the property holds today because the descriptor's
+/// <c>AsyncInvoke</c>, <c>Getter</c>, and <c>Setter</c> fields are dereferenced only here.
+/// The async closure performs its own <c>DynamicInvoke</c> + <c>await</c> internally
+/// (it needs CancellationToken threading and task-bridging that cannot be extracted to
+/// a simple tuple return), so the structural guarantee cannot be applied there without
+/// substantially rewriting the bridge. See <see cref="HostAsyncMethodInvoker"/> for the
+/// convention contract.
 /// </para>
 /// <para>
 /// <b>Exception mapping.</b> Any <see cref="Exception"/> that escapes the delegate is
@@ -91,17 +111,20 @@ internal static class InvokeHostDelegate
     }
 
     /// <summary>
-    /// Invokes a baked method invoker on <paramref name="target"/> with the given
+    /// Invokes a registered sync method delegate on <paramref name="target"/> with the given
     /// Stash arguments and returns the marshalled result.
     /// </summary>
     /// <remarks>
-    /// This is the <b>only</b> place in <c>Stash.Hosting</c> that executes a registered
-    /// method delegate — maintaining the Construct-lite chokepoint for method dispatch.
-    /// Arg-marshalling errors (kind = <see cref="HostError"/>) are thrown before reaching
-    /// this method (inside the baked invoker created in
-    /// <see cref="HostTypeBuilder{T}.Method"/>). Any CLR exception from the <em>body</em>
-    /// of the delegate that escapes the baked closure is caught here and re-thrown as a
-    /// <see cref="HostError"/>, preserving the call-site span.
+    /// This is the <b>only</b> call site for <c>Delegate.DynamicInvoke</c> on a registered
+    /// sync method handler — maintaining the structural Construct-lite chokepoint.
+    /// The <see cref="HostMethodInvoker"/> closure marshals args and returns
+    /// <c>(object?[] clrArgs, Delegate handler)</c>; this method performs
+    /// <c>handler.DynamicInvoke(clrArgs)</c> inside its own try/catch so CLR exceptions
+    /// from the delegate body are structurally guaranteed to be converted to
+    /// <see cref="HostError"/>.
+    /// Arg-marshalling errors (kind = <see cref="HostError"/>) are thrown synchronously
+    /// from the closure (before this method's try/catch); they propagate as-is via
+    /// <c>catch (RuntimeError) { throw; }</c>.
     /// </remarks>
     /// <param name="invoker">The baked method invoker from the descriptor.</param>
     /// <param name="target">The live CLR host object (first delegate parameter).</param>
@@ -130,11 +153,17 @@ internal static class InvokeHostDelegate
         System.Runtime.CompilerServices.ConditionalWeakTable<object,
             HostTypeRegistration>?                                      observedTargets = null)
     {
-        object? rawResult;
+        // Step 1: marshal Stash args to CLR args (arg-marshalling errors throw HostError here).
+        // The closure does NOT call DynamicInvoke — it returns (clrArgs, handler) so that
+        // this method is the ONLY call site for DynamicInvoke on a registered handler.
+        var (clrArgs, handler) = invoker(target, stashArgs);
 
+        // Step 2: invoke the registered delegate — the structural chokepoint.
+        // Any CLR exception from the handler body is caught and mapped to HostError below.
+        object? rawResult;
         try
         {
-            rawResult = invoker(target, stashArgs);
+            rawResult = handler.DynamicInvoke(clrArgs);
         }
         catch (RuntimeError)
         {
