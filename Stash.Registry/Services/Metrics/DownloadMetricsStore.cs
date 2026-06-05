@@ -145,6 +145,11 @@ public sealed class DownloadMetricsStore : IDownloadMetricsStore
         // Include all closed events (ts < currentDayStart) in the daily rollup.
         // Events in closed hours but today (ts >= currentDayStart) are NOT yet
         // in a closed day bucket; skip them for daily rollup now.
+        // NOTE: daily rollup reads directly from raw closed-bucket events — NOT
+        // from hourly rows. Ordering invariant: rollup always runs before the
+        // retention sweep so raw events exist when this query executes (safe with
+        // the default RetentionDays=30; operators setting a very small RetentionDays
+        // should ensure the rollup pass runs before the sweep on the same day).
         var closedDailyEvents = closedEvents
             .Where(e => e.Ts < currentDayStart)
             .ToList();

@@ -9,8 +9,10 @@ namespace Stash.Registry.Database.Models;
 /// <remarks>
 /// <para>
 /// Daily rollup rows are permanent (never subject to retention sweeps). The background
-/// rollup service (<c>MetricsBackgroundService</c>, landed in M4) aggregates hourly
-/// rollup rows into this table as part of the nightly pass.
+/// rollup service aggregates raw <c>download_events</c> (closed-day buckets,
+/// <c>ts &lt; currentDayStart</c>) directly into this table; daily rows are NOT
+/// recomputed from hourly rows — both daily and hourly come from the same raw
+/// closed-bucket projection.
 /// </para>
 /// <para>
 /// The composite primary key is (<see cref="PackageName"/>, <see cref="Version"/>,
