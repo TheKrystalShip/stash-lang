@@ -1,7 +1,7 @@
 schema_version: 1
 feature: host-object-dispatch
 current: null
-updated: "2026-06-05T00:19:18Z"
+updated: "2026-06-05T00:46:49Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "Property dispatch (read/write), InvokeHostDelegate chokepoint, HostError registration, StashError.KindHostError const, HostMarshaller.FromStash<T> HostHandle branch, 11 new tests pass, docs regen green"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b6db63ab833f5093f83d3281934721559b6f9901
+    verified: true
+    started: "2026-06-05T00:20:43Z"
+    completed: "2026-06-05T00:46:49Z"
+    attempts: 1
+    notes: "Sync method dispatch: HostTypeBuilder.Method, HostBoundMethod:IStashCallable, InvokeHostDelegate.InvokeMethod; arity/arg/CLR-exception all surface as HostError; 14 new tests pass"
   P4:
     status: pending
     commit: null
