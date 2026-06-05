@@ -42,6 +42,42 @@ internal static class ChokepointFailPathFixture_HttpClient
         }
         """;
 
+    // ── Known-bad snippet: rogue extension-method calls outside an allowed type ─
+
+    /// <summary>
+    /// A C# snippet containing rogue <c>PostAsJsonAsync</c> and <c>GetFromJsonAsync</c>
+    /// calls OUTSIDE the allowed types. The chokepoint scanner MUST flag both as violations.
+    /// This proves the scan covers the <c>System.Net.Http.Json</c> extension-method surface,
+    /// not just the six methods defined directly on <c>HttpClient</c>.
+    /// </summary>
+    public const string RogueExtensionMethodSnippet = """
+        using System.Net.Http;
+        using System.Net.Http.Json;
+        using System.Threading;
+        using System.Threading.Tasks;
+
+        // RoguePageModel is NOT on the allowed list.
+        public sealed class RoguePageModel
+        {
+            private readonly IHttpClientFactory _factory;
+            public RoguePageModel(IHttpClientFactory factory) => _factory = factory;
+
+            public async Task DoPostAsync(CancellationToken ct)
+            {
+                var client = _factory.CreateClient("Rogue");
+                // PostAsJsonAsync must be flagged as a violation.
+                var response = await client.PostAsJsonAsync("/api/v1/packages", new { Name = "test" }, ct);
+            }
+
+            public async Task DoGetAsync(CancellationToken ct)
+            {
+                var client = _factory.CreateClient("Rogue");
+                // GetFromJsonAsync must be flagged as a violation.
+                var result = await client.GetFromJsonAsync<object>("/api/v1/packages", ct);
+            }
+        }
+        """;
+
     // ── Known-good snippet: SendAsync inside an allowed type ──────────────────
 
     /// <summary>

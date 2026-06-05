@@ -17,8 +17,10 @@ namespace Stash.Tests.Registry.Web;
 /// <remarks>
 /// <para>
 /// <b>Sink set:</b> <c>SendAsync</c>, <c>GetAsync</c>, <c>PostAsync</c>, <c>PutAsync</c>,
-/// <c>PatchAsync</c>, <c>DeleteAsync</c>. These are the HTTP-method call sites on
-/// <see cref="System.Net.Http.HttpClient"/>.
+/// <c>PatchAsync</c>, <c>DeleteAsync</c> (defined directly on <c>HttpClient</c>) plus the
+/// <c>System.Net.Http.Json</c> extension methods <c>PostAsJsonAsync</c>, <c>PutAsJsonAsync</c>,
+/// <c>PatchAsJsonAsync</c>, <c>GetFromJsonAsync</c>, <c>GetStringAsync</c>,
+/// <c>GetByteArrayAsync</c>, <c>GetStreamAsync</c>, and the sync <c>Send</c>.
 /// </para>
 /// <para>
 /// <b>Allowlist (three pinned types):</b>
@@ -36,9 +38,11 @@ namespace Stash.Tests.Registry.Web;
 /// </list>
 /// </para>
 /// <para>
-/// <b>Binding floor:</b> at least one allowed call site must be found and at least
-/// <see cref="MinScannedFiles"/> files must be scanned. A vacuous pass (scan ran nothing)
-/// fails loudly.
+/// <b>Binding floor:</b> at least one allowed call site must be found (general floor) AND
+/// at least one extension-method sink call site must be found in an allowed type
+/// (extension-method floor). Both floors must pass — a vacuous pass (scan ran nothing,
+/// or the extension-method sinks were accidentally removed) fails loudly. At least
+/// <see cref="MinScannedFiles"/> files must be scanned.
 /// </para>
 /// <para>
 /// The scan is purely <b>syntactic</b> — uses
@@ -53,15 +57,44 @@ public sealed class AuthClientChokepointMetaTests
 
     /// <summary>
     /// HTTP-method sink names whose containing class is inspected.
+    /// Includes both the direct <c>HttpClient</c> methods and the idiomatic
+    /// <c>System.Net.Http.Json</c> extension methods.
     /// </summary>
     private static readonly HashSet<string> SinkMethods = new(StringComparer.Ordinal)
     {
+        // Direct HttpClient methods.
         "SendAsync",
         "GetAsync",
         "PostAsync",
         "PutAsync",
         "PatchAsync",
         "DeleteAsync",
+        "Send",
+
+        // System.Net.Http.Json / HttpClient extension methods (idiomatic in ASP.NET Core).
+        "PostAsJsonAsync",
+        "PutAsJsonAsync",
+        "PatchAsJsonAsync",
+        "GetFromJsonAsync",
+        "GetStringAsync",
+        "GetByteArrayAsync",
+        "GetStreamAsync",
+    };
+
+    /// <summary>
+    /// The subset of <see cref="SinkMethods"/> that are extension methods
+    /// (i.e. not defined directly on <c>HttpClient</c>). Used for the
+    /// extension-method binding floor.
+    /// </summary>
+    private static readonly HashSet<string> ExtensionMethodSinks = new(StringComparer.Ordinal)
+    {
+        "PostAsJsonAsync",
+        "PutAsJsonAsync",
+        "PatchAsJsonAsync",
+        "GetFromJsonAsync",
+        "GetStringAsync",
+        "GetByteArrayAsync",
+        "GetStreamAsync",
     };
 
     /// <summary>
@@ -108,11 +141,12 @@ public sealed class AuthClientChokepointMetaTests
 
     // ── Scanner ───────────────────────────────────────────────────────────────
 
-    private static (List<string> Violations, int ScannedFiles, int AllowedCallSitesFound)
+    private static (List<string> Violations, int ScannedFiles, int AllowedCallSitesFound, int ExtensionMethodSinkCallSitesFound)
         ScanDirectory(string sourceDir)
     {
         var violations = new List<string>();
         int allowedCallSitesFound = 0;
+        int extensionMethodSinkCallSitesFound = 0;
 
         var csFiles = Directory.EnumerateFiles(sourceDir, "*.cs", SearchOption.AllDirectories)
             .Where(f =>
@@ -132,10 +166,10 @@ public sealed class AuthClientChokepointMetaTests
             string source = File.ReadAllText(filePath);
             string relativePath = filePath.Substring(sourceDir.Length)
                 .TrimStart(Path.DirectorySeparatorChar, '/');
-            ScanSource(source, relativePath, violations, ref allowedCallSitesFound);
+            ScanSource(source, relativePath, violations, ref allowedCallSitesFound, ref extensionMethodSinkCallSitesFound);
         }
 
-        return (violations, csFiles.Count, allowedCallSitesFound);
+        return (violations, csFiles.Count, allowedCallSitesFound, extensionMethodSinkCallSitesFound);
     }
 
     /// <summary>
@@ -166,6 +200,8 @@ public sealed class AuthClientChokepointMetaTests
     /// <summary>
     /// Scans one C# source file for HTTP sink call sites.
     /// Allowed call sites (inside the pinned types) increment <paramref name="allowedCallSitesFound"/>.
+    /// Allowed call sites whose method is an extension-method sink also increment
+    /// <paramref name="extensionMethodSinkCallSitesFound"/> (the extension-method binding floor).
     /// Disallowed call sites outside the pinned types are added to <paramref name="violations"/>.
     /// Known non-HttpClient calls (see <see cref="KnownNonHttpClientCalls"/>) are silently excluded.
     /// </summary>
@@ -180,7 +216,8 @@ public sealed class AuthClientChokepointMetaTests
         string source,
         string label,
         List<string> violations,
-        ref int allowedCallSitesFound)
+        ref int allowedCallSitesFound,
+        ref int extensionMethodSinkCallSitesFound)
     {
         var tree = CSharpSyntaxTree.ParseText(source);
         var root = tree.GetCompilationUnitRoot();
@@ -210,6 +247,8 @@ public sealed class AuthClientChokepointMetaTests
             if (enclosingType is not null && AllowedTypes.Contains(enclosingType))
             {
                 allowedCallSitesFound++;
+                if (ExtensionMethodSinks.Contains(methodName))
+                    extensionMethodSinkCallSitesFound++;
             }
             else
             {
@@ -257,7 +296,8 @@ public sealed class AuthClientChokepointMetaTests
     public void AllHttpClientCallSites_AreInsideAllowedTypes()
     {
         string sourceDir = FindWebSourceDir();
-        var (violations, scannedFiles, allowedCallSitesFound) = ScanDirectory(sourceDir);
+        var (violations, scannedFiles, allowedCallSitesFound, extensionMethodSinkCallSitesFound) =
+            ScanDirectory(sourceDir);
 
         // ── File-count floor: guard against path-discovery regression ─────────
         Assert.True(
@@ -275,6 +315,18 @@ public sealed class AuthClientChokepointMetaTests
             "Either the Web project no longer uses HttpClient (unexpected) or the allowed type " +
             $"names in AllowedTypes ({string.Join(", ", AllowedTypes)}) no longer match the source. " +
             "Update the allowlist to match the actual implementation.");
+
+        // ── Extension-method binding floor ────────────────────────────────────
+        // Guards against a vacuous pass for the extension-method sink surface:
+        // LoginService.PostAsJsonAsync (lines 97 and 146) must be counted here.
+        // If this fails, either LoginService was rewritten to not use extension methods
+        // OR the ExtensionMethodSinks set was accidentally cleared — both need investigation.
+        Assert.True(
+            extensionMethodSinkCallSitesFound >= 1,
+            $"The chokepoint scan found 0 allowed extension-method sink call sites in '{sourceDir}'. " +
+            "LoginService is expected to contribute at least 1 PostAsJsonAsync site. " +
+            $"Extension-method sinks tracked: [{string.Join(", ", ExtensionMethodSinks)}]. " +
+            "Either LoginService was rewritten or the ExtensionMethodSinks set was cleared.");
 
         // ── Primary compliance assertion ──────────────────────────────────────
         Assert.True(
@@ -296,11 +348,13 @@ public sealed class AuthClientChokepointMetaTests
     {
         var violations = new List<string>();
         int allowed = 0;
+        int extAllowed = 0;
         ScanSource(
             ChokepointFailPathFixture_HttpClient.RogueSendAsyncSnippet,
             "rogue-snippet",
             violations,
-            ref allowed);
+            ref allowed,
+            ref extAllowed);
 
         Assert.True(
             violations.Count >= 1,
@@ -318,14 +372,44 @@ public sealed class AuthClientChokepointMetaTests
     {
         var violations = new List<string>();
         int allowed = 0;
+        int extAllowed = 0;
         ScanSource(
             ChokepointFailPathFixture_HttpClient.AllowedSendAsyncSnippet,
             "allowed-snippet",
             violations,
-            ref allowed);
+            ref allowed,
+            ref extAllowed);
 
         Assert.Empty(violations);
         Assert.True(allowed >= 1,
             "Expected at least 1 allowed call site in the known-good snippet.");
+    }
+
+    /// <summary>
+    /// Proves the scanner flags rogue <c>PostAsJsonAsync</c> and <c>GetFromJsonAsync</c>
+    /// extension-method calls in an unknown class. This is the teeth-proof for the
+    /// extension-method sink surface added to cover the <c>System.Net.Http.Json</c> API.
+    /// </summary>
+    [Fact]
+    public void Scanner_RogueExtensionMethodCallSite_FlagsViolation()
+    {
+        var violations = new List<string>();
+        int allowed = 0;
+        int extAllowed = 0;
+        ScanSource(
+            ChokepointFailPathFixture_HttpClient.RogueExtensionMethodSnippet,
+            "rogue-ext-snippet",
+            violations,
+            ref allowed,
+            ref extAllowed);
+
+        Assert.True(
+            violations.Count >= 2,
+            $"Expected at least 2 violations (PostAsJsonAsync + GetFromJsonAsync) for the rogue " +
+            $"extension-method snippet, but got {violations.Count}. " +
+            "If this assertion fails, the extension-method sinks are not in SinkMethods.");
+
+        Assert.Equal(0, allowed);
+        Assert.Equal(0, extAllowed);
     }
 }
