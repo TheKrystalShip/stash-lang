@@ -1,0 +1,111 @@
+#!/usr/bin/env stash
+
+// process.readBytes — Byte-Exact Stdout Capture
+// Demonstrates reading raw bytes from a spawned process's stdout without
+// any text decoding.  This matters for binary data and byte-length-framed
+// protocols (e.g. LSP Content-Length), where decode→re-encode can silently
+// corrupt the byte count of multibyte UTF-8 sequences.
+
+// ─── 1. Build a known multibyte UTF-8 payload ────────────────────────────────
+
+io.println("=" * 60);
+io.println("  process.readBytes — Byte-Exact Stdout Capture");
+io.println("=" * 60);
+io.println();
+
+io.println("--- 1. Build multibyte UTF-8 payload ---");
+io.println();
+
+// "─—·" contains three characters that each take more than one byte in UTF-8:
+//   ─  U+2500  BOX DRAWINGS LIGHT HORIZONTAL  → E2 94 80  (3 bytes)
+//   —  U+2014  EM DASH                         → E2 80 94  (3 bytes)
+//   ·  U+00B7  MIDDLE DOT                      → C2 B7     (2 bytes)
+//                                                           --------
+//                                                           8 bytes total
+let payload = buf.from("─—·");
+
+io.println($"  String: ─—·");
+io.println($"  Byte length  : {buf.len(payload)}  (expect 8)");
+io.println($"  Hex          : {buf.toHex(payload)}  (expect e29480e28094c2b7)");
+io.println();
+
+// ─── 2. Write the raw bytes to a temp file ───────────────────────────────────
+
+io.println("--- 2. Write raw bytes to temp file ---");
+io.println();
+
+// fs.tempFile() creates the file and returns its path.
+// fs.writeBytes overwrites it with our exact buffer — no text encoding step.
+let tmpPath = fs.tempFile();
+fs.writeBytes(tmpPath, payload);
+
+io.println($"  Written {buf.len(payload)} bytes to: {tmpPath}");
+io.println();
+
+// ─── 3. Spawn cat and drain stdout with process.readBytes ────────────────────
+
+io.println("--- 3. Drain stdout via process.readBytes ---");
+io.println();
+
+// Spawn `cat <path>`.  cat will emit the file's raw bytes and exit, closing
+// its stdout pipe — that EOF is what makes the drain loop safe (no idle-open
+// pipe, so the process-read-blocks-empty-pipe gotcha does not apply here).
+let h = process.spawn($"cat {tmpPath}");
+
+// Accumulate chunks into a single buffer.
+// buf.alloc(0) creates an empty buffer — the correct empty-accumulator value
+// because buf.concat throws TypeError if any argument is not a buffer (null
+// would blow up on the first iteration).
+let acc = buf.alloc(0);
+
+// Read until EOF (readBytes returns null at end-of-stream).
+// Each call blocks until at least one byte is available or the stream closes.
+let chunk = process.readBytes(h);
+while (chunk != null) {
+    acc = buf.concat(acc, chunk);
+    chunk = process.readBytes(h);
+}
+
+// Reap the child process.  We already drained stdout via the raw pipe, so we
+// don't use result.stdout — mixing readBytes with the StreamReader-backed
+// result.stdout field would corrupt the read.
+process.wait(h);
+
+io.println($"  Chunks drained, total bytes accumulated: {buf.len(acc)}");
+io.println();
+
+// ─── 4. Verify byte fidelity ─────────────────────────────────────────────────
+
+io.println("--- 4. Verify byte fidelity ---");
+io.println();
+
+let byteLen = buf.len(acc);
+let hexStr  = buf.toHex(acc);
+let decoded = buf.toString(acc);  // default encoding: utf-8
+
+io.println($"  Byte length : {byteLen}  (expect 8)");
+io.println($"  Hex         : {hexStr}");
+io.println($"               (expect e29480e28094c2b7)");
+io.println($"  Decoded text: {decoded}  (expect ─—·)");
+io.println();
+
+// Sanity assertions — a mismatch here means something decoded/re-encoded the
+// bytes in transit (which is exactly what process.read would do).
+if (byteLen != 8) {
+    io.println($"  ERROR: expected 8 bytes, got {byteLen}");
+} else if (hexStr != "e29480e28094c2b7") {
+    io.println($"  ERROR: hex mismatch: {hexStr}");
+} else {
+    io.println("  All checks passed — bytes round-tripped without corruption.");
+}
+
+// ─── 5. Cleanup ──────────────────────────────────────────────────────────────
+
+io.println();
+fs.delete(tmpPath);
+io.println($"  Temp file removed: {tmpPath}");
+
+io.println();
+io.println("=" * 60);
+io.println("  Done.");
+io.println("=" * 60);

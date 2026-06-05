@@ -557,10 +557,10 @@ public static partial class ProcessBuiltIns
         return result;
     }
 
-    /// <summary>Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.</summary>
+    /// <summary>Reads available text from a process's stdout. Blocks until at least one character is available or the stream reaches end-of-stream, then returns the text chunk read, or null at end-of-stream. Note: despite the intended non-blocking design this currently blocks on an empty but still-open pipe, so call it only after sending input you expect the process to respond to (reading speculatively from an idle child will hang until it produces output or exits).</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
-    /// <returns>A string chunk, or null if no data is available</returns>
+    /// <returns>The text chunk read from stdout, or null at end-of-stream</returns>
     [StashFn]
     private static StashValue Read(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
     {
@@ -583,6 +583,49 @@ public static partial class ProcessBuiltIns
             var buffer = new char[4096];
             int read = stream.Read(buffer, 0, buffer.Length);
             return read > 0 ? StashValue.FromObj(new string(buffer, 0, read)) : StashValue.Null;
+        }
+        catch
+        {
+            return StashValue.Null;
+        }
+    }
+
+    /// <summary>Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. Use this instead of process.read for binary data or byte-length-framed protocols (e.g. LSP Content-Length framing), where decoding to a string and re-encoding it would corrupt the byte count of multibyte UTF-8 sequences. Like process.read this blocks until at least one byte is available or the stream reaches end-of-stream, then returns the bytes read, or null at end-of-stream — so call it only after sending input you expect the process to respond to (reading speculatively from an idle child will hang until it produces output or exits). Do not mix read and readBytes on the same handle: read decodes via a buffered StreamReader, readBytes reads the raw pipe, and the StreamReader can steal bytes from the raw path.</summary>
+    /// <param name="handleVal">The Process handle returned by process.spawn()</param>
+    /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <returns>A buffer of the bytes read from stdout, or null at end-of-stream</returns>
+    [StashFn(ReturnType = "byte[]")]
+    private static StashValue ReadBytes(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
+    {
+        var handle = ExtractProcessHandle(handleVal, "process.readBytes");
+
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is null)
+        {
+            return StashValue.Null;
+        }
+
+        try
+        {
+            // Read raw bytes from the underlying pipe (BaseStream), NOT via the StreamReader
+            // (entry.Process.StandardOutput): the StreamReader decodes to text and buffers ahead,
+            // which both loses byte-accuracy for multibyte UTF-8 and would steal bytes from this
+            // raw path. read (StreamReader) and readBytes (BaseStream) must not be mixed on one handle.
+            var stream = entry.Process.StandardOutput.BaseStream;
+            var buffer = new byte[4096];
+            int read = stream.Read(buffer, 0, buffer.Length);
+            if (read <= 0)
+            {
+                return StashValue.Null; // end-of-stream
+            }
+
+            if (read == buffer.Length)
+            {
+                return StashValue.FromObj(new StashByteArray(buffer));
+            }
+            var slice = new byte[read];
+            System.Array.Copy(buffer, slice, read);
+            return StashValue.FromObj(new StashByteArray(slice));
         }
         catch
         {

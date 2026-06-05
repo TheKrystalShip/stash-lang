@@ -13,7 +13,7 @@ public class ProcessDocSnapshotTests
     [Fact]
     public void Process_HasExpectedFunctionCount()
     {
-        Assert.Equal(30, Ns.Functions.Count);
+        Assert.Equal(31, Ns.Functions.Count);
     }
 
     [Fact]

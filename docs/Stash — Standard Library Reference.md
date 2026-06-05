@@ -6862,7 +6862,8 @@ A handle to a spawned child process.
 | `process.signal` | `any` | `ValueError`, `TypeError` | Sends a POSIX signal to a running process. |
 | `process.detach` | `any` | `TypeError` | Removes a Process handle from tracking. |
 | `process.list` | `array` | — | Returns an array of all Process handles currently tracked by this script. |
-| `process.read` | `any` | `TypeError` | Non-blocking read from a process's stdout. |
+| `process.read` | `any` | `TypeError` | Reads available text from a process's stdout. |
+| `process.readBytes` | `byte[]` | `TypeError` | Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. |
 | `process.write` | `any` | `TypeError` | Writes a string to a process's stdin. |
 | `process.onExit` | `any` | `TypeError` | Registers a callback function to be called when the process exits. |
 | `process.daemonize` | `any` | `IOError` | Starts a process fully detached from the script with no stdio redirection. |
@@ -7073,13 +7074,27 @@ Returns an array of all Process handles currently tracked by this script.
 
 #### `process.read(handle: any) -> any`
 
-Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.
+Reads available text from a process's stdout. Blocks until at least one character is available or the stream reaches end-of-stream, then returns the text chunk read, or null at end-of-stream. Note: despite the intended non-blocking design this currently blocks on an empty but still-open pipe, so call it only after sending input you expect the process to respond to (reading speculatively from an idle child will hang until it produces output or exits).
 
 **Parameters:**
 
 - `handle`: `any`
 
-**Returns:** `any` — A string chunk, or null if no data is available
+**Returns:** `any` — The text chunk read from stdout, or null at end-of-stream
+
+**Throws:**
+
+- `TypeError` — if handle is not a Process
+
+#### `process.readBytes(handle: any) -> byte[]`
+
+Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. Use this instead of process.read for binary data or byte-length-framed protocols (e.g. LSP Content-Length framing), where decoding to a string and re-encoding it would corrupt the byte count of multibyte UTF-8 sequences. Like process.read this blocks until at least one byte is available or the stream reaches end-of-stream, then returns the bytes read, or null at end-of-stream — so call it only after sending input you expect the process to respond to (reading speculatively from an idle child will hang until it produces output or exits). Do not mix read and readBytes on the same handle: read decodes via a buffered StreamReader, readBytes reads the raw pipe, and the StreamReader can steal bytes from the raw path.
+
+**Parameters:**
+
+- `handle`: `any`
+
+**Returns:** `byte[]` — A buffer of the bytes read from stdout, or null at end-of-stream
 
 **Throws:**
 

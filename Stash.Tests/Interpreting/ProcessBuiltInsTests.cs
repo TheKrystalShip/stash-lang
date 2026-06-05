@@ -292,4 +292,69 @@ public class ProcessBuiltInsTests : TempDirectoryFixture
             "let result = r.exitCode;");
         Assert.Equal(0L, result);
     }
+
+    // ── process.readBytes ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Drains a spawned process's stdout via process.readBytes, concatenating each
+    /// chunk into one buffer (loop terminates on the EOF null). Returns the
+    /// accumulated buffer's lowercase hex so byte-exactness is asserted on a string.
+    /// </summary>
+    private static string ReadBytesDrainHexScript(string spawnCmd) =>
+        $"let h = process.spawn(\"{spawnCmd}\");" +
+        "let acc = buf.from(\"\");" +
+        "let chunk = process.readBytes(h);" +
+        "while (chunk != null) { acc = buf.concat(acc, chunk); chunk = process.readBytes(h); }" +
+        "process.wait(h);" +
+        "let result = buf.toHex(acc);";
+
+    [Fact]
+    public void ReadBytes_MultibyteUtf8Output_PreservesExactBytes()
+    {
+        // This is the discriminating test vs process.read: read decodes to a string
+        // (char-count semantics) and a re-encode can drift the byte count for multibyte
+        // UTF-8, breaking byte-length-framed protocols. readBytes stays in byte-space.
+        // '─' '—' '·' = E2 94 80 | E2 80 94 | C2 B7 — eight bytes. The child cat's them
+        // straight from a file written by C# (no shell/string escaping of the bytes).
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var path = Path.Combine(TestDir, "multibyte.bin");
+        File.WriteAllBytes(path, new byte[] { 0xE2, 0x94, 0x80, 0xE2, 0x80, 0x94, 0xC2, 0xB7 });
+
+        var result = Run(ReadBytesDrainHexScript($"cat {path}"));
+        Assert.Equal("e29480e28094c2b7", result);
+    }
+
+    [Fact]
+    public void ReadBytes_AsciiOutput_DecodesToText()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var path = Path.Combine(TestDir, "ascii.txt");
+        File.WriteAllBytes(path, System.Text.Encoding.ASCII.GetBytes("hello"));
+
+        // "hello" = 68 65 6c 6c 6f
+        var result = Run(ReadBytesDrainHexScript($"cat {path}"));
+        Assert.Equal("68656c6c6f", result);
+    }
+
+    [Fact]
+    public void ReadBytes_NoOutputEof_ReturnsNull()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        // 'true' produces no stdout and exits 0 — the first readBytes hits EOF (Read==0) → null.
+        var result = Run(
+            "let h = process.spawn(\"true\");" +
+            "let chunk = process.readBytes(h);" +
+            "process.wait(h);" +
+            "let result = chunk == null;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void ReadBytes_NonProcessHandle_ThrowsTypeError()
+    {
+        RunExpectingError("let result = process.readBytes(42);");
+    }
 }
