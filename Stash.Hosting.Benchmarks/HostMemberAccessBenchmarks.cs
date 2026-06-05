@@ -28,7 +28,7 @@ using BenchmarkDotNet.Jobs;
 /// opcode? Expected: comparable — no optimisation warranted in v1.
 /// </summary>
 [MemoryDiagnoser]
-[ShortRunJob]
+[SimpleJob(warmupCount: 10, iterationCount: 30)]
 public class HostMemberAccessBenchmarks
 {
     // ── Domain fixture ──────────────────────────────────────────────────────

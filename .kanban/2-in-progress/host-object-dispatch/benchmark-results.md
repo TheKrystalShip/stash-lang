@@ -13,7 +13,7 @@
 | .NET       | .NET 10.0.8 (42.42.42.42424), X64 RyuJIT AVX2           |
 | GC         | Concurrent Workstation                                   |
 | Build      | Release, `dotnet run -c Release`                        |
-| BDN        | BenchmarkDotNet v0.13.12 (ShortRun: 1 launch, 3 warmup, 3 measured) |
+| BDN        | BenchmarkDotNet v0.13.12 (SimpleJob: 1 launch, 10 warmup, 30 measured) |
 
 ---
 
@@ -26,39 +26,34 @@ host with a registered `Player` type and `player` global. The timed window is on
 `CallAsync` round-trip — including `SemaphoreSlim.WaitAsync`, `Task.Run` dispatch, script
 execution, and return-value marshalling.
 
-| Method                               | Median     | Mean       | StdDev     | Alloc | Notes |
-|--------------------------------------|------------|------------|------------|-------|-------|
-| `PlainStashFunctionBaseline` (baseline) | 2.503 μs | 2.341 μs | 0.499 μs  | 485 B | `fn plainBaseline() { return 42; }` — no host dispatch |
-| `WarmMethodCall`                     | 3.879 μs   | 6.444 μs   | 5.026 μs   | 704 B | `fn callAttack() { return player.attack(0); }` |
-| `WarmPropertyRead`                   | 15.488 μs  | 15.523 μs  | 1.046 μs   | 565 B | `fn readHp() { return player.hp; }` |
+| Method                               | Median     | Mean       | StdDev     | Ratio | Alloc | Notes |
+|--------------------------------------|------------|------------|------------|-------|-------|-------|
+| `PlainStashFunctionBaseline` (baseline) | 1.304 μs | 1.302 μs | 0.017 μs  | 1.00× | 487 B | `fn plainBaseline() { return 42; }` — no host dispatch |
+| `WarmPropertyRead`                   | 1.331 μs   | 1.320 μs   | 0.061 μs   | 1.01× | 535 B | `fn readHp() { return player.hp; }` |
+| `WarmMethodCall`                     | 1.452 μs   | 1.456 μs   | 0.053 μs   | 1.12× | 704 B | `fn callAttack() { return player.attack(0); }` |
 
-> BDN ShortRun: 1 launch, 3 warmup iterations, 3 measured iterations. The `WarmMethodCall` error
-> band (±91 μs) reflects high jitter across the 3 iterations — the median (3.879 μs) is the more
-> reliable figure. Priority escalation failed (Permission denied); numbers may be ±5–10 % noisier
-> than root-level runs.
+> BDN SimpleJob: 1 launch, 10 warmup iterations, 30 measured iterations (N=26–28 after outlier removal).
+> Priority escalation failed (Permission denied); numbers may be ±5–10 % noisier than root-level runs.
 
 ### Interpretation
 
-The `WarmMethodCall` median (3.879 μs) is **comparable** to the plain-Stash-function baseline
-(2.503 μs) — adding ~1.4 μs on top of the baseline overhead for HostBoundMethod dispatch through
-`VMTryGetField` → `HostBoundMethod.CallDirect` → `InvokeHostDelegate` → arg/return marshal. This
-is within the noise floor of the `SemaphoreSlim.WaitAsync`/`Task.Run` infra (~2.8 μs median from
-MVP Measurement 4).
+With 30 measured iterations the results are clear and internally consistent. The previous
+`ShortRun` table (3 iterations) showed a 15 μs figure for `WarmPropertyRead` — that was a
+statistical artifact of the 3-iteration budget; the larger sample eliminates it entirely.
 
-The `WarmPropertyRead` median (15.488 μs) is higher — ~6x the baseline. Investigation note: this
-represents the same `CallAsync` infrastructure plus the getter delegate path. The ShortRun's 3
-iterations for property-read show low variance (StdDev 1.046 μs), so the 15 μs is a stable
-measurement. The property-read overhead versus method-call (15 μs vs 3.9 μs) warrants a note: the
-difference likely reflects task-scheduling jitter (both pass through identical infrastructure) and
-measurement variance inherent to a 3-iteration ShortRun. Neither number indicates a bottleneck in
-the dispatch path itself.
+`WarmPropertyRead` (1.33 μs median, Ratio = 1.01×) is statistically indistinguishable from the
+plain-Stash-function baseline (1.30 μs) — the getter delegate adds no measurable overhead above
+the `CallAsync` infra floor. `WarmMethodCall` (1.45 μs, Ratio = 1.12×) is ~12 % above baseline,
+consistent with the extra allocations and work it performs (HostBoundMethod alloc, arity check,
+arg marshal, `CallDirect` → `InvokeHostDelegate` → return marshal). The ordering
+— baseline ≤ property-read < method-call — matches the expected work profile.
 
 **Verdict:** Host member access via delegate registration is comparable to the existing
-IC-megamorphic `CallAsync` baseline. The dispatch added by `HostHandle` (VMTryGetField →
-registered getter/HostBoundMethod) is not the bottleneck — the `SemaphoreSlim`/`Task.Run`
+`CallAsync` baseline. The dispatch added by `HostHandle` (`VMTryGetField` →
+registered getter / `HostBoundMethod`) is not the bottleneck — the `SemaphoreSlim`/`Task.Run`
 infrastructure dominates. **No specialised opcode, promoted IC path, or optimisation to the
 `GetFieldValue` / `ExecuteCall` hot path is justified in v1.** The throughput floor for
-host-member-based APIs is set by the per-call `CallAsync` cost (~2.8–3 μs warm), not by
+host-member-based APIs is set by the per-call `CallAsync` cost (~1.3 μs warm), not by
 member-dispatch overhead.
 
 ---
@@ -67,7 +62,9 @@ member-dispatch overhead.
 
 - **Priority escalation failed** (`Permission denied`) on this machine; BDN ran without elevated
   priority. Numbers may be ±5–10 % noisier than root-level runs.
-- The `ShortRun` job uses only 3 warmup + 3 measured iterations; a full `LongRun` would narrow the
-  CI but is not necessary for this order-of-magnitude verdict.
-- `.NET 10.0` is not yet in BDN 0.13.12's `RuntimeMoniker` enum; `[ShortRunJob]` is used instead
-  of `[SimpleJob(RuntimeMoniker.Net10_0)]` to target the host runtime automatically.
+- The `HostMemberAccessBenchmarks` class uses `[SimpleJob(warmupCount: 10, iterationCount: 30)]`
+  for a statistically sound sample (N=26–28 after BDN outlier removal). `HostConstructionBenchmarks`
+  retains its `[ShortRunJob]` (3 iterations), which is appropriate for its coarser order-of-magnitude
+  verdict.
+- `.NET 10.0` is not yet in BDN 0.13.12's `RuntimeMoniker` enum; `[SimpleJob]` with bare counts
+  (rather than `[SimpleJob(RuntimeMoniker.Net10_0)]`) targets the host runtime automatically.
