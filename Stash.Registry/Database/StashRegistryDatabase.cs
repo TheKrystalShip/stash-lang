@@ -804,6 +804,18 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     // ── Metrics operations (M2) ───────────────────────────────────────────────
 
     /// <inheritdoc/>
+    public async Task<int> CountAllPackagesAsync()
+    {
+        return await _context.Packages.CountAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> CountAllVersionsAsync()
+    {
+        return await _context.Versions.CountAsync();
+    }
+
+    /// <inheritdoc/>
     public async Task<long> GetTotalStorageBytesAsync()
     {
         return await _context.Versions.SumAsync(v => (long?)v.StorageBytes) ?? 0L;

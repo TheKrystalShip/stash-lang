@@ -229,4 +229,60 @@ public sealed class AdminStatsExpandedTests : RegistryAuthzTestBase
         Assert.Equal(1, unpublishes);
         Assert.Equal(0, deprecations);
     }
+
+    // ── Packages / Versions totals ────────────────────────────────────────────
+
+    /// <summary>
+    /// Seeding 2 packages with 3 versions each yields <c>packages = 2</c> and
+    /// <c>versions = 6</c> — verifies both counters independently so a
+    /// transposition bug (packages counted where versions belong) fails loudly.
+    /// </summary>
+    [Fact]
+    public async Task GetStats_AfterSeedingPackagesAndVersions_PackagesAndVersionsCountsAreCorrect()
+    {
+        const int packageCount = 2;
+        const int versionsPerPackage = 3;
+
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client   = ctx.Factory.CreateClient();
+
+        string username   = "stats-pkg-ver";
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, username);
+        string publishToken = await RegisterAndGetTokenAsync(client, username);
+
+        // Seed packageCount packages, each with versionsPerPackage versions.
+        string[] versionTags = ["1.0.0", "1.1.0", "2.0.0"];
+        for (int p = 1; p <= packageCount; p++)
+        {
+            string pkgName = $"stats-pkg-{p}";
+            for (int v = 0; v < versionsPerPackage; v++)
+            {
+                string ver     = versionTags[v];
+                byte[] tarball = CreateTarball($"@{username}/{pkgName}", ver);
+                var req        = new HttpRequestMessage(HttpMethod.Put,
+                    $"/api/v1/packages/{username}/{pkgName}");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", publishToken);
+                req.Content               = TarballContent(tarball);
+                var resp = await client.SendAsync(req);
+                Assert.True(resp.IsSuccessStatusCode,
+                    $"Publish {pkgName}@{ver} failed: {resp.StatusCode} — {await resp.Content.ReadAsStringAsync()}");
+            }
+        }
+
+        SetBearer(client, adminToken);
+        var statsResp = await client.GetAsync("/api/v1/admin/stats");
+        Assert.Equal(HttpStatusCode.OK, statsResp.StatusCode);
+
+        string statsBody = await statsResp.Content.ReadAsStringAsync();
+        using var doc    = JsonDocument.Parse(statsBody);
+        var root         = doc.RootElement;
+
+        Assert.True(root.TryGetProperty("packages", out var pkgsProp),
+            $"StatsResponse must contain 'packages' field. Body: {statsBody}");
+        Assert.True(root.TryGetProperty("versions", out var versProp),
+            $"StatsResponse must contain 'versions' field. Body: {statsBody}");
+
+        Assert.Equal(packageCount, pkgsProp.GetInt32());
+        Assert.Equal(packageCount * versionsPerPackage, versProp.GetInt32());
+    }
 }

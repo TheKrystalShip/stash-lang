@@ -174,14 +174,23 @@ public sealed class AdminActivitySummary
 /// </summary>
 /// <remarks>
 /// M2 adds <see cref="StorageBytes"/> (sum of all version tarball sizes from
-/// <c>version_records.storage_bytes</c>). M6 adds <see cref="Downloads"/> and
-/// <see cref="Activity"/> (registry-wide totals + last-24h activity counts).
+/// <c>version_records.storage_bytes</c>). M6 adds <see cref="Packages"/>,
+/// <see cref="Versions"/>, <see cref="Downloads"/>, and <see cref="Activity"/>
+/// (registry-wide totals + last-24h activity counts).
 /// </remarks>
 public sealed class StatsResponse
 {
     /// <summary>The total number of registered user accounts.</summary>
     [JsonPropertyName("users")]
     public int Users { get; set; }
+
+    /// <summary>The total number of packages in the registry.</summary>
+    [JsonPropertyName("packages")]
+    public int Packages { get; set; }
+
+    /// <summary>The total number of published versions across all packages.</summary>
+    [JsonPropertyName("versions")]
+    public int Versions { get; set; }
 
     /// <summary>
     /// The total number of bytes occupied by all published tarballs, summed from

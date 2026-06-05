@@ -541,6 +541,18 @@ public interface IRegistryDatabase
     // Metrics operations (M2 — storage bytes)
 
     /// <summary>
+    /// Returns the total number of packages registered in the registry.
+    /// Returns <c>0</c> when no packages exist.
+    /// </summary>
+    Task<int> CountAllPackagesAsync();
+
+    /// <summary>
+    /// Returns the total number of published version records across all packages.
+    /// Returns <c>0</c> when no versions exist.
+    /// </summary>
+    Task<int> CountAllVersionsAsync();
+
+    /// <summary>
     /// Returns the sum of <c>storage_bytes</c> across all version records.
     /// Returns <c>0</c> when no versions exist.
     /// </summary>

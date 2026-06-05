@@ -85,6 +85,8 @@ public class AdminController : ControllerBase
         DateTime since24h = now - TimeSpan.FromHours(24);
 
         int  users        = (await _db.ListUsersAsync()).Count;
+        int  packages     = await _db.CountAllPackagesAsync();
+        int  versions     = await _db.CountAllVersionsAsync();
         long storageBytes = await _db.GetTotalStorageBytesAsync();
 
         var (dlTotal, dlLast24h) =
@@ -102,6 +104,8 @@ public class AdminController : ControllerBase
         return TypedResults.Ok(new StatsResponse
         {
             Users        = users,
+            Packages     = packages,
+            Versions     = versions,
             StorageBytes = storageBytes,
             Downloads    = new AdminDownloadsSummary { Total = dlTotal, Last24h = dlLast24h },
             Activity     = new AdminActivitySummary
