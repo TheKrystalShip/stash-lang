@@ -7,6 +7,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Stash.Registry.Configuration;
 using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Services.Metrics;
@@ -68,6 +69,9 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         RequesterUser = null,
     };
 
+    /// <summary>Returns a default <see cref="RegistryConfig"/> suitable for unit tests.</summary>
+    private static RegistryConfig DefaultConfig() => new();
+
     // ── DrainBatchAsync ────────────────────────────────────────────────────────
 
     /// <summary>
@@ -83,6 +87,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
@@ -103,6 +108,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
@@ -133,6 +139,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
@@ -159,6 +166,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
@@ -181,6 +189,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
@@ -213,6 +222,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         Assert.NotNull(svc);
@@ -242,6 +252,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
@@ -269,6 +280,7 @@ public sealed class MetricsBackgroundServiceTests : IDisposable
         var svc = new MetricsBackgroundService(
             _queue,
             BuildScopeFactory(),
+            DefaultConfig(),
             NullLogger<MetricsBackgroundService>.Instance);
 
         await svc.DrainBatchAsync(CancellationToken.None);
