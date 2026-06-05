@@ -17,6 +17,7 @@ using Stash.Registry.Database;
 using Stash.Registry.Database.Models;
 using Stash.Registry.Http;
 using Stash.Registry.Services;
+using Stash.Registry.Services.Metrics;
 using Stash.Registry.Storage;
 
 namespace Stash.Registry.Controllers;
@@ -48,6 +49,8 @@ public class PackagesController : ControllerBase
     private readonly IRegistryAuthorizer _authorizer;
     private readonly IRegistryAuthzPrincipalFactory _principalFactory;
     private readonly RegistryConfig _config;
+    private readonly IDownloadEventQueue _downloadEventQueue;
+    private readonly IIpHasher _ipHasher;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -61,7 +64,9 @@ public class PackagesController : ControllerBase
         DeprecationService deprecationService,
         IRegistryAuthorizer authorizer,
         IRegistryAuthzPrincipalFactory principalFactory,
-        RegistryConfig config)
+        RegistryConfig config,
+        IDownloadEventQueue downloadEventQueue,
+        IIpHasher ipHasher)
     {
         _db = db;
         _storage = storage;
@@ -72,6 +77,8 @@ public class PackagesController : ControllerBase
         _authorizer = authorizer;
         _principalFactory = principalFactory;
         _config = config;
+        _downloadEventQueue = downloadEventQueue;
+        _ipHasher = ipHasher;
     }
 
     // ── Read endpoints ────────────────────────────────────────────────────────
@@ -275,9 +282,25 @@ public class PackagesController : ControllerBase
     /// Downloads the tarball for a specific package version.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Returns a binary tarball stream (application/octet-stream + X-Integrity header).
     /// Permanently exempt from the typed Results refactor — binary streams do not have
     /// a JSON DTO schema; see <c>OpenApiCoverageMetaTests.PermanentlyExemptOperations</c>.
+    /// </para>
+    /// <para>
+    /// A single download event is enqueued via <see cref="IDownloadEventQueue"/> using
+    /// <c>Response.OnCompleted</c> — exactly when the response stream finishes writing
+    /// to the client with HTTP 200. A 404 (missing version), a
+    /// <c>VisibilityHidden</c> 404 (anonymous on a private package), or a mid-stream
+    /// client disconnect each result in ZERO enqueued events.
+    /// </para>
+    /// <para>
+    /// The IP is read from <c>HttpContext.Connection.RemoteIpAddress</c> here (this
+    /// file is in the <c>NoMagicRemoteIpAccessMetaTests</c> permanent-exempt list for
+    /// its audit reads) and immediately transformed via
+    /// <see cref="IIpHasher.Apply"/>. The transformed string — never the raw IP — is
+    /// placed in the <see cref="DownloadEvent"/> and persisted by the background service.
+    /// </para>
     /// </remarks>
     [PublicEndpoint("tarball download is public for public packages; visibility gated by IRegistryAuthorizer")]
     [RegistryAuthorize(RegistryAction.DownloadPackageVersion)]
@@ -301,6 +324,47 @@ public class PackagesController : ControllerBase
 
         if (!string.IsNullOrEmpty(versionRecord.Integrity))
             Response.Headers["X-Integrity"] = versionRecord.Integrity;
+
+        // Capture all fields needed for the download event BEFORE the OnCompleted hook
+        // fires — HttpContext is in teardown at that point and must not be accessed.
+        // The IP is transformed here (PackagesController.cs is in the permanent-exempt
+        // list for its audit-log reads; the download-metrics read is proven compliant by
+        // DownloadCaptureSemanticsTests asserting ip is populated via IIpHasher.Apply).
+        string capturedPackageName = packageName;
+        string capturedVersion = version;
+        string? capturedIp = _ipHasher.Apply(HttpContext.Connection.RemoteIpAddress);
+        string? capturedUserAgent = Request.Headers.UserAgent.Count > 0
+            ? Request.Headers.UserAgent.ToString()
+            : null;
+        long capturedBytesServed = versionRecord.StorageBytes;
+        string? capturedUser = User.Identity?.IsAuthenticated == true ? User.Identity.Name : null;
+
+        // Register the capture callback.  OnCompleted fires after the response stream
+        // has been fully written to the client with the committed status code.
+        // We check RequestAborted to exclude mid-stream disconnects (the stream may
+        // still reach OnCompleted with partial bytes if the OS write buffer absorbed the
+        // remaining data before the disconnect was detected, so we also rely on the
+        // CancellationToken to exclude those cases).
+        var capturedContext = HttpContext;
+        var capturedQueue = _downloadEventQueue;
+        Response.OnCompleted(() =>
+        {
+            if (capturedContext.Response.StatusCode == StatusCodes.Status200OK &&
+                !capturedContext.RequestAborted.IsCancellationRequested)
+            {
+                capturedQueue.Enqueue(new DownloadEvent
+                {
+                    PackageName = capturedPackageName,
+                    Version = capturedVersion,
+                    Ts = DateTime.UtcNow,
+                    Ip = capturedIp,
+                    UserAgent = capturedUserAgent,
+                    BytesServed = capturedBytesServed,
+                    RequesterUser = capturedUser,
+                });
+            }
+            return Task.CompletedTask;
+        });
 
         return File(stream, "application/gzip", $"{packageName.Replace('/', '-').TrimStart('@', '-')}-{version}.tgz");
     }

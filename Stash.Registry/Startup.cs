@@ -19,6 +19,7 @@ using Stash.Registry.Database;
 using Stash.Registry.Endpoints;
 using Stash.Registry.Middleware;
 using Stash.Registry.Services;
+using Stash.Registry.Services.Metrics;
 using Stash.Registry.OpenApi;
 using Stash.Registry.Storage;
 
@@ -198,6 +199,16 @@ public sealed class Startup
             var hasherLogger = sp.GetRequiredService<ILogger<IpHasher>>();
             return new IpHasher(_config.Metrics, hasherLogger, _config.Database.Path);
         });
+
+        // Download-event queue — singleton channel shared across all requests.
+        // MetricsBackgroundService drains it in its own DI scope.
+        services.AddSingleton<IDownloadEventQueue, DownloadEventQueue>();
+
+        // Scoped metrics store — uses the per-scope DbContext; never inject into singletons.
+        services.AddScoped<IDownloadMetricsStore, DownloadMetricsStore>();
+
+        // Background drain service — singleton lifecycle (ASP.NET Core requirement for IHostedService).
+        services.AddHostedService<MetricsBackgroundService>();
 
         services.AddScoped<PackageService>();
         services.AddScoped<PackageRoleService>();

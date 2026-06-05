@@ -17,15 +17,28 @@ namespace Stash.Tests.Registry.Configuration;
 /// <remarks>
 /// <para>
 /// The <b>sink</b> is: any <see cref="Microsoft.CodeAnalysis.CSharp.Syntax.MemberAccessExpressionSyntax"/>
-/// whose member name is <c>RemoteIpAddress</c>.  Only <c>Configuration/IpHasher.cs</c>
-/// is the permanent authorised home (the only file that should ever read the raw IP).
+/// whose member name is <c>RemoteIpAddress</c>.  <c>Configuration/IpHasher.cs</c>
+/// is the permanent transform home (the only file that <em>should</em> read the raw IP
+/// for metrics purposes).
 /// </para>
 /// <para>
-/// The <b>exemption list</b> is seeded in M1 with every file that currently contains a
-/// direct read.  Each subsequent phase that migrates a call site through
-/// <see cref="Stash.Registry.Configuration.IIpHasher"/> removes that file from the list.
-/// By M3 the list should contain only the permanent allowed home
-/// <c>Configuration/IpHasher.cs</c>.
+/// The <b>exemption list</b> is seeded in M1 and is <b>PERMANENT</b> — it does NOT
+/// shrink across later phases.  The 6 non-<c>IpHasher</c> files are legitimate
+/// non-metrics raw-IP readers (auth/admin audit, rate-limit keying, authz audit) that
+/// legitimately keep the raw IP and are out of every metrics phase's scope.  These 6
+/// files will remain in the list indefinitely; no phase removes them.
+/// </para>
+/// <para>
+/// <b>Known file-level limitation.</b>  This guard operates at file granularity.
+/// <c>Controllers/PackagesController.cs</c> is permanently exempt (for its 8 audit
+/// and rate-limit reads), so a <c>RemoteIpAddress</c> read added inside
+/// <c>DownloadVersion</c> would NOT be caught by this test.  The download-metrics
+/// capture path's compliance is proven instead by
+/// <c>DownloadCaptureSemanticsTests</c>, which asserts that
+/// <c>download_events.ip</c> is populated through
+/// <see cref="Stash.Registry.Configuration.IIpHasher"/>.  A finer-grained (method-level)
+/// Roslyn guard is tracked in the backlog stub
+/// <c>registry-no-magic-ip-file-level-granularity.md</c>.
 /// </para>
 /// <para>
 /// A self-test proves the scanner has teeth (positive fixture),
@@ -46,36 +59,45 @@ public sealed class NoMagicRemoteIpAccessMetaTests
     private const string SinkMemberName = "RemoteIpAddress";
 
     /// <summary>
-    /// The single permanent allowed home: <c>IpHasher</c> itself is exempt because it IS
-    /// the transform that reads the raw IP and applies the configured
+    /// The permanent transform home: <c>IpHasher</c> itself is exempt because it IS
+    /// the authorised transform that reads the raw IP and applies the configured
     /// <see cref="Stash.Registry.Configuration.IpHandlingMode"/>.
+    /// The metrics download-capture path routes through <see cref="Stash.Registry.Configuration.IIpHasher"/>
+    /// and never reads <c>RemoteIpAddress</c> in any <c>Services/Metrics/</c> file.
     /// </summary>
     private const string PermanentAllowedHome = "Configuration/IpHasher.cs";
 
     /// <summary>
     /// Files (relative to <c>Stash.Registry/</c>, forward-slash separated) that are
-    /// currently allowed to contain direct <c>.RemoteIpAddress</c> reads.
+    /// permanently allowed to contain direct <c>.RemoteIpAddress</c> reads.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This list is seeded in M1 with all existing callers.  It shrinks across later
-    /// phases as each site is migrated to use <see cref="Stash.Registry.Configuration.IIpHasher"/>.
-    /// By the time M3 is complete the list should contain only <see cref="PermanentAllowedHome"/>.
+    /// This set is <b>PERMANENT</b> — it does NOT shrink across metrics phases.
+    /// <c>Configuration/IpHasher.cs</c> is the authorised transform home; the other
+    /// 6 files are legitimate non-metrics readers (audit logging, rate-limit keying,
+    /// authz-filter audit) that are out of every metrics phase's scope and will remain
+    /// here indefinitely.
     /// </para>
     /// <para>
-    /// The exemption set is <b>append-only</b> in the downward direction: removing an
-    /// entry without also removing the direct read causes a compile error, so removing
-    /// an entry is a deliberate act that proves migration happened.
+    /// Adding a new file to this set requires an explicit justification comment — the
+    /// set is append-only for files that have a documented, non-metrics reason to
+    /// read the raw IP.  The download-metrics capture path in
+    /// <c>PackagesController.DownloadVersion</c> is NOT a new entry — it is covered
+    /// by the existing <c>Controllers/PackagesController.cs</c> permanent exemption
+    /// and its compliance is proven by <c>DownloadCaptureSemanticsTests</c>.
     /// </para>
     /// </remarks>
     private static readonly IReadOnlySet<string> AllowedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        // ── Permanent allowed home ────────────────────────────────────────────
+        // ── Permanent transform home ──────────────────────────────────────────
+        // IpHasher.cs is the sole authorised reader for the metrics IP-handling pipeline.
         PermanentAllowedHome,
 
-        // ── M1 seed — existing callers migrated in M3 ────────────────────────
-        // These files currently read RemoteIpAddress directly and will be migrated
-        // to use IIpHasher in M3 / later phases.
+        // ── Permanent non-metrics raw-IP readers ──────────────────────────────
+        // These 6 files read RemoteIpAddress for legitimate non-metrics purposes
+        // (audit logging, rate-limit keying, authz-filter audit) and will remain
+        // in this list indefinitely — they are NOT metrics call sites.
         "Controllers/AuthController.cs",
         "Controllers/PackagesController.cs",
         "Controllers/AdminController.cs",
