@@ -537,6 +537,14 @@ public interface IRegistryDatabase
         string? owner = null,
         PackageSortOrder sort = PackageSortOrder.Relevance);
 
+    // Metrics operations (M2 — storage bytes)
+
+    /// <summary>
+    /// Returns the sum of <c>storage_bytes</c> across all version records.
+    /// Returns <c>0</c> when no versions exist.
+    /// </summary>
+    Task<long> GetTotalStorageBytesAsync();
+
     // Audit operations
     /// <summary>
     /// Appends a new audit entry to the audit log.

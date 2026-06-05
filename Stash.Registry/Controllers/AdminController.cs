@@ -64,7 +64,8 @@ public class AdminController : ControllerBase
     public async Task<Ok<StatsResponse>> GetStats()
     {
         int users = (await _db.ListUsersAsync()).Count;
-        return TypedResults.Ok(new StatsResponse { Users = users });
+        long storageBytes = await _db.GetTotalStorageBytesAsync();
+        return TypedResults.Ok(new StatsResponse { Users = users, StorageBytes = storageBytes });
     }
 
     /// <summary>

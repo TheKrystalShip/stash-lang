@@ -531,4 +531,41 @@ public sealed class PackageServiceTests : IDisposable
         Assert.Equal("@test/public-pkg", vr.PackageName);
         Assert.Equal("1.0.0", vr.Version);
     }
+
+    // ── M2: storage_bytes written at publish time (D10) ──────────────────
+
+    /// <summary>
+    /// <c>PackageService.PublishAsync</c> writes <c>StorageBytes</c> on the
+    /// <see cref="VersionRecord"/> from the in-memory tarball size (D10 — persisted
+    /// column, never a runtime filesystem stat).
+    /// </summary>
+    [Fact]
+    public async Task Publish_SetsStorageBytes_FromTarballSize()
+    {
+        byte[] tarball = CreateTestTarball("@test/storybytes-pkg", "1.0.0");
+        using var stream = new MemoryStream(tarball);
+
+        VersionRecord vr = await _service.Publish(stream, "alice", null);
+
+        Assert.True(vr.StorageBytes > 0,
+            "StorageBytes must be populated with the tarball length at publish time.");
+        Assert.Equal(tarball.LongLength, vr.StorageBytes);
+    }
+
+    /// <summary>
+    /// After publishing a package, the persisted <see cref="VersionRecord.StorageBytes"/>
+    /// equals the original tarball length (round-trip through the database).
+    /// </summary>
+    [Fact]
+    public async Task Publish_StorageBytes_PersistedInDatabase()
+    {
+        byte[] tarball = CreateTestTarball("@test/storybytes-persist-pkg", "1.0.0");
+        using var stream = new MemoryStream(tarball);
+        await _service.Publish(stream, "alice", null);
+
+        VersionRecord? persisted = await _db.GetPackageVersionAsync("@test/storybytes-persist-pkg", "1.0.0");
+
+        Assert.NotNull(persisted);
+        Assert.Equal(tarball.LongLength, persisted.StorageBytes);
+    }
 }

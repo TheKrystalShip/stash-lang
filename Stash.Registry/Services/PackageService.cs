@@ -209,7 +209,8 @@ public sealed class PackageService
             Dependencies = dependenciesJson,
             Integrity = integrity,
             PublishedAt = DateTime.UtcNow,
-            PublishedBy = username
+            PublishedBy = username,
+            StorageBytes = tarballBytes.LongLength
         };
 
         await _db.AddVersionAsync(packageName, versionRecord);

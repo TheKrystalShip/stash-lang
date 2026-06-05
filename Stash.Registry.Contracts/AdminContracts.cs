@@ -135,11 +135,26 @@ public sealed class OwnerListResponse
 /// <summary>
 /// Response body returned by the <c>GET /api/v1/admin/stats</c> endpoint.
 /// </summary>
+/// <remarks>
+/// M2 adds <see cref="StorageBytes"/> (sum of all version tarball sizes from
+/// <c>version_records.storage_bytes</c>). Additional fields (<c>packages</c>,
+/// <c>versions</c>, <c>downloads</c>, <c>activity</c>) are added in M6 when the
+/// discovery flag is flipped and the full stats surface is activated.
+/// </remarks>
 public sealed class StatsResponse
 {
     /// <summary>The total number of registered user accounts.</summary>
     [JsonPropertyName("users")]
     public int Users { get; set; }
+
+    /// <summary>
+    /// The total number of bytes occupied by all published tarballs, summed from
+    /// <c>version_records.storage_bytes</c>. Written at publish time by
+    /// <c>PackageService.PublishAsync</c> (D10 — a real persisted column, not a
+    /// runtime filesystem stat).
+    /// </summary>
+    [JsonPropertyName("storageBytes")]
+    public long StorageBytes { get; set; }
 }
 
 /// <summary>

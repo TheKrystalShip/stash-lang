@@ -65,6 +65,15 @@ public sealed class RegistryDbContext : DbContext
     /// <summary>Gets the <see cref="PackageRoleEntry"/> table (replaces the old <c>owners</c> table).</summary>
     public DbSet<PackageRoleEntry> PackageRoles => Set<PackageRoleEntry>();
 
+    /// <summary>Gets the <see cref="DownloadEventRecord"/> raw download-event table.</summary>
+    public DbSet<DownloadEventRecord> DownloadEvents => Set<DownloadEventRecord>();
+
+    /// <summary>Gets the <see cref="DownloadRollupHourlyRecord"/> hourly download-rollup table.</summary>
+    public DbSet<DownloadRollupHourlyRecord> DownloadRollupHourly => Set<DownloadRollupHourlyRecord>();
+
+    /// <summary>Gets the <see cref="DownloadRollupDailyRecord"/> daily download-rollup table.</summary>
+    public DbSet<DownloadRollupDailyRecord> DownloadRollupDaily => Set<DownloadRollupDailyRecord>();
+
     /// <summary>
     /// Configures entity mappings, column names, keys, relationships, and CHECK constraints.
     /// </summary>
@@ -119,6 +128,7 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.Deprecated).HasColumnName("deprecated").HasDefaultValue(false);
             entity.Property(e => e.DeprecationMessage).HasColumnName("deprecation_message");
             entity.Property(e => e.DeprecatedBy).HasColumnName("deprecated_by");
+            entity.Property(e => e.StorageBytes).HasColumnName("storage_bytes").HasDefaultValue(0L);
         });
 
         modelBuilder.Entity<UserRecord>(entity =>
@@ -326,6 +336,47 @@ public sealed class RegistryDbContext : DbContext
                 .HasForeignKey(e => e.PackageName)
                 .HasPrincipalKey(e => e.Name)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── M2: Download metrics tables ────────────────────────────────────────
+
+        modelBuilder.Entity<DownloadEventRecord>(entity =>
+        {
+            entity.ToTable("download_events");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id").ValueGeneratedOnAdd();
+            entity.Property(e => e.PackageName).HasColumnName("package_name").IsRequired();
+            entity.Property(e => e.Version).HasColumnName("version").IsRequired();
+            entity.Property(e => e.Ts).HasColumnName("ts");
+            entity.Property(e => e.Ip).HasColumnName("ip");
+            entity.Property(e => e.UserAgent).HasColumnName("user_agent");
+            entity.Property(e => e.Status).HasColumnName("status");
+            entity.Property(e => e.BytesServed).HasColumnName("bytes_served").HasDefaultValue(0L);
+            entity.Property(e => e.RequesterUser).HasColumnName("requester_user");
+            entity.HasIndex(e => new { e.PackageName, e.Version });
+            entity.HasIndex(e => e.Ts);
+        });
+
+        modelBuilder.Entity<DownloadRollupHourlyRecord>(entity =>
+        {
+            entity.ToTable("download_rollup_hourly");
+            entity.HasKey(e => new { e.PackageName, e.Version, e.BucketStart });
+            entity.Property(e => e.PackageName).HasColumnName("package_name");
+            entity.Property(e => e.Version).HasColumnName("version");
+            entity.Property(e => e.BucketStart).HasColumnName("bucket_start");
+            entity.Property(e => e.Downloads).HasColumnName("downloads").HasDefaultValue(0L);
+            entity.Property(e => e.BytesServed).HasColumnName("bytes_served").HasDefaultValue(0L);
+        });
+
+        modelBuilder.Entity<DownloadRollupDailyRecord>(entity =>
+        {
+            entity.ToTable("download_rollup_daily");
+            entity.HasKey(e => new { e.PackageName, e.Version, e.BucketStart });
+            entity.Property(e => e.PackageName).HasColumnName("package_name");
+            entity.Property(e => e.Version).HasColumnName("version");
+            entity.Property(e => e.BucketStart).HasColumnName("bucket_start");
+            entity.Property(e => e.Downloads).HasColumnName("downloads").HasDefaultValue(0L);
+            entity.Property(e => e.BytesServed).HasColumnName("bytes_served").HasDefaultValue(0L);
         });
     }
 }
