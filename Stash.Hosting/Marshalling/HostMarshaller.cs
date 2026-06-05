@@ -97,7 +97,7 @@ internal static class HostMarshaller
         {
             var sd = new StashDictionary();
             foreach (KeyValuePair<string, object?> kv in dict)
-                sd.Set(kv.Key, ToStash(kv.Value, registrations));
+                sd.Set(kv.Key, ToStash(kv.Value, registrations, observedTargets));
             return StashValue.FromObj(sd);
         }
 
@@ -107,7 +107,7 @@ internal static class HostMarshaller
         {
             var sd = new StashDictionary();
             foreach (System.Reflection.PropertyInfo prop in type.GetProperties())
-                sd.Set(prop.Name, ToStash(prop.GetValue(arg), registrations));
+                sd.Set(prop.Name, ToStash(prop.GetValue(arg), registrations, observedTargets));
             return StashValue.FromObj(sd);
         }
 
@@ -117,7 +117,7 @@ internal static class HostMarshaller
         {
             var list = new List<StashValue>();
             foreach (object? item in enumerable)
-                list.Add(ToStash(item, registrations));
+                list.Add(ToStash(item, registrations, observedTargets));
             return StashValue.FromObj(list);
         }
 

@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Hosting;
+using Stash.Runtime;
 using Xunit;
 
 /// <summary>
@@ -230,6 +231,46 @@ public class HostObjectLifetimeTests
         Assert.Null(ex);
         // OnRelease was invoked for the observed target.
         Assert.True(releaseFired);
+    }
+
+    // ── #10: OnRelease fires for a host instance returned nested inside a dict ─
+
+    [Fact]
+    public async Task OnRelease_FiresForHostInstance_ReturnedNestedInDict()
+    {
+        // Regression for F01: observedTargets was not forwarded in the IDictionary
+        // recursive branch of HostMarshaller.ToStash, so a Resource returned *inside*
+        // a dict was never added to _observedTargets and OnRelease never fired.
+        //
+        // Key: "inner" is a freshly-created Resource that has NO other observation
+        // route (it is not bound via SetGlobal). Its only path into VM state is through
+        // the nested dict returned by r.wrap(). Pre-fix: "inner" absent from released.
+        // Post-fix: "inner" is present.
+
+        var host = new StashHost();
+        var released = new List<string>();
+
+        host.RegisterType<Resource>(b => b
+            .Property("id", x => x.Id)
+            .Method("wrap", (Resource self) =>
+                (object)new Dictionary<string, object?> { ["inner"] = new Resource("inner") })
+            .OnRelease(r => released.Add(r.Id)));
+
+        var outer = new Resource("outer");
+        host.SetGlobal("r", outer);
+
+        // run() calls r.wrap() so the nested "inner" Resource is marshalled through
+        // the IDictionary branch and placed into VM state.
+        var script = await host.CompileAsync("""
+            fn run() { return r.wrap(); }
+            """);
+        await host.RunAsync(script);
+        await host.CallAsync<StashValue>("run");
+
+        await host.DisposeAsync();
+
+        // The "inner" Resource must be released — it was observed only via the nested dict.
+        Assert.Contains("inner", released);
     }
 
     // ── #9: Two hosts — hermetic isolation — no shared OnRelease state ────────
