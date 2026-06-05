@@ -1,0 +1,267 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose
+# in brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec async-correctness
+
+schema_version: 1
+
+feature: async-correctness
+title: Async Correctness — Contract and Test Suite
+
+brief: ./brief.md
+
+created: 2026-06-05
+architect_session: async-correctness-architect-2026-06-05
+
+# Default verify command run after every phase (cheap; full test runs in per-phase verify).
+default_verify:
+  - dotnet build Stash.sln
+
+# Broad scope — safety rail, not prison. Implementers may make small documented
+# corrections when discovery was stale.
+scope:
+  - docs/Stash — Language Specification.md
+  - docs/Stash — Standard Library Reference.md
+  - Stash.Core/Runtime/Types/StashFuture.cs
+  - Stash.Core/Runtime/Errors/**
+  - Stash.Bytecode/VM/VirtualMachine.Async.cs
+  - Stash.Bytecode/VM/VirtualMachine.Dispatch.cs
+  - Stash.Bytecode/VM/VirtualMachine.cs
+  - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+  - Stash.Bytecode/Runtime/VMContext.cs
+  - Stash.Bytecode/StashEngine.cs
+  - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/NetSocketImpl.cs
+  - Stash.Stdlib/BuiltIns/TcpBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/UdpBuiltIns.cs
+  - Stash.Cli/Program.cs
+  - Stash.Tests/Interpreting/Async/**
+  - Stash.Tests/Interpreting/AsyncAwaitTests.cs
+  - Stash.Tests/Interpreting/AsyncIsolationTests.cs
+  - Stash.Tests/Interpreting/TaskBuiltInsTests.cs
+  - Stash.Tests/Interpreting/ArrBuiltInsTests.cs
+  - Stash.Tests/Interpreting/ProcessBuiltInsTests.cs
+  - Stash.Tests/Stdlib/SourceGenerator/Wave1ThrowsCoverageTests.cs
+  - Stash.Tests/Stdlib/SourceGenerator/Wave3ThrowsCoverageTests.cs
+  - examples/async_correctness.stash
+  - .claude/agents/stash-author.gotchas.md
+
+phases:
+  - id: P1
+    title: Contract spec, stdlib metadata, test-dir scaffold
+    deps: []
+    files:
+      - docs/Stash — Language Specification.md
+      - docs/Stash — Standard Library Reference.md
+      - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs
+      - Stash.Tests/Interpreting/Async/_README.md
+      - Stash.Tests/Stdlib/SourceGenerator/Wave1ThrowsCoverageTests.cs
+      - Stash.Tests/Stdlib/SourceGenerator/Wave3ThrowsCoverageTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet run --project Stash.Docs/
+      - dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~Wave3ThrowsCoverageTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+    done_when:
+      - "`docs/Stash — Language Specification.md` §Async presents both concurrency systems (Futures + event queue) as one picture and documents D6–D11."
+      - "`task.*` and `arr.par*` XML doc comments include `<exception>` tags referencing registered StashError types for the post-feature contract (CancellationError on cancel paths, original type preservation noted on awaitAll, StateError on cross-VM handle on process builtins)."
+      - "`arr.parMap` / `parFilter` / `parForEach` `maxConcurrency` parameter is surfaced in the generated reference."
+      - "`docs/Stash — Standard Library Reference.md` is regenerated; `StandardLibraryReferenceTests` passes."
+      - "`Wave1ThrowsCoverageTests` and `Wave3ThrowsCoverageTests` pass (allow-lists updated or `<exception>` tags added so each `task.*` / `process.*` function the contract reaches is in sync)."
+      - "Directory `Stash.Tests/Interpreting/Async/` exists with a `_README.md` describing the dimension folders the later phases will populate (Basics, ErrorPropagation, CancellationAndTimeout, LifecycleEdges, Isolation, Combinators, UnobservedAndExit, TwoSystemsBoundary)."
+    notes: |
+      The metadata may declare contract behavior that the runtime does not yet
+      deliver — this phase is intentionally docs-leads-impl. The throws-coverage
+      meta-tests check metadata vs. reference consistency, not metadata vs.
+      runtime, so they pass on metadata alone after regen.
+
+      The `_README.md` is a placeholder so the directory exists for later
+      phases; no test code in it.
+
+  - id: P2
+    title: D3 — genuine cancellation (dispatch + StashFuture)
+    deps: [P1]
+    files:
+      - Stash.Core/Runtime/Types/StashFuture.cs
+      - Stash.Bytecode/VM/VirtualMachine.Dispatch.cs
+      - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
+      - Stash.Tests/Interpreting/Async/CancellationAndTimeout/CancellationTests.cs
+      - Stash.Tests/Interpreting/Async/CancellationAndTimeout/TimeoutTests.cs
+      - Stash.Tests/Interpreting/TaskBuiltInsTests.cs
+      - Stash.Tests/Interpreting/AsyncAwaitTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async.CancellationAndTimeout|FullyQualifiedName~TaskBuiltInsTests|FullyQualifiedName~AsyncAwaitTests"
+      - dotnet test
+    done_when:
+      - "A test that calls `task.cancel(f)` and then gives the child cooperative time to exit (polling `task.status(f)` at a park point such as `time.sleep`, or awaiting the future under a timeout) observes `Status.Cancelled` — today it cannot. The test must not race the child by reading status synchronously immediately after cancel; the brief documents cancellation is cooperative."
+      - "A test that awaits `f` (under a bounded timeout to avoid hangs on regression) after `task.cancel(f)` catches a `CancellationError` whose `.type == \"CancellationError\"`."
+      - "`task.timeout(50, () => { time.sleep(10); })` still throws `TimeoutError` (timeout vs. external cancellation distinction preserved)."
+      - "`StashFuture.GetResult()` throws registered `CancellationError` on OperationCanceledException (today: bare RuntimeError)."
+      - "Full `dotnet test` is green."
+
+  - id: P3
+    title: D2 — task.awaitAll preserves original error type
+    deps: [P2]
+    files:
+      - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
+      - Stash.Tests/Interpreting/Async/ErrorPropagation/AwaitAllErrorTests.cs
+      - Stash.Tests/Interpreting/Async/ErrorPropagation/CombinatorPairingTests.cs
+      - Stash.Tests/Interpreting/TaskBuiltInsTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async.ErrorPropagation|FullyQualifiedName~TaskBuiltInsTests"
+      - dotnet test
+    done_when:
+      - "`task.awaitAll([task.run(() => { throw TypeError(\"nope\"); })])` returns an array whose element is a `StashError` with `.type == \"TypeError\"` and `.message == \"nope\"` (today: synthetic `TaskError`)."
+      - "`task.awaitAll` element corresponding to a cancelled future is `StashError` with `.type == \"CancellationError\"` (uses D3's marker)."
+      - "Tests assert the fail-fast (`all`/`race`/`awaitAny`) ↔ collect-all (`awaitAll`) pairing as a single behavioral contract."
+      - "Full `dotnet test` is green."
+
+  - id: P4
+    title: D4 — arr.par* async callback flatten
+    deps: [P3]
+    files:
+      - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+      - Stash.Tests/Interpreting/Async/Combinators/ParStarAsyncFlattenTests.cs
+      - Stash.Tests/Interpreting/Async/Combinators/ParStarOrderingTests.cs
+      - Stash.Tests/Interpreting/ArrBuiltInsTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async.Combinators|FullyQualifiedName~ArrBuiltInsTests"
+      - dotnet test
+    done_when:
+      - "`arr.parMap([1,2,3], async (x) => x * 2)` returns `[2, 4, 6]` (today: three Futures)."
+      - "`arr.parFilter([1,2,3,4], async (x) => x % 2 == 0)` returns `[2, 4]` (truthiness runs on unwrapped value)."
+      - "`arr.parForEach([1,2,3], async (x) => { … })` runs all three async callbacks to completion (today: returns before inner Futures resolve)."
+      - "Order preservation (D10) holds for `arr.parMap` / `arr.parFilter` even when async callbacks complete out of order."
+      - "Implementation reuses the `callable.IsAsync && result is StashFuture inner` unwrap pattern from `TaskBuiltIns.Run`."
+      - "Full `dotnet test` is green."
+
+  - id: P5
+    title: D5 — cross-VM process handle throws StateError; socket boundary scoped
+    deps: [P4]
+    files:
+      - Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Stdlib/BuiltIns/NetSocketImpl.cs
+      - Stash.Stdlib/BuiltIns/TcpBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/UdpBuiltIns.cs
+      - Stash.Tests/Interpreting/Async/TwoSystemsBoundary/CrossVmHandleTests.cs
+      - Stash.Tests/Interpreting/ProcessBuiltInsTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async.TwoSystemsBoundary|FullyQualifiedName~ProcessBuiltInsTests|FullyQualifiedName~Wave1ThrowsCoverageTests"
+      - dotnet test
+    done_when:
+      - "A `process.spawn` handle from the parent, used inside `task.run` (`process.read` / `process.wait` / `process.kill`), throws `StateError` with a message naming the cross-task boundary (today: silent empty `CommandResult(\"\",\"\", -1)`)."
+      - "The process StateError is thrown at the `VMContext.TrackedProcesses` lookup site in `ProcessBuiltIns`, using the same handle-not-in-current-context check."
+      - "Sockets (`TcpClient`/`TcpServer`/`UdpSocket`) get an equivalent StateError IF and ONLY IF a `TrackedSockets` (or per-builtin equivalent) collection already exists or is added in this phase. If sockets have no per-VM tracking today, the phase adds minimal tracking and the cross-VM throw at the same boundary; the audit verified only the process case, so this is design work in this phase, not an assumed parallel."
+      - "`Wave1ThrowsCoverageTests` passes (process functions whose throws metadata changed are in sync)."
+      - "Full `dotnet test` is green."
+    notes: |
+      Discovery from architect: `Stash.Bytecode/Runtime/VMContext.cs` has
+      `TrackedProcesses` and `TrackedWatchers`. There is no `TrackedSockets`
+      today. The implementer must decide between:
+        (a) add a minimal `TrackedSockets` collection to VMContext + thread
+            registration through `tcp.listen` / `tcp.connect` / `udp.bind` /
+            etc., then apply the same boundary check;
+        (b) scope this phase to processes only and file a follow-up stub for
+            sockets in `.kanban/0-backlog/`.
+      Prefer (a) when the change is bounded; choose (b) only if the socket
+      tracking requires non-trivial design. Either choice is acceptable as
+      long as the done_when above is honored.
+
+  - id: P6
+    title: D1 — observation registry + exit-hook unobserved-task report
+    deps: [P5]
+    files:
+      - Stash.Core/Runtime/Types/StashFuture.cs
+      - Stash.Bytecode/VM/VirtualMachine.cs
+      - Stash.Bytecode/VM/VirtualMachine.Async.cs
+      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+      - Stash.Bytecode/Runtime/VMContext.cs
+      - Stash.Bytecode/StashEngine.cs
+      - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
+      - Stash.Cli/Program.cs
+      - Stash.Tests/Interpreting/Async/UnobservedAndExit/UnobservedReportTests.cs
+      - Stash.Tests/Interpreting/Async/UnobservedAndExit/ConsumerEnumerationTests.cs
+      - Stash.Tests/Interpreting/Async/UnobservedAndExit/InFlightDropGotchaTests.cs
+      - Stash.Tests/Interpreting/Async/UnobservedAndExit/EmbeddedModeGateTests.cs
+      - .claude/agents/stash-author.gotchas.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async.UnobservedAndExit|FullyQualifiedName~TaskBuiltInsTests|FullyQualifiedName~AsyncAwaitTests"
+      - dotnet test
+    done_when:
+      - "A Stash script `task.run(() => { throw ValueError(\"oops\"); });` (no await) run via the CLI writes exactly one `warning: 1 unobserved async error(s):` block to `stderr` with `ValueError: oops`; `stdout` is unchanged."
+      - "The same script run via `StashEngine` with `EmbeddedMode = true` writes zero stderr (EmbeddedMode gate)."
+      - "A consumer-enumeration test programmatically asserts that for every outcome-consuming combinator (`await`, `task.await`, `task.awaitAll`, `task.awaitAny`, `task.all`, `task.race`) a normally-awaited faulted future produces ZERO unobserved-error lines — i.e. no false positives."
+      - "`task.status(f)` on a faulted future does NOT count as observation: a `task.run` whose only inspection is `task.status(...)` still reports at exit (positive assertion of the `status != observation` decision)."
+      - "Cancelled futures (via `task.cancel`) are NOT reported at exit (filter is `faulted && !observed && !cancelled`)."
+      - "A still-running `task.run(() => time.sleep(10))` at script exit does NOT print to stderr and does NOT block exit (row-10 drop boundary preserved). A `Category=Gotcha` test under `InFlightDropGotchaTests` change-detects this."
+      - "When the script itself threw a top-level error, the unobserved-task report still fires after the primary error message (a primary error does not excuse a silently-dropped one)."
+      - "`.claude/agents/stash-author.gotchas.md` has the row-10 in-flight-drop entry linked to `InFlightDropGotchaTests`."
+      - "Full `dotnet test` is green."
+    notes: |
+      The registry must be a per-root-VM field threaded into every child-VM
+      creation site by reference; see brief §Cross-Cutting Concerns for the
+      Construct-level enforcement. Sites to update (enumerated for the
+      implementer):
+        - VirtualMachine.Async.cs line ~89 (SpawnAsyncFunction child VM)
+        - VMContext.cs line ~363 (Fork)
+        - VMContext.cs line ~667 (InvokeCallback inner childVm)
+        - VirtualMachine.Modules.cs line ~119 (imported-module VM)
+
+      Consumers that must call `MarkObserved`:
+        - VirtualMachine.Async.cs ExecuteAwait (the `await` opcode handler)
+        - TaskBuiltIns.Await
+        - TaskBuiltIns.AwaitAll (per element)
+        - TaskBuiltIns.AwaitAny (per element — winner AND cancelled losers)
+        - TaskBuiltIns.All (per constituent at result-collection time)
+        - TaskBuiltIns.Race (per constituent at result-collection time)
+
+      `task.status` and `task.cancel` deliberately do NOT call MarkObserved.
+
+      Exit code is unchanged (defer the "non-zero exit on unobserved error"
+      decision to a follow-up).
+
+  - id: P7
+    title: Dimension suite + verified example
+    deps: [P6]
+    files:
+      - Stash.Tests/Interpreting/Async/TwoSystemsBoundary/NonInteractionTests.cs
+      - Stash.Tests/Interpreting/Async/Isolation/IsolationMatrixTests.cs
+      - Stash.Tests/Interpreting/Async/Basics/AwaitUncoloredTests.cs
+      - Stash.Tests/Interpreting/Async/LifecycleEdges/DoubleAwaitTests.cs
+      - Stash.Tests/Interpreting/Async/LifecycleEdges/FutureAsValueTests.cs
+      - examples/async_correctness.stash
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~Stash.Tests.Interpreting.Async"
+      - dotnet run --project Stash.Cli/ -- examples/async_correctness.stash
+      - dotnet test
+    done_when:
+      - "Two-systems non-interaction tests pass: a Stash script that calls `event.poll()` does NOT advance an `async fn` Future (the Future stays Running); a Stash script that `await`s a Future does NOT drain pending `fs.watch` / `signal.on` callbacks (the callback fires only at the next true park point)."
+      - "Isolation matrix tests pass: freeze-or-clone applies to `async fn` / `task.run` / `arr.par*` callbacks; frozen values are share-by-reference; a non-frozen cycle → `ValueError` with the cycle path; Future-as-value is share-by-reference across the isolation boundary."
+      - "Basics tests pass: `await` works at top-level, in non-async fns, and in loops (D6 — `await` is blocking & uncolored)."
+      - "LifecycleEdges tests pass: double-await is idempotent (returns the cached result; body runs once); `await` on a non-Future passes the value through; `await` unwraps exactly one level (Future-of-Future requires two `await`s)."
+      - "Future-as-value tests pass: `typeof(f) == \"Future\"`; reference identity for `==`; stringifies `<Future:Status>`; storable in arrays, dicts, and struct fields."
+      - "`examples/async_correctness.stash` runs cleanly against the freshly-built CLI binary (`dotnet run --project Stash.Cli/ -- examples/async_correctness.stash`) and demonstrates the D1–D5 contract at the user level."
+      - "Full `dotnet test` is green."
+    notes: |
+      This phase carries the cross-cutting dimension tests that no single fix
+      phase owns. It is sequenced last so the example can demonstrate the full
+      D1–D5 contract against a binary that ships it all.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Full test suite + the standing checkpoint-lint omission guards.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
