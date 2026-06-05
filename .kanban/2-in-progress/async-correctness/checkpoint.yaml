@@ -1,7 +1,7 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-05T23:12:51Z"
+updated: "2026-06-05T23:44:10Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "D2: awaitAll routes through GetResult+FromRuntimeError; original TypeError/ValueError/CancellationError types preserved; 13886 full suite pass"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b0e3f309ee221c39d2f562eb459f4e6d04b21bd8
+    verified: true
+    started: "2026-06-05T23:16:22Z"
+    completed: "2026-06-05T23:44:10Z"
+    attempts: 1
+    notes: "D4: FlattenAsyncCallbackResult helper reuses IsAsync/StashFuture pattern; parMap/parFilter/parForEach all flatten; 13901 full suite pass"
   P5:
     status: pending
     commit: null
