@@ -37,7 +37,8 @@ The pass-1 findings (F01–F04) are all sound. Pass-2 surfaces two cosmetic doc-
 
 ## F05 — [MINOR] F02 test's XML-doc summary is orphaned by the F04 test insertion
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ba8a1d9a
 **Files:** `Stash.Tests/Registry/AuditTamperEvidenceTests.cs:680-723`
 **Phase:** A6 (review-pass-1 fix follow-up)
 **Commit:** 22f0ae83
@@ -114,7 +115,8 @@ dotnet test --filter "FullyQualifiedName~AuditTamperEvidence"
 
 ## F06 — [MINOR] Two `<see cref="WalkChain">` doc references survived the rename to `WalkChainAsync`
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** ba8a1d9a
 **Files:** `Stash.Registry/Services/AuditChainHasher.cs:195`, `Stash.Tests/Registry/AuditLogControllerTests.cs:540`
 **Phase:** A6 (review-pass-1 fix follow-up)
 **Commit:** 3f3589dd
