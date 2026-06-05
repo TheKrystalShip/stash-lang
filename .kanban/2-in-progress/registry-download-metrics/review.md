@@ -16,7 +16,7 @@
 ## F01 — [CRITICAL] AuditActions value drift silently changed an audit-log wire contract; breaks existing AuditServiceTests (×2)
 
 **Status:** fixed
-**Fixed in:** <!-- sha placeholder, will be replaced after commit -->
+**Fixed in:** 69fd790d
 **Files:** `Stash.Registry/Services/AuditActions.cs:29-31`, `Stash.Registry/Services/AuditService.cs:110,124`, `Stash.Tests/Registry/AuditServiceTests.cs:39,51,54`
 **Phase:** M6
 **Commit:** c2515b87
