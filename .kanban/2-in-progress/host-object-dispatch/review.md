@@ -85,7 +85,8 @@ The three MINOR findings are scoped narrowly and **do not block** acceptance:
 
 ## F01 — [MINOR] OnRelease misses registered host instances returned nested inside a dict/array/anonymous object
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** c592018e
 **Files:** `Stash.Hosting/Marshalling/HostMarshaller.cs:100`, `Stash.Hosting/Marshalling/HostMarshaller.cs:110`, `Stash.Hosting/Marshalling/HostMarshaller.cs:120`
 **Phase:** P4 (lifetime — though the root cause sits in the P1/P2 marshaller chokepoint)
 **Commit:** 4a35888b
