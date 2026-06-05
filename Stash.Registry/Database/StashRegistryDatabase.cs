@@ -831,19 +831,37 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
-    public async Task<SearchResult<AuditEntry>> GetAuditLogAsync(int page, int pageSize, string? packageName, string? action)
+    public async Task<SearchResult<AuditEntry>> GetAuditLogAsync(
+        int page, int pageSize,
+        string? packageName = null, string? action = null,
+        string? user = null, string? target = null, string? version = null,
+        string? ip = null, DateTime? from = null, DateTime? to = null)
     {
         var queryable = _context.AuditLog.AsQueryable();
 
         if (packageName != null)
-        {
             queryable = queryable.Where(e => e.Package == packageName);
-        }
 
         if (action != null)
-        {
             queryable = queryable.Where(e => e.Action == action);
-        }
+
+        if (user != null)
+            queryable = queryable.Where(e => e.User == user);
+
+        if (target != null)
+            queryable = queryable.Where(e => e.Target == target);
+
+        if (version != null)
+            queryable = queryable.Where(e => e.Version == version);
+
+        if (ip != null)
+            queryable = queryable.Where(e => e.Ip == ip);
+
+        if (from != null)
+            queryable = queryable.Where(e => e.Timestamp >= from.Value);
+
+        if (to != null)
+            queryable = queryable.Where(e => e.Timestamp <= to.Value);
 
         int totalCount = await queryable.CountAsync();
         var items = await queryable

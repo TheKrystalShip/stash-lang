@@ -576,11 +576,26 @@ public interface IRegistryDatabase
 
     /// <summary>
     /// Returns a paginated, filtered view of the audit log, ordered by timestamp descending.
+    /// All filter parameters are combined with logical AND; omitted (null) filters are inert.
     /// </summary>
     /// <param name="page">The 1-based page number.</param>
     /// <param name="pageSize">The maximum number of entries per page.</param>
-    /// <param name="packageName">Optional package name filter; pass <c>null</c> to include all packages.</param>
-    /// <param name="action">Optional action string filter; pass <c>null</c> to include all actions.</param>
+    /// <param name="packageName">Optional package name filter (exact match).</param>
+    /// <param name="action">Optional action string filter (exact match).</param>
+    /// <param name="user">Optional actor username filter (exact match).</param>
+    /// <param name="target">Optional secondary target filter (exact match).</param>
+    /// <param name="version">Optional version filter (exact match).</param>
+    /// <param name="ip">
+    /// Optional IP filter — the caller must pass the ALREADY-TRANSFORMED value (i.e. the same value
+    /// that was stored at write time) so that this layer can use a plain exact-match.
+    /// Passing <c>null</c> here disables the filter.
+    /// </param>
+    /// <param name="from">Optional inclusive UTC lower-bound on the entry timestamp.</param>
+    /// <param name="to">Optional inclusive UTC upper-bound on the entry timestamp.</param>
     /// <returns>A <see cref="SearchResult{T}"/> of <see cref="AuditEntry"/> items with the total count.</returns>
-    Task<SearchResult<AuditEntry>> GetAuditLogAsync(int page, int pageSize, string? packageName, string? action);
+    Task<SearchResult<AuditEntry>> GetAuditLogAsync(
+        int page, int pageSize,
+        string? packageName = null, string? action = null,
+        string? user = null, string? target = null, string? version = null,
+        string? ip = null, DateTime? from = null, DateTime? to = null);
 }

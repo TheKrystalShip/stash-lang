@@ -88,6 +88,34 @@ public sealed class AuditLogQuery
     /// <summary>Optional action type filter (e.g. <c>"publish"</c>, <c>"user.create"</c>).</summary>
     [JsonPropertyName("action")]
     public string? action { get; set; }
+
+    /// <summary>Optional user (actor) filter — exact match against the <c>user</c> column.</summary>
+    [JsonPropertyName("user")]
+    public string? user { get; set; }
+
+    /// <summary>Optional secondary target filter — exact match against the <c>target</c> column.</summary>
+    [JsonPropertyName("target")]
+    public string? target { get; set; }
+
+    /// <summary>Optional version filter — exact match against the <c>version</c> column.</summary>
+    [JsonPropertyName("version")]
+    public string? version { get; set; }
+
+    /// <summary>
+    /// Optional IP filter — the operator supplies a raw IP; the registry transforms it through
+    /// <c>IIpHasher</c> before matching the stored (already-transformed) value.  With
+    /// <c>IpMode=off</c> the stored column is null for all entries so the filter matches nothing.
+    /// </summary>
+    [JsonPropertyName("ip")]
+    public string? ip { get; set; }
+
+    /// <summary>Optional inclusive UTC lower-bound on the entry timestamp.</summary>
+    [JsonPropertyName("from")]
+    public DateTime? from { get; set; }
+
+    /// <summary>Optional inclusive UTC upper-bound on the entry timestamp.</summary>
+    [JsonPropertyName("to")]
+    public DateTime? to { get; set; }
 }
 
 /// <summary>

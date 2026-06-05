@@ -238,7 +238,11 @@ public class AdminController : ControllerBase
     [HttpGet("audit-log")]
     public async Task<Ok<PagedResponse<AuditEntryResponse>>> GetAuditLog([FromQuery] AuditLogQuery query)
     {
-        var result = await _auditService.GetAuditLogAsync(query.page, query.pageSize, query.package, query.action);
+        var result = await _auditService.GetAuditLogAsync(
+            query.page, query.pageSize,
+            query.package, query.action,
+            query.user, query.target, query.version,
+            query.ip, query.from, query.to);
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
         return TypedResults.Ok(new PagedResponse<AuditEntryResponse>

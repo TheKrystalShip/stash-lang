@@ -24,9 +24,15 @@ namespace Stash.Tests.Registry.Configuration;
 /// <para>
 /// The <b>exemption list</b> is seeded in M1 and is <b>PERMANENT</b> — it does NOT
 /// shrink across later phases.  The 6 non-<c>IpHasher</c> files are legitimate
-/// non-metrics raw-IP readers (auth/admin audit, rate-limit keying, authz audit) that
-/// legitimately keep the raw IP and are out of every metrics phase's scope.  These 6
-/// files will remain in the list indefinitely; no phase removes them.
+/// non-metrics raw-IP readers: the audit-write files (<c>AuthController</c>,
+/// <c>AdminController</c>, <c>Startup</c>, <c>RegistryAuthorizeFilter</c>)
+/// <em>obtain</em> the raw IP from <c>HttpContext</c> (the layering-correct read site)
+/// and pass it downstream; <c>AuditService</c> applies
+/// <see cref="Stash.Registry.Configuration.IIpHasher"/> once at write time, so the
+/// stored value is already transformed — these files do NOT keep the raw IP.
+/// <c>RateLimitingMiddleware</c> uses the raw IP for keying (genuinely needs raw, not
+/// an audit write); <c>PackagesController</c> has legitimate audit and rate-limit reads.
+/// These 6 files will remain in the list indefinitely; no phase removes them.
 /// </para>
 /// <para>
 /// <b>Known file-level limitation.</b>  This guard operates at file granularity.
@@ -96,14 +102,25 @@ public sealed class NoMagicRemoteIpAccessMetaTests
 
         // ── Permanent non-metrics raw-IP readers ──────────────────────────────
         // These 6 files read RemoteIpAddress for legitimate non-metrics purposes
-        // (audit logging, rate-limit keying, authz-filter audit) and will remain
-        // in this list indefinitely — they are NOT metrics call sites.
+        // and will remain in this list indefinitely — they are NOT metrics call sites.
+        //
+        // Audit-write files: obtain the raw IP from HttpContext (layering-correct read site)
+        // and pass it to AuditService, which applies IIpHasher.Apply once at write time.
+        // The stored Ip column holds the TRANSFORMED value; these files do NOT keep raw IPs.
+        // Rationale flip from A3 (registry-audit-log-v2): "keeps raw IP" → "obtains raw IP,
+        // transformed downstream in AuditService" (D11 now applies to both metrics and audit).
         "Controllers/AuthController.cs",
-        "Controllers/PackagesController.cs",
         "Controllers/AdminController.cs",
-        "Middleware/RateLimitingMiddleware.cs",
         "Auth/Authorization/RegistryAuthorizeFilter.cs",
         "Startup.cs",
+        //
+        // Rate-limit keying: genuinely needs the raw IP for per-IP throttling — this is not
+        // an audit write; the raw IP is used as a bucket key and never persisted.
+        "Middleware/RateLimitingMiddleware.cs",
+        //
+        // PackagesController: has both audit and rate-limit RemoteIpAddress reads (8 total);
+        // the download-metrics path's compliance is proven by DownloadCaptureSemanticsTests.
+        "Controllers/PackagesController.cs",
     };
 
     /// <summary>

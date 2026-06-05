@@ -250,4 +250,104 @@ public sealed class AuditLogControllerTests
         Assert.True(items.GetArrayLength() >= 3,
             "Expected at least 3 items in the 'items' array.");
     }
+
+    // ── A3: widened filter tests (user, ip, from/to) ──────────────────────────
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log?user=alice returns only alice's entries.
+    /// Seeds three entries: two for alice, one for bob; verifies the filter.
+    /// </summary>
+    [Fact]
+    public async Task GetAuditLog_FilterByUser_ReturnsOnlyThatUsersEntries()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-user-filter");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        // Seed entries for specific users
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+            db.AuditLog.Add(new AuditEntry { Action = "publish", User = "alice", Timestamp = DateTime.UtcNow.AddSeconds(-3) });
+            db.AuditLog.Add(new AuditEntry { Action = "publish", User = "bob", Timestamp = DateTime.UtcNow.AddSeconds(-2) });
+            db.AuditLog.Add(new AuditEntry { Action = "unpublish", User = "alice", Timestamp = DateTime.UtcNow.AddSeconds(-1) });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.GetAsync("/api/v1/admin/audit-log?user=alice&pageSize=50");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string content = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(content);
+        var root = doc.RootElement;
+
+        Assert.True(root.TryGetProperty("items", out var items));
+        // All returned items must be alice's
+        foreach (var item in items.EnumerateArray())
+        {
+            Assert.True(item.TryGetProperty("user", out var u));
+            Assert.Equal("alice", u.GetString());
+        }
+        // At least the 2 seeded entries for alice
+        Assert.True(items.GetArrayLength() >= 2,
+            "Expected at least 2 items for user=alice.");
+    }
+
+    /// <summary>
+    /// GET /api/v1/admin/audit-log?action=X&amp;from=t0&amp;to=t1 returns only X within [t0,t1].
+    /// </summary>
+    [Fact]
+    public async Task GetAuditLog_FilterByActionAndTimeWindow_ReturnsMatchingEntries()
+    {
+        using var conn = new SqliteConnection("Data Source=:memory:");
+        conn.Open();
+        await using var factory = CreateFactory(conn);
+        var client = factory.CreateClient();
+
+        string adminToken = await RegisterAndGetAdminTokenAsync(client, "admin-action-time");
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", adminToken);
+
+        var t0 = new DateTime(2025, 6, 1, 0, 0, 0, DateTimeKind.Utc);
+        var t1 = new DateTime(2025, 6, 3, 0, 0, 0, DateTimeKind.Utc);
+        var tOutside = new DateTime(2025, 6, 10, 0, 0, 0, DateTimeKind.Utc);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegistryDbContext>();
+            // 2 entries of "special.action" inside the window
+            db.AuditLog.Add(new AuditEntry { Action = "special.action", User = "alice", Timestamp = t0 });
+            db.AuditLog.Add(new AuditEntry { Action = "special.action", User = "alice", Timestamp = t1 });
+            // 1 entry of "special.action" OUTSIDE the window
+            db.AuditLog.Add(new AuditEntry { Action = "special.action", User = "alice", Timestamp = tOutside });
+            // 1 entry of different action inside window
+            db.AuditLog.Add(new AuditEntry { Action = "other.action", User = "alice", Timestamp = t0 });
+            await db.SaveChangesAsync();
+        }
+
+        string from = Uri.EscapeDataString(t0.ToString("o"));
+        string to = Uri.EscapeDataString(t1.ToString("o"));
+        var response = await client.GetAsync(
+            $"/api/v1/admin/audit-log?action=special.action&from={from}&to={to}&pageSize=50");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        string content = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(content);
+        var root = doc.RootElement;
+
+        Assert.True(root.TryGetProperty("totalCount", out var tc));
+        Assert.Equal(2, tc.GetInt32());
+
+        Assert.True(root.TryGetProperty("items", out var items));
+        foreach (var item in items.EnumerateArray())
+        {
+            Assert.True(item.TryGetProperty("action", out var a));
+            Assert.Equal("special.action", a.GetString());
+        }
+    }
 }
