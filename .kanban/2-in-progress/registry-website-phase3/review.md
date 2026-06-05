@@ -77,7 +77,8 @@ After the change all production sites must still be allowed, and the new rogue-e
 
 ## F02 — [MAJOR] Dashboard does not honor the C4 401 → clear-session → /login?expired=1 contract
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 5494d9b7
 **Files:** `Stash.Registry.Web/Areas/Maintainer/Pages/Dashboard.cshtml.cs:62-70`
 **Phase:** A2
 **Commit:** 36a20bc4
