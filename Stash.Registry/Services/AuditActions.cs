@@ -82,4 +82,60 @@ public static class AuditActions
 
     /// <summary>A specific version's deprecation was removed.</summary>
     public const string VersionUndeprecate = "version.undeprecate";
+
+    // ── Role management ───────────────────────────────────────────────────────
+
+    /// <summary>A principal was assigned a role on a package.</summary>
+    public const string RoleAssign = "role.assign";
+
+    /// <summary>A principal's role on a package was revoked.</summary>
+    public const string RoleRevoke = "role.revoke";
+
+    // ── Package visibility ────────────────────────────────────────────────────
+
+    /// <summary>A package's visibility was changed.</summary>
+    /// <remarks>The value preserves the original underscore form (<c>package.visibility_change</c>)
+    /// as a wire-contract value — do not "fix" to <c>visibility.update</c>.</remarks>
+    public const string PackageVisibilityChange = "package.visibility_change";
+
+    // ── User management ───────────────────────────────────────────────────────
+
+    /// <summary>A new user account was created.</summary>
+    public const string UserCreate = "user.create";
+
+    /// <summary>A user account was disabled.</summary>
+    public const string UserDisable = "user.disable";
+
+    // ── Token management ──────────────────────────────────────────────────────
+
+    /// <summary>A new API token was created.</summary>
+    public const string TokenCreate = "token.create";
+
+    /// <summary>An API token was explicitly revoked by the user.</summary>
+    public const string TokenRevoke = "token.revoke";
+
+    /// <summary>A refresh token was exchanged for a new access/refresh token pair.</summary>
+    public const string TokenRefresh = "token.refresh";
+
+    /// <summary>A consumed refresh token was reused, indicating a potential theft.</summary>
+    /// <remarks>The value preserves the original underscore form (<c>token_theft_detected</c>)
+    /// as a wire-contract value — do not reformat to dot-separated notation.</remarks>
+    public const string TokenTheftDetected = "token_theft_detected";
+
+    /// <summary>A request was denied because the presented JWT has been revoked (JTI check).</summary>
+    public const string TokenRevoked = "token.revoked";
+
+    // ── Authentication events ─────────────────────────────────────────────────
+
+    /// <summary>A user authenticated successfully with valid credentials.</summary>
+    public const string AuthLoginSuccess = "auth.login.success";
+
+    /// <summary>A login attempt was rejected due to invalid credentials.</summary>
+    public const string AuthLoginFailure = "auth.login.failure";
+
+    /// <summary>A token refresh attempt failed (invalid, expired, or mismatched token).</summary>
+    public const string AuthRefreshFailure = "auth.refresh.failure";
+
+    /// <summary>A new user account was created via self-service registration.</summary>
+    public const string AuthRegister = "auth.register";
 }

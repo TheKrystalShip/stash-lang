@@ -1,0 +1,67 @@
+schema_version: 1
+feature: registry-audit-log-v2
+current: null
+updated: "2026-06-05T22:13:52Z"
+phases:
+  A1:
+    status: done
+    commit: 50b5f894f5339b34038d8ee63b7857022eb3f6e2
+    verified: true
+    started: "2026-06-05T18:33:19Z"
+    completed: "2026-06-05T18:46:27Z"
+    attempts: 1
+    notes: "Migrated 10 inline audit-action literals to AuditActions constants; shipped NoMagicAuditActionStringsMetaTests with binding-floor, file-count floor, 3 self-tests, and single RegistryAuthorizeFilter exemption; 21 tests green"
+  A2:
+    status: done
+    commit: 952d8f1c7b65743421cbdf830d3a40653790b64a
+    verified: true
+    started: "2026-06-05T18:47:40Z"
+    completed: "2026-06-05T19:06:54Z"
+    attempts: 1
+    notes: Added 4 auth-event constants + helpers; instrumented Login/Register/RefreshToken (all failure branches); 20 targeted tests green
+  A3:
+    status: done
+    commit: f8f76f7dfbea82a83e8091e2d07f68755f7e93f9
+    verified: true
+    started: "2026-06-05T19:08:38Z"
+    completed: "2026-06-05T19:22:35Z"
+    attempts: 1
+    notes: Write-time IP transform in AuditService (single chokepoint); filters widened by user/target/version/ip/from/to; ip filter routes through same IIpHasher; NoMagicRemoteIpAccess rationale flipped; 83 tests green
+  A4:
+    status: done
+    commit: afb9ca38d6be0eb446b92661def7d99f6e6f7208
+    verified: true
+    started: "2026-06-05T19:38:25Z"
+    completed: "2026-06-05T19:57:18Z"
+    attempts: 1
+    notes: "Export endpoint: AuditExportFormat enum (jsonl/csv) in BoundedDomains; AuditExportQuery DTO (no pagination); AdminController.ExportAuditLog streams JSONL/CSV; AuditService.StreamAuditLogAsync; 7 new tests all green"
+  A5:
+    status: done
+    commit: a6234b4a635dcbe6d270a330076d632f602765a6
+    verified: true
+    started: "2026-06-05T19:58:33Z"
+    completed: "2026-06-05T20:07:49Z"
+    attempts: 1
+    notes: "AuditConfig (RetentionDays=0 default + TamperEvidence shape); AuditBackgroundService (deferred-first-sweep, scope-per-cycle); DeleteAuditEntriesOlderThanAsync; 20 tests green"
+  A6:
+    status: done
+    commit: bb7094cd23819308efc7769ec7a100181809def7
+    verified: true
+    started: "2026-06-05T20:08:59Z"
+    completed: "2026-06-05T20:27:48Z"
+    attempts: 1
+    notes: AuditChainHasher canonical serializer (fixed-field JSON); process-global SemaphoreSlim write lock; HMAC-SHA256/SHA-256 chain; disabled-on genesis handling; retention-window anchor in verify walker; AuditVerifyResponse DTO; VerifyAuditLog endpoint; 22 new tests
+  A7:
+    status: done
+    commit: 9584b98ab97267f2bb030287049e82efe61d3647
+    verified: true
+    started: "2026-06-05T20:51:59Z"
+    completed: "2026-06-05T21:26:03Z"
+    attempts: 1
+    notes: Audit=true in DiscoveryFeatures; Admin_ExportAuditLog joins permanent stream exemption; Admin_VerifyAuditLog carries full schema (no exemption); snapshot diff purely additive (A3+A4+A6+A7 deltas only); docs updated
+review:
+  status: resolved
+  started: "2026-06-05T21:39:28Z"
+  resolved: "2026-06-05T22:13:52Z"
+  findings_open: 0
+  findings_fixed: 0

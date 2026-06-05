@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -40,6 +44,7 @@ public class AdminController : ControllerBase
     private readonly PackageRoleService _roleService;
     private readonly RegistryConfig _config;
     private readonly IDownloadMetricsStore _metricsStore;
+    private readonly AuditChainHasher _chainHasher;
 
     /// <summary>
     /// Initialises the controller with its required services.
@@ -50,7 +55,8 @@ public class AdminController : ControllerBase
         AuditService auditService,
         PackageRoleService roleService,
         RegistryConfig config,
-        IDownloadMetricsStore metricsStore)
+        IDownloadMetricsStore metricsStore,
+        AuditChainHasher chainHasher)
     {
         _db = db;
         _authProvider = authProvider;
@@ -58,6 +64,7 @@ public class AdminController : ControllerBase
         _roleService = roleService;
         _config = config;
         _metricsStore = metricsStore;
+        _chainHasher = chainHasher;
     }
 
     /// <summary>
@@ -187,7 +194,7 @@ public class AdminController : ControllerBase
 
         // Validation is handled by JsonStringEnumConverter — invalid values return 400 before reaching here.
         await _db.AssignPackageRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId, request.Role.ToWire());
-        await _auditService.LogRoleMutationAllowAsync("role.assign", username, packageName, request.PrincipalId, ip);
+        await _auditService.LogRoleMutationAllowAsync(AuditActions.RoleAssign, username, packageName, request.PrincipalId, ip);
 
         return TypedResults.Ok(new SuccessResponse());
     }
@@ -217,7 +224,7 @@ public class AdminController : ControllerBase
         try
         {
             await _roleService.RevokeRoleAsync(packageName, request.PrincipalType.ToWire(), request.PrincipalId);
-            await _auditService.LogRoleMutationAllowAsync("role.revoke", username, packageName, request.PrincipalId, ip);
+            await _auditService.LogRoleMutationAllowAsync(AuditActions.RoleRevoke, username, packageName, request.PrincipalId, ip);
             return TypedResults.NoContent();
         }
         catch (RoleNotFoundException)
@@ -238,27 +245,207 @@ public class AdminController : ControllerBase
     [HttpGet("audit-log")]
     public async Task<Ok<PagedResponse<AuditEntryResponse>>> GetAuditLog([FromQuery] AuditLogQuery query)
     {
-        var result = await _auditService.GetAuditLogAsync(query.page, query.pageSize, query.package, query.action);
+        var result = await _auditService.GetAuditLogAsync(
+            query.page, query.pageSize,
+            query.package, query.action,
+            query.user, query.target, query.version,
+            query.ip, query.from, query.to);
         int totalPages = (int)Math.Ceiling(result.TotalCount / (double)query.pageSize);
 
         return TypedResults.Ok(new PagedResponse<AuditEntryResponse>
         {
-            Items = result.Items.Select(e => new AuditEntryResponse
-            {
-                Action = e.Action,
-                Package = e.Package,
-                Version = e.Version,
-                User = e.User,
-                Target = e.Target,
-                Ip = e.Ip,
-                Timestamp = e.Timestamp,
-                Decision = e.Decision,
-                DenyReason = e.DenyReason
-            }).ToList(),
+            Items = result.Items.Select(MapToResponse).ToList(),
             TotalCount = result.TotalCount,
             Page = query.page,
             PageSize = query.pageSize,
             TotalPages = totalPages
+        });
+    }
+
+    // ── Audit export ─────────────────────────────────────────────────────────────
+
+    // RFC-4180 CSV column order — stable shape with tamper-evidence hash columns.
+    private static readonly string[] CsvColumns =
+    [
+        "action", "package", "version", "user", "target", "ip", "timestamp", "decision", "denyReason",
+        "previousHash", "entryHash"
+    ];
+
+    /// <summary>
+    /// Streams the full filtered audit log in either JSONL (<c>application/x-ndjson</c>) or
+    /// CSV (<c>text/csv</c>) format.  Honours all filter parameters from <see cref="AuditExportQuery"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Export is not paginated — it streams the full filtered set.  The <c>?format</c> parameter
+    /// is required; an absent or unknown value returns <c>400 InvalidRequest</c>.
+    /// </para>
+    /// <para>
+    /// The IP column carries the already-transformed stored value (export never reveals a raw IP
+    /// that was stored hashed, because <see cref="AuditService"/> applied the transform at write time).
+    /// </para>
+    /// </remarks>
+    [RegistryAuthorize(RegistryAction.ReadAuditLog)]
+    [HttpGet("audit-log/export")]
+    public async Task ExportAuditLog([FromQuery] AuditExportQuery query)
+    {
+        // [ApiController]'s ModelStateInvalidFilter handles the 400 for invalid/missing format
+        // before reaching this body — we only run when ModelState is valid.
+        if (!ModelState.IsValid)
+        {
+            Response.StatusCode = StatusCodes.Status400BadRequest;
+            return;
+        }
+
+        AuditExportFormat format = query.format!.Value;
+
+        if (format == AuditExportFormat.Jsonl)
+        {
+            Response.StatusCode = StatusCodes.Status200OK;
+            Response.ContentType = "application/x-ndjson";
+            await Response.StartAsync();
+
+            var jsonOptions = new JsonSerializerOptions { WriteIndented = false };
+            await foreach (var entry in _auditService.StreamAuditLogAsync(
+                query.package, query.action,
+                query.user, query.target, query.version,
+                query.ip, query.from, query.to))
+            {
+                var dto = MapToResponse(entry);
+                string line = JsonSerializer.Serialize(dto, jsonOptions);
+                await Response.WriteAsync(line + "\n");
+            }
+        }
+        else // AuditExportFormat.Csv
+        {
+            Response.StatusCode = StatusCodes.Status200OK;
+            Response.ContentType = "text/csv";
+            await Response.StartAsync();
+
+            // Header row
+            await Response.WriteAsync(string.Join(",", CsvColumns) + "\r\n");
+
+            await foreach (var entry in _auditService.StreamAuditLogAsync(
+                query.package, query.action,
+                query.user, query.target, query.version,
+                query.ip, query.from, query.to))
+            {
+                var dto = MapToResponse(entry);
+                string row = ToCsvRow(dto);
+                await Response.WriteAsync(row + "\r\n");
+            }
+        }
+    }
+
+    /// <summary>Maps an <see cref="AuditEntry"/> entity to its wire DTO, reusing the same
+    /// projection used by the <see cref="GetAuditLog"/> list endpoint.</summary>
+    private static AuditEntryResponse MapToResponse(AuditEntry e) => new()
+    {
+        Action       = e.Action,
+        Package      = e.Package,
+        Version      = e.Version,
+        User         = e.User,
+        Target       = e.Target,
+        Ip           = e.Ip,
+        Timestamp    = e.Timestamp,
+        Decision     = e.Decision,
+        DenyReason   = e.DenyReason,
+        PreviousHash = e.PreviousHash,
+        EntryHash    = e.EntryHash,
+    };
+
+    /// <summary>
+    /// Serializes an <see cref="AuditEntryResponse"/> to a single RFC-4180 CSV data row.
+    /// Fields are double-quoted when they contain a comma, double-quote, or line ending;
+    /// embedded double-quotes are escaped by doubling them.
+    /// </summary>
+    private static string ToCsvRow(AuditEntryResponse dto)
+    {
+        return string.Join(",", new[]
+        {
+            CsvField(dto.Action),
+            CsvField(dto.Package),
+            CsvField(dto.Version),
+            CsvField(dto.User),
+            CsvField(dto.Target),
+            CsvField(dto.Ip),
+            CsvField(dto.Timestamp.ToString("o", CultureInfo.InvariantCulture)),
+            CsvField(dto.Decision),
+            CsvField(dto.DenyReason),
+            CsvField(dto.PreviousHash),
+            CsvField(dto.EntryHash),
+        });
+    }
+
+    /// <summary>
+    /// Returns the RFC-4180 representation of a single field value.
+    /// <c>null</c> → empty string (no quotes).  Values containing a comma, double-quote,
+    /// CR, or LF are wrapped in double-quotes with internal quotes doubled.
+    /// </summary>
+    private static string CsvField(string? value)
+    {
+        if (value == null)
+            return "";
+        if (value.IndexOfAny([',', '"', '\r', '\n']) < 0)
+            return value;
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
+    }
+
+    /// <summary>
+    // ── Audit chain verification ──────────────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies the tamper-evidence hash chain for the audit log.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When tamper-evidence is enabled, walks the chain from the earliest retained hashed entry
+    /// (the genesis or the oldest retained entry after a retention sweep) to the most recent,
+    /// recomputing each entry's hash and comparing it to the stored value. Returns the id of the
+    /// first broken link, or <c>null</c> when the entire chain is intact.
+    /// </para>
+    /// <para>
+    /// Pre-genesis entries (with <c>null</c> hashes) are excluded from the walk entirely — they
+    /// are not reported as broken.  The earliest retained hashed row's stored <c>previousHash</c>
+    /// is used as the trusted anchor (so the verify endpoint still reports <c>valid=true</c> after
+    /// a retention sweep deletes the original genesis row).
+    /// </para>
+    /// <para>
+    /// When tamper-evidence is disabled (<c>Audit.TamperEvidence.Enabled = false</c>), returns
+    /// <c>enabled=false, checkedCount=0, valid=true</c>.
+    /// </para>
+    /// </remarks>
+    [RegistryAuthorize(RegistryAction.ReadAuditLog)]
+    [HttpGet("audit-log/verify")]
+    public async Task<Ok<AuditVerifyResponse>> VerifyAuditLog()
+    {
+        if (!_chainHasher.IsEnabled)
+        {
+            // Tamper-evidence disabled — trivially valid.
+            return TypedResults.Ok(new AuditVerifyResponse
+            {
+                Enabled      = false,
+                CheckedCount = 0,
+                Valid        = true,
+                FirstBrokenId = null,
+                GenesisId    = null,
+            });
+        }
+
+        var entries = _db.StreamHashedAuditEntriesAsync();
+
+        // Delegate to the single walker in AuditChainHasher — the same function the
+        // unit tests exercise so both call the identical code path.
+        // WalkChainAsync processes entries one at a time (O(1) memory) via IAsyncEnumerable.
+        var result = await _chainHasher.WalkChainAsync(entries);
+
+        return TypedResults.Ok(new AuditVerifyResponse
+        {
+            Enabled       = true,
+            CheckedCount  = result.CheckedCount,
+            Valid         = result.Valid,
+            FirstBrokenId = result.FirstBrokenId,
+            GenesisId     = result.GenesisId,
         });
     }
 

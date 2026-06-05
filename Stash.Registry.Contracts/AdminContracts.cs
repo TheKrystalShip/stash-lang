@@ -88,6 +88,87 @@ public sealed class AuditLogQuery
     /// <summary>Optional action type filter (e.g. <c>"publish"</c>, <c>"user.create"</c>).</summary>
     [JsonPropertyName("action")]
     public string? action { get; set; }
+
+    /// <summary>Optional user (actor) filter — exact match against the <c>user</c> column.</summary>
+    [JsonPropertyName("user")]
+    public string? user { get; set; }
+
+    /// <summary>Optional secondary target filter — exact match against the <c>target</c> column.</summary>
+    [JsonPropertyName("target")]
+    public string? target { get; set; }
+
+    /// <summary>Optional version filter — exact match against the <c>version</c> column.</summary>
+    [JsonPropertyName("version")]
+    public string? version { get; set; }
+
+    /// <summary>
+    /// Optional IP filter — the operator supplies a raw IP; the registry transforms it through
+    /// <c>IIpHasher</c> before matching the stored (already-transformed) value.  With
+    /// <c>IpMode=off</c> the stored column is null for all entries so the filter matches nothing.
+    /// </summary>
+    [JsonPropertyName("ip")]
+    public string? ip { get; set; }
+
+    /// <summary>Optional inclusive UTC lower-bound on the entry timestamp.</summary>
+    [JsonPropertyName("from")]
+    public DateTime? from { get; set; }
+
+    /// <summary>Optional inclusive UTC upper-bound on the entry timestamp.</summary>
+    [JsonPropertyName("to")]
+    public DateTime? to { get; set; }
+}
+
+/// <summary>
+/// Query-string parameters for the <c>GET /api/v1/admin/audit-log/export</c> endpoint.
+/// Bound via <c>[FromQuery]</c>.  This DTO carries only filter fields — export is unbounded
+/// and must not advertise pagination; do not reuse <see cref="AuditLogQuery"/> and silently
+/// ignore its <c>[Range]</c>-validated pagination fields.
+/// </summary>
+public sealed class AuditExportQuery
+{
+    /// <summary>
+    /// The export format.  Required — missing or unknown values return <c>400 InvalidRequest</c>.
+    /// <c>[Required]</c> forces model-binding to fail when the parameter is absent, preventing
+    /// a silent default to the CLR-zero enum member.
+    /// </summary>
+    [Required]
+    [JsonPropertyName("format")]
+    public AuditExportFormat? format { get; set; }
+
+    /// <summary>Optional package name filter.</summary>
+    [JsonPropertyName("package")]
+    public string? package { get; set; }
+
+    /// <summary>Optional action type filter (e.g. <c>"package.publish"</c>).</summary>
+    [JsonPropertyName("action")]
+    public string? action { get; set; }
+
+    /// <summary>Optional user (actor) filter — exact match against the <c>user</c> column.</summary>
+    [JsonPropertyName("user")]
+    public string? user { get; set; }
+
+    /// <summary>Optional secondary target filter — exact match against the <c>target</c> column.</summary>
+    [JsonPropertyName("target")]
+    public string? target { get; set; }
+
+    /// <summary>Optional version filter — exact match against the <c>version</c> column.</summary>
+    [JsonPropertyName("version")]
+    public string? version { get; set; }
+
+    /// <summary>
+    /// Optional IP filter — the operator supplies a raw IP; the registry transforms it through
+    /// <c>IIpHasher</c> before matching the stored (already-transformed) value.
+    /// </summary>
+    [JsonPropertyName("ip")]
+    public string? ip { get; set; }
+
+    /// <summary>Optional inclusive UTC lower-bound on the entry timestamp.</summary>
+    [JsonPropertyName("from")]
+    public DateTime? from { get; set; }
+
+    /// <summary>Optional inclusive UTC upper-bound on the entry timestamp.</summary>
+    [JsonPropertyName("to")]
+    public DateTime? to { get; set; }
 }
 
 /// <summary>
@@ -258,5 +339,67 @@ public sealed class AuditEntryResponse
     /// <summary>The typed deny reason when <see cref="Decision"/> is <c>"deny"</c>, or <c>null</c> for allow entries.</summary>
     [JsonPropertyName("denyReason")]
     public string? DenyReason { get; set; }
+
+    /// <summary>
+    /// The hash of the immediately preceding hashed entry's <see cref="EntryHash"/>, or the
+    /// genesis sentinel for the first hashed entry in a tamper-evidence run.
+    /// <c>null</c> when tamper-evidence was disabled at write time.
+    /// </summary>
+    [JsonPropertyName("previousHash")]
+    public string? PreviousHash { get; set; }
+
+    /// <summary>
+    /// The HMAC-SHA256 or SHA-256 hash of this entry's canonical payload concatenated with
+    /// <see cref="PreviousHash"/>, computed at write time.
+    /// <c>null</c> when tamper-evidence was disabled at write time.
+    /// </summary>
+    [JsonPropertyName("entryHash")]
+    public string? EntryHash { get; set; }
+}
+
+/// <summary>
+/// Response body returned by <c>GET /api/v1/admin/audit-log/verify</c>.
+/// Reports the result of walking the tamper-evidence hash chain.
+/// </summary>
+public sealed class AuditVerifyResponse
+{
+    /// <summary>
+    /// Whether tamper-evidence is enabled (<c>Audit.TamperEvidence.Enabled = true</c>).
+    /// When <c>false</c>, <see cref="CheckedCount"/> is 0 and <see cref="Valid"/> is
+    /// <c>true</c> (trivially — there is no chain to verify).
+    /// </summary>
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; set; }
+
+    /// <summary>
+    /// The number of hashed entries that were walked during verification.
+    /// Equals the count of entries with a non-null <c>entry_hash</c> in the retained window.
+    /// Pre-genesis (null-hash) entries are excluded from the count.
+    /// </summary>
+    [JsonPropertyName("checkedCount")]
+    public int CheckedCount { get; set; }
+
+    /// <summary>
+    /// <c>true</c> if all checked entries verify cleanly (no broken links), or if
+    /// <see cref="CheckedCount"/> is 0 (no hashed entries exist yet).
+    /// <c>false</c> if at least one entry's recomputed hash does not match the stored hash.
+    /// </summary>
+    [JsonPropertyName("valid")]
+    public bool Valid { get; set; }
+
+    /// <summary>
+    /// The database <c>id</c> of the first entry whose recomputed hash does not match the
+    /// stored hash, or <c>null</c> when <see cref="Valid"/> is <c>true</c>.
+    /// </summary>
+    [JsonPropertyName("firstBrokenId")]
+    public int? FirstBrokenId { get; set; }
+
+    /// <summary>
+    /// The database <c>id</c> of the first hashed entry in the verified run (the genesis
+    /// or the earliest retained hashed entry when pre-genesis rows have been deleted).
+    /// <c>null</c> when <see cref="CheckedCount"/> is 0.
+    /// </summary>
+    [JsonPropertyName("genesisId")]
+    public int? GenesisId { get; set; }
 }
 

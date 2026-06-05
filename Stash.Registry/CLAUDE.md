@@ -257,6 +257,8 @@ All controller actions that accept a request body or query parameters use ASP.NE
 | PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin         | AdminController          |
 | DELETE | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin         | AdminController          |
 | GET    | `/api/v1/admin/audit-log`                              | admin         | AdminController          |
+| GET    | `/api/v1/admin/audit-log/export`                       | admin         | AdminController          |
+| GET    | `/api/v1/admin/audit-log/verify`                       | admin         | AdminController          |
 
 ## Database Layer
 
@@ -343,6 +345,7 @@ All configuration lives in `appsettings.json` with typed models in `Configuratio
 | `Security`     | `SecurityConfig`     | Package size, integrity, JWT key       |
 | `RateLimiting` | `RateLimitingConfig` | Per-category throttle settings         |
 | `Metrics`      | `MetricsConfig`      | Download metrics: IpMode, RetentionDays, RollupIntervalMinutes |
+| `Audit`        | `AuditConfig`        | Audit-log retention (`RetentionDays`) + tamper-evidence hash chain (`TamperEvidence.Enabled`, `TamperEvidence.HashSecret`) |
 
 ## Tests
 
@@ -371,7 +374,8 @@ Several meta-tests enforce structural invariants that must stay green when addin
 | `NoMagicRemoteIpAccessMetaTests`  | No bare read of `HttpContext.Connection.RemoteIpAddress` outside the exempt list (`IpHasher.cs` + 6 permanent non-metrics raw-IP readers). Enforces the D11 IP-handling pipeline. |
 | `RegistryAuthzMatrixTests`        | Every (action × principal) row in `AuthzMatrixData` produces the correct HTTP status and `ErrorResponse` body — the primary behavior-preservation gate. |
 | `RegistryAuthzAuditMutationTests` | Authenticated denials on key endpoints (including `CreateOrg`, `AddOrgMember`, `VerifyScope`) write exactly one audit entry. Guards the uniform-audit behavior introduced by the shared filter. |
-| `OpenApiCoverageMetaTests`        | Every operation in the generated OpenAPI doc has an `operationId` and every response code has a `$ref` schema. Permanently exempt: `Packages_DownloadVersion` (binary stream). |
+| `NoMagicAuditActionStringsMetaTests` | No bare string literal reaches an audit-action sink (`AuditEntry { Action = ... }` initializer or `Log*` action parameter). Sink-targeted Roslyn scan; includes a fail-path self-test, binding-floor, file-count floor, and a pinned exemption for the PDP deny path (`RegistryAction.ToString()`). |
+| `OpenApiCoverageMetaTests`        | Every operation in the generated OpenAPI doc has an `operationId` and every response code has a `$ref` schema. Permanently exempt: `Packages_DownloadVersion` (binary stream) and `Admin_ExportAuditLog` (streamed NDJSON/CSV, no declared return type). |
 
 When adding new features, add corresponding tests in `Stash.Tests/Registry/`. Use `dotnet test --filter "FullyQualifiedName~Registry"` to run registry tests.
 

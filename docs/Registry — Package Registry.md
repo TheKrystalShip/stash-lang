@@ -1038,10 +1038,18 @@ Query the audit log. Entries are returned in descending chronological order.
 
 | Query parameter | Type    | Description                                                      |
 | --------------- | ------- | ---------------------------------------------------------------- |
-| `package`       | string  | Filter by package name.                                          |
-| `action`        | string  | Filter by action type (see [Section 13]).                        |
+| `package`       | string  | Filter by package name (exact match).                            |
+| `action`        | string  | Filter by action type (exact match; see [Section 13]).           |
+| `user`          | string  | Filter by the principal that performed the action (exact match). |
+| `target`        | string  | Filter by the target principal, e.g. for `role.assign` (exact match). |
+| `version`       | string  | Filter by package version (exact match).                         |
+| `ip`            | string  | Filter by IP address. Supply the raw IP — the registry applies the same `IpMode` transform used at write time before matching against the stored value. |
+| `from`          | ISO-8601 UTC | Lower bound (inclusive) on `timestamp`.                   |
+| `to`            | ISO-8601 UTC | Upper bound (inclusive) on `timestamp`.                   |
 | `page`          | integer | Page number (1-based, must be ≥ 1).                              |
 | `pageSize`      | integer | Results per page (default 50, 1–200); out-of-range returns `400`. |
+
+All filters are optional. Multiple filters combine as logical AND. Exact-match filters (`package`, `action`, `user`, `target`, `version`) perform database-level equality comparisons — no wildcard or substring matching.
 
 ```json
 {
@@ -1053,8 +1061,12 @@ Query the audit log. Entries are returned in descending chronological order.
       "version": "1.2.0",
       "user": "alice",
       "target": null,
-      "ip": "203.0.113.5",
-      "timestamp": "2026-03-10T14:00:00Z"
+      "ip": "<transformed>",
+      "timestamp": "2026-03-10T14:00:00Z",
+      "decision": "allow",
+      "denyReason": null,
+      "previousHash": null,
+      "entryHash": "a3f7c2..."
     }
   ],
   "totalCount": 5,
@@ -1063,6 +1075,67 @@ Query the audit log. Entries are returned in descending chronological order.
   "totalPages": 1
 }
 ```
+
+The `ip` field contains the stored transformed value (not the raw IP unless `Metrics.IpMode = raw`). The `previousHash` and `entryHash` fields are non-null only when tamper-evidence is enabled (see [Section 10.10](#1010-audit)).
+
+### 9.9 GET /api/v1/admin/audit-log/export
+
+Export the full (unpaginated) audit log as `jsonl` or `csv`. Accepts the same filters as `GET /admin/audit-log` **except** `page` and `pageSize` (export is not paginated — it streams the entire filtered result set).
+
+| Query parameter | Type   | Required | Description                                                        |
+| --------------- | ------ | -------- | ------------------------------------------------------------------ |
+| `format`        | string | Yes      | `jsonl` (application/x-ndjson) or `csv` (text/csv). Other values return `400 InvalidRequest`. |
+| `package`       | string | No       | Same as `GET /admin/audit-log`.                                    |
+| `action`        | string | No       | Same as `GET /admin/audit-log`.                                    |
+| `user`          | string | No       | Same as `GET /admin/audit-log`.                                    |
+| `target`        | string | No       | Same as `GET /admin/audit-log`.                                    |
+| `version`       | string | No       | Same as `GET /admin/audit-log`.                                    |
+| `ip`            | string | No       | Same as `GET /admin/audit-log`.                                    |
+| `from`          | ISO-8601 UTC | No | Same as `GET /admin/audit-log`.                                   |
+| `to`            | ISO-8601 UTC | No | Same as `GET /admin/audit-log`.                                   |
+
+**JSONL format** (`Content-Type: application/x-ndjson`): one `AuditEntryResponse` JSON object per line, no trailing comma.
+
+```
+{"id":42,"action":"package.publish","package":"@stash/http","version":"1.2.0","user":"alice","target":null,"ip":"<transformed>","timestamp":"2026-03-10T14:00:00Z","decision":"allow","denyReason":null,"previousHash":null,"entryHash":"a3f7c2..."}
+```
+
+**CSV format** (`Content-Type: text/csv`): header row followed by RFC-4180-quoted data rows. Fixed column order:
+
+```
+action,package,version,user,target,ip,timestamp,decision,denyReason,previousHash,entryHash
+package.publish,@stash/http,1.2.0,alice,,<transformed>,2026-03-10T14:00:00Z,allow,,,a3f7c2...
+```
+
+The `ip` column contains the already-transformed stored value; the raw IP is never re-exposed.
+
+### 9.10 GET /api/v1/admin/audit-log/verify
+
+Verify the tamper-evidence hash chain. Walks every entry that has a non-null `entryHash`, recomputes each entry's hash from its stored content fields and the prior stored hash, and compares the recomputed value against the stored value. Reports the first chain break found.
+
+When tamper-evidence is disabled (`Audit.TamperEvidence.Enabled = false`), returns `enabled=false, checkedCount=0, valid=true` immediately.
+
+Response `200 OK`:
+
+```json
+{
+  "enabled": true,
+  "checkedCount": 1402,
+  "valid": false,
+  "firstBrokenId": 938,
+  "genesisId": 17
+}
+```
+
+| Field           | Description                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------- |
+| `enabled`       | Whether tamper-evidence is configured on.                                                             |
+| `checkedCount`  | Number of hashed entries walked.                                                                      |
+| `valid`         | `true` if the entire retained chain is intact; `false` if any link is broken.                        |
+| `firstBrokenId` | ID of the first entry whose recomputed hash does not match the stored hash. `null` when `valid=true`. |
+| `genesisId`     | ID of the first hashed (post-enable) entry. `null` when no hashed entries exist.                     |
+
+**Retained-window semantics.** The verification window is `retained ∧ hashed`. When a retention sweep has deleted old entries, the earliest retained hashed row's stored `previousHash` is treated as the trusted anchor for the retained window. This is intended behaviour — a deletion truncates the anchor but retained rows remain internally verifiable. The verify endpoint does not report a break for the deleted portion.
 
 [Section 13]: #13-audit-log
 
@@ -1281,6 +1354,36 @@ The `Metrics` section configures the download-metrics subsystem (introduced in `
 
 The `IpHashSecret` **must persist across restarts** — unlike the JWT signing key, it is NOT regenerated on each start (regeneration would break hash correlation across restarts). When missing, the server generates a secret once, writes it to `<db-dir>/metrics-ip-secret.bin`, and logs a warning.
 
+### 10.10 Audit
+
+The `Audit` section configures audit-log retention and the optional tamper-evidence hash chain.
+
+```json
+"Audit": {
+  "RetentionDays": 0,
+  "TamperEvidence": {
+    "Enabled": false,
+    "HashSecret": ""
+  }
+}
+```
+
+| Property                       | Type    | Default | Description                                                                                                                              |
+| ------------------------------ | ------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `RetentionDays`                | integer | `0`     | How many days to retain audit entries. `0` / unset = never delete (the safe default for a compliance log). `> 0` enables a nightly sweep. |
+| `TamperEvidence.Enabled`       | bool    | `false` | Whether the hash chain is computed on append and checked by `GET /admin/audit-log/verify`.                                               |
+| `TamperEvidence.HashSecret`    | string  | `""`    | Optional base64-encoded HMAC-SHA256 secret. When non-empty, uses HMAC-SHA256(`secret`, `payload`); when empty, uses plain SHA-256.       |
+
+**Tamper-evidence chain semantics:**
+
+- When `Enabled = true`, each audit entry's `entryHash = H(canonical_payload || previousHash)`, where `previousHash` is the `entryHash` of the immediately prior hashed entry (or a genesis sentinel for the first).
+- The canonical payload is a fixed-field-order serialization of `action`, `package`, `version`, `user`, `target`, `ip`, `timestamp`, `decision`, and `denyReason`. The surrogate `id` and the hash fields themselves are excluded.
+- Appending is serialized (process-global async lock) to prevent concurrent appends from forking the chain.
+- Entries written before tamper-evidence was enabled retain `null` hashes (pre-genesis); `verify` starts at the first non-null `entryHash`.
+- Re-enabling after a disable starts a new genesis; the `null`-hash gap delimits chains.
+
+**Audit retention is independent of download-metrics retention** (`Metrics.Raw.RetentionDays`). Two distinct knobs, two distinct background sweeps.
+
 ### 10.11 Pagination
 
 All paginated listing endpoints return a shared `PagedResponse<T>` envelope:
@@ -1341,7 +1444,8 @@ Response `200 OK`:
     "verifiedPublishers": false,
     "organizations": true,
     "privatePackages": true,
-    "cors": false
+    "cors": false,
+    "audit": true
   }
 }
 ```
@@ -1358,17 +1462,19 @@ is the compile-time constant `100` shared with the `[Range]` validators on `Sear
 | `privatePackages`   | `true`  | Private and internal package visibility is supported.                                        |
 | `cors`              | dynamic | Reflects `Cors.Enabled` at server startup (default `false`).                                 |
 | `metrics`           | `true`  | Download metrics endpoints are available (shipped in `registry-download-metrics`).           |
+| `audit`             | `true`  | Audit log endpoints are available: widened filters, export, verify, tamper-evidence chain (shipped in `registry-audit-log-v2`). |
 | `advisories`        | `false` | Bucket-B — security advisory data not yet implemented.                                       |
 | `provenance`        | `false` | Bucket-B — provenance attestation not yet implemented.                                       |
 | `signatures`        | `false` | Bucket-B — package signature verification not yet implemented.                               |
 | `trustedPublishing` | `false` | Bucket-B — OIDC-based trusted publishing not yet implemented.                                |
 | `verifiedPublishers`| `false` | Bucket-B — publisher verification not yet implemented.                                       |
 
-The remaining Bucket-B flags (`advisories`, `provenance`, `signatures`, `trustedPublishing`,
+The Bucket-B flags (`advisories`, `provenance`, `signatures`, `trustedPublishing`,
 `verifiedPublishers`) are pinned `false` until their backing data and logic land. They are
 present as explicit future seams — clients should check these flags before attempting to use the
 corresponding functionality. `metrics` was promoted from Bucket-B to Bucket-A in the
-`registry-download-metrics` feature.
+`registry-download-metrics` feature; `audit` was promoted from Bucket-B to Bucket-A in the
+`registry-audit-log-v2` feature.
 
 ## 11. Database Schema
 
@@ -1634,6 +1740,23 @@ The audit log covers two categories of events:
 to unauthenticated callers). These are excluded to avoid flooding the table without a security
 signal; public-read 404s appear in the HTTP access log.
 
+**IP handling.** Every audit entry's `ip` field contains the transformed value — not the raw
+client IP. The transform is applied at write time by `AuditService` using the same `IpMode`
+pipeline as download metrics (see [Section 10.9](#109-metrics)). `IpMode = raw` stores the raw
+IP; `hashed` stores an HMAC-SHA256 prefix; `off` stores `null`. When filtering by `ip` (see
+[Section 9.8](#98-get-apiv1adminaudit-log)), supply the raw IP — the registry applies the same
+transform before matching.
+
+**Tamper-evidence hash fields.** When `Audit.TamperEvidence.Enabled = true` (see
+[Section 10.10](#1010-audit)), each entry additionally carries:
+
+| Field          | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `previousHash` | The `entryHash` of the immediately prior hashed entry (`null` for genesis or pre-genesis entries). |
+| `entryHash`    | `H(canonical_payload || previousHash)` where `H` is HMAC-SHA256 (keyed) or SHA-256 (unkeyed). |
+
+**Audit event types:**
+
 | Action                    | Trigger                                                                           |
 | ------------------------- | --------------------------------------------------------------------------------- |
 | `package.create`          | New package created (first publish).                                              |
@@ -1644,7 +1767,7 @@ signal; public-read 404s appear in the HTTP access log.
 | `version.deprecate`       | Version deprecated.                                                               |
 | `version.undeprecate`     | Version deprecation cleared.                                                      |
 | `package.visibility_change` | Package visibility changed.                                                     |
-| `user.create`             | User account created.                                                             |
+| `user.create`             | User account created (both admin-created and self-registered users).              |
 | `user.disable`            | User account disabled.                                                            |
 | `role.assign`             | Package role assigned to a principal (added or role changed).                     |
 | `role.revoke`             | Package role revoked from a principal.                                            |
@@ -1652,6 +1775,10 @@ signal; public-read 404s appear in the HTTP access log.
 | `token.revoke`            | API token revoked.                                                                |
 | `token.refresh`           | Access token refreshed using a refresh token.                                     |
 | `token_theft_detected`    | Consumed refresh token replayed; entire token family was revoked.                 |
+| `auth.login.success`      | Successful login (correct credentials). Decision: `allow`.                        |
+| `auth.login.failure`      | Failed login attempt (bad credentials). Decision: `deny`.                         |
+| `auth.refresh.failure`    | Token refresh rejected (bad, expired, or revoked refresh token). Decision: `deny`. |
+| `auth.register`           | Successful self-service registration (`POST /auth/register`). Decision: `allow`. A `user.create` entry is also written in the same request — this is the registration-event complement (two entries per self-service registration is intentional, not a double-write bug). |
 | _(action name from PDP)_  | Authenticated authorization denial — action is the `RegistryAction` name, entry includes `AuthzDenyReason`. |
 
 ## 14. Publishing Workflow

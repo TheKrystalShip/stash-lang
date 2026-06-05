@@ -520,6 +520,120 @@ public sealed class SqliteDatabaseTests
         Assert.Equal("unpublish", result.Items[0].Action);
     }
 
+    // ── A3: widened filter tests ──────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAuditLog_FiltersByUser_ExactMatch()
+    {
+        var db = CreateTestDb();
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", User = "alice", Timestamp = DateTime.UtcNow });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", User = "bob", Timestamp = DateTime.UtcNow });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", User = "alice", Timestamp = DateTime.UtcNow });
+
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, user: "alice");
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.All(result.Items, e => Assert.Equal("alice", e.User));
+    }
+
+    [Fact]
+    public async Task GetAuditLog_FiltersByTarget_ExactMatch()
+    {
+        var db = CreateTestDb();
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "role.assign", User = "alice", Target = "bob", Timestamp = DateTime.UtcNow });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "role.assign", User = "alice", Target = "carol", Timestamp = DateTime.UtcNow });
+
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, target: "bob");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("bob", result.Items[0].Target);
+    }
+
+    [Fact]
+    public async Task GetAuditLog_FiltersByVersion_ExactMatch()
+    {
+        var db = CreateTestDb();
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Package = "pkg-x", Version = "1.0.0", User = "alice", Timestamp = DateTime.UtcNow });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Package = "pkg-x", Version = "2.0.0", User = "alice", Timestamp = DateTime.UtcNow });
+
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, version: "1.0.0");
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("1.0.0", result.Items[0].Version);
+    }
+
+    [Fact]
+    public async Task GetAuditLog_FiltersByIp_ExactMatch()
+    {
+        var db = CreateTestDb();
+        const string hashA = "aaaa1111aaaa1111aaaa1111aaaa1111";
+        const string hashB = "bbbb2222bbbb2222bbbb2222bbbb2222";
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Ip = hashA, Timestamp = DateTime.UtcNow });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Ip = hashA, Timestamp = DateTime.UtcNow });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Ip = hashB, Timestamp = DateTime.UtcNow });
+
+        // Database layer takes the already-transformed value (no hashing here).
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, ip: hashA);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.All(result.Items, e => Assert.Equal(hashA, e.Ip));
+    }
+
+    [Fact]
+    public async Task GetAuditLog_FiltersByFrom_InclusiveLowerBound()
+    {
+        var db = CreateTestDb();
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var t1 = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Timestamp = t0 });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Timestamp = t1 });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Timestamp = t2 });
+
+        // from=t1 → include t1 and t2 (inclusive lower bound)
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, from: t1);
+
+        Assert.Equal(2, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetAuditLog_FiltersByTo_InclusiveUpperBound()
+    {
+        var db = CreateTestDb();
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var t1 = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 1, 10, 0, 0, 0, DateTimeKind.Utc);
+
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Timestamp = t0 });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Timestamp = t1 });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", Timestamp = t2 });
+
+        // to=t1 → include t0 and t1 (inclusive upper bound)
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, to: t1);
+
+        Assert.Equal(2, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetAuditLog_CombinedFilters_AppliesLogicalAnd()
+    {
+        var db = CreateTestDb();
+        var t0 = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var t1 = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc);
+
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", User = "alice", Timestamp = t0 });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", User = "bob", Timestamp = t0 });
+        await db.AddAuditEntryAsync(new AuditEntry { Action = "publish", User = "alice", Timestamp = t1 });
+
+        // user=alice AND to=t0 → only the t0 entry for alice
+        SearchResult<AuditEntry> result = await db.GetAuditLogAsync(1, 10, user: "alice", to: t0);
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("alice", result.Items[0].User);
+        Assert.Equal(t0, result.Items[0].Timestamp);
+    }
+
     // ── Refresh token operations ──────────────────────────────────────────
 
     [Fact]

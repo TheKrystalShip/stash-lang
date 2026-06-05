@@ -566,6 +566,26 @@ public interface IRegistryDatabase
     Task AddAuditEntryAsync(AuditEntry entry);
 
     /// <summary>
+    /// Returns the <see cref="AuditEntry.EntryHash"/> of the most recently inserted hashed
+    /// entry (i.e. the entry with the highest <c>id</c> whose <c>entry_hash</c> is non-null),
+    /// or <c>null</c> when no hashed entry exists yet.
+    /// Called under the process-global write lock to read the chain's tail before appending.
+    /// </summary>
+    Task<string?> GetLatestHashedEntryHashAsync();
+
+    /// <summary>
+    /// Streams ALL audit entries that have a non-null <c>entry_hash</c>, ordered by <c>id</c>
+    /// ascending (insertion order).  Used by the verify endpoint to walk the full chain.
+    /// </summary>
+    /// <remarks>
+    /// Returns an <see cref="IAsyncEnumerable{T}"/> so callers can process the chain
+    /// incrementally without materialising all rows into memory.  The caller must enumerate
+    /// this inside the owning <see cref="Microsoft.EntityFrameworkCore.DbContext"/> lifetime.
+    /// </remarks>
+    /// <returns>A lazily-streamed sequence of hashed <see cref="AuditEntry"/> objects, oldest first.</returns>
+    IAsyncEnumerable<AuditEntry> StreamHashedAuditEntriesAsync();
+
+    /// <summary>
     /// Counts audit entries whose <c>Action</c> is in <paramref name="actions"/>,
     /// <c>Decision = "allow"</c>, and <c>Timestamp &gt;= since</c>.
     /// </summary>
@@ -575,12 +595,38 @@ public interface IRegistryDatabase
     Task<int> CountAuditEntriesByActionSinceAsync(IReadOnlyCollection<string> actions, DateTime since);
 
     /// <summary>
+    /// Deletes all audit entries whose <c>Timestamp</c> is strictly before
+    /// <paramref name="cutoff"/> (i.e. entries older than the retention window).
+    /// </summary>
+    /// <param name="cutoff">
+    /// The UTC cutoff datetime. Entries with <c>Timestamp &lt; cutoff</c> are removed.
+    /// The caller is responsible for computing <c>cutoff = now - RetentionDays</c>.
+    /// </param>
+    /// <returns>The number of rows deleted.</returns>
+    Task<int> DeleteAuditEntriesOlderThanAsync(DateTime cutoff);
+
+    /// <summary>
     /// Returns a paginated, filtered view of the audit log, ordered by timestamp descending.
+    /// All filter parameters are combined with logical AND; omitted (null) filters are inert.
     /// </summary>
     /// <param name="page">The 1-based page number.</param>
     /// <param name="pageSize">The maximum number of entries per page.</param>
-    /// <param name="packageName">Optional package name filter; pass <c>null</c> to include all packages.</param>
-    /// <param name="action">Optional action string filter; pass <c>null</c> to include all actions.</param>
+    /// <param name="packageName">Optional package name filter (exact match).</param>
+    /// <param name="action">Optional action string filter (exact match).</param>
+    /// <param name="user">Optional actor username filter (exact match).</param>
+    /// <param name="target">Optional secondary target filter (exact match).</param>
+    /// <param name="version">Optional version filter (exact match).</param>
+    /// <param name="ip">
+    /// Optional IP filter — the caller must pass the ALREADY-TRANSFORMED value (i.e. the same value
+    /// that was stored at write time) so that this layer can use a plain exact-match.
+    /// Passing <c>null</c> here disables the filter.
+    /// </param>
+    /// <param name="from">Optional inclusive UTC lower-bound on the entry timestamp.</param>
+    /// <param name="to">Optional inclusive UTC upper-bound on the entry timestamp.</param>
     /// <returns>A <see cref="SearchResult{T}"/> of <see cref="AuditEntry"/> items with the total count.</returns>
-    Task<SearchResult<AuditEntry>> GetAuditLogAsync(int page, int pageSize, string? packageName, string? action);
+    Task<SearchResult<AuditEntry>> GetAuditLogAsync(
+        int page, int pageSize,
+        string? packageName = null, string? action = null,
+        string? user = null, string? target = null, string? version = null,
+        string? ip = null, DateTime? from = null, DateTime? to = null);
 }

@@ -210,6 +210,17 @@ public sealed class Startup
         // Background drain service — singleton lifecycle (ASP.NET Core requirement for IHostedService).
         services.AddHostedService<MetricsBackgroundService>();
 
+        // Nightly audit-log retention sweep — independent of the metrics sweep.
+        // RetentionDays=0 (default) disables the sweep; the service is always
+        // registered so operators can flip the knob via config without a restart.
+        services.AddHostedService<AuditBackgroundService>();
+
+        // AuditChainHasher — singleton so the process-global WriteLock and HMAC key are
+        // shared across all AuditService scopes. Always registered (even when disabled)
+        // so AuditService and AdminController can safely inject it without nullable-type
+        // complications; IsEnabled=false is the no-op signal.
+        services.AddSingleton(new AuditChainHasher(_config.Audit.TamperEvidence));
+
         services.AddScoped<PackageService>();
         services.AddScoped<PackageRoleService>();
         services.AddScoped<AuditService>();
@@ -423,7 +434,7 @@ public sealed class Startup
                         var auditService = context.RequestServices.GetRequiredService<AuditService>();
                         string ip = context.Connection.RemoteIpAddress?.ToString() ?? "";
                         await auditService.LogAuthzDenyAsync(
-                            "token.revoked",
+                            AuditActions.TokenRevoked,
                             principalId,
                             context.Request.Path.Value ?? "",
                             Auth.Authorization.AuthzDenyReason.TokenRevoked,

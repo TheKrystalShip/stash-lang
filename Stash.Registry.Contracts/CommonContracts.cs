@@ -93,6 +93,12 @@ public sealed class DiscoveryFeatures
     /// <summary>Whether CORS headers are enabled. Reflects <c>CorsConfig.Enabled</c> at runtime.</summary>
     [JsonPropertyName("cors")]
     public bool Cors { get; set; }
+
+    // ── Bucket-A (implemented today — true) ──────────────────────────────
+
+    /// <summary>Whether the audit log is available (export, verify, widened filters). <c>true</c> — shipped in <c>registry-audit-log-v2</c>.</summary>
+    [JsonPropertyName("audit")]
+    public bool Audit { get; set; }
 }
 
 /// <summary>
@@ -105,10 +111,9 @@ public sealed class DiscoveryFeatures
 /// Capability advertisement is static; the response does not touch the database.
 /// </para>
 /// <para>
-/// The <see cref="DiscoveryFeatures.Metrics"/>, <see cref="DiscoveryFeatures.Advisories"/>,
-/// <see cref="DiscoveryFeatures.Provenance"/>, <see cref="DiscoveryFeatures.Signatures"/>,
-/// <see cref="DiscoveryFeatures.TrustedPublishing"/>, and
-/// <see cref="DiscoveryFeatures.VerifiedPublishers"/> flags are Bucket-B and are pinned
+/// The <see cref="DiscoveryFeatures.Advisories"/>, <see cref="DiscoveryFeatures.Provenance"/>,
+/// <see cref="DiscoveryFeatures.Signatures"/>, <see cref="DiscoveryFeatures.TrustedPublishing"/>,
+/// and <see cref="DiscoveryFeatures.VerifiedPublishers"/> flags are Bucket-B and are pinned
 /// <c>false</c> until those features land.
 /// </para>
 /// </remarks>

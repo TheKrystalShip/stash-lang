@@ -202,6 +202,8 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.Timestamp).HasColumnName("timestamp");
             entity.Property(e => e.Decision).HasColumnName("decision");
             entity.Property(e => e.DenyReason).HasColumnName("deny_reason");
+            entity.Property(e => e.PreviousHash).HasColumnName("previous_hash");
+            entity.Property(e => e.EntryHash).HasColumnName("entry_hash");
         });
 
         // ── New P2 tables ──────────────────────────────────────────────────────

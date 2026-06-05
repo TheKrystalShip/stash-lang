@@ -831,19 +831,37 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
     }
 
     /// <inheritdoc/>
-    public async Task<SearchResult<AuditEntry>> GetAuditLogAsync(int page, int pageSize, string? packageName, string? action)
+    public async Task<SearchResult<AuditEntry>> GetAuditLogAsync(
+        int page, int pageSize,
+        string? packageName = null, string? action = null,
+        string? user = null, string? target = null, string? version = null,
+        string? ip = null, DateTime? from = null, DateTime? to = null)
     {
         var queryable = _context.AuditLog.AsQueryable();
 
         if (packageName != null)
-        {
             queryable = queryable.Where(e => e.Package == packageName);
-        }
 
         if (action != null)
-        {
             queryable = queryable.Where(e => e.Action == action);
-        }
+
+        if (user != null)
+            queryable = queryable.Where(e => e.User == user);
+
+        if (target != null)
+            queryable = queryable.Where(e => e.Target == target);
+
+        if (version != null)
+            queryable = queryable.Where(e => e.Version == version);
+
+        if (ip != null)
+            queryable = queryable.Where(e => e.Ip == ip);
+
+        if (from != null)
+            queryable = queryable.Where(e => e.Timestamp >= from.Value);
+
+        if (to != null)
+            queryable = queryable.Where(e => e.Timestamp <= to.Value);
 
         int totalCount = await queryable.CountAsync();
         var items = await queryable
@@ -862,6 +880,46 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         return await _context.AuditLog
             .Where(e => actions.Contains(e.Action) && e.Decision == "allow" && e.Timestamp >= since)
             .CountAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<int> DeleteAuditEntriesOlderThanAsync(DateTime cutoff)
+    {
+        // Load candidates into memory then remove — mirrors the DownloadMetricsStore
+        // pattern for in-memory-SQLite testability (the same DbContext is reused
+        // across the test's seed + sweep calls, so ExecuteDeleteAsync on a separate
+        // DbContext context would not see the in-memory data).
+        var stale = await _context.AuditLog
+            .Where(e => e.Timestamp < cutoff)
+            .ToListAsync();
+
+        if (stale.Count == 0)
+            return 0;
+
+        _context.AuditLog.RemoveRange(stale);
+        await _context.SaveChangesAsync();
+        return stale.Count;
+    }
+
+    /// <inheritdoc/>
+    public async Task<string?> GetLatestHashedEntryHashAsync()
+    {
+        // Max(id) among rows with a non-null entry_hash gives the most recently inserted hashed entry.
+        var entry = await _context.AuditLog
+            .Where(e => e.EntryHash != null)
+            .OrderByDescending(e => e.Id)
+            .FirstOrDefaultAsync();
+        return entry?.EntryHash;
+    }
+
+    /// <inheritdoc/>
+    public IAsyncEnumerable<AuditEntry> StreamHashedAuditEntriesAsync()
+    {
+        return _context.AuditLog
+            .Where(e => e.EntryHash != null)
+            .OrderBy(e => e.Id)
+            .AsNoTracking()
+            .AsAsyncEnumerable();
     }
 
     // ── Organization operations ───────────────────────────────────────────────

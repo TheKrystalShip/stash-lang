@@ -16,4 +16,15 @@ public sealed class RegistryConfig
     /// retention, rollup interval).  Bound from <c>Registry:Metrics</c>.
     /// </summary>
     public MetricsConfig Metrics { get; set; } = new();
+
+    /// <summary>
+    /// Operator-configurable audit-log settings (retention, tamper-evidence).
+    /// Bound from <c>Registry:Audit</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Separate knob from <see cref="Metrics"/>.</b>  Compliance logs and raw
+    /// download telemetry have different retention obligations; this section drives
+    /// the nightly audit-entry sweep independently of the metrics sweep.
+    /// </remarks>
+    public AuditConfig Audit { get; set; } = new();
 }

@@ -148,6 +148,29 @@ public sealed class DiscoveryEndpointTests : RegistryAuthzTestBase
         Assert.True(features.GetProperty("privatePackages").GetBoolean(), "privatePackages must be true (Bucket-A, exists today).");
     }
 
+    // ── Audit feature flag is true (Bucket-A) ────────────────────────────────
+
+    /// <summary>
+    /// Pins <c>features.audit = true</c> now that the <c>registry-audit-log-v2</c> feature is
+    /// complete (widened filters, export, verify, tamper-evidence chain).
+    /// </summary>
+    [Fact]
+    public async Task GetDiscovery_AuditFlag_IsTrue()
+    {
+        await using var ctx = RegistryAuthzFactory.Create();
+        using var client = ctx.Factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/.well-known/registry");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        string body = await response.Content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(body);
+        var features = doc.RootElement.GetProperty("features");
+
+        Assert.True(features.GetProperty("audit").GetBoolean(),
+            "features.audit must be true — the audit-log-v2 feature is complete (registry-audit-log-v2).");
+    }
+
     // ── limits.maxPageSize equals PagingLimits.MaxPageSize const ────────────
 
     [Fact]

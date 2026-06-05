@@ -216,6 +216,27 @@ public static class VisibilityHelpers
         => visibility is "public" or "private" or "internal";
 }
 
+// ── Audit export format wire values ──────────────────────────────────────────
+
+/// <summary>
+/// Wire values for the <c>?format=</c> query parameter on the
+/// <c>GET /api/v1/admin/audit-log/export</c> endpoint.
+/// The set is closed: <see cref="Jsonl"/> and <see cref="Csv"/> are the only valid values.
+/// An unknown value (e.g. <c>?format=xml</c>) or a missing value returns
+/// <c>400 InvalidRequest</c> — there is no silent default.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter<AuditExportFormat>))]
+public enum AuditExportFormat
+{
+    /// <summary>Newline-delimited JSON (application/x-ndjson): one <c>AuditEntryResponse</c> JSON object per line.</summary>
+    [JsonStringEnumMemberName("jsonl")]
+    Jsonl,
+
+    /// <summary>Comma-separated values (text/csv): RFC-4180-quoted header row plus data rows.</summary>
+    [JsonStringEnumMemberName("csv")]
+    Csv,
+}
+
 // ── Wire-string conversion helpers ────────────────────────────────────────────
 
 /// <summary>

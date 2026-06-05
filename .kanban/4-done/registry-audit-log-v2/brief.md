@@ -335,10 +335,12 @@ documented, not a chain corruption.
   transfer to audit; the lock cost is acceptable for the low-volume mutation/deny stream.
 - **disabled → enabled mid-stream.** Genesis = the first entry written after enabling
   (its `previousHash` = genesis sentinel). Prior entries keep `null` hashes and are **pre-genesis**;
-  `verify` starts at the first non-null `entryHash`. enabled → disabled → re-enabled: the simplest
-  rule is a **new genesis** at each re-enable (a `null`-hash gap delimits chains); `verify` reports
-  each contiguous hashed run and treats a pre-genesis gap as a boundary, not a break. Documented so
-  the implementer does not invent a different rule.
+  `verify` starts at the first non-null `entryHash`. enabled → disabled → re-enabled: on re-enable the
+  new entry links to the most recent hashed entry (`PreviousHash` = its `EntryHash`); null-hash entries
+  written while disabled are invisible to the walker, which verifies **one continuous chain anchored at
+  the original genesis**. This maximises the verified set — the entire history of hashed entries is
+  covered by a single unbroken chain, even across disabled gaps. Documented so the implementer does not
+  invent a different rule.
 - **verify endpoint.** `GET /admin/audit-log/verify` recomputes each hashed entry's hash from its
   stored fields + the prior stored hash, comparing to the stored `entryHash`; returns
   `AuditVerifyResponse` naming the first broken id. This gives a clean end-to-end acceptance test:

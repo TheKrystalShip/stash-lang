@@ -91,9 +91,11 @@ public class AuthController : ControllerBase
     {
         string username = request.Username!.Trim();
         string password = request.Password!;
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
 
         if (!await _authProvider.AuthenticateAsync(username, password))
         {
+            await _auditService.LogAuthLoginFailureAsync(username, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid username or password." });
         }
 
@@ -139,6 +141,8 @@ public class AuthController : ControllerBase
                 ExpiresAt = refreshExpiresAt.Value
             });
         }
+
+        await _auditService.LogAuthLoginSuccessAsync(username, ip);
 
         return TypedResults.Ok(new LoginResponse
         {
@@ -194,6 +198,9 @@ public class AuthController : ControllerBase
 
         string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogUserCreateAsync(username, ip);
+        // Two entries are intentional (OQ1 locked default): user.create is the creation record;
+        // auth.register is the self-service registration event (distinct from admin-created users).
+        await _auditService.LogAuthRegisterAsync(username, ip);
 
         return TypedResults.Created((string?)null, new RegisterResponse { Username = username });
     }
@@ -439,6 +446,9 @@ public class AuthController : ControllerBase
     [PublicEndpoint("token refresh validates the refresh-token credential itself — no bearer session required")]
     public async Task<Results<Ok<RefreshTokenResponse>, BadRequest<ErrorResponse>, JsonUnauthorized<ErrorResponse>>> RefreshToken([FromBody] RefreshTokenRequest request)
     {
+        // Capture IP up front so it is available in all failure branches.
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+
         // [Required] on RefreshToken, AccessToken, MachineId ensures all three are present.
         // Validate the expired access token's signature (but not lifetime)
         ClaimsPrincipal? principal;
@@ -449,6 +459,7 @@ public class AuthController : ControllerBase
         }
         catch (SecurityTokenException)
         {
+            await _auditService.LogAuthRefreshFailureAsync(null, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid access token." });
         }
 
@@ -456,6 +467,7 @@ public class AuthController : ControllerBase
         string? tokenJti = principal.FindFirstValue(JwtRegisteredClaimNames.Jti);
         if (string.IsNullOrEmpty(tokenUsername) || string.IsNullOrEmpty(tokenJti))
         {
+            await _auditService.LogAuthRefreshFailureAsync(null, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid access token claims." });
         }
 
@@ -463,6 +475,7 @@ public class AuthController : ControllerBase
         string? tokenMachineId = principal.FindFirstValue(RegistryClaims.MachineId);
         if (!string.Equals(tokenMachineId, request.MachineId, StringComparison.Ordinal))
         {
+            await _auditService.LogAuthRefreshFailureAsync(tokenUsername, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Machine fingerprint mismatch." });
         }
 
@@ -471,12 +484,14 @@ public class AuthController : ControllerBase
         var refreshRecord = await _db.GetRefreshTokenByHashAsync(refreshTokenHash);
         if (refreshRecord == null)
         {
+            await _auditService.LogAuthRefreshFailureAsync(tokenUsername, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Invalid refresh token." });
         }
 
         // Verify the access token is the one paired with this refresh token
         if (!string.Equals(tokenJti, refreshRecord.AccessTokenId, StringComparison.Ordinal))
         {
+            await _auditService.LogAuthRefreshFailureAsync(tokenUsername, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Token pair mismatch." });
         }
 
@@ -484,24 +499,28 @@ public class AuthController : ControllerBase
         if (refreshRecord.Consumed)
         {
             await RevokeTokenFamilyAsync(refreshRecord.FamilyId, refreshRecord.Username);
+            await _auditService.LogAuthRefreshFailureAsync(refreshRecord.Username, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
         }
 
         // Validate refresh token belongs to the right user
         if (!string.Equals(refreshRecord.Username, tokenUsername, StringComparison.Ordinal))
         {
+            await _auditService.LogAuthRefreshFailureAsync(tokenUsername, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Token mismatch." });
         }
 
         // Validate machine fingerprint matches
         if (!string.Equals(refreshRecord.MachineId, request.MachineId, StringComparison.Ordinal))
         {
+            await _auditService.LogAuthRefreshFailureAsync(tokenUsername, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Machine fingerprint mismatch. Please log in again." });
         }
 
         // Check refresh token hasn't expired
         if (refreshRecord.ExpiresAt < DateTime.UtcNow)
         {
+            await _auditService.LogAuthRefreshFailureAsync(tokenUsername, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Refresh token has expired. Please log in again." });
         }
 
@@ -510,6 +529,7 @@ public class AuthController : ControllerBase
         if (!consumed)
         {
             await RevokeTokenFamilyAsync(refreshRecord.FamilyId, refreshRecord.Username);
+            await _auditService.LogAuthRefreshFailureAsync(refreshRecord.Username, ip);
             return new JsonUnauthorized<ErrorResponse>(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
         }
 
@@ -553,7 +573,6 @@ public class AuthController : ControllerBase
             ExpiresAt = newRefreshExpiresAt
         });
 
-        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
         await _auditService.LogTokenRefreshAsync(tokenUsername, ip);
 
         return TypedResults.Ok(new RefreshTokenResponse
