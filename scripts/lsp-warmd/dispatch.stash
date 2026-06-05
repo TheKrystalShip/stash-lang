@@ -1,0 +1,88 @@
+#!/usr/bin/env stash
+// scripts/lsp-warmd/dispatch.stash
+// Stateless stdio↔TCP dispatcher for the LSP warm-daemon.
+//
+// Invoked per-call by the LSP harness (via .lsp.json "command" — not wired yet).
+// Fully generic: no language argument. One dispatcher entry covers all languages
+// because the daemon routes by file extension internally.
+//
+// Algorithm:
+//   1. Probe TCP 127.0.0.1:8787 — if open, relay immediately.
+//   2. If not open: rm stale ready file, daemonize the warm-daemon, poll
+//      /tmp/lsp_warmd.ready for up to 40s (warm is ~15–25s for csharp-ls).
+//   3. One final net.isPortOpen confirm after .ready appears (closes the
+//      file-write/tcp.listen gap in daemon.stash).
+//   4. Relay: $>(socat - TCP:127.0.0.1:8787) — byte-transparent bidirectional
+//      stdio↔socket. Non-strict: does not throw on non-zero exit.
+//   5. env.exit(result.exitCode) — propagate socat's exit code.
+//
+// STDOUT DISCIPLINE: ALL diagnostic output uses io.eprint / io.eprintln (stderr).
+// NEVER io.println here — stdout is the LSP byte channel; stray bytes corrupt
+// Content-Length framing before socat even connects.
+//
+// DAEMON STDIO: daemonized command is wrapped in bash -c '... >/tmp/lsp_warmd.log 2>&1'
+// so the daemon's io.eprintln output goes to a log file, never this process's stdout.
+//
+// SPAWN-RACE NOTE: a simple "check ready file, wait if racing" model. Two concurrent
+// first-calls may both daemonize — flock-style exclusive-spawn hardening is a
+// follow-up listed in CONCURRENCY-PLAN.md.
+
+let DAEMON_HOST = "127.0.0.1";
+let DAEMON_PORT = 8787;
+let READY_FILE  = "/tmp/lsp_warmd.ready";
+let DAEMON_LOG  = "/tmp/lsp_warmd.log";
+
+// Path to the built Stash CLI binary (not PATH stash — that may be stale).
+let STASH_BIN = "/home/heisen/stash-lang/Stash.Cli/bin/Debug/net10.0/Stash";
+// daemon.stash is in the same directory as this script
+let DAEMON_SCRIPT = "/home/heisen/stash-lang/scripts/lsp-warmd/daemon.stash";
+
+let WARMUP_BUDGET_S    = 40.0;
+let PORT_PROBE_TIMEOUT_MS = 500;
+
+// ─── Step 1: probe — is the daemon already up? ────────────────────────────────
+
+let port_open = net.isPortOpen(DAEMON_HOST, DAEMON_PORT, PORT_PROBE_TIMEOUT_MS);
+
+if (port_open) {
+    io.eprintln("[dispatch] daemon up — relaying");
+} else {
+    // ─── Step 2: spawn-if-down ────────────────────────────────────────────────
+
+    if (fs.exists(READY_FILE)) {
+        $!(rm -f ${READY_FILE});
+        io.eprintln("[dispatch] removed stale ready marker");
+    }
+
+    // Daemonize with stdio redirected to log — never reaches this process's stdout
+    let daemon_cmd = $"bash -c 'exec {STASH_BIN} {DAEMON_SCRIPT} >{DAEMON_LOG} 2>&1'";
+    io.eprintln($"[dispatch] spawning daemon -> {DAEMON_LOG}");
+    process.daemonize(daemon_cmd);
+
+    // ─── Step 3: poll for readiness ───────────────────────────────────────────
+
+    let deadline = time.now() + WARMUP_BUDGET_S;
+    let ready = false;
+    while (time.now() < deadline) {
+        if (fs.exists(READY_FILE)) { ready = true; break; }
+        time.sleep(0.5);
+    }
+
+    if (!ready) {
+        io.eprintln($"[dispatch] FAIL: no {READY_FILE} within {WARMUP_BUDGET_S}s — see {DAEMON_LOG}");
+        env.exit(1);
+    }
+
+    io.eprintln("[dispatch] ready file seen — relaying (socat retries through the listen/rebind gap)");
+}
+
+// ─── Step 4: relay stdio ↔ daemon TCP (byte-transparent) ─────────────────────
+// $>(socat - TCP:host:port) streams stdin→daemon and daemon→stdout concurrently.
+// Exits when either side closes. Non-strict: propagates socat's exit code.
+
+// retry/interval tolerates the daemon's per-accept rebind gap (tcp.listen re-binds
+// the port between connections) and the ready-file→listen startup gap.
+let relay = $>(socat - TCP:127.0.0.1:8787,retry=40,interval=0.1);
+
+// ─── Step 5: propagate exit code ─────────────────────────────────────────────
+env.exit(relay.exitCode);
