@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Stash.Registry.Contracts;
@@ -551,6 +552,15 @@ public interface IRegistryDatabase
     /// </summary>
     /// <param name="entry">The <see cref="AuditEntry"/> to persist.</param>
     Task AddAuditEntryAsync(AuditEntry entry);
+
+    /// <summary>
+    /// Counts audit entries whose <c>Action</c> is in <paramref name="actions"/>,
+    /// <c>Decision = "allow"</c>, and <c>Timestamp &gt;= since</c>.
+    /// </summary>
+    /// <param name="actions">The set of action strings to match (e.g. <c>{ "package.publish", "package.create" }</c>).</param>
+    /// <param name="since">The UTC lower-bound (inclusive) for the timestamp filter.</param>
+    /// <returns>The count of matching audit entries.</returns>
+    Task<int> CountAuditEntriesByActionSinceAsync(IReadOnlyCollection<string> actions, DateTime since);
 
     /// <summary>
     /// Returns a paginated, filtered view of the audit log, ordered by timestamp descending.

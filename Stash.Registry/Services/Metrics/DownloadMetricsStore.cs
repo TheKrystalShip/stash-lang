@@ -43,6 +43,38 @@ public sealed class DownloadMetricsStore : IDownloadMetricsStore
     }
 
     /// <inheritdoc/>
+    public async Task<(long Total, long Last24h)> GetRegistryDownloadTotalsAsync(
+        DateTime now,
+        CancellationToken cancellationToken = default)
+    {
+        var cutoff24h        = now - TimeSpan.FromHours(24);
+        var currentHourStart = new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc);
+
+        // ── Closed-bucket totals from hourly rollups ──────────────────────────
+        var closedRollups = await _db.DownloadRollupHourly
+            .AsNoTracking()
+            .Where(r => r.BucketStart < currentHourStart)
+            .ToListAsync(cancellationToken);
+
+        // ── Open-bucket raw events (current hour) ─────────────────────────────
+        var openBucketEvents = await _db.DownloadEvents
+            .AsNoTracking()
+            .Where(e => e.Ts >= currentHourStart && e.Status == DownloadEventStatus.Success)
+            .ToListAsync(cancellationToken);
+
+        long total  = closedRollups.Sum(r => r.Downloads)
+                    + openBucketEvents.Count;
+
+        long last24h = closedRollups
+                           .Where(r => r.BucketStart >= cutoff24h)
+                           .Sum(r => r.Downloads)
+                     + openBucketEvents
+                           .Count(e => e.Ts >= cutoff24h);
+
+        return (total, last24h);
+    }
+
+    /// <inheritdoc/>
     public async Task<int> RollupAsync(DateTime now, CancellationToken cancellationToken = default)
     {
         // Compute the start of the current (open) hour and day buckets.

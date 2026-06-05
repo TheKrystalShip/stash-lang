@@ -533,7 +533,7 @@ public class PackagesController : ControllerBase
                 resource, Request.Body, principal, clientIntegrity, expectedVersion);
 
             // Audit: emit one allow entry per successful mutation
-            string auditAction = isNewPackage ? "package.create" : "package.publish";
+            string auditAction = isNewPackage ? AuditActions.PackageCreate : AuditActions.PackagePublish;
             await _auditService.LogMutationAllowAsync(auditAction, username, packageName, ip);
 
             return TypedResults.Created((string?)null, new PublishResponse
@@ -577,7 +577,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _packageService.UnpublishAsync(packageName, version, username);
-            await _auditService.LogMutationAllowAsync("package.unpublish", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.PackageUnpublish, username, packageName, ip);
             return TypedResults.Ok(new UnpublishResponse { Package = packageName, Version = version });
         }
         catch (InvalidOperationException ex)
@@ -608,7 +608,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.DeprecatePackageAsync(packageName, request.Message, request.Alternative, username);
-            await _auditService.LogMutationAllowAsync("package.deprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.PackageDeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Deprecated = true });
         }
         catch (InvalidOperationException ex)
@@ -637,7 +637,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.UndeprecatePackageAsync(packageName);
-            await _auditService.LogMutationAllowAsync("package.undeprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.PackageUndeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Deprecated = false });
         }
         catch (InvalidOperationException ex)
@@ -666,7 +666,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.DeprecateVersionAsync(packageName, version, request.Message, username);
-            await _auditService.LogMutationAllowAsync("version.deprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.VersionDeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = true });
         }
         catch (InvalidOperationException ex)
@@ -695,7 +695,7 @@ public class PackagesController : ControllerBase
         try
         {
             await _deprecationService.UndeprecateVersionAsync(packageName, version);
-            await _auditService.LogMutationAllowAsync("version.undeprecate", username, packageName, ip);
+            await _auditService.LogMutationAllowAsync(AuditActions.VersionUndeprecate, username, packageName, ip);
             return TypedResults.Ok(new DeprecationResponse { Package = packageName, Version = version, Deprecated = false });
         }
         catch (InvalidOperationException ex)

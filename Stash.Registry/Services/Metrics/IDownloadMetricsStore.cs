@@ -95,6 +95,27 @@ public interface IDownloadMetricsStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns registry-wide download totals across all packages: all-time total and
+    /// the rolling last-24h count.
+    /// </summary>
+    /// <remarks>
+    /// Follows the same D8 read-model contract as <see cref="GetPackageDownloadsAsync"/>:
+    /// closed hourly rollups are authoritative; the current open bucket is computed from
+    /// raw <c>download_events</c> and added.  Only <c>status = 'success'</c> events count.
+    /// </remarks>
+    /// <param name="now">
+    /// The reference "current" time used to compute window cutoffs and the open-bucket boundary.
+    /// </param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>
+    /// A tuple of (<c>total</c>, <c>last24h</c>): total is the all-time count across all
+    /// versions and all time; last24h is the rolling 24-hour count.
+    /// </returns>
+    Task<(long Total, long Last24h)> GetRegistryDownloadTotalsAsync(
+        DateTime now,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Aggregates raw <c>download_events</c> rows whose timestamps fall in fully-closed
     /// hourly and daily buckets (i.e. buckets whose window has completely elapsed before
     /// <paramref name="now"/>) into <c>download_rollup_hourly</c> and

@@ -844,6 +844,14 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         return new SearchResult<AuditEntry> { Items = items, TotalCount = totalCount };
     }
 
+    /// <inheritdoc/>
+    public async Task<int> CountAuditEntriesByActionSinceAsync(IReadOnlyCollection<string> actions, DateTime since)
+    {
+        return await _context.AuditLog
+            .Where(e => actions.Contains(e.Action) && e.Decision == "allow" && e.Timestamp >= since)
+            .CountAsync();
+    }
+
     // ── Organization operations ───────────────────────────────────────────────
 
     /// <inheritdoc/>

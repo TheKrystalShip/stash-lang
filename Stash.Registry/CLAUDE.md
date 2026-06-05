@@ -23,7 +23,10 @@ Stash.Registry/
 │   ├── AuthConfig.cs             → Auth type, token expiry
 │   ├── SecurityConfig.cs         → Max package size, JWT key, unpublish window
 │   ├── TlsConfig.cs              → TLS cert/key paths
-│   └── RateLimitingConfig.cs     → Per-category rate limits
+│   ├── RateLimitingConfig.cs     → Per-category rate limits
+│   ├── MetricsConfig.cs          → Download-metrics config (IpMode, RetentionDays, etc.)
+│   ├── IpHandlingMode.cs         → Enum: raw | truncated | hashed | off
+│   └── IpHasher.cs               → HMAC-SHA256 IP transform service (IIpHasher)
 ├── Controllers/                  → REST API endpoints
 │   ├── AuthController.cs         → Login, register, tokens, whoami
 │   ├── PackagesController.cs     → Get, publish, unpublish, download, roles, visibility
@@ -40,7 +43,14 @@ Stash.Registry/
 ├── Services/                     → Business logic
 │   ├── PackageService.cs         → Publish/unpublish workflows
 │   ├── AuditService.cs           → Audit logging
-│   └── DeprecationService.cs     → (stub)
+│   ├── AuditActions.cs           → Named constants for audit action strings (bounded domain)
+│   ├── DeprecationService.cs     → (stub)
+│   └── Metrics/                  → Download metrics subsystem
+│       ├── IDownloadEventQueue.cs   → In-process bounded Channel abstraction
+│       ├── DownloadEventQueue.cs    → Channel<DownloadEvent> implementation
+│       ├── IDownloadMetricsStore.cs → Persistence + read-model interface
+│       ├── DownloadMetricsStore.cs  → EF Core implementation (scoped)
+│       └── MetricsBackgroundService.cs → Hosted drain loop + rollup + retention
 ├── Storage/                      → Package file storage
 │   ├── IPackageStorage.cs        → Store, Retrieve, Delete, Exists, GetSize
 │   ├── FileSystemStorage.cs      → Local disk with path traversal protection
@@ -219,6 +229,8 @@ All controller actions that accept a request body or query parameters use ASP.NE
 | GET    | `/api/v1/packages/{scope}/{name}`                      | None (public) | PackagesController       |
 | GET    | `/api/v1/packages/{scope}/{name}/{version}`            | None (public) | PackagesController       |
 | GET    | `/api/v1/packages/{scope}/{name}/{version}/download`   | None (public) | PackagesController       |
+| GET    | `/api/v1/packages/{scope}/{name}/metrics`              | None (public) | PackagesController       |
+| GET    | `/api/v1/packages/{scope}/{name}/{version}/metrics`    | None (public) | PackagesController       |
 | PUT    | `/api/v1/packages/{scope}/{name}`                      | publish scope | PackagesController       |
 | DELETE | `/api/v1/packages/{scope}/{name}/{version}`            | publish scope | PackagesController       |
 | PATCH  | `/api/v1/packages/{scope}/{name}/deprecate`            | publish scope | PackagesController       |
@@ -239,6 +251,7 @@ All controller actions that accept a request body or query parameters use ASP.NE
 | GET    | `/api/v1/scopes/{scope}`                               | None          | ScopesController         |
 | POST   | `/api/v1/scopes`                                       | publish scope | ScopesController         |
 | GET    | `/api/v1/admin/stats`                                  | admin         | AdminController          |
+| GET    | `/api/v1/admin/metrics/downloads`                      | admin         | AdminController          |
 | POST   | `/api/v1/admin/users`                                  | admin         | AdminController          |
 | DELETE | `/api/v1/admin/users/{username}`                       | admin         | AdminController          |
 | PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin         | AdminController          |
@@ -329,6 +342,7 @@ All configuration lives in `appsettings.json` with typed models in `Configuratio
 | `Auth`         | `AuthConfig`         | Provider type, registration, token TTL |
 | `Security`     | `SecurityConfig`     | Package size, integrity, JWT key       |
 | `RateLimiting` | `RateLimitingConfig` | Per-category throttle settings         |
+| `Metrics`      | `MetricsConfig`      | Download metrics: IpMode, RetentionDays, RollupIntervalMinutes |
 
 ## Tests
 
@@ -354,8 +368,10 @@ Several meta-tests enforce structural invariants that must stay green when addin
 | `AuthzCoverageMetaTests`          | Every action on a production controller carries `[Authorize]` or `[PublicEndpoint]`. Class-level `[Authorize]` counts. Fail-path fixture included. |
 | `AuthzDispatchCoverageMetaTests`  | Every non-`[PublicEndpoint]` action carries `[RegistryAuthorize]` OR `[ImperativeAuthz]`. Class-level `[Authorize]` alone does NOT satisfy this — the action itself must be classified. Includes a fail-path fixture (proving the scan has teeth) and an imperative-pin assertion (the set of `[ImperativeAuthz]` endpoints must equal `{ScopesController.ClaimScope}` — the irreducible end-state after `registry-authz-pdp-completion`). Adding or removing an `[ImperativeAuthz]` marker requires updating the pin assertion. |
 | `NoMagicAuthStringsMetaTests`     | No bare string literal reaches an auth sink (`IsInRole`/`FindFirst`/etc.). Sink-targeted scan; includes a self-test and floor guard. New auth sinks must be added to the scanner. |
+| `NoMagicRemoteIpAccessMetaTests`  | No bare read of `HttpContext.Connection.RemoteIpAddress` outside the exempt list (`IpHasher.cs` + 6 permanent non-metrics raw-IP readers). Enforces the D11 IP-handling pipeline. |
 | `RegistryAuthzMatrixTests`        | Every (action × principal) row in `AuthzMatrixData` produces the correct HTTP status and `ErrorResponse` body — the primary behavior-preservation gate. |
 | `RegistryAuthzAuditMutationTests` | Authenticated denials on key endpoints (including `CreateOrg`, `AddOrgMember`, `VerifyScope`) write exactly one audit entry. Guards the uniform-audit behavior introduced by the shared filter. |
+| `OpenApiCoverageMetaTests`        | Every operation in the generated OpenAPI doc has an `operationId` and every response code has a `$ref` schema. Permanently exempt: `Packages_DownloadVersion` (binary stream). |
 
 When adding new features, add corresponding tests in `Stash.Tests/Registry/`. Use `dotnet test --filter "FullyQualifiedName~Registry"` to run registry tests.
 

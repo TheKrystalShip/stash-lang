@@ -64,6 +64,8 @@ All package routes use the two-segment form `/packages/{scope}/{name}` where `{s
 | DELETE | `/api/v1/packages/{scope}/{name}/deprecate`                | publish scope                | Undeprecate package                      |
 | PATCH  | `/api/v1/packages/{scope}/{name}/{version}/deprecate`      | publish scope                | Deprecate version                        |
 | DELETE | `/api/v1/packages/{scope}/{name}/{version}/deprecate`      | publish scope                | Undeprecate version                      |
+| GET    | `/api/v1/packages/{scope}/{name}/metrics`                  | None (public)                | Package download metrics (visibility-gated by PDP) |
+| GET    | `/api/v1/packages/{scope}/{name}/{version}/metrics`        | None (public)                | Version download metrics (visibility-gated by PDP) |
 | GET    | `/api/v1/packages/{scope}/{name}/roles`                    | publish scope (owner)        | List package roles                       |
 | PUT    | `/api/v1/packages/{scope}/{name}/roles`                    | publish scope (owner)        | Assign a role to a principal             |
 | DELETE | `/api/v1/packages/{scope}/{name}/roles`                    | publish scope (owner)        | Revoke a role from a principal           |
@@ -98,7 +100,7 @@ Search results are filtered by visibility. Unauthenticated callers see only `pub
 | ------ | ---------------------------------- | ------------- | ----------------------------------------------- |
 | GET    | `/api/v1/.well-known/registry`     | None (public) | Registry capability advertisement (no database) |
 
-Returns static server capabilities (API version, paging limits, links, feature flags). No authentication required; revoked or invalid `Authorization` headers are tolerated. See [Section 10.10](#1010-well-knownregistry-discovery-endpoint).
+Returns static server capabilities (API version, paging limits, links, feature flags). No authentication required; revoked or invalid `Authorization` headers are tolerated. See [Section 10.12](#1012-well-knownregistry-discovery-endpoint).
 
 ### Organization and Scope Endpoints
 
@@ -117,12 +119,13 @@ Returns static server capabilities (API version, paging limits, links, feature f
 
 | Method | Path                                           | Auth  | Description                    |
 | ------ | ---------------------------------------------- | ----- | ------------------------------ |
-| GET    | `/api/v1/admin/stats`                          | admin | Registry statistics            |
-| POST   | `/api/v1/admin/users`                          | admin | Create user                    |
-| DELETE | `/api/v1/admin/users/{username}`               | admin | Delete user                    |
-| PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin | Assign package role (admin override)  |
-| DELETE | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin | Revoke package role (admin override)  |
-| GET    | `/api/v1/admin/audit-log`                              | admin | Query audit log                       |
+| GET    | `/api/v1/admin/stats`                                  | admin | Registry statistics (users, storage, downloads, activity) |
+| GET    | `/api/v1/admin/metrics/downloads`                      | admin | Top packages by download count (paginated)                |
+| POST   | `/api/v1/admin/users`                                  | admin | Create user                                               |
+| DELETE | `/api/v1/admin/users/{username}`                       | admin | Delete user                                               |
+| PUT    | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin | Assign package role (admin override)                      |
+| DELETE | `/api/v1/admin/packages/{scope}/{name}/roles`          | admin | Revoke package role (admin override)                      |
+| GET    | `/api/v1/admin/audit-log`                              | admin | Query audit log                                           |
 
 ## 4. Authentication
 
@@ -458,6 +461,57 @@ Returns the raw `.tar.gz` tarball. Visibility rules identical to [Section 6.1](#
 | Status | Meaning                       |
 | ------ | ----------------------------- |
 | 404    | Package or version not found, or unauthorized. |
+
+**Count-on-success semantics.** A download is counted **exactly once, only when the response
+completes with status `200` and the full tarball body is flushed to the client.** The following
+cases do NOT increment the download counter:
+
+- `404 Not Found` — package or version absent, or hidden by the visibility predicate.
+- Client disconnect / write failure mid-stream — if the connection drops before the full body is
+  written, the event is not counted.
+- `304 Not Modified` (the endpoint does not currently emit 304, but this rule is forward-stated
+  for future conditional-request support).
+
+The counter is incremented asynchronously (off the hot path via an in-process event queue) so
+that metrics capture does not add latency to the download response.
+
+### 6.3a GET /api/v1/packages/{scope}/{name}/metrics
+
+Returns aggregate download counts for the package across all versions and four rolling windows.
+Visibility-gated: anonymous callers on private or internal packages receive `404 Not Found` (not `403`).
+
+Response `200 OK`:
+
+```json
+{
+  "package": "@scope/name",
+  "downloads": { "total": 1234567, "last24h": 4321, "last7d": 30210, "last30d": 102003 },
+  "perVersion": [
+    { "version": "1.2.3", "total": 100200, "last24h": 800, "last7d": 5600, "last30d": 24100 }
+  ],
+  "generatedAt": "2026-06-05T12:00:00Z"
+}
+```
+
+`perVersion` is ordered by `total` downloads descending. Versions with zero downloads are included
+with all counts set to `0`. The read model uses closed hourly rollups as authoritative; the current
+open bucket is computed from raw events and added (≤ `Rollup.IntervalMinutes` staleness on the latest bucket).
+
+### 6.3b GET /api/v1/packages/{scope}/{name}/{version}/metrics
+
+Returns download counts for a specific version across four rolling windows.
+Visibility-gated by the same predicate as `GET /api/v1/packages/{scope}/{name}/{version}`.
+
+Response `200 OK`:
+
+```json
+{
+  "package": "@scope/name",
+  "version": "1.2.3",
+  "downloads": { "total": 100200, "last24h": 800, "last7d": 5600, "last30d": 24100 },
+  "generatedAt": "2026-06-05T12:00:00Z"
+}
+```
 
 ### 6.4 PUT /api/v1/packages/{scope}/{name}
 
@@ -890,11 +944,63 @@ the ceiling check (step 1) and the resource-side admin short-circuit (step 2) fo
 
 ### 9.1 GET /api/v1/admin/stats
 
+Returns high-level registry statistics including storage bytes, registry-wide download totals,
+and recent activity counts.
+
+Download totals follow the D8 read-model: closed hourly rollups are authoritative; the current
+open bucket is computed from raw `download_events` and added. Activity counts are derived from
+audit-log entries with `decision = "allow"` over a rolling 24-hour window.
+
 ```json
-{ "users": 15 }
+{
+  "users": 15,
+  "storageBytes": 8123456789,
+  "downloads": {
+    "total": 9123456,
+    "last24h": 4321
+  },
+  "activity": {
+    "publishesLast24h": 12,
+    "unpublishesLast24h": 1,
+    "deprecationsLast24h": 0
+  }
+}
 ```
 
-### 9.2 POST /api/v1/admin/users
+**Activity count semantics:**
+
+| Field                  | Counts audit actions                                           |
+| ---------------------- | -------------------------------------------------------------- |
+| `publishesLast24h`     | `package.create` and `package.publish` (`allow` entries only) |
+| `unpublishesLast24h`   | `package.unpublish` (`allow` entries only)                     |
+| `deprecationsLast24h`  | `package.deprecate` and `version.deprecate` (`allow` only)    |
+
+### 9.2 GET /api/v1/admin/metrics/downloads
+
+Returns the top packages ordered by download count over a configurable rolling window.
+Uses the same D8 read-model as the package-level metrics endpoints.
+
+| Query parameter | Type    | Default | Constraints                     | Description                                   |
+| --------------- | ------- | ------- | ------------------------------- | --------------------------------------------- |
+| `windowDays`    | integer | `7`     | 1–30                            | Rolling window length in days.                |
+| `page`          | integer | `1`     | ≥ 1                             | 1-based page index.                           |
+| `pageSize`      | integer | `20`    | 1–100                           | Number of entries per page.                   |
+
+Response `200 OK` (`PagedResponse<TopPackageDownloadsEntry>`):
+
+```json
+{
+  "items": [
+    { "package": "@scope/name", "downloads": 100200, "windowDays": 7 }
+  ],
+  "totalCount": 1,
+  "page": 1,
+  "pageSize": 20,
+  "totalPages": 1
+}
+```
+
+### 9.4 POST /api/v1/admin/users
 
 Create a user, bypassing `Auth.RegistrationEnabled`.
 
@@ -910,7 +1016,7 @@ Response `201 Created`:
 { "ok": true, "username": "carol", "role": "user" }
 ```
 
-### 9.3 DELETE /api/v1/admin/users/{username}
+### 9.5 DELETE /api/v1/admin/users/{username}
 
 Delete a user. Their tokens are cascade-deleted from the `tokens` and `refresh_tokens` tables.
 
@@ -918,15 +1024,15 @@ Delete a user. Their tokens are cascade-deleted from the `tokens` and `refresh_t
 { "ok": true }
 ```
 
-### 9.4 PUT /api/v1/admin/packages/{scope}/{name}/roles
+### 9.6 PUT /api/v1/admin/packages/{scope}/{name}/roles
 
 Assign a role to a principal on a package (admin override). Body is identical to [Section 6.8](#68-put-apiv1packagesscopenameroles).
 
-### 9.5 DELETE /api/v1/admin/packages/{scope}/{name}/roles
+### 9.7 DELETE /api/v1/admin/packages/{scope}/{name}/roles
 
 Revoke a role from a principal on a package (admin override). Body is identical to [Section 6.9](#69-delete-apiv1packagesscopenameroles). The last-owner protection invariant applies: `409 Conflict` if the revoke would drop the package's owner count to zero.
 
-### 9.6 GET /api/v1/admin/audit-log
+### 9.8 GET /api/v1/admin/audit-log
 
 Query the audit log. Entries are returned in descending chronological order.
 
@@ -1129,7 +1235,7 @@ without CORS support. To enable CORS, set `Cors.Enabled` to `true` and configure
 | `AllowCredentials` | bool             | `false`                                                                   | Whether `Access-Control-Allow-Credentials: true` is emitted (for cookie / HTTP auth scenarios).                                        |
 
 The `Cors.Enabled` flag is reflected in the discovery endpoint's `features.cors` field
-(see [Section 10.9](#109-well-knownregistry-discovery-endpoint) and
+(see [Section 10.12](#1012-well-knownregistry-discovery-endpoint) and
 [Section 3](#3-endpoint-summary)).
 
 ```json
@@ -1142,7 +1248,40 @@ The `Cors.Enabled` flag is reflected in the discovery endpoint's `features.cors`
 }
 ```
 
-### 10.9 Pagination
+### 10.9 Metrics
+
+The `Metrics` section configures the download-metrics subsystem (introduced in `registry-download-metrics`).
+
+```json
+"Metrics": {
+  "Enabled": true,
+  "IpMode": "hashed",
+  "IpHashSecret": "<base64>",
+  "Raw": { "RetentionDays": 30 },
+  "Rollup": { "IntervalMinutes": 60 }
+}
+```
+
+| Property               | Type    | Default     | Description                                                                                       |
+| ---------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------- |
+| `Enabled`              | bool    | `true`      | Whether download-event capture is active.                                                         |
+| `IpMode`               | string  | `"hashed"`  | How the downloader's IP address is recorded: `raw`, `truncated`, `hashed`, or `off`.             |
+| `IpHashSecret`         | string  | auto-gen    | HMAC-SHA256 secret (base64) used when `IpMode = "hashed"`. If absent, generated once and persisted to `<db-dir>/metrics-ip-secret.bin` on startup. |
+| `Raw.RetentionDays`    | integer | `30`        | How many days to retain raw `download_events` rows. `0` disables raw capture.                    |
+| `Rollup.IntervalMinutes`| integer | `60`       | Rollup job interval in minutes. The background service rolls up closed buckets on this schedule.  |
+
+**`IpMode` values:**
+
+| Value         | Behavior                                                                               |
+| ------------- | -------------------------------------------------------------------------------------- |
+| `raw`         | Stores the downloader's IP address verbatim.                                           |
+| `truncated`   | Truncates to `/24` for IPv4, `/64` for IPv6.                                           |
+| `hashed`      | Stores `HMACSHA256(secret, raw_ip)`, first 32 hex chars. Correlation-safe across restarts. |
+| `off`         | Stores `NULL` — no IP recorded.                                                        |
+
+The `IpHashSecret` **must persist across restarts** — unlike the JWT signing key, it is NOT regenerated on each start (regeneration would break hash correlation across restarts). When missing, the server generates a secret once, writes it to `<db-dir>/metrics-ip-secret.bin`, and logs a warning.
+
+### 10.11 Pagination
 
 All paginated listing endpoints return a shared `PagedResponse<T>` envelope:
 
@@ -1170,7 +1309,7 @@ Per-endpoint `pageSize` caps:
 `pageSize` is validated via `[Range]` on the query DTO. Out-of-range values are rejected `400`
 with `{ "error": "InvalidRequest", ... }` — they are never silently clamped.
 
-### 10.10 .well-known/registry Discovery Endpoint
+### 10.12 .well-known/registry Discovery Endpoint
 
 `GET /api/v1/.well-known/registry` returns a static capability advertisement for the registry.
 No authentication is required; a revoked or invalid `Authorization` header does not block the
@@ -1194,7 +1333,7 @@ Response `200 OK`:
     "wellKnown": "/api/v1/.well-known/registry"
   },
   "features": {
-    "metrics": false,
+    "metrics": true,
     "advisories": false,
     "provenance": false,
     "signatures": false,
@@ -1213,22 +1352,23 @@ is the compile-time constant `100` shared with the `[Range]` validators on `Sear
 
 **Feature flags:**
 
-| Flag                | Value   | Notes                                                                         |
-| ------------------- | ------- | ----------------------------------------------------------------------------- |
-| `organizations`     | `true`  | Organization-scoped packages are supported.                                   |
-| `privatePackages`   | `true`  | Private and internal package visibility is supported.                         |
-| `cors`              | dynamic | Reflects `Cors.Enabled` at server startup (default `false`).                  |
-| `metrics`           | `false` | Bucket-B — download metrics not yet implemented.                              |
-| `advisories`        | `false` | Bucket-B — security advisory data not yet implemented.                        |
-| `provenance`        | `false` | Bucket-B — provenance attestation not yet implemented.                        |
-| `signatures`        | `false` | Bucket-B — package signature verification not yet implemented.                |
-| `trustedPublishing` | `false` | Bucket-B — OIDC-based trusted publishing not yet implemented.                 |
-| `verifiedPublishers`| `false` | Bucket-B — publisher verification not yet implemented.                        |
+| Flag                | Value   | Notes                                                                                        |
+| ------------------- | ------- | -------------------------------------------------------------------------------------------- |
+| `organizations`     | `true`  | Organization-scoped packages are supported.                                                  |
+| `privatePackages`   | `true`  | Private and internal package visibility is supported.                                        |
+| `cors`              | dynamic | Reflects `Cors.Enabled` at server startup (default `false`).                                 |
+| `metrics`           | `true`  | Download metrics endpoints are available (shipped in `registry-download-metrics`).           |
+| `advisories`        | `false` | Bucket-B — security advisory data not yet implemented.                                       |
+| `provenance`        | `false` | Bucket-B — provenance attestation not yet implemented.                                       |
+| `signatures`        | `false` | Bucket-B — package signature verification not yet implemented.                               |
+| `trustedPublishing` | `false` | Bucket-B — OIDC-based trusted publishing not yet implemented.                                |
+| `verifiedPublishers`| `false` | Bucket-B — publisher verification not yet implemented.                                       |
 
-The Bucket-B flags (`metrics`, `advisories`, `provenance`, `signatures`, `trustedPublishing`,
+The remaining Bucket-B flags (`advisories`, `provenance`, `signatures`, `trustedPublishing`,
 `verifiedPublishers`) are pinned `false` until their backing data and logic land. They are
 present as explicit future seams — clients should check these flags before attempting to use the
-corresponding functionality.
+corresponding functionality. `metrics` was promoted from Bucket-B to Bucket-A in the
+`registry-download-metrics` feature.
 
 ## 11. Database Schema
 
@@ -1648,7 +1788,6 @@ Full CLI semantics are documented in [PKG - Package Manager CLI](PKG%20—%20Pac
 | Auth providers      | Only `local` is functional. `ldap` and `oidc` configuration is accepted but unused.             |
 | Storage backends    | Only `filesystem` is functional. `s3` returns `NotImplementedException` on every operation.     |
 | Integrity algorithm | Only `sha256` is supported.                                                                     |
-| Stats endpoint      | `GET /admin/stats` currently returns only the user count.                                       |
 | Unpublish window    | After `Security.UnpublishWindow` expires, the only path to discourage a version is deprecation. |
 | Scope deletion      | Scopes are not deletable in this release. Org deletion cascades only when no packages depend on the scope. |
 
@@ -1723,6 +1862,9 @@ Every operation in the document carries a stable `operationId` following the con
 | `POST /api/v1/scopes`                                  | `Scopes_ClaimScope`            |
 | `GET /api/v1/search`                                   | `Search_Search`                |
 | `GET /api/v1/admin/stats`                              | `Admin_GetStats`               |
+| `GET /api/v1/admin/metrics/downloads`                  | `Admin_GetDownloadsMetrics`    |
+| `GET /api/v1/packages/{scope}/{name}/metrics`          | `Packages_GetPackageMetrics`   |
+| `GET /api/v1/packages/{scope}/{name}/{version}/metrics`| `Packages_GetVersionMetrics`   |
 | `POST /api/v1/admin/users`                             | `Admin_CreateUser`             |
 
 The `Health_Check` operationId is set explicitly via `.WithName("Health_Check")` on the minimal-API health endpoint; all controller actions receive their operationId from the `{Controller}_{Action}` transformer applied at document-serve time.

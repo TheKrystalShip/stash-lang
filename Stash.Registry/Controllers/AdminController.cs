@@ -61,15 +61,56 @@ public class AdminController : ControllerBase
     }
 
     /// <summary>
-    /// Returns high-level registry statistics.
+    /// Returns high-level registry statistics including storage bytes, download totals,
+    /// and recent publish/unpublish/deprecation activity.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Download totals follow the D8 read-model contract: closed hourly rollups are
+    /// authoritative; the current open bucket is computed from raw <c>download_events</c>
+    /// and added.
+    /// </para>
+    /// <para>
+    /// Activity counts are derived from audit-log entries with <c>decision = "allow"</c>
+    /// over a rolling 24-hour window.  Publish counts include both <c>package.create</c>
+    /// (first publish) and <c>package.publish</c> (subsequent versions).  Deprecation
+    /// counts sum <c>package.deprecate</c> and <c>version.deprecate</c>.
+    /// </para>
+    /// </remarks>
     [RegistryAuthorize(RegistryAction.ReadAdminStats)]
     [HttpGet("stats")]
     public async Task<Ok<StatsResponse>> GetStats()
     {
-        int users = (await _db.ListUsersAsync()).Count;
+        DateTime now     = DateTime.UtcNow;
+        DateTime since24h = now - TimeSpan.FromHours(24);
+
+        int  users        = (await _db.ListUsersAsync()).Count;
         long storageBytes = await _db.GetTotalStorageBytesAsync();
-        return TypedResults.Ok(new StatsResponse { Users = users, StorageBytes = storageBytes });
+
+        var (dlTotal, dlLast24h) =
+            await _metricsStore.GetRegistryDownloadTotalsAsync(now);
+
+        int publishes = await _db.CountAuditEntriesByActionSinceAsync(
+            new[] { AuditActions.PackageCreate, AuditActions.PackagePublish }, since24h);
+
+        int unpublishes = await _db.CountAuditEntriesByActionSinceAsync(
+            new[] { AuditActions.PackageUnpublish }, since24h);
+
+        int deprecations = await _db.CountAuditEntriesByActionSinceAsync(
+            new[] { AuditActions.PackageDeprecate, AuditActions.VersionDeprecate }, since24h);
+
+        return TypedResults.Ok(new StatsResponse
+        {
+            Users        = users,
+            StorageBytes = storageBytes,
+            Downloads    = new AdminDownloadsSummary { Total = dlTotal, Last24h = dlLast24h },
+            Activity     = new AdminActivitySummary
+            {
+                PublishesLast24h     = publishes,
+                UnpublishesLast24h   = unpublishes,
+                DeprecationsLast24h  = deprecations,
+            },
+        });
     }
 
     /// <summary>
