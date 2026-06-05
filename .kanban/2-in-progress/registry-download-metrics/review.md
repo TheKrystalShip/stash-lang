@@ -225,7 +225,7 @@ dotnet test --filter "FullyQualifiedName~AdminStatsExpandedTests"
 ## F05 — [MINOR] `DownloadRollupDailyRecord` docstring claims it "aggregates hourly rollup rows" but daily rollup is computed from raw events
 
 **Status:** fixed
-**Fixed in:** TBD
+**Fixed in:** 5cc12640
 **Files:** `Stash.Registry/Database/Models/DownloadRollupDailyRecord.cs:9-13`, `Stash.Registry/Services/Metrics/DownloadMetricsStore.cs:144-196`
 **Phase:** M4
 **Commit:** 6ee722c4
@@ -265,7 +265,7 @@ dotnet build Stash.Registry
 ## F06 — [MINOR] Brief wording "404 body must NOT contain the package name" conflicts with the registry's indistinguishability invariant — reconcile the brief, not the code
 
 **Status:** fixed
-**Fixed in:** TBD
+**Fixed in:** 5cc12640
 **Files:** `.kanban/2-in-progress/registry-download-metrics/brief.md:179`, `Stash.Tests/Registry/Metrics/MetricsVisibilityBehaviorTests.cs:170-178`
 **Phase:** M5 (and brief)
 **Commit:** 9e496091
