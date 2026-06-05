@@ -24,6 +24,16 @@ always read the relevant sections first.
 
 ## Active gotchas
 
+### `process-read-blocks-empty-pipe`
+- **Observed:** 2026-06-05 (lsp_warmd.stash increment 2 authoring)
+- **Mismatch:** `process.read(handle)` is documented as "Non-blocking — returns null if no data is ready." In practice, when the child's stdout pipe buffer is empty, `process.read` **blocks** indefinitely waiting for the child to produce output, instead of returning null.
+- **Impact:** Any poll-based read loop (`while(chunk = process.read(p); chunk == null) { ... }`) hangs forever when the child goes quiet. The daemon workaround: only call `process.read(lsp)` inside `pumpLsp`/`pumpLspBridge` AFTER forwarding a client request to csharp-ls (which will produce a response), so the pipe always has pending data.
+- **Note:** `process.read(p)` from inside `task.run` returns immediately (cross-VM handle is disconnected from the new VM's scope), so the blocking is specific to the spawning VM's main execution context.
+- **Test:** `dotnet test --filter "FullyQualifiedName~GotchaTests.ProcessRead_EmptyPipe_CurrentlyBlocks"` (green = bug still present, red = fixed)
+- **Backlog:** `.kanban/0-backlog/bugs/process-read-blocks-on-empty-pipe.md`
+
+---
+
 ### `fs-move-copy-file-only`
 - **Observed:** 2026-06-01 (build with `path.match`, post-A.6)
 - **Mismatch:** `fs.move` / `fs.copy` are **file-only** — there is no
