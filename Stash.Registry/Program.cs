@@ -57,7 +57,20 @@ public class Program
         var remainingArgs = Array.FindAll(args, a => a is not "--help" and not "-h" and not "--version" and not "-v");
         var builder = WebApplication.CreateBuilder(remainingArgs);
 
-        var config = builder.Configuration.GetSection("Registry").Get<RegistryConfig>() ?? new RegistryConfig();
+        RegistryConfig config;
+        try
+        {
+            config = builder.Configuration.GetSection("Registry").Get<RegistryConfig>() ?? new RegistryConfig();
+        }
+        catch (InvalidOperationException ex)
+        {
+            // ConfigurationBinder throws when it cannot parse a bounded-domain value
+            // (e.g. an unrecognised IpHandlingMode string).  Re-wrap with a clear
+            // message that identifies this as a configuration error.
+            Console.Error.WriteLine($"stash-registry: configuration error: {ex.Message}");
+            Environment.Exit(1);
+            return;
+        }
 
         try
         {

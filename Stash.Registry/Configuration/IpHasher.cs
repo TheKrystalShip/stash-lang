@@ -53,11 +53,17 @@ public sealed class IpHasher : IIpHasher
     /// </summary>
     /// <param name="config">The metrics configuration section.</param>
     /// <param name="logger">Logger for startup warnings.</param>
+    /// <param name="databasePath">
+    /// Optional path to the SQLite database file.  When provided, the auto-generated
+    /// secret is written as a sibling of the database directory rather than the
+    /// application binary directory.  Ignored when
+    /// <see cref="MetricsConfig.IpHashSecret"/> is set.
+    /// </param>
     /// <exception cref="InvalidOperationException">
-    /// Thrown if the <see cref="IpHandlingMode.Hashed"/> mode is active, a secret
-    /// file path can be derived, but the file cannot be written on first generation.
+    /// Thrown if the <see cref="IpHandlingMode.Hashed"/> mode is active and
+    /// <see cref="MetricsConfig.IpHashSecret"/> is not valid base-64.
     /// </exception>
-    public IpHasher(MetricsConfig config, ILogger<IpHasher> logger)
+    public IpHasher(MetricsConfig config, ILogger<IpHasher> logger, string? databasePath = null)
     {
         if (config is null) throw new ArgumentNullException(nameof(config));
         if (logger is null) throw new ArgumentNullException(nameof(logger));
@@ -85,8 +91,11 @@ public sealed class IpHasher : IIpHasher
         }
         else
         {
-            // Auto-generate once and persist.
-            SecretFilePath = ResolveSecretFilePath();
+            // Auto-generate once and persist to disk so hashes stay stable across
+            // registry restarts.  The file is placed in the database directory
+            // (typically a persistent volume mount) rather than the binary output
+            // directory, which may be ephemeral in container deployments.
+            SecretFilePath = ResolveSecretFilePath(databasePath);
             _hmacKey = LoadOrCreateSecret(SecretFilePath, logger);
         }
     }
@@ -154,15 +163,25 @@ public sealed class IpHasher : IIpHasher
     // ── Secret file helpers ───────────────────────────────────────────────────
 
     /// <summary>
-    /// Resolves the default secret file path relative to the registry's data directory.
-    /// Falls back to the temp directory if the data path is unavailable.
+    /// Resolves the default secret file path.
     /// </summary>
-    private static string ResolveSecretFilePath()
+    /// <param name="databasePath">
+    /// Optional path to the SQLite database file.  When provided and the directory
+    /// exists (or can be created), the secret is placed in the same directory so it
+    /// lives on the same persistent volume as the data.  Falls back to the application
+    /// binary directory when <paramref name="databasePath"/> is null/empty.
+    /// </param>
+    private static string ResolveSecretFilePath(string? databasePath)
     {
-        // Derive the path relative to the executable's directory (where appsettings.json lives)
-        // so the file is a natural sibling to the database.
-        string baseDir = AppContext.BaseDirectory;
-        return Path.Combine(baseDir, DefaultSecretFileName);
+        if (!string.IsNullOrWhiteSpace(databasePath))
+        {
+            string? dbDir = Path.GetDirectoryName(Path.GetFullPath(databasePath));
+            if (!string.IsNullOrEmpty(dbDir))
+                return Path.Combine(dbDir, DefaultSecretFileName);
+        }
+
+        // Fallback: sibling of the application binary (appsettings.json directory).
+        return Path.Combine(AppContext.BaseDirectory, DefaultSecretFileName);
     }
 
     /// <summary>

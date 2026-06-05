@@ -162,6 +162,28 @@ public sealed class MetricsConfigTests
         Assert.Contains("IntervalMinutes", ex.Message);
     }
 
+    // ── ConfigurationBinder with illegal IpMode (integration-level) ──────────
+
+    /// <summary>
+    /// Verifies that the ConfigurationBinder throws when an unrecognised IpMode value
+    /// is present in the configuration source.  This ensures the try/catch in Program.cs
+    /// is the real enforcement path.
+    /// </summary>
+    [Fact]
+    public void GetRegistryConfig_UnknownIpMode_BinderThrows()
+    {
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Registry:Metrics:IpMode"] = "banana" })
+            .Build();
+
+        // ConfigurationBinder uses Enum.TryParse internally; an unrecognised string
+        // throws InvalidOperationException (wrapping an ArgumentException).
+        Assert.ThrowsAny<Exception>(() =>
+        {
+            _ = cfg.GetSection("Registry").Get<RegistryConfig>();
+        });
+    }
+
     // ── Helper ────────────────────────────────────────────────────────────────
 
     private static RegistryConfig BuildConfig(Dictionary<string, string?> values)

@@ -190,12 +190,13 @@ public sealed class Startup
 
         // IIpHasher — singleton: the HMAC key is loaded once at startup and shared
         // across all requests.  Construction logs a warning and writes the secret file
-        // if the key is absent.  Registered BEFORE the startup warning check below so
-        // the logger is available when the singleton is first resolved.
+        // if the key is absent.  The database path is threaded in so the auto-generated
+        // secret is written as a sibling of the data directory (persistent volume) rather
+        // than the binary output directory, which may be ephemeral in container deploys.
         services.AddSingleton<IIpHasher>(sp =>
         {
             var hasherLogger = sp.GetRequiredService<ILogger<IpHasher>>();
-            return new IpHasher(_config.Metrics, hasherLogger);
+            return new IpHasher(_config.Metrics, hasherLogger, _config.Database.Path);
         });
 
         services.AddScoped<PackageService>();
