@@ -140,7 +140,8 @@ The new test must fail before the fix and pass after; the existing `ManagePageTe
 
 ## F03 — [MINOR] Maintainer-area Authorize convention relies on default auth scheme — deviates from `done_when` text
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** a0791f80
 **Files:** `Stash.Registry.Web/Areas/Maintainer/MaintainerAreaConventions.cs:41-50`
 **Phase:** A2
 **Commit:** 36a20bc4
@@ -246,7 +247,8 @@ After the change, no `.GetAwaiter().GetResult()` remains in the accessor; all in
 
 ## F05 — [MINOR] `asp-area="Maintainer"` and `area = "Maintainer"` literals duplicate the single source of truth
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** a0791f80
 **Files:** `Stash.Registry.Web/Areas/Maintainer/Pages/Settings/Tokens.cshtml.cs:206`, `Stash.Registry.Web/Areas/Maintainer/Views/MaintainerDeprecateForm.cshtml:38`, `:54`, `Stash.Registry.Web/Areas/Maintainer/Views/MaintainerVersionsTable.cshtml:63`, `:77`, `Stash.Registry.Web/Areas/Maintainer/Views/MaintainerVisibilityForm.cshtml:24`, `Stash.Registry.Web/Areas/Maintainer/Views/TokenCreateForm.cshtml:17`, `Stash.Registry.Web/Areas/Maintainer/Views/TokenList.cshtml:62`
 **Phase:** A3, A4
 **Commit:** 277c685b, f79972bf
