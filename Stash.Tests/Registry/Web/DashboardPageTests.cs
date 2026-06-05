@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Hosting;
@@ -247,6 +248,56 @@ public sealed class DashboardPageTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var html = await response.Content.ReadAsStringAsync();
         Assert.Contains("Registry unavailable", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── GET: registry 401 → clear session + redirect to /login?expired=1 ─────
+
+    /// <summary>
+    /// C4 — session expiry contract: a registry 401 on the dashboard (e.g. publish token
+    /// revoked out-of-band) must clear the server-side session, delete the session cookie,
+    /// and redirect to <c>/login?expired=1</c>.
+    /// </summary>
+    [Fact]
+    public async Task Dashboard_AuthenticatedGet_Registry401_ClearsSessionAndRedirectsToLoginExpired()
+    {
+        // Arrange: stub returns 401 from SearchOwnedAsync.
+        var stub = new StubAuthenticatedRegistryClient
+        {
+            SearchOwnedException = new RegistryClientException(HttpStatusCode.Unauthorized),
+        };
+
+        using var factory = CreateFactory(stub);
+        using var client = CreateAuthenticatedHttpClient(factory);
+
+        // Act.
+        var response = await client.GetAsync("/dashboard");
+
+        // Assert 1: 302 redirect to /login?expired=1.
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location?.ToString();
+        Assert.NotNull(location);
+        Assert.Contains("/login", location, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("expired=1", location, StringComparison.OrdinalIgnoreCase);
+
+        // Assert 2: session cookie is deleted — the Set-Cookie header for the session
+        // cookie must be present with an expiry in the past (Max-Age=0 or Expires in the past).
+        Assert.True(
+            response.Headers.TryGetValues("Set-Cookie", out var cookies),
+            "Expected a Set-Cookie header to delete the session cookie.");
+        var cookieList = cookies!.ToList();
+        var sessionCookieHeader = cookieList.FirstOrDefault(c =>
+            c.StartsWith(SessionCookie.CookieName, StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(sessionCookieHeader);
+        // ASP.NET Core cookie deletion sets the value to empty and expires it.
+        Assert.True(
+            sessionCookieHeader!.Contains("expires=", StringComparison.OrdinalIgnoreCase) ||
+            sessionCookieHeader!.Contains("max-age=0", StringComparison.OrdinalIgnoreCase),
+            $"Session cookie header did not indicate deletion: {sessionCookieHeader}");
+
+        // Assert 3: server-side session is removed from ISessionStore.
+        var sessionStore = factory.Services.GetRequiredService<ISessionStore>();
+        var session = await sessionStore.GetAsync(FixtureSessionId);
+        Assert.Null(session);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
