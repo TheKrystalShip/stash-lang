@@ -1,0 +1,80 @@
+@using Stash.Registry.Web.Constants
+@model Stash.Registry.Contracts.PackageDetailResponse
+
+@* Package-level deprecate / undeprecate controls.
+   Renders the "Deprecate Package" form when the package is not yet deprecated,
+   or the "Remove Deprecation" button when it is.
+   scope and name are passed via ViewData. *@
+
+@{
+    var scope = (string)ViewData["Scope"]!;
+    var name = (string)ViewData["Name"]!;
+}
+
+@if (Model.Deprecated)
+{
+    @* Un-deprecate package *@
+    <section class="manage-section" aria-labelledby="undeprecate-heading">
+        <h2 id="undeprecate-heading" class="manage-section-title">@ViewLabels.UndeprecatePackageSectionTitle</h2>
+
+        @if (!string.IsNullOrEmpty(Model.DeprecationMessage))
+        {
+            <p class="current-deprecation-message">
+                <strong>Current message:</strong> @Model.DeprecationMessage
+            </p>
+        }
+        @if (!string.IsNullOrEmpty(Model.DeprecationAlternative))
+        {
+            <p class="current-deprecation-alternative">
+                <strong>Alternative:</strong> @Model.DeprecationAlternative
+            </p>
+        }
+
+        <form method="post"
+              asp-page="/Manage"
+              asp-page-handler="UndeprecatePackage"
+              asp-route-scope="@scope"
+              asp-route-name="@name"
+              asp-area="@MaintainerAreaConventions.AreaName">
+            <button type="submit" class="btn btn-secondary">Remove Deprecation</button>
+        </form>
+    </section>
+}
+else
+{
+    @* Deprecate package *@
+    <section class="manage-section" aria-labelledby="deprecate-heading">
+        <h2 id="deprecate-heading" class="manage-section-title">@ViewLabels.DeprecatePackageSectionTitle</h2>
+
+        <form method="post"
+              asp-page="/Manage"
+              asp-page-handler="DeprecatePackage"
+              asp-route-scope="@scope"
+              asp-route-name="@name"
+              asp-area="@MaintainerAreaConventions.AreaName"
+              class="deprecate-package-form">
+
+            <div class="form-field">
+                <label for="deprecation-message" class="form-label">Deprecation message <span class="required" aria-hidden="true">*</span></label>
+                <textarea id="deprecation-message"
+                          name="DeprecationMessage"
+                          class="input-full"
+                          rows="3"
+                          placeholder="Why is this package deprecated?"
+                          required
+                          aria-required="true"></textarea>
+            </div>
+
+            <div class="form-field">
+                <label for="deprecation-alternative" class="form-label">Alternative package (optional)</label>
+                <input type="text"
+                       id="deprecation-alternative"
+                       name="DeprecationAlternative"
+                       class="input-full"
+                       placeholder="e.g. @scope/replacement-package" />
+            </div>
+
+            <button type="submit" class="btn btn-warning">Deprecate Package</button>
+        </form>
+    </section>
+}

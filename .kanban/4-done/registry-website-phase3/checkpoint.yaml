@@ -1,0 +1,51 @@
+schema_version: 1
+feature: registry-website-phase3
+current: null
+updated: "2026-06-05T00:50:20Z"
+phases:
+  A1:
+    status: done
+    commit: 6c0035ff5321eeaab943399fe68607a66e84c173
+    verified: true
+    started: "2026-06-04T21:00:31Z"
+    completed: "2026-06-04T21:48:48Z"
+    attempts: 1
+    notes: Login/logout + session store + cookie auth handler + global anti-forgery + Phase-2 byte-unchanged guard — 57 tests green
+  A2:
+    status: done
+    commit: 36a20bc417831dce17c4402f31abdc811e77b099
+    verified: true
+    started: "2026-06-04T21:50:02Z"
+    completed: "2026-06-04T22:13:42Z"
+    attempts: 1
+    notes: "IAuthenticatedRegistryClient + HttpAuthenticatedRegistryClient (fail-closed DI factory, SendAsync C1 chokepoint), Maintainer area with MaintainerAreaConventions ([Authorize] + own layout), GET /dashboard (SearchOwnedAsync), AuthClientChokepointMetaTests + SessionTokenLeakMetaTests; 39/39 tests green"
+  A3:
+    status: done
+    commit: 56899be3755e7cc894ef9447f4c9ab6ed979f823
+    verified: true
+    started: "2026-06-04T22:23:17Z"
+    completed: "2026-06-04T22:43:15Z"
+    attempts: 1
+    notes: "CSS fix applied: removed duplicate .badge/.btn-primary definitions; all 45 A3 tests pass."
+  A4:
+    status: done
+    commit: 98684397924d8da3dc7dba3522e8d61517b320ee
+    verified: true
+    started: "2026-06-04T22:45:20Z"
+    completed: "2026-06-04T23:07:46Z"
+    attempts: 1
+    notes: "Token management page (list/create/revoke): 303 redirect, TempData single-use, current-session badge/guard, all chokepoint guards green (303 and copy-button fixed after advisor review)"
+  A5:
+    status: done
+    commit: fb1a36a49a7890452d6fcd2aa214d07774f133a6
+    verified: true
+    started: "2026-06-04T23:10:03Z"
+    completed: "2026-06-04T23:42:51Z"
+    attempts: 1
+    notes: "Docs: Web README authenticated-area section + registry-doc Clients cross-link (orchestrator fallback; full suite green)"
+review:
+  status: resolved
+  started: "2026-06-04T23:56:22Z"
+  resolved: "2026-06-05T00:50:20Z"
+  findings_open: 0
+  findings_fixed: 0

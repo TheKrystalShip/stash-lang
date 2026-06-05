@@ -1,0 +1,49 @@
+@using Stash.Registry.Web.Constants
+@model string
+
+@* Single-use token reveal banner.
+   Displayed exactly once immediately after POST /settings/tokens succeeds.
+   The model is the raw token value (from TempData — consumed once on this GET).
+   Once rendered, TempData is cleared; a page refresh will NOT show the value again.
+
+   C4 note: the token value is never stored server-side beyond the TempData cookie
+   (DataProtection-encrypted), and the user is told it cannot be retrieved again. *@
+
+<div class="alert alert-token-created token-just-created" role="alert" aria-live="assertive">
+
+    <strong class="token-created-title">@ViewLabels.TokenJustCreatedTitle</strong>
+
+    <p class="token-created-warning">
+        @ViewLabels.TokenJustCreatedWarning
+    </p>
+
+    <div class="token-value-row">
+        <code class="token-value-display" id="token-value-display">@Model</code>
+        <button type="button"
+                class="btn btn-sm btn-secondary"
+                onclick="copyTokenValue()"
+                aria-label="Copy token to clipboard">
+            Copy
+        </button>
+    </div>
+
+    <p class="token-created-dismiss-hint">
+        Navigate away or refresh the page when you are done — the value will not be shown again.
+    </p>
+</div>
+
+@* Script is inline (not @section) because @section is silently dropped in partials.
+   Putting it here means it renders in-place, immediately after the banner. *@
+<script>
+    function copyTokenValue() {
+        var val = document.getElementById('token-value-display').textContent;
+        navigator.clipboard.writeText(val).catch(function() {
+            // Fallback: select the text for manual copy
+            var el = document.getElementById('token-value-display');
+            var range = document.createRange();
+            range.selectNode(el);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+        });
+    }
+</script>

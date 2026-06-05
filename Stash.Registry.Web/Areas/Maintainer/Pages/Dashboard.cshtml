@@ -1,0 +1,65 @@
+@page "/dashboard"
+@model DashboardModel
+@{
+    ViewData["Title"] = "My Packages";
+}
+
+<section class="dashboard-page">
+
+    <div class="dashboard-header">
+        <h1>My Packages</h1>
+    </div>
+
+    @if (Model.RegistryError is not null)
+    {
+        <div class="alert alert-error" role="alert">
+            <strong>Registry unavailable.</strong> @Model.RegistryError
+        </div>
+    }
+    else if (Model.Packages is not null)
+    {
+        @if (!Model.Packages.Items.Any())
+        {
+            <p class="empty-state">You don&apos;t own any packages yet.</p>
+        }
+        else
+        {
+            <div class="package-grid">
+                @foreach (var pkg in Model.Packages.Items)
+                {
+                    <partial name="~/Views/PackageCard.cshtml" model="pkg" />
+                }
+            </div>
+
+            @if (Model.Packages.TotalPages > 1)
+            {
+                <nav class="pagination" aria-label="Package pages">
+                    @if (Model.CurrentPage > 1)
+                    {
+                        <a href="/dashboard?page=@(Model.CurrentPage - 1)" class="pagination-prev"
+                           aria-label="Previous page">&laquo; Previous</a>
+                    }
+
+                    @for (var p = 1; p <= Model.Packages.TotalPages; p++)
+                    {
+                        if (p == Model.CurrentPage)
+                        {
+                            <span class="pagination-current" aria-current="page">@p</span>
+                        }
+                        else
+                        {
+                            <a href="/dashboard?page=@p" class="pagination-link">@p</a>
+                        }
+                    }
+
+                    @if (Model.CurrentPage < Model.Packages.TotalPages)
+                    {
+                        <a href="/dashboard?page=@(Model.CurrentPage + 1)" class="pagination-next"
+                           aria-label="Next page">Next &raquo;</a>
+                    }
+                </nav>
+            }
+        }
+    }
+
+</section>

@@ -20,7 +20,7 @@ This document defines the public contract of the registry. It intentionally omit
 The registry has two first-party clients:
 
 - **`stash pkg`** — the command-line package manager. It is the primary publishing and installation client and is documented in [PKG - Package Manager CLI](PKG%20—%20Package%20Manager%20CLI.md).
-- **`Stash.Registry.Web`** — the public browse-only web client. It is a server-rendered ASP.NET Core Razor Pages application that exposes package search, package detail, version detail, and README rendering to anyone with a browser. It calls the registry server-to-server via a typed `IRegistryClient`; the browser never reaches the registry directly. See [`Stash.Registry.Web/README.md`](../Stash.Registry.Web/README.md) for build, run, and configuration instructions.
+- **`Stash.Registry.Web`** — the web client for the registry. In addition to a public anonymous browse surface (package search, package detail, version detail, README rendering), it provides an **authenticated maintainer area** where package owners can view their packages (including private ones), manage API tokens, and perform safe write operations (deprecate, un-deprecate, change visibility). Both surfaces are served by the same ASP.NET Core Razor Pages application; the browser never reaches the registry directly. See [`Stash.Registry.Web/README.md`](../Stash.Registry.Web/README.md) for build, run, configuration, and a description of the authenticated maintainer area and its BFF session model.
 
 ## 1. Roles
 

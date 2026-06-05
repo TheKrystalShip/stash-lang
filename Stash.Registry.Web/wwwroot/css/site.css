@@ -900,3 +900,446 @@ pre code {
     font-size: 0.78rem;
     color: var(--text-muted);
 }
+
+/* ================================================================
+   LOGIN PAGE
+   ================================================================ */
+
+.login-page {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 3rem 1rem;
+    min-height: 60vh;
+}
+
+.login-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 2rem 2.5rem;
+    width: 100%;
+    max-width: 420px;
+}
+
+.login-title {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.login-icon {
+    vertical-align: middle;
+}
+
+/* ── Form controls ──────────────────────────────────────────── */
+
+.form-group {
+    margin-bottom: 1.1rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: var(--text);
+}
+
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    background: var(--base);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s;
+    box-sizing: border-box;
+}
+
+.form-control:focus {
+    border-color: var(--accent);
+}
+
+.validation-error {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--error);
+    margin-top: 0.25rem;
+}
+
+.btn-block {
+    display: block;
+    width: 100%;
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+    font-weight: 600;
+    background: var(--accent);
+    color: var(--accent-text);
+    transition: background 0.15s;
+    margin-top: 1.5rem;
+}
+
+.btn-block:hover {
+    background: var(--accent-hover);
+}
+
+/* ── Logout page ───────────────────────────────────────────── */
+
+.logout-page {
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+/* ── Manage page ───────────────────────────────────────────── */
+
+.manage-page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.manage-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.manage-title {
+    font-size: 1.6rem;
+    color: var(--text);
+}
+
+.package-name-highlight {
+    color: var(--accent);
+    font-family: var(--font-mono);
+}
+
+.btn-back {
+    font-size: 0.9rem;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.btn-back:hover {
+    color: var(--accent-hover);
+}
+
+.manage-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.manage-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 1rem;
+}
+
+.manage-metadata .metadata-list {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    gap: 0.5rem 1rem;
+}
+
+.manage-metadata .metadata-list dt {
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.manage-metadata .metadata-list dd {
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+/* Versions table */
+
+.versions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.versions-table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+}
+
+.versions-table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.versions-table .version-row:last-child td {
+    border-bottom: none;
+}
+
+.versions-table .version-deprecated {
+    opacity: 0.7;
+}
+
+.badge-active {
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+}
+
+/* .badge-deprecated already defined in the BADGES section above */
+
+.deprecation-reason {
+    margin-left: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.inline-form {
+    display: inline;
+}
+
+.deprecate-version-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.input-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.85rem;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    min-width: 180px;
+}
+
+.input-full {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
+textarea.input-full {
+    resize: vertical;
+}
+
+.select-control {
+    padding: 0.5rem 0.75rem;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.95rem;
+    min-width: 240px;
+}
+
+.btn-sm {
+    padding: 0.3rem 0.7rem;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+    font-weight: 600;
+}
+
+.btn-secondary {
+    background: var(--surface-alt);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--border);
+}
+
+.btn-warning {
+    background: color-mix(in srgb, #fab387 20%, var(--surface-alt));
+    color: #fab387;
+    border: 1px solid #fab387;
+}
+
+.btn-warning:hover {
+    background: color-mix(in srgb, #fab387 35%, var(--surface-alt));
+}
+
+/* .btn-primary already defined globally above; scope button-specific resets here */
+.manage-page button.btn-primary,
+.manage-page a.btn-primary {
+    border: none;
+    cursor: pointer;
+}
+
+.form-field {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+}
+
+.form-label .required {
+    color: var(--error);
+    margin-left: 0.2rem;
+}
+
+.deprecate-package-form,
+.visibility-form {
+    max-width: 480px;
+}
+
+.current-deprecation-message,
+.current-deprecation-alternative {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+/* ================================================================
+   TOKEN SETTINGS PAGE (A4)
+   ================================================================ */
+
+.tokens-page .tokens-table-wrapper {
+    overflow-x: auto;
+    margin-bottom: 1.5rem;
+}
+
+.tokens-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.tokens-table th,
+.tokens-table td {
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+}
+
+.tokens-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.tokens-table .token-row-current {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.token-id-value {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-right: 0.4rem;
+    word-break: break-all;
+}
+
+.badge-current-session {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent);
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    vertical-align: middle;
+}
+
+.token-action-none {
+    color: var(--text-muted);
+}
+
+.tokens-empty {
+    color: var(--text-muted);
+    font-style: italic;
+    margin-bottom: 1rem;
+}
+
+.create-token-form {
+    max-width: 480px;
+}
+
+.form-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.3rem;
+}
+
+/* Just-created token reveal banner */
+.alert-token-created {
+    background: color-mix(in srgb, var(--success) 12%, var(--surface));
+    border: 1px solid var(--success);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+.token-created-title {
+    display: block;
+    color: var(--success);
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.token-created-warning {
+    color: var(--text);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+}
+
+.token-value-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.token-value-display {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    word-break: break-all;
+    flex: 1;
+    min-width: 0;
+}
+
+.token-created-dismiss-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}

@@ -1,0 +1,95 @@
+@using Stash.Registry.Contracts
+@using Stash.Registry.Web.Constants
+@model Stash.Registry.Contracts.PackageDetailResponse
+
+@* Per-version deprecate / undeprecate controls.
+   Called from Manage.cshtml with the current package.
+   Each row sends its version via a hidden <TargetVersion> field.
+   scope and name are passed via ViewData to ensure the POST action targets the right package. *@
+
+@{
+    var scope = (string)ViewData["Scope"]!;
+    var name = (string)ViewData["Name"]!;
+    var sortedVersions = Model.Versions.Values.OrderByDescending(v => v.PublishedAt).ToList();
+}
+
+<section class="manage-section" aria-labelledby="versions-section-heading">
+    <h2 id="versions-section-heading" class="manage-section-title">@ViewLabels.VersionsSectionTitle</h2>
+
+    @if (!sortedVersions.Any())
+    {
+        <p class="empty-state">No published versions.</p>
+    }
+    else
+    {
+        <table class="versions-table">
+            <thead>
+                <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Published</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var version in sortedVersions)
+                {
+                    <tr class="@(version.Deprecated ? "version-row version-deprecated" : "version-row")">
+                        <td class="version-name">@version.Version</td>
+                        <td class="version-published">@version.PublishedAt</td>
+                        <td class="version-status">
+                            @if (version.Deprecated)
+                            {
+                                <span class="badge badge-deprecated">Deprecated</span>
+                                @if (!string.IsNullOrEmpty(version.DeprecationMessage))
+                                {
+                                    <span class="deprecation-reason">@version.DeprecationMessage</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="badge badge-active">Active</span>
+                            }
+                        </td>
+                        <td class="version-actions">
+                            @if (version.Deprecated)
+                            {
+                                @* Undeprecate version *@
+                                <form method="post"
+                                      asp-page="/Manage"
+                                      asp-page-handler="UndeprecateVersion"
+                                      asp-route-scope="@scope"
+                                      asp-route-name="@name"
+                                      asp-area="@MaintainerAreaConventions.AreaName"
+                                      class="inline-form">
+                                    <input type="hidden" name="TargetVersion" value="@version.Version" />
+                                    <button type="submit" class="btn btn-sm btn-secondary">Remove Deprecation</button>
+                                </form>
+                            }
+                            else
+                            {
+                                @* Deprecate version — small inline form with a message field *@
+                                <form method="post"
+                                      asp-page="/Manage"
+                                      asp-page-handler="DeprecateVersion"
+                                      asp-route-scope="@scope"
+                                      asp-route-name="@name"
+                                      asp-area="@MaintainerAreaConventions.AreaName"
+                                      class="deprecate-version-form">
+                                    <input type="hidden" name="TargetVersion" value="@version.Version" />
+                                    <input type="text"
+                                           name="VersionDeprecationMessage"
+                                           placeholder="Deprecation reason (required)"
+                                           class="input-sm"
+                                           aria-label="Deprecation reason for @version.Version"
+                                           required />
+                                    <button type="submit" class="btn btn-sm btn-warning">Deprecate</button>
+                                </form>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>

@@ -1,0 +1,56 @@
+@page "/settings/tokens/{id?}/{handler?}"
+@model TokensModel
+@using Stash.Registry.Web.Constants
+@{
+    ViewData["Title"] = "API Tokens";
+}
+
+<section class="manage-page tokens-page">
+
+    @* ── Page heading ──────────────────────────────────────────────── *@
+    <div class="manage-header">
+        <h1 class="manage-title">API Tokens</h1>
+        <a href="/dashboard" class="btn-back">&laquo; Back to Dashboard</a>
+    </div>
+
+    @* ── Success banner ────────────────────────────────────────────── *@
+    @if (Model.SuccessBanner is not null)
+    {
+        <div class="alert alert-success" role="status" aria-live="polite">
+            @Model.SuccessBanner
+        </div>
+    }
+
+    @* ── Error banner (registry 4xx / 5xx on a write) ─────────────── *@
+    @if (Model.ErrorBanner is not null)
+    {
+        <div class="alert alert-error" role="alert">
+            @Model.ErrorBanner
+        </div>
+    }
+
+    @* ── Just-created token reveal (single-use TempData) ─────────── *@
+    @if (Model.JustCreatedTokenValue is not null)
+    {
+        <partial name="~/Areas/Maintainer/Views/TokenJustCreated.cshtml"
+                 model="Model.JustCreatedTokenValue" />
+    }
+
+    @* ── Token list ─────────────────────────────────────────────────── *@
+    @if (Model.RegistryError is not null)
+    {
+        <div class="alert alert-error" role="alert">
+            @Model.RegistryError
+        </div>
+    }
+    else
+    {
+        <partial name="~/Areas/Maintainer/Views/TokenList.cshtml"
+                 model="Model" />
+    }
+
+    @* ── Create token form ─────────────────────────────────────────── *@
+    <partial name="~/Areas/Maintainer/Views/TokenCreateForm.cshtml"
+             model="Model" />
+
+</section>
