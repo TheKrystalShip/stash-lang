@@ -9036,7 +9036,7 @@ Members: `Running`, `Completed`, `Failed`, `Cancelled`
 
 #### `task.run(fn: function) -> Future`
 
-Runs a function asynchronously in a new task and returns a Future. Use task.await() to wait for the result.
+Runs a function asynchronously in a new task and returns a Future. Use task.await() to wait for the result. If the function is itself an async function, its returned Future is unwrapped so the task resolves to the inner value rather than a Future-of-Future — task.run(async () => x) behaves like task.run(() => x).
 
 **Parameters:**
 
@@ -9163,7 +9163,7 @@ Returns a Future that completes after the given number of seconds.
 
 #### `task.timeout(ms: number, fn: function) -> any`
 
-Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time.
+Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time. If the function is async, its returned Future is unwrapped and the timeout bounds the inner computation.
 
 **Parameters:**
 

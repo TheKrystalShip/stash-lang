@@ -19,6 +19,9 @@ internal sealed class VMFunction : IStashCallable
     public int Arity => Chunk.Arity;
     public int MinArity => Chunk.MinArity;
 
+    /// <summary>True when the compiled body is an <c>async fn</c> (invoking it returns a Future).</summary>
+    public bool IsAsync => Chunk.IsAsync;
+
     /// <inheritdoc />
     /// <remarks>
     /// Returns the function's name when it has no captured upvalues (i.e. it is a true

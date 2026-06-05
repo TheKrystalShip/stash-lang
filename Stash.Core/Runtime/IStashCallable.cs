@@ -20,6 +20,15 @@ public interface IStashCallable
     int MinArity => Arity;
 
     /// <summary>
+    /// True if this callable is an async function — invoking it returns a <c>StashFuture</c>
+    /// rather than the eventual value. Call sites that themselves await the result (e.g.
+    /// <c>task.run</c>) use this to flatten the returned Future instead of producing a
+    /// Future-of-Future. Defaults to <see langword="false"/>; only async user functions
+    /// override it (built-ins and plain lambdas are synchronous by value).
+    /// </summary>
+    bool IsAsync => false;
+
+    /// <summary>
     /// Invokes the callable with the given arguments.
     /// </summary>
     object? Call(IInterpreterContext context, List<object?> arguments);

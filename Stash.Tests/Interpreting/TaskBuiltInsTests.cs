@@ -107,6 +107,71 @@ let result = task.await(handle);
         Assert.Equal(true, result);
     }
 
+    // ── task.run + async lambda (regression: task-run-async-lambda-crash) ──────
+    // Before the fix, task.run(async () => …) crashed on await with an opaque
+    // "Index was outside the bounds of the array" (CallClosureDirect entered Run()
+    // on a frameless VM because SpawnAsyncFunction returns the Future without a
+    // frame). The fix returns the Future early AND flattens it so an async callback
+    // resolves to its inner value, matching the plain-lambda contract.
+
+    [Fact]
+    public void Run_AsyncLambda_FlattensToInnerValue()
+    {
+        var result = Run(@"
+let handle = task.run(async () => 2 + 2);
+let result = task.await(handle);
+");
+        Assert.Equal(4L, result);
+    }
+
+    [Fact]
+    public void Run_AsyncFnReference_FlattensToInnerValue()
+    {
+        var result = Run(@"
+async fn compute() { return 21 * 2; }
+let handle = task.run(compute);
+let result = task.await(handle);
+");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Run_AsyncLambdaWithInnerAwait_FlattensToInnerValue()
+    {
+        var result = Run(@"
+async fn double(n) { return n * 2; }
+let handle = task.run(async () => await double(50));
+let result = task.await(handle);
+");
+        Assert.Equal(100L, result);
+    }
+
+    [Fact]
+    public void Run_AsyncLambdaThatThrows_AwaitPropagatesCleanly()
+    {
+        // Must surface the real error (TypeError about the array), not the old
+        // "Index was outside the bounds of the array" C# leak from the frameless crash.
+        var error = RunCapturingError(@"
+let handle = task.run(async () => { let x = arr.push(""not an array"", 1); });
+let result = task.await(handle);
+");
+        Assert.Contains("arr.push", error.Message);
+        Assert.DoesNotContain("Index was outside", error.Message);
+    }
+
+    [Fact]
+    public void Run_PlainLambdaReturningFuture_IsNotFlattened()
+    {
+        // Narrow flatten: only async callables are unwrapped. A plain lambda that
+        // explicitly returns a Future keeps its Future-of-Future (no surprise auto-flatten).
+        var result = Run(@"
+let handle = task.run(() => task.run(() => 5));
+let inner = task.await(handle);
+let result = typeof(inner) == ""Future"";
+");
+        Assert.Equal(true, result);
+    }
+
     // ── task.awaitAll ─────────────────────────────────────────────────────────
 
     [Fact]
@@ -835,6 +900,41 @@ task.await(t2);
             let result = task.timeout(5000, compute);
         ");
         Assert.Equal(4950L, result);
+    }
+
+    [Fact]
+    public void Timeout_AsyncLambda_FlattensToInnerValue()
+    {
+        // Same flatten contract as task.run: an async fn under task.timeout resolves
+        // to its inner value, and the timeout bounds the real computation.
+        var result = Run(@"
+let result = task.timeout(5000, async () => 7 * 6);
+");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Timeout_AsyncLambdaThatThrows_PropagatesError()
+    {
+        var error = RunCapturingError(@"
+let result = task.timeout(5000, async () => { let x = arr.push(""not an array"", 1); });
+");
+        Assert.Contains("arr.push", error.Message);
+        Assert.DoesNotContain("Index was outside", error.Message);
+    }
+
+    [Fact]
+    public void Timeout_SlowAsyncLambda_ThrowsTimeoutError()
+    {
+        // The inner async computation exceeds the deadline → TimeoutError, and the
+        // linked cts cancels the inner child VM.
+        var error = RunCapturingError(@"
+let result = task.timeout(50, async () => {
+    time.sleep(2.0);
+    return 999;
+});
+");
+        Assert.Contains("timed out", error.Message);
     }
 
     // ── Regression: parallel-isolated path (ActiveVM==null) must execute, not enqueue ──

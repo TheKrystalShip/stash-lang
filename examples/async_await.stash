@@ -279,6 +279,23 @@ let taskResult = await future;
 
 io.println($"  await on Future: {taskResult}");
 
+// task.run also accepts an async function directly. Its Future is unwrapped, so the
+// task resolves to the inner value — task.run(async () => x) behaves like task.run(() => x).
+
+let flattened = task.run(async () => {
+    let a = await task.run(() => 19);
+    let b = await task.run(() => 23);
+    return a + b;
+});
+
+io.println($"  task.run(async ...) flattens to: {task.await(flattened)}");
+
+// task.timeout works with async functions the same way, bounding the inner computation.
+
+let timed = task.timeout(5000, async () => 6 * 7);
+
+io.println($"  task.timeout(async ...) returns: {timed}");
+
 io.println("");
 
 io.println("=" * 60);

@@ -21,7 +21,7 @@ public static partial class TaskBuiltIns
 
     private static readonly StashEnum _taskStatusEnum = new("Status", new List<string> { "Running", "Completed", "Failed", "Cancelled" });
 
-    /// <summary>Runs a function asynchronously in a new task and returns a Future. Use task.await() to wait for the result.</summary>
+    /// <summary>Runs a function asynchronously in a new task and returns a Future. Use task.await() to wait for the result. If the function is itself an async function, its returned Future is unwrapped so the task resolves to the inner value rather than a Future-of-Future — task.run(async () =&gt; x) behaves like task.run(() =&gt; x).</summary>
     /// <param name="fn">The function to run asynchronously</param>
     /// <returns>A Future representing the running task</returns>
     [StashFn(ReturnType = "Future")]
@@ -36,7 +36,11 @@ public static partial class TaskBuiltIns
             IInterpreterContext child = ctx.Fork(cts.Token);
             try
             {
-                return child.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty).ToObject();
+                object? result = child.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty).ToObject();
+                // Flatten an async fn's Future-of-Future: task.run(async () => x) resolves to x,
+                // exactly like task.run(() => x). Only async callables are unwrapped — a plain
+                // lambda that explicitly returns a Future keeps it (no surprise auto-flatten).
+                return fn.IsAsync && result is StashFuture inner ? inner.GetResult() : result;
             }
             finally
             {
@@ -281,7 +285,7 @@ public static partial class TaskBuiltIns
         return StashValue.FromObj(new StashFuture(delayTask, cts));
     }
 
-    /// <summary>Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time.</summary>
+    /// <summary>Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time. If the function is async, its returned Future is unwrapped and the timeout bounds the inner computation.</summary>
     /// <param name="ms">Timeout in milliseconds</param>
     /// <param name="fn">The function to execute</param>
     /// <exception cref="TimeoutError">if the function does not complete within the timeout</exception>
@@ -297,7 +301,11 @@ public static partial class TaskBuiltIns
             IInterpreterContext child = ctx.Fork(cts.Token);
             try
             {
-                return child.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty).ToObject();
+                object? result = child.InvokeCallbackDirect(fn, ReadOnlySpan<StashValue>.Empty).ToObject();
+                // An async fn returns a Future; block on it here (the linked cts cancels the
+                // inner computation when the timeout fires) so the timeout bounds the real work
+                // rather than just the Future's creation. Mirrors the flatten in task.run.
+                return fn.IsAsync && result is StashFuture inner ? inner.GetResult() : result;
             }
             finally
             {

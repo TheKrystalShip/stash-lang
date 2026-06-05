@@ -371,6 +371,17 @@ public sealed partial class VirtualMachine
         }
 
         CallValue(fn, args.Length, null);
+
+        // Async fn: SpawnAsyncFunction returned the Future immediately *without* pushing a
+        // frame, so the Future is already on top of the stack. Entering Run() now would
+        // index _frames[_frameCount - 1] == _frames[-1] (the "Index was outside the bounds
+        // of the array" crash from task.run(async () => ...)). Return the Future directly.
+        // Mirrors the same guard in ExecuteVMFunctionInlineDirect.
+        if (_frameCount == 0)
+        {
+            return _stack[_sp - 1];
+        }
+
         object? result = Run();
         return StashValue.FromObject(result);
     }
