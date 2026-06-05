@@ -107,7 +107,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = AuditActions.PackagePublish,
+            Action = AuditActions.Publish,
             Package = package,
             Version = version,
             User = user,
@@ -121,7 +121,7 @@ public sealed class AuditService
     {
         await _db.AddAuditEntryAsync(new AuditEntry
         {
-            Action = AuditActions.PackageUnpublish,
+            Action = AuditActions.Unpublish,
             Package = package,
             Version = version,
             User = user,

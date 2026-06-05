@@ -31,11 +31,43 @@ public static class AuditActions
     /// <summary>A new package was created by its first publish.</summary>
     public const string PackageCreate = "package.create";
 
-    /// <summary>A new version was published onto an existing package.</summary>
-    public const string PackagePublish = "publish";
+    /// <summary>
+    /// A new version was published onto an existing package.
+    /// This is the real controller mutation audit action, written by
+    /// <c>PackagesController.PublishPackage</c> and counted by
+    /// <c>AdminController.GetStats</c> (publishesLast24h).  It is the
+    /// authoritative wire contract value for publish operations.
+    /// </summary>
+    public const string PackagePublish = "package.publish";
 
-    /// <summary>A version was unpublished (within the unpublish window).</summary>
-    public const string PackageUnpublish = "unpublish";
+    /// <summary>
+    /// A version was unpublished (within the unpublish window).
+    /// This is the real controller mutation audit action, written by
+    /// <c>PackagesController.UnpublishVersion</c> and counted by
+    /// <c>AdminController.GetStats</c> (unpublishesLast24h).  It is the
+    /// authoritative wire contract value for unpublish operations.
+    /// </summary>
+    public const string PackageUnpublish = "package.unpublish";
+
+    // ── Legacy helper values (test-only; no production caller) ───────────────
+
+    /// <summary>
+    /// Value logged by the vestigial <c>AuditService.LogPublishAsync</c> helper
+    /// (test-only; no production caller).  Kept distinct from
+    /// <see cref="PackagePublish"/> (<c>"package.publish"</c>), which is the real
+    /// controller mutation audit wire contract.  Changing this value is a
+    /// wire-breaking change for any consumer filtering by <c>action="publish"</c>.
+    /// </summary>
+    public const string Publish = "publish";
+
+    /// <summary>
+    /// Value logged by the vestigial <c>AuditService.LogUnpublishAsync</c> helper
+    /// (test-only; no production caller).  Kept distinct from
+    /// <see cref="PackageUnpublish"/> (<c>"package.unpublish"</c>), which is the
+    /// real controller mutation audit wire contract.  Changing this value is a
+    /// wire-breaking change for any consumer filtering by <c>action="unpublish"</c>.
+    /// </summary>
+    public const string Unpublish = "unpublish";
 
     /// <summary>A package was marked as deprecated.</summary>
     public const string PackageDeprecate = "package.deprecate";

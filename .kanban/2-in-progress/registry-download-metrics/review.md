@@ -17,6 +17,7 @@
 
 **Status:** fixed
 **Fixed in:** 69fd790d
+**Pass-2 follow-up (TBD_SHA):** F01's single-constant revert broke the controller audit-contract tests (RegistryAuthzAuditMutationTests / RegistryAuthzMatrixTests, both pre-existing on main, expecting "package.publish"); split into PackagePublish/PackageUnpublish (controller, "package.publish"/"package.unpublish") vs Publish/Unpublish (test-only helpers, "publish"/"unpublish"). Restores the real wire contract; AuditServiceTests still green.
 **Files:** `Stash.Registry/Services/AuditActions.cs:29-31`, `Stash.Registry/Services/AuditService.cs:110,124`, `Stash.Tests/Registry/AuditServiceTests.cs:39,51,54`
 **Phase:** M6
 **Commit:** c2515b87
