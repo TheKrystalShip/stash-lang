@@ -1,7 +1,7 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-05T22:11:33Z"
+updated: "2026-06-05T22:41:27Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: Spec §Async rewritten with two-systems model + D6-D11; task/arr/process metadata updated; reference regenerated; Async/ test scaffold created
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: d184d2523a7073a8fe2c14e9d5da2e03c947aacc
+    verified: true
+    started: "2026-06-05T22:17:52Z"
+    completed: "2026-06-05T22:41:27Z"
+    attempts: 1
+    notes: "D3: IsAsyncChild flag + OCE propagation + CancellationError in GetResult; Timeout distinction preserved; 126 targeted + 13867 full suite pass"
   P3:
     status: pending
     commit: null
