@@ -1,0 +1,192 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec registry-download-metrics
+
+schema_version: 1
+
+feature: registry-download-metrics
+
+title: Registry Download Metrics — Counting, Usage API, and Expanded Admin Stats
+
+# This feature is the P2 unit of the self-hosted-registry milestone.
+# See .kanban/milestones/self-hosted-registry/MILESTONE.md.
+milestone: self-hosted-registry
+
+brief: ./brief.md
+
+created: 2026-06-05
+architect_session: registry-download-metrics
+
+# Per-phase verify steps already cover the relevant subsuite; keep default cheap.
+default_verify:
+  - dotnet build Stash.Registry
+
+# Safety rail — backend metrics work touches the registry, its shared contracts,
+# and the corresponding test subtree. No CLI / language layer changes.
+scope:
+  - Stash.Registry/**
+  - Stash.Registry.Contracts/**
+  - Stash.Tests/Registry/**
+
+phases:
+  - id: M1
+    title: Metrics config + IP-handling enum + IpHasher service
+    deps: []
+    files:
+      - Stash.Registry/Configuration/MetricsConfig.cs
+      - Stash.Registry/Configuration/IpHandlingMode.cs
+      - Stash.Registry/Configuration/IpHasher.cs
+      - Stash.Registry/Configuration/IIpHasher.cs
+      - Stash.Registry/Configuration/RegistryConfig.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Registry/appsettings.json
+      - Stash.Tests/Registry/Configuration/MetricsConfigTests.cs
+      - Stash.Tests/Registry/Configuration/IpHasherTests.cs
+      - Stash.Tests/Registry/Configuration/NoMagicRemoteIpAccessMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~Registry.Configuration|FullyQualifiedName~NoMagicRemoteIpAccessMetaTests"
+    done_when:
+      - "`MetricsConfig` binds from appsettings.json (defaults: IpMode=hashed, Raw.RetentionDays=30, Rollup.IntervalMinutes=60)."
+      - "`IpHandlingMode` is a C# enum with values `raw|truncated|hashed|off`; an illegal config string fails startup with a clear message."
+      - "`IpHasher.Apply(IPAddress?)` returns the raw string for `raw`, the IPv4-/24 / IPv6-/64 prefix for `truncated`, a 32-char hex HMAC-SHA256 hash for `hashed`, and `null` for `off`."
+      - "The HMAC secret persists across registry restarts (auto-generated once on first run if missing, written to disk, logged warning naming the file)."
+      - "`IIpHasher` registered in DI as a singleton; `RegistryConfig` exposes the new `Metrics` section."
+      - "`NoMagicRemoteIpAccessMetaTests` ships RED with an exemption list seeded with the current call sites that read `HttpContext.Connection.RemoteIpAddress` directly (the ~7 existing callers); the list shrinks across M3/later phases. Ships a self-test (a fixture that should trip it, and does) and a binding-floor / file-count floor per CLAUDE.md Roslyn-determinism rule."
+    notes: |
+      The `NoMagicRemoteIpAccessMetaTests` exemption list is the omission guard for the
+      cross-cutting IP-transform concern. It MUST land in M1 with a seeded list (NOT
+      empty); M3 / M6 will shrink it. A final-phase RED-from-empty would mean every
+      prior phase merged with the invariant unenforced.
+
+  - id: M2
+    title: Schema (download_events + rollups) + storage_bytes column with publish-path write/read
+    deps: [M1]
+    files:
+      - Stash.Registry/Database/Models/DownloadEventRecord.cs
+      - Stash.Registry/Database/Models/DownloadRollupHourlyRecord.cs
+      - Stash.Registry/Database/Models/DownloadRollupDailyRecord.cs
+      - Stash.Registry/Database/Models/VersionRecord.cs
+      - Stash.Registry/Database/RegistryDbContext.cs
+      - Stash.Registry/Database/IRegistryDatabase.cs
+      - Stash.Registry/Database/StashRegistryDatabase.cs
+      - Stash.Registry/Services/PackageService.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Tests/Registry/SqliteDatabaseTests.cs
+      - Stash.Tests/Registry/PackageServiceTests.cs
+      - Stash.Tests/Registry/AdminStatsStorageBytesEndToEndTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~SqliteDatabaseTests|FullyQualifiedName~PackageServiceTests|FullyQualifiedName~AdminStatsStorageBytesEndToEndTests"
+    done_when:
+      - "EF migration creates `download_events(id, package_name, version, ts, ip, user_agent, status, bytes_served, requester_user)`, `download_rollup_hourly(package_name, version, bucket_start, downloads, bytes_served)`, `download_rollup_daily(...)` and adds `version_records.storage_bytes BIGINT NOT NULL`."
+      - "`PackageService.PublishAsync` writes `VersionRecord.StorageBytes` from `IPackageStorage.GetSize(...)` for every new version."
+      - "`AdminController.GetStats` returns a new `storageBytes` field on `StatsResponse` from `SUM(storage_bytes)` (DTO widening landed in this phase covers only `storageBytes`; the rest of the StatsResponse expansion lands in M6 with the discovery flip)."
+      - "End-to-end test publishes a tarball of known size `M`, then `GET /api/v1/admin/stats` reports `storageBytes >= M`."
+
+  - id: M3
+    title: Non-blocking download capture (queue + background drain) on PackagesController.DownloadVersion
+    deps: [M2]
+    files:
+      - Stash.Registry/Services/Metrics/IDownloadEventQueue.cs
+      - Stash.Registry/Services/Metrics/DownloadEventQueue.cs
+      - Stash.Registry/Services/Metrics/MetricsBackgroundService.cs
+      - Stash.Registry/Services/Metrics/IDownloadMetricsStore.cs
+      - Stash.Registry/Services/Metrics/DownloadMetricsStore.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Startup.cs
+      - Stash.Tests/Registry/Metrics/DownloadEventQueueTests.cs
+      - Stash.Tests/Registry/Metrics/DownloadCaptureSemanticsTests.cs
+      - Stash.Tests/Registry/Metrics/MetricsBackgroundServiceTests.cs
+      - Stash.Tests/Registry/Configuration/NoMagicRemoteIpAccessMetaTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~Registry.Metrics|FullyQualifiedName~NoMagicRemoteIpAccessMetaTests"
+    done_when:
+      - "`IDownloadEventQueue` is a bounded `Channel<DownloadEvent>` registered as a singleton."
+      - "`MetricsBackgroundService` (`BackgroundService`) drains the channel in batches, opens its OWN DI scope per batch, and writes to `download_events` — never uses a request's scoped DbContext."
+      - "`PackagesController.DownloadVersion` enqueues exactly one event AT SUCCESSFUL RESPONSE COMPLETION when status is 200 and the stream wrote to completion."
+      - "A 404 (missing version), a `VisibilityHidden` 404 (anonymous on a private package), and a simulated mid-stream disconnect each enqueue ZERO events (asserted by `DownloadCaptureSemanticsTests`)."
+      - "After draining: `download_events` carries one row per successful download, with `ip` populated through `IIpHasher.Apply(...)` — never read via direct `HttpContext.Connection.RemoteIpAddress`."
+      - "`NoMagicRemoteIpAccessMetaTests` exemption list shrinks to a single entry: `IpHasher.cs`."
+
+  - id: M4
+    title: Hourly rollup + nightly raw-event retention sweep
+    deps: [M3]
+    files:
+      - Stash.Registry/Services/Metrics/MetricsBackgroundService.cs
+      - Stash.Registry/Services/Metrics/IDownloadMetricsStore.cs
+      - Stash.Registry/Services/Metrics/DownloadMetricsStore.cs
+      - Stash.Tests/Registry/Metrics/RollupTests.cs
+      - Stash.Tests/Registry/Metrics/RetentionSweepTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~Registry.Metrics.Rollup|FullyQualifiedName~Registry.Metrics.RetentionSweep"
+    done_when:
+      - "Hourly rollup pass aggregates closed `download_events` buckets into `download_rollup_hourly` (and daily rollup into `download_rollup_daily`)."
+      - "Nightly retention sweep deletes raw rows older than `Raw.RetentionDays` (default 30d)."
+      - "After running rollup over a known input set, SUM(downloads) across rollups equals the seeded raw-event count for closed buckets; the current open bucket is excluded from rollup writes."
+      - "Retention sweep with `RetentionDays=0` is a no-op (raw capture disabled)."
+
+  - id: M5
+    title: Package + version + admin top-packages metrics endpoints (visibility-gated)
+    deps: [M4]
+    files:
+      - Stash.Registry.Contracts/MetricsContracts.cs
+      - Stash.Registry/Controllers/PackagesController.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/Services/Metrics/IDownloadMetricsStore.cs
+      - Stash.Registry/Services/Metrics/DownloadMetricsStore.cs
+      - Stash.Tests/Registry/Metrics/PackageMetricsEndpointTests.cs
+      - Stash.Tests/Registry/Metrics/VersionMetricsEndpointTests.cs
+      - Stash.Tests/Registry/Metrics/AdminTopPackagesEndpointTests.cs
+      - Stash.Tests/Registry/Metrics/MetricsVisibilityBehaviorTests.cs
+    verify:
+      - dotnet build Stash.Registry
+      - dotnet test --filter "FullyQualifiedName~Registry.Metrics|FullyQualifiedName~RegistryAuthzMatrixTests|FullyQualifiedName~AuthzCoverageMetaTests|FullyQualifiedName~AuthzDispatchCoverageMetaTests"
+    done_when:
+      - "`GET /api/v1/packages/{scope}/{name}/metrics` returns `PackageMetricsResponse` (total/last24h/last7d/last30d + perVersion array); carries `[PublicEndpoint] + [RegistryAuthorize(RegistryAction.ReadPackageMetadata)]`."
+      - "`GET /api/v1/packages/{scope}/{name}/{version}/metrics` returns `VersionMetricsResponse`; carries `[PublicEndpoint] + [RegistryAuthorize(RegistryAction.ReadPackageVersion)]`."
+      - "`GET /api/v1/admin/metrics/downloads?page=&pageSize=&windowDays=` returns `PagedResponse<TopPackageDownloadsEntry>` with packages ordered descending by downloads over `windowDays`; carries `[Authorize] + [RegistryAuthorize(RegistryAction.ReadAdminStats)]`; uses `[FromQuery]` model binding."
+      - "Read model: rollups authoritative for closed buckets + current open bucket computed from raw and added."
+      - "Per-route visibility behavior tests pass: anonymous-on-public-package → 200, anonymous-on-private-package → 404, unauthorized-on-private-package → 404, authorized-member-on-private-package → 200 (covers both new package routes)."
+      - "`AuthzCoverageMetaTests` and `AuthzDispatchCoverageMetaTests` remain green (new endpoints classified)."
+
+  - id: M6
+    title: Discovery flag flip + expanded admin stats activity counts + OpenAPI + docs
+    deps: [M5]
+    files:
+      - Stash.Registry/Endpoints/DiscoveryEndpoint.cs
+      - Stash.Registry.Contracts/AdminContracts.cs
+      - Stash.Registry/Controllers/AdminController.cs
+      - Stash.Registry/CLAUDE.md
+      - docs/Registry — Package Registry.md
+      - Stash.Tests/Registry/DiscoveryEndpointTests.cs
+      - Stash.Tests/Registry/Web/HttpRegistryClientTests.cs
+      - Stash.Tests/Registry/AdminStatsExpandedTests.cs
+      - Stash.Tests/Registry/OpenApi/OpenApiCoverageMetaTests.cs
+    verify:
+      - dotnet build
+      - dotnet test --filter "FullyQualifiedName~DiscoveryEndpointTests|FullyQualifiedName~AdminStatsExpandedTests|FullyQualifiedName~OpenApiCoverageMetaTests|FullyQualifiedName~HttpRegistryClientTests"
+    done_when:
+      - "`DiscoveryFeatures.Metrics` flipped from `false` to `true`."
+      - "`DiscoveryEndpointTests.GetDiscovery_BucketBFlags_ArePinnedFalse` re-baselined: `metrics` removed from the pinned-false set; `advisories`, `provenance`, `signatures`, `trustedPublishing`, `verifiedPublishers` remain false. A new assertion in `DiscoveryEndpointTests` pins `metrics = true` (Bucket-A)."
+      - "`StatsResponse` widens to include `downloads: { total, last24h }`, `activity: { publishesLast24h, unpublishesLast24h, deprecationsLast24h }` (storageBytes landed in M2). End-to-end test publishes / unpublishes / deprecates a known set and asserts the counts."
+      - "`OpenApiCoverageMetaTests` is green with the three new operations (`Packages_GetMetrics`, `Packages_GetVersionMetrics`, `Admin_GetDownloadsMetrics`) and ZERO new exemptions."
+      - "`Stash.Registry/CLAUDE.md` endpoints table, configuration table, and meta-test table updated to include metrics."
+      - "`docs/Registry — Package Registry.md` documents the three new endpoints, `MetricsConfig`, and the count-on-success semantics."
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The two `checkpoint lint` lines are
+# the standing omission guard: every feature's promotion gate confirms the live doc
+# surface has no raw `scripts/checkpoint/<sub>.stash` reference (it routes through the
+# facade) and that the guard still has teeth. Keep them — dropping them makes the
+# guard one-shot instead of perpetual.
+final_verify:
+  - dotnet build
+  - dotnet test
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

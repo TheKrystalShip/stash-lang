@@ -28,6 +28,7 @@ The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
 - host-object-dispatch — Host-Objects-by-Reference — Member Dispatch from Stash | .kanban/2-in-progress/host-object-dispatch/ | 5 phases | started 2026-06-05
+- registry-download-metrics — Registry Download Metrics — Counting, Usage API, and Expanded Admin Stats | .kanban/2-in-progress/registry-download-metrics/ | 6 phases | started 2026-06-05
 ---
 
 ## Architecture Decisions (enduring)
