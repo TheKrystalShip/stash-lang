@@ -1,6 +1,6 @@
 # `task.run` with an `async` lambda crashes: "Index was outside the bounds of the array"
 
-**Status:** Backlog — Bug
+**Status:** Fixed — 2026-06-05 (commit 54615769)
 **Created:** 2026-06-05
 **Discovery context:** Surfaced during the LSP warm-daemon dogfood (increment 2, `/tmp/lsp_warmd.stash`) while exploring whether a background task could poll a socket concurrently with the main VM. Passing an `async` lambda to `task.run` crashed; the daemon worked around it by using the synchronous `tcp.listen` in the main VM instead. Independently reproduced and confirmed 2026-06-05.
 
@@ -73,3 +73,24 @@ Cross-cutting: the existing `task.*` tests and `async fn` / `await` tests must s
 - Surfaced during: LSP warm-daemon dogfood (`/tmp/lsp_warmd.stash`, increment 2). The daemon avoided it by using synchronous `tcp.listen` in the main VM — see also the task-VM isolation findings.
 - Same surface: `task.run` / `task.await` (`Stash.Stdlib/BuiltIns/TaskBuiltIns.cs`), `async fn` child-VM forking (Language Spec §"Async-child global isolation").
 - Sibling finding (separate bug): `process.read` blocks on an empty pipe — `.kanban/0-backlog/bugs/process-read-blocks-on-empty-pipe.md`.
+- Follow-up (not done here): `arr.parMap` / `arr.parFilter` / `arr.parForEach` invoke their callbacks via the same forked-child path, so the `CallClosureDirect` guard fixes the *crash* for an async callback there too — but they do **not** flatten (an async element callback would yield a `Future`, not its value). Flattening the parallel `arr.*` helpers for async callbacks is a separate, lower-priority enhancement.
+
+## Resolution (2026-06-05)
+
+Fixed with both halves of suggested fix (A): the underlying `IndexOutOfRange` *and* the Future-of-Future double-wrap.
+
+**What changed**
+
+1. **Root crash — `CallClosureDirect` frameless guard** (`Stash.Bytecode/VM/VirtualMachine.Functions.cs`). The forked-child callback path (the sole caller is `VMContext.InvokeCallbackDirect`'s Branch 3, used by `task.run`/`task.timeout`/`arr.parMap`/exit callbacks/TCP accept) unconditionally called `Run()` after `CallValue`. For an async fn, `SpawnAsyncFunction` returns the Future immediately *without pushing a frame*, so `Run()` → `RunInner` indexed `_frames[_frameCount - 1]` = `_frames[-1]` → "Index was outside the bounds of the array." The fix returns the Future directly when `_frameCount == 0`, mirroring the guard already present in the same-thread sibling `ExecuteVMFunctionInlineDirect`. This alone removes the crash for every Branch-3 caller.
+
+2. **Flatten — narrow, async-only** (`Stash.Stdlib/BuiltIns/TaskBuiltIns.cs` `Run` + `Timeout`). With the crash gone, an async callback returned a `StashFuture`, so `task.await(task.run(async () => x))` yielded a Future-of-Future, not `x`. `task.run`/`task.timeout` now unwrap that inner Future (via `inner.GetResult()`) **only when the callable is async**, so `task.run(async () => x)` behaves exactly like `task.run(() => x)`. A plain lambda that explicitly returns a Future is left untouched (no surprise auto-flatten) — verified by `Run_PlainLambdaReturningFuture_IsNotFlattened`.
+
+3. **`IStashCallable.IsAsync`** (`Stash.Core/Runtime/IStashCallable.cs`, default `false`; overridden by `VMFunction` → `Chunk.IsAsync`). The async-ness needed for the narrow flatten lived in `Stash.Bytecode` (`VMFunction.Chunk`), a layer above `Stash.Stdlib` where `TaskBuiltIns` lives — so the callable abstraction in `Stash.Core` had to expose it. Built-ins and plain lambdas inherit `false`.
+
+**Verification**
+
+- `dotnet test --filter FullyQualifiedName~TaskBuiltInsTests` → 67 passed (8 new: async-lambda/async-fn-ref/inner-await flatten, async-throws-propagates-cleanly asserting the `IndexOutOfRange` leak is gone, plain-lambda-not-flattened, + 3 `task.timeout` async cases).
+- `AsyncAwaitTests`, `StandardLibraryReferenceTests`, `CompletionSurfaceSnapshotTests` → green.
+- Docs regenerated (`dotnet run --project Stash.Docs/`) for the `task.run`/`task.timeout` `<summary>` clarifications.
+- Example: `examples/async_await.stash` §10 demonstrates `task.run(async ...)` and `task.timeout(async ...)`, verified with the freshly-built binary (both flatten to 42).
+- Tooling-compat checklist (LSP/DAP/Playground/VS Code/Analysis): **N/A** — runtime-behavior fix only; no new syntax, keyword, namespace, or signature change (only `<summary>` text), so no tokenizer/grammar/completion surface is affected.
