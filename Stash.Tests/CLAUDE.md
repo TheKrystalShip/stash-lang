@@ -1,6 +1,6 @@
 # Stash.Tests Guidelines
 
-xUnit test suite with 5,800+ tests. Every project has a corresponding test subdirectory.
+xUnit test suite. Every project has a corresponding test subdirectory.
 
 ## Directory Map
 

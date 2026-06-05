@@ -11,7 +11,7 @@ Stash.Bytecode/
 ├── StashTypeConverter.cs             # CLR ↔ Stash type bridge
 │
 ├── Bytecode/                         # Instruction definitions & metadata
-│   ├── OpCode.cs                     # 120+ opcodes in 14 categories
+│   ├── OpCode.cs                     # Opcode enum, grouped by category
 │   ├── Instruction.cs                # 32-bit encode/decode (ABC, ABx, AsBx, Ax formats)
 │   ├── Chunk.cs                      # Immutable compiled function prototype
 │   ├── ChunkBuilder.cs               # Incremental bytecode builder (constants, jumps)
@@ -23,7 +23,8 @@ Stash.Bytecode/
 ├── Compilation/                      # AST → Bytecode compiler (partial class)
 │   ├── Compiler.cs                   # Main visitor, entry points, register management
 │   ├── Compiler.Expressions.cs       # Literals, binary/unary ops, calls, indexing
-│   ├── Compiler.Statements.cs        # Declarations, assignments, blocks
+│   ├── Compiler.CommandLowering.cs   # Lower command/pipe/redirect exprs → process.exec
+│   ├── Compiler.Lock.cs              # lock-statement compilation
 │   ├── Compiler.Collections.cs       # Arrays, dicts, ranges, spread, destructuring
 │   ├── Compiler.ComplexExprs.cs      # Closures, lambdas, ternary, short-circuit
 │   ├── Compiler.ControlFlow.cs       # Loops, if-else, try-catch, elevate, retry
@@ -39,6 +40,7 @@ Stash.Bytecode/
 │   ├── VirtualMachine.cs             # Core: stack, frames, globals, Execute()
 │   ├── VirtualMachine.Dispatch.cs    # Main execution loop, switch dispatch
 │   ├── VirtualMachine.Functions.cs   # Call/return, closure creation
+│   ├── VirtualMachine.Closures.cs    # Upvalue capture/close operations
 │   ├── VirtualMachine.Variables.cs   # Global/upvalue access
 │   ├── VirtualMachine.Arithmetic.cs  # Math operators
 │   ├── VirtualMachine.TypeOps.cs     # Type checks, comparisons

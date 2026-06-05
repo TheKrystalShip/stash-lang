@@ -9,14 +9,14 @@ Stash.Core/
 ├── Lexing/
 │   ├── Lexer.cs          → Two-pointer scanner: produces List<Token> from source text
 │   ├── Token.cs          → Token record (Type, Lexeme, Literal, Line, Column)
-│   └── TokenType.cs      → 100+ token types (keywords, operators, literals, delimiters)
+│   └── TokenType.cs      → Token-type enum (keywords, operators, literals, delimiters)
 │
 ├── Parsing/
 │   ├── Parser.cs         → Recursive-descent parser: produces List<Stmt> from tokens
-│   └── AST/              → 65 AST node types (see below)
+│   └── AST/              → One file per AST node type (see below)
 │       ├── Expr.cs / IExprVisitor.cs    → Expression base + visitor interface
 │       ├── Stmt.cs / IStmtVisitor.cs    → Statement base + visitor interface
-│       └── [65 node files]              → One file per node type
+│       └── [node-type files]           → One file per node type
 │
 ├── Resolution/           → SemanticResolver: pre-pass that resolves variable bindings
 │
@@ -26,7 +26,7 @@ Stash.Core/
 │   ├── StashValueTag.cs  → Value type discriminant enum
 │   ├── StashCapabilities.cs → Feature gates (FileSystem, Network, Process, etc.)
 │   ├── Types/            → Runtime types (StashDictionary, StashInstance, StashEnum, etc.)
-│   ├── Protocols/        → 12 IVM* interfaces (IVMArithmetic, IVMIndexable, etc.)
+│   ├── Protocols/        → IVM* interfaces (IVMArithmetic, IVMIndexable, etc.)
 │   └── Stdlib/           → IStdlibProvider interface (injected, not imported)
 │
 ├── Common/               → Shared utilities (SourceSpan, diagnostics, etc.)
@@ -35,7 +35,7 @@ Stash.Core/
 
 ## The Visitor Pattern
 
-**Six visitors** must ALL be updated when adding a new AST node:
+**All visitors** must be updated when adding a new AST node:
 
 | Visitor | Location | Purpose |
 | ------- | -------- | ------- |
@@ -46,7 +46,7 @@ Stash.Core/
 | `SemanticTokenWalker` | `Stash.Lsp/Analysis/` | Semantic highlighting |
 | `StashFormatter` | `Stash.Lsp/Analysis/` | Code formatting |
 
-**Rule:** If you add a new AST node and don't update all six visitors, you will get a compile error (the visitors implement the interfaces) — but you must also ensure the semantic behavior is correct in each, not just that it compiles.
+**Rule:** If you add a new AST node and don't update every visitor, you will get a compile error (the visitors implement the interfaces) — but you must also ensure the semantic behavior is correct in each, not just that it compiles.
 
 ## Adding a New AST Node
 
@@ -58,7 +58,7 @@ Stash.Core/
    }
    ```
 2. Add `VisitFooExpr(FooExpr expr)` to `IExprVisitor<T>` (or `IStmtVisitor<T>` for statements)
-3. Implement `VisitFooExpr` in **all six visitors** (see table above)
+3. Implement `VisitFooExpr` in **every visitor** (see table above)
 4. Add parser rule in `Parser.cs` at the appropriate precedence level
 5. Update the SemanticResolver in `Resolution/` if the node introduces new scope or binding
 
@@ -89,7 +89,7 @@ Runs before the Compiler. Resolves every identifier to its enclosing scope depth
 
 ## Runtime Type System
 
-Values use a tagged union (`StashValue` + `StashValueTag`). The 12 `IVM*` protocols in `Runtime/Protocols/` define type behaviors:
+Values use a tagged union (`StashValue` + `StashValueTag`). The `IVM*` protocols in `Runtime/Protocols/` define type behaviors:
 
 | Protocol | Capability |
 | -------- | ---------- |

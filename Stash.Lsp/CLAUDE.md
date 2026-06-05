@@ -7,10 +7,11 @@ The Stash LSP server provides language intelligence for `.stash` files using **O
 ```
 Stash.Lsp/
 ├── Program.cs                → Entry point: calls StashLanguageServer.RunAsync()
-├── StashLanguageServer.cs    → Server builder: DI registration + 24 handler registrations
-├── Handlers/                 → 24 LSP request handlers (one per feature)
-└── Analysis/                 → Semantic analysis engine, symbol resolution, type inference,
-                                AST-walker semantic highlighting (SemanticTokenWalker)
+├── StashLanguageServer.cs    → Server builder: DI registration + handler registrations
+├── Handlers/                 → LSP request handlers (one per feature)
+└── Analysis/                 → LSP-side analysis: symbol resolution, type-inference glue,
+                                AST-walker semantic highlighting (SemanticTokenWalker).
+                                The core AnalysisEngine itself lives in Stash.Analysis.
 ```
 
 **Dependencies:** `OmniSharp.Extensions.LanguageServer` v0.19.9, `Stash.Core` (project reference).
@@ -144,7 +145,7 @@ A `null` `CompletionItem.Data` comes back as an empty `JToken` after the LSP rou
 
 ## Tests
 
-LSP analysis tests live in `Stash.Tests/Analysis/` (15 files):
+LSP analysis tests live in `Stash.Tests/Analysis/`:
 
 - **Helpers:** `Analyze(source)` → `ScopeTree`, `FullAnalyze(source)` → `AnalysisResult`
 - **Coverage:** Symbol resolution, references, renaming, type inference, doc comments, import resolution, formatting, semantic validation, incremental sync, call hierarchy

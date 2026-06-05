@@ -7,9 +7,9 @@ The Stash DAP server implements the Debug Adapter Protocol using **OmniSharp** (
 ```
 Stash.Dap/
 ├── Program.cs             → Entry point: calls StashDebugServer.RunAsync()
-├── StashDebugServer.cs    → Server builder: DI registration + 18 handlers + capabilities
+├── StashDebugServer.cs    → Server builder: DI registration + handlers + capabilities
 ├── DebugSession.cs        → Core state: IDebugger impl, breakpoints, stepping, variables
-└── Handlers/              → 18 thin DAP request handlers (delegate to DebugSession)
+└── Handlers/              → Thin DAP request handlers (delegate to DebugSession)
 ```
 
 **Dependencies:** `OmniSharp.Extensions.DebugAdapter.Server` v0.19.9, `Stash.Bytecode`, `Stash.Core`, `Stash.Stdlib`, `Stash.Tap` (project references).
@@ -35,7 +35,7 @@ Configured in `StashDebugServer.cs`:
 
 ## Handler Pattern
 
-All 18 handlers are thin adapters — extract request data and delegate to `DebugSession`:
+All handlers are thin adapters — extract request data and delegate to `DebugSession`:
 
 ```csharp
 public class StashFooHandler : FooHandlerBase
@@ -54,7 +54,7 @@ public class StashFooHandler : FooHandlerBase
 
 Register new handlers in `StashDebugServer.cs` via `.WithHandler<StashNewHandler>()`.
 
-### All 18 Handlers
+### All Handlers
 
 | Handler                               | DAP Request             | Delegates To                                                            |
 | ------------------------------------- | ----------------------- | ----------------------------------------------------------------------- |
@@ -149,8 +149,9 @@ DAP uses integer reference IDs for expandable objects. `DebugSession` allocates 
 
 ## Tests
 
-DAP tests live in `Stash.Tests/Dap/` (3 files):
+DAP tests live in `Stash.Tests/Dap/`:
 
 - **`DapHandlerTests.cs`** — Handler unit tests: instantiate `DebugSession` + handler, call `Handle()` directly, assert response fields
 - **`DebugSessionTests.cs`** — Session state tests: breakpoint management, stepping, scope resolution, variable formatting. Uses reflection helpers for private methods (`EvaluateHitCondition`, `FormatVariable`, `InterpolateLogMessage`)
 - **`DapIntegrationTests.cs`** — End-to-end tests with interpreter
+- **`NamespaceMembersDapTests.cs`** — Variable formatting + namespace-member display in the variables view (`FormatVariable`, DAP label conventions, namespace expansion)

@@ -101,7 +101,7 @@ Wraps the Stash Registry REST API. Commands: `install`, `publish`, `search`, `in
 
 ## Service Manager (stash service)
 
-Wraps `Stash.Scheduler` for OS-level service management. Commands: `install`, `uninstall`, `start`, `stop`, `status`, `restart`, `logs`. Dispatches to systemd/launchd/Task Scheduler based on platform. See `docs/Scheduler — Service Manager.md`.
+Wraps `Stash.Scheduler` for OS-level service management. Commands: `install`, `uninstall`, `start`, `stop`, `status`, `restart`, `logs`. Dispatches to systemd/launchd/Task Scheduler based on platform.
 
 ## AST Graph (stash ast)
 

@@ -36,8 +36,8 @@ Stash.Registry/
 │   └── AdminController.cs        → Stats, user mgmt, package role override, audit log
 │   (Contracts/ removed — all wire DTOs live in Stash.Registry.Contracts/)
 ├── Database/                     → EF Core data layer
-│   ├── RegistryDbContext.cs      → DbContext with 12 DbSets
-│   ├── IRegistryDatabase.cs      → 40+ CRUD methods
+│   ├── RegistryDbContext.cs      → DbContext (entity DbSets)
+│   ├── IRegistryDatabase.cs      → CRUD method abstraction
 │   ├── StashRegistryDatabase.cs  → EF Core implementation
 │   └── Models/                   → Entity models (PackageRecord, VersionRecord, OrganizationRecord, etc.)
 ├── Services/                     → Business logic
@@ -101,7 +101,7 @@ Client (stash pkg CLI / HTTP)
 | -------------------------------- | --------- | ---------------------------------------------------------------- |
 | `RegistryConfig`                 | Singleton | Parsed `appsettings.json` configuration                          |
 | `RegistryDbContext`              | Scoped    | EF Core DbContext (SQLite or PostgreSQL)                         |
-| `IRegistryDatabase`              | Scoped    | Database abstraction (40+ CRUD methods)                          |
+| `IRegistryDatabase`              | Scoped    | Database abstraction (CRUD methods)                             |
 | `IPackageStorage`                | Singleton | Tarball storage (filesystem or S3)                               |
 | `IAuthProvider`                  | Singleton | Auth backend (local, LDAP stub, OIDC stub)                       |
 | `JwtTokenService`                | Singleton | JWT creation and validation                                      |
@@ -156,11 +156,11 @@ public class PackagesController : ControllerBase
 - `[RegistryAuthorize(RegistryAction.X)]` triggers `RegistryAuthorizeFilter`, which builds the typed `Principal`, resolves the `ResourceRef` from route values, calls `IRegistryAuthorizer.AuthorizeAsync`, and renders the unified deny response (`context.Result`) before the action body runs.
 - The action body is pure work — no PDP call, no deny block.
 
-~33 controller actions carry this pattern.
+Most controller actions carry this pattern.
 
 **Audited exemptions (`[ImperativeAuthz]`) — for endpoints with pre/post-PDP dependencies:**
 
-One endpoint cannot express its authorization as a simple resource-action pair and carries `[ImperativeAuthz("reason")]` instead. It calls the PDP inline. The attribute documents why folding is blocked and satisfies `AuthzDispatchCoverageMetaTests`:
+An endpoint that cannot express its authorization as a simple resource-action pair carries `[ImperativeAuthz("reason")]` instead, calling the PDP inline. The attribute documents why folding is blocked and satisfies `AuthzDispatchCoverageMetaTests`:
 
 ```csharp
 [Authorize]
@@ -268,7 +268,7 @@ Eleven entities: `PackageRecord`, `VersionRecord`, `UserRecord`, `TokenRecord`, 
 
 ### IRegistryDatabase Interface
 
-40+ methods covering CRUD for all entities. Key patterns:
+Methods covering CRUD for all entities. Key patterns:
 
 - Methods return `null` when not found (not exceptions)
 - Package name is the primary key (no auto-increment ID)

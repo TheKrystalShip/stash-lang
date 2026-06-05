@@ -6,11 +6,11 @@ Stash includes a built-in templating engine with its own lexer/parser pipeline, 
 
 ```
 Stash.Tpl/
-├── TemplateAst.cs        → 8 record types (TextNode, OutputNode, IfNode, ForNode, etc.)
+├── TemplateAst.cs        → Template AST record types (TextNode, OutputNode, IfNode, ForNode, etc.)
 ├── TemplateLexer.cs      → Two-pointer scanner for {{ }}, {% %}, {# #} delimiters
 ├── TemplateParser.cs     → Recursive-descent parser, nesting, filter parsing
 ├── TemplateRenderer.cs   → Tree-walk renderer over the template AST; expressions compile to Stash bytecode via VMTemplateEvaluator
-├── TemplateFilters.cs    → 19 built-in filters (static registry)
+├── TemplateFilters.cs    → Built-in filters (static registry)
 └── TemplateException.cs  → Template-specific error with line/column
 Stash.Stdlib/BuiltIns/
 └── TplBuiltIns.cs        → Registers tpl.render, tpl.renderFile, tpl.compile
@@ -65,7 +65,7 @@ public record TemplateFilter(string Name, string[] Arguments);
 
 ### Filters
 
-19 built-in filters, applied via pipe syntax and chainable:
+Built-in filters, applied via pipe syntax and chainable:
 
 | Filter                                          | Args      | Notes                              |
 | ----------------------------------------------- | --------- | ---------------------------------- |
@@ -104,11 +104,11 @@ Filters validate input types and throw `TemplateException` on mismatch.
 
 ## Tests
 
-`Stash.Tests/Interpreting/TemplateTests.cs` (~70 tests) covering:
+`Stash.Tests/Interpreting/TemplateTests.cs` covering:
 
 - Variable interpolation, expressions (arithmetic, ternary, null-coalescing)
 - Dot/index access on structs and arrays
-- All 19 filters individually + chaining
+- All filters individually + chaining
 - Conditionals (if/elif/else, nested, with logical operators)
 - Loops (simple, nested, all loop metadata fields, empty arrays)
 - Comments and raw blocks (including edge cases with trim markers)
