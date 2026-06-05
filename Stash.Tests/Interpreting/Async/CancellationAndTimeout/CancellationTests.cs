@@ -122,6 +122,31 @@ task.await(f);
         Assert.IsType<CancellationError>(error);
     }
 
+    // ── SpawnAsyncFunction path (async fn direct) ─────────────────────────────
+
+    /// <summary>
+    /// Cancellation via SpawnAsyncFunction (calling an async fn directly, not task.run).
+    /// This exercises the IsAsyncChild flag set in SpawnAsyncFunction rather than in
+    /// VMContext.InvokeCallbackDirect Branch 3 (used by task.run).
+    /// </summary>
+    [Fact]
+    public void CancellationAndTimeout_CancelAsyncFnFuture_StatusBecomesCancelled()
+    {
+        var result = Run(@"
+async fn sleeper() { time.sleep(10); }
+let f = sleeper();
+task.cancel(f);
+let i = 0;
+while (task.status(f) == task.Status.Running && i < 40) {
+    time.sleep(0.05);
+    i = i + 1;
+}
+let result = task.status(f);
+");
+        var status = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Cancelled", status.MemberName);
+    }
+
     // ── Cancel already-completed task is harmless ─────────────────────────────
 
     [Fact]
