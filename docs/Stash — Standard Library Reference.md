@@ -883,9 +883,9 @@ Lists the contents of a ZIP or TAR archive without extracting.
 | `arr.map` | `array` | — | Returns a new array with each element transformed by the given function. |
 | `arr.filter` | `array` | `TypeError` | Returns a new array containing only elements for which fn returns truthy. |
 | `arr.forEach` | `null` | — | Calls fn for each element in the array. |
-| `arr.parMap` | `array` | `TypeError`, `ValueError` | Like map, but executes the function in parallel across elements. |
-| `arr.parFilter` | `array` | `TypeError`, `ValueError` | Like filter, but evaluates the predicate in parallel. |
-| `arr.parForEach` | `null` | `TypeError`, `ValueError` | Like forEach, but executes the function in parallel. |
+| `arr.parMap` | `array` | `TypeError`, `ValueError` | Like map, but executes the function in parallel across elements using a thread-pool. |
+| `arr.parFilter` | `array` | `TypeError`, `ValueError` | Like filter, but evaluates the predicate in parallel using a thread-pool. |
+| `arr.parForEach` | `null` | `TypeError`, `ValueError` | Like forEach, but executes the function in parallel using a thread-pool. |
 | `arr.find` | `any` | — | Returns the first element for which fn returns truthy, or null if none found. |
 | `arr.reduce` | `any` | — | Reduces the array to a single value by applying fn(accumulator, element) for each element. |
 | `arr.unique` | `array` | `TypeError` | Returns a new array with duplicate values removed. |
@@ -1179,46 +1179,49 @@ Calls fn for each element in the array. Returns null.
 
 **Returns:** `null` — null
 
-#### `arr.parMap(array: any, ...fn: any) -> array`
+#### `arr.parMap(array: any, fn: any, ...maxConcurrency: any) -> array`
 
-Like map, but executes the function in parallel across elements.
+Like map, but executes the function in parallel across elements using a thread-pool. Results are returned in the same order as the input array (order-preserving). If any callback throws, the first error encountered is rethrown (fail-fast). If the callback is an async function, its returned Future is automatically awaited, so arr.parMap([1,2,3], async (x) => x * 2) returns [2, 4, 6] rather than an array of Futures.
 
 **Parameters:**
 
 - `array`: `any` — The source array
 - `fn`: `any` — A function that receives each element and returns its transformed value
+- `maxConcurrency`: `any` — Optional maximum number of parallel threads (default: unbounded — uses all available cores). Must be >= 1 if provided.
 
-**Returns:** `array` — A new array of transformed elements
+**Returns:** `array` — A new array of transformed elements in input order
 
 **Throws:**
 
 - `TypeError` — if `array` is not an array or `fn` is not callable
 - `ValueError` — if `maxConcurrency` is less than 1
 
-#### `arr.parFilter(array: any, ...fn: any) -> array`
+#### `arr.parFilter(array: any, fn: any, ...maxConcurrency: any) -> array`
 
-Like filter, but evaluates the predicate in parallel.
+Like filter, but evaluates the predicate in parallel using a thread-pool. The relative order of passing elements is preserved (order-preserving). If any predicate call throws, the first error encountered is rethrown (fail-fast). If the predicate is an async function, its returned Future is automatically awaited; truthiness is then tested on the resolved value.
 
 **Parameters:**
 
 - `array`: `any` — The source array
-- `fn`: `any` — A predicate function that receives each element
+- `fn`: `any` — A predicate function that receives each element; truthy return = keep
+- `maxConcurrency`: `any` — Optional maximum number of parallel threads (default: unbounded — uses all available cores). Must be >= 1 if provided.
 
-**Returns:** `array` — A new array of elements where fn returned truthy
+**Returns:** `array` — A new array of elements where fn returned truthy, in input order
 
 **Throws:**
 
 - `TypeError` — if `array` is not an array or `fn` is not callable
 - `ValueError` — if `maxConcurrency` is less than 1
 
-#### `arr.parForEach(array: any, ...fn: any) -> null`
+#### `arr.parForEach(array: any, fn: any, ...maxConcurrency: any) -> null`
 
-Like forEach, but executes the function in parallel.
+Like forEach, but executes the function in parallel using a thread-pool. If any callback throws, the first error encountered is rethrown (fail-fast). If the callback is an async function, its returned Future is automatically awaited before the iteration continues for that element.
 
 **Parameters:**
 
 - `array`: `any` — The array to iterate
 - `fn`: `any` — A function that receives each element
+- `maxConcurrency`: `any` — Optional maximum number of parallel threads (default: unbounded — uses all available cores). Must be >= 1 if provided.
 
 **Returns:** `null` — null
 
@@ -6810,7 +6813,7 @@ Returns the root directory path of the current package (the directory containing
 ## `process` — Process Management
 
 **Capability:** `Process`
-**Throws:** `CommandError`, `IOError`, `NotSupportedError`, `TypeError`, `ValueError`
+**Throws:** `CommandError`, `IOError`, `NotSupportedError`, `StateError`, `TypeError`, `ValueError`
 
 ### Types
 
@@ -6854,23 +6857,23 @@ A handle to a spawned child process.
 | `process.exec` | `any` | `CommandError`, `IOError`, `ValueError`, `TypeError` | Runs a program with an explicit argv array. |
 | `process.pipeline` | `any` | `CommandError`, `IOError`, `ValueError`, `TypeError` | Runs a multi-stage pipeline from an array of PipelineStage values. |
 | `process.spawn` | `Process` | `IOError` | Spawns a child process with redirected stdio. |
-| `process.wait` | `CommandResult` | `TypeError` | Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode. |
-| `process.waitTimeout` | `any` | `TypeError` | Waits up to the given number of milliseconds for a process to exit. |
-| `process.kill` | `any` | `TypeError` | Sends SIGTERM (Unix) or terminates (Windows) a running process. |
-| `process.isAlive` | `any` | `TypeError` | Returns true if the process is still running, false if it has exited. |
-| `process.pid` | `any` | `TypeError` | Returns the OS process ID for a spawned Process handle. |
-| `process.signal` | `any` | `ValueError`, `TypeError` | Sends a POSIX signal to a running process. |
-| `process.detach` | `any` | `TypeError` | Removes a Process handle from tracking. |
+| `process.wait` | `CommandResult` | `TypeError`, `StateError` | Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode. |
+| `process.waitTimeout` | `any` | `TypeError`, `StateError` | Waits up to the given number of milliseconds for a process to exit. |
+| `process.kill` | `any` | `TypeError`, `StateError` | Sends SIGTERM (Unix) or terminates (Windows) a running process. |
+| `process.isAlive` | `any` | `TypeError`, `StateError` | Returns true if the process is still running, false if it has exited. |
+| `process.pid` | `any` | `TypeError`, `StateError` | Returns the OS process ID for a spawned Process handle. |
+| `process.signal` | `any` | `ValueError`, `TypeError`, `StateError` | Sends a POSIX signal to a running process. |
+| `process.detach` | `any` | `TypeError`, `StateError` | Removes a Process handle from tracking. |
 | `process.list` | `array` | — | Returns an array of all Process handles currently tracked by this script. |
-| `process.read` | `any` | `TypeError` | Reads available text from a process's stdout. |
-| `process.readBytes` | `byte[]` | `TypeError` | Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. |
-| `process.write` | `any` | `TypeError` | Writes a string to a process's stdin. |
-| `process.onExit` | `any` | `TypeError` | Registers a callback function to be called when the process exits. |
+| `process.read` | `any` | `TypeError`, `StateError` | Reads available text from a process's stdout. |
+| `process.readBytes` | `byte[]` | `TypeError`, `StateError` | Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. |
+| `process.write` | `any` | `TypeError`, `StateError` | Writes a string to a process's stdin. |
+| `process.onExit` | `any` | `TypeError`, `StateError` | Registers a callback function to be called when the process exits. |
 | `process.daemonize` | `any` | `IOError` | Starts a process fully detached from the script with no stdio redirection. |
 | `process.find` | `any` | — | Returns an array of Process handles for all OS processes matching the given name. |
 | `process.exists` | `bool` | — | Returns true if an OS process with the given PID is currently running. |
-| `process.waitAll` | `any` | `TypeError` | Waits for all processes in the array to exit. |
-| `process.waitAny` | `any` | `ValueError`, `TypeError` | Waits until any process in the array exits. |
+| `process.waitAll` | `any` | `TypeError`, `StateError` | Waits for all processes in the array to exit. |
+| `process.waitAny` | `any` | `ValueError`, `TypeError`, `StateError` | Waits until any process in the array exits. |
 | `process.chdir` | `any` | `CommandError` | Changes the current working directory to the given path and pushes it onto the directory stack. _Deprecated — use `env.chdir`._ |
 | `process.popDir` | `any` | `CommandError` | Pops the top directory from the stack, changes cwd back to the new top, and returns the popped path. _Deprecated — use `env.popDir`._ |
 | `process.dirStack` | `array` | — | Returns a copy of the directory stack, oldest entry first. _Deprecated — use `env.dirStack`._ |
@@ -6978,6 +6981,7 @@ Waits for a spawned process to exit and returns a CommandResult with stdout, std
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.waitTimeout(handle: any, ms: int) -> any`
 
@@ -6993,6 +6997,7 @@ Waits up to the given number of milliseconds for a process to exit. Returns a Co
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.kill(handle: any) -> any`
 
@@ -7007,6 +7012,7 @@ Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on 
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.isAlive(handle: any) -> any`
 
@@ -7021,6 +7027,7 @@ Returns true if the process is still running, false if it has exited.
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.pid(handle: any) -> any`
 
@@ -7035,6 +7042,7 @@ Returns the OS process ID for a spawned Process handle.
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.signal(handle: any, signum: any) -> any`
 
@@ -7051,6 +7059,7 @@ Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL,
 
 - `ValueError` — if the Signal enum member is unknown, or the signal number is outside the range 1–64
 - `TypeError` — if handle is not a Process, or the signal argument is not an integer or Signal enum value
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.detach(handle: any) -> any`
 
@@ -7065,6 +7074,7 @@ Removes a Process handle from tracking. The process continues running but will n
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.list() -> array`
 
@@ -7085,6 +7095,7 @@ Reads available text from a process's stdout. Blocks until at least one characte
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.readBytes(handle: any) -> byte[]`
 
@@ -7099,6 +7110,7 @@ Reads available raw bytes from a process's stdout and returns them as a buffer, 
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.write(handle: any, data: string) -> any`
 
@@ -7114,6 +7126,7 @@ Writes a string to a process's stdin. Returns true on success, false if the proc
 **Throws:**
 
 - `TypeError` — if handle is not a Process
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.onExit(handle: any, callback: function) -> any`
 
@@ -7129,6 +7142,7 @@ Registers a callback function to be called when the process exits. The callback 
 **Throws:**
 
 - `TypeError` — if handle is not a Process, or the callback requires more than one argument
+- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.daemonize(command: string) -> any`
 
@@ -7177,6 +7191,7 @@ Waits for all processes in the array to exit. Returns an array of CommandResult 
 **Throws:**
 
 - `TypeError` — if any element in the array is not a Process
+- `StateError` — if any Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.waitAny(procs: array) -> any`
 
@@ -7192,6 +7207,7 @@ Waits until any process in the array exits. Returns the CommandResult of the fir
 
 - `ValueError` — if the array is empty
 - `TypeError` — if any element in the array is not a Process
+- `StateError` — if any Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.chdir(...path: any) -> any`
 
@@ -9022,7 +9038,7 @@ Members: `Running`, `Completed`, `Failed`, `Cancelled`
 | -------- | ------- | ------ | ----------- |
 | `task.run` | `Future` | — | Runs a function asynchronously in a new task and returns a Future. |
 | `task.await` | `any` | `TypeError`, `CancellationError` | Waits for a Future to complete and returns its result. |
-| `task.awaitAll` | `array` | `TypeError` | Waits for all Futures in the array to complete. |
+| `task.awaitAll` | `array` | `TypeError` | Waits for all Futures in the array to complete and returns an array of per-element results in the same order. |
 | `task.awaitAny` | `any` | `ValueError`, `TypeError`, `CancellationError` | Waits for the first Future in the array to complete. |
 | `task.status` | `string` | `TypeError` | Returns the current status of a Future as a Status enum value: Running, Completed, Failed, or Cancelled. |
 | `task.cancel` | `null` | `TypeError` | Requests cancellation of a running Future. |
@@ -9061,13 +9077,13 @@ Waits for a Future to complete and returns its result. Throws if the task failed
 
 #### `task.awaitAll(tasks: array) -> array`
 
-Waits for all Futures in the array to complete. Returns an array of results in the same order. Failed tasks become error values.
+Waits for all Futures in the array to complete and returns an array of per-element results in the same order. This is the collect-all combinator (analogous to Promise.allSettled): it never throws even if tasks fail. Failed tasks become StashError values with the original error type preserved (e.g. a task that throws TypeError produces a StashError whose .type == "TypeError"). Cancelled tasks become a StashError with .type == "CancellationError" and message "Task was cancelled.". Contrast with the fail-fast combinators (task.all, task.race, task.awaitAny) which throw on the first failure.
 
 **Parameters:**
 
 - `tasks`: `array` — An array of Futures
 
-**Returns:** `array` — An array of result values
+**Returns:** `array` — An array of result values; failed or cancelled elements are StashError values with the original error type
 
 **Throws:**
 
@@ -9119,23 +9135,23 @@ Requests cancellation of a running Future. The task may not stop immediately.
 
 #### `task.all(tasks: array) -> Future`
 
-Returns a new Future that resolves when all Futures in the array complete. Plain values are wrapped in completed Futures.
+Returns a new Future that resolves when all Futures in the array complete. This is a fail-fast combinator (analogous to Promise.all): if any constituent task faults, the outer Future faults with the original error type; awaiting it throws that error. Plain values are wrapped in completed Futures. Contrast with task.awaitAll (collect-all).
 
 **Parameters:**
 
 - `tasks`: `array` — An array of Futures or plain values
 
-**Returns:** `Future` — A Future that resolves to an array of all results
+**Returns:** `Future` — A Future that resolves to an array of all results, or faults on the first failure
 
 #### `task.race(tasks: array) -> Future`
 
-Returns a new Future that resolves when the first Future in the array completes. Requires a non-empty array.
+Returns a new Future that resolves when the first Future in the array completes. This is a fail-fast combinator (analogous to Promise.race): if the winning task faults, the outer Future faults with the original error type; awaiting it throws that error. Requires a non-empty array.
 
 **Parameters:**
 
 - `tasks`: `array` — A non-empty array of Futures
 
-**Returns:** `Future` — A Future that resolves to the first completed value
+**Returns:** `Future` — A Future that resolves to the first completed value, or faults on the first failure
 
 **Throws:**
 

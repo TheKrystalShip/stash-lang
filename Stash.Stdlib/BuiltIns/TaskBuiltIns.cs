@@ -64,10 +64,21 @@ public static partial class TaskBuiltIns
         return StashValue.FromObject(future.GetResult());
     }
 
-    /// <summary>Waits for all Futures in the array to complete. Returns an array of results in the same order. Failed tasks become error values.</summary>
+    /// <summary>
+    /// Waits for all Futures in the array to complete and returns an array of per-element results in
+    /// the same order. This is the <em>collect-all</em> combinator (analogous to
+    /// <c>Promise.allSettled</c>): it never throws even if tasks fail.
+    /// Failed tasks become <c>StashError</c> values with the <strong>original error type
+    /// preserved</strong> (e.g. a task that throws <c>TypeError</c> produces a
+    /// <c>StashError</c> whose <c>.type == "TypeError"</c>). Cancelled tasks become a
+    /// <c>StashError</c> with <c>.type == "CancellationError"</c> and message
+    /// <c>"Task was cancelled."</c>. Contrast with the <em>fail-fast</em> combinators
+    /// (<c>task.all</c>, <c>task.race</c>, <c>task.awaitAny</c>) which throw on the
+    /// first failure.
+    /// </summary>
     /// <param name="tasks">An array of Futures</param>
     /// <exception cref="TypeError">if any element in the array is not a Future</exception>
-    /// <returns>An array of result values</returns>
+    /// <returns>An array of result values; failed or cancelled elements are StashError values with the original error type</returns>
     [StashFn(ReturnType = "array")]
     private static StashValue AwaitAll(IInterpreterContext ctx, List<StashValue> tasks)
     {
@@ -178,9 +189,15 @@ public static partial class TaskBuiltIns
         future.Cancel();
     }
 
-    /// <summary>Returns a new Future that resolves when all Futures in the array complete. Plain values are wrapped in completed Futures.</summary>
+    /// <summary>
+    /// Returns a new Future that resolves when all Futures in the array complete. This is a
+    /// <em>fail-fast</em> combinator (analogous to <c>Promise.all</c>): if any constituent
+    /// task faults, the outer Future faults with the original error type; awaiting it throws
+    /// that error. Plain values are wrapped in completed Futures. Contrast with
+    /// <c>task.awaitAll</c> (collect-all).
+    /// </summary>
     /// <param name="tasks">An array of Futures or plain values</param>
-    /// <returns>A Future that resolves to an array of all results</returns>
+    /// <returns>A Future that resolves to an array of all results, or faults on the first failure</returns>
     [StashFn(ReturnType = "Future")]
     private static StashValue All(IInterpreterContext ctx, List<StashValue> tasks)
     {
@@ -221,10 +238,15 @@ public static partial class TaskBuiltIns
         return StashValue.FromObj(new StashFuture(combinedTask, cts));
     }
 
-    /// <summary>Returns a new Future that resolves when the first Future in the array completes. Requires a non-empty array.</summary>
+    /// <summary>
+    /// Returns a new Future that resolves when the first Future in the array completes. This is a
+    /// <em>fail-fast</em> combinator (analogous to <c>Promise.race</c>): if the winning task
+    /// faults, the outer Future faults with the original error type; awaiting it throws that
+    /// error. Requires a non-empty array.
+    /// </summary>
     /// <param name="tasks">A non-empty array of Futures</param>
     /// <exception cref="ValueError">if the tasks array is empty</exception>
-    /// <returns>A Future that resolves to the first completed value</returns>
+    /// <returns>A Future that resolves to the first completed value, or faults on the first failure</returns>
     [StashFn(ReturnType = "Future")]
     private static StashValue Race(IInterpreterContext ctx, List<StashValue> tasks)
     {

@@ -511,12 +511,20 @@ public static partial class ArrBuiltIns
         }
     }
 
-    /// <summary>Like map, but executes the function in parallel across elements.</summary>
+    /// <summary>
+    /// Like map, but executes the function in parallel across elements using a thread-pool.
+    /// Results are returned in the same order as the input array (order-preserving).
+    /// If any callback throws, the first error encountered is rethrown (fail-fast).
+    /// If the callback is an <c>async</c> function, its returned Future is automatically
+    /// awaited, so <c>arr.parMap([1,2,3], async (x) =&gt; x * 2)</c> returns
+    /// <c>[2, 4, 6]</c> rather than an array of Futures.
+    /// </summary>
     /// <param name="array">The source array</param>
     /// <param name="fn">A function that receives each element and returns its transformed value</param>
+    /// <param name="maxConcurrency">Optional maximum number of parallel threads (default: unbounded — uses all available cores). Must be &gt;= 1 if provided.</param>
     /// <exception cref="TypeError">if `array` is not an array or `fn` is not callable</exception>
     /// <exception cref="ValueError">if `maxConcurrency` is less than 1</exception>
-    /// <returns>A new array of transformed elements</returns>
+    /// <returns>A new array of transformed elements in input order</returns>
     // Raw = true: passes raw args span to ExecuteParMap which also reads optional
     // maxConcurrency from args[2]. The variadic handling doesn't map cleanly to the
     // typed form's params StashValue[] (which would shift the index).
@@ -528,12 +536,19 @@ public static partial class ArrBuiltIns
         return StashValue.FromObject(ExecuteParMap(ctx, list));
     }
 
-    /// <summary>Like filter, but evaluates the predicate in parallel.</summary>
+    /// <summary>
+    /// Like filter, but evaluates the predicate in parallel using a thread-pool.
+    /// The relative order of passing elements is preserved (order-preserving).
+    /// If any predicate call throws, the first error encountered is rethrown (fail-fast).
+    /// If the predicate is an <c>async</c> function, its returned Future is automatically
+    /// awaited; truthiness is then tested on the resolved value.
+    /// </summary>
     /// <param name="array">The source array</param>
-    /// <param name="fn">A predicate function that receives each element</param>
+    /// <param name="fn">A predicate function that receives each element; truthy return = keep</param>
+    /// <param name="maxConcurrency">Optional maximum number of parallel threads (default: unbounded — uses all available cores). Must be &gt;= 1 if provided.</param>
     /// <exception cref="TypeError">if `array` is not an array or `fn` is not callable</exception>
     /// <exception cref="ValueError">if `maxConcurrency` is less than 1</exception>
-    /// <returns>A new array of elements where fn returned truthy</returns>
+    /// <returns>A new array of elements where fn returned truthy, in input order</returns>
     // Raw = true: passes raw args span to ExecuteParFilter which also reads optional
     // maxConcurrency from args[2]. See ParMap comment above.
     [StashFn(Raw = true, ReturnType = "array")]
@@ -544,9 +559,15 @@ public static partial class ArrBuiltIns
         return StashValue.FromObject(ExecuteParFilter(ctx, list));
     }
 
-    /// <summary>Like forEach, but executes the function in parallel.</summary>
+    /// <summary>
+    /// Like forEach, but executes the function in parallel using a thread-pool.
+    /// If any callback throws, the first error encountered is rethrown (fail-fast).
+    /// If the callback is an <c>async</c> function, its returned Future is automatically
+    /// awaited before the iteration continues for that element.
+    /// </summary>
     /// <param name="array">The array to iterate</param>
     /// <param name="fn">A function that receives each element</param>
+    /// <param name="maxConcurrency">Optional maximum number of parallel threads (default: unbounded — uses all available cores). Must be &gt;= 1 if provided.</param>
     /// <exception cref="TypeError">if `array` is not an array or `fn` is not callable</exception>
     /// <exception cref="ValueError">if `maxConcurrency` is less than 1</exception>
     /// <returns>null</returns>

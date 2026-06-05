@@ -306,6 +306,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>A CommandResult with stdout, stderr, and exitCode</returns>
     [StashFn(ReturnType = "CommandResult")]
     private static StashValue Wait(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -359,6 +360,7 @@ public static partial class ProcessBuiltIns
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <param name="ms">Maximum wait time in milliseconds</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>A CommandResult, or null if timed out</returns>
     [StashFn]
     private static StashValue WaitTimeout(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, long ms)
@@ -406,6 +408,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>True if the signal was sent, false if the process was not running</returns>
     [StashFn]
     private static StashValue Kill(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -432,6 +435,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Returns true if the process is still running, false if it has exited.</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>True if the process is running</returns>
     [StashFn]
     private static StashValue IsAlive(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -451,6 +455,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Returns the OS process ID for a spawned Process handle.</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>The integer process ID</returns>
     [StashFn]
     private static StashValue Pid(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -464,6 +469,7 @@ public static partial class ProcessBuiltIns
     /// <param name="sigArg">The POSIX signal number (1–64)</param>
     /// <exception cref="ValueError">if the Signal enum member is unknown, or the signal number is outside the range 1–64</exception>
     /// <exception cref="TypeError">if handle is not a Process, or the signal argument is not an integer or Signal enum value</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>True if the signal was sent successfully</returns>
     [StashFn]
     private static StashValue Signal(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, [StashParam(Name = "signum")] StashValue sigArg)
@@ -527,6 +533,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.</summary>
     /// <param name="handleVal">The Process handle to detach</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>True if the handle was found and removed</returns>
     [StashFn]
     private static StashValue Detach(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -560,6 +567,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Reads available text from a process's stdout. Blocks until at least one character is available or the stream reaches end-of-stream, then returns the text chunk read, or null at end-of-stream. Note: despite the intended non-blocking design this currently blocks on an empty but still-open pipe, so call it only after sending input you expect the process to respond to (reading speculatively from an idle child will hang until it produces output or exits).</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>The text chunk read from stdout, or null at end-of-stream</returns>
     [StashFn]
     private static StashValue Read(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -593,6 +601,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. Use this instead of process.read for binary data or byte-length-framed protocols (e.g. LSP Content-Length framing), where decoding to a string and re-encoding it would corrupt the byte count of multibyte UTF-8 sequences. Like process.read this blocks until at least one byte is available or the stream reaches end-of-stream, then returns the bytes read, or null at end-of-stream — so call it only after sending input you expect the process to respond to (reading speculatively from an idle child will hang until it produces output or exits). Do not mix read and readBytes on the same handle: read decodes via a buffered StreamReader, readBytes reads the raw pipe, and the StreamReader can steal bytes from the raw path.</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>A buffer of the bytes read from stdout, or null at end-of-stream</returns>
     [StashFn(ReturnType = "byte[]")]
     private static StashValue ReadBytes(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -637,6 +646,7 @@ public static partial class ProcessBuiltIns
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <param name="data">The string data to write to stdin</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>True if written successfully</returns>
     [StashFn]
     private static StashValue Write(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, string data)
@@ -665,6 +675,7 @@ public static partial class ProcessBuiltIns
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <param name="callback">A function that accepts a CommandResult</param>
     /// <exception cref="TypeError">if handle is not a Process, or the callback requires more than one argument</exception>
+    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>null</returns>
     [StashFn]
     private static StashValue OnExit(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal, IStashCallable callback)
@@ -783,6 +794,7 @@ public static partial class ProcessBuiltIns
     /// <summary>Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order as the input.</summary>
     /// <param name="procs">An array of Process handles</param>
     /// <exception cref="TypeError">if any element in the array is not a Process</exception>
+    /// <exception cref="StateError">if any Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>An array of CommandResult values</returns>
     [StashFn]
     private static StashValue WaitAll(IInterpreterContext ctx, List<StashValue> procs)
@@ -838,6 +850,7 @@ public static partial class ProcessBuiltIns
     /// <param name="procs">A non-empty array of Process handles</param>
     /// <exception cref="ValueError">if the array is empty</exception>
     /// <exception cref="TypeError">if any element in the array is not a Process</exception>
+    /// <exception cref="StateError">if any Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>The CommandResult of the first process to exit</returns>
     [StashFn]
     private static StashValue WaitAny(IInterpreterContext ctx, List<StashValue> procs)
