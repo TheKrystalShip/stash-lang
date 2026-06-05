@@ -111,7 +111,7 @@ public sealed class StashHost : IStashHost
         // the HostHandle to SetGlobal(string, object?) stores it as an Obj-tagged StashValue —
         // exactly what we need. The handle is always created here, keyed through the
         // registration map, so the single-chokepoint invariant is preserved.
-        var handle = new HostHandle(hostObject, reg);
+        var handle = new HostHandle(hostObject, reg, _typeRegistrations);
         _engine!.SetGlobal(name, handle);
     }
 

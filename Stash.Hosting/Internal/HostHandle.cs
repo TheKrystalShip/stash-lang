@@ -1,6 +1,7 @@
 namespace Stash.Hosting.Internal;
 
 using System;
+using System.Collections.Generic;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
@@ -22,16 +23,33 @@ using Stash.Runtime.Protocols;
 /// — <see cref="IVMFieldMutable.VMSetField"/> dispatches registered property setters
 ///   via <see cref="InvokeHostDelegate.InvokeSetter"/>; raises <see cref="ReadOnlyError"/>
 ///   for read-only properties; raises <see cref="RuntimeError"/> for unknown names.
+/// P3 adds:
+/// — <see cref="IVMFieldAccessible.VMTryGetField"/> also returns a
+///   <see cref="HostBoundMethod"/> (<see cref="IStashCallable"/>) for registered
+///   synchronous methods. The VM's <c>ExecuteCall</c> path invokes it via
+///   <see cref="HostBoundMethod.CallDirect"/>.
 /// </remarks>
 internal sealed class HostHandle : IVMFieldAccessible, IVMFieldMutable, IVMTyped, IVMStringifiable
 {
     private readonly object _target;
     private readonly HostTypeRegistration _registration;
 
-    internal HostHandle(object target, HostTypeRegistration registration)
+    /// <summary>
+    /// Full host registration map; may be <c>null</c> for handles created without a host
+    /// context (unit tests, etc.). When non-null, passed to
+    /// <see cref="HostBoundMethod"/> so method return values can wrap registered CLR
+    /// instances back as <see cref="HostHandle"/> values.
+    /// </summary>
+    private readonly IReadOnlyDictionary<Type, HostTypeRegistration>? _allRegistrations;
+
+    internal HostHandle(
+        object target,
+        HostTypeRegistration registration,
+        IReadOnlyDictionary<Type, HostTypeRegistration>? allRegistrations = null)
     {
-        _target       = target ?? throw new ArgumentNullException(nameof(target));
-        _registration = registration ?? throw new ArgumentNullException(nameof(registration));
+        _target           = target       ?? throw new ArgumentNullException(nameof(target));
+        _registration     = registration ?? throw new ArgumentNullException(nameof(registration));
+        _allRegistrations = allRegistrations;
     }
 
     /// <summary>The live CLR instance carried by this handle.</summary>
@@ -68,16 +86,31 @@ internal sealed class HostHandle : IVMFieldAccessible, IVMFieldMutable, IVMTyped
     /// </remarks>
     public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
     {
-        if (_registration.Members.TryGetValue(name, out HostMemberDescriptor? desc)
-            && desc.Kind == HostMemberKind.Property
-            && desc.Getter is not null)
+        if (_registration.Members.TryGetValue(name, out HostMemberDescriptor? desc))
         {
-            // Route through the chokepoint; any CLR exception → HostError.
-            value = InvokeHostDelegate.InvokeGetter(desc.Getter, _target, span);
-            return true;
+            switch (desc.Kind)
+            {
+                case HostMemberKind.Property when desc.Getter is not null:
+                    // Route through the chokepoint; any CLR exception → HostError.
+                    value = InvokeHostDelegate.InvokeGetter(desc.Getter, _target, span);
+                    return true;
+
+                case HostMemberKind.Method when desc.Invoke is not null:
+                    // Return an IStashCallable (HostBoundMethod) so the VM's ExecuteCall
+                    // path can invoke it via CallDirect — zero bytecode changes needed.
+                    value = StashValue.FromObj(
+                        new HostBoundMethod(
+                            target:           _target,
+                            typeName:         _registration.VmTypeName,
+                            methodName:       name,
+                            arity:            desc.MethodArity,
+                            invoker:          desc.Invoke,
+                            allRegistrations: _allRegistrations));
+                    return true;
+            }
         }
 
-        // Unknown member: let the VM handle the fallthrough.
+        // Unknown member (or a descriptor with a missing handler): let the VM fall through.
         value = StashValue.Null;
         return false;
     }

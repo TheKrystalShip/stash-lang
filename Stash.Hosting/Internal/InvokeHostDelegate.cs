@@ -1,7 +1,10 @@
 namespace Stash.Hosting.Internal;
 
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using Stash.Common;
+using Stash.Hosting.Marshalling;
 using Stash.Runtime;
 using Stash.Runtime.Errors;
 
@@ -79,6 +82,71 @@ internal static class InvokeHostDelegate
             setter(target, value);
         }
         catch (Exception ex) when (ex is not RuntimeError)
+        {
+            throw new HostError(ex.Message, span);
+        }
+    }
+
+    /// <summary>
+    /// Invokes a baked method invoker on <paramref name="target"/> with the given
+    /// Stash arguments and returns the marshalled result.
+    /// </summary>
+    /// <remarks>
+    /// This is the <b>only</b> place in <c>Stash.Hosting</c> that executes a registered
+    /// method delegate — maintaining the Construct-lite chokepoint for method dispatch.
+    /// Arg-marshalling errors (kind = <see cref="HostError"/>) are thrown before reaching
+    /// this method (inside the baked invoker created in
+    /// <see cref="HostTypeBuilder{T}.Method"/>). Any CLR exception from the <em>body</em>
+    /// of the delegate that escapes the baked closure is caught here and re-thrown as a
+    /// <see cref="HostError"/>, preserving the call-site span.
+    /// </remarks>
+    /// <param name="invoker">The baked method invoker from the descriptor.</param>
+    /// <param name="target">The live CLR host object (first delegate parameter).</param>
+    /// <param name="stashArgs">
+    /// Stash-value arguments for the method (excluding the target). Arity was already
+    /// validated by <see cref="HostBoundMethod.CallDirect"/> before this call.
+    /// </param>
+    /// <param name="allRegistrations">
+    /// Full host registration map used to wrap registered CLR return values as
+    /// <see cref="HostHandle"/> values. May be <c>null</c> (handles created without a
+    /// full host context).
+    /// </param>
+    /// <param name="span">The call site span, forwarded to any thrown error.</param>
+    /// <returns>The marshalled return value as a <see cref="StashValue"/>.</returns>
+    /// <exception cref="HostError">
+    /// Thrown when the method delegate throws any <see cref="Exception"/> that is not
+    /// already a <see cref="RuntimeError"/> (which includes <see cref="HostError"/>).
+    /// The original exception's message is preserved.
+    /// </exception>
+    internal static StashValue InvokeMethod(
+        HostMethodInvoker                                   invoker,
+        object                                              target,
+        StashValue[]                                        stashArgs,
+        IReadOnlyDictionary<Type, HostTypeRegistration>?   allRegistrations,
+        SourceSpan?                                         span)
+    {
+        try
+        {
+            object? result = invoker(target, stashArgs);
+            // Marshal return value using the full registrations map so registered CLR
+            // instances are wrapped as HostHandle values rather than causing an ArgumentException.
+            return HostMarshaller.ToStash(result, allRegistrations);
+        }
+        catch (RuntimeError)
+        {
+            // HostError and other RuntimeError subclasses already have the right shape;
+            // let them propagate so the VM's catch path surfaces them correctly.
+            throw;
+        }
+        catch (TargetInvocationException tie) when (tie.InnerException is not null)
+        {
+            // DynamicInvoke wraps the real exception in TargetInvocationException;
+            // unwrap and re-surface as HostError preserving the original message.
+            Exception inner = tie.InnerException;
+            if (inner is RuntimeError re) throw re; // already structured
+            throw new HostError(inner.Message, span);
+        }
+        catch (Exception ex)
         {
             throw new HostError(ex.Message, span);
         }

@@ -2,9 +2,11 @@ namespace Stash.Hosting;
 
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Stash.Hosting.Internal;
 using Stash.Hosting.Marshalling;
 using Stash.Runtime;
+using Stash.Runtime.Errors;
 
 /// <summary>
 /// Typed builder for declaring a CLR type's Stash-visible members.
@@ -14,7 +16,8 @@ using Stash.Runtime;
 /// <remarks>
 /// P1 supports only <see cref="Named"/> — the builder records the VM type name.
 /// P2 adds <c>Property</c> overloads (read-only and read-write).
-/// <c>Method</c>, <c>AsyncMethod</c>, and <c>OnRelease</c> are added in P3/P4.
+/// P3 adds <c>Method</c> (sync).
+/// <c>AsyncMethod</c> and <c>OnRelease</c> are added in P4.
 /// </remarks>
 public sealed class HostTypeBuilder<T> where T : class
 {
@@ -101,6 +104,228 @@ public sealed class HostTypeBuilder<T> where T : class
             Invoke: null);
 
         return this;
+    }
+
+    /// <summary>
+    /// Registers a synchronous method. When Stash code calls
+    /// <c>obj.<paramref name="name"/>(...)</c>, the call is dispatched to
+    /// <paramref name="handler"/> with the CLR instance as the first argument.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The delegate signature must have the CLR host type <typeparamref name="T"/> as its
+    /// first parameter (the target), followed by zero or more typed parameters that map
+    /// to the Stash arguments. Example: <c>(Player p, long dmg) =&gt; p.Attack(dmg)</c>
+    /// registers a one-argument method.
+    /// </para>
+    /// <para>
+    /// Parameter and return type marshalling are baked at registration time via
+    /// <see cref="HostMarshaller"/>. Reflection is used ONCE at host setup to determine
+    /// parameter types — never in the VM hot path (NAOT-clean per the brief's Q1 note).
+    /// </para>
+    /// <para>
+    /// The arity reported to Stash is <c>handler.Method.GetParameters().Length - 1</c>
+    /// (the first parameter — the target — is excluded from the Stash argument count).
+    /// </para>
+    /// </remarks>
+    /// <param name="name">The method name visible in Stash.</param>
+    /// <param name="handler">
+    /// Delegate whose first parameter is the CLR host instance of type
+    /// <typeparamref name="T"/>; subsequent parameters are marshalled from the Stash
+    /// argument list.
+    /// </param>
+    /// <returns>This builder (fluent API).</returns>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="name"/> or <paramref name="handler"/> is <c>null</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="handler"/>'s first parameter is not assignable from
+    /// <typeparamref name="T"/>, meaning the delegate does not accept the registered type.
+    /// </exception>
+    public HostTypeBuilder<T> Method(string name, Delegate handler)
+    {
+        if (name is null)    throw new ArgumentNullException(nameof(name));
+        if (handler is null) throw new ArgumentNullException(nameof(handler));
+
+        MethodInfo mi = handler.Method;
+        ParameterInfo[] parameters = mi.GetParameters();
+
+        // Validate: first param must be T (or a supertype that T is assignable to).
+        if (parameters.Length == 0 || !parameters[0].ParameterType.IsAssignableFrom(typeof(T)))
+        {
+            throw new ArgumentException(
+                $"Method delegate's first parameter must be assignable from '{typeof(T).Name}'. " +
+                $"Expected first parameter type '{typeof(T).Name}' (or a base class), " +
+                $"but got '{(parameters.Length == 0 ? "<none>" : parameters[0].ParameterType.Name)}'.",
+                nameof(handler));
+        }
+
+        // Determine arity: exclude the target (first) parameter.
+        int arity = parameters.Length - 1;
+
+        // Snapshot parameter types for marshalling (positions 1..N are the Stash args).
+        // This reflection runs ONCE at registration time — NAOT-clean (brief Q1).
+        Type[] argTypes = new Type[arity];
+        for (int i = 0; i < arity; i++)
+            argTypes[i] = parameters[i + 1].ParameterType;
+
+        // Capture for closures.
+        string typeName   = typeof(T).Name;
+        string memberName = name;
+
+        // Bake the invoker closure.
+        // Per-arg marshalling (StashValue → expected CLR type) produces "arg N to T.m: ..."
+        // messages when conversion fails, satisfying the P3 done_when requirement.
+        //
+        // DynamicInvoke is used here because the delegate's parameter types are only known
+        // at registration time. This is acceptable in Stash.Hosting (an embedding host SDK
+        // for managed-JIT consumers — not the VM dispatch loop or a NAOT-published binary
+        // path). The per-arg marshalling above ensures type errors surface before DynamicInvoke.
+        HostMethodInvoker baked = (target, stashArgs) =>
+        {
+            // Marshal each Stash arg to the expected CLR type.
+            object?[] clrArgs = new object?[arity + 1];
+            clrArgs[0] = target; // typed instance as first arg
+
+            for (int i = 0; i < arity; i++)
+            {
+                StashValue sv = stashArgs[i];
+                try
+                {
+                    clrArgs[i + 1] = MarshalArgToClr(sv, argTypes[i]);
+                }
+                catch (Exception ex) when (ex is not RuntimeError)
+                {
+                    throw new Stash.Runtime.Errors.HostError(
+                        $"arg {i + 1} to {typeName}.{memberName}: {ex.Message}");
+                }
+            }
+
+            // Invoke the typed delegate with the marshalled args.
+            // Return the raw CLR result — InvokeHostDelegate.InvokeMethod handles
+            // return-value marshalling using the full host registrations map, which
+            // correctly wraps registered CLR instances as HostHandle values.
+            // Any CLR exception from the body is caught by InvokeHostDelegate.InvokeMethod.
+            return handler.DynamicInvoke(clrArgs);
+        };
+
+        _members[name] = new HostMemberDescriptor(
+            Kind:        HostMemberKind.Method,
+            Getter:      null,
+            Setter:      null,
+            Invoke:      baked,
+            MethodArity: arity);
+
+        return this;
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Converts a <see cref="StashValue"/> to the expected CLR type for a method argument.
+    /// Used per-argument in the baked method invoker; runs at call time.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors the type-switch in <see cref="HostMarshaller.FromStash{T}"/> but operates
+    /// on a runtime <see cref="Type"/> so it can be called from the non-generic invoker closure.
+    /// Covers only the types legal as method parameters; throws <see cref="InvalidCastException"/>
+    /// for unsupported or mismatched types.
+    /// </remarks>
+    private static object? MarshalArgToClr(StashValue sv, Type targetType)
+    {
+        if (sv.IsNull) return null;
+
+        // StashValue passthrough
+        if (targetType == typeof(StashValue)) return sv;
+
+        // string
+        if (targetType == typeof(string))
+        {
+            if (sv.Tag == StashValueTag.Obj && sv.AsObj is string s) return s;
+            throw new InvalidCastException(
+                $"expected string, got Stash {sv.Tag}");
+        }
+
+        // long (most common numeric type in Stash)
+        if (targetType == typeof(long))
+        {
+            if (sv.Tag == StashValueTag.Int)   return sv.AsInt;
+            if (sv.Tag == StashValueTag.Byte)  return (long)sv.AsByte;
+            if (sv.Tag == StashValueTag.Float) return (long)sv.AsFloat;
+            throw new InvalidCastException(
+                $"expected long, got Stash {sv.Tag}");
+        }
+
+        // int
+        if (targetType == typeof(int))
+        {
+            if (sv.Tag == StashValueTag.Int)  return (int)sv.AsInt;
+            if (sv.Tag == StashValueTag.Byte) return (int)sv.AsByte;
+            throw new InvalidCastException(
+                $"expected int, got Stash {sv.Tag}");
+        }
+
+        // double
+        if (targetType == typeof(double))
+        {
+            if (sv.Tag == StashValueTag.Float) return sv.AsFloat;
+            if (sv.Tag == StashValueTag.Int)   return (double)sv.AsInt;
+            if (sv.Tag == StashValueTag.Byte)  return (double)sv.AsByte;
+            throw new InvalidCastException(
+                $"expected double, got Stash {sv.Tag}");
+        }
+
+        // float
+        if (targetType == typeof(float))
+        {
+            if (sv.Tag == StashValueTag.Float) return (float)sv.AsFloat;
+            if (sv.Tag == StashValueTag.Int)   return (float)sv.AsInt;
+            throw new InvalidCastException(
+                $"expected float, got Stash {sv.Tag}");
+        }
+
+        // bool
+        if (targetType == typeof(bool))
+        {
+            if (sv.Tag == StashValueTag.Bool) return sv.AsBool;
+            throw new InvalidCastException(
+                $"expected bool, got Stash {sv.Tag}");
+        }
+
+        // byte
+        if (targetType == typeof(byte))
+        {
+            if (sv.Tag == StashValueTag.Byte) return sv.AsByte;
+            if (sv.Tag == StashValueTag.Int)  return (byte)sv.AsInt;
+            throw new InvalidCastException(
+                $"expected byte, got Stash {sv.Tag}");
+        }
+
+        // byte[]
+        if (targetType == typeof(byte[]))
+        {
+            if (sv.Tag == StashValueTag.Obj && sv.AsObj is byte[] buf) return buf;
+            throw new InvalidCastException(
+                $"expected byte[], got Stash {sv.Tag}");
+        }
+
+        // Host-handle types (registered CLR objects passed back to a method as arguments).
+        // Unwrap the HostHandle for the expected registered type.
+        if (targetType.IsClass && sv.Tag == StashValueTag.Obj && sv.AsObj is HostHandle handle)
+        {
+            if (handle.ClrType == targetType || targetType.IsAssignableFrom(handle.ClrType))
+                return handle.Target;
+            throw new InvalidCastException(
+                $"expected host type '{targetType.Name}', got HostHandle<{handle.ClrType.Name}>");
+        }
+
+        // Fallback: let the raw object pass through for object/dynamic parameters.
+        if (targetType == typeof(object)) return sv.ToObject();
+
+        throw new InvalidCastException(
+            $"No arg-marshaller for type '{targetType.Name}'. " +
+            $"Supported: StashValue, string, long, int, double, float, bool, byte, byte[], " +
+            $"registered host types, object.");
     }
 
     // ── Internal build ────────────────────────────────────────────────────

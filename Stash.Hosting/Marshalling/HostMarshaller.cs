@@ -82,7 +82,7 @@ internal static class HostMarshaller
         {
             Type argType = arg.GetType();
             if (registrations.TryGetValue(argType, out HostTypeRegistration? reg))
-                return StashValue.FromObj(new HostHandle(arg, reg));
+                return StashValue.FromObj(new HostHandle(arg, reg, registrations));
         }
 
         // IDictionary<string, object?> → StashDictionary
