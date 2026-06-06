@@ -1581,6 +1581,12 @@ reach your code.
   thread-pool thread is abandoned: its remaining work neither delays process exit nor produces a
   result. To let it finish, `await` it, or hold the VM open with `event.loop()` or a `time.sleep`
   loop.
+
+**Negative space — still-running at exit is dropped, not drained.** A Future whose status is
+`task.Status.Running` when the main script returns is silently abandoned. The runtime does not
+wait, does not drain pending work, and does not report. This is intentional negative space: the
+unobserved-fault report (D1) scans *faulted-and-unobserved* tasks only. To let a task finish,
+`await` it or hold the VM open with `event.loop()` or a `time.sleep` loop.
 - **Faulted but never observed → reported.** If a task **faults** (throws) and its error is never
   observed by any `await` / `task.*` consumer, the runtime prints a single block to **stderr** at
   script exit:
