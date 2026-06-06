@@ -48,10 +48,31 @@ internal static class RuntimeOps
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsEqual(StashValue left, StashValue right)
     {
-        if (left.Tag != right.Tag) return false;
+        // D2 (ratified): cross-tag numeric pairs (int/float/byte) compare by mathematical value.
+        // Route cross-tag to IsEqualCrossTag BEFORE any same-tag fast path.
+        // Same-tag paths below remain exact (no precision loss for large int64 values).
+        if (left.Tag != right.Tag) return IsEqualCrossTag(left, right);
         if (left.Tag == StashValueTag.Int) return left.AsInt == right.AsInt;
         if (left.Tag == StashValueTag.Bool) return left.AsBool == right.AsBool;
         return IsEqualSlow(left, right);
+    }
+
+    /// <summary>
+    /// Called only when <c>left.Tag != right.Tag</c>.
+    /// Numeric coercion: int, float, and byte form a single equivalence class — compare by
+    /// mathematical value (IEEE 754 semantics: NaN != NaN, 0.0 == -0.0).
+    /// All other cross-category pairs are unequal.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool IsEqualCrossTag(StashValue left, StashValue right)
+    {
+        // Promote byte → int first so ToDouble never sees a Byte tag.
+        if (left.IsByte)  left  = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
+        // Now both operands are either Int or Float (or a non-numeric type).
+        if (left.IsNumeric && right.IsNumeric)
+            return ToDouble(left) == ToDouble(right);
+        return false;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

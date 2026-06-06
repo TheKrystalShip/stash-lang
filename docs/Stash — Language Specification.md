@@ -677,15 +677,51 @@ contexts.
 ### Equality
 
 `==` evaluates to `true` when its operands are equal. `!=` evaluates to the logical
-negation of `==`.
+negation of `==`. Equality is **total**: it returns a boolean for any two operands
+and never raises.
 
-Primitive values compare by value. Struct instances, arrays, dictionaries, errors,
-futures, namespaces, and functions compare according to their runtime representation
-unless a more specific rule is defined by the implementation. Semantic-version
-values compare according to semantic-version rules.
+**Numeric-coercion rule.** The three numeric categories — `int`, `float`, `byte` —
+form a single equivalence class for `==` and `!=`. Operands from any two of these
+categories are compared by **mathematical value**: `1 == 1.0` is `true`, `0 == 0.0`
+is `true`, `-0.0 == 0` is `true`, `byte 0 == 0` is `true`, `byte 7 == 7.0` is
+`true`. This matches the byte→int and int↔float promotion in arithmetic and
+relational operators (see *Type Coercion*). NaN follows IEEE 754: `NaN != NaN` even
+with itself.
 
-Cross-type coercion must not be performed for equality unless explicitly specified
-for a type.
+**Non-numeric cross-category rule.** Outside the numeric equivalence class, two
+values of different runtime categories (per `typeof`) are never equal: `1 == true`
+is `false`, `0 == null` is `false`, `0 == ""` is `false`, `null == false` is
+`false`, `[] == null` is `false`. No other cross-category coercion is performed.
+
+**Per-category rule (within a category, or within the numeric equivalence class).**
+
+| Category | `==` semantics |
+| -------- | -------------- |
+| `null`, `bool`, `string` | by value |
+| `int`, `float`, `byte` | by **mathematical value across the three categories** (IEEE 754 for `float`: `0.0 == -0.0`, `NaN != NaN`) |
+| `duration`, `bytes`, `ip`, `semver` | by value (semver per semver precedence) |
+| `secret`, `array`, `dict`, `struct`, `enum`, `function`, `namespace`, `future`, `range`, `Error` | by **reference identity** (same value handle ↔ equal) |
+
+The reference-identity rule for `function` and `namespace` implies
+`io.println == io.println` is `true` (the same registered function handle), and
+`io == io` is `true` (the same namespace singleton). Two arrays with the same
+elements but distinct constructions are **not** equal (`[1] == [1]` is `false`);
+use `arr.equals` / `dict.equals` for structural comparison. Two distinct
+`secret("x")` constructions are **not** equal — to compare contents, `reveal()`
+first; for security-sensitive comparison use `crypto.constantTimeEquals` on the
+revealed values (see §Secret Values).
+
+**Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
+value not equal to itself). `NaN` is reachable from a Stash script only via
+overflow arithmetic (`conv.toFloat("1e308") * 10.0` produces `Infinity`;
+`Infinity - Infinity` produces `NaN`); literal `0.0 / 0.0` raises
+`RuntimeError("Division by zero.")`.
+
+**The `==` operator's compile-time evaluation agrees with its runtime evaluation.**
+The compiler folds a literal equality only when the folded result equals the runtime
+result. In particular, `1 == 1.0` is `true` at both compile time and at runtime —
+the same boolean as `let i = 1; let f = 1.0; i == f`. A folder regression that
+diverges from the runtime path is a defect.
 
 ### Type Coercion
 
