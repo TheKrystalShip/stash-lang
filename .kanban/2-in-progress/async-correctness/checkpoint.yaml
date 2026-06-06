@@ -1,7 +1,7 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-06T00:03:03Z"
+updated: "2026-06-06T00:52:46Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "D5: ResolveTrackedProcess helper (tracked/cached/StateError); socket decision (b) — backlog stub filed; 13908/0 full suite"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 695e51ddf5e079d0697eb1eaea2122f33a4562c9
+    verified: true
+    started: "2026-06-06T00:08:35Z"
+    completed: "2026-06-06T00:52:46Z"
+    attempts: 1
+    notes: "D1: SpawnedFutureRegistry + MarkObserved chokepoint + CLI exit hook; 13935/0 full suite; 27 new UnobservedAndExit tests; gotchas.md updated"
   P7:
     status: pending
     commit: null
