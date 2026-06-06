@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T14:32:22Z"
+updated: "2026-06-06T14:49:26Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "Edit 4 (cancel idempotency/null/TypeError) + Edit 5 (task.Status qualified, no bare Status) + 16 CancellationConformanceTests; GetFuture fixed to throw TypeError; MinScannedParticipants bumped to 3"
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: a1f97624c33d8aaf50b1ec515676306d6d433a0b
+    verified: true
+    started: "2026-06-06T14:33:47Z"
+    completed: "2026-06-06T14:49:26Z"
+    attempts: 1
+    notes: Edit 8 (still-running-at-exit drop sealed as negative space) + 15 D1 conformance tests + InFlightDrop moved Gotcha→Conformance; MinScannedParticipants bumped 3→5
   P6:
     status: pending
     commit: null
