@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T17:37:14Z"
+updated: "2026-06-06T17:52:59Z"
 phases:
   P1:
     status: done
@@ -68,7 +68,7 @@ phases:
     attempts: 1
     notes: "coverage.md row #6 sealed (§Async done, Functions/Closures half pending, D5 socket note); cross-cutting #1 marked complete; reference regen no-op; full suite 14212 passed 0 failed 6 skipped; Category=Conformance 121 tests"
 review:
-  status: resolved
+  status: in_progress
   started: "2026-06-06T16:10:12Z"
   resolved: "2026-06-06T17:37:14Z"
   findings_open: 0
