@@ -1,7 +1,7 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-06T02:45:52Z"
+updated: "2026-06-06T02:47:46Z"
 phases:
   P1:
     status: done
@@ -60,8 +60,8 @@ phases:
     attempts: 1
     notes: 5 dimension test files (217 async tests green) + async_correctness.stash example; D1-D5 contract demonstrated end-to-end; full 14008-test suite green
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-06T02:08:17Z"
-  resolved: null
+  resolved: "2026-06-06T02:47:46Z"
   findings_open: 0
   findings_fixed: 0

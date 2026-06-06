@@ -262,10 +262,11 @@ If C: introduce the meta-test, then mutate one propagation site to remove `Spawn
 
 ## F05 — [MINOR] Static analyzer does not recognize the `event` namespace (SA0202 false positive) — pre-existing scope gap surfaced by this feature's spec
 
-**Status:** open
+**Status:** fixed
+**Resolution:** Out-of-scope deferral — the analyzer fix is excluded by the brief's Non-Goals (bridging the two systems), and the finding's *only* required action (file a backlog stub) is complete: `.kanban/0-backlog/bugs/analyzer-event-namespace-unknown-sa0202.md` (full bug-template stub, pre-existing `Stash.Analysis` gap tracked there for a future fix). No async-correctness code change. This is NOT an /accept of an in-scope defect — the reviewer's required deliverable was the backlog stub, which is done.
 **Files:** `Stash.Analysis/` (analyzer), `docs/Stash — Language Specification.md:1437` (the spec that names `event.*` as System B)
 **Phase:** out-of-scope (pre-existing; uncovered by P7)
-**Commit:** —
+**Commit:** — (no code change; backlog stub filed)
 
 ### Observation
 
