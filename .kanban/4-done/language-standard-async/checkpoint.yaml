@@ -1,0 +1,75 @@
+schema_version: 1
+feature: language-standard-async
+current: null
+updated: "2026-06-06T17:55:54Z"
+phases:
+  P1:
+    status: done
+    commit: b4371e349871f683835995b0e3a1aac828714fa2
+    verified: true
+    started: "2026-06-06T13:15:14Z"
+    completed: "2026-06-06T13:24:12Z"
+    attempts: 1
+    notes: "Conformance scaffold + trait guard meta-test: 3 READMEs + ConformanceTraitMetaTests; MinScannedParticipants=0 at P1 (raised per phase)"
+  P2:
+    status: done
+    commit: 7f88372a7f3f0c2291147203b7bd3ed212a9fe9a
+    verified: true
+    started: "2026-06-06T13:25:31Z"
+    completed: "2026-06-06T13:43:58Z"
+    attempts: 1
+    notes: "Edit 6 (D8 settled-future replay) + FuturesCoreConformanceTests (25 tests, D6/D7/D8/D9); MinScannedParticipants bumped to 1; D7 UserRuntimeError vs typed-error divergence resolved in tests"
+  P3:
+    status: done
+    commit: e8e8c54a434bd1c4b3b3ab17e93df7f7fd7a5cd8
+    verified: true
+    started: "2026-06-06T13:45:02Z"
+    completed: "2026-06-06T14:13:19Z"
+    attempts: 1
+    notes: Edit 7 (parForEach returns null) + 23 conformance tests for D2/D4/D10; no impl changes needed; all clauses matched impl
+  P4:
+    status: done
+    commit: be517bfe3155baeb2e7d2a3f9b4759508d57b196
+    verified: true
+    started: "2026-06-06T14:14:40Z"
+    completed: "2026-06-06T14:32:22Z"
+    attempts: 1
+    notes: "Edit 4 (cancel idempotency/null/TypeError) + Edit 5 (task.Status qualified, no bare Status) + 16 CancellationConformanceTests; GetFuture fixed to throw TypeError; MinScannedParticipants bumped to 3"
+  P5:
+    status: done
+    commit: a1f97624c33d8aaf50b1ec515676306d6d433a0b
+    verified: true
+    started: "2026-06-06T14:33:47Z"
+    completed: "2026-06-06T14:49:26Z"
+    attempts: 1
+    notes: Edit 8 (still-running-at-exit drop sealed as negative space) + 15 D1 conformance tests + InFlightDrop moved Gotcha→Conformance; MinScannedParticipants bumped 3→5
+  P6:
+    status: done
+    commit: c7e618b444be86c4c40273009d357819ccf18c72
+    verified: true
+    started: "2026-06-06T14:54:35Z"
+    completed: "2026-06-06T15:18:23Z"
+    attempts: 1
+    notes: "14 IsolationConformanceTests (freeze/clone/cycle/Future-sharing) + 12 TwoSystemsConformanceTests (D5 process handles + D11 non-interaction); spec narrowed: socket handle enforcement is not implemented (gap documented in spec prose); MinScannedParticipants 5→7"
+  P7:
+    status: done
+    commit: 7ff03971a7d47aa5bc7c50f2ecb2c98bfe1fb6a0
+    verified: true
+    started: "2026-06-06T15:20:24Z"
+    completed: "2026-06-06T15:36:38Z"
+    attempts: 1
+    notes: Edit 1 fix (task.delay(1s)→TypeError confirmed; impl bent to accept number for int+float); Edit 2 task.resolve normative clause; Edit 3 task.delay normative clause; 13 TaskResolveDelayConformanceTests; MinScannedParticipants 7→8; stdlib reference regenerated
+  P8:
+    status: done
+    commit: 644e3437b05df63083ba85756a8de8a0ab29d2c2
+    verified: true
+    started: "2026-06-06T15:37:51Z"
+    completed: "2026-06-06T15:48:58Z"
+    attempts: 1
+    notes: "coverage.md row #6 sealed (§Async done, Functions/Closures half pending, D5 socket note); cross-cutting #1 marked complete; reference regen no-op; full suite 14212 passed 0 failed 6 skipped; Category=Conformance 121 tests"
+review:
+  status: resolved
+  started: "2026-06-06T16:10:12Z"
+  resolved: "2026-06-06T17:55:54Z"
+  findings_open: 0
+  findings_fixed: 0

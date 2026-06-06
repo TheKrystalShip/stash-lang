@@ -1458,7 +1458,8 @@ let result = await future;
 `async` lambdas are also allowed.
 
 ```stash
-let work = async () => await task.delay(1s);
+// task.delay takes seconds as a number (not a duration literal).
+let work = async () => await task.delay(1);
 ```
 
 **D6 — `await` is blocking and uncolored.** `await expr` evaluates `expr`. If the result
@@ -1484,18 +1485,51 @@ recursively unwrap Future-of-Future — it unwraps exactly one level. If you nee
 value from a Future-of-Future, either `await` twice or use `task.run(async fn)` which
 already flattens one level.
 
+**D8 (extended) — `await` on a settled Future is non-blocking and replays the outcome.**
+Awaiting a Future whose status is:
+
+- `task.Status.Completed` returns the cached result without blocking;
+- `task.Status.Failed` rethrows the cached error with full type fidelity (per D7) — the
+  second and subsequent awaits throw the *same* error type and message, not a wrapped copy;
+- `task.Status.Cancelled` throws `CancellationError` without blocking; subsequent awaits
+  also throw `CancellationError`.
+
+The body never runs more than once. There is no distinction between "first await on a
+settled Future" and "second await after the first completed" — both replay the cached
+outcome.
+
 **D9 — Future is a first-class value.** A Future behaves like any other value:
 
 - `typeof future == "Future"` is true.
 - `==` tests reference identity — two variables holding the same Future are `==`; two
   separately-created Futures are not.
-- `conv.str(future)` (or implicit stringification) produces `"<Future:Running>"`,
+- `conv.toStr(future)` (or implicit stringification) produces `"<Future:Running>"`,
   `"<Future:Completed>"`, `"<Future:Failed>"`, or `"<Future:Cancelled>"`.
 - Futures can be stored in arrays, dicts, and struct fields; they can be returned from
   functions and passed as arguments.
 - A Future handle is **shared**, not cloned, across the isolation boundary — a child task
   can return a Future created by the parent and the parent can await it. The handle is safe
   to share because it is effectively immutable (it wraps a thread-safe .NET `Task`).
+
+**`task.resolve(value?)` — already-resolved Future.** Returns a Future that has already
+resolved to `value`. The argument is **optional**; calling `task.resolve()` returns a Future
+resolved to `null`. The returned Future:
+
+- has status `task.Status.Completed` from the moment of creation;
+- returns `value` (or `null` if omitted) when awaited; awaiting it never blocks;
+- is **observation-tracked** like any other Future (a `task.resolve(…)` that is never awaited
+  does not trigger the unobserved-fault report, because it has not faulted);
+- is fail-safe — `task.resolve` itself never throws.
+
+**`task.delay(seconds)` — timed Future.** Returns a Future that resolves to `null` after
+`seconds` seconds (a `number`, e.g. `0.1` or `1`). The Future has status
+`task.Status.Running` until the delay elapses, then transitions to `task.Status.Completed`.
+Cancelling a delay Future with `task.cancel` transitions it to `task.Status.Cancelled` at the
+next park point; awaiting a cancelled delay throws `CancellationError`. `task.delay(0)` is a
+zero-second delay that still resolves on the thread pool — it does *not* synchronously
+complete. `task.delay` is **not** an event-queue drain point: queued callbacks (`fs.watch`,
+`signal.on`) are not drained while a Future from `task.delay` is being awaited; use
+`time.sleep` instead for that purpose.
 
 **Combinator pairing — fail-fast vs. collect-all.**
 
@@ -1523,24 +1557,55 @@ preserved** (e.g. a task that throws `TypeError` produces a `StashError` whose
 - If the callback is an `async` function, its returned Future is automatically awaited, so
   `arr.parMap([1,2,3], async (x) => x * 2)` returns `[2, 4, 6]` — not an array of Futures.
 
-**Process / socket handle boundary.** `process.spawn()` and socket-creation functions return
-handles that are bound to the task context that created them. Using a parent's handle inside
-a child task (via `task.run` or `async fn`) throws `StateError` with the message
-`"process handle does not cross task boundaries: this Process was created in a different task;
-pass the result of process.spawn() back to the parent via the task's return value"`.
-The same boundary applies to socket / TcpServer / TcpClient handles. Communicate handles
-via return values, not closure capture.
+**D10 (extended) — `arr.parForEach` return value.** `arr.parForEach` is side-effect-only and
+returns `null`. (`arr.parMap` returns an array of results; `arr.parFilter` returns an array of
+elements that passed; `arr.parForEach` returns nothing observable beyond its callbacks' effects.)
+
+**Process handle boundary (D5).** `process.spawn()` returns a handle that is bound to the task
+context that created it. Using a parent's handle inside a child task (via `task.run` or
+`async fn`) throws `StateError` with the message
+`"'<funcName>': process handle does not cross task boundaries. Spawn the process inside the same task that uses it."`,
+where `<funcName>` is the name of the `process.*` operation invoked (e.g. `process.wait`).
+The boundary is enforced for all `process.*` operations (`process.wait`, `process.kill`,
+`process.read`, `process.write`, etc.) that take a `Process` handle argument.
+Communicate `Process` handles via return values, not closure capture.
+
+**Socket handle task-affinity (D5 — enforcement pending).** D5's cross-task handle boundary is
+**intended to apply to socket handles** (`TcpConnection`, `TcpServer`, `TcpClient`, and all
+socket types) as well as to `Process` handles — the same rationale (silent misbehavior is the
+worst outcome) applies equally to sockets. However, this boundary is **not yet enforced for
+socket handles**: only `Process` handles are enforced today (via per-context tracking in the
+runtime). Cross-task socket-handle use is therefore **unsupported and unsafe**: concurrent
+same-direction access to an underlying `NetworkStream` or `TcpClient` silently corrupts data
+without raising an exception, and the async socket path throws `IOError` rather than
+`StateError` when a deep-cloned handle is used across a task boundary. This is a **known,
+tracked gap** — an oversight from the original `async-correctness` ship, where D5 named sockets
+in scope but only Process enforcement was built. Do not share socket handles across task
+boundaries. The planned enforcement work (which will make cross-task socket use throw
+`StateError` matching the Process behavior) is tracked in
+`.kanban/0-backlog/bugs/tcp-socket-handle-task-boundary-enforcement.md`.
 
 **Cancellation, timeout, and task status.** A running task can be cancelled with
 `task.cancel(future)`. Cancellation is **cooperative**, not pre-emptive: the task observes its
 cancellation token at park points (such as `time.sleep` and blocking I/O), so it stops at the
 next park point rather than being interrupted mid-instruction. Once cancellation has propagated,
-awaiting the future throws `CancellationError` and `task.status(future)` returns `Status.Cancelled`.
+awaiting the future throws `CancellationError` and `task.status(future)` returns
+`task.Status.Cancelled`.
 
-`task.status(future)` reports a future's lifecycle state — one of `Status.Running`,
-`Status.Completed`, `Status.Failed`, or `Status.Cancelled`. Because cancellation is cooperative,
-a status read taken immediately after `task.cancel` may still observe `Status.Running` until the
-task reaches its next park point.
+`task.cancel(future)` returns `null`. It is **idempotent**: cancelling a Future that has already
+settled (`task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`) is a no-op
+— the call returns `null` without raising. A second `task.cancel(future)` on the same Future is
+also a no-op. Cancelling a non-`Future` value throws `TypeError`. All `task.*` builtins
+that consume a `Future` argument (`task.await`, `task.status`, `task.cancel`) throw `TypeError`
+when given a non-Future value.
+
+`task.status(future)` reports a future's lifecycle state. It returns a value of the closed enum
+`task.Status`, whose members are `task.Status.Running`, `task.Status.Completed`,
+`task.Status.Failed`, and `task.Status.Cancelled`. There is no top-level `Status` binding —
+always use the namespace-qualified form. Adding a new member to `task.Status` is a breaking
+change to the §Async surface. Because cancellation is cooperative, a status read taken
+immediately after `task.cancel` may still observe `task.Status.Running` until the task reaches
+its next park point.
 
 `task.timeout(ms, fn)` runs `fn` under a deadline and is **distinct from external cancellation**:
 when the deadline elapses it throws `TimeoutError` (never `CancellationError`), while still
@@ -1555,6 +1620,13 @@ reach your code.
   thread-pool thread is abandoned: its remaining work neither delays process exit nor produces a
   result. To let it finish, `await` it, or hold the VM open with `event.loop()` or a `time.sleep`
   loop.
+
+**Negative space — still-running at exit is dropped, not drained.** A Future whose status is
+`task.Status.Running` when the main script returns is silently abandoned. The runtime does not
+wait, does not drain pending work, and does not report. This is intentional negative space: the
+unobserved-fault report (D1) scans *faulted-and-unobserved* tasks only. To let a task finish,
+`await` it or hold the VM open with `event.loop()` or a `time.sleep` loop.
+
 - **Faulted but never observed → reported.** If a task **faults** (throws) and its error is never
   observed by any `await` / `task.*` consumer, the runtime prints a single block to **stderr** at
   script exit:
@@ -1615,7 +1687,7 @@ readonly let config = { host: "localhost", port: 8080 };
 
 async fn handler(req) {
     // config is frozen — reads are safe, writes throw ReadOnlyError
-    return config.host + ":" + conv.str(config.port);
+    return config.host + ":" + conv.toStr(config.port);
 }
 ```
 
@@ -1777,7 +1849,7 @@ let w = fs.watch(dir, (e) => { polled = true; });
 fs.writeFile(path.join(dir, "f.txt"), "x");
 // spin until the watch debounce fires
 while (!polled) { event.poll(); }
-io.println("polled: " + conv.str(polled));   // "polled: true"
+io.println("polled: " + conv.toStr(polled));   // "polled: true"
 fs.unwatch(w);
 
 // event.loop() — run until cancelled
