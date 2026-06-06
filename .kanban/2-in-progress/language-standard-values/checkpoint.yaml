@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T22:43:00Z"
+updated: "2026-06-06T22:57:44Z"
 phases:
   P1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: "Edit 6 + D4 secret reference-identity flip landed; full dotnet test green (14373/0/6). Two done_when clauses were spec-authoring errors corrected to reality (spec-is-law, language-changes.md): (1) idempotent-wrap = value non-nesting, NOT handle identity — Option A is the only D4-consistent answer (Option B would invent unratified handle-sharing); (2) secrets are not permitted dict keys (RuntimeError) — conformance test asserts the throw; 'where permitted, keys by identity' prose deferred to reviewer. Both within ratified D4 scope; no user ratification needed."
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 05c09b053c67fd986dbf94b898c6cb012fbe585d
+    verified: true
+    started: "2026-06-06T22:43:31Z"
+    completed: "2026-06-06T22:57:44Z"
+    attempts: 1
+    notes: "Reference regen confirmed no-op; coverage.md row #2 sealed (6 classes/159 tests, corrected from draft; scoreboard 0→1 sealed, 7→6 unsealed); workstream #3 complete; contradictions table V&T row struck; full suite 14373/0/6"
 review:
   status: not_started
   started: null
