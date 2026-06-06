@@ -1540,13 +1540,22 @@ preserved** (e.g. a task that throws `TypeError` produces a `StashError` whose
 returns `null`. (`arr.parMap` returns an array of results; `arr.parFilter` returns an array of
 elements that passed; `arr.parForEach` returns nothing observable beyond its callbacks' effects.)
 
-**Process / socket handle boundary.** `process.spawn()` and socket-creation functions return
-handles that are bound to the task context that created them. Using a parent's handle inside
-a child task (via `task.run` or `async fn`) throws `StateError` with the message
+**Process handle boundary (D5).** `process.spawn()` returns a handle that is bound to the task
+context that created it. Using a parent's handle inside a child task (via `task.run` or
+`async fn`) throws `StateError` with the message
 `"process handle does not cross task boundaries: this Process was created in a different task;
 pass the result of process.spawn() back to the parent via the task's return value"`.
-The same boundary applies to socket / TcpServer / TcpClient handles. Communicate handles
-via return values, not closure capture.
+The boundary is enforced for all `process.*` operations (`process.wait`, `process.kill`,
+`process.read`, `process.write`, etc.) that take a `Process` handle argument.
+Communicate `Process` handles via return values, not closure capture.
+
+**Socket handle task-affinity.** Socket-creation functions (`tcp.connect`, `tcp.listenAsync`,
+etc.) return handles that are ideally used within the task that created them. Unlike
+`process.spawn()`, the runtime does **not** currently enforce this at the Stash level: passing
+a `TcpConnection` or `TcpServer` handle across a task boundary may produce undefined behavior
+(underlying `TcpClient` state accessed from multiple threads simultaneously) but does not throw
+a guaranteed `StateError`. Do not share socket handles across task boundaries — communicate
+results via return values instead.
 
 **Cancellation, timeout, and task status.** A running task can be cancelled with
 `task.cancel(future)`. Cancellation is **cooperative**, not pre-emptive: the task observes its
