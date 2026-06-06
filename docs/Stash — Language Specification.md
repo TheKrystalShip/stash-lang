@@ -1536,6 +1536,10 @@ preserved** (e.g. a task that throws `TypeError` produces a `StashError` whose
 - If the callback is an `async` function, its returned Future is automatically awaited, so
   `arr.parMap([1,2,3], async (x) => x * 2)` returns `[2, 4, 6]` — not an array of Futures.
 
+**D10 (extended) — `arr.parForEach` return value.** `arr.parForEach` is side-effect-only and
+returns `null`. (`arr.parMap` returns an array of results; `arr.parFilter` returns an array of
+elements that passed; `arr.parForEach` returns nothing observable beyond its callbacks' effects.)
+
 **Process / socket handle boundary.** `process.spawn()` and socket-creation functions return
 handles that are bound to the task context that created them. Using a parent's handle inside
 a child task (via `task.run` or `async fn`) throws `StateError` with the message
