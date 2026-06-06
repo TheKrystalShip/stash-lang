@@ -178,6 +178,9 @@ withCycle();
     [Fact]
     public void Isolation_AsyncFn_CycleMessage_ContainsCyclePath()
     {
+        // done_when says "ValueError with the cycle path". The runtime message includes
+        // path information such as 'path: <root> -> ["self"]'. Assert both "cycle" and
+        // the path marker to pin the path contents, not just the category word.
         var error = RunCapturingError(@"
 let d = {};
 d[""self""] = d;
@@ -185,6 +188,7 @@ async fn withCycle() { let x = d; return 1; }
 withCycle();
 ");
         Assert.Contains("cycle", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("self", error.Message, StringComparison.OrdinalIgnoreCase);  // key name appears in path
     }
 
     [Fact]

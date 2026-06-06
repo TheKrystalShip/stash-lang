@@ -44,23 +44,22 @@ let result = r1 == r2;
     [Fact]
     public void DoubleAwait_BodyRunsOnce_ReturnedValueReflectsOneExecution()
     {
-        // The child body increments and returns its clone-local counter.
-        // Isolation ensures the parent's counter is untouched; the child increments once.
-        // Both awaits must return 1 (the single run's result is cached).
+        // Use time.millis() as the return value: if the body ran ONCE, both awaits
+        // return the same cached timestamp. If the body re-ran on the second await,
+        // the second millis() call would return a *later* value, and r1 != r2.
+        // This gives the test actual teeth for the body-runs-once property.
         var result = Run(@"
 let f = task.run(() => {
-    return 77;  // Distinct sentinel — if body runs twice, the result doesn't change
-                // but we can verify via a specific value.
+    // Sleep a tiny bit so the timestamp is meaningfully distinct from a re-run.
+    time.sleep(0.01);
+    return time.millis();
 });
 let r1 = await f;
 let r2 = await f;
-// Both must equal 77 (the single body run result), and equal each other.
-let result = [r1, r2, r1 == r2];
+// r1 must equal r2 — only possible if the body ran once and r2 came from the cache.
+let result = r1 == r2;
 ");
-        var list = Assert.IsType<List<object?>>(result);
-        Assert.Equal(77L, list[0]);
-        Assert.Equal(77L, list[1]);
-        Assert.Equal(true, list[2]);
+        Assert.Equal(true, result);
     }
 
     [Fact]

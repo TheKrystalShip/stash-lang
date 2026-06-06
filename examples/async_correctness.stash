@@ -170,6 +170,28 @@ io.println($"  await in non-async fn + loop: sum = {sum}");  // 6
 
 io.println("");
 
+// ─── Bonus: task.timeout — TimeoutError distinct from CancellationError ───────
+//
+// task.timeout uses its own internal CTS; a timeout throws TimeoutError, NOT
+// CancellationError. This is the D3 timeout-vs-cancel distinction: task.cancel
+// → CancellationError, but task.timeout → TimeoutError.
+
+io.println("── task.timeout → TimeoutError (distinct from CancellationError) ──");
+
+let timeoutErr = "";
+try {
+    task.timeout(50, async () => { time.sleep(5); return "too slow"; });
+} catch (TimeoutError e) {
+    timeoutErr = e.type;
+}
+io.println($"  timeout error type: {timeoutErr}");  // TimeoutError
+
+// A fast-completing task does NOT throw TimeoutError:
+let fastResult = task.timeout(5000, async () => { return "fast enough"; });
+io.println($"  fast task result: {fastResult}");  // fast enough
+
+io.println("");
+
 // ─── Bonus: D9 — Future as a first-class value ───────────────────────────────
 
 io.println("── D9: Future is a first-class value ──");
