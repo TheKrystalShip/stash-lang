@@ -1,0 +1,337 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec language-standard-values
+
+schema_version: 1
+
+feature: language-standard-values
+
+title: "Language Standard: Seal §Values & Types"
+
+# Second unit of the language-standard milestone — reuses the Conformance/<Area>/
+# scaffold + trait guard built in language-standard-async (unit #1).
+milestone: language-standard
+
+brief: ./brief.md
+
+created: 2026-06-06
+architect_session: language-standard-values-architect-2026-06-06
+
+# Default verify command run after every phase (cheap; per-phase verify holds the
+# heavier filters).
+default_verify:
+  - dotnet build Stash.sln
+
+# Broad scope — safety rail, not prison.
+scope:
+  - docs/Stash — Language Specification.md
+  - docs/Stash — Standard Library Reference.md
+  - Stash.Bytecode/Runtime/RuntimeOps.cs
+  - Stash.Core/Runtime/Types/StashSecret.cs
+  - Stash.Core/Runtime/Types/StashError.cs
+  - Stash.Core/Runtime/Types/StashLiteralArg.cs
+  - Stash.Tests/Conformance/**
+  - Stash.Tests/Interpreting/InterpreterTests.cs
+  - .kanban/milestones/language-standard/coverage.md
+
+phases:
+  - id: P1
+    title: Spec Edits 1 + 2 + 7 + Conformance — type model, typeof/nameof, range
+    deps: []
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/_README.md
+      - Stash.Tests/Conformance/Values/_README.md
+      - Stash.Tests/Conformance/Values/TypeModelConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~TypeModelConformanceTests|FullyQualifiedName~ConformanceTraitMetaTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests"
+    done_when:
+      - "**D3 ratified (code-side, no code change):** the spec table row for the byte-quantity category is corrected from `bytesize` to `bytes`, reading ``| `bytes`     | byte quantity                                |``. `typeof(1KB)` continues to return `\"bytes\"` (verified by the new TypeModel conformance test). No edit to `StashByteSize.PrimitiveTypeName`, no stdlib reference regen, no `PropertyTypes` allowlist edits."
+      - "Spec Edit 1 landed: `docs/Stash — Language Specification.md` §Values and Types type table (≈L582–L604) contains a `range` row reading ``| `range`     | half-open integer range (a..b)               |``, AND the type table ends with the normative closing sentence containing the distinctive phrase `\"complete closed set returned by typeof\"`."
+      - "Spec Edit 2 landed: §Values and Types `### typeof and nameof` (≈L606–L619) is rewritten to the normative closed-vocabulary form. The spec contains the distinctive phrase `\"It is total: it never raises for any value\"` AND the bulleted normative clauses for `typeof(struct_instance) == \"struct\"`, `typeof(enum_value) == \"enum\"`, `typeof(future) == \"Future\"`, `typeof(error) == \"Error\"`, and `typeof(typed_array)` returning element-type plus `\"[]\"`."
+      - "Spec Edit 7 landed: §Values and Types contains a new `### Ranges` subsection (≈4–6 lines) immediately before `### typeof and nameof`, asserting `range` is a first-class value with `typeof` string `\"range\"`, reference-identity equality, and unconditional truthiness; cross-references §Expressions for iteration / `in`-membership semantics."
+      - "`Stash.Tests/Conformance/Values/` exists with a `_README.md` listing the §Values & Types clause groups this unit will populate."
+      - "`Stash.Tests/Conformance/_README.md` directory layout table includes a `Values/` row pointing at this unit."
+      - "`Stash.Tests/Conformance/Values/TypeModelConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edits 1 + 2 + 7."
+      - "TypeModel conformance: `typeof(0)`, `typeof(0.0)`, `typeof(true)`, `typeof(null)`, `typeof(\"\")`, `typeof([])`, `typeof({})`, `typeof(1..3)`, `typeof(1s)`, `typeof(1KB) == \"bytes\"`, `typeof(io)`, `typeof(io.println)`, `typeof(conv.toByte(7))`, `typeof(semver(\"1.2.3\"))`, `typeof(secret(\"x\"))` each return the spec table's string. The byte-quantity assertion uses `\"bytes\"` (D3 ratified)."
+      - "typeof aggregate-vs-named conformance: `typeof(struct_instance) == \"struct\"` and `nameof(struct_instance)` returns the user-visible struct name (e.g. `\"P\"`); same pair for enums; `typeof(future) == \"Future\"` (note capitalization); `typeof(thrown_error_in_catch) == \"Error\"`; a typed `byte[]` (constructed via the runtime's typed-array path — e.g. a `process.read` byte buffer) returns `\"byte[]\"`."
+      - "typeof totality conformance: `typeof(null) == \"null\"` does not raise; `typeof(overflow_NaN)` returns `\"float\"` (NaN is a float; NaN reachability via `conv.toFloat(\"1e308\") * 10.0 - conv.toFloat(\"1e308\") * 10.0`)."
+      - "Range conformance: `typeof(1..3) == \"range\"`; `(1..3) ? true : false` returns `true` (always truthy, even `0..0`); two distinct range constructions are not `==` (reference identity)."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1 (to `9` if the prior floor was `8`); the trait-guard meta-test passes and binds the new `TypeModelConformanceTests` class as a participant."
+      - "`StandardLibraryReferenceTests` still passes (no metadata changes in this phase)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green and binds non-zero tests across both `Async` and `Values` suites."
+    notes: |
+      P1 carries D3's spec-side ratification. The runtime string `"bytes"` is
+      law; the spec table is what drifted. No code change.
+
+      The TypeModel conformance class is the *vocabulary registry* test: every
+      distinct typeof string the spec table names is asserted. A new runtime
+      category added without updating the table + this test is the Detect
+      mechanism for the typeof-vocabulary cross-cutting concern.
+
+  - id: P2
+    title: Spec Edit 3 + D1 + D5 + Conformance — truthiness (empty-collection + caught-error)
+    deps: [P1]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Values/TruthinessConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Core/Runtime/Types/StashError.cs
+      - Stash.Core/Runtime/Types/StashLiteralArg.cs
+      - Stash.Tests/Interpreting/InterpreterTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~TruthinessConformanceTests"
+      - dotnet test --filter "FullyQualifiedName~InterpreterTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "**D1 ratified (law-side, no code change):** `RuntimeOps.IsFalsy` is unchanged. The legacy `Truthiness_EmptyArrayIsTruthy` test (`Stash.Tests/Interpreting/InterpreterTests.cs:4204`) is reclassified to `Category=Conformance` — either moved to `Conformance/Values/TruthinessConformanceTests.cs` (preferred) or trait-added in place. The same treatment applies to `Truthiness_StructInstanceIsTruthy` (adjacent line). Name the chosen placement in the commit message."
+      - "**D5 ratified (caught-error truthiness — code change):** `Stash.Core/Runtime/Types/StashError.cs` line 152 changes `public bool VMIsFalsy => true;` to `public bool VMIsFalsy => false;` so caught errors are truthy. Before the flip, a blast-radius grep was performed and recorded in the commit message: `git grep -n 'IsFalsy' Stash.Bytecode Stash.Core Stash.Stdlib` to confirm no caller relies on the old behavior. If any internal caller does, refactor or file a backlog stub before committing the flip."
+      - "**StashLiteralArg open question RESOLVED in this phase:** a probe confirms reachability from a Stash user script. If `StashLiteralArg` values are not user-script-reachable (the suspected case), `Stash.Core/Runtime/Types/StashLiteralArg.cs` gets a one-line XML doc-comment naming the internal-only invariant; no spec edit. If reachable, file a backlog stub with the discovery context."
+      - "Spec Edit 3 landed: `docs/Stash — Language Specification.md` §Values and Types `### Truthiness` (≈L621–L633) is rewritten to a closed normative form. The new prose contains the distinctive phrase `\"The following values, and no others, are\"`. The falsey set is enumerated as exactly six values: `null`, `false`, integer `0`, float `0.0` (and `-0.0`), byte `0`, empty string `\"\"` — **NO** `Error` entry (D5)."
+      - "Spec Edit 3 explicitly states empty array `[]` AND empty dictionary `{}` are **truthy** (D1)."
+      - "Spec Edit 3 explicitly states every caught Error value is **truthy** with the worked example `try { ... } catch (e) { if (e) { ... } }` entering the `if` body (D5)."
+      - "Spec Edit 3 names the consumer surfaces (`if`, `while`, `do while`, ternary, `&&`, `||`, `!`, `when` retry predicate) so the rule applies uniformly."
+      - "`Stash.Tests/Conformance/Values/TruthinessConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit 3 and the D1 + D5 rulings."
+      - "Truthiness positive-set conformance: each of `null`, `false`, `0`, `0.0`, `-0.0`, `conv.toByte(0)`, `\"\"` is falsey under `value ? true : false`."
+      - "Truthiness D1 conformance: empty array `[]` is truthy; empty dict `{}` is truthy."
+      - "Truthiness D5 conformance: `try { throw \"x\"; } catch (e) { let r = e ? \"truthy\" : \"falsey\"; }` returns `\"truthy\"` (post-flip); `try { throw TypeError(\"bad\"); } catch (e) { let r = e ? \"truthy\" : \"falsey\"; }` returns `\"truthy\"`; `typeof(e) == \"Error\"` in both branches."
+      - "Truthiness negative-space (per D1 + general): struct instance, enum value, function reference, namespace, future, range `0..0`, secret, `1s` duration, `1KB` bytes, `semver(\"1.2.3\")`, NaN (`overflow - overflow`), and single-space string `\" \"` are all truthy."
+      - "Truthiness consumer-uniformity conformance: the rule is reached uniformly through `if`, `while`, `do while`, ternary `? :`, logical `&&`, logical `||`, logical `!`, AND a `retry { ... } when (pred) { ... }` predicate — one assertion per consumer."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1 (to `10` if P1 raised to `9`); the trait-guard meta-test is green."
+      - "Full `dotnet test` is green (the D5 code change must not regress any other test)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      P2 lands two ratified changes (D1 law-side; D5 code-side). D5 is the
+      load-bearing impl flip — the blast-radius grep is mandatory before the
+      commit, and the full `dotnet test` is required to catch any indirect
+      regression (e.g. a test that relied on `if (caught_error) {...}` not
+      entering the body).
+
+      The legacy `Truthiness_StructInstanceIsTruthy` is reclassified along
+      with `Truthiness_EmptyArrayIsTruthy` so both sealed truthiness laws
+      have their conformance home.
+
+  - id: P3
+    title: Spec Edit 4 (numeric/cross-type/NaN) + D2 const-folder fix + Conformance
+    deps: [P2]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~EqualityNumericConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "**D2 ratified change landed (RUNTIME fix, NOT folder — user override of the architect's original recommendation):** `Stash.Bytecode/Runtime/RuntimeOps.cs:IsEqual`/`IsEqualSlow` is extended so cross-tag pairs drawn from `{Int, Float, Byte}` compare by mathematical value. The likely shape: before the `if (left.Tag != right.Tag) return false;` early-out, add an `if (left.IsNumeric && right.IsNumeric)` branch that promotes both operands to `double` (matching `ExecuteLtSlow`'s shape at `VirtualMachine.Arithmetic.cs:397–405`) and returns `ToDouble(left) == ToDouble(right)`. Byte and int must both be `IsNumeric` (they already are per `StashValue` definition; verify). NaN handling is automatic via IEEE 754 (`NaN != NaN`). The constant folder at `Compiler.Expressions.cs:TryFoldBinary` (L874–L893) is **NOT touched** — it already returns the ratified answer."
+      - "**Runtime probe (pre-commit) confirms the fix:** `let i = 1; let f = 1.0; i == f` returns `true`; `let bi = conv.toByte(0); bi == 0` returns `true`; `bi == 0.0` returns `true`; `let bi7 = conv.toByte(7); bi7 == 7` returns `true`; `bi7 == 7.0` returns `true`. (Today, before the fix, these all return `false`.)"
+      - "Spec Edit 4 (numeric + cross-type portion) landed: `docs/Stash — Language Specification.md` §Values and Types `### Equality` (≈L635–L646) is rewritten. The new prose contains the distinctive phrase `\"Equality is total\"` AND the distinctive phrase `\"form a single equivalence class for == and !=\"` (the numeric-coercion clause) AND the worked examples stating `1 == 1.0` is **true**, `0 == 0.0` is **true**, `-0.0 == 0` is **true**, `byte 0 == 0` is **true**, `byte 7 == 7.0` is **true**."
+      - "Spec Edit 4 (non-numeric cross-category portion) landed: the new prose contains the distinctive phrase `\"Outside the numeric equivalence class\"` AND the worked examples `1 == true` is **false**, `0 == null` is **false**, `0 == \"\"` is **false**, `null == false` is **false**."
+      - "Spec Edit 4 contains the **compile-time-agrees-with-runtime** clause with the distinctive phrase `\"folds a literal equality only when the folded result equals the runtime result\"` and the worked example that `1 == 1.0` is `true` at both compile time and at runtime."
+      - "Spec Edit 4 contains the **floating-point edges** clause with the distinctive phrases `\"0.0 == -0.0\"` is `true` AND `\"NaN != NaN\"` AND the NaN-reachability incantation (`conv.toFloat(\"1e308\") * 10.0` produces `Infinity`; `Infinity - Infinity` produces `NaN`)."
+      - "`Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked. The class-level XML doc cites Edit 4 (numeric/cross-type/NaN portion) AND documents the **literal-vs-variable pair pattern** as a normative test-authoring convention this milestone inherits."
+      - "Numeric-coercion `==` conformance (literal-vs-variable pair): for each of `(1, 1.0)`, `(0, 0.0)`, `(-0.0, 0)`, `(byte 0, 0)`, `(byte 7, 7.0)`, the test asserts BOTH the two-literal form AND the two-`let`-bound-variable form return `true` (the **same** boolean). A test failure when the two forms disagree carries the message `\"Constant folder diverged from runtime path — D2 regression\"`."
+      - "Non-numeric cross-category `==` conformance (literal-vs-variable pair): for each of `(1, true)`, `(0, null)`, `(0, \"\")`, `(null, false)`, the test asserts BOTH forms return `false`."
+      - "Same-type `==` conformance: `1 == 1` (`true`), `1.0 == 1.0` (`true`), `\"a\" == \"a\"` (`true`), `null == null` (`true`), `true == true` (`true`), each in literal AND variable form."
+      - "Floating-point conformance: `0.0 == -0.0` is `true`; `let big = conv.toFloat(\"1e308\") * 10.0; let nan = big - big; nan == nan` is `false`; `nan != nan` is `true`; `nan == 0.0` is `false`; `typeof(nan) == \"float\"`."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1 (to `11` if P2 raised to `10`); trait-guard passes."
+      - "Existing equality/compiler tests under `Stash.Tests/Bytecode/` and `Stash.Tests/Interpreting/` still pass — full `dotnet test` is green (the D2 runtime change must not regress same-tag equality or any other dispatch path)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      D2's seal-first-then-bend is the load-bearing fix of this unit. The
+      cross-type `==` trilemma was a silent self-contradiction for the lifetime
+      of the language; the user ratified the mainstream direction (numeric
+      coercion), so the RUNTIME path (`RuntimeOps.IsEqual`) is fixed to match
+      the folder. Do NOT edit `Compiler.Expressions.cs:TryFoldBinary` —
+      it already returns the ratified answer.
+
+      The fix shape mirrors the existing relational numeric-promotion branch
+      in `ExecuteLtSlow` (`VirtualMachine.Arithmetic.cs:397–405`), which has
+      worked correctly for relational since day one. Bring `IsEqual` into
+      parity with it for the equality operators.
+
+      Full `dotnet test` is required because the runtime equality path is
+      reached by every consumer (dict-key lookup, `arr.contains`, `in`
+      operator). A subtle regression in any of those paths gets caught only
+      by the unfiltered suite.
+
+  - id: P4
+    title: Spec Edit 4 (per-category) + Conformance — identity vs by-value equality
+    deps: [P3]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Values/EqualityPerCategoryConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~EqualityPerCategoryConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "Spec Edit 4 (per-category portion) landed: the §Values and Types `### Equality` section now contains the normative table mapping each runtime category to its `==` semantics. The spec contains the distinctive phrase `\"by reference identity (same value handle\"` AND the per-category table covering (a) primitive-by-value (`null`, `bool`, `string`), (b) numeric-by-mathematical-value-across-categories (`int`, `float`, `byte`), (c) other primitive-by-value (`duration`, `bytes`, `ip`, `semver`), (d) by-reference-identity (`secret`, `array`, `dict`, `struct`, `enum`, `function`, `namespace`, `future`, `range`, `Error`)."
+      - "Spec Edit 4 contains the worked-examples paragraph naming `io.println == io.println` (`true`, same function handle), `io == io` (`true`, same namespace singleton), `[1] == [1]` (`false`, distinct constructions), AND `secret(\"x\") == secret(\"x\")` (`false`, distinct constructions; D4 ratified). The paragraph points at `arr.equals` / `dict.equals` for structural comparison AND at `reveal()` + `crypto.constantTimeEquals` for secret content comparison."
+      - "`Stash.Tests/Conformance/Values/EqualityPerCategoryConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit 4 (per-category portion)."
+      - "Primitive-by-value conformance: `\"a\" == \"a\"` for distinct-construction strings (`true`); `1s == 1000ms` (`true`); `1KB == 1024B` (`true`); `semver(\"1.2.3\") == semver(\"1.2.3\")` (`true`); two `null` literals (`true`); two `true` literals (`true`)."
+      - "Reference-identity conformance: two distinct `[1, 2]` literals are NOT `==` (assert `false`); two aliased references to the same array ARE `==` (assert `true`); same pair for `{}` dictionaries; same pair for struct instances (`P { x: 1, y: 2 } == P { x: 1, y: 2 }` is `false`); same pair for range (`1..3 == 1..3` is `false`)."
+      - "Function-and-namespace conformance: `io.println == io.println` (`true`); `io == io` (`true`); `io == math` (`false`); a user-defined `fn ff() { return 0; }` aliased as `let g = ff;` satisfies `ff == g` (`true`); two distinct future handles satisfy `f1 == f2` only when aliased."
+      - "Enum-value conformance: `Color.Red == Color.Red` (`true`); `Color.Red == Color.Green` (`false`); `typeof(Color.Red) == \"enum\"` (asserted again here as a cross-check)."
+      - "Error conformance: a caught Error compared to itself is `==`; two distinct `throw` events caught in two `try/catch` blocks are NOT `==` (reference identity)."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1; trait-guard passes."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      No code change in P4 — every per-category equality matches the spec's
+      about-to-land rule. The seal-first work was completed in P3 (numeric
+      coercion fix) and is committed in P6 for secret-equality identity flip;
+      P4 is pure prose + tests landing the per-category decomposition the
+      L640–L646 punt left empty.
+
+      The secret-in-reference-identity-row is the D4 outcome; the
+      corresponding P6 code change makes the assertion live. The XML doc
+      cross-references P6 so the seam between "the rule" (here) and "the code
+      that honors it" (P6) is explicit.
+
+      Note the `Error` row in the by-reference-identity bucket may surprise
+      future readers — log the rationale in the conformance test XML doc
+      (errors are first-class values caught by try/catch; their by-reference
+      identity preserves stack-trace pointers across copies).
+
+  - id: P5
+    title: Spec Edit 5 + Conformance — type coercion (the closed list)
+    deps: [P4]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Values/CoercionConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~CoercionConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "Spec Edit 5 landed: `docs/Stash — Language Specification.md` §Values and Types `### Type Coercion` (≈L648–L652) is rewritten to the closed-list form. The spec contains the distinctive phrase `\"Stash performs implicit conversion only in the following narrow, enumerated cases\"` AND the three numbered cases (numeric promotion in arithmetic, relational, AND equality; byte→int promotion in arithmetic/relational; string `+`-concatenation with one-string-operand) AND the closing `RuntimeError`-on-mismatch sentence."
+      - "Spec Edit 5 names the operators in case 1 — `+`, `-`, `*`, `/`, `%`, `**`, `<`, `<=`, `>`, `>=`, **`==`, `!=`** — and explicitly states the result category rule (arithmetic/relational widen to int or float; equality returns bool) so the cross-reference to *Equality* is unambiguous."
+      - "Spec Edit 5 names the byte-promotion-to-int rule (case 2) for arithmetic and relational operators ONLY (`+`, `-`, `*`, `/`, `%`, `**`, `<`, `<=`, `>`, `>=`); byte equality is covered by case 1's numeric equivalence class, not case 2."
+      - "Spec Edit 5 names the `secret`-on-`+` taint-propagation rule (already covered in Edit 6 but cross-referenced here as case 3 sub-clause)."
+      - "`Stash.Tests/Conformance/Values/CoercionConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit 5."
+      - "Numeric promotion conformance (case 1, arithmetic + relational): `1 + 1.0` returns `2.0` with `typeof(result) == \"float\"`; `2 * 1.5` returns `3.0` (`float`); `4 / 2.0` returns `2.0` (`float`); `1 < 1.5` returns `true`; `5 % 2.0` returns `1.0` (`float`)."
+      - "Numeric promotion conformance (case 1, equality — D2 ratified): `1 == 1.0` returns `true`; `0 == 0.0` returns `true`; `-0.0 == 0` returns `true` (asserted here in addition to P3, as the coercion-clause anchor)."
+      - "Byte promotion conformance (case 2): `conv.toByte(7) + 1` returns `8` with `typeof(result) == \"int\"` (NOT `\"byte\"`); same for `*`, `<`."
+      - "Byte equality (case 1, not case 2): `conv.toByte(7) == 7` returns `true`; `conv.toByte(7) == 7.0` returns `true`; `conv.toByte(0) == 0` returns `true`."
+      - "String concat conformance (case 3): `\"x\" + 1` returns `\"x1\"`; `1 + \"x\"` returns `\"1x\"`; `\"a\" + true` returns `\"atrue\"`; `\"a\" + null` returns `\"anull\"`; `\"a\" + [1,2]` returns the stringified array form."
+      - "Negative-space conformance: `\"1\" == 1` returns `false` (string is not in the numeric equivalence class — re-asserted as a coercion negative); `null + 1` raises `RuntimeError` with the operand types in the message; `true + 1` raises `RuntimeError` (no bool→int promotion in arithmetic); `1 + [1]` raises `RuntimeError`."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1; trait-guard passes."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      No code change in P5 — every coercion case the spec edit names matches
+      the current impl (the case 1 + case 2 + case 3 enumeration was derived
+      from `RuntimeOps.Add` / `Subtract` / `Multiply` / `Divide` / `Modulo` /
+      `Power` and `ExecuteLt`/`ExecuteLe`/`ExecuteGt`/`ExecuteGe`). The seal
+      is documentation-of-existing.
+
+      The negative-space tests are the load-bearing ones: they prove the spec's
+      "no other implicit conversion" clause is honored.
+
+  - id: P6
+    title: Spec Edit 6 + Conformance — secret values
+    deps: [P5]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Values/SecretConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Core/Runtime/Types/StashSecret.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~SecretConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "**D4 ratified (reference identity — code change; user OVERRODE the architect's by-inner-value recommendation):** `Stash.Core/Runtime/Types/StashSecret.cs` line 36 changes `public bool Equals(StashSecret? other) => other is not null && InnerValue.Equals(other.InnerValue);` to `public bool Equals(StashSecret? other) => ReferenceEquals(this, other);` AND line 38 changes `GetHashCode()` to return `System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this)` (identity hash). The `IEquatable<StashSecret>` interface stays but the contract narrows to identity."
+      - "**Pre-commit equality-path audit:** confirm that `RuntimeOps.IsEqual` reaches `StashSecret.Equals` via `RuntimeValues.IsEqual` (the slow-path fallback for non-`IVMEquatable` Obj values) and not via a separate dict-key path that bypasses identity. Document the audit result in the commit message."
+      - "**Runtime probe (pre-commit) confirms the fix:** `let a = secret(\"x\"); let b = secret(\"x\"); a == b` returns `false`; `let t = secret(\"x\"); t == t` returns `true`. (Today, before the fix, the first form returns `true`.)"
+      - "Spec Edit 6 landed: `docs/Stash — Language Specification.md` §Values and Types `### Secret Values` (≈L654–L664) is extended with the equality, taint, unwrap, and capability clauses. The spec contains the distinctive phrase `\"Idempotent wrap\"` AND `\"Taint-propagating +\"` AND `\"there is no capability gate on reveal\"` AND `\"Equality — reference identity\"` (D4 ratified)."
+      - "Spec Edit 6 contains the safety-by-default rationale with the distinctive phrase `\"== cannot be used as an oracle for the wrapped value\"` and the explicit pointer to `reveal()` + `crypto.constantTimeEquals` for content comparison."
+      - "Spec Edit 6 contains the dict-key-identity consequence with the distinctive phrase `\"keys by **identity**\"`."
+      - "Spec Edit 6 names the redacted display form `\"******\"` (six asterisks) and enumerates the stringification contexts: `io.println`, string interpolation, `conv.toStr`, and string `+`."
+      - "Spec Edit 6 explicitly **does NOT** contain the phrase `\"ratified information-leak window\"` (D4 ratified the opposite direction; the architect's original framing is rejected)."
+      - "`Stash.Tests/Conformance/Values/SecretConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit 6 and the D4 safety-by-default ruling."
+      - "Display conformance: `let t = secret(\"abc123\");` `conv.toStr(t)` returns `\"******\"`; `io.println(t)` prints `\"******\"`; `\"prefix=${t}\"` returns `\"prefix=******\"`; `\"prefix=\" + t` returns a `secret`-typed value wrapping `\"prefix=abc123\"` (taint propagation)."
+      - "Idempotent-wrap conformance: `let inner = secret(\"x\"); let outer = secret(inner); outer == inner` returns `true` (the constructor unwraps so they share the same handle); `typeof(outer) == \"secret\"`; `reveal(outer) == \"x\"`."
+      - "Taint-propagation conformance: `typeof(secret(\"a\") + \"b\") == \"secret\"`; `typeof(\"a\" + secret(\"b\")) == \"secret\"`; `typeof(1 + secret(\"a\")) == \"secret\"`; `reveal(secret(\"a\") + \"b\") == \"ab\"`."
+      - "Equality conformance (D4 reference identity): `secret(\"x\") == secret(\"x\")` returns `false` (two distinct constructions); `let t = secret(\"x\"); t == t` returns `true` (same handle); `secret(\"x\") != secret(\"x\")` returns `true`; `secret(\"x\") == secret(\"y\")` returns `false`."
+      - "Dict-key consequence conformance: `let d = {}; d[secret(\"x\")] = 1; d[secret(\"x\")]` returns `null` (distinct constructions are distinct keys); `let k = secret(\"x\"); d[k] = 1; d[k]` returns `1` (same handle is the same key)."
+      - "Type/truthiness conformance: `typeof(secret(\"x\")) == \"secret\"`; `nameof(secret(\"x\")) == \"secret\"`; every secret is truthy regardless of inner value (`secret(0) ? true : false` returns `true`; `secret(null) ? true : false` returns `true`; `secret(\"\") ? true : false` returns `true`)."
+      - "Reveal conformance: `reveal(secret(\"x\")) == \"x\"`; `typeof(reveal(secret(\"x\"))) == \"string\"`; behavior of `reveal` on a non-secret is probed and either pinned in the spec (if it passes through) or a backlog stub is filed (if the behavior is unclear)."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1; trait-guard passes."
+      - "Full `dotnet test` is green (the D4 code change must not regress any consumer of secret equality — particularly dict-key lookups in other tests)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      D4's safety-by-default ruling is the user-ratified override. The spec
+      edit removes the architect's original "information-leak window"
+      framing entirely; the rationale flips to "== cannot be used as an
+      oracle". The conformance test XML doc names the trade-off (lose dedup
+      / content-keying; gain safety-by-default) so future readers understand
+      the choice was deliberate.
+
+      The pre-commit equality-path audit is mandatory: `StashSecret`
+      reaches equality through `RuntimeValues.IsEqual(left.AsObj,
+      right.AsObj)` (RuntimeOps.cs:65); if a second equality path exists
+      (e.g. a dict-key path or a custom `IVMEquatable` not yet present), the
+      fix must reach it too.
+
+      Investigate the existing `reveal()` behavior on a non-secret in this
+      phase — the spec must match the current impl. If `reveal(42)` is a
+      pass-through and the user prefers a throw, file a backlog stub.
+
+  - id: P7
+    title: Closing — confirmation no-op + update coverage.md
+    deps: [P6]
+    files:
+      - docs/Stash — Standard Library Reference.md
+      - .kanban/milestones/language-standard/coverage.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet run --project Stash.Docs/
+      - dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~Wave2ThrowsCoverageTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "**Reference regeneration no-op (D3 ratified code-side; D4 + D5 change runtime flags, not docs metadata):** `dotnet run --project Stash.Docs/` is run as a confirmation no-op. If `docs/Stash — Standard Library Reference.md` changes for any reason, the diff is committed and explained in the commit message; if it does not change (the expected case), the phase commit explicitly notes the no-op."
+      - "Both `Wave1ThrowsCoverageTests` and `Wave2ThrowsCoverageTests` pass — no new tagged throws were added without registering the error type, and no new function omitted from the allow-list / metadata."
+      - "`CompletionSurfaceSnapshotTests` passes — no completion-surface drift caused by metadata edits."
+      - "`.kanban/milestones/language-standard/coverage.md` row #2 (Values & Types) status column reads `🟢 sealed`; the `Conformance dir` column reads `Conformance/Values/` (populated); the `Highest-value open items` column is reduced to a brief sealed-summary note pointing at Edits 1–7 and D1–D5."
+      - "`.kanban/milestones/language-standard/coverage.md` cross-cutting workstreams section: workstream #3 (truthiness/equality/coercion substrate) is marked **complete** with an inline note pointing at `Conformance/Values/` as the durable proof; the live spec-vs-impl contradictions table strikes through the `Values & Types` row (empty-array truthiness — resolved per D1)."
+      - "`.kanban/milestones/language-standard/coverage.md` Scoreboard counts are updated (`🟢 sealed` rises by 1 to 2; `🔴 unsealed` falls by 1 to 6)."
+      - "Full `dotnet test` is green; `dotnet test --filter \"Category=Conformance\"` binds non-zero tests across both `Async` and `Values` suites and is green."
+    notes: |
+      The closing phase intentionally lands no new conformance class — the
+      seal is complete at P6. P7 is the documentation roll-up + the
+      final-gate confirmation.
+
+      No reference regeneration is expected because all five ratified
+      directions either change the spec only (D1, D3) or flip a runtime
+      flag invisible to the generated reference (D2 runtime equality, D4
+      secret equality, D5 error truthiness). The `dotnet run --project
+      Stash.Docs/` step stays as a confirmation no-op so a surprise diff
+      surfaces loud rather than silent.
+
+      `coverage.md` row #2 is the milestone's seal-status truth; the
+      conformance suite is the durable runtime proof. Keep them in sync.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The Category=Conformance filter
+# is a discrete extra step — a vacuous pass (zero bound tests) fails this step
+# even if the full suite is green.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - dotnet test --filter "Category=Conformance"
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

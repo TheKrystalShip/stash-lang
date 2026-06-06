@@ -27,6 +27,8 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- language-standard-values — Language Standard: Seal §Values & Types | .kanban/2-in-progress/language-standard-values/ | 7 phases | started 2026-06-06
+
 ---
 
 ## Architecture Decisions (enduring)
