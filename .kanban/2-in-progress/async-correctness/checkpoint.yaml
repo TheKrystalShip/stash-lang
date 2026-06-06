@@ -1,7 +1,7 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-06T00:52:46Z"
+updated: "2026-06-06T01:40:36Z"
 phases:
   P1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: "D1: SpawnedFutureRegistry + MarkObserved chokepoint + CLI exit hook; 13935/0 full suite; 27 new UnobservedAndExit tests; gotchas.md updated"
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 735e67b8c586cc8fd95a85b2e7438946ff8f4daf
+    verified: true
+    started: "2026-06-06T01:04:18Z"
+    completed: "2026-06-06T01:40:36Z"
+    attempts: 1
+    notes: 5 dimension test files (217 async tests green) + async_correctness.stash example; D1-D5 contract demonstrated end-to-end; full 14008-test suite green
 review:
   status: not_started
   started: null
