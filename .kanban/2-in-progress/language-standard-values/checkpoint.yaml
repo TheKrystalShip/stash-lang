@@ -1,16 +1,16 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T18:49:24Z"
+updated: "2026-06-06T19:49:13Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c292e810f4fac44c34157fe03a5904c57ce8ea3f
+    verified: true
+    started: "2026-06-06T19:37:34Z"
+    completed: "2026-06-06T19:49:13Z"
+    attempts: 1
+    notes: Spec Edits 1+2+7 landed; D3 ratified; TypeModelConformanceTests (27 tests); MinScannedParticipants 8→9; all 4 verify steps green
   P2:
     status: pending
     commit: null
