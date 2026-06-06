@@ -1552,12 +1552,21 @@ via return values, not closure capture.
 `task.cancel(future)`. Cancellation is **cooperative**, not pre-emptive: the task observes its
 cancellation token at park points (such as `time.sleep` and blocking I/O), so it stops at the
 next park point rather than being interrupted mid-instruction. Once cancellation has propagated,
-awaiting the future throws `CancellationError` and `task.status(future)` returns `Status.Cancelled`.
+awaiting the future throws `CancellationError` and `task.status(future)` returns
+`task.Status.Cancelled`.
 
-`task.status(future)` reports a future's lifecycle state — one of `Status.Running`,
-`Status.Completed`, `Status.Failed`, or `Status.Cancelled`. Because cancellation is cooperative,
-a status read taken immediately after `task.cancel` may still observe `Status.Running` until the
-task reaches its next park point.
+`task.cancel(future)` returns `null`. It is **idempotent**: cancelling a Future that has already
+settled (`task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`) is a no-op
+— the call returns `null` without raising. A second `task.cancel(future)` on the same Future is
+also a no-op. Cancelling a non-`Future` value throws `TypeError`.
+
+`task.status(future)` reports a future's lifecycle state. It returns a value of the closed enum
+`task.Status`, whose members are `task.Status.Running`, `task.Status.Completed`,
+`task.Status.Failed`, and `task.Status.Cancelled`. There is no top-level `Status` binding —
+always use the namespace-qualified form. Adding a new member to `task.Status` is a breaking
+change to the §Async surface. Because cancellation is cooperative, a status read taken
+immediately after `task.cancel` may still observe `task.Status.Running` until the task reaches
+its next park point.
 
 `task.timeout(ms, fn)` runs `fn` under a deadline and is **distinct from external cancellation**:
 when the deadline elapses it throws `TimeoutError` (never `CancellationError`), while still

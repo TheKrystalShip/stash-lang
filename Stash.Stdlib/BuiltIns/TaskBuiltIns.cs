@@ -413,6 +413,6 @@ public static partial class TaskBuiltIns
     private static StashFuture GetFuture(StashValue v, string funcName)
     {
         if (v.IsObj && v.AsObj is StashFuture f) return f;
-        throw new RuntimeError($"First argument to '{funcName}' must be a future.");
+        throw new TypeError($"First argument to '{funcName}' must be a Future.");
     }
 }
