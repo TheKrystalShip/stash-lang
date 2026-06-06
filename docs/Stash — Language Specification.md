@@ -1587,6 +1587,7 @@ reach your code.
 wait, does not drain pending work, and does not report. This is intentional negative space: the
 unobserved-fault report (D1) scans *faulted-and-unobserved* tasks only. To let a task finish,
 `await` it or hold the VM open with `event.loop()` or a `time.sleep` loop.
+
 - **Faulted but never observed → reported.** If a task **faults** (throws) and its error is never
   observed by any `await` / `task.*` consumer, the runtime prints a single block to **stderr** at
   script exit:
