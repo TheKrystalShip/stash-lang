@@ -1,16 +1,16 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T13:03:35Z"
+updated: "2026-06-06T13:24:12Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b4371e349871f683835995b0e3a1aac828714fa2
+    verified: true
+    started: "2026-06-06T13:15:14Z"
+    completed: "2026-06-06T13:24:12Z"
+    attempts: 1
+    notes: "Conformance scaffold + trait guard meta-test: 3 READMEs + ConformanceTraitMetaTests; MinScannedParticipants=0 at P1 (raised per phase)"
   P2:
     status: pending
     commit: null
