@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T15:18:23Z"
+updated: "2026-06-06T15:36:38Z"
 phases:
   P1:
     status: done
@@ -52,13 +52,13 @@ phases:
     attempts: 1
     notes: "14 IsolationConformanceTests (freeze/clone/cycle/Future-sharing) + 12 TwoSystemsConformanceTests (D5 process handles + D11 non-interaction); spec narrowed: socket handle enforcement is not implemented (gap documented in spec prose); MinScannedParticipants 5→7"
   P7:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 7ff03971a7d47aa5bc7c50f2ecb2c98bfe1fb6a0
+    verified: true
+    started: "2026-06-06T15:20:24Z"
+    completed: "2026-06-06T15:36:38Z"
+    attempts: 1
+    notes: Edit 1 fix (task.delay(1s)→TypeError confirmed; impl bent to accept number for int+float); Edit 2 task.resolve normative clause; Edit 3 task.delay normative clause; 13 TaskResolveDelayConformanceTests; MinScannedParticipants 7→8; stdlib reference regenerated
   P8:
     status: pending
     commit: null
