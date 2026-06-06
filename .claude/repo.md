@@ -27,6 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
+- language-standard-async — Language Standard: Seal §Async | .kanban/2-in-progress/language-standard-async/ | 8 phases | started 2026-06-06
 
 ---
 

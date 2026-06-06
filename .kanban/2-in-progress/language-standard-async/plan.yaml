@@ -1,0 +1,234 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec language-standard-async
+
+schema_version: 1
+
+feature: language-standard-async
+
+title: "Language Standard: Seal §Async"
+
+# First unit of the language-standard milestone — pattern-setter for Conformance/<Area>/.
+milestone: language-standard
+
+brief: ./brief.md
+
+created: 2026-06-06
+architect_session: language-standard-async-architect-2026-06-06
+
+# Default verify command run after every phase (cheap; full test runs in per-phase verify).
+default_verify:
+  - dotnet build Stash.sln
+
+# Broad scope — safety rail, not prison. Implementers may make small documented
+# corrections when discovery was stale.
+scope:
+  - docs/Stash — Language Specification.md
+  - docs/Stash — Standard Library Reference.md
+  - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+  - Stash.Tests/Conformance/**
+  - Stash.Tests/Interpreting/Async/UnobservedAndExit/InFlightDropGotchaTests.cs
+  - .claude/agents/stash-author.gotchas.md
+  - .kanban/milestones/language-standard/coverage.md
+
+phases:
+  - id: P1
+    title: Conformance scaffold + trait guard meta-test
+    deps: []
+    files:
+      - Stash.Tests/Conformance/_README.md
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Tests/Conformance/Async/_README.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~ConformanceTraitMetaTests"
+    done_when:
+      - "Directory `Stash.Tests/Conformance/` exists with a `_README.md` documenting the clause-citing convention (`Conformance/<Area>/{Clause}_{Scenario}_{Expected}_PerSpec{SpecArea}` naming + `[Trait(\"Category\",\"Conformance\")]` requirement) and pointing at `Stash.Tests/CLAUDE.md` → \"Conformance tests — proving the spec\"."
+      - "Directory `Stash.Tests/Conformance/Async/` exists with a `_README.md` listing the §Async clause groups this unit will populate (D1–D11, isolation, swept clauses)."
+      - "`Stash.Tests/Conformance/ConformanceTraitMetaTests.cs` exists. The scan is factored as a pure function `Scan(IEnumerable<Type>) → IReadOnlyList<Type>` (returns the violator set) — the same shape as `NoMagicAuthStringsMetaTests`'s scanner. A `[Fact]` calls the scanner against the discovered conformance-participant set (see next clause) and asserts ZERO violations with an EMPTY exemption list."
+      - "`Participant` is precisely defined: a public type under namespace `Stash.Tests.Conformance.*` **whose simple-name ends with `ConformanceTests`** OR which declares at least one `[Fact]` / `[Theory]` method. The trait-guard meta-test itself (`ConformanceTraitMetaTests`) and the self-test fixture (next clause) are intentionally excluded by this definition — they are infrastructure, not participants — and that exclusion is asserted by a third `[Fact]` so a refactor that accidentally inverts it fails loud."
+      - "Meta-test includes a positive fail-path self-test: an untraited fixture nested-private inside `ConformanceTraitMetaTests` (`private class UntraitedFixture { [Fact] public void Marker() { } }`) lives OUTSIDE the `Stash.Tests.Conformance.*` namespace root that the production scan walks (it lives under `Stash.Tests.Conformance.ConformanceTraitMetaTests+UntraitedFixture`, which the production participant filter must NOT include — verified by an assertion). The self-test calls `Scan(new[]{ typeof(UntraitedFixture) })` directly and asserts the scanner returns a non-empty violator set containing that fixture — proving the guard has teeth without polluting the live trait-guard or the empty-exemption-list invariant."
+      - "Meta-test includes a scanned-participant-count floor (`MinScannedParticipants`) asserting the discovered participant count is `>= 1` at this phase (raised over time) — a vacuous-pass cannot mask a refactor that emptied the directory. The floor counts real participants, not infrastructure (so the trait-guard meta-test and its fixture don't count toward the floor)."
+      - "`dotnet test --filter \"FullyQualifiedName~ConformanceTraitMetaTests\"` passes."
+    notes: |
+      The exemption list ships EMPTY because participants are born-traited — there
+      is no migration tail. The guard amortizes across all 13 language-standard
+      milestone units; do not optimize for one-unit scope.
+
+      The scanner-as-pure-function shape mirrors `NoMagicAuthStringsMetaTests`:
+      production callers pass the discovered participant set; the self-test
+      passes a synthetic input. This is what lets "empty exemption list" and
+      "self-test fixture trips the scanner" coexist — they are separate inputs
+      to the same pure function.
+
+  - id: P2
+    title: Spec Edit 6 + Conformance — Futures core (D6, D7, D8, D9)
+    deps: [P1]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Async/FuturesCoreConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~FuturesCoreConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "Spec Edit 6 landed: D8 paragraph in `docs/Stash — Language Specification.md` §Async is extended with the settled-future-replay clause — `task.Status.Completed` returns cached without blocking; `task.Status.Failed` rethrows the cached typed error per D7 (second and subsequent awaits throw the same error type and message); `task.Status.Cancelled` throws `CancellationError` without blocking; subsequent awaits also throw `CancellationError`; the body never runs more than once."
+      - "`Stash.Tests/Conformance/Async/FuturesCoreConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with a class-level XML doc-comment citing §Async D6–D9 + Edit 6."
+      - "D6 conformance: `await` is blocking + uncolored — tests prove `await` works at the top level, inside a non-async fn, inside a loop, and on a non-Future value (passthrough); class names and tests cite `D6` explicitly."
+      - "D7 conformance: error-type fidelity — a thrown `TypeError` / `ValueError` / `IOError` / `StateError` survives `await` with type and message intact; `throw \"string\"` wraps to `RuntimeError(\"string\")`; a foreign C# exception wraps to `RuntimeError(\"Future failed: <msg>\")`; cancellation throws `CancellationError`."
+      - "D8 conformance: double-await is idempotent on a completed Future (cached result, body runs once); `await` unwraps exactly one level of Future-of-Future."
+      - "D8 + Edit 6 conformance: second-await of a faulted Future rethrows the same typed error (proving the Failed-replay clause); second-await of a cancelled Future throws `CancellationError` without blocking (proving the Cancelled-replay clause)."
+      - "D9 conformance: `typeof(future) == \"Future\"`; reference identity `==` (same handle equal; separately-created not equal); `conv.str(future)` produces one of `\"<Future:Running>\"` / `\"<Future:Completed>\"` / `\"<Future:Failed>\"` / `\"<Future:Cancelled>\"`; Future stores in array / dict / struct field."
+      - "`dotnet test --filter \"Category=Conformance\"` passes with non-zero bound tests; full `dotnet build` stays green."
+
+  - id: P3
+    title: Spec Edit 7 + Conformance — Combinators and arr.par* (D2, D4, D10)
+    deps: [P2]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Async/CombinatorsConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~CombinatorsConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "Spec Edit 7 landed: D10 paragraph in `docs/Stash — Language Specification.md` §Async is extended with the `arr.parForEach` return-value sentence (returns `null`; side-effect-only — contrasted with `arr.parMap` returning the result array and `arr.parFilter` returning the passing-elements array)."
+      - "`Stash.Tests/Conformance/Async/CombinatorsConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, citing §Async D2 / D4 / D10 + Edit 7."
+      - "D2 conformance: `task.awaitAll` is collect-all — never throws; a faulted element becomes a `StashError` value with `.type == \"<OriginalErrorType>\"` (e.g. `TypeError` → `\"TypeError\"`); a cancelled element has `.type == \"CancellationError\"`."
+      - "Fail-fast combinator conformance: `task.all` / `task.race` / `task.awaitAny` rethrow the original `StashError` type on first fault — not wrapped to `RuntimeError`."
+      - "D4 conformance: `arr.parMap([1,2,3], async (x) => x * 2)` returns `[2,4,6]` — not an array of Futures (async-callback auto-flatten)."
+      - "D10 conformance: `arr.parMap` and `arr.parFilter` preserve input order; first-error fail-fast; `maxConcurrency = N` is accepted; `maxConcurrency < 1` throws `ValueError`."
+      - "Edit 7 conformance: `arr.parForEach([1,2,3], fn)` returns `null` (proven by `let r = arr.parForEach(...); assert r == null`)."
+      - "`dotnet test --filter \"Category=Conformance\"` passes."
+
+  - id: P4
+    title: Spec Edits 4 + 5 + Conformance — Cancellation, timeout, status (D3 + new clauses)
+    deps: [P3]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Async/CancellationConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~CancellationConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "Spec Edit 4 landed: the cancellation paragraph (around L1534) in `docs/Stash — Language Specification.md` §Async is extended with a normative sentence stating `task.cancel(future)` returns `null`, is **idempotent** (no-op on a settled Future — `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled` — and no-op on a second call), and throws `TypeError` on a non-Future argument."
+      - "Spec Edit 5 landed: the task-status paragraph (around L1540) is extended with a normative sentence stating `task.Status` is a closed enum with members `Running`, `Completed`, `Failed`, `Cancelled`, accessed namespace-qualified (`task.Status.X`), with no top-level `Status` binding; the four bare `Status.Running`/`.Completed`/`.Failed`/`.Cancelled` references at L1493 and L1538–1542 are rewritten to the qualified form `task.Status.Running` etc.; adding a new enum member is called out as a breaking change to the §Async surface."
+      - "`Stash.Tests/Conformance/Async/CancellationConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, citing §Async D3 + Edit 4 + Edit 5."
+      - "D3 conformance: a `task.cancel(future)` transitions the future to `task.Status.Cancelled` at the next park point; awaiting a cancelled future throws `CancellationError`; status read immediately after `task.cancel` may still observe `task.Status.Running` (cooperative-cancel race) — both branches are sealed law."
+      - "Edit 4 conformance: `task.cancel(future)` returns `null` (assert directly); `task.cancel` on a completed Future is a no-op (no exception, returns null, status stays `Completed`); calling `task.cancel` twice on the same Future is a no-op on the second call; `task.cancel(42)` (non-Future) throws `TypeError`."
+      - "Timeout-vs-cancel distinction: `task.timeout(ms, fn)` throws `TimeoutError` on deadline (never `CancellationError`), and still cancels the underlying work."
+      - "Edit 5 conformance: `task.Status.Running` / `task.Status.Completed` / `task.Status.Failed` / `task.Status.Cancelled` all resolve to valid enum values; a bare `Status` identifier in a script fails resolution (no top-level `Status` binding) — proven by `RunExpectingError` for an undefined-name diagnostic."
+      - "`event.loop()` cancellation: invoking from a script with a fired cancellation token throws `CancellationError`."
+      - "`dotnet test --filter \"Category=Conformance\"` passes."
+
+  - id: P5
+    title: Spec Edit 8 + Conformance — Unobserved / exit (D1) + move drop test to Conformance
+    deps: [P4]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Async/UnobservedExitConformanceTests.cs
+      - Stash.Tests/Conformance/Async/InFlightDropConformanceTests.cs
+      - Stash.Tests/Interpreting/Async/UnobservedAndExit/InFlightDropGotchaTests.cs
+      - .claude/agents/stash-author.gotchas.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~UnobservedExitConformanceTests|FullyQualifiedName~InFlightDropConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test --filter "Category=Gotcha"
+    done_when:
+      - "Spec Edit 8 landed: the unawaited-tasks paragraph (around L1554) in `docs/Stash — Language Specification.md` §Async is extended with a normative clause headed `**Negative space — still-running at exit is dropped, not drained.**` stating: a Future whose status is `task.Status.Running` when the main script returns is silently abandoned; the runtime does not wait, does not drain pending work, and does not report; the unobserved-fault report (D1) scans `faulted-and-unobserved` tasks only; to let a task finish, `await` it or hold the VM open with `event.loop()` or a `time.sleep` loop."
+      - "`Stash.Tests/Conformance/Async/UnobservedExitConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, citing §Async D1."
+      - "D1 conformance: a fire-and-forget task that faults emits exactly one `warning: <N> unobserved async error(s):\\n  <ErrorType>: <message>` block to stderr at script exit; exit code unchanged; an explicitly cancelled task is NOT reported; `task.status(future)` does NOT count as observation."
+      - "D1 EmbeddedMode conformance: in embedded mode the runtime does not emit the unobserved-fault report (the host surfaces task errors itself)."
+      - "Consumer-enumeration conformance: every observer (`await`, `task.await`, `task.awaitAll`, `task.awaitAny`, `task.all`, `task.race`) marks futures observed — no false report for normally-consumed faults."
+      - "The drop test is **moved** from `Stash.Tests/Interpreting/Async/UnobservedAndExit/InFlightDropGotchaTests.cs` to `Stash.Tests/Conformance/Async/InFlightDropConformanceTests.cs` (rename, move, re-namespace to `Stash.Tests.Conformance.Async`); trait changed from `[Trait(\"Category\",\"Gotcha\")]` to `[Trait(\"Category\",\"Conformance\")]`; XML-doc header cites Edit 8 (still-running-at-exit drop is sealed negative space, not a doc/reality mismatch); old `InFlightDropGotchaTests.cs` is deleted (`git mv` or equivalent — the file's content moves, it does not split)."
+      - "`.claude/agents/stash-author.gotchas.md` no longer contains the `async-in-flight-drop-at-exit` entry — the matching `Category=Gotcha` change-detector is now a `Category=Conformance` sealed-law assertion."
+      - "`dotnet test --filter \"Category=Conformance\"` is green and binds the moved drop test as a participant; `dotnet test --filter \"Category=Gotcha\"` is green and no longer binds the in-flight-drop test (it has moved to Conformance); the trait-guard meta-test (P1) sees `InFlightDropConformanceTests` as a valid participant (correct namespace, correct trait, simple-name ends with `ConformanceTests`)."
+    notes: |
+      Moving the file (not just retagging in place) keeps the trait-guard's
+      namespace↔trait correspondence honest from the first unit forward. A
+      Category=Conformance test living outside Stash.Tests.Conformance.* would
+      silently break the model the guard maintains for the next 12 units.
+
+  - id: P6
+    title: Conformance — Isolation + two-systems boundary (D5, D11, fork isolation)
+    deps: [P5]
+    files:
+      - Stash.Tests/Conformance/Async/IsolationConformanceTests.cs
+      - Stash.Tests/Conformance/Async/TwoSystemsConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~IsolationConformanceTests|FullyQualifiedName~TwoSystemsConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "`Stash.Tests/Conformance/Async/IsolationConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, citing §Async-child global isolation (L1576–1624)."
+      - "Isolation conformance: frozen captured values share by reference (a mutation attempt in a child throws `ReadOnlyError`); non-frozen reference-typed values deep-clone at fork (call-local mutation does not reach the parent); a non-frozen captured cycle throws `ValueError` at fork with the cycle path in the message."
+      - "Future handle sharing conformance: a Future handle is shared (not cloned) across the fork — a parent-created Future returned from a child task is awaitable by the parent."
+      - "`Stash.Tests/Conformance/Async/TwoSystemsConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, citing §Async D5 + D11."
+      - "D5 conformance: using a parent's `process.spawn` or socket handle inside a child task throws `StateError` with the boundary message; same for `TcpServer` / `TcpClient` / `UdpSocket` handles."
+      - "D11 conformance: `event.poll()` does NOT advance a Future (the Future remains `task.Status.Running` after `event.poll()`); `await` does NOT drain the event queue (a `fs.watch` callback enqueued during an `await` is not observed until a subsequent `time.sleep` / `event.poll` / `event.loop`)."
+      - "`dotnet test --filter \"Category=Conformance\"` passes."
+
+  - id: P7
+    title: Spec Edits 1 + 2 + 3 + Conformance — task.resolve, task.delay sweep
+    deps: [P6]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Async/TaskResolveDelayConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~TaskResolveDelayConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+    done_when:
+      - "Spec Edit 1 landed: `docs/Stash — Language Specification.md` §Async no longer contains the literal string `task.delay(1s)`; the lambda example at L1460–1462 uses `task.delay(1)` (or `task.delay(0.1)`) and is preceded by a comment clarifying `task.delay` takes seconds as a `number`."
+      - "Spec Edit 2 landed: `docs/Stash — Language Specification.md` §Async contains a normative paragraph headed `**\\`task.resolve(value?)\\` — already-resolved Future.**` between D9 and `**Combinator pairing**`, listing the four bulleted properties (Status.Completed at creation; value/null on await; observation-tracked; never throws)."
+      - "Spec Edit 3 landed: §Async contains a normative paragraph headed `**\\`task.delay(seconds)\\` — timed Future.**` adjacent to Edit 2 stating the seconds-number signature, Running→Completed transition, cancellation behavior, `task.delay(0)` non-synchronous resolution, and the explicit non-drain-point clarification (the event-queue callbacks are not drained while a `task.delay` Future is being awaited; use `time.sleep` instead)."
+      - "`Stash.Tests/Conformance/Async/TaskResolveDelayConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, citing §Async Edits 1 + 2 + 3."
+      - "Edit 2 conformance: `await task.resolve()` returns `null`; `await task.resolve(42)` returns `42`; `task.status(task.resolve(1))` returns `task.Status.Completed` immediately; `task.resolve` never throws (a fire-and-forget `task.resolve(42)` produces no unobserved-fault report)."
+      - "Edit 3 conformance: `task.delay(0.1)` returns a Future that resolves to `null` after ~100ms; `task.status` on a fresh `task.delay` Future returns `task.Status.Running`; cancelling a `task.delay` Future and awaiting it throws `CancellationError`; `task.delay(0)` returns a Future (does not synchronously complete on the calling thread — proven by `typeof(task.delay(0)) == \"Future\"` and the Future's status being readable)."
+      - "Edit 1 conformance (anchor for the example fix): passing a duration literal `1s` directly to `task.delay` produces a `TypeError` at runtime — proven by `RunExpectingError` asserting the TypeError message identifies the first-arg-must-be-float contract; this anchors the spec example correction to actual runtime behavior, not just a prose swap."
+      - "`dotnet test --filter \"Category=Conformance\"` passes."
+    notes: |
+      The duration-literal-rejection conformance test is the load-bearing one
+      for Edit 1 — it proves the impl behaves as the corrected example documents.
+      Without it, the spec edit is a prose-only fix unanchored to runtime law.
+
+  - id: P8
+    title: Closing — regenerate reference if needed + update coverage.md
+    deps: [P7]
+    files:
+      - docs/Stash — Standard Library Reference.md
+      - .kanban/milestones/language-standard/coverage.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet run --project Stash.Docs/
+      - dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~Wave2ThrowsCoverageTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "If any `task.*` or `arr.par*` `<summary>`/`<param>`/`<exception>` metadata was edited in earlier phases, `docs/Stash — Standard Library Reference.md` has been regenerated (`dotnet run --project Stash.Docs/`) AND committed; `StandardLibraryReferenceTests` passes."
+      - "If no metadata changed, document the no-op explicitly in the phase commit message — `dotnet run --project Stash.Docs/` is still run as a confirmation no-op."
+      - "Both `Wave1ThrowsCoverageTests` and `Wave2ThrowsCoverageTests` pass — no new tagged throws were added without registering the error type, no new function omitted from the allow-list / metadata."
+      - "`CompletionSurfaceSnapshotTests` passes — no completion-surface drift caused by metadata edits."
+      - "`.kanban/milestones/language-standard/coverage.md` row #6 evidence column reads `§Async sealed; Functions/Closures/Lambdas/Methods half pending` and lists `Conformance/Async/` as populated; the `Highest-value open items` cell for row #6 references the Functions/Closures workstream pending."
+      - "`.kanban/milestones/language-standard/coverage.md` cross-cutting workstream #1 (\"Stand up the `Conformance/` suite\") is marked complete with a brief inline note pointing at `Stash.Tests/Conformance/ConformanceTraitMetaTests.cs` as the durable guard."
+      - "Full `dotnet test` is green; `dotnet test --filter \"Category=Conformance\"` binds non-zero tests and is green."
+    notes: |
+      The coverage.md row #6 stays at "partial" since the Functions/Closures
+      half is out of scope. The half-sealed accounting is logged in the brief's
+      Decision Log; future units will copy the convention.
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The Category=Conformance filter
+# is a discrete extra step — a vacuous pass (zero bound tests) fails this step
+# even if the full suite is green.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - dotnet test --filter "Category=Conformance"
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
