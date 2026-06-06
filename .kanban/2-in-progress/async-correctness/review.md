@@ -12,7 +12,8 @@
 
 ## F01 — [IMPORTANT] `process.pid` and `process.detach` metadata declares `<exception cref="StateError">` that the runtime provably cannot throw; the published reference now lies to users
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 16db172a
 **Files:** `Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs:458`, `Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs:535-536`, `docs/Stash — Standard Library Reference.md:6859,6863`
 **Phase:** P5 (added in P1; P5 added the StateError contract for the consumer subset and should have cleaned these)
 **Commit:** `410ef8fe` (P1 metadata), `7d6bde6b` (P5 runtime; opportunity missed)
