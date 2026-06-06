@@ -224,7 +224,8 @@ grep -n "Zero .Category=Conformance.\|Category=Conformance.* none exist" .kanban
 
 ## F05 — [LOW] §Async does not normatively seal that `task.await(non-Future)` / `task.status(non-Future)` throws TypeError — parallel-to-Edit-4 clause gap
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e7110a6d
 **Files:** `docs/Stash — Language Specification.md:1588-1591`, `Stash.Stdlib/BuiltIns/TaskBuiltIns.cs:65,188,413-416`
 **Phase:** P4
 **Commit:** be517bfe
@@ -286,7 +287,8 @@ grep -n "All .task.\* builtins that consume a .Future." "docs/Stash — Language
 
 ## F06 — [LOW] File a backlog stub for the empty-array combinator error-type bugs surfaced by the audit (out-of-scope but worth tracking)
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** e7110a6d
 **Files:** `Stash.Stdlib/BuiltIns/TaskBuiltIns.cs:148,156,279`, `docs/Stash — Standard Library Reference.md` (generated — propagates the wrong cref)
 **Phase:** cross-phase (audit byproduct)
 **Commit:** -
