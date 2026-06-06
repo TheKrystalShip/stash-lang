@@ -1564,19 +1564,26 @@ elements that passed; `arr.parForEach` returns nothing observable beyond its cal
 **Process handle boundary (D5).** `process.spawn()` returns a handle that is bound to the task
 context that created it. Using a parent's handle inside a child task (via `task.run` or
 `async fn`) throws `StateError` with the message
-`"process handle does not cross task boundaries: this Process was created in a different task;
-pass the result of process.spawn() back to the parent via the task's return value"`.
+`"'<funcName>': process handle does not cross task boundaries. Spawn the process inside the same task that uses it."`,
+where `<funcName>` is the name of the `process.*` operation invoked (e.g. `process.wait`).
 The boundary is enforced for all `process.*` operations (`process.wait`, `process.kill`,
 `process.read`, `process.write`, etc.) that take a `Process` handle argument.
 Communicate `Process` handles via return values, not closure capture.
 
-**Socket handle task-affinity.** Socket-creation functions (`tcp.connect`, `tcp.listenAsync`,
-etc.) return handles that are ideally used within the task that created them. Unlike
-`process.spawn()`, the runtime does **not** currently enforce this at the Stash level: passing
-a `TcpConnection` or `TcpServer` handle across a task boundary may produce undefined behavior
-(underlying `TcpClient` state accessed from multiple threads simultaneously) but does not throw
-a guaranteed `StateError`. Do not share socket handles across task boundaries — communicate
-results via return values instead.
+**Socket handle task-affinity (D5 — enforcement pending).** D5's cross-task handle boundary is
+**intended to apply to socket handles** (`TcpConnection`, `TcpServer`, `TcpClient`, and all
+socket types) as well as to `Process` handles — the same rationale (silent misbehavior is the
+worst outcome) applies equally to sockets. However, this boundary is **not yet enforced for
+socket handles**: only `Process` handles are enforced today (via per-context tracking in the
+runtime). Cross-task socket-handle use is therefore **unsupported and unsafe**: concurrent
+same-direction access to an underlying `NetworkStream` or `TcpClient` silently corrupts data
+without raising an exception, and the async socket path throws `IOError` rather than
+`StateError` when a deep-cloned handle is used across a task boundary. This is a **known,
+tracked gap** — an oversight from the original `async-correctness` ship, where D5 named sockets
+in scope but only Process enforcement was built. Do not share socket handles across task
+boundaries. The planned enforcement work (which will make cross-task socket use throw
+`StateError` matching the Process behavior) is tracked in
+`.kanban/0-backlog/bugs/tcp-socket-handle-task-boundary-enforcement.md`.
 
 **Cancellation, timeout, and task status.** A running task can be cancelled with
 `task.cancel(future)`. Cancellation is **cooperative**, not pre-emptive: the task observes its

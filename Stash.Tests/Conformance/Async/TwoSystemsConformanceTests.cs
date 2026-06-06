@@ -19,16 +19,18 @@ namespace Stash.Tests.Conformance.Async;
 /// <c>docs/Stash — Language Specification.md</c> §Async, specifically:
 /// </para>
 /// <list type="bullet">
-///   <item><b>D5 — Process handle boundary</b> (L1543–1549): Using a parent's
+///   <item><b>D5 — Process handle boundary</b>: Using a parent's
 ///     <c>process.spawn()</c> handle inside a child task throws <c>StateError</c> with a
 ///     message that names the cross-task boundary. The enforcement applies to all
 ///     <c>process.*</c> operations that consume a <c>Process</c> handle.
 ///     <para>
-///     Note: the spec's claim "The same boundary applies to socket / TcpServer / TcpClient
-///     handles" is currently unspecified at the implementation level — the runtime does not
-///     enforce task-affinity for TCP/UDP socket handles. See the spec §Async "Socket handle
-///     task-affinity" clause for the current (narrowed) normative statement. Only Process
-///     handle enforcement is proven here.</para></item>
+///     Note: D5 is <b>intended</b> to apply equally to socket handles
+///     (<c>TcpConnection</c>, <c>TcpServer</c>, etc.), but socket enforcement is
+///     <b>not yet built</b>. Cross-task socket-handle use is unsupported and unsafe
+///     (silent data corruption; wrong error type on the async path). This is a known,
+///     tracked gap — see
+///     <c>.kanban/0-backlog/bugs/tcp-socket-handle-task-boundary-enforcement.md</c>
+///     for the planned enforcement work. Only Process handle enforcement is proven here.</para></item>
 ///   <item><b>D11 — Two-systems non-interaction</b> (L1440–1442, L1661+):
 ///     <list type="bullet">
 ///       <item><c>event.poll()</c> does NOT advance a Future (System A); the Future's status
@@ -83,11 +85,12 @@ let result = errType;
 
     /// <summary>
     /// D5: The <c>StateError</c> message for a cross-task process handle access names
-    /// the task boundary. The spec quotes the message:
-    /// "process handle does not cross task boundaries: this Process was created in a
-    /// different task; pass the result of process.spawn() back to the parent via the
-    /// task's return value."
-    /// Spec: L1543–1549.
+    /// the task boundary. The impl emits:
+    /// "'&lt;funcName&gt;': process handle does not cross task boundaries. Spawn the process
+    /// inside the same task that uses it."
+    /// The test pins both stable sentence fragments verbatim so any future drift in
+    /// either the spec or the impl fails loud.
+    /// Spec: §Async "Process handle boundary (D5)".
     /// </summary>
     [Fact]
     public void D5_ProcessWait_CrossTask_ErrorMessage_NamesBoundary_PerSpecAsyncD5()
@@ -104,8 +107,8 @@ process.wait(h);
 let result = msg;
 ");
         var msg = Assert.IsType<string>(result);
-        Assert.Contains("task", msg, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("process", msg, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("process handle does not cross task boundaries", msg, StringComparison.Ordinal);
+        Assert.Contains("Spawn the process inside the same task that uses it", msg, StringComparison.Ordinal);
     }
 
     /// <summary>
