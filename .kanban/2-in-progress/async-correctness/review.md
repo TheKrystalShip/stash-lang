@@ -81,7 +81,8 @@ grep -nE "process\.(pid|detach).*StateError" "docs/Stash — Standard Library Re
 
 ## F02 — [IMPORTANT] D1 EmbeddedMode gate is not actually exercised; `EmbeddedMode_UnobservedFault_ZeroStderr` passes vacuously
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** b602d4d2
 **Files:** `Stash.Tests/Interpreting/Async/UnobservedAndExit/EmbeddedModeGateTests.cs:14-31`, `Stash.Cli/Program.cs:1291-1298`, `Stash.Bytecode/StashEngine.cs`
 **Phase:** P6
 **Commit:** `695e51dd`
@@ -151,7 +152,8 @@ dotnet test --filter "FullyQualifiedName~EmbeddedModeGateTests"
 
 ## F03 — [IMPORTANT] D1 CLI driver wiring (RunFile/RunSource exit hook) has no test exercising the production path
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** b602d4d2
 **Files:** `Stash.Cli/Program.cs:587,594,600,683,690,696`, `Stash.Tests/Interpreting/Async/UnobservedAndExit/UnobservedReportTests.cs`
 **Phase:** P6
 **Commit:** `695e51dd`
