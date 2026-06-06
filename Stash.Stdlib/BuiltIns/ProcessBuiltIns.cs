@@ -313,10 +313,10 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.wait");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.wait");
         if (entry.Process is null)
         {
-            // Already waited — return cached result if available
+            // Already waited in this context — return cached result if available
             if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
             {
                 return StashValue.FromObj(cached);
@@ -367,7 +367,7 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.waitTimeout");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.waitTimeout");
         if (entry.Process is null)
         {
             return StashValue.Null;
@@ -415,7 +415,7 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.kill");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.kill");
         if (entry.Process is null || entry.Process.HasExited)
         {
             return StashValue.FromBool(false);
@@ -442,7 +442,7 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.isAlive");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.isAlive");
         if (entry.Process is null)
         {
             return StashValue.FromBool(false);
@@ -496,7 +496,7 @@ public static partial class ProcessBuiltIns
             throw new ValueError($"Signal number must be between 1 and 64, got {sig}.");
         }
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.signal");
         if (entry.Process is null || entry.Process.HasExited)
         {
             return StashValue.FromBool(false);
@@ -540,6 +540,9 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.detach");
 
+        // detach is special: we use FindIndex directly (not ResolveTrackedProcess) because
+        // detach is an intentional removal operation — cross-VM throws StateError only for
+        // consumer operations (wait/kill/read/etc.), not for detach itself.
         int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
         if (idx >= 0)
         {
@@ -574,7 +577,7 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.read");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.read");
         if (entry.Process is null)
         {
             return StashValue.Null;
@@ -608,7 +611,7 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.readBytes");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.readBytes");
         if (entry.Process is null)
         {
             return StashValue.Null;
@@ -653,7 +656,7 @@ public static partial class ProcessBuiltIns
     {
         var handle = ExtractProcessHandle(handleVal, "process.write");
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.write");
         if (entry.Process is null || entry.Process.HasExited)
         {
             return StashValue.FromBool(false);
@@ -687,7 +690,7 @@ public static partial class ProcessBuiltIns
             throw new TypeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).");
         }
 
-        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        var entry = ResolveTrackedProcess(ctx, handle, "process.onExit");
         if (entry.Process is null)
         {
             return StashValue.Null;
@@ -808,7 +811,7 @@ public static partial class ProcessBuiltIns
                 throw new TypeError("All elements in 'process.waitAll' array must be Process handles.");
             }
 
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            var entry = ResolveTrackedProcess(ctx, handle, "process.waitAll");
             if (entry.Process is null)
             {
                 if (ctx.ProcessWaitCache.TryGetValue(handle, out var cached))
@@ -870,7 +873,7 @@ public static partial class ProcessBuiltIns
                 throw new TypeError("All elements in 'process.waitAny' array must be Process handles.");
             }
 
-            var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            var entry = ResolveTrackedProcess(ctx, handle, "process.waitAny");
             entries.Add((handle, entry.Process));
         }
 
@@ -1034,6 +1037,39 @@ public static partial class ProcessBuiltIns
         if (v.IsObj && v.AsObj is StashInstance inst && inst.TypeName == "Process")
             return inst;
         throw new TypeError($"First argument to '{funcName}' must be a Process.");
+    }
+
+    /// <summary>
+    /// Resolves a process handle to its <see cref="System.Diagnostics.Process"/> entry,
+    /// enforcing the cross-task boundary contract (D5):
+    /// <list type="bullet">
+    ///   <item>Handle found in <see cref="IProcessContext.TrackedProcesses"/> — tracked, return entry.</item>
+    ///   <item>Not tracked but present in <see cref="IProcessContext.ProcessWaitCache"/> — already waited
+    ///         in this context; return a default "not-running" entry so the caller sees its existing
+    ///         semantics (e.g. kill returns false, isAlive returns false, wait returns cached result).</item>
+    ///   <item>Not tracked and not in cache — handle was minted in a different task; throw
+    ///         <see cref="StateError"/> with a message that names the cross-task boundary.</item>
+    /// </list>
+    /// The returned <c>Process</c> field is <c>null</c> for the "already waited" case;
+    /// callers must apply their existing null-check semantics after this call.
+    /// </summary>
+    private static (StashInstance Handle, System.Diagnostics.Process? Process) ResolveTrackedProcess(
+        IInterpreterContext ctx, StashInstance handle, string funcName)
+    {
+        // Fast path: still actively tracked.
+        var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+        if (entry.Process is not null)
+            return entry;
+
+        // Already-waited (process was tracked and completed in this context): return null-process
+        // entry so the caller uses its existing "process is null" semantics unchanged.
+        if (ctx.ProcessWaitCache.ContainsKey(handle))
+            return (handle, null);
+
+        // Neither tracked nor cached in this context — the handle was created in a different task.
+        throw new StateError(
+            $"'{funcName}': process handle does not cross task boundaries. " +
+            "Spawn the process inside the same task that uses it.");
     }
 
     /// <summary>
