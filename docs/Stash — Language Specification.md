@@ -693,6 +693,25 @@ values of different runtime categories (per `typeof`) are never equal: `1 == tru
 is `false`, `0 == null` is `false`, `0 == ""` is `false`, `null == false` is
 `false`, `[] == null` is `false`. No other cross-category coercion is performed.
 
+**Per-category rule (within a category, or within the numeric equivalence class).**
+
+| Category | `==` semantics |
+| -------- | -------------- |
+| `null`, `bool`, `string` | by value |
+| `int`, `float`, `byte` | by **mathematical value across the three categories** (IEEE 754 for `float`: `0.0 == -0.0`, `NaN != NaN`) |
+| `duration`, `bytes`, `ip`, `semver` | by value (semver per semver precedence) |
+| `secret`, `array`, `dict`, `struct`, `enum`, `function`, `namespace`, `future`, `range`, `Error` | by reference identity (same value handle ↔ equal) |
+
+The reference-identity rule for `function` and `namespace` implies `io.println ==
+io.println` is `true` (the same registered function handle), and `io == io` is
+`true` (the same namespace singleton). Two arrays with the same elements but
+distinct constructions are **not** equal (`[1] == [1]` is `false`); use
+`arr.equals` / `dict.equals` for structural comparison. Two distinct
+`secret("x")` constructions are **not** equal (`secret("x") == secret("x")` is
+`false`) — to compare contents, `reveal()` first; for security-sensitive
+comparison use `crypto.constantTimeEquals` on the revealed values (see *Secret
+Values*).
+
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
 overflow arithmetic (`conv.toFloat("1e308") * 10.0` produces `Infinity`;
