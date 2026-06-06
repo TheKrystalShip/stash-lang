@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T21:52:00Z"
+updated: "2026-06-06T22:05:44Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: Edit 4 per-category table + worked examples landed; EqualityPerCategoryConformanceTests 27 tests; MinScannedParticipants 11→12; secret row is prose-only (no executable secret test); all 3 verify steps green
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: b25bc2f543ce3c3b73938995623ca083370e68cd
+    verified: true
+    started: "2026-06-06T21:52:52Z"
+    completed: "2026-06-06T22:05:44Z"
+    attempts: 1
+    notes: "Spec Edit 5 closed-list coercion landed; CoercionConformanceTests 23 tests (case 1 arithmetic+relational+equality, case 2 byte→int, case 3 string concat, negative space); MinScannedParticipants 12→13; all 3 verify steps green"
   P6:
     status: pending
     commit: null
