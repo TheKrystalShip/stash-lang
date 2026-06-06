@@ -6861,9 +6861,9 @@ A handle to a spawned child process.
 | `process.waitTimeout` | `any` | `TypeError`, `StateError` | Waits up to the given number of milliseconds for a process to exit. |
 | `process.kill` | `any` | `TypeError`, `StateError` | Sends SIGTERM (Unix) or terminates (Windows) a running process. |
 | `process.isAlive` | `any` | `TypeError`, `StateError` | Returns true if the process is still running, false if it has exited. |
-| `process.pid` | `any` | `TypeError`, `StateError` | Returns the OS process ID for a spawned Process handle. |
+| `process.pid` | `any` | `TypeError` | Returns the OS process ID for a spawned Process handle. |
 | `process.signal` | `any` | `ValueError`, `TypeError`, `StateError` | Sends a POSIX signal to a running process. |
-| `process.detach` | `any` | `TypeError`, `StateError` | Removes a Process handle from tracking. |
+| `process.detach` | `any` | `TypeError` | Removes a Process handle from tracking. |
 | `process.list` | `array` | — | Returns an array of all Process handles currently tracked by this script. |
 | `process.read` | `any` | `TypeError`, `StateError` | Reads available text from a process's stdout. |
 | `process.readBytes` | `byte[]` | `TypeError`, `StateError` | Reads available raw bytes from a process's stdout and returns them as a buffer, without any text decoding. |
@@ -7042,7 +7042,6 @@ Returns the OS process ID for a spawned Process handle.
 **Throws:**
 
 - `TypeError` — if handle is not a Process
-- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.signal(handle: any, signum: any) -> any`
 
@@ -7074,7 +7073,6 @@ Removes a Process handle from tracking. The process continues running but will n
 **Throws:**
 
 - `TypeError` — if handle is not a Process
-- `StateError` — if the Process handle was created in a different task (handles do not cross task boundaries)
 
 #### `process.list() -> array`
 

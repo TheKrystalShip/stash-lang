@@ -455,7 +455,6 @@ public static partial class ProcessBuiltIns
     /// <summary>Returns the OS process ID for a spawned Process handle.</summary>
     /// <param name="handleVal">The Process handle returned by process.spawn()</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
-    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>The integer process ID</returns>
     [StashFn]
     private static StashValue Pid(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
@@ -533,7 +532,6 @@ public static partial class ProcessBuiltIns
     /// <summary>Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.</summary>
     /// <param name="handleVal">The Process handle to detach</param>
     /// <exception cref="TypeError">if handle is not a Process</exception>
-    /// <exception cref="StateError">if the Process handle was created in a different task (handles do not cross task boundaries)</exception>
     /// <returns>True if the handle was found and removed</returns>
     [StashFn]
     private static StashValue Detach(IInterpreterContext ctx, [StashParam(Name = "handle")] StashValue handleVal)
