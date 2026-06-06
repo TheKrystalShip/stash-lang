@@ -1531,6 +1531,47 @@ pass the result of process.spawn() back to the parent via the task's return valu
 The same boundary applies to socket / TcpServer / TcpClient handles. Communicate handles
 via return values, not closure capture.
 
+**Cancellation, timeout, and task status.** A running task can be cancelled with
+`task.cancel(future)`. Cancellation is **cooperative**, not pre-emptive: the task observes its
+cancellation token at park points (such as `time.sleep` and blocking I/O), so it stops at the
+next park point rather than being interrupted mid-instruction. Once cancellation has propagated,
+awaiting the future throws `CancellationError` and `task.status(future)` returns `Status.Cancelled`.
+
+`task.status(future)` reports a future's lifecycle state — one of `Status.Running`,
+`Status.Completed`, `Status.Failed`, or `Status.Cancelled`. Because cancellation is cooperative,
+a status read taken immediately after `task.cancel` may still observe `Status.Running` until the
+task reaches its next park point.
+
+`task.timeout(ms, fn)` runs `fn` under a deadline and is **distinct from external cancellation**:
+when the deadline elapses it throws `TimeoutError` (never `CancellationError`), while still
+cancelling the underlying work so the timed-out computation does not keep running.
+
+**Unawaited tasks — dropped, but faults are reported.** Futures are never implicitly awaited; a
+task you spawn and never await is fire-and-forget. Only the results and errors you `await`
+(directly, or via `task.await` / `task.awaitAll` / `task.awaitAny` / `task.all` / `task.race`)
+reach your code.
+
+- **Still running at exit → dropped.** When the main script returns, a task still executing on a
+  thread-pool thread is abandoned: its remaining work neither delays process exit nor produces a
+  result. To let it finish, `await` it, or hold the VM open with `event.loop()` or a `time.sleep`
+  loop.
+- **Faulted but never observed → reported.** If a task **faults** (throws) and its error is never
+  observed by any `await` / `task.*` consumer, the runtime prints a single block to **stderr** at
+  script exit:
+
+  ```
+  warning: <N> unobserved async error(s):
+    <ErrorType>: <message>
+    ...
+  ```
+
+  so a silently-swallowed background error becomes visible instead of vanishing. The process
+  **exit code is unchanged** by this report. An explicitly **cancelled** task (via `task.cancel`)
+  is *not* reported, and reading `task.status(future)` does **not** count as observing the error —
+  you can inspect a future's state without suppressing the warning. This report is emitted by the
+  CLI runtime; a host that embeds Stash through the hosting SDK does not receive it and surfaces
+  task errors however it chooses.
+
 #### Async-child global isolation
 
 When an `async fn` body is invoked, the runtime forks a child VM on a thread-pool thread.
