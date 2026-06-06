@@ -753,15 +753,62 @@ conversions.
 
 ### Secret Values
 
-`secret(value)` wraps a value for redaction. A secret value must display as redacted
-when printed, stringified, interpolated, or concatenated. `reveal(secretValue)`
-returns the wrapped value.
+`secret(value)` wraps `value` for redaction. The wrapped value is stored
+unmodified inside the secret. A `secret` value displays as the redacted form
+`"******"` (six asterisks) in every stringification context — `io.println`,
+string interpolation (`"...${secret}..."`), `conv.toStr`, and the `+`
+string-concatenation operator (which propagates taint — see below). `reveal(s)`
+returns the wrapped value and is the only way to escape redaction; there is no capability gate on reveal.
 
 ```stash
 let token = secret("abc123");
-io.println(token);       // redacted
+io.println(token);       // ******
 let raw = reveal(token); // "abc123"
 ```
+
+`reveal` requires a secret argument. Passing a non-secret value to `reveal`
+raises a `RuntimeError`.
+
+**Idempotent wrap.** `secret(secret(x))` is equivalent to `secret(x)`. Secrets
+do not nest; the inner secret's value is unwrapped before wrapping.
+
+```stash
+let inner = secret("x");
+let outer = secret(inner); // unwraps: reveal(outer) == "x"
+typeof(outer);             // "secret"
+```
+
+**Taint-propagating `+`.** When `+` is applied with a `secret` operand on
+either side, the result is a `secret` wrapping the concatenation. The non-
+secret operand is stringified through `conv.toStr` before concatenation. This
+applies whether the other operand is a `string`, a number, or any other value.
+
+```stash
+let s = secret("abc123");
+typeof(s + "!")      // "secret"
+typeof("prefix=" + s) // "secret"
+reveal(s + "!")      // "abc123!"
+reveal("prefix=" + s) // "prefix=abc123"
+```
+
+**Equality — reference identity.** `secret(a) == secret(b)` is `true` only
+when both operands are the **same secret handle** (`let t = secret("x"); t
+== t` is `true`); two distinct `secret("x")` constructions are **not** equal
+(`secret("x") == secret("x")` is `false`). The wrapped value never participates
+in equality. To compare contents, `reveal()` both secrets first and compare
+the revealed values; for security-sensitive comparison use
+`crypto.constantTimeEquals` on the revealed bytes (a constant-time check that
+resists timing side-channels). This is safety-by-default: == cannot be used as an oracle for the wrapped value.
+
+A consequence of reference identity: a `secret` value, where permitted as a
+dict key, keys by **identity**. Two distinct `secret("x")` constructions are
+distinct keys; the same handle is the same key. The current implementation
+restricts dict keys to `string`, `int`, `float`, and `bool`; passing a
+`secret` as a dict key raises a `RuntimeError`.
+
+**`typeof` and truthiness.** `typeof(s) == "secret"` for any secret `s`.
+`nameof(s)` returns `"secret"`. A `secret` is truthy regardless of inner
+value — `secret(0)`, `secret(null)`, and `secret("")` are all truthy.
 
 ## Bindings and Scope
 

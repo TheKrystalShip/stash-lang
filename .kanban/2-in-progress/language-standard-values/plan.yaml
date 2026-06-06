@@ -248,6 +248,7 @@ phases:
       - Stash.Tests/Conformance/Values/SecretConformanceTests.cs
       - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
       - Stash.Core/Runtime/Types/StashSecret.cs
+      - Stash.Tests/Interpreting/SecretTests.cs
     verify:
       - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~SecretConformanceTests"

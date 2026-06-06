@@ -33,9 +33,13 @@ public sealed class StashSecret : IEquatable<StashSecret>,
 
     public override string ToString() => RedactedText;
 
-    public bool Equals(StashSecret? other) => other is not null && InnerValue.Equals(other.InnerValue);
+    // D4 (ratified 2026-06-06, user override): secret equality is reference identity.
+    // Two distinct secret("x") constructions are NOT equal; the same handle is.
+    // To compare contents, reveal() both and compare; for security-sensitive comparison
+    // use crypto.constantTimeEquals on the revealed bytes.
+    public bool Equals(StashSecret? other) => ReferenceEquals(this, other);
     public override bool Equals(object? obj) => obj is StashSecret other && Equals(other);
-    public override int GetHashCode() => InnerValue.GetHashCode();
+    public override int GetHashCode() => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this);
 
     // --- VM Protocol Implementations ---
 
