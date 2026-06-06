@@ -200,6 +200,32 @@ let result = task.cancel(f);
         Assert.Equal("TypeError", error.ErrorType);
     }
 
+    /// <summary>
+    /// All task.* builtins consuming a Future argument throw TypeError on a non-Future value.
+    /// Spec: "All <c>task.*</c> builtins that consume a <c>Future</c> argument
+    /// (<c>task.await</c>, <c>task.status</c>, <c>task.cancel</c>) throw <c>TypeError</c>
+    /// when given a non-Future value." (Edit 4 paragraph)
+    /// </summary>
+    [Fact]
+    public void TaskAwait_NonFuture_ThrowsTypeError_PerSpecAsyncValidation()
+    {
+        var error = RunCapturingError("task.await(42);");
+        Assert.Equal("TypeError", error.ErrorType);
+    }
+
+    /// <summary>
+    /// All task.* builtins consuming a Future argument throw TypeError on a non-Future value.
+    /// Spec: "All <c>task.*</c> builtins that consume a <c>Future</c> argument
+    /// (<c>task.await</c>, <c>task.status</c>, <c>task.cancel</c>) throw <c>TypeError</c>
+    /// when given a non-Future value." (Edit 4 paragraph)
+    /// </summary>
+    [Fact]
+    public void TaskStatus_NonFuture_ThrowsTypeError_PerSpecAsyncValidation()
+    {
+        var error = RunCapturingError("task.status(42);");
+        Assert.Equal("TypeError", error.ErrorType);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────────
     // Edit 5 — task.Status is a closed enum; qualified access; no top-level Status
     // Spec: "task.status(future) reports a future's lifecycle state. It returns a

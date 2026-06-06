@@ -1595,7 +1595,9 @@ awaiting the future throws `CancellationError` and `task.status(future)` returns
 `task.cancel(future)` returns `null`. It is **idempotent**: cancelling a Future that has already
 settled (`task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`) is a no-op
 — the call returns `null` without raising. A second `task.cancel(future)` on the same Future is
-also a no-op. Cancelling a non-`Future` value throws `TypeError`.
+also a no-op. Cancelling a non-`Future` value throws `TypeError`. All `task.*` builtins
+that consume a `Future` argument (`task.await`, `task.status`, `task.cancel`) throw `TypeError`
+when given a non-Future value.
 
 `task.status(future)` reports a future's lifecycle state. It returns a value of the closed enum
 `task.Status`, whose members are `task.Status.Running`, `task.Status.Completed`,
