@@ -203,7 +203,8 @@ dotnet test --filter "Category=Conformance"
 
 ## F04 — [MEDIUM] Spec Edit 2 lists `int[]`/`float[]`/`string[]` as typed-array examples — only `byte[]` is reachable from a Stash script
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 6597c945
 **Files:** `docs/Stash — Language Specification.md:642-643`, `Stash.Core/Runtime/Types/StashByteArray.cs`
 **Phase:** P1
 **Commit:** c292e810
