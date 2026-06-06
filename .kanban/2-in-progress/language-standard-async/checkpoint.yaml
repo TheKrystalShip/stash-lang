@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T13:43:58Z"
+updated: "2026-06-06T14:13:19Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: "Edit 6 (D8 settled-future replay) + FuturesCoreConformanceTests (25 tests, D6/D7/D8/D9); MinScannedParticipants bumped to 1; D7 UserRuntimeError vs typed-error divergence resolved in tests"
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: e8e8c54a434bd1c4b3b3ab17e93df7f7fd7a5cd8
+    verified: true
+    started: "2026-06-06T13:45:02Z"
+    completed: "2026-06-06T14:13:19Z"
+    attempts: 1
+    notes: Edit 7 (parForEach returns null) + 23 conformance tests for D2/D4/D10; no impl changes needed; all clauses matched impl
   P4:
     status: pending
     commit: null
