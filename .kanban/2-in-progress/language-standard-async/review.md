@@ -40,13 +40,13 @@
   conformance test `D9_ImplicitStringification_CompletedFuture_PerSpecAsyncD9` proves the
   "(or implicit stringification)" half of the D9 clause via `"" + f` concatenation and
   asserts `"<Future:Completed>"`. **Confirmed.**
-- **F04 (IMPORTANT → fixed, with one stale spot remaining — see F01R below).** The
+- **F04 (IMPORTANT → fixed, with one stale spot remaining — see F07 below).** The
   `Seal-status discriminator` paragraph (`coverage.md:34–38`) was reframed: it acknowledges
   conformance presence as a per-section maturity signal post-§Async-seal AND preserves the
   prose-based discriminator, removing the prior self-contradiction with cross-cutting #1's
   "Complete" mark. **Confirmed for the discriminator paragraph itself.** (A SEPARATE stale
   sentence in coverage.md row #6 — written at P6 and not updated by F01 — is filed as a new
-  finding F01R below.)
+  finding F07 below.)
 - **F05 (MINOR → fixed).** New normative sentence at `docs/Stash — Language Specification.md:1598–1600`
   seals: "All `task.*` builtins that consume a `Future` argument (`task.await`, `task.status`,
   `task.cancel`) throw `TypeError` when given a non-Future value." Two conformance tests added in
@@ -75,9 +75,10 @@ without timing dependence — sound, non-flaky. `Category=Conformance` filter ru
 
 ---
 
-## F01R — [MINOR] coverage.md row #6 D5 note still reads the P6-narrowed state, opposite of post-F01 law
+## F07 — [MINOR] coverage.md row #6 D5 note still reads the P6-narrowed state, opposite of post-F01 law
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 15a8bd51
 **Files:** `.kanban/milestones/language-standard/coverage.md:55`
 **Phase:** cross-phase (F04 resolve loop carry-over)
 **Commit:** -
