@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T13:24:12Z"
+updated: "2026-06-06T13:43:58Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: "Conformance scaffold + trait guard meta-test: 3 READMEs + ConformanceTraitMetaTests; MinScannedParticipants=0 at P1 (raised per phase)"
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 7f88372a7f3f0c2291147203b7bd3ed212a9fe9a
+    verified: true
+    started: "2026-06-06T13:25:31Z"
+    completed: "2026-06-06T13:43:58Z"
+    attempts: 1
+    notes: "Edit 6 (D8 settled-future replay) + FuturesCoreConformanceTests (25 tests, D6/D7/D8/D9); MinScannedParticipants bumped to 1; D7 UserRuntimeError vs typed-error divergence resolved in tests"
   P3:
     status: pending
     commit: null
