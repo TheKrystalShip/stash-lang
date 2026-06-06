@@ -24,7 +24,8 @@ The seal can be declared sound and promoted on resolution of F01 + F02 at minimu
 
 ## F01 — [HIGH] Spec normatively recommends `crypto.constantTimeEquals` — the function does not exist
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 04701792
 **Files:** `docs/Stash — Language Specification.md:711-713`, `docs/Stash — Language Specification.md:799-801`
 **Phase:** P4, P6
 **Commit:** 69f93ebb, c32fcfec
@@ -254,7 +255,8 @@ dotnet run --project Stash.Cli/ -- -c 'let xs: int[] = [1]; io.println(typeof(xs
 
 ## F05 — [LOW] §Secret Values prose: "Idempotent wrap" + dict-key hypothetical can be tightened
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 04701792
 **Files:** `docs/Stash — Language Specification.md:772-779`, `docs/Stash — Language Specification.md:803-807`
 **Phase:** P6
 **Commit:** c32fcfec
