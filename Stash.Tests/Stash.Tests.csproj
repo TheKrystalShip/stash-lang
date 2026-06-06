@@ -29,6 +29,7 @@
     <EmbeddedResource Include="Lsp\Completion\Fixtures\*.stash" />
     <EmbeddedResource Include="Bytecode\Fixtures\ChildVMConstructionMetaTests.Fixtures\*.txt" />
     <EmbeddedResource Include="Bytecode\Fixtures\NoProcessGlobalLeakMetaTests.Fixtures\*.txt" />
+    <EmbeddedResource Include="Bytecode\Fixtures\SpawnedFuturePropagationMetaTests.Fixtures\*.txt" />
     <EmbeddedResource Include="Registry\OpenApi\Snapshots\openapi-v1.json" />
   </ItemGroup>
 

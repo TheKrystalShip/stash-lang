@@ -3,6 +3,7 @@ namespace Stash.Runtime.Types;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Stash.Runtime.Errors;
 using Stash.Runtime.Protocols;
 
 /// <summary>
@@ -12,6 +13,20 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
 {
     private readonly Task<object?> _task;
     private readonly CancellationTokenSource _cts;
+
+    /// <summary>
+    /// True if this future's outcome has been consumed by a registered consumer
+    /// (await, task.await, task.awaitAll, task.awaitAny, task.all, task.race).
+    /// When false at script exit, D1 will report the fault (if faulted &amp;&amp; !cancelled).
+    /// </summary>
+    public bool Observed { get; private set; }
+
+    /// <summary>
+    /// Marks this future's outcome as observed — called by every outcome-consuming
+    /// combinator so D1 does not false-report a normally-awaited future at exit.
+    /// Idempotent: subsequent calls are no-ops.
+    /// </summary>
+    public void MarkObserved() => Observed = true;
 
     public StashFuture(Task<object?> task, CancellationTokenSource cts)
     {
@@ -31,6 +46,17 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
         return new StashFuture(tcs.Task, new CancellationTokenSource());
     }
 
+    /// <summary>
+    /// Creates an already-faulted future with the given error type name and message.
+    /// Used in tests to construct pre-faulted futures without timing-dependent background tasks.
+    /// </summary>
+    public static StashFuture Failed(string errorType, string message)
+    {
+        var tcs = new TaskCompletionSource<object?>();
+        tcs.SetException(new Errors.UserRuntimeError(errorType, message));
+        return new StashFuture(tcs.Task, new CancellationTokenSource());
+    }
+
     public object? GetResult()
     {
         try
@@ -43,7 +69,7 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
         }
         catch (OperationCanceledException)
         {
-            throw new RuntimeError("Future was cancelled.");
+            throw new CancellationError("Task was cancelled.");
         }
         catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
         {
@@ -51,7 +77,7 @@ public class StashFuture : IVMTyped, IVMStringifiable, IVMPrimitiveType
         }
         catch (AggregateException ae) when (ae.InnerException is OperationCanceledException)
         {
-            throw new RuntimeError("Future was cancelled.");
+            throw new CancellationError("Task was cancelled.");
         }
         catch (Exception ex)
         {

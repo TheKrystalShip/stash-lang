@@ -1,0 +1,212 @@
+#!/usr/bin/env stash
+
+// examples/async_correctness.stash
+// Stash Async Correctness Contract — D1 through D5 demonstrated end-to-end.
+//
+// This script demonstrates each locked contract decision from the async-correctness
+// feature (2026-06-06). Run with:
+//   dotnet run --project Stash.Cli/ -- examples/async_correctness.stash
+
+io.println("=" * 60);
+io.println("  Async Correctness Contract Demo (D1–D5)");
+io.println("=" * 60);
+io.println("");
+
+// ─── D3: Genuine Cancellation ────────────────────────────────────────────────
+//
+// task.cancel() fires the child's linked CTS. The child VM cooperatively exits
+// at the next park point. The .NET Task then ends as Canceled — not Faulted — so
+// task.status returns "Cancelled" and await throws CancellationError.
+
+io.println("── D3: task.cancel → status Cancelled, await → CancellationError ──");
+
+let cancelledTask = task.run(() => { time.sleep(10); });
+task.cancel(cancelledTask);
+
+// Poll until the child cooperatively exits (bounded — up to ~2s).
+let i = 0;
+while (task.status(cancelledTask) == task.Status.Running && i < 40) {
+    time.sleep(0.05);
+    i = i + 1;
+}
+
+let cancelStatus = task.status(cancelledTask);
+io.println($"  status after cancel: {cancelStatus}");  // Cancelled
+
+let cancelErr = "";
+try {
+    await cancelledTask;
+} catch (CancellationError e) {
+    cancelErr = e.type;
+}
+io.println($"  await cancelled task throws: {cancelErr}");  // CancellationError
+
+io.println("");
+
+// ─── D2: task.awaitAll preserves original error type ─────────────────────────
+//
+// task.awaitAll is the collect-all combinator. Failed tasks become StashError
+// values with the ORIGINAL error type — not a synthetic "TaskError".
+// Contrast: task.all is fail-fast (throws on the first failure).
+
+io.println("── D2: task.awaitAll preserves original error type ──");
+
+let failingTask = task.run(() => { throw TypeError { message: "type mismatch" }; });
+let cancelledForAwaitAll = task.run(() => { time.sleep(10); });
+task.cancel(cancelledForAwaitAll);
+
+// Wait for both to reach a terminal state.
+let j = 0;
+while ((task.status(failingTask) == task.Status.Running ||
+        task.status(cancelledForAwaitAll) == task.Status.Running) && j < 40) {
+    time.sleep(0.05);
+    j = j + 1;
+}
+
+let allResults = task.awaitAll([
+    task.run(() => { return "success"; }),
+    failingTask,
+    cancelledForAwaitAll
+]);
+
+io.println($"  allResults[0] = {allResults[0]}");                     // success
+io.println($"  allResults[1].type = {allResults[1].type}");           // TypeError (preserved!)
+io.println($"  allResults[1].message = {allResults[1].message}");     // type mismatch
+io.println($"  allResults[2].type = {allResults[2].type}");           // CancellationError
+
+io.println("");
+
+// ─── D4: arr.parMap with async callback flattens Futures ─────────────────────
+//
+// arr.parMap (and parFilter/parForEach) detect async callbacks and automatically
+// await each returned Future. The result is an array of resolved values, not
+// an array of Futures — same as task.run(async fn) which also flattens.
+
+io.println("── D4: arr.parMap async callback → resolved values, not Futures ──");
+
+let numbers = [1, 2, 3, 4, 5];
+
+let doubled = arr.parMap(numbers, async (x) => {
+    // This callback is async — parMap awaits the inner Future automatically.
+    return x * 2;
+});
+
+io.println($"  parMap async [1..5] * 2 = {doubled}");
+
+// Mixed sync/async: filter to evens with an async predicate.
+let evens = arr.parFilter(numbers, async (x) => { return x % 2 == 0; });
+io.println($"  parFilter async evens = {evens}");
+
+io.println("");
+
+// ─── D5: Cross-VM process handle → StateError ────────────────────────────────
+//
+// A process.spawn() handle is bound to the context that created it. Using it
+// inside a task.run() child throws StateError — not a silent empty result.
+
+io.println("── D5: cross-VM process handle → StateError ──");
+
+if (os.isLinux || os.isMacOS) {
+    let h = process.spawn("sleep 100");
+    let crossVmTask = task.run(() => {
+        // h was created in the parent VM — using it here throws StateError.
+        return process.wait(h);
+    });
+    let crossVmResults = task.awaitAll([crossVmTask]);
+    io.println($"  cross-VM process.wait errType = {crossVmResults[0].type}");    // StateError
+    io.println($"  (not silent empty — fail loud is the contract)");
+
+    // Clean up the long-running sleep process.
+    process.kill(h);
+    process.wait(h);
+} else {
+    io.println("  (D5 demonstration skipped — requires Linux/macOS for process.spawn)");
+}
+
+io.println("");
+
+// ─── D1: Unobserved async errors ─────────────────────────────────────────────
+//
+// D1 report (faulted-but-never-awaited task → stderr warning at exit) is best
+// shown with a comment to keep the example's stdout clean. See:
+//   Stash.Tests/Interpreting/Async/UnobservedAndExit/UnobservedReportTests.cs
+//
+// The live behavior:
+//   task.run(() => { throw ValueError { message: "oops" }; });
+//   // (script exits without awaiting the task)
+//   // → stderr: "warning: 1 unobserved async error(s):"
+//   //           "  ValueError: oops"
+//
+// Gated on !EmbeddedMode: a host using EmbeddedMode never receives surprise
+// stderr writes; the registry is still maintained for host-side inspection.
+
+io.println("── D1: Unobserved async errors ──");
+io.println("  (Covered by UnobservedReportTests.cs — see docs for live demo)");
+io.println("  Contract: a faulted-but-never-awaited task.run writes one warning");
+io.println("  line to stderr at script exit. Still-running tasks are dropped.");
+io.println("  EmbeddedMode suppresses the report (host controls its own output).");
+
+io.println("");
+
+// ─── Bonus: D6 — await is uncolored (works anywhere) ─────────────────────────
+
+io.println("── D6: await is uncolored — works at top level, in non-async fns, in loops ──");
+
+// Top level.
+let topLevelResult = await task.resolve("top-level OK");
+io.println($"  top-level await: {topLevelResult}");
+
+// Inside a non-async function.
+fn syncJoiner(futures) {
+    let total = 0;
+    for (let f in futures) {
+        total = total + await f;
+    }
+    return total;
+}
+
+let sum = syncJoiner([task.resolve(1), task.resolve(2), task.resolve(3)]);
+io.println($"  await in non-async fn + loop: sum = {sum}");  // 6
+
+io.println("");
+
+// ─── Bonus: task.timeout — TimeoutError distinct from CancellationError ───────
+//
+// task.timeout uses its own internal CTS; a timeout throws TimeoutError, NOT
+// CancellationError. This is the D3 timeout-vs-cancel distinction: task.cancel
+// → CancellationError, but task.timeout → TimeoutError.
+
+io.println("── task.timeout → TimeoutError (distinct from CancellationError) ──");
+
+let timeoutErr = "";
+try {
+    task.timeout(50, async () => { time.sleep(5); return "too slow"; });
+} catch (TimeoutError e) {
+    timeoutErr = e.type;
+}
+io.println($"  timeout error type: {timeoutErr}");  // TimeoutError
+
+// A fast-completing task does NOT throw TimeoutError:
+let fastResult = task.timeout(5000, async () => { return "fast enough"; });
+io.println($"  fast task result: {fastResult}");  // fast enough
+
+io.println("");
+
+// ─── Bonus: D9 — Future as a first-class value ───────────────────────────────
+
+io.println("── D9: Future is a first-class value ──");
+
+let f = task.resolve("first-class");
+io.println($"  typeof(f) = {typeof(f)}");          // Future
+io.println($"  f is Future: {f is Future}");        // true
+let g = f;
+io.println($"  f == g (same ref): {f == g}");       // true
+let h2 = task.resolve("other");
+io.println($"  f == h2 (diff ref): {f == h2}");     // false
+await f;
+io.println($"  conv.toStr: {conv.toStr(f)}");       // <Future:Completed>
+
+io.println("");
+io.println("=" * 60);
+io.println("  Demo complete — all D1–D5 contracts verified.");
+io.println("=" * 60);

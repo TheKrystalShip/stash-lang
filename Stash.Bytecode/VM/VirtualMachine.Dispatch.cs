@@ -89,13 +89,11 @@ public sealed partial class VirtualMachine
                 System.Environment.Exit(ex.ExitCode);
                 return null; // unreachable
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (!IsAsyncChild)
             {
-                // External cancellation (e.g. CLI Ctrl-C, programmatic CTS).
-                // ExecuteTimeout's own OCE catch already handles timeout-initiated OCEs and
-                // converts them to TimeoutError before they reach here. This catch only fires
-                // for OCEs originating from the outer _ct (external cancellation).
-                // Run defers + dispose iterators on every frame, then convert to CancellationError.
+                // External cancellation on the main VM (e.g. CLI Ctrl-C, programmatic CTS,
+                // event.loop token). Run defers + dispose iterators on every frame, then convert
+                // to CancellationError so the host sees a typed Stash error (not a raw OCE).
                 List<StashError>? suppressed = null;
                 for (int i = _frameCount - 1; i >= 0; i--)
                 {
@@ -112,6 +110,25 @@ public sealed partial class VirtualMachine
                     SuppressedErrors = suppressed
                 };
                 throw err;
+            }
+            catch (OperationCanceledException) when (IsAsyncChild)
+            {
+                // Async child VM (task.run / async fn): let the OCE propagate so the enclosing
+                // .NET Task ends in the Canceled state (IsCanceled = true) rather than Faulted.
+                // Run defers + dispose iterators first so Stash defer blocks still execute on
+                // cooperative cancellation before the task ends.
+                List<StashError>? suppressed = null;
+                for (int i = _frameCount - 1; i >= 0; i--)
+                {
+                    ref CallFrame frame = ref _frames[i];
+                    if (frame.Defers is { Count: > 0 })
+                        RunFrameDefers(ref frame, ref suppressed);
+                    DisposeFrameIterators(ref frame);
+                }
+                _frameCount = 0;
+                _sp = 0;
+                _exceptionHandlers.Clear();
+                throw; // propagate OCE so the Task transitions to Canceled, not Faulted
             }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
             {

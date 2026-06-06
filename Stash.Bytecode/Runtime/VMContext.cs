@@ -379,6 +379,9 @@ internal sealed class VMContext : IInterpreterContext
             ModuleCache = ModuleCache,
             ModuleLocks = ModuleLocks,
             LoggerState = LoggerState,
+            // Share the root's SpawnedFutureRegistry so futures spawned in forked
+            // callbacks register into the same root set as the parent.
+            SpawnedFutures = SpawnedFutures,
             // Propagate the per-VM virtual cwd — the child inherits the parent's view,
             // not the real process cwd (the constructor already set it from real env,
             // but we override here so forked contexts share the parent's virtual state).
@@ -423,6 +426,18 @@ internal sealed class VMContext : IInterpreterContext
 
     /// <summary>Per-module locks for double-checked loading, propagated from the parent <see cref="VirtualMachine"/>.</summary>
     internal ConcurrentDictionary<string, object>? ModuleLocks { get; set; }
+
+    /// <summary>
+    /// Per-root-VM registry of spawned <see cref="StashFuture"/> instances.
+    /// Shared by reference with every child VM so background futures register into the
+    /// same root set regardless of nesting depth. Set by <see cref="VirtualMachine"/> on
+    /// construction; propagated through <see cref="Fork"/> and the child-VM branch of
+    /// <see cref="InvokeCallbackDirect"/>.
+    /// Non-nullable: every VMContext has a registry (root contexts have their own fresh one;
+    /// child contexts receive the root's registry during propagation). This eliminates the
+    /// silent null-no-op code path on <see cref="RegisterFuture"/>.
+    /// </summary>
+    internal SpawnedFutureRegistry SpawnedFutures { get; set; } = new SpawnedFutureRegistry();
 
     /// <summary>
     /// Reference to the active <see cref="VirtualMachine"/> executing on the main thread.
@@ -665,6 +680,12 @@ internal sealed class VMContext : IInterpreterContext
                 childVm.CurrentFile = CurrentFile;
                 childVm.ScriptArgs = ScriptArgs;
                 childVm.EmbeddedMode = EmbeddedMode;
+                // Allow OCE to propagate so the enclosing Task ends Canceled (not Faulted)
+                // when task.cancel fires the linked CTS. The main VM keeps IsAsyncChild=false.
+                childVm.IsAsyncChild = true;
+                // Share the root's SpawnedFutureRegistry so any future spawned inside this
+                // callback registers into the same root set.
+                childVm.SpawnedFutures = SpawnedFutures;
                 if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
                 if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
                 if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
@@ -694,5 +715,11 @@ internal sealed class VMContext : IInterpreterContext
         // Non-VMFunction callables (native delegates, etc.): fall through to fork path.
         return callable.CallDirect(Fork(), args);
     }
+
+    /// <summary>
+    /// Registers a user-visible <see cref="StashFuture"/> into the per-root-VM registry
+    /// so D1 can scan it at exit.
+    /// </summary>
+    public void RegisterFuture(StashFuture future) => SpawnedFutures.Register(future);
 
 }

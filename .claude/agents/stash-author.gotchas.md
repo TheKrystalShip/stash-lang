@@ -24,6 +24,15 @@ always read the relevant sections first.
 
 ## Active gotchas
 
+### `async-in-flight-drop-at-exit`
+- **Observed:** 2026-06-06 (async-correctness P6 — D1 unobserved-task report)
+- **Behavior:** A task that is still **Running** (not yet faulted or completed) at script exit is **silently dropped** — it is not awaited, not drained, and not reported by the D1 unobserved-task exit hook. This is the row-10 behavior that D1 deliberately does NOT change: the runtime never hangs on a stuck task.
+- **Impact:** If a task is computing something and the script exits before it finishes, the result (and any fault) is silently lost. Only tasks that have **already faulted** (IsFaulted == true) AND were never observed are reported.
+- **Documented in:** brief §D1 "Joining in-flight tasks at exit"; decision log "Joining in-flight tasks at exit (D1 option c) rejected".
+- **Test:** `dotnet test --filter "FullyQualifiedName~InFlightDropGotchaTests"` (green = drop-without-blocking behavior still present; goes RED if exit starts joining/draining tasks)
+
+---
+
 ### `process-read-blocks-empty-pipe`
 - **Observed:** 2026-06-05 (lsp_warmd.stash increment 2 authoring)
 - **Mismatch:** `process.read(handle)` is documented as "Non-blocking — returns null if no data is ready." In practice, when the child's stdout pipe buffer is empty, `process.read` **blocks** indefinitely waiting for the child to produce output, instead of returning null.

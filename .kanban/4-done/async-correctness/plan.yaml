@@ -181,11 +181,14 @@ phases:
     deps: [P5]
     files:
       - Stash.Core/Runtime/Types/StashFuture.cs
+      - Stash.Core/Runtime/Types/SpawnedFutureRegistry.cs
+      - Stash.Core/Runtime/IInterpreterContext.cs
       - Stash.Bytecode/VM/VirtualMachine.cs
       - Stash.Bytecode/VM/VirtualMachine.Async.cs
       - Stash.Bytecode/VM/VirtualMachine.Modules.cs
       - Stash.Bytecode/Runtime/VMContext.cs
       - Stash.Bytecode/StashEngine.cs
+      - Stash.Bytecode/UnobservedFaultReporter.cs
       - Stash.Stdlib/BuiltIns/TaskBuiltIns.cs
       - Stash.Cli/Program.cs
       - Stash.Tests/Interpreting/Async/UnobservedAndExit/UnobservedReportTests.cs

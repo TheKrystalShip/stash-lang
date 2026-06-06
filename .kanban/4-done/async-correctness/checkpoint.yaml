@@ -1,0 +1,67 @@
+schema_version: 1
+feature: async-correctness
+current: null
+updated: "2026-06-06T02:58:05Z"
+phases:
+  P1:
+    status: done
+    commit: 410ef8feee3e379e6486e3b4e28e4a39b1802998
+    verified: true
+    started: "2026-06-05T21:57:31Z"
+    completed: "2026-06-05T22:11:33Z"
+    attempts: 1
+    notes: Spec §Async rewritten with two-systems model + D6-D11; task/arr/process metadata updated; reference regenerated; Async/ test scaffold created
+  P2:
+    status: done
+    commit: d184d2523a7073a8fe2c14e9d5da2e03c947aacc
+    verified: true
+    started: "2026-06-05T22:17:52Z"
+    completed: "2026-06-05T22:41:27Z"
+    attempts: 1
+    notes: "D3: IsAsyncChild flag + OCE propagation + CancellationError in GetResult; Timeout distinction preserved; 126 targeted + 13867 full suite pass"
+  P3:
+    status: done
+    commit: 3271a7a51a871443128d9f6a5a404db1c75891bd
+    verified: true
+    started: "2026-06-05T22:48:24Z"
+    completed: "2026-06-05T23:12:51Z"
+    attempts: 1
+    notes: "D2: awaitAll routes through GetResult+FromRuntimeError; original TypeError/ValueError/CancellationError types preserved; 13886 full suite pass"
+  P4:
+    status: done
+    commit: b0e3f309ee221c39d2f562eb459f4e6d04b21bd8
+    verified: true
+    started: "2026-06-05T23:16:22Z"
+    completed: "2026-06-05T23:44:10Z"
+    attempts: 1
+    notes: "D4: FlattenAsyncCallbackResult helper reuses IsAsync/StashFuture pattern; parMap/parFilter/parForEach all flatten; 13901 full suite pass"
+  P5:
+    status: done
+    commit: 7d6bde6b107e1ecd294cdec5e613ef84ae0a5837
+    verified: true
+    started: "2026-06-05T23:45:12Z"
+    completed: "2026-06-06T00:03:03Z"
+    attempts: 1
+    notes: "D5: ResolveTrackedProcess helper (tracked/cached/StateError); socket decision (b) — backlog stub filed; 13908/0 full suite"
+  P6:
+    status: done
+    commit: 695e51ddf5e079d0697eb1eaea2122f33a4562c9
+    verified: true
+    started: "2026-06-06T00:08:35Z"
+    completed: "2026-06-06T00:52:46Z"
+    attempts: 1
+    notes: "D1: SpawnedFutureRegistry + MarkObserved chokepoint + CLI exit hook; 13935/0 full suite; 27 new UnobservedAndExit tests; gotchas.md updated"
+  P7:
+    status: done
+    commit: 735e67b8c586cc8fd95a85b2e7438946ff8f4daf
+    verified: true
+    started: "2026-06-06T01:04:18Z"
+    completed: "2026-06-06T01:40:36Z"
+    attempts: 1
+    notes: 5 dimension test files (217 async tests green) + async_correctness.stash example; D1-D5 contract demonstrated end-to-end; full 14008-test suite green
+review:
+  status: resolved
+  started: "2026-06-06T02:08:17Z"
+  resolved: "2026-06-06T02:58:05Z"
+  findings_open: 0
+  findings_fixed: 0

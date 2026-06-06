@@ -109,6 +109,9 @@ public sealed partial class VirtualMachine
                     ModuleCache = ModuleCache,
                     _importStack = _importStack,
                     ModuleLocks = ModuleLocks,
+                    // Share the root's SpawnedFutureRegistry so any async functions defined
+                    // in the imported module register their futures into the same root set.
+                    SpawnedFutures = SpawnedFutures,
                 };
                 moduleVM._context.CurrentFile = resolvedPath;
                 moduleVM._context.Output = _context.Output;

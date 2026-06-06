@@ -46,9 +46,12 @@ public static partial class TaskBuiltIns
             {
                 child.CleanupTrackedProcesses();
             }
-        });
+        }, cts.Token); // Pass the token so the Task transitions to Canceled (not Faulted) on OCE
 
-        return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        var future = new StashFuture(dotnetTask, cts);
+        // Register in the root's SpawnedFutureRegistry so D1 can scan it at exit.
+        ctx.RegisterFuture(future);
+        return StashValue.FromObj(future);
     }
 
     /// <summary>Waits for a Future to complete and returns its result. Throws if the task failed.</summary>
@@ -60,14 +63,27 @@ public static partial class TaskBuiltIns
     private static StashValue Await(IInterpreterContext ctx, StashValue task)
     {
         var future = GetFuture(task, "task.await");
-
+        // Mark observed BEFORE GetResult() so a faulted-but-awaited future is not
+        // reported by D1 even if GetResult() throws.
+        future.MarkObserved();
         return StashValue.FromObject(future.GetResult());
     }
 
-    /// <summary>Waits for all Futures in the array to complete. Returns an array of results in the same order. Failed tasks become error values.</summary>
+    /// <summary>
+    /// Waits for all Futures in the array to complete and returns an array of per-element results in
+    /// the same order. This is the <em>collect-all</em> combinator (analogous to
+    /// <c>Promise.allSettled</c>): it never throws even if tasks fail.
+    /// Failed tasks become <c>StashError</c> values with the <strong>original error type
+    /// preserved</strong> (e.g. a task that throws <c>TypeError</c> produces a
+    /// <c>StashError</c> whose <c>.type == "TypeError"</c>). Cancelled tasks become a
+    /// <c>StashError</c> with <c>.type == "CancellationError"</c> and message
+    /// <c>"Task was cancelled."</c>. Contrast with the <em>fail-fast</em> combinators
+    /// (<c>task.all</c>, <c>task.race</c>, <c>task.awaitAny</c>) which throw on the
+    /// first failure.
+    /// </summary>
     /// <param name="tasks">An array of Futures</param>
     /// <exception cref="TypeError">if any element in the array is not a Future</exception>
-    /// <returns>An array of result values</returns>
+    /// <returns>An array of result values; failed or cancelled elements are StashError values with the original error type</returns>
     [StashFn(ReturnType = "array")]
     private static StashValue AwaitAll(IInterpreterContext ctx, List<StashValue> tasks)
     {
@@ -89,20 +105,25 @@ public static partial class TaskBuiltIns
             catch { /* Exceptions captured in task */ }
         }
 
-        // Collect results — failed/cancelled tasks become StashError values
+        // Collect results — failed/cancelled tasks become StashError values.
+        // Route through f.GetResult() so the error type is identical to what `await` would throw
+        // (CancellationError for cancelled futures, original RuntimeError subclass for faulted ones),
+        // then convert to a StashError via FromRuntimeError to preserve .type and .message exactly.
         var results = new List<StashValue>(futures.Count);
         foreach (StashFuture f in futures)
         {
-            if (f.IsFaulted)
+            // Mark each constituent observed — awaitAll consumes every outcome.
+            f.MarkObserved();
+            if (f.IsFaulted || f.IsCancelled)
             {
-                string? msg = null;
-                try { f.DotNetTask.GetAwaiter().GetResult(); }
-                catch (Exception ex) { msg = ex.Message; }
-                results.Add(StashValue.FromObj(new StashError(msg ?? "Task failed.", "TaskError")));
-            }
-            else if (f.IsCancelled)
-            {
-                results.Add(StashValue.FromObj(new StashError("Task was cancelled.", "TaskCancelled")));
+                try
+                {
+                    f.GetResult(); // always throws for faulted/cancelled futures
+                }
+                catch (RuntimeError re)
+                {
+                    results.Add(StashValue.FromObj(StashError.FromRuntimeError(re, (List<string>?)null)));
+                }
             }
             else
             {
@@ -142,9 +163,12 @@ public static partial class TaskBuiltIns
         int idx = Task.WaitAny(dotnetTasks.ToArray());
         StashFuture completed = futures[idx];
 
-        // Cancel remaining futures
+        // Cancel remaining futures and mark ALL as observed (winner + cancelled losers).
+        // awaitAny consumes the outcome of the winner (returns/throws it) and initiates
+        // termination of the losers — all futures in the set are now "handled" by this call.
         for (int i = 0; i < futures.Count; i++)
         {
+            futures[i].MarkObserved();
             if (i != idx)
             {
                 try { futures[i].Cancel(); } catch (ObjectDisposedException) { }
@@ -178,9 +202,15 @@ public static partial class TaskBuiltIns
         future.Cancel();
     }
 
-    /// <summary>Returns a new Future that resolves when all Futures in the array complete. Plain values are wrapped in completed Futures.</summary>
+    /// <summary>
+    /// Returns a new Future that resolves when all Futures in the array complete. This is a
+    /// <em>fail-fast</em> combinator (analogous to <c>Promise.all</c>): if any constituent
+    /// task faults, the outer Future faults with the original error type; awaiting it throws
+    /// that error. Plain values are wrapped in completed Futures. Contrast with
+    /// <c>task.awaitAll</c> (collect-all).
+    /// </summary>
     /// <param name="tasks">An array of Futures or plain values</param>
-    /// <returns>A Future that resolves to an array of all results</returns>
+    /// <returns>A Future that resolves to an array of all results, or faults on the first failure</returns>
     [StashFn(ReturnType = "Future")]
     private static StashValue All(IInterpreterContext ctx, List<StashValue> tasks)
     {
@@ -189,18 +219,22 @@ public static partial class TaskBuiltIns
             return StashValue.FromObj(StashFuture.Resolved(new List<StashValue>()));
         }
 
-        // Collect all .NET tasks
+        // Collect all .NET tasks; track original StashFuture objects so we can mark them
+        // observed when their outcome is consumed (D1 — no false positives on task.all).
         var dotnetTasks = new List<Task<object?>>(tasks.Count);
+        var inputFutures = new List<StashFuture?>(tasks.Count);
         foreach (StashValue item in tasks)
         {
             if (item.ToObject() is StashFuture future)
             {
                 dotnetTasks.Add(future.DotNetTask);
+                inputFutures.Add(future);
             }
             else
             {
-                // Plain value — wrap in completed task
+                // Plain value — wrap in completed task; no StashFuture to track.
                 dotnetTasks.Add(Task.FromResult(item.ToObject()));
+                inputFutures.Add(null);
             }
         }
 
@@ -209,6 +243,13 @@ public static partial class TaskBuiltIns
             : new CancellationTokenSource();
         var combinedTask = Task.Run(async () =>
         {
+            // Mark all constituents observed before awaiting — task.all consumes the outcome
+            // of every constituent (either the result collection or the first fault). This
+            // must happen before WhenAll throws, otherwise a faulted constituent would appear
+            // unobserved at exit (the loop below is never reached when WhenAll fails).
+            for (int i = 0; i < inputFutures.Count; i++)
+                inputFutures[i]?.MarkObserved();
+
             await Task.WhenAll(dotnetTasks);
             var results = new List<StashValue>(dotnetTasks.Count);
             foreach (var t in dotnetTasks)
@@ -221,10 +262,15 @@ public static partial class TaskBuiltIns
         return StashValue.FromObj(new StashFuture(combinedTask, cts));
     }
 
-    /// <summary>Returns a new Future that resolves when the first Future in the array completes. Requires a non-empty array.</summary>
+    /// <summary>
+    /// Returns a new Future that resolves when the first Future in the array completes. This is a
+    /// <em>fail-fast</em> combinator (analogous to <c>Promise.race</c>): if the winning task
+    /// faults, the outer Future faults with the original error type; awaiting it throws that
+    /// error. Requires a non-empty array.
+    /// </summary>
     /// <param name="tasks">A non-empty array of Futures</param>
     /// <exception cref="ValueError">if the tasks array is empty</exception>
-    /// <returns>A Future that resolves to the first completed value</returns>
+    /// <returns>A Future that resolves to the first completed value, or faults on the first failure</returns>
     [StashFn(ReturnType = "Future")]
     private static StashValue Race(IInterpreterContext ctx, List<StashValue> tasks)
     {
@@ -234,15 +280,18 @@ public static partial class TaskBuiltIns
         }
 
         var dotnetTasks = new List<Task<object?>>(tasks.Count);
+        var raceFutures = new List<StashFuture?>(tasks.Count);
         foreach (StashValue item in tasks)
         {
             if (item.ToObject() is StashFuture future)
             {
                 dotnetTasks.Add(future.DotNetTask);
+                raceFutures.Add(future);
             }
             else
             {
                 dotnetTasks.Add(Task.FromResult(item.ToObject()));
+                raceFutures.Add(null);
             }
         }
 
@@ -251,8 +300,12 @@ public static partial class TaskBuiltIns
             : new CancellationTokenSource();
         var raceTask = Task.Run(async () =>
         {
-            Task<object?> winner = await Task.WhenAny(dotnetTasks);
-            return await winner;
+            Task<object?> winnerTask = await Task.WhenAny(dotnetTasks);
+            // Mark ALL constituents observed — task.race consumes the winner's outcome
+            // and initiates termination of the rest; all are "handled" by this combinator.
+            for (int i = 0; i < dotnetTasks.Count; i++)
+                raceFutures[i]?.MarkObserved();
+            return await winnerTask;
         });
 
         return StashValue.FromObj(new StashFuture(raceTask, cts));
@@ -282,7 +335,10 @@ public static partial class TaskBuiltIns
             return (object?)null;
         });
 
-        return StashValue.FromObj(new StashFuture(delayTask, cts));
+        var future = new StashFuture(delayTask, cts);
+        // Register in the root's SpawnedFutureRegistry so D1 can scan it at exit.
+        ctx.RegisterFuture(future);
+        return StashValue.FromObj(future);
     }
 
     /// <summary>Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time. If the function is async, its returned Future is unwrapped and the timeout bounds the inner computation.</summary>

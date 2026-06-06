@@ -1,0 +1,29 @@
+// Synthetic C# snippet used by SpawnedFuturePropagationMetaTests as the fail-path
+// self-test fixture for the MISSING-ASSIGNMENT case: a new VirtualMachine is constructed
+// but SpawnedFutures is never assigned — exactly the omission the guard exists to catch.
+//
+// Extension is .txt intentionally: the .cs SDK glob would compile this into
+// Stash.Tests and cause a build break (internals are not accessible there).
+
+using System.Collections.Generic;
+using System.Threading;
+using Stash.Bytecode.Runtime;
+
+namespace Stash.Bytecode.Fixtures;
+
+/// <summary>
+/// A class that creates a child VM without propagating SpawnedFutures —
+/// any futures spawned inside this child will never register in the root set.
+/// </summary>
+internal static class BadMissingPropagationFixture
+{
+    internal static void SpawnChild(
+        Dictionary<string, StashValue> childGlobals,
+        CancellationToken ct)
+    {
+        // BAD: constructs a child VM but never assigns childVm.SpawnedFutures.
+        // Futures spawned inside the child are silently dropped from D1 tracking.
+        var childVm = new VirtualMachine(childGlobals, ct);
+        _ = childVm;
+    }
+}

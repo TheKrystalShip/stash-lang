@@ -78,6 +78,28 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     private HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
     internal ConcurrentDictionary<string, object> ModuleLocks = new(StringComparer.OrdinalIgnoreCase);
 
+    private SpawnedFutureRegistry _spawnedFutures = new SpawnedFutureRegistry();
+
+    /// <summary>
+    /// Per-root-VM registry of every user-visible <see cref="StashFuture"/> spawned during
+    /// a script run. Shared by reference with every child VM so background futures register
+    /// into the same set.  Root VM creates the instance; child VMs receive it via the
+    /// constructor path or the <see cref="SpawnedFutures"/> property setter.
+    /// The CLI driver reads this after script exit to emit D1 unobserved-task warnings.
+    /// </summary>
+    internal SpawnedFutureRegistry SpawnedFutures
+    {
+        get => _spawnedFutures;
+        set
+        {
+            _spawnedFutures = value;
+            // Keep context in sync so Fork() and InvokeCallbackDirect propagate correctly.
+            // _context may be null during field-initializer phase (before the constructor body
+            // runs); the constructor wires SpawnedFutures into the context explicitly.
+            if (_context is not null) _context.SpawnedFutures = value;
+        }
+    }
+
     // ── Debugger Integration ──
     private IDebugger? _debugger;
     private readonly List<DebugCallFrame> _debugCallStack = new();
@@ -117,7 +139,10 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
             ModuleLocks = ModuleLocks,
             // Wire up the VM's import stack so InvokeCallbackDirect can snapshot it
             // when creating a cross-thread child VM (background-thread branch).
-            ImportStack = _importStack
+            ImportStack = _importStack,
+            // Wire the root's SpawnedFutureRegistry into the context so Fork() and
+            // InvokeCallbackDirect's child-VM branch both inherit the same root registry.
+            SpawnedFutures = SpawnedFutures,
         };
     }
 
@@ -156,6 +181,16 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     {
         _context.MainThreadId = -1;
     }
+
+    /// <summary>
+    /// When true, the VM is running as an async child (spawned via task.run or async fn).
+    /// In this mode, an <see cref="OperationCanceledException"/> is propagated directly
+    /// (rather than converted to <see cref="Stash.Runtime.Errors.CancellationError"/>) so
+    /// the enclosing .NET Task transitions to the Canceled state instead of Faulted.
+    /// The main VM always leaves this false, preserving <c>CancellationError</c> for the
+    /// host (Ctrl-C / event.loop cancellation).
+    /// </summary>
+    internal bool IsAsyncChild { get; set; }
 
 
     public void RegisterTypeCheck(string vmTypeName, Func<object, bool> predicate)

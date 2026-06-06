@@ -1427,8 +1427,24 @@ Captured mutable bindings remain mutable through the closure.
 
 ### Async Functions and Await
 
-`async fn` declares an asynchronous function. Calling an async function returns a
-`Future`.
+Stash has **two concurrency systems** that are deliberately separate and do not bridge:
+
+| | **System A — Futures (parallel)** | **System B — Event queue (serial)** |
+| --- | --- | --- |
+| **Surface** | `async fn`, `await`, `task.*`, `arr.par*` | `fs.watch`, `signal.on`, `event.poll`, `event.loop` |
+| **Where the body runs** | Real **thread-pool thread** (forked child VM) | The **main VM thread**, at park / drain points |
+| **State sharing** | Deep-clone or freeze-share isolation at fork; call-local mutations | Shared — callback mutations reach the parent after the drain point |
+| **Concurrency with main script** | Genuinely parallel | Zero — runs only when the main thread is parked |
+| **How results reach the caller** | Only via `await` / `task.await` | Direct mutation of captured state, visible after the drain point |
+
+The two systems are **non-interacting**: `event.poll()` does not advance a Future; `await`
+does not drain the event queue. Both properties are part of the contract — the dimension
+suite tests them explicitly as positive invariants, not as gaps.
+
+#### The Futures system — `async fn` and `await`
+
+`async fn` declares an asynchronous function. Calling an async function immediately returns
+a `Future` — the body begins executing on a thread-pool thread.
 
 ```stash
 async fn fetchAll(urls) {
@@ -1445,11 +1461,75 @@ let result = await future;
 let work = async () => await task.delay(1s);
 ```
 
-`await expr` evaluates `expr`. If the result is a `Future`, `await` waits for it to
-resolve and evaluates to its result. Awaiting a non-`Future` value evaluates to that
-value.
+**D6 — `await` is blocking and uncolored.** `await expr` evaluates `expr`. If the result
+is a `Future`, `await` blocks the *current thread* until the Future resolves and evaluates
+to its result. If the result is not a `Future`, `await` evaluates to the value unchanged.
+`await` works at the top level, inside non-async functions, and inside loops — it does not
+require an `async` context. Only `async fn` (or `task.run`) *spawns* a new parallel task;
+`await` merely *joins* one.
 
-If a future fails with an error, `await` produces that error.
+**D7 — Error-type fidelity.** When a Future fails, the error type is preserved through
+`await`:
+
+- A thrown `StashError` (e.g. `TypeError`, `ValueError`, `IOError`, `StateError`) survives
+  `await` with its type and message intact. Awaiting a faulted Future throws that same error.
+- A C# exception that escapes the task wraps to a generic `RuntimeError` with the message
+  `"Future failed: <original message>"`.
+- `throw "string"` inside a task wraps to `RuntimeError("string")`.
+- Cancellation (`task.cancel`) throws `CancellationError` when the cancelled Future is awaited.
+
+**D8 — Double-await is idempotent; `await` unwraps exactly one level.** Awaiting the same
+Future a second time returns the cached result (the body runs once). `await` does not
+recursively unwrap Future-of-Future — it unwraps exactly one level. If you need the inner
+value from a Future-of-Future, either `await` twice or use `task.run(async fn)` which
+already flattens one level.
+
+**D9 — Future is a first-class value.** A Future behaves like any other value:
+
+- `typeof future == "Future"` is true.
+- `==` tests reference identity — two variables holding the same Future are `==`; two
+  separately-created Futures are not.
+- `conv.str(future)` (or implicit stringification) produces `"<Future:Running>"`,
+  `"<Future:Completed>"`, `"<Future:Failed>"`, or `"<Future:Cancelled>"`.
+- Futures can be stored in arrays, dicts, and struct fields; they can be returned from
+  functions and passed as arguments.
+- A Future handle is **shared**, not cloned, across the isolation boundary — a child task
+  can return a Future created by the parent and the parent can await it. The handle is safe
+  to share because it is effectively immutable (it wraps a thread-safe .NET `Task`).
+
+**Combinator pairing — fail-fast vs. collect-all.**
+
+`task.all`, `task.race`, and `task.awaitAny` are **fail-fast** combinators (analogous to
+`Promise.all`, `Promise.race`, `Promise.any`): if any constituent task faults, the
+combinator throws immediately with the original error type; remaining tasks are cancelled.
+
+`task.awaitAll` is the **collect-all** combinator (analogous to `Promise.allSettled`): it
+waits for every Future in the array regardless of failure and returns an array of per-element
+results. A faulted element becomes a `StashError` value with the **original error type
+preserved** (e.g. a task that throws `TypeError` produces a `StashError` whose
+`.type == "TypeError"`). A cancelled element becomes a `StashError` with
+`.type == "CancellationError"`. `task.awaitAll` never throws.
+
+**D10 — `arr.par*` order preservation, fail-fast, and `maxConcurrency`.** `arr.parMap`,
+`arr.parFilter`, and `arr.parForEach` execute their callback in parallel across elements:
+
+- Results are returned in **input order** (parMap preserves the index mapping; parFilter
+  preserves relative order of elements that pass).
+- If any callback throws, **the first error encountered is rethrown** (fail-fast); other
+  in-flight callbacks are not waited for.
+- All three accept an optional third argument `maxConcurrency` (default: unbounded, using
+  all available cores). Passing `maxConcurrency = N` limits the thread-pool parallelism to
+  `N` simultaneous callbacks; must be `>= 1`.
+- If the callback is an `async` function, its returned Future is automatically awaited, so
+  `arr.parMap([1,2,3], async (x) => x * 2)` returns `[2, 4, 6]` — not an array of Futures.
+
+**Process / socket handle boundary.** `process.spawn()` and socket-creation functions return
+handles that are bound to the task context that created them. Using a parent's handle inside
+a child task (via `task.run` or `async fn`) throws `StateError` with the message
+`"process handle does not cross task boundaries: this Process was created in a different task;
+pass the result of process.spawn() back to the parent via the task's return value"`.
+The same boundary applies to socket / TcpServer / TcpClient handles. Communicate handles
+via return values, not closure capture.
 
 #### Async-child global isolation
 
@@ -1502,7 +1582,13 @@ If a non-frozen value to be captured contains a cycle, the deep-clone at fork ti
 `ValueError` with the cycle path in the message. Fix: `freeze` one node on the cycle (which
 makes the entire reachable graph frozen and eligible for reference-sharing).
 
-#### Background-thread callback marshaling
+#### The event-queue system — background-thread callback marshaling
+
+**D11 — Two-systems model.** The event-queue system is System B: callbacks registered with
+`fs.watch`, `signal.on`, and similar event-source functions run on the **main VM thread**
+at drain points, with full access to shared mutable state and zero concurrency against the
+main script. This is distinct from System A (Futures), which runs truly in parallel on
+thread-pool threads.
 
 Background-thread callbacks — those registered with `fs.watch` and similar event-source
 functions — run their bodies on the **VM thread**, not on the OS event thread that detected
