@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T20:43:57Z"
+updated: "2026-06-06T21:52:00Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "D2 runtime fix: IsEqualCrossTag coerces int/float/byte cross-tag pairs by mathematical value; Edit 4 spec prose landed (trimmed to P3 scope — no per-category table, no secret paragraph); 22 conformance tests (literal+variable pairs); full suite green 14298/14304; bug filed for in/dict-key inconsistency"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 69f93ebbd19fbe34cce1dcdddac34526ed1b15c3
+    verified: true
+    started: "2026-06-06T21:31:01Z"
+    completed: "2026-06-06T21:52:00Z"
+    attempts: 1
+    notes: Edit 4 per-category table + worked examples landed; EqualityPerCategoryConformanceTests 27 tests; MinScannedParticipants 11→12; secret row is prose-only (no executable secret test); all 3 verify steps green
   P5:
     status: pending
     commit: null
