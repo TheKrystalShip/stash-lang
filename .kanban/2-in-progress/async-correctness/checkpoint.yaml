@@ -1,7 +1,7 @@
 schema_version: 1
 feature: async-correctness
 current: null
-updated: "2026-06-05T23:44:10Z"
+updated: "2026-06-06T00:03:03Z"
 phases:
   P1:
     status: done
@@ -36,13 +36,13 @@ phases:
     attempts: 1
     notes: "D4: FlattenAsyncCallbackResult helper reuses IsAsync/StashFuture pattern; parMap/parFilter/parForEach all flatten; 13901 full suite pass"
   P5:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 7d6bde6b107e1ecd294cdec5e613ef84ae0a5837
+    verified: true
+    started: "2026-06-05T23:45:12Z"
+    completed: "2026-06-06T00:03:03Z"
+    attempts: 1
+    notes: "D5: ResolveTrackedProcess helper (tracked/cached/StateError); socket decision (b) — backlog stub filed; 13908/0 full suite"
   P6:
     status: pending
     commit: null
