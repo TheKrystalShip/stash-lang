@@ -25,9 +25,9 @@ structural orphans *except* the three named [grammar holes](#structural--grammar
 
 | | Count | Sections |
 | --- | --- | --- |
-| 🟢 **sealed** | **0** | — (the expected baseline; nothing meets the bar yet) |
+| 🟢 **sealed** | **1** | Values & Types |
 | 🟡 **partial** | **6** | Bindings & Scope · Functions/Closures/Async · Source Files & Modules · Function References · Namespace Members · Runtime Behavior |
-| 🔴 **unsealed** | **7** | Lexical Structure · Values & Types · Expressions · Statements & Control Flow · Aggregate Types & Members · Errors & Cleanup · Shell Integration |
+| 🔴 **unsealed** | **6** | Lexical Structure · Expressions · Statements & Control Flow · Aggregate Types & Members · Errors & Cleanup · Shell Integration |
 
 **Inventory oracle:** 100 grammar productions · 39 keywords · 55 operators · 64 AST nodes.
 
@@ -48,7 +48,7 @@ the unsealed-vs-partial axis* — the operative discriminator remains the **pros
 | # | Spec § | Status | Conformance dir | Highest-value open items (evidence) | Existing tests |
 | - | ------ | ------ | --------------- | ----------------------------------- | -------------- |
 | 1 | **Lexical Structure** (L84) | 🔴 unsealed | — | False clause: L198 "any other backslash escape is a lex error" vs `Lexer.cs:812` silently preserves unknown escapes in Windows-path heuristic. Multi-line string dangling normative ref. | Lexing/ (3) |
-| 2 | **Values & Types** (L570) | 🔴 unsealed | — | **Contradiction: L629 lists empty array FALSEY; `Truthiness_EmptyArrayIsTruthy` (InterpreterTests.cs:4204) asserts truthy.** Equality/coercion punt to "the implementation" (L642, L650). Cross-type primitive `==` (1==1.0) unspecified. `range` missing from type table. Secret redaction string/edges unspec. NaN/-0.0/null equality edges. | Interpreting/ (7) |
+| 2 | **Values & Types** (L570) | 🟢 **sealed** | `Conformance/Values/` *(populated — 6 test classes, 159 tests)* | ✅ Sealed by `language-standard-values` (2026-06-07). Edits 1–7 + rulings D1–D5: type table closed + `range` added (E1); `typeof`/`nameof` vocab pinned (E2); truthiness closed falsey set + empty-collection truthy (D1) + caught-error truthy (D5) (E3); equality per-category table + numeric cross-type coercion (D2) + secret reference identity (D4) (E4); coercion closed list (E5); secret values normative prose (E6); `bytesize`→`bytes` rename spec-side only (D3) (E7). | Interpreting/ (7) + **Conformance/Values/ (6 classes, 159 tests)** |
 | 3 | **Bindings & Scope** (L666) | 🟡 partial | — | Assign-to-`const` throws **unregistered** `RuntimeError` base, error type unspec (L689). Destructure-mismatch / `unset` failure error types unnamed. Same-scope redeclare unspec. (`readonly` sub-section is the spec's best-sealed prose.) | Readonly*, Scope* (11) |
 | 4 | **Expressions** (L942) | 🔴 unsealed | — | Relational `< > <= >=` have **no semantics clause** (only a precedence row). Dict-spread `{...x}` implemented, unspecified. Arithmetic edges (div/mod by zero, overflow) unspec. Every error is bare "a runtime error", no named type. Range inclusivity unstated. | Interpreting/ (7) |
 | 5 | **Statements & Control Flow** (L1208) | 🔴 unsealed | — | **Contradiction: `elevate` spec'd as "elevated privileges" (L1338) vs impl command-prefixing reality.** `lockOptions` (wait/stale) has no semantics. for-in iterable set + non-iterable error type unspec. switch-*statement* no-match unspec (asymmetric with switch-expr). | Interpreting/ (7) |
@@ -78,10 +78,13 @@ They are the async-gap failure mode generalized, and they unblock multiple rows 
    **unregistered `RuntimeError` base** (const-assignment). No section owns the catalogue; this is the
    async-gap class *at the error layer*. Likely home: **§Errors & Cleanup** absorbs the generalized map,
    each consuming section cites it.
-3. **Pin the truthiness / equality / coercion substrate (§Values & Types).** Defined once, cited
-   everywhere (every `if`/`while`/ternary/`switch` condition, struct/array/fn-ref equality). The
-   empty-array contradiction and unspecified cross-type `==` propagate into every consumer — these
-   sections **cannot be sealed independently** of Values & Types. Seal the substrate first (order #2).
+3. **Pin the truthiness / equality / coercion substrate (§Values & Types).** ✅ **Complete** (`language-standard-values`, 2026-06-07).
+   `Stash.Tests/Conformance/Values/` populated (6 test classes, 159 tests): `TypeModelConformanceTests`,
+   `TruthinessConformanceTests`, `EqualityNumericConformanceTests`, `EqualityPerCategoryConformanceTests`,
+   `CoercionConformanceTests`, `SecretConformanceTests`. Empty-array contradiction resolved per D1 (truthy,
+   law corrected); cross-type `==` numeric coercion ratified per D2 (runtime fixed); `bytesize`→`bytes` spec-side
+   per D3; secret equality by reference identity per D4; caught-error truthiness per D5. All later units can cite
+   §Values & Types instead of re-deriving these primitives.
 4. **Specify closure / loop-variable capture once.** Straddles §Bindings (L780) and §Functions (L1414).
    Impl empirically **shares** the loop binding (a closure made in a loop observes the final value).
    Unspecified in *both* — a reviewer must spec it once, not double-spec or leave it in the seam.
@@ -99,7 +102,7 @@ The first two are confirmed by direct spot-check; the rest are audit-identified 
 
 | § | Spec says | Impl does | Status |
 | - | --------- | --------- | ------ |
-| Values & Types | L629: empty array is **falsey** | `[] ? …` is **truthy** (InterpreterTests.cs:4204) | ✅ confirmed |
+| ~~Values & Types~~ | ~~L629: empty array is **falsey**~~ | ~~`[] ? …` is **truthy** (InterpreterTests.cs:4204)~~ | ✅ **resolved per D1** — law corrected to truthy; `Conformance/Values/TruthfulnessConformanceTests.cs` is the durable proof |
 | Shell Integration | L2124: `$(...)` captures stdout **as a string** | returns `CommandResult(Stdout,Stderr,ExitCode)` (ProcessBuiltIns.cs:68) | ✅ confirmed |
 | Lexical Structure | L198: any other backslash escape is a **lex error** | `Lexer.cs:812` silently preserves unknown escapes (Windows-path heuristic) | audit-identified |
 | Aggregate Types | L1846: missing required fields **produce a runtime error** | `TypeOps.cs:347` does **not** check | audit-identified |
