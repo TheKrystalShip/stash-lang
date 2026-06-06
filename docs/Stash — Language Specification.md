@@ -588,7 +588,7 @@ The core value categories are:
 | `byte`      | integer value in the range 0..255            |
 | `string`    | text value                                   |
 | `array`     | ordered mutable sequence                     |
-| typed array | primitive homogeneous array such as `byte[]` |
+| typed array | primitive homogeneous byte array (`byte[]`) |
 | `dict`      | key-value mapping                            |
 | `range`     | half-open integer range (a..b)               |
 | `struct`    | user-defined aggregate instance              |
@@ -639,8 +639,13 @@ For aggregate, opaque, and user-defined values:
 - `typeof(error)` returns `"Error"` for any first-class Error value caught by
   `try/catch`. The user-visible error type (e.g. `"TypeError"`) is recoverable
   via `nameof(err)` or the `err.type` property.
-- `typeof(typed_array)` returns the element-type string suffixed with `[]`
-  (e.g. `"byte[]"`, `"int[]"`, `"float[]"`, `"string[]"`).
+- `typeof(typed_array)` returns the element-type string suffixed with `[]`.
+  The only reachable typed array in the current runtime is `byte[]` (constructed
+  via `buf.from(...)`, `buf.alloc(...)`, or a `process.read*` byte buffer).
+  Adding a new typed-array category (e.g. `int[]`, `float[]`, `string[]`) is a
+  breaking change to §Values and Types per the closed-set sentence at the end of
+  the type table; type annotations of that form erase to plain `array` at compile
+  time and never produce those typeof strings.
 
 `nameof(value)` returns the declared type or binding name where one exists,
 and falls back to the same string `typeof` would return for values with no
