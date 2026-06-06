@@ -109,7 +109,7 @@ public interface IInterpreterContext : IExecutionContext, IProcessContext, ITest
     /// Registers a user-visible <see cref="Stash.Runtime.Types.StashFuture"/> into the
     /// per-root-VM <c>SpawnedFutureRegistry</c> so D1 can scan it at exit for unobserved
     /// faults. The default implementation is a no-op (non-VM execution contexts have no
-    /// registry). <c>VMContext</c> overrides this to call <c>SpawnedFutures?.Register()</c>.
+    /// registry). <c>VMContext</c> overrides this to call <c>SpawnedFutures.Register()</c>.
     /// </summary>
     void RegisterFuture(Stash.Runtime.Types.StashFuture future) { }
 

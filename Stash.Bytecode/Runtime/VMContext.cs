@@ -433,8 +433,11 @@ internal sealed class VMContext : IInterpreterContext
     /// same root set regardless of nesting depth. Set by <see cref="VirtualMachine"/> on
     /// construction; propagated through <see cref="Fork"/> and the child-VM branch of
     /// <see cref="InvokeCallbackDirect"/>.
+    /// Non-nullable: every VMContext has a registry (root contexts have their own fresh one;
+    /// child contexts receive the root's registry during propagation). This eliminates the
+    /// silent null-no-op code path on <see cref="RegisterFuture"/>.
     /// </summary>
-    internal SpawnedFutureRegistry? SpawnedFutures { get; set; }
+    internal SpawnedFutureRegistry SpawnedFutures { get; set; } = new SpawnedFutureRegistry();
 
     /// <summary>
     /// Reference to the active <see cref="VirtualMachine"/> executing on the main thread.
@@ -682,7 +685,7 @@ internal sealed class VMContext : IInterpreterContext
                 childVm.IsAsyncChild = true;
                 // Share the root's SpawnedFutureRegistry so any future spawned inside this
                 // callback registers into the same root set.
-                if (SpawnedFutures != null) childVm.SpawnedFutures = SpawnedFutures;
+                childVm.SpawnedFutures = SpawnedFutures;
                 if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
                 if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
                 if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
@@ -715,8 +718,8 @@ internal sealed class VMContext : IInterpreterContext
 
     /// <summary>
     /// Registers a user-visible <see cref="StashFuture"/> into the per-root-VM registry
-    /// so D1 can scan it at exit. No-op when <see cref="SpawnedFutures"/> is null.
+    /// so D1 can scan it at exit.
     /// </summary>
-    public void RegisterFuture(StashFuture future) => SpawnedFutures?.Register(future);
+    public void RegisterFuture(StashFuture future) => SpawnedFutures.Register(future);
 
 }

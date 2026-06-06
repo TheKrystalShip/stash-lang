@@ -1,0 +1,35 @@
+// Synthetic C# snippet used by SpawnedFuturePropagationMetaTests as the fail-path
+// self-test fixture for the ORPHAN-REGISTRY case: the child VM gets a NEW
+// SpawnedFutureRegistry instead of the root's existing one — futures registered in
+// the child never appear in the root set that the CLI driver scans at exit.
+//
+// This is the subtler failure the meta-test must catch: a required-ctor-param approach
+// would accept this (the field is non-null) but the real invariant (propagation of the
+// ROOT registry) is still violated.
+//
+// Extension is .txt intentionally: the .cs SDK glob would compile this into
+// Stash.Tests and cause a build break (internals are not accessible there).
+
+using System.Collections.Generic;
+using System.Threading;
+using Stash.Bytecode.Runtime;
+
+namespace Stash.Bytecode.Fixtures;
+
+/// <summary>
+/// A class that creates a child VM with a fresh, orphan registry instead of sharing
+/// the root's registry — futures from this child will never be reported by D1.
+/// </summary>
+internal static class BadOrphanRegistryFixture
+{
+    internal static void SpawnChild(
+        Dictionary<string, StashValue> childGlobals,
+        CancellationToken ct)
+    {
+        // BAD: assigns a FRESH SpawnedFutureRegistry — the child's futures register
+        // there but the CLI driver scans the root's registry, so they are silently lost.
+        var childVm = new VirtualMachine(childGlobals, ct);
+        childVm.SpawnedFutures = new SpawnedFutureRegistry();
+        _ = childVm;
+    }
+}
