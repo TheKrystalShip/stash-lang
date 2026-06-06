@@ -18,7 +18,8 @@
 
 ## F01 — [HIGH] D5 was unilaterally narrowed past a user-locked safety decision; impl gap remains unenforced
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** b8c6ad11
 **Files:** `docs/Stash — Language Specification.md:1573-1579`, `Stash.Tests/Conformance/Async/TwoSystemsConformanceTests.cs:27-31`, `Stash.Stdlib/BuiltIns/NetSocketImpl.cs:29-38` (process-global `ConditionalWeakTable<StashInstance, *>` — no per-context tracking analogous to `ProcessBuiltIns.cs:1054-1071`)
 **Phase:** P6
 **Commit:** c7e618b4
@@ -74,7 +75,8 @@ grep -n "socket" "docs/Stash — Language Specification.md"  # confirm narrowed 
 
 ## F02 — [MEDIUM] D5 `StateError` message in the spec does not match what the impl emits; conformance test is too loose to catch it
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** b8c6ad11
 **Files:** `docs/Stash — Language Specification.md:1564-1571`, `Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs:1067-1071`, `Stash.Tests/Conformance/Async/TwoSystemsConformanceTests.cs:92-109`
 **Phase:** P6
 **Commit:** c7e618b4

@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T16:10:12Z"
+updated: "2026-06-06T17:14:12Z"
 phases:
   P1:
     status: done
