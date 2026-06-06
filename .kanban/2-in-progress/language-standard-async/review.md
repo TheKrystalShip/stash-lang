@@ -132,7 +132,8 @@ grep -n "process handle does not cross" "docs/Stash — Language Specification.m
 
 ## F03 — [MEDIUM] §Async D9 prose cites `conv.str(future)` but the function is `conv.toStr` — spec-vs-impl gap inside the sealed prose
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** f1ba8c7e
 **Files:** `docs/Stash — Language Specification.md:1506`, `docs/Stash — Language Specification.md:1681`, `docs/Stash — Language Specification.md:1843`, `Stash.Stdlib/BuiltIns/ConvBuiltIns.cs:19`, `Stash.Tests/Conformance/Async/FuturesCoreConformanceTests.cs:400-442`
 **Phase:** P2 (D9 conformance landed without catching this)
 **Commit:** 7f88372a
@@ -182,7 +183,8 @@ dotnet run --project Stash.Cli/ -- -c 'let f = task.resolve(1); io.println("" + 
 
 ## F04 — [MEDIUM] coverage.md "Seal-status discriminator" still claims zero Conformance tests across all 13 sections; contradicts cross-cutting #1 marked complete
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** f1ba8c7e
 **Files:** `.kanban/milestones/language-standard/coverage.md:34-42`, `.kanban/milestones/language-standard/coverage.md:68-72`
 **Phase:** P8
 **Commit:** 644e3437
