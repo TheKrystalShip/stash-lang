@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T19:49:13Z"
+updated: "2026-06-06T20:18:13Z"
 phases:
   P1:
     status: done
@@ -12,13 +12,13 @@ phases:
     attempts: 1
     notes: Spec Edits 1+2+7 landed; D3 ratified; TypeModelConformanceTests (27 tests); MinScannedParticipants 8→9; all 4 verify steps green
   P2:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 598b386b85651a994ead3c34d8910c485afbab3e
+    verified: true
+    started: "2026-06-06T19:49:58Z"
+    completed: "2026-06-06T20:18:13Z"
+    attempts: 1
+    notes: Spec Edit 3 + D1 (empty-collection truthy law fix) + D5 (StashError.VMIsFalsy false) + 36 conformance tests + legacy test reclassification
   P3:
     status: pending
     commit: null
