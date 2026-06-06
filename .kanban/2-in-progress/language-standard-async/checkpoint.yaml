@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T15:36:38Z"
+updated: "2026-06-06T15:48:58Z"
 phases:
   P1:
     status: done
@@ -60,13 +60,13 @@ phases:
     attempts: 1
     notes: Edit 1 fix (task.delay(1s)→TypeError confirmed; impl bent to accept number for int+float); Edit 2 task.resolve normative clause; Edit 3 task.delay normative clause; 13 TaskResolveDelayConformanceTests; MinScannedParticipants 7→8; stdlib reference regenerated
   P8:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 644e3437b05df63083ba85756a8de8a0ab29d2c2
+    verified: true
+    started: "2026-06-06T15:37:51Z"
+    completed: "2026-06-06T15:48:58Z"
+    attempts: 1
+    notes: "coverage.md row #6 sealed (§Async done, Functions/Closures half pending, D5 socket note); cross-cutting #1 marked complete; reference regen no-op; full suite 14212 passed 0 failed 6 skipped; Category=Conformance 121 tests"
 review:
   status: not_started
   started: null
