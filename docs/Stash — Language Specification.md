@@ -1484,6 +1484,19 @@ recursively unwrap Future-of-Future — it unwraps exactly one level. If you nee
 value from a Future-of-Future, either `await` twice or use `task.run(async fn)` which
 already flattens one level.
 
+**D8 (extended) — `await` on a settled Future is non-blocking and replays the outcome.**
+Awaiting a Future whose status is:
+
+- `task.Status.Completed` returns the cached result without blocking;
+- `task.Status.Failed` rethrows the cached error with full type fidelity (per D7) — the
+  second and subsequent awaits throw the *same* error type and message, not a wrapped copy;
+- `task.Status.Cancelled` throws `CancellationError` without blocking; subsequent awaits
+  also throw `CancellationError`.
+
+The body never runs more than once. There is no distinction between "first await on a
+settled Future" and "second await after the first completed" — both replay the cached
+outcome.
+
 **D9 — Future is a first-class value.** A Future behaves like any other value:
 
 - `typeof future == "Future"` is true.

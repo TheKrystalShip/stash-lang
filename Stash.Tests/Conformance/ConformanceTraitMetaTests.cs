@@ -144,7 +144,7 @@ public sealed class ConformanceTraitMetaTests
     /// the participant count from <see cref="DiscoverParticipants"/>, so a mismatch
     /// means the floor would always fail.
     /// </remarks>
-    private const int MinScannedParticipants = 0; // raised in P2+ as classes land
+    private const int MinScannedParticipants = 1; // P2: FuturesCoreConformanceTests added
 
     // ── Production [Fact]s ────────────────────────────────────────────────────
 
