@@ -31,9 +31,11 @@ structural orphans *except* the three named [grammar holes](#structural--grammar
 
 **Inventory oracle:** 100 grammar productions · 39 keywords · 55 operators · 64 AST nodes.
 
-**Seal-status discriminator.** "Zero `Category=Conformance` tests" is *uniform* across all 13 sections
-(none exist yet) — so it is a **milestone-wide precondition, not a per-section maturity signal**. The
-operative axis is therefore the prose itself:
+**Seal-status discriminator.** At audit time, zero `Category=Conformance` tests existed across all 13
+sections — that was the uniform baseline precondition. With §Async sealed (`language-standard-async`,
+2026-06-06), conformance presence is now a **per-section maturity signal** as units land: each sealed row
+will have its `Conformance/<Area>/` populated. However, *conformance-test presence alone does not decide
+the unsealed-vs-partial axis* — the operative discriminator remains the **prose itself**:
 
 - 🔴 **unsealed** — carries a **false/contradicted clause** OR a whole owned construct with **no
   semantics clause**.

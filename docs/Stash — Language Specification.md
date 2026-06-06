@@ -1503,7 +1503,7 @@ outcome.
 - `typeof future == "Future"` is true.
 - `==` tests reference identity — two variables holding the same Future are `==`; two
   separately-created Futures are not.
-- `conv.str(future)` (or implicit stringification) produces `"<Future:Running>"`,
+- `conv.toStr(future)` (or implicit stringification) produces `"<Future:Running>"`,
   `"<Future:Completed>"`, `"<Future:Failed>"`, or `"<Future:Cancelled>"`.
 - Futures can be stored in arrays, dicts, and struct fields; they can be returned from
   functions and passed as arguments.
@@ -1685,7 +1685,7 @@ readonly let config = { host: "localhost", port: 8080 };
 
 async fn handler(req) {
     // config is frozen — reads are safe, writes throw ReadOnlyError
-    return config.host + ":" + conv.str(config.port);
+    return config.host + ":" + conv.toStr(config.port);
 }
 ```
 
@@ -1847,7 +1847,7 @@ let w = fs.watch(dir, (e) => { polled = true; });
 fs.writeFile(path.join(dir, "f.txt"), "x");
 // spin until the watch debounce fires
 while (!polled) { event.poll(); }
-io.println("polled: " + conv.str(polled));   // "polled: true"
+io.println("polled: " + conv.toStr(polled));   // "polled: true"
 fs.unwatch(w);
 
 // event.loop() — run until cancelled

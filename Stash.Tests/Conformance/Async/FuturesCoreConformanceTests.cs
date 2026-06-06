@@ -442,6 +442,22 @@ let result = conv.toStr(f);
     }
 
     /// <summary>
+    /// D9: Implicit stringification (string concatenation) produces the bracketed form,
+    /// proving the "or implicit stringification" half of the D9 clause.
+    /// The spec says <c>conv.toStr(future)</c> "(or implicit stringification)" produces the
+    /// bracketed form; this test verifies the implicit path via string concatenation.
+    /// </summary>
+    [Fact]
+    public void D9_ImplicitStringification_CompletedFuture_PerSpecAsyncD9()
+    {
+        var result = Run(@"
+let f = task.resolve(1);
+let result = """" + f;
+");
+        Assert.Equal("<Future:Completed>", result);
+    }
+
+    /// <summary>
     /// D9: Futures can be stored in an array and later awaited.
     /// </summary>
     [Fact]
