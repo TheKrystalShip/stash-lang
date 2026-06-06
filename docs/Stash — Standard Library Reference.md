@@ -9165,13 +9165,13 @@ Returns an already-resolved Future wrapping the given value.
 
 **Returns:** `Future` — A completed Future wrapping the value
 
-#### `task.delay(seconds: float) -> Future`
+#### `task.delay(seconds: number) -> Future`
 
 Returns a Future that completes after the given number of seconds.
 
 **Parameters:**
 
-- `seconds`: `float` — The delay duration in seconds
+- `seconds`: `number` — The delay duration in seconds (accepts both int and float, e.g. 1 or 0.1)
 
 **Returns:** `Future` — A Future that resolves to null after the delay
 

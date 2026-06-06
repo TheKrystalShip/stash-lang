@@ -1458,7 +1458,8 @@ let result = await future;
 `async` lambdas are also allowed.
 
 ```stash
-let work = async () => await task.delay(1s);
+// task.delay takes seconds as a number (not a duration literal).
+let work = async () => await task.delay(1);
 ```
 
 **D6 — `await` is blocking and uncolored.** `await expr` evaluates `expr`. If the result
@@ -1509,6 +1510,26 @@ outcome.
 - A Future handle is **shared**, not cloned, across the isolation boundary — a child task
   can return a Future created by the parent and the parent can await it. The handle is safe
   to share because it is effectively immutable (it wraps a thread-safe .NET `Task`).
+
+**`task.resolve(value?)` — already-resolved Future.** Returns a Future that has already
+resolved to `value`. The argument is **optional**; calling `task.resolve()` returns a Future
+resolved to `null`. The returned Future:
+
+- has status `task.Status.Completed` from the moment of creation;
+- returns `value` (or `null` if omitted) when awaited; awaiting it never blocks;
+- is **observation-tracked** like any other Future (a `task.resolve(…)` that is never awaited
+  does not trigger the unobserved-fault report, because it has not faulted);
+- is fail-safe — `task.resolve` itself never throws.
+
+**`task.delay(seconds)` — timed Future.** Returns a Future that resolves to `null` after
+`seconds` seconds (a `number`, e.g. `0.1` or `1`). The Future has status
+`task.Status.Running` until the delay elapses, then transitions to `task.Status.Completed`.
+Cancelling a delay Future with `task.cancel` transitions it to `task.Status.Cancelled` at the
+next park point; awaiting a cancelled delay throws `CancellationError`. `task.delay(0)` is a
+zero-second delay that still resolves on the thread pool — it does *not* synchronously
+complete. `task.delay` is **not** an event-queue drain point: queued callbacks (`fs.watch`,
+`signal.on`) are not drained while a Future from `task.delay` is being awaited; use
+`time.sleep` instead for that purpose.
 
 **Combinator pairing — fail-fast vs. collect-all.**
 

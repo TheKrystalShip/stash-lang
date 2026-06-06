@@ -322,10 +322,10 @@ public static partial class TaskBuiltIns
     }
 
     /// <summary>Returns a Future that completes after the given number of seconds.</summary>
-    /// <param name="seconds">The delay duration in seconds</param>
+    /// <param name="seconds">The delay duration in seconds (accepts both int and float, e.g. 1 or 0.1)</param>
     /// <returns>A Future that resolves to null after the delay</returns>
     [StashFn(ReturnType = "Future")]
-    private static StashValue Delay(IInterpreterContext ctx, double seconds)
+    private static StashValue Delay(IInterpreterContext ctx, [StashParam(Type = "number")] double seconds)
     {
         int ms = (int)(seconds * 1000);
         var cts = new CancellationTokenSource();
