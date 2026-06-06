@@ -558,6 +558,7 @@ public class Program
         }
 
         // Stage 3: Execute via bytecode VM
+        bool primaryErrored = false;
         try
         {
             SemanticResolver.Resolve(statements);
@@ -581,16 +582,22 @@ public class Program
         }
         catch (RuntimeError ex)
         {
+            primaryErrored = true;
             PrintRuntimeError(ex);
+            ReportUnobservedFaults(_activeVM);
             System.Environment.Exit(70);
         }
         catch (OperationCanceledException)
         {
+            primaryErrored = true;
             Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
+            ReportUnobservedFaults(_activeVM);
             System.Environment.Exit(70);
         }
         finally
         {
+            if (!primaryErrored)
+                ReportUnobservedFaults(_activeVM);
             _activeVM?.CleanupTrackedProcesses();
             _activeVM?.CleanupTrackedWatchers();
             _activeVM = null;
@@ -646,6 +653,7 @@ public class Program
             return;
         }
 
+        bool primaryErrored = false;
         try
         {
             SemanticResolver.Resolve(statements);
@@ -670,16 +678,22 @@ public class Program
         }
         catch (RuntimeError ex)
         {
+            primaryErrored = true;
             PrintRuntimeError(ex);
+            ReportUnobservedFaults(_activeVM);
             System.Environment.Exit(70);
         }
         catch (OperationCanceledException)
         {
+            primaryErrored = true;
             Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
+            ReportUnobservedFaults(_activeVM);
             System.Environment.Exit(70);
         }
         finally
         {
+            if (!primaryErrored)
+                ReportUnobservedFaults(_activeVM);
             _activeVM?.CleanupTrackedProcesses();
             _activeVM?.CleanupTrackedWatchers();
             _activeVM = null;
@@ -1264,6 +1278,23 @@ public class Program
             _activeVM?.CleanupTrackedWatchers();
             _activeVM = null;
         }
+    }
+
+    /// <summary>
+    /// Scans the VM's <c>SpawnedFutureRegistry</c> for faulted-but-never-awaited futures
+    /// and writes a warning block to stderr (D1 — unobserved-task report).
+    /// No-op when <paramref name="vm"/> is null or <c>EmbeddedMode</c> is true.
+    /// Called by <see cref="RunFile"/> and <see cref="RunSource"/> after the primary
+    /// script execution finishes (even after a top-level error — a primary error does
+    /// not excuse a silently-dropped async one).
+    /// </summary>
+    private static void ReportUnobservedFaults(VirtualMachine? vm)
+    {
+        if (vm is null) return;
+        // EmbeddedMode hosts opt out of the report (they control their own error output).
+        if (vm.EmbeddedMode) return;
+
+        UnobservedFaultReporter.Report(vm.SpawnedFutures, Console.Error);
     }
 
     /// <summary>Creates built-in globals dictionary for the bytecode VM.</summary>

@@ -80,6 +80,9 @@ public sealed partial class VirtualMachine
         TextWriter capturedErrorOutput = _context.ErrorOutput;
         TextReader capturedInput = _context.Input;
         bool capturedEmbedded = EmbeddedMode;
+        // Share the root's SpawnedFutures registry with the child so any future
+        // spawned inside the async function body registers into the same root set.
+        var capturedRegistry = SpawnedFutures;
 
         var cts = _ct.CanBeCanceled
             ? CancellationTokenSource.CreateLinkedTokenSource(_ct)
@@ -94,6 +97,8 @@ public sealed partial class VirtualMachine
                 EmbeddedMode = capturedEmbedded,
                 // Allow OCE to propagate so the Task ends Canceled (not Faulted) on cancel.
                 IsAsyncChild = true,
+                // Share the root's registry so nested async spawns register there too.
+                SpawnedFutures = capturedRegistry,
             };
             // InitImportStack sets both _importStack and _context.ImportStack in one call —
             // single chokepoint so a future refactor cannot forget to sync the context reference.
@@ -121,7 +126,10 @@ public sealed partial class VirtualMachine
             return childVM.Run();
         }, cts.Token);
 
-        return new StashFuture(task, cts);
+        var future = new StashFuture(task, cts);
+        // Register in the root's SpawnedFutureRegistry so D1 can scan it at exit.
+        SpawnedFutures.Register(future);
+        return future;
     }
 
 
@@ -132,8 +140,16 @@ public sealed partial class VirtualMachine
         byte b = Instruction.GetB(inst);
         int @base = frame.BaseSlot;
         object? future = _stack[@base + b].ToObject();
-        _stack[@base + a] = future is StashFuture sf
-            ? StashValue.FromObject(sf.GetResult())
-            : _stack[@base + b]; // non-future values pass through
+        if (future is StashFuture sf)
+        {
+            // Mark observed BEFORE GetResult() so a faulted-but-awaited future is not
+            // reported by D1 even if GetResult() throws and unwinds the stack.
+            sf.MarkObserved();
+            _stack[@base + a] = StashValue.FromObject(sf.GetResult());
+        }
+        else
+        {
+            _stack[@base + a] = _stack[@base + b]; // non-future values pass through
+        }
     }
 }
