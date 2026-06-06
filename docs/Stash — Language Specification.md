@@ -726,9 +726,30 @@ diverges from the runtime path is a defect.
 
 ### Type Coercion
 
-Stash does not perform broad implicit conversion between unrelated types. Operators
-may define narrow coercions, such as string concatenation with `+`. Library
-functions in the `conv` namespace provide explicit conversions.
+Stash performs implicit conversion only in the following narrow, enumerated cases.
+No other operator or operation performs implicit conversion between types:
+
+1. **Numeric promotion in arithmetic, relational, AND equality operators.**
+   When `+`, `-`, `*`, `/`, `%`, `**`, `<`, `<=`, `>`, `>=`, `==`, `!=` are
+   applied to two numeric operands of different categories (any pair drawn from
+   `int`, `float`, `byte`), the operands are promoted to a common category by
+   mathematical value. For arithmetic and relational operators, the result category
+   is the wider of the two (`int`/`byte` → `int`; anything paired with `float` →
+   `float`). For equality (`==`/`!=`), the result is a `bool`; see *Equality* for
+   the full rule.
+2. **Byte promotion to int in arithmetic and relational operators.** A `byte`
+   operand to `+`, `-`, `*`, `/`, `%`, `**`, `<`, `<=`, `>`, `>=` is promoted
+   to `int` before the operation. The result category is `int` or `float`
+   (per rule 1), never `byte`. Byte equality is covered by rule 1 (the three
+   numeric categories form a single equivalence class for `==`/`!=`).
+3. **String concatenation with `+`.** When one operand of `+` is a `string`,
+   the other operand is stringified via the same rule as `conv.toStr` and the
+   result is a `string`. A `secret` operand of `+` produces a `secret` result
+   (see *Secret Values*).
+
+Outside these three cases, every operand mismatch raises a `RuntimeError` with
+the operand types in the message. Use the `conv` namespace for explicit
+conversions.
 
 ### Secret Values
 

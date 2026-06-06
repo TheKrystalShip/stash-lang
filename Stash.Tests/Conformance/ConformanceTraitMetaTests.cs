@@ -144,7 +144,7 @@ public sealed class ConformanceTraitMetaTests
     /// the participant count from <see cref="DiscoverParticipants"/>, so a mismatch
     /// means the floor would always fail.
     /// </remarks>
-    private const int MinScannedParticipants = 12; // P4(values): + EqualityPerCategoryConformanceTests
+    private const int MinScannedParticipants = 13; // P5(values): + CoercionConformanceTests
 
     // ── Production [Fact]s ────────────────────────────────────────────────────
 
