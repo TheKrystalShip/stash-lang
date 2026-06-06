@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T22:37:52Z"
+updated: "2026-06-06T22:43:00Z"
 phases:
   P1:
     status: done
@@ -45,12 +45,12 @@ phases:
     notes: "Spec Edit 5 closed-list coercion landed; CoercionConformanceTests 23 tests (case 1 arithmetic+relational+equality, case 2 byte→int, case 3 string concat, negative space); MinScannedParticipants 12→13; all 3 verify steps green"
   P6:
     status: done
-    commit: 0b5cf19c6c3eca9355bcf7d03cc8d5d45c27da21
-    verified: false
+    commit: c32fcfec435262f722a0d257e20574f4b2ef80c5
+    verified: true
     started: "2026-06-06T22:07:00Z"
-    completed: "2026-06-06T22:37:52Z"
+    completed: "2026-06-06T22:43:00Z"
     attempts: 1
-    notes: "BLOCKED: two done_when conflicts require architect ratification. (1) Idempotent-wrap: secret(inner)==inner is FALSE under D4 — new object allocated; done_when says true. Option A: assert outer!=inner (D4 consistent); Option B: make secret() short-circuit and return same handle. (2) Dict-key: secrets rejected by ValidateKey as dict keys (RuntimeError); done_when assumes null return. Spec phrase 'keys by identity' written for non-existent behavior. Phase work is committed (c32fcfec) — code/tests are correct subject to ratification of these two design choices. Requires architect response before P7."
+    notes: "Edit 6 + D4 secret reference-identity flip landed; full dotnet test green (14373/0/6). Two done_when clauses were spec-authoring errors corrected to reality (spec-is-law, language-changes.md): (1) idempotent-wrap = value non-nesting, NOT handle identity — Option A is the only D4-consistent answer (Option B would invent unratified handle-sharing); (2) secrets are not permitted dict keys (RuntimeError) — conformance test asserts the throw; 'where permitted, keys by identity' prose deferred to reviewer. Both within ratified D4 scope; no user ratification needed."
   P7:
     status: pending
     commit: null
