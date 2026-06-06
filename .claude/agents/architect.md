@@ -29,6 +29,7 @@ Required sections:
 - Design
 - Surface
 - Semantics
+- Specification Delta
 - Implementation Path
 - Cross-Cutting Concerns
 - Acceptance Criteria
@@ -37,6 +38,11 @@ Required sections:
 - Decision Log
 
 The most important sections are `Implementation Path` and `Acceptance Criteria`. They keep the end-to-end feature visible across small implementation turns.
+
+**`Specification Delta` (spec-first — per `AGENTS.md` → *The Specification is the Law*).** For any feature that adds or changes **observable language/runtime behavior**, write the *exact normative prose* the feature will add to or change in `docs/Stash — Language Specification.md` — the positive behavior **and** its negative space (errors, edges, lifecycle, ordering, what is dropped / unspecified / not guaranteed). This is the law the code will be built to honor, drafted at design time, not reverse-engineered from the implementation afterward. Then:
+- a phase's `done_when` must make the spec edit concrete and checkable — e.g. "`docs/Stash — Language Specification.md` §X states `task.status` reaches `Status.Cancelled` after cooperative cancellation" — not merely "behavior implemented";
+- the same phase (or its sibling) lands the `Category=Conformance` test(s) proving the implementation honors each clause.
+A pure-internal change (no observable behavior, no user-reachable surface) writes "Specification Delta: None — no observable behavior changes." Do not skip the section; state its absence.
 
 ### `plan.yaml`
 
@@ -119,6 +125,7 @@ Do not declare the brief ready until:
 - The implementation path connects every major layer that must participate.
 - Acceptance criteria include at least one end-to-end behavior.
 - Every phase has a concrete `done_when`.
+- **`Specification Delta` is present** — either the exact normative spec prose (positive + negative space) for every observable behavior the feature adds/changes, with a phase `done_when` pinning each spec edit and a `Category=Conformance` test backing each clause; or an explicit "None — no observable behavior changes." Spec-first is not optional (`AGENTS.md` → *The Specification is the Law*).
 - Every concern shared across phases has a named single source of truth and a recorded prevention mechanism in `Cross-Cutting Concerns` — preferring **Construct** (compile error / fail-closed default) over a **Detect** meta-test, and never relying on **Instruct** (prose) alone. (Single-subsystem features: "None.")
 - `stash scripts/checkpoint/checkpoint.stash validate-spec <slug>` passes.
 

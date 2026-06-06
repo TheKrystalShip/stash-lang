@@ -33,6 +33,20 @@ This is the umbrella over the project's other doctrines, each an instance of it:
 
 **What this is NOT — it is not a license for scope creep or gold-plating.** It governs *how well you solve the agreed problem*, never *how much you build*. "Make it right" means the right depth, correctness, and durability for the in-scope work — it never means adding unrequested features, speculative generality, or polish beyond the requirement. Choosing the right construction ≠ enlarging the task.
 
+## The Specification is the Law
+
+**`docs/Stash — Language Specification.md` is the normative, human-authored definition of Stash — the law, in the spirit of the C++ ISO standard. The implementation exists to *honor* it; the spec is never generated from, derived from, or subordinate to the code.** A user learns how Stash behaves by reading the spec, not the source — so a behavior the spec does not state does not, for that reader, exist. Undocumented observable behavior is not a hidden feature; it is a **gap**, and a gap is a defect. This doctrine sits beside *Make It Right*, but it inverts the usual flow: here the **document leads and the code follows**.
+
+**How it operates:**
+
+- **Sealed, not merely populated.** The spec must state what the language **does** *and* what it **explicitly does not do** — the full observable behavior of every internal system: errors, edges, lifecycles, ordering, concurrency, isolation, resource cleanup, exit semantics. Negative space — "X is not guaranteed," "Y is dropped at exit," "Z is unspecified" — is as binding as positive space. The bar is *airtight*: a competent reader should be able to predict the language's behavior in any situation the spec addresses, and know which situations it deliberately leaves open. A black box where the user must read the source to learn what happens is a failure of this doctrine.
+- **Spec-first.** Language or runtime behavior is decided and written **in the spec first**, as the prose a human will read — *then* the code is made to conform. The spec drives development; the diff conforms to the spec, never the reverse. "Implemented and tested but unspecified" is the exact drift this forbids — it quietly promotes the tests to the de-facto source of truth and leaves the spec a stale shadow. (This is how `async` cooperative-cancellation, `task.status` lifecycle, and unobserved-task reporting shipped working-and-tested but undocumented — the failure that motivated this doctrine.)
+- **Conformance is tested, not constructed.** The spec is prose *by design* — not machine-parseable, not generated — so omission here **cannot** be made a compile error, and the *Construct > Detect > Instruct* doctrine deliberately does **not** reach it. That is accepted, not a shortcoming: intent written for humans cannot be a testable construct. The spec↔reality binding is instead held by **conformance unit tests** (`Category=Conformance`, see `Stash.Tests/CLAUDE.md`) that assert each explicit claim — positive *and* negative. A normative claim with no conformance test, or a conformance test with no clause behind it, is itself a gap.
+- **Drift either way is a bug.** Undocumented observable behavior → write the clause, then the test. A spec claim the code violates → fix the code, or correct the claim if it was wrong. The two must never silently disagree; when they do, decide which is right *on purpose* and make the other match.
+- **Seal first, then bend.** When the goal is to lock the standard down, write the *intended* law first and only afterward bend the implementation to honor it — never reverse-engineer the law from whatever the code happens to do today. The standard is the destination; the code is moved to meet it.
+
+The standing program to find and close the gaps — the unwritten rules we follow but never wrote down, the negative space we never stated — is the **`language-standard` milestone** (`.kanban/milestones/language-standard/MILESTONE.md`). Every language/stdlib change also carries the per-change obligations in `.claude/language-changes.md`.
+
 ## Architecture
 
 ```
@@ -110,7 +124,7 @@ Use these rules when writing tests and interpreting behavior:
 
 ## Documentation
 
-Detailed docs live in `docs/` - link to these instead of duplicating content:
+Detailed docs live in `docs/` - link to these instead of duplicating content. The language spec is **normative law**, not a convenience doc — see *The Specification is the Law* above; every language/runtime behavior change updates it spec-first per `.claude/language-changes.md`.
 
 | Topic                       | File                                         |
 | --------------------------- | -------------------------------------------- |

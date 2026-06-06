@@ -2,13 +2,18 @@
 
 Every change to the Stash language or its standard library MUST complete **all** applicable steps below. Do not consider a feature done until each item is addressed.
 
-## 1. Documentation (MANDATORY)
+## 1. Documentation (MANDATORY) — spec-first
+
+**The Language Specification is the law (`AGENTS.md` → *The Specification is the Law*). Write the spec clause FIRST — as the prose a human will read — then make the code conform.** A behavior that ships implemented-and-tested but unspecified is a **defect**, not a feature, even when every test is green. This applies to **observable runtime/semantic behavior**, not just syntax: cancellation, error types, lifecycle, ordering, concurrency, isolation, resource cleanup, exit semantics — and their **negative space** (what is *not* guaranteed, what is dropped, what is left unspecified). If a reader of the spec cannot predict the behavior you changed, the spec is not done.
 
 | What changed                                                        | How to update                                                                                       |
 | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | Syntax, types, operators, literals, keywords, control flow, scoping | Edit `docs/Stash — Language Specification.md` directly                                              |
+| **Observable runtime / semantic behavior** (cancellation, error types, lifecycles, ordering, concurrency, isolation, cleanup, exit, edge cases) | **Edit the spec directly, spec-first** — state the behavior *and* its negative space; do not leave it to live only in code + tests |
 | Namespace functions, signatures, return types, new namespaces       | Update metadata (see below), then run `dotnet run --project Stash.Docs/` to regenerate the reference |
 | Built-in error types (`[StashError]`)                               | Update `Description`, `Properties`, `PropertyTypes` on the attribute, then regenerate               |
+
+**Conformance.** Every normative spec claim a change adds or alters must be backed by a `Category=Conformance` test that proves the implementation honors it — positive *and* negative (see `Stash.Tests/CLAUDE.md` → *Conformance tests*). A claim with no test, or a behavior with no claim, is a gap to close, not a detail to defer.
 
 **`docs/Stash — Standard Library Reference.md` is generated — never edit it by hand.**
 Its API inventory is produced from `StdlibDefinitions` and `BuiltInErrorRegistry` metadata by `Stash.Docs`.

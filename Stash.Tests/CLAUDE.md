@@ -31,6 +31,17 @@ Examples:
 - `Compiler_ClosureCapture_ClosesOverCorrectVariable()`
 - `SemanticValidator_UndeclaredVariable_EmitsSA0201()`
 
+## Conformance tests — proving the spec
+
+The Language Specification is **normative law** (`AGENTS.md` → *The Specification is the Law*), and because it is human prose it cannot be machine-checked against the code. The binding between the spec and reality is held by **conformance tests**: their job is to *prove the implementation honors a specific spec clause* — positive behavior **and** negative space (what is not guaranteed, dropped, or unspecified).
+
+- **Mark them** `[Trait("Category", "Conformance")]` so `dotnet test --filter "Category=Conformance"` runs the whole conformance surface, and a reviewer can confirm a new spec clause has a test behind it.
+- **Organize by spec section**, not by feature, under `Stash.Tests/Conformance/<Area>/` (e.g. `Conformance/Async/CancellationConformanceTests.cs`). The directory mirrors the spec's structure so "what proves §Async cancellation" is findable.
+- **Cite the clause.** Each test (or class) names the spec section / normative claim it verifies in a comment or its name — `Cancellation_StatusReachesCancelled_PerSpecAsyncCancellation()`. A conformance test with no clause behind it, or a normative clause with no conformance test, is a **gap** (a reviewer finding under Review Priority 2).
+- **Negative space is testable too.** "A still-running task is dropped at exit (not awaited)" and "`task.status` does not suppress the unobserved-error report" are conformance assertions as much as the happy path.
+
+This is `Detect`/`Instruct`, not `Construct`, and that is accepted — see the doctrine. Existing behavior tests are not retroactively re-homed wholesale; the `language-standard` milestone seals each spec area and lands its conformance tests as it goes.
+
 ## Imports — global usings are on
 
 `Stash.Tests.csproj` sets `<ImplicitUsings>enable</ImplicitUsings>` + `<Using Include="Xunit" />`, so `System.*` and `Xunit` are already global. Do **not** re-declare `using System;`/`using System.Linq;`/`using Xunit;`/etc. in new test files — they trigger CS8933 (duplicate global using) + CS8019 (unnecessary using) warnings. Only `using` project-specific namespaces.

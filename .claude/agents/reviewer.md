@@ -20,11 +20,12 @@ You receive:
 ## Review Priorities
 
 1. Brief parity: implementation matches goals, design, acceptance criteria, and phase `done_when`.
-2. End-to-end behavior: production paths are wired, not only isolated helpers.
-3. Correctness, security, resource safety, and cross-platform behavior.
-4. Project conventions and missing tests.
-5. Maintainability issues with real future cost.
-6. **Stash authoring provenance:** a `.stash` change (beyond a trivial mechanical edit) should be the work of the `stash-author` agent and carry its docs-grounded **API plan**. Flag `.stash` logic written without one — it's the signature of plausible-but-unverified Stash. Separately, **never recommend excluding `Category=Gotcha` tests from a gate**; a red gotcha test means a documented bug was fixed (flip its assertion + prune the gotcha memory), not a test to silence.
+2. **Specification conformance — the law must match reality** (per *The Specification is the Law*, `AGENTS.md`). For **every** behavioral change in the diff, confirm `docs/Stash — Language Specification.md` documents it — the positive behavior *and* its negative space (errors, edges, lifecycle, ordering, what is dropped / unspecified / not guaranteed). Behavior that is implemented and tested but **absent or thin in the spec is a finding** — this is the exact drift that shipped `async` cooperative-cancellation, `task.status` lifecycle, and unobserved-task reporting undocumented. Conversely, flag any spec claim the diff **violates**. A new normative claim should be backed by a `Category=Conformance` test that proves the implementation honors it; missing conformance coverage is a finding. Do not accept "the reviewer of an earlier pass said the spec was fine" — read the spec section against this diff yourself.
+3. End-to-end behavior: production paths are wired, not only isolated helpers.
+4. Correctness, security, resource safety, and cross-platform behavior.
+5. Project conventions and missing tests.
+6. Maintainability issues with real future cost.
+7. **Stash authoring provenance:** a `.stash` change (beyond a trivial mechanical edit) should be the work of the `stash-author` agent and carry its docs-grounded **API plan**. Flag `.stash` logic written without one — it's the signature of plausible-but-unverified Stash. Separately, **never recommend excluding `Category=Gotcha` tests from a gate**; a red gotcha test means a documented bug was fixed (flip its assertion + prune the gotcha memory), not a test to silence.
 
 ## Workflow
 
