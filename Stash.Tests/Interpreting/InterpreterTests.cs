@@ -2948,13 +2948,15 @@ public class InterpreterTests : StashTestBase
     }
 
     [Fact]
-    public void TryExpr_ErrorIsFalsy()
+    public void TryExpr_ErrorIsTruthy()
     {
+        // D5 ratification (language-standard-values P2): caught Error values are truthy.
+        // !err is false because err (a caught Error) is truthy.
         var source = @"
             let err = try conv.toInt(""abc"");
             let result = !err;
         ";
-        Assert.Equal(true, Run(source));
+        Assert.Equal(false, Run(source));
     }
 
     [Fact]
@@ -3077,13 +3079,16 @@ public class InterpreterTests : StashTestBase
     }
 
     [Fact]
-    public void TryExpr_ErrorInConditional_IsFalsy()
+    public void TryExpr_ErrorInConditional_IsTruthy()
     {
+        // D5 ratification (language-standard-values P2): caught Error values are truthy.
+        // A try-expression that fails returns an Error value; that value is truthy
+        // so the ternary enters the "truthy" branch.
         var source = @"
             let err = try conv.toInt(""abc"");
             let result = err ? ""truthy"" : ""falsy"";
         ";
-        Assert.Equal("falsy", Run(source));
+        Assert.Equal("truthy", Run(source));
     }
 
     [Fact]
@@ -4196,20 +4201,6 @@ fn makeAdder(x) {
         var result = Eval("10 % -3");
         Assert.IsType<long>(result);
         Assert.Equal(1L, result);
-    }
-
-    // --- Truthiness edge cases ---
-
-    [Fact]
-    public void Truthiness_EmptyArrayIsTruthy()
-    {
-        Assert.Equal(true, Run("let result = [] ? true : false;"));
-    }
-
-    [Fact]
-    public void Truthiness_StructInstanceIsTruthy()
-    {
-        Assert.Equal(true, Run("struct S { x } let s = S { x: 1 }; let result = s ? true : false;"));
     }
 
     // --- Mixed type comparisons ---

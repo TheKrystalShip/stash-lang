@@ -85,6 +85,7 @@ phases:
       - Stash.Core/Runtime/Types/StashError.cs
       - Stash.Core/Runtime/Types/StashLiteralArg.cs
       - Stash.Tests/Interpreting/InterpreterTests.cs
+      - Stash.Tests/Bytecode/TypeProtocolTests.cs
     verify:
       - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~TruthinessConformanceTests"

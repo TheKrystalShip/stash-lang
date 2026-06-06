@@ -53,6 +53,12 @@ public sealed class StashLiteralArg : IVMTyped, IVMStringifiable, IVMTruthiness
     public string VMToString() => Text;
 
     // IVMTruthiness
+    /// <summary>
+    /// Internal-only invariant: <see cref="StashLiteralArg"/> is never reachable as a
+    /// user-visible Stash value — it is consumed by the VM command-dispatch path before
+    /// any user-facing truthiness check can observe it. This truthiness rule is therefore
+    /// not part of the §Values and Types spec surface.
+    /// </summary>
     public bool VMIsFalsy => string.IsNullOrEmpty(Text);
 
     public override bool Equals(object? obj) =>

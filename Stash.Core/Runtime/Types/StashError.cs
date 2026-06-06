@@ -149,7 +149,12 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
         }
     }
 
-    public bool VMIsFalsy => true;
+    /// <summary>
+    /// Ratified by D5 (2026-06-06, language-standard-values): caught Error values are
+    /// <strong>truthy</strong>. A caught error is a real value, not an absence-marker —
+    /// <c>try { ... } catch (e) { if (e) { ... } }</c> enters the <c>if</c> body.
+    /// </summary>
+    public bool VMIsFalsy => false;
 
     public string VMToString() => ToString();
 }

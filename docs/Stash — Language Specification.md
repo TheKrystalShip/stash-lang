@@ -649,17 +649,30 @@ named declaration. For user-defined struct, enum, and interface types,
 
 ### Truthiness
 
-The following values are falsey:
+The following values, and no others, are **falsey**:
 
 - `null`
 - `false`
-- numeric zero
-- empty string
-- empty array
-- empty dictionary
+- the integer `0`
+- the float `0.0` (and the float `-0.0`)
+- the byte `0`
+- the empty string `""`
 
-All other values are truthy. Conditions in `if`, `while`, `do while`, ternary
-expressions, logical operators, and retry predicates use these rules.
+**Every other value is truthy.** This explicitly includes:
+
+- The empty array `[]` and the empty dictionary `{}`. Use `len(value) == 0` or
+  `arr.isEmpty(value)` / `dict.isEmpty(value)` for emptiness checks.
+- Every caught Error value. `try { ... } catch (e) { if (e) { ... } }` enters
+  the `if` body — `e` is a real value, not an absence-marker.
+- Every struct instance, enum value, function, namespace, future, range, secret,
+  `ip`, `duration`, `bytes`, and `semver` value, regardless of internal state.
+- `NaN` (the float). Use `value != value` to detect NaN.
+- The string `" "` (a single space).
+
+Conditions in `if`, `while`, `do while`, ternary expressions, logical operators
+(`&&`, `||`, `!`), and retry predicates (`until`) use these rules. The same rules
+apply uniformly in CLI, embedded host, LSP runtime, and DAP-driven execution
+contexts.
 
 ### Equality
 
