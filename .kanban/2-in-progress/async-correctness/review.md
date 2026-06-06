@@ -210,7 +210,8 @@ dotnet test --filter "FullyQualifiedName~Stash.Tests.Cli.UnobservedAsync"   # ne
 
 ## F04 — [MINOR] Cross-cutting "Construct" claim is actually Detect — `SpawnedFutureRegistry` is nullable and `RegisterFuture` silently no-ops on null
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3025b900
 **Files:** `Stash.Bytecode/Runtime/VMContext.cs:437,720`, `Stash.Core/Runtime/IInterpreterContext.cs:114`, brief §Cross-Cutting Concerns row 2
 **Phase:** P6
 **Commit:** `695e51dd`
