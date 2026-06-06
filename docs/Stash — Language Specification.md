@@ -590,6 +590,7 @@ The core value categories are:
 | `array`     | ordered mutable sequence                     |
 | typed array | primitive homogeneous array such as `byte[]` |
 | `dict`      | key-value mapping                            |
+| `range`     | half-open integer range (a..b)               |
 | `struct`    | user-defined aggregate instance              |
 | `enum`      | enum member value                            |
 | `interface` | interface type used for conformance checks   |
@@ -600,23 +601,51 @@ The core value categories are:
 | `secret`    | redaction wrapper                            |
 | `ip`        | IP address or network                        |
 | `duration`  | elapsed time duration                        |
-| `bytesize`  | byte quantity                                |
+| `bytes`     | byte quantity                                |
 | `semver`    | semantic version                             |
+
+The type names above are the complete closed set returned by `typeof`. A future
+runtime value category is a breaking change to §Values and Types; tooling and
+libraries may rely on this set being closed.
+
+### Ranges
+
+A `range` value (constructed by the `..` operator; see §Expressions) is a
+first-class value with `typeof` string `"range"`. Ranges compare by reference
+identity (`1..3 == 1..3` is `false` for two distinct constructions; the same
+range value compared to itself is `true`). A range is always truthy,
+regardless of whether the range is empty (`0..0`). Iteration semantics, `in`
+membership, and arithmetic interactions are defined in §Expressions.
 
 ### `typeof` and `nameof`
 
-`typeof(value)` returns a string naming the runtime category of `value`.
-`nameof(value)` returns the declared type or binding name where available. For user
-types, `nameof` must preserve the user-visible struct, enum, or interface name.
+`typeof(value)` returns one of the strings enumerated in the type table above —
+a closed vocabulary. It is total: it never raises for any value, including
+`null`. For `int`, `float`, `bool`, `null`, `byte`, `string`, `array`, `dict`,
+`range`, `function`, `namespace`, `secret`, `duration`, `bytes`, `ip`, and
+`semver`, the string names the runtime category directly.
 
-```stash
-typeof(1);        // "int"
-typeof(null);     // "null"
-nameof(Server);   // "Server"
-```
+For aggregate, opaque, and user-defined values:
 
-The complete standard-library contract for these functions is in the
-[Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md).
+- `typeof(struct_instance)` returns `"struct"`. To recover the user-visible
+  struct name, use `nameof(instance)`.
+- `typeof(enum_value)` returns `"enum"`. `nameof(enum_value)` returns the
+  declared enum-type name.
+- `typeof(struct_type)` / `typeof(enum_type)` (the type *identifier*) returns
+  `"struct"` / `"enum"` respectively; the *type* and its *instance* are
+  indistinguishable by `typeof`.
+- `typeof(future)` returns `"Future"` (capitalized; Future is a runtime category,
+  not a user-defined type — the capitalization is normative).
+- `typeof(error)` returns `"Error"` for any first-class Error value caught by
+  `try/catch`. The user-visible error type (e.g. `"TypeError"`) is recoverable
+  via `nameof(err)` or the `err.type` property.
+- `typeof(typed_array)` returns the element-type string suffixed with `[]`
+  (e.g. `"byte[]"`, `"int[]"`, `"float[]"`, `"string[]"`).
+
+`nameof(value)` returns the declared type or binding name where one exists,
+and falls back to the same string `typeof` would return for values with no
+named declaration. For user-defined struct, enum, and interface types,
+`nameof` returns the user-visible name (e.g. `nameof(Server) == "Server"`).
 
 ### Truthiness
 
