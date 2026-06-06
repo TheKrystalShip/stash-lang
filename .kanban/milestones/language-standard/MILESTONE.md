@@ -68,6 +68,12 @@ One **unit** = one subsystem audit-and-seal pass (a child `/spec` feature tagged
 
 ### Rough order & next up
 
+**The authoritative map is [`coverage.md`](coverage.md)** — a living, grammar-diffed audit of all 13
+spec sections (seal status, per-section gaps, the cross-cutting workstreams, and the live spec-vs-impl
+contradictions). Produced 2026-06-06 by the `language-standard-coverage-map` workflow. Baseline:
+**0 sealed · 6 partial · 7 unsealed.** The order below is its dependency-ranked recommendation; consult
+`coverage.md` for the evidence behind each row.
+
 A revisable sketch, **not** a contract. Detail only the next unit; redraw the rest as each pass
 teaches us where the real gaps are.
 
@@ -79,12 +85,17 @@ teaches us where the real gaps are.
   semantics, `await` on an already-cancelled future, `arr.parForEach` return value, isolation cycle
   errors), and seals it. It also establishes the `Conformance/` directory + the clause-citing pattern
   the later units reuse.
-- Later (rough, reorder freely as audits teach us): error model & exceptions (`throw`/`try`/`catch`/
-  `defer`/`elevate`/`retry`, the `[StashError]` hierarchy, error propagation) · types, truthiness &
-  coercion · scoping, closures & upvalue capture · modules & imports (resolution, circular-import,
-  dynamic paths) · control flow & pattern matching · operators, literals & precedence · collections &
-  iteration protocols · strings, interpolation & templates · the command/pipe/shell surface ·
-  numbers (int/float, overflow, division) · structs/enums/interfaces & dispatch.
+- **Cross-cutting workstreams come first or in parallel** (owned by no single section — see
+  `coverage.md`): (a) stand up `Conformance/` — §Async is the vehicle; (b) author the error-type
+  taxonomy (the biggest gap — nearly every section says "produces a runtime error" with no named
+  `[StashError]`); (c) resolve the live spec-vs-impl contradictions (empty-array truthiness,
+  escape-rule, missing-field / nominal-vs-structural interface, `elevate`, `$(...)` return type) as
+  spec-first decisions before a conformance test can assert them.
+- Later (dependency-ranked per `coverage.md`, foundations first; reorder freely as audits teach us):
+  Lexical Structure → **Values & Types** (truthiness/equality/coercion substrate cited everywhere) →
+  Bindings & Scope → Expressions → Statements & Control Flow → Functions/Closures/Async → Aggregate
+  Types → Errors & Cleanup → Source Files & Modules → Shell Integration → Function References →
+  Namespace Members → Runtime Behavior.
 
 ### Decisions & learnings (append as you go)
 
@@ -92,12 +103,13 @@ teaches us where the real gaps are.
 | --- | --- | --- |
 | 2026-06-06 | Milestone created after the `async-correctness` feature shipped cancellation + unobserved-task behavior **working and tested but undocumented**; the spec gap was caught only by a manual read, not by any gate. | Established the *Specification is the Law* doctrine + spec-first hooks (architect `Specification Delta`, reviewer Review-Priority-2, `language-changes.md` reorder, `Category=Conformance` convention). The spec can't be a Construct, so the standing audit milestone is how we seal it. |
 | 2026-06-06 | Locked: **formal milestone** (subsystem-by-subsystem passes) over incremental-on-touch; **marked + organized conformance tests** (`Category=Conformance` + `Conformance/<Area>/`) over an unmarked discipline. | User rulings — the stronger, more durable options; matches how the project runs cross-cutting programs and its `Category=Gotcha` precedent. |
+| 2026-06-06 | **Built `coverage.md`** via a 15-agent grammar-diffed audit (1 inventory → 13 parallel section auditors → 1 omission-oracle/skeptic). Baseline 0 sealed / 6 partial / 7 unsealed; surfaced 6 spec-vs-impl contradictions + 5 cross-cutting workstreams + 3 grammar holes. | Discovery-first: the index already existed (the spec's 13 `##` sections), so the work was a *seal-status map* over it, not a new taxonomy. The grammar (Appendix A) is the mechanical completeness oracle — stronger and less biased than an LLM "what's missing" pass. Cross-cutting error-type taxonomy + truthiness substrate identified as the highest-leverage first moves. |
 
 ### Open questions
 
-- Should there be a single roll-up conformance "spec coverage" report (e.g. a doc listing each spec
-  section → its conformance test file), to make remaining gaps visible at a glance — or is the
-  `Conformance/<Area>/` directory structure mirroring the spec enough?
+- ~~Should there be a single roll-up conformance "spec coverage" report…?~~ **Resolved 2026-06-06:
+  yes — [`coverage.md`](coverage.md), regenerated from the audit workflow.** The
+  `Conformance/<Area>/` directories remain the per-area home; `coverage.md` is the roll-up view.
 - Granularity of a unit: one spec `##` section per `/spec`, or batch closely-related sections (e.g.
   all of §Async, or all of the error model) into one pass? Decide per area by size.
 - Do any *generated* surfaces (the stdlib reference) carry normative claims that belong in the
