@@ -709,8 +709,9 @@ distinct constructions are **not** equal (`[1] == [1]` is `false`); use
 `arr.equals` / `dict.equals` for structural comparison. Two distinct
 `secret("x")` constructions are **not** equal (`secret("x") == secret("x")` is
 `false`) — to compare contents, `reveal()` first; for security-sensitive
-comparison use `crypto.constantTimeEquals` on the revealed values (see *Secret
-Values*).
+comparison use `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a
+constant-time comparator backed by `CryptographicOperations.FixedTimeEquals`;
+see *Secret Values*).
 
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
@@ -769,13 +770,17 @@ let raw = reveal(token); // "abc123"
 `reveal` requires a secret argument. Passing a non-secret value to `reveal`
 raises a `RuntimeError`.
 
-**Idempotent wrap.** `secret(secret(x))` is equivalent to `secret(x)`. Secrets
-do not nest; the inner secret's value is unwrapped before wrapping.
+**Idempotent wrap.** `secret(secret(x))` wraps `x` with no inner-secret
+nesting; `reveal(secret(secret(x))) == reveal(secret(x))`. Secrets do not
+nest; the inner secret's value is unwrapped before wrapping. The outer and
+inner handles are distinct objects (per *Equality* below), so `outer == inner`
+is `false`.
 
 ```stash
 let inner = secret("x");
 let outer = secret(inner); // unwraps: reveal(outer) == "x"
 typeof(outer);             // "secret"
+// outer == inner is false — distinct handles (reference identity)
 ```
 
 **Taint-propagating `+`.** When `+` is applied with a `secret` operand on
@@ -797,14 +802,14 @@ when both operands are the **same secret handle** (`let t = secret("x"); t
 (`secret("x") == secret("x")` is `false`). The wrapped value never participates
 in equality. To compare contents, `reveal()` both secrets first and compare
 the revealed values; for security-sensitive comparison use
-`crypto.constantTimeEquals` on the revealed bytes (a constant-time check that
-resists timing side-channels). This is safety-by-default: == cannot be used as an oracle for the wrapped value.
+`buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a constant-time
+comparator backed by `CryptographicOperations.FixedTimeEquals` that resists
+timing side-channels). This is safety-by-default: == cannot be used as an oracle for the wrapped value.
 
-A consequence of reference identity: a `secret` value, where permitted as a
-dict key, keys by **identity**. Two distinct `secret("x")` constructions are
-distinct keys; the same handle is the same key. The current implementation
+A `secret` value cannot be used as a dict key. The current implementation
 restricts dict keys to `string`, `int`, `float`, and `bool`; passing a
-`secret` as a dict key raises a `RuntimeError`.
+`secret` raises a `RuntimeError`. (If a future runtime permits secret
+dict-keys, they will key by reference identity per the equality rule above.)
 
 **`typeof` and truthiness.** `typeof(s) == "secret"` for any secret `s`.
 `nameof(s)` returns `"secret"`. A `secret` is truthy regardless of inner
