@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-async
 current: null
-updated: "2026-06-06T14:49:26Z"
+updated: "2026-06-06T15:18:23Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: Edit 8 (still-running-at-exit drop sealed as negative space) + 15 D1 conformance tests + InFlightDrop moved Gotcha→Conformance; MinScannedParticipants bumped 3→5
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: c7e618b444be86c4c40273009d357819ccf18c72
+    verified: true
+    started: "2026-06-06T14:54:35Z"
+    completed: "2026-06-06T15:18:23Z"
+    attempts: 1
+    notes: "14 IsolationConformanceTests (freeze/clone/cycle/Future-sharing) + 12 TwoSystemsConformanceTests (D5 process handles + D11 non-interaction); spec narrowed: socket handle enforcement is not implemented (gap documented in spec prose); MinScannedParticipants 5→7"
   P7:
     status: pending
     commit: null
