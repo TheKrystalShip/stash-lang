@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T20:18:13Z"
+updated: "2026-06-06T20:43:57Z"
 phases:
   P1:
     status: done
@@ -20,13 +20,13 @@ phases:
     attempts: 1
     notes: Spec Edit 3 + D1 (empty-collection truthy law fix) + D5 (StashError.VMIsFalsy false) + 36 conformance tests + legacy test reclassification
   P3:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: f03c186a064c75c8e7980bd27e512e23c8b4c82a
+    verified: true
+    started: "2026-06-06T20:22:12Z"
+    completed: "2026-06-06T20:43:57Z"
+    attempts: 1
+    notes: "D2 runtime fix: IsEqualCrossTag coerces int/float/byte cross-tag pairs by mathematical value; Edit 4 spec prose landed; 22 conformance tests (literal+variable pairs); full suite green 14298/14304"
   P4:
     status: pending
     commit: null
