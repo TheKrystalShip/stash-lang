@@ -50,7 +50,7 @@ operative axis is therefore the prose itself:
 | 3 | **Bindings & Scope** (L666) | 🟡 partial | — | Assign-to-`const` throws **unregistered** `RuntimeError` base, error type unspec (L689). Destructure-mismatch / `unset` failure error types unnamed. Same-scope redeclare unspec. (`readonly` sub-section is the spec's best-sealed prose.) | Readonly*, Scope* (11) |
 | 4 | **Expressions** (L942) | 🔴 unsealed | — | Relational `< > <= >=` have **no semantics clause** (only a precedence row). Dict-spread `{...x}` implemented, unspecified. Arithmetic edges (div/mod by zero, overflow) unspec. Every error is bare "a runtime error", no named type. Range inclusivity unstated. | Interpreting/ (7) |
 | 5 | **Statements & Control Flow** (L1208) | 🔴 unsealed | — | **Contradiction: `elevate` spec'd as "elevated privileges" (L1338) vs impl command-prefixing reality.** `lockOptions` (wait/stale) has no semantics. for-in iterable set + non-iterable error type unspec. switch-*statement* no-match unspec (asymmetric with switch-expr). | Interpreting/ (7) |
-| 6 | **Functions, Closures, Async** (L1353) | 🟡 partial | `Conformance/Async/` *(to create — pattern-setter)* | `-> returnHint` has **zero prose**. **Loop-variable closure capture unspec** (impl shares the binding — prints 2,2 not 0,1). Arity-mismatch error unspec. Type-hint runtime-enforcement negative space. *(Async half L1428-1787 is the spec's strongest prose: two-systems model + D6–D11.)* | **Interpreting/Async/ (16)** + (8) |
+| 6 | **Functions, Closures, Async** (L1353) | 🟡 partial | `Conformance/Async/` *(populated — pattern-setter; 8 test classes, 105+ tests)* | §Async sealed; Functions/Closures/Lambdas/Methods half pending. Open items: `-> returnHint` has **zero prose**. **Loop-variable closure capture unspec** (impl shares the binding — prints 2,2 not 0,1). Arity-mismatch error unspec. Type-hint runtime-enforcement negative space. Future unit: `language-standard-functions`. **D5 note (P6):** D5 cross-task handle enforcement narrowed to process handles only; socket task-affinity is a documented impl limitation (not enforced at runtime — spec prose updated to reflect gap; architect-ratification pending). | **Conformance/Async/ (8 classes)** + **Interpreting/Async/ (16)** + (8) |
 | 7 | **Aggregate Types & Members** (L1820) | 🔴 unsealed | — | **Two FALSE clauses: L1846 "missing required fields produce a runtime error" (VM `TypeOps.cs:347` does not check); L1867 declares interfaces "structural" but impl is nominal.** Struct instance identity/mutability/self unspec. Enum ordinal model unspec. | Interpreting/ (7) |
 | 8 | **Errors & Cleanup** (L2248) | 🔴 unsealed | — | `retry`/`timeout` have keywords + AST nodes + ~90 tests but **no Appendix A grammar production**. `RetryExhaustedError`/`TimeoutError` tested but unspecified. Generalized error-type catalogue (see cross-cutting #2) belongs here. | Interpreting/ (5) |
 | 9 | **Source Files & Modules** (L281) | 🟡 partial | — | Module caching / single-evaluation semantics unspec. Import-of-non-exported-name runtime contract is only an SA hint (SA0809), not normative. Every module failure is bare "a runtime error" (cycle/non-string-path/not-found), no named types. | Bytecode/Import* (10) |
@@ -65,10 +65,11 @@ These are the **omission class** — concerns that span sections, so no per-sect
 They are the async-gap failure mode generalized, and they unblock multiple rows at once. Do them
 *before or alongside* the per-section seal passes.
 
-1. **Stand up the `Conformance/` suite.** No `[Trait("Category","Conformance")]` test exists for any
-   language section today (the trait appears only under `Registry/Authz/`). This is a precondition for
-   *every* row reaching sealed. **§Async is the natural vehicle** — finishing it establishes
-   `Stash.Tests/Conformance/Async/` and the clause-citing convention every later unit copies.
+1. **Stand up the `Conformance/` suite.** ✅ **Complete** (`language-standard-async`, 2026-06-06).
+   `Stash.Tests/Conformance/Async/` established (8 test classes, 105+ tests), clause-citing convention
+   documented, and `Stash.Tests/Conformance/ConformanceTraitMetaTests.cs` is the durable guard (reflection
+   scan with fail-path self-test + scanned-count floor) every later unit inherits. The `[Trait("Category",
+   "Conformance")]` trait now has non-zero bindings reachable via `dotnet test --filter "Category=Conformance"`.
 2. **Author the error-type taxonomy (the single biggest gap).** Nearly every section describes failures
    only as "produces a runtime error" with **no named registered `[StashError]` type** — Bindings,
    Expressions, Statements, Functions, Modules, Shell, Aggregate, Errors. Worse, some throw the
