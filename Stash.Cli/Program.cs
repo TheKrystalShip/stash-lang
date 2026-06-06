@@ -1291,10 +1291,9 @@ public class Program
     private static void ReportUnobservedFaults(VirtualMachine? vm)
     {
         if (vm is null) return;
-        // EmbeddedMode hosts opt out of the report (they control their own error output).
-        if (vm.EmbeddedMode) return;
-
-        UnobservedFaultReporter.Report(vm.SpawnedFutures, Console.Error);
+        // EmbeddedMode is forwarded into the reporter so the gate lives in Stash.Bytecode
+        // (unit-testable) rather than here. A normal CLI run always has EmbeddedMode=false.
+        UnobservedFaultReporter.Report(vm.SpawnedFutures, Console.Error, vm.EmbeddedMode);
     }
 
     /// <summary>Creates built-in globals dictionary for the bytecode VM.</summary>
