@@ -209,4 +209,31 @@ let result = await f;
 
         Assert.Equal("", report);
     }
+
+    // ── Real-path registration test (Chokepoint 2 exercise) ──────────────────
+
+    /// <summary>
+    /// Exercises the real task.run → ctx.RegisterFuture → SpawnedFutureRegistry path
+    /// (Chokepoint 2). If ctx.RegisterFuture is removed from TaskBuiltIns.Run, this test
+    /// goes RED because the future is never in the registry.
+    ///
+    /// Uses WaitForNonRunning() to wait deterministically (no wall-clock sleep) for the
+    /// background task to fault before scanning the registry.
+    /// </summary>
+    [Fact]
+    public void RealPath_TaskRunThrows_RegistrationAndReport()
+    {
+        var vm = BuildAndRunVM(@"
+task.run(() => { throw ValueError { message: ""real-oops"" }; });
+", out _);
+
+        // Wait deterministically for the background task to fault (no wall-clock sleep).
+        vm.SpawnedFutures.WaitForNonRunning(2000);
+
+        string report = RunReport(vm);
+
+        // The real task.run path registered the future; the report fires
+        Assert.Contains("warning: 1 unobserved async error(s):", report);
+        Assert.Contains("ValueError: real-oops", report);
+    }
 }
