@@ -746,7 +746,7 @@ collection membership requires changing both `StashValue.Equals` and
 dedicated future unit (see
 `.kanban/0-backlog/bugs/numeric-equality-inconsistency-in-operator-dict-keys.md`).
 To test mathematical membership today, normalize types first:
-`arr.contains(arr.map(xs, x => conv.toFloat(x)), 1.0)`.
+`arr.contains(arr.map(xs, (x) => conv.toFloat(x)), 1.0)`.
 
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
@@ -1333,8 +1333,9 @@ value falls within the range and aligns with the step.
 ```
 
 Array element membership and dict key membership use **tag-strict equality**, not the
-numeric-coercion rule of `==`. `1 in [1.0]` is `false`; `1.0 in {1: "v"}` does not
-find the integer key. See *Equality → Membership and keying use tag-strict equality*.
+numeric-coercion rule of `==`. `1 in [1.0]` is `false`; a dict populated with integer
+key `1` does not match a float key `1.0` lookup. See *Equality → Membership and keying
+use tag-strict equality*.
 
 Using `in` with an unsupported right operand produces a runtime error.
 
