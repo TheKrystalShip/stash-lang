@@ -274,7 +274,8 @@ directory doesn't introduce findings.
 
 ## F04 — [MEDIUM] `DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1` is vacuous for 3 of 4 types — constant-pool interning collapses literal `1KB`/`5s`/`@10.0.0.1` to a single object
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 020de361
 **Files:** `Stash.Tests/Conformance/Equality/DictKeyConformanceTests.cs:309-335`
 **Phase:** F01 fix (commit `9756804c`) — regression caught in re-review
 **Commit:** 9756804c

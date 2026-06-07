@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-equality
 current: null
-updated: "2026-06-07T15:09:11Z"
+updated: "2026-06-07T15:23:26Z"
 phases:
   P1:
     status: done
@@ -52,8 +52,8 @@ phases:
     attempts: 1
     notes: "Closed §Equality: E3 three-named-modes + E4 stale-xref fix, examples/equality.stash, tooling sweep, coverage roll-up; full suite 14470/0/6"
 review:
-  status: in_progress
+  status: resolved
   started: "2026-06-07T14:36:13Z"
-  resolved: null
+  resolved: "2026-06-07T15:23:26Z"
   findings_open: 0
   findings_fixed: 0
