@@ -71,7 +71,8 @@ dotnet test --filter "Category=Conformance"
 
 ## F02 — [HIGH] §Equality "single equivalence class" claim silently contradicted by `in`/dict-key/`arr.contains` — unsealed negative space
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 00b27587
 **Files:** `docs/Stash — Language Specification.md:677-725`, `Stash.Core/Runtime/StashValue.cs:145-167`, `Stash.Bytecode/Runtime/RuntimeOps.cs:49-76`
 **Phase:** P3, P4
 **Commit:** f03c186a, 69f93ebb
