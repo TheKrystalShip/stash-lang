@@ -238,17 +238,20 @@ public sealed class SecretConformanceTests : StashTestBase
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Passing a secret as a dict key raises a RuntimeError.
-    /// Spec Edit 6: "The current implementation restricts dict keys to string, int, float, and bool;
-    /// passing a secret as a dict key raises a RuntimeError."
-    /// If secrets were permitted as dict keys, they would key by identity (per the spec's
-    /// "keys by identity" clause). That restriction may be lifted in a future version.
+    /// A secret may be used as a dict key; it keys by reference identity (Edit E1 keying half, §Equality).
+    /// Two distinct <c>secret("x")</c> constructions are distinct keys; the same handle is the same key.
+    /// This is the sealed §Equality / §Secret Values behavior as of Edit E1.
     /// </summary>
     [Fact]
-    public void DictKey_SecretAsKey_ThrowsRuntimeError_PerSpecValuesSecret()
+    public void DictKey_SecretAsKey_KeysByReferenceIdentity_PerSpecEqualityE1()
     {
-        var err = RunCapturingError(@"let d = {}; d[secret(""x"")] = 1;");
-        Assert.Contains("Dictionary keys must be string, int, float, or bool", err.Message);
+        // Two distinct constructions → distinct keys; second lookup misses
+        var result1 = Run(@"let d = {}; d[secret(""x"")] = 1; let result = d[secret(""x"")];");
+        Assert.Null(result1);
+
+        // Same handle → same key; lookup hits
+        var result2 = Run(@"let t = secret(""x""); let d = {}; d[t] = 1; let result = d[t];");
+        Assert.Equal(1L, result2);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -148,8 +148,8 @@ public static partial class IniBuiltIns
         var sb = new StringBuilder();
 
         // Collect global (non-section) keys and section keys separately
-        var globals = new List<KeyValuePair<object, StashValue>>();
-        var sections = new List<KeyValuePair<object, StashValue>>();
+        var globals = new List<KeyValuePair<StashValue, StashValue>>();
+        var sections = new List<KeyValuePair<StashValue, StashValue>>();
 
         foreach (var kvp in dict.RawEntries())
         {
@@ -166,7 +166,7 @@ public static partial class IniBuiltIns
         // Write global keys first
         foreach (var kvp in globals)
         {
-            var key = kvp.Key.ToString()!;
+            var key = kvp.Key.ToObject()?.ToString() ?? "";
             var val = FormatValue(kvp.Value.ToObject());
             sb.AppendLine($"{key} = {val}");
         }
@@ -174,7 +174,7 @@ public static partial class IniBuiltIns
         // Write section blocks
         foreach (var kvp in sections)
         {
-            var sectionName = kvp.Key.ToString()!;
+            var sectionName = kvp.Key.ToObject()?.ToString() ?? "";
             var sectionDict = (StashDictionary)kvp.Value.AsObj!;
 
             if (sb.Length > 0)
@@ -192,7 +192,7 @@ public static partial class IniBuiltIns
                     continue;
                 }
 
-                var key = entry.Key.ToString()!;
+                var key = entry.Key.ToObject()?.ToString() ?? "";
                 var val = FormatValue(entry.Value.ToObject());
                 sb.AppendLine($"{key} = {val}");
             }

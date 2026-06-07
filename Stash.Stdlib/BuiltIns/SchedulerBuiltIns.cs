@@ -255,7 +255,7 @@ public static partial class SchedulerBuiltIns
         {
             env = new Dictionary<string, string>(envDict.Count);
             foreach (var kvp in envDict.GetAllEntries())
-                env[kvp.Key.ToString()!] = kvp.Value.ToObject()?.ToString() ?? "";
+                env[kvp.Key.ToObject()?.ToString() ?? ""] = kvp.Value.ToObject()?.ToString() ?? "";
         }
 
         Dictionary<string, string>? platformExtras = null;
@@ -264,7 +264,7 @@ public static partial class SchedulerBuiltIns
         {
             platformExtras = new Dictionary<string, string>(extrasDict.Count);
             foreach (var kvp in extrasDict.GetAllEntries())
-                platformExtras[kvp.Key.ToString()!] = kvp.Value.ToObject()?.ToString() ?? "";
+                platformExtras[kvp.Key.ToObject()?.ToString() ?? ""] = kvp.Value.ToObject()?.ToString() ?? "";
         }
 
         return new ServiceDefinition

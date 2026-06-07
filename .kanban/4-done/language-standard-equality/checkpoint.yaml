@@ -1,0 +1,59 @@
+schema_version: 1
+feature: language-standard-equality
+current: null
+updated: "2026-06-07T15:23:26Z"
+phases:
+  P1:
+    status: done
+    commit: 2fc3ca5cf5119bcb46b8ea5c6ea17566d1fa4bdd
+    verified: true
+    started: "2026-06-07T10:52:51Z"
+    completed: "2026-06-07T11:29:49Z"
+    attempts: 1
+    notes: StashEquality chokepoint built; RuntimeOps forwarder installed; Detect meta-test + conformance tests green; 14396/0/6 full suite
+  P2:
+    status: done
+    commit: 53240e571e970145e99db220e6e5038d0c62d821
+    verified: true
+    started: "2026-06-07T11:30:45Z"
+    completed: "2026-06-07T11:57:53Z"
+    attempts: 1
+    notes: RuntimeOps.Contains + 8 ArrBuiltIns sites → SameValueZeroEquals; E1 membership spec landed; 14417/0/6 full suite
+  P3:
+    status: done
+    commit: 268dc93423f4f3b08dd420e6ee6cc70e0917c241
+    verified: true
+    started: "2026-06-07T12:03:09Z"
+    completed: "2026-06-07T12:57:24Z"
+    attempts: 1
+    notes: "StashDictionary._entries → Dictionary<StashValue,StashValue> SameValueZero; all callers updated; E1 keying spec sealed; DictKeyConformanceTests added + aggregate ref-identity tests; 14438/0/6 full suite"
+  P4:
+    status: done
+    commit: 37dfaf5f2a1808eedfccb65135078a0d8a3f8ac7
+    verified: true
+    started: "2026-06-07T12:59:58Z"
+    completed: "2026-06-07T13:23:38Z"
+    attempts: 1
+    notes: assert.equal/notEqual → StrictEquals; RuntimeValues.IsEqual deleted; E2 spec landed; StrictAssertConformanceTests (18 tests); 14456/0/6 full suite
+  P5:
+    status: done
+    commit: 98460fb8c4a3e7122ab059948be307ad03e5a76f
+    verified: true
+    started: "2026-06-07T13:24:47Z"
+    completed: "2026-06-07T13:47:24Z"
+    attempts: 1
+    notes: "Deleted ChunkBuilder.StashValueComparer (value-level float comparer), used StashValue.Equals (bit-level) for constant pool; ±0 now distinct; added InterningRegressionTests + EqualityModesVocabularyConformanceTests; KnownExemptions emptied; MinScannedParticipants raised to 21"
+  P6:
+    status: done
+    commit: 531d14b7754315cf6c613d8f7a4ab8fd3ded9ccb
+    verified: true
+    started: "2026-06-07T13:54:44Z"
+    completed: "2026-06-07T14:17:57Z"
+    attempts: 1
+    notes: "Closed §Equality: E3 three-named-modes + E4 stale-xref fix, examples/equality.stash, tooling sweep, coverage roll-up; full suite 14470/0/6"
+review:
+  status: resolved
+  started: "2026-06-07T14:36:13Z"
+  resolved: "2026-06-07T15:23:26Z"
+  findings_open: 0
+  findings_fixed: 0

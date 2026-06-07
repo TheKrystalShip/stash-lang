@@ -176,7 +176,7 @@ public static partial class TomlBuiltIns
                 continue;
             }
 
-            string key = kvp.Key.ToString()!;
+            string key = kvp.Key.ToObject()?.ToString() ?? "";
             object? converted = ConvertStashValue(kvp.Value.ToObject());
             if (converted is not null)
             {

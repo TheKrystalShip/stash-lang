@@ -41,7 +41,7 @@ public sealed partial class VirtualMachine
             var props = new Dictionary<string, object?>();
             foreach (var kv in throwDict.GetAllEntries())
             {
-                if (kv.Key is string k)
+                if (kv.Key.AsObj is string k)
                     props[k] = kv.Value.ToObject();
             }
             throw new UserRuntimeError(errType, errMsg, span) { Properties = props };

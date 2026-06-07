@@ -272,9 +272,9 @@ public static partial class CliBuiltIns
         // Collect all options/flags from the dict, then append implicit --help if helpFlag is on
         var optRows = new List<(string label, string help, string defaultAnnotation)>();
 
-        foreach (object rawKey in optionsDict.RawKeys())
+        foreach (StashValue rawKey in optionsDict.RawKeys())
         {
-            StashValue sv = optionsDict.Get(rawKey!);
+            StashValue sv = optionsDict.Get(rawKey);
             if (!sv.IsObj || sv.AsObj is not StashInstance spec) continue;
 
             string longName = GetStringFieldOrEmpty(spec, "name");

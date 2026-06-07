@@ -46,7 +46,7 @@ public sealed partial class VirtualMachine
                 throw new RuntimeError("Dictionary key cannot be null.", GetCurrentSpan(ref frame));
             }
 
-            return dict.Get(index).ToObject();
+            return dict.Get(StashValue.FromObject(index)).ToObject();
         }
 
         if (obj is string s)
@@ -107,7 +107,7 @@ public sealed partial class VirtualMachine
                 throw new RuntimeError("Dictionary key cannot be null.", GetCurrentSpan(ref frame));
             }
 
-            dict.Set(index, StashValue.FromObject(value));
+            dict.Set(StashValue.FromObject(index), StashValue.FromObject(value));
             return;
         }
         throw new RuntimeError($"Cannot index-assign into {RuntimeValues.Stringify(obj)}.", GetCurrentSpan(ref frame));
@@ -450,24 +450,24 @@ public sealed partial class VirtualMachine
         var dict = new StashDictionary();
         for (int i = 0; i < count; i++)
         {
-            object? key = _stack[@base + a + 1 + i * 2].ToObject();
+            StashValue keySv = _stack[@base + a + 1 + i * 2];
             StashValue valSv = _stack[@base + a + 2 + i * 2];
             object? valObj = valSv.ToObject();
 
-            if (key == null)
+            if (keySv.IsNull)
             {
                 // Spread entry: compiler emits LoadNull for the key slot.
                 if (valObj is SpreadMarker sm)
                 {
                     if (sm.Items is StashDictionary spreadDict)
                     {
-                        foreach (KeyValuePair<object, StashValue> kv in spreadDict.RawEntries())
+                        foreach (KeyValuePair<StashValue, StashValue> kv in spreadDict.RawEntries())
                             dict.Set(kv.Key, kv.Value);
                     }
                     else if (sm.Items is StashInstance inst2)
                     {
                         foreach (KeyValuePair<string, StashValue> kv in inst2.GetFields())
-                            dict.Set(kv.Key, kv.Value);
+                            dict.Set(StashValue.FromObj(kv.Key), kv.Value);
                     }
                     else
                     {
@@ -479,7 +479,7 @@ public sealed partial class VirtualMachine
             }
             else
             {
-                dict.Set(key, valSv);
+                dict.Set(keySv, valSv);
             }
         }
         _stack[@base + a] = StashValue.FromObj(dict);
@@ -581,8 +581,8 @@ public sealed partial class VirtualMachine
                 {
                     var rest = new StashDictionary();
                     foreach (StashValue k in dict.Keys())
-                        if (k.ToObject() is string ks && !usedNames.Contains(ks))
-                            rest.Set(ks, dict.Get(ks));
+                        if (k.AsObj is string ks && !usedNames.Contains(ks))
+                            rest.Set(k, dict.Get(k));
                     _stack[@base + writeReg + meta.Names.Length] = StashValue.FromObj(rest);
                 }
             }

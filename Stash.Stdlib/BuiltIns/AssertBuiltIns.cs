@@ -21,10 +21,10 @@ public static partial class AssertBuiltIns
     [StashFn]
     private static void Equal(IInterpreterContext ctx, StashValue actual, StashValue expected)
     {
-        object? actualObj = actual.ToObject();
-        object? expectedObj = expected.ToObject();
-        if (!RuntimeValues.IsEqual(actualObj, expectedObj))
+        if (!StashEquality.StrictEquals(actual, expected))
         {
+            object? actualObj = actual.ToObject();
+            object? expectedObj = expected.ToObject();
             string msg = $"assert.equal failed: expected {RuntimeValues.Stringify(expectedObj)} but got {RuntimeValues.Stringify(actualObj)}";
             throw new AssertionError(msg, expectedObj, actualObj, ctx.CurrentSpan);
         }
@@ -37,12 +37,11 @@ public static partial class AssertBuiltIns
     [StashFn]
     private static void NotEqual(IInterpreterContext ctx, StashValue actual, StashValue expected)
     {
-        object? actualObj = actual.ToObject();
-        object? expectedObj = expected.ToObject();
-        if (RuntimeValues.IsEqual(actualObj, expectedObj))
+        if (StashEquality.StrictEquals(actual, expected))
         {
+            object? actualObj = actual.ToObject();
             string msg = $"assert.notEqual failed: expected values to differ but both are {RuntimeValues.Stringify(actualObj)}";
-            throw new AssertionError(msg, expectedObj, actualObj, ctx.CurrentSpan);
+            throw new AssertionError(msg, actualObj, actualObj, ctx.CurrentSpan);
         }
     }
 
@@ -281,7 +280,7 @@ public static partial class AssertBuiltIns
             {
                 foreach (var kvp in dictE.RawEntries())
                 {
-                    string keyStr = RuntimeValues.Stringify(kvp.Key);
+                    string keyStr = RuntimeValues.Stringify(kvp.Key.ToObject());
                     string keyPath = $"{path}[\"{keyStr}\"]";
                     if (!dictA.Has(kvp.Key))
                         return (false, keyPath, RuntimeValues.Stringify(kvp.Value.ToObject()), "missing");
@@ -292,7 +291,7 @@ public static partial class AssertBuiltIns
                 {
                     if (!dictE.Has(kvp.Key))
                     {
-                        string keyStr = RuntimeValues.Stringify(kvp.Key);
+                        string keyStr = RuntimeValues.Stringify(kvp.Key.ToObject());
                         return (false, $"{path}[\"{keyStr}\"]", "missing", RuntimeValues.Stringify(kvp.Value.ToObject()));
                     }
                 }

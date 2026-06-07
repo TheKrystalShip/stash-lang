@@ -47,10 +47,10 @@ public static partial class CliBuiltIns
             seenLongs["help"] = "--help (implicit)";
         }
 
-        foreach (object rawKey in def.RawKeys())
+        foreach (StashValue rawKey in def.RawKeys())
         {
-            string propName = rawKey?.ToString() ?? "";
-            StashValue entry = def.Get(rawKey!);
+            string propName = rawKey.ToObject()?.ToString() ?? "";
+            StashValue entry = def.Get(rawKey);
 
             if (!entry.IsObj) continue;
 

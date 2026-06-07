@@ -157,10 +157,9 @@ public static class RuntimeValues
                 }
 
                 first = false;
-                object? rawKey = key.ToObject();
-                sb.Append(Stringify(rawKey));
+                sb.Append(Stringify(key.ToObject()));
                 sb.Append(": ");
-                sb.Append(Stringify(dict.Get(rawKey!).ToObject()));
+                sb.Append(Stringify(dict.Get(key).ToObject()));
             }
             sb.Append('}');
             return sb.ToString();
@@ -197,29 +196,6 @@ public static class RuntimeValues
         }
 
         return value.ToString()!;
-    }
-
-    /// <summary>
-    /// Tests two runtime values for equality without type coercion.
-    /// </summary>
-    public static bool IsEqual(object? left, object? right)
-    {
-        if (left is null && right is null)
-        {
-            return true;
-        }
-
-        if (left is null || right is null)
-        {
-            return false;
-        }
-
-        if (left.GetType() != right.GetType())
-        {
-            return false;
-        }
-
-        return object.Equals(left, right);
     }
 
     /// <summary>
@@ -584,19 +560,19 @@ public static class RuntimeValues
 
     private static StashValue DeepCloneDictionary(StashDictionary dict, HashSet<object> activePath, List<string> pathBreadcrumbs)
     {
-        // Snapshot the parent's live Dictionary<object,StashValue> BEFORE walking.
+        // Snapshot the parent's live Dictionary<StashValue,StashValue> BEFORE walking.
         // RawEntries() uses ToList() which dispatches to ICollection.CopyTo — that does
         // NOT check the version flag and silently produces a torn snapshot without throwing.
         // Instead use RawEntriesEnumerable() which yields via a foreach over _entries,
         // triggering the version-checked Dictionary struct enumerator and throwing on
         // concurrent structural mutation (new-key Set/Remove from the parent thread).
         // Unbounded-retry, single-writer safe — mirrors SnapshotEntries in IsolationHelpers.
-        KeyValuePair<object, StashValue>[] entries = null!;
+        KeyValuePair<StashValue, StashValue>[] entries = null!;
         for (int attempt = 0; ; attempt++)
         {
             try
             {
-                var list = new List<KeyValuePair<object, StashValue>>(dict.Count);
+                var list = new List<KeyValuePair<StashValue, StashValue>>(dict.Count);
                 foreach (var kv in dict.RawEntriesEnumerable())
                 {
                     list.Add(kv);
@@ -618,7 +594,7 @@ public static class RuntimeValues
             StashValue val = kv.Value;
             if (val.IsObj)
             {
-                string keyStr = RuntimeValues.Stringify(kv.Key);
+                string keyStr = RuntimeValues.Stringify(kv.Key.ToObject());
                 pathBreadcrumbs.Add($"[\"{keyStr}\"]");
                 val = DeepClone(val, activePath, pathBreadcrumbs);
                 pathBreadcrumbs.RemoveAt(pathBreadcrumbs.Count - 1);

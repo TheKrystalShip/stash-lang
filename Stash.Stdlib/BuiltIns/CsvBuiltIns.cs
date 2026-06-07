@@ -421,7 +421,7 @@ public static partial class CsvBuiltIns
                 var rawKeys = firstDict.RawKeys();
                 columns = new List<string>(rawKeys.Count);
                 foreach (var k in rawKeys)
-                    columns.Add(k.ToString()!);
+                    columns.Add(k.ToObject()?.ToString() ?? "");
             }
 
             // Write header row

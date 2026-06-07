@@ -143,9 +143,9 @@ internal static class JsonStashBridge
 
             case StashValueTag.Obj when value.AsObj is StashDictionary dict:
                 writer.WriteStartObject();
-                foreach (KeyValuePair<object, StashValue> kv in dict.RawEntries())
+                foreach (KeyValuePair<StashValue, StashValue> kv in dict.RawEntries())
                 {
-                    string keyStr = kv.Key is string ks ? ks : kv.Key.ToString() ?? string.Empty;
+                    string keyStr = kv.Key.AsObj is string ks ? ks : kv.Key.ToObject()?.ToString() ?? string.Empty;
                     writer.WritePropertyName(keyStr);
                     WriteValue(writer, kv.Value, depth + 1);
                 }

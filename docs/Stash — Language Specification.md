@@ -727,26 +727,64 @@ comparison use `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a
 constant-time comparator backed by `CryptographicOperations.FixedTimeEquals`;
 see *Secret Values*).
 
-**Membership and keying use tag-strict equality — not the numeric equivalence class.**
-The numeric-coercion rule above governs `==` and `!=` only. The `in` operator (array
-element membership and dict key lookup), `arr.contains`, and dictionary key storage
-use **tag-strict structural equality**: two numeric values are considered equal only
-when they share the same runtime category (`int`, `float`, or `byte`) and the same
-bit-level value. Concretely:
+**Strict assert equality (Edit E2, DE3).** The `assert.equal` and `assert.notEqual` built-ins use a type-strict equality: operands of different `typeof` are never equal even within the numeric equivalence class. `assert.equal(1, 1.0)` raises `AssertionError` even though `1 == 1.0` is `true`. Within a single type, value equality applies with the following floating-point specifics: `assert.equal(0.0, -0.0)` passes (±0 unified), and `assert.equal(NaN, NaN)` passes (NaN is reflexive under strict assert equality). Aggregates and secrets compare by reference identity: `assert.equal(secret("x"), secret("x"))` raises (two distinct constructions); `let t = secret("x"); assert.equal(t, t)` passes (aliased handle). Test authors who want operator-== semantics in an assertion write `assert.true(a == b);` instead.
 
-- `1 in [1.0]` is `false` — integer `1` is not tag-equal to float `1.0`.
-- `arr.contains([1], 1.0)` is `false` — same reason.
-- Integer key `1` and float key `1.0` are **distinct dictionary keys**: a dictionary
-  populated with `d[1] = "int"` returns `null` for `d[1.0]`.
+**Array membership uses SameValueZero — a value-equality comparator aligned with the
+numeric-coercion rule, with one floating-point delta.** The `in` operator (when the
+right-hand side is an array), `arr.contains`, `arr.includes`, `arr.indexOf`,
+`arr.lastIndexOf`, `arr.remove`, and `arr.unique` (de-duplication compares elements
+pairwise under SameValueZero) all use **SameValueZero equality**: int/float/byte operands
+compare by mathematical value (the numeric-coercion rule above), the floats `+0.0` and
+`-0.0` are the same value, and `NaN` is **self-equal by value**. Two `NaN`s in the same
+array are considered equal even though `NaN != NaN` under `==`.
 
-This divergence from `==` is observable and deliberate in the current runtime. The
-hash-contract requirement (`a == b → same hash`) means extending numeric coercion to
-collection membership requires changing both `StashValue.Equals` and
-`StashValue.GetHashCode` for every numeric key — a coordinated change reserved for a
-dedicated future unit (see
-`.kanban/0-backlog/bugs/numeric-equality-inconsistency-in-operator-dict-keys.md`).
-To test mathematical membership today, normalize types first:
-`arr.contains(arr.map(xs, (x) => conv.toFloat(x)), 1.0)`.
+Concretely:
+
+- `1 in [1.0]` is `true`. `arr.contains([1], 1.0)` is `true`.
+  `arr.contains([0], -0.0)` is `true`.
+- `NaN in [NaN]` is `true` (`NaN`-self-equal by value, not by identity).
+
+This is the **collection equivalent of `==`** with the single delta that NaN is treated
+as self-equal by value (a key collection users universally expect — a value put in is a
+value found back). The `==` operator is unaffected: `NaN == NaN` remains `false` and
+`+0.0 == -0.0` remains `true` per IEEE 754. The non-numeric branch of SameValueZero
+delegates to the per-category equality rule above: two distinct `secret("x")` constructions
+are **not** the same array element (reference identity per §Secret Values); two arrays with
+the same elements but distinct constructions are **not** the same element (reference
+identity).
+
+**Dictionary keys use SameValueZero — the same comparator as array membership (Edit E1,
+keying half).** Integer key `1` and float key `1.0` are the same dictionary key:
+`let d = {}; d[1] = "a"` returns `"a"` for `d[1.0]`. The floats `+0.0` and `-0.0`
+are the same key. A `NaN` key round-trips: a value stored under a `NaN` key is
+retrieved by the same `NaN` expression.
+
+For non-numeric types, the per-category equality rule governs keying:
+
+- Strings key by value (two `"foo"` expressions are the same key).
+- `duration`, `bytes`, `ip`, and `semver` key by value (per the per-category equality
+  rule above): `let d = {}; d[1KB] = 1; d[1KB]` returns `1`. Two `5s` duration
+  expressions, two `@10.0.0.1` ip expressions, and two `semver("1.2.3")` expressions
+  each produce the same key.
+- Secrets, arrays, dicts, struct instances, functions, namespaces, futures, ranges,
+  and Error values key by reference identity — two distinct `secret("x")` constructions
+  are distinct keys; two `[1, 2]` arrays with distinct identities are distinct keys.
+  A handle that is the same object is always the same key:
+  `let t = secret("x"); d[t] = 1; d[t]` returns `1`.
+
+**Three named modes — one source of truth.** Every equality decision in Stash
+resolves through exactly three named modes, all defined in one place
+(`StashEquality`): **`OperatorEquals`** backs `==` and `!=` (the numeric-coercion
+rule above, with `NaN != NaN` per IEEE 754); **`SameValueZero`** backs collection
+membership and dictionary keying (the same numeric coercion, but with `NaN`
+self-equal by value); and **`StrictEquals`** backs `assert.equal` and
+`assert.notEqual` (type-strict — no cross-category numeric coercion). These three
+are the complete vocabulary of value equality: there is no fourth mode, and no code
+path compares two runtime values by any other rule. (The constant-pool interning key
+the compiler uses to deduplicate literals is *structural identity*, not a value-equality
+mode — it is intentionally at least as fine as `==` and is not part of this set.) A
+future addition to this set is a breaking change to §Equality and requires a new
+normative clause here.
 
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
@@ -841,10 +879,11 @@ the revealed values; for security-sensitive comparison use
 comparator backed by `CryptographicOperations.FixedTimeEquals` that resists
 timing side-channels). This is safety-by-default: == cannot be used as an oracle for the wrapped value.
 
-A `secret` value cannot be used as a dict key. The current implementation
-restricts dict keys to `string`, `int`, `float`, and `bool`; passing a
-`secret` raises a `RuntimeError`. (If a future runtime permits secret
-dict-keys, they will key by reference identity per the equality rule above.)
+A `secret` value may be used as a dictionary key; it keys by reference
+identity per the equality rule above (§Equality, Edit E1 keying half). Two
+distinct `secret("x")` constructions are distinct keys: `d[secret("x")] = 1`
+followed by `d[secret("x")]` returns `null`. A named binding is the same key
+as itself: `let t = secret("x"); d[t] = 1; d[t]` returns `1`.
 
 **`typeof` and truthiness.** `typeof(s) == "secret"` for any secret `s`.
 `nameof(s)` returns `"secret"`. A `secret` is truthy regardless of inner
@@ -1332,10 +1371,10 @@ value falls within the range and aligns with the step.
 3 in 1..5;
 ```
 
-Array element membership and dict key membership use **tag-strict equality**, not the
-numeric-coercion rule of `==`. `1 in [1.0]` is `false`; a dict populated with integer
-key `1` does not match a float key `1.0` lookup. See *Equality → Membership and keying
-use tag-strict equality*.
+Array element membership uses **SameValueZero equality**: `1 in [1.0]` is `true`;
+`NaN in [NaN]` is `true`. See *Equality → Array membership uses SameValueZero*.
+Dict key membership also uses **SameValueZero equality**: `1.0 in d` is `true` when
+`d` has the integer key `1`. See *Equality → Dictionary keys use SameValueZero*.
 
 Using `in` with an unsupported right operand produces a runtime error.
 

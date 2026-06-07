@@ -96,10 +96,10 @@ public static partial class CliBuiltIns
                               cs.TypeName == "CliCommandSpec";
 
         // Emit options and flags (keyed by propName in optionsDict)
-        foreach (object rawKey in optionsDict.RawKeys())
+        foreach (StashValue rawKey in optionsDict.RawKeys())
         {
-            string propName = rawKey?.ToString() ?? "";
-            StashValue specSv = optionsDict.Get(rawKey!);
+            string propName = rawKey.ToObject()?.ToString() ?? "";
+            StashValue specSv = optionsDict.Get(rawKey);
             if (!specSv.IsObj || specSv.AsObj is not StashInstance spec) continue;
 
             string kind = GetStringFieldOrEmpty(spec, "kind");

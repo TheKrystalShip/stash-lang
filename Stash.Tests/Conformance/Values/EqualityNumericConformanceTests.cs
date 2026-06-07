@@ -348,57 +348,53 @@ public sealed class EqualityNumericConformanceTests : StashTestBase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // §Equality — Membership and keying: tag-strict divergence (sealed)
+    // §Equality — Membership and keying: SameValueZero (Edit E1, P2+P3)
     //
-    // These tests pin the current tag-strict behavior for `in`, `arr.contains`,
-    // and dict key lookup, as documented in the "Membership and keying use
-    // tag-strict equality" clause of §Equality.
+    // P2 flipped array membership to SameValueZero: `in` and `arr.contains`
+    // now coerce int/float/byte by mathematical value (matching the `==` rule)
+    // with the additional delta that NaN is self-equal by value.
     //
-    // IMPORTANT: These tests back the *sealed divergence* clause, not a bug.
-    // When the deferred SameValueZero-unification feature ships, these will
-    // flip from `false`/`null` to `true`/"int" — at that point flip the
-    // assertions here and prune the backlog entry.
+    // P3 flipped dict-key storage to SameValueZero: `d[1] = "a"; d[1.0]`
+    // now returns `"a"`. Edit E1 is fully sealed (membership + keying).
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// <c>1 in [1.0]</c> is <c>false</c>: array membership uses tag-strict equality,
-    /// not the numeric-coercion rule of <c>==</c>.
-    /// Sealed in §Equality — "Membership and keying use tag-strict equality".
+    /// <c>1 in [1.0]</c> is <c>true</c>: array membership uses SameValueZero equality
+    /// (Edit E1, membership half), coercing int/float/byte by mathematical value.
+    /// Sealed in §Equality — "Membership and keying use SameValueZero".
     /// </summary>
     [Fact]
-    public void InOperator_IntNotInFloatArray_IsFalse_PerSpecValuesEquality()
+    public void InOperator_IntInFloatArray_IsTrue_PerSpecEqualityMembership()
     {
         var result = (bool?)Run("let result = 1 in [1.0];");
-        Assert.False(result,
-            "in/dict-key tag-strict (sealed in §Equality): 1 in [1.0] must be false " +
-            "— array membership uses tag-strict equality, not the == numeric-coercion rule.");
+        Assert.True(result,
+            "§Equality SameValueZero (Edit E1, membership): 1 in [1.0] must be true " +
+            "— array membership uses SameValueZero, coercing int/float/byte by mathematical value.");
     }
 
     /// <summary>
-    /// <c>arr.contains([1], 1.0)</c> is <c>false</c>: arr.contains uses tag-strict equality.
-    /// Sealed in §Equality — "Membership and keying use tag-strict equality".
+    /// <c>arr.contains([1], 1.0)</c> is <c>true</c>: arr.contains uses SameValueZero equality.
+    /// Sealed in §Equality — "Membership and keying use SameValueZero" (Edit E1, membership half).
     /// </summary>
     [Fact]
-    public void ArrContains_IntArrayDoesNotContainFloat_IsFalse_PerSpecValuesEquality()
+    public void ArrContains_IntArrayContainsFloat_IsTrue_PerSpecEqualityMembership()
     {
         var result = (bool?)Run("let result = arr.contains([1], 1.0);");
-        Assert.False(result,
-            "in/dict-key tag-strict (sealed in §Equality): arr.contains([1], 1.0) must be false " +
-            "— arr.contains uses tag-strict equality, not the == numeric-coercion rule.");
+        Assert.True(result,
+            "§Equality SameValueZero (Edit E1, membership): arr.contains([1], 1.0) must be true " +
+            "— arr.contains uses SameValueZero, coercing int/float/byte by mathematical value.");
     }
 
     /// <summary>
-    /// Integer key <c>1</c> and float key <c>1.0</c> are distinct dictionary keys.
-    /// A dict populated with integer key <c>1</c> returns <c>null</c> for float key <c>1.0</c>.
-    /// Sealed in §Equality — "Membership and keying use tag-strict equality".
+    /// Integer key <c>1</c> and float key <c>1.0</c> are the same dictionary key (Edit E1, keying half).
+    /// A dict populated with integer key <c>1</c> returns <c>"int"</c> for float key <c>1.0</c>.
+    /// Sealed in §Equality — "Dictionary keys use SameValueZero" (Edit E1, keying half, P3).
     /// </summary>
     [Fact]
-    public void DictKey_IntAndFloatAreDistinctKeys_FloatLookupReturnsNull_PerSpecValuesEquality()
+    public void DictKey_IntAndFloatAreSameKey_FloatLookupReturnsValue_PerSpecEqualityE1()
     {
-        var result = Run("let d = {}; d[1] = \"int\"; let result = d[1.0];");
-        Assert.True(result is null,
-            "in/dict-key tag-strict (sealed in §Equality): d[1.0] must be null when d was populated with integer key 1 " +
-            "— dict keys use tag-strict equality; integer 1 and float 1.0 are distinct keys.");
+        var result = (string?)Run("let d = {}; d[1] = \"int\"; let result = d[1.0];");
+        Assert.Equal("int", result);
     }
 
     /// <summary>

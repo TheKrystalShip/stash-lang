@@ -9,11 +9,15 @@ using Stash.Common;
 
 /// <summary>
 /// Represents a dictionary — an unordered collection of key-value pairs.
-/// Keys must be value types: string, int (long), float (double), or bool.
+/// Keys are any non-null <see cref="StashValue"/>; equality and hashing use
+/// <see cref="StashEquality.SameValueZero"/> so that, for example, integer key
+/// <c>1</c> and float key <c>1.0</c> are the same dictionary key.
+/// Non-primitive types (arrays, dicts, structs, secrets, functions, …) key by
+/// reference identity per §Equality DE4.
 /// </summary>
 public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMIterable, IVMIndexable, IVMSized, IVMStringifiable
 {
-    private readonly Dictionary<object, StashValue> _entries = new();
+    private readonly Dictionary<StashValue, StashValue> _entries = new(StashEquality.SameValueZero);
     private bool _frozen;
 
     public int Count => _entries.Count;
@@ -28,7 +32,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     /// </summary>
     public void Freeze() => _frozen = true;
 
-    public void Set(object key, StashValue value)
+    public void Set(StashValue key, StashValue value)
     {
         if (_frozen)
             throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
@@ -36,22 +40,34 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         _entries[key] = value;
     }
 
-    public StashValue Get(object key)
+    // Convenience overload for C# string keys (field access, marshalling).
+    public void Set(string key, StashValue value) => Set(StashValue.FromObj(key), value);
+
+    public StashValue Get(StashValue key)
     {
         return _entries.TryGetValue(key, out var value) ? value : StashValue.Null;
     }
 
-    public bool Has(object key)
+    // Convenience overload for C# string keys (field access, marshalling).
+    public StashValue Get(string key) => Get(StashValue.FromObj(key));
+
+    public bool Has(StashValue key)
     {
         return _entries.ContainsKey(key);
     }
 
-    public bool Remove(object key)
+    // Convenience overload for C# string keys (field access, marshalling).
+    public bool Has(string key) => Has(StashValue.FromObj(key));
+
+    public bool Remove(StashValue key)
     {
         if (_frozen)
             throw new ReadOnlyError("Cannot mutate a frozen dictionary.");
         return _entries.Remove(key);
     }
+
+    // Convenience overload for C# string keys (field access, marshalling).
+    public bool Remove(string key) => Remove(StashValue.FromObj(key));
 
     public void Clear()
     {
@@ -65,15 +81,15 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         var keys = new StashArray(_entries.Count);
         foreach (var key in _entries.Keys)
         {
-            keys.Add(StashValue.FromObject(key));
+            keys.Add(key);
         }
         return keys;
     }
 
-    /// <summary>Returns dict keys as raw objects for internal use (dict lookups, serialization).</summary>
-    public List<object> RawKeys()
+    /// <summary>Returns dict keys as raw StashValues for internal use (dict lookups, serialization).</summary>
+    public List<StashValue> RawKeys()
     {
-        var keys = new List<object>(_entries.Count);
+        var keys = new List<StashValue>(_entries.Count);
         foreach (var key in _entries.Keys)
         {
             keys.Add(key);
@@ -96,13 +112,13 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         var pairs = new StashArray(_entries.Count);
         foreach (var kvp in _entries)
         {
-            var fields = new Dictionary<string, StashValue> { { "key", StashValue.FromObject(kvp.Key) }, { "value", kvp.Value } };
+            var fields = new Dictionary<string, StashValue> { { "key", kvp.Key }, { "value", kvp.Value } };
             pairs.Add(StashValue.FromObj(new StashInstance("Pair", fields)));
         }
         return pairs;
     }
 
-    public IEnumerable<KeyValuePair<object, StashValue>> RawEntries()
+    public IEnumerable<KeyValuePair<StashValue, StashValue>> RawEntries()
     {
         return _entries.ToList();
     }
@@ -121,7 +137,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     /// <c>RawEntries()</c> materialises eagerly and is simpler there.
     /// </para>
     /// </summary>
-    public IEnumerable<KeyValuePair<object, StashValue>> RawEntriesEnumerable()
+    public IEnumerable<KeyValuePair<StashValue, StashValue>> RawEntriesEnumerable()
     {
         foreach (var kv in _entries)
         {
@@ -129,12 +145,12 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         }
     }
 
-    public IEnumerable<KeyValuePair<object, StashValue>> GetAllEntries()
+    public IEnumerable<KeyValuePair<StashValue, StashValue>> GetAllEntries()
     {
         return _entries.ToList();
     }
 
-    public IEnumerable<object?> IterableKeys()
+    public IEnumerable<StashValue> IterableKeys()
     {
         foreach (var key in _entries.Keys)
         {
@@ -147,14 +163,10 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
         return $"<dict({Count})>";
     }
 
-    private static void ValidateKey(object key)
+    private static void ValidateKey(StashValue key)
     {
-        if (key is string or long or double or bool)
-        {
-            return;
-        }
-
-        throw new RuntimeError($"Dictionary keys must be string, int, float, or bool. Got '{key.GetType().Name}'.");
+        if (key.IsNull)
+            throw new RuntimeError("Dictionary key cannot be null.");
     }
 
     // --- Protocol implementations ---
@@ -186,14 +198,14 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
     {
         if (index.IsNull)
             throw new RuntimeError("Dictionary key cannot be null.", span);
-        return Get(index.ToObject()!);
+        return Get(index);
     }
 
     public void VMSetIndex(StashValue index, StashValue value, SourceSpan? span)
     {
         if (index.IsNull)
             throw new RuntimeError("Dictionary key cannot be null.", span);
-        Set(index.ToObject()!, value);
+        Set(index, value);
     }
 
     public long VMLength => Count;
@@ -203,7 +215,7 @@ public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IV
 
 internal sealed class StashDictionaryIterator : IVMIterator
 {
-    private readonly IEnumerator<KeyValuePair<object, StashValue>> _enumerator;
+    private readonly IEnumerator<KeyValuePair<StashValue, StashValue>> _enumerator;
     private readonly bool _indexed;
     private int _index;
 
@@ -220,6 +232,6 @@ internal sealed class StashDictionaryIterator : IVMIterator
         return _enumerator.MoveNext();
     }
 
-    public StashValue Current => _indexed ? _enumerator.Current.Value : StashValue.FromObj(_enumerator.Current.Key);
-    public StashValue CurrentKey => _indexed ? StashValue.FromObj(_enumerator.Current.Key) : StashValue.FromInt(_index);
+    public StashValue Current => _indexed ? _enumerator.Current.Value : _enumerator.Current.Key;
+    public StashValue CurrentKey => _indexed ? _enumerator.Current.Key : StashValue.FromInt(_index);
 }

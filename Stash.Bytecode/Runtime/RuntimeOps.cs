@@ -45,47 +45,50 @@ internal static class RuntimeOps
 
     // --- Equality ---
 
+    /// <summary>
+    /// Equality for the <c>==</c> and <c>!=</c> operators.
+    ///
+    /// <para>
+    /// All logic is now in <see cref="StashEquality.OperatorEquals"/> (the single source
+    /// of truth for operator equality). This method is a thin forwarder that preserves the
+    /// <see cref="IVMEquatable.VMEquals"/> dispatch for user struct/enum <c>==</c>
+    /// overloads — that dispatch happens at the VM layer before the chokepoint, so
+    /// user-defined equality is unchanged.
+    /// </para>
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsEqual(StashValue left, StashValue right)
     {
-        // D2 (ratified): cross-tag numeric pairs (int/float/byte) compare by mathematical value.
-        // Route cross-tag to IsEqualCrossTag BEFORE any same-tag fast path.
-        // Same-tag paths below remain exact (no precision loss for large int64 values).
-        if (left.Tag != right.Tag) return IsEqualCrossTag(left, right);
-        if (left.Tag == StashValueTag.Int) return left.AsInt == right.AsInt;
-        if (left.Tag == StashValueTag.Bool) return left.AsBool == right.AsBool;
-        return IsEqualSlow(left, right);
+        // Preserve IVMEquatable.VMEquals dispatch for user-defined == on structs/enums.
+        // This check must happen before the chokepoint so user-defined equality takes
+        // precedence over the runtime numeric-coercion rule.
+        if (left.Tag == StashValueTag.Obj && right.Tag == StashValueTag.Obj &&
+            left.AsObj is IVMEquatable eq)
+            return eq.VMEquals(right);
+
+        return StashEquality.OperatorEquals(left, right);
     }
 
     /// <summary>
-    /// Called only when <c>left.Tag != right.Tag</c>.
-    /// Numeric coercion: int, float, and byte form a single equivalence class — compare by
-    /// mathematical value (IEEE 754 semantics: NaN != NaN, 0.0 == -0.0).
-    /// All other cross-category pairs are unequal.
+    /// Thin forwarder — cross-tag path. Routes directly to
+    /// <see cref="StashEquality.OperatorEquals"/> (which handles numeric coercion).
+    /// Retained for binary-compatibility with any internal callers that invoke this path
+    /// directly; the VM dispatch still calls <see cref="IsEqual"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static bool IsEqualCrossTag(StashValue left, StashValue right)
-    {
-        // Promote byte → int first so ToDouble never sees a Byte tag.
-        if (left.IsByte)  left  = StashValue.FromInt(left.AsByte);
-        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
-        // Now both operands are either Int or Float (or a non-numeric type).
-        if (left.IsNumeric && right.IsNumeric)
-            return ToDouble(left) == ToDouble(right);
-        return false;
-    }
+        => StashEquality.OperatorEquals(left, right);
 
+    /// <summary>
+    /// Thin forwarder — same-tag slow path (Null, Byte, Float, Obj).
+    /// Routes to <see cref="StashEquality.OperatorEquals"/>, which handles all same-tag
+    /// cases via its own fast paths.
+    /// Note: for the Obj same-tag path the IVMEquatable check is already handled by
+    /// the caller (<see cref="IsEqual"/>), so the forwarder delegates cleanly.
+    /// </summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static bool IsEqualSlow(StashValue left, StashValue right) => left.Tag switch
-    {
-        StashValueTag.Null => true,
-        StashValueTag.Byte => left.AsInt == right.AsInt,
-        StashValueTag.Float => left.AsFloat == right.AsFloat,
-        StashValueTag.Obj => left.AsObj is IVMEquatable eq
-            ? eq.VMEquals(right)
-            : RuntimeValues.IsEqual(left.AsObj, right.AsObj),
-        _ => false,
-    };
+    private static bool IsEqualSlow(StashValue left, StashValue right)
+        => StashEquality.OperatorEquals(left, right);
 
     // --- Stringify ---
 
@@ -332,11 +335,11 @@ internal static class RuntimeOps
         object? rObj = right.IsObj ? right.AsObj : null;
         return rObj switch
         {
-            List<StashValue> svList => svList.Any(sv => sv.Equals(left)),
+            List<StashValue> svList => svList.Any(sv => StashEquality.SameValueZeroEquals(sv, left)),
             string str when left.AsObj is string sub => str.Contains(sub),
             string => throw new RuntimeError(
                 "Left operand of 'in' must be a string when checking string containment.", span),
-            StashDictionary dict => !left.IsNull && dict.Has(left.ToObject()!),
+            StashDictionary dict => !left.IsNull && dict.Has(left),
             StashRange range when left.IsInt => range.Contains(left.AsInt),
             StashRange range when left.IsFloat && left.AsFloat == Math.Floor(left.AsFloat) => range.Contains((long)left.AsFloat),
             StashRange => throw new RuntimeError(

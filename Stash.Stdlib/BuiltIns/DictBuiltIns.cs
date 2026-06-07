@@ -31,8 +31,8 @@ public static partial class DictBuiltIns
     [StashFn(ReturnType = "any")]
     private static StashValue Get(StashDictionary dict, StashValue key, params StashValue[] rest)
     {
-        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
-        var result = dict.Get(keyObj);
+        if (key.IsNull) throw new TypeError("Dictionary key cannot be null.");
+        var result = dict.Get(key);
         if (result.IsNull && rest.Length > 0)
             return rest[0];
         return result;
@@ -49,8 +49,8 @@ public static partial class DictBuiltIns
     {
         if (dict.IsFrozen)
             throw new ReadOnlyError("Cannot mutate a read-only dict returned by a namespace member.");
-        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
-        dict.Set(keyObj, value);
+        if (key.IsNull) throw new TypeError("Dictionary key cannot be null.");
+        dict.Set(key, value);
     }
 
     /// <summary>Returns true if the dictionary contains the key.</summary>
@@ -61,8 +61,8 @@ public static partial class DictBuiltIns
     [StashFn(ReturnType = "bool")]
     private static bool Has(StashDictionary dict, StashValue key)
     {
-        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
-        return dict.Has(keyObj);
+        if (key.IsNull) throw new TypeError("Dictionary key cannot be null.");
+        return dict.Has(key);
     }
 
     /// <summary>Removes a key from the dictionary. Returns true if it existed.</summary>
@@ -76,8 +76,8 @@ public static partial class DictBuiltIns
     {
         if (dict.IsFrozen)
             throw new ReadOnlyError("Cannot mutate a read-only dict returned by a namespace member.");
-        var keyObj = key.ToObject() ?? throw new TypeError("Dictionary key cannot be null.");
-        return dict.Remove(keyObj);
+        if (key.IsNull) throw new TypeError("Dictionary key cannot be null.");
+        return dict.Remove(key);
     }
 
     /// <summary>Removes all entries from the dictionary.</summary>
@@ -135,7 +135,7 @@ public static partial class DictBuiltIns
     {
         foreach (var entry in dict.RawEntries())
         {
-            ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value });
+            ctx.InvokeCallbackDirect(fn, new StashValue[] { entry.Key, entry.Value });
         }
     }
 
@@ -161,7 +161,7 @@ public static partial class DictBuiltIns
         var result = new StashDictionary();
         foreach (var entry in dict.RawEntries())
         {
-            result.Set(entry.Key, ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }));
+            result.Set(entry.Key, ctx.InvokeCallbackDirect(fn, new StashValue[] { entry.Key, entry.Value }));
         }
         return result;
     }
@@ -176,7 +176,7 @@ public static partial class DictBuiltIns
         var result = new StashDictionary();
         foreach (var entry in dict.RawEntries())
         {
-            var keep = ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value });
+            var keep = ctx.InvokeCallbackDirect(fn, new StashValue[] { entry.Key, entry.Value });
             if (RuntimeValues.IsTruthy(keep.ToObject()))
             {
                 result.Set(entry.Key, entry.Value);
@@ -195,19 +195,19 @@ public static partial class DictBuiltIns
         var result = new StashDictionary();
         foreach (var pairSv in pairs)
         {
-            object? key;
+            StashValue key;
             StashValue val;
             var pairObj = pairSv.AsObj;
             if (pairObj is List<StashValue> svp && svp.Count == 2)
             {
-                key = svp[0].ToObject();
+                key = svp[0];
                 val = svp[1];
             }
             else
             {
                 throw new TypeError("'dict.fromPairs' requires each element to be a [key, value] pair.");
             }
-            if (key is null) throw new TypeError("Dictionary key cannot be null in 'dict.fromPairs'.");
+            if (key.IsNull) throw new TypeError("Dictionary key cannot be null in 'dict.fromPairs'.");
             result.Set(key, val);
         }
         return result;
@@ -223,9 +223,8 @@ public static partial class DictBuiltIns
         var result = new StashDictionary();
         foreach (var keySv in keys)
         {
-            var key = keySv.ToObject();
-            if (key != null && dict.Has(key))
-                result.Set(key, dict.Get(key));
+            if (!keySv.IsNull && dict.Has(keySv))
+                result.Set(keySv, dict.Get(keySv));
         }
         return result;
     }
@@ -243,8 +242,7 @@ public static partial class DictBuiltIns
             bool omit = false;
             foreach (var keySv in keys)
             {
-                var k = keySv.ToObject();
-                if (k != null && RuntimeValues.IsEqual(entry.Key, k))
+                if (!keySv.IsNull && StashEquality.SameValueZeroEquals(entry.Key, keySv))
                 {
                     omit = true;
                     break;
@@ -279,7 +277,7 @@ public static partial class DictBuiltIns
     {
         foreach (var entry in dict.RawEntries())
         {
-            if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
+            if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { entry.Key, entry.Value }).ToObject()))
             {
                 return true;
             }
@@ -296,7 +294,7 @@ public static partial class DictBuiltIns
     {
         foreach (var entry in dict.RawEntries())
         {
-            if (!RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
+            if (!RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { entry.Key, entry.Value }).ToObject()))
             {
                 return false;
             }
@@ -313,11 +311,11 @@ public static partial class DictBuiltIns
     {
         foreach (var entry in dict.RawEntries())
         {
-            if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
+            if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { entry.Key, entry.Value }).ToObject()))
             {
                 return StashValue.FromObj(new List<StashValue>
                 {
-                    StashValue.FromObject(entry.Key),
+                    entry.Key,
                     entry.Value,
                 });
             }

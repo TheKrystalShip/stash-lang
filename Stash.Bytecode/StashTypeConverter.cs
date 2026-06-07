@@ -27,7 +27,7 @@ public static class StashTypeConverter
         var result = new Dictionary<string, object?>();
         foreach (var entry in dict.RawEntries())
         {
-            result[RuntimeValues.Stringify(entry.Key)] = entry.Value.ToObject();
+            result[RuntimeValues.Stringify(entry.Key.ToObject())] = entry.Value.ToObject();
         }
         return result;
     }

@@ -681,10 +681,10 @@ internal static class NetSocketImpl
                 client.Options.AddSubProtocol(capturedSp);
             if (capturedHdrs is not null)
             {
-                foreach (var rawKey in capturedHdrs.RawKeys())
+                foreach (StashValue rawKey in capturedHdrs.RawKeys())
                 {
                     var val = capturedHdrs.Get(rawKey);
-                    if (rawKey is string headerName && val.IsObj && val.AsObj is string headerVal)
+                    if (rawKey.AsObj is string headerName && val.IsObj && val.AsObj is string headerVal)
                         client.Options.SetRequestHeader(headerName, headerVal);
                 }
             }
