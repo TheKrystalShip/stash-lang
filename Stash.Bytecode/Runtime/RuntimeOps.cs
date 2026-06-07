@@ -335,7 +335,7 @@ internal static class RuntimeOps
         object? rObj = right.IsObj ? right.AsObj : null;
         return rObj switch
         {
-            List<StashValue> svList => svList.Any(sv => sv.Equals(left)),
+            List<StashValue> svList => svList.Any(sv => StashEquality.SameValueZeroEquals(sv, left)),
             string str when left.AsObj is string sub => str.Contains(sub),
             string => throw new RuntimeError(
                 "Left operand of 'in' must be a string when checking string containment.", span),

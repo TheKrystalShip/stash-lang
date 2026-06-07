@@ -727,26 +727,31 @@ comparison use `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a
 constant-time comparator backed by `CryptographicOperations.FixedTimeEquals`;
 see *Secret Values*).
 
-**Membership and keying use tag-strict equality — not the numeric equivalence class.**
-The numeric-coercion rule above governs `==` and `!=` only. The `in` operator (array
-element membership and dict key lookup), `arr.contains`, and dictionary key storage
-use **tag-strict structural equality**: two numeric values are considered equal only
-when they share the same runtime category (`int`, `float`, or `byte`) and the same
-bit-level value. Concretely:
+**Array membership uses SameValueZero — a value-equality comparator aligned with the
+numeric-coercion rule, with one floating-point delta.** The `in` operator (when the
+right-hand side is an array), `arr.contains`, `arr.indexOf`, `arr.remove`, and related
+array-search built-ins use **SameValueZero equality**: int/float/byte operands compare
+by mathematical value (the numeric-coercion rule above), the floats `+0.0` and `-0.0`
+are the same value, and `NaN` is **self-equal by value**. Two `NaN`s in the same array
+are considered equal even though `NaN != NaN` under `==`.
 
-- `1 in [1.0]` is `false` — integer `1` is not tag-equal to float `1.0`.
-- `arr.contains([1], 1.0)` is `false` — same reason.
-- Integer key `1` and float key `1.0` are **distinct dictionary keys**: a dictionary
-  populated with `d[1] = "int"` returns `null` for `d[1.0]`.
+Concretely:
 
-This divergence from `==` is observable and deliberate in the current runtime. The
-hash-contract requirement (`a == b → same hash`) means extending numeric coercion to
-collection membership requires changing both `StashValue.Equals` and
-`StashValue.GetHashCode` for every numeric key — a coordinated change reserved for a
-dedicated future unit (see
-`.kanban/0-backlog/bugs/numeric-equality-inconsistency-in-operator-dict-keys.md`).
-To test mathematical membership today, normalize types first:
-`arr.contains(arr.map(xs, (x) => conv.toFloat(x)), 1.0)`.
+- `1 in [1.0]` is `true`. `arr.contains([1], 1.0)` is `true`.
+  `arr.contains([0], -0.0)` is `true`.
+- `NaN in [NaN]` is `true` (`NaN`-self-equal by value, not by identity).
+
+This is the **collection equivalent of `==`** with the single delta that NaN is treated
+as self-equal by value (a key collection users universally expect — a value put in is a
+value found back). The `==` operator is unaffected: `NaN == NaN` remains `false` and
+`+0.0 == -0.0` remains `true` per IEEE 754. The non-numeric branch of SameValueZero
+delegates to the per-category equality rule above: two distinct `secret("x")` constructions
+are **not** the same array element (reference identity per §Secret Values); two arrays with
+the same elements but distinct constructions are **not** the same element (reference
+identity).
+
+**Dictionary key lookup** currently uses tag-strict equality (a coordinated change to dict
+key storage is forthcoming).
 
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
@@ -1332,10 +1337,10 @@ value falls within the range and aligns with the step.
 3 in 1..5;
 ```
 
-Array element membership and dict key membership use **tag-strict equality**, not the
-numeric-coercion rule of `==`. `1 in [1.0]` is `false`; a dict populated with integer
-key `1` does not match a float key `1.0` lookup. See *Equality → Membership and keying
-use tag-strict equality*.
+Array element membership uses **SameValueZero equality**: `1 in [1.0]` is `true`;
+`NaN in [NaN]` is `true`. See *Equality → Array membership uses SameValueZero*.
+Dict key membership currently uses tag-strict equality (a coordinated change
+to dict key storage is forthcoming).
 
 Using `in` with an unsupported right operand produces a runtime error.
 

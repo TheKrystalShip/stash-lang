@@ -149,10 +149,9 @@ public static partial class ArrBuiltIns
             throw new ReadOnlyError("Cannot mutate a frozen array.");
         if (array.IsObj && array.AsObj is StashTypedArray taRemove)
         {
-            object? target = value.ToObject();
             for (int i = 0; i < taRemove.Count; i++)
             {
-                if (RuntimeValues.IsEqual(taRemove.Get(i).ToObject(), target))
+                if (StashEquality.SameValueZeroEquals(taRemove.Get(i), value))
                 {
                     taRemove.RemoveAt(i);
                     return true;
@@ -162,10 +161,9 @@ public static partial class ArrBuiltIns
         }
         if (array.IsObj && array.AsObj is List<StashValue> list)
         {
-            var target2 = value.ToObject();
             for (int i = 0; i < list.Count; i++)
             {
-                if (RuntimeValues.IsEqual(list[i].ToObject(), target2))
+                if (StashEquality.SameValueZeroEquals(list[i], value))
                 {
                     list.RemoveAt(i);
                     return true;
@@ -205,10 +203,9 @@ public static partial class ArrBuiltIns
     [StashFn(ReturnType = "bool")]
     private static bool Contains(IInterpreterContext ctx, List<StashValue> array, StashValue value)
     {
-        var target = value.ToObject();
         foreach (var item in array)
         {
-            if (RuntimeValues.IsEqual(item.ToObject(), target))
+            if (StashEquality.SameValueZeroEquals(item, value))
                 return true;
         }
         return false;
@@ -224,10 +221,9 @@ public static partial class ArrBuiltIns
     {
         int start = (int)startIndex;
         if (start < 0) start = Math.Max(0, array.Count + start);
-        var target = value.ToObject();
         for (int i = start; i < array.Count; i++)
         {
-            if (RuntimeValues.IsEqual(array[i].ToObject(), target))
+            if (StashEquality.SameValueZeroEquals(array[i], value))
                 return true;
         }
         return false;
@@ -243,10 +239,9 @@ public static partial class ArrBuiltIns
     {
         int start = (int)startIndex;
         if (start < 0) start = Math.Max(0, array.Count + start);
-        var target = value.ToObject();
         for (int i = start; i < array.Count; i++)
         {
-            if (RuntimeValues.IsEqual(array[i].ToObject(), target))
+            if (StashEquality.SameValueZeroEquals(array[i], value))
                 return (long)i;
         }
         return -1L;
@@ -266,13 +261,13 @@ public static partial class ArrBuiltIns
         if (args.Length < 2 || args.Length > 3)
             throw new RuntimeError("'arr.lastIndexOf' requires 2 or 3 arguments.");
         var list = SvArgs.StashList(args, 0, "arr.lastIndexOf");
-        var value = args[1].ToObject();
+        var value = args[1];
         int start = args.Length == 3 ? (int)SvArgs.Long(args, 2, "arr.lastIndexOf") : list.Count - 1;
         if (start < 0) start = list.Count + start;
         start = Math.Min(start, list.Count - 1);
         for (int i = start; i >= 0; i--)
         {
-            if (RuntimeValues.IsEqual(list[i].ToObject(), value))
+            if (StashEquality.SameValueZeroEquals(list[i], value))
                 return StashValue.FromInt((long)i);
         }
         return StashValue.FromInt(-1L);
@@ -632,14 +627,14 @@ public static partial class ArrBuiltIns
         if (args.Length == 2)
         {
             var fn = SvArgs.Callable(args, 1, "arr.unique");
-            var seenKeys = new List<object?>();
+            var seenKeys = new List<StashValue>();
             foreach (var item in list)
             {
-                var key = ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject();
+                var key = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
                 bool found = false;
                 foreach (var existingKey in seenKeys)
                 {
-                    if (RuntimeValues.IsEqual(key, existingKey))
+                    if (StashEquality.SameValueZeroEquals(key, existingKey))
                     {
                         found = true;
                         break;
@@ -659,7 +654,7 @@ public static partial class ArrBuiltIns
                 bool found = false;
                 foreach (var existing in result)
                 {
-                    if (RuntimeValues.IsEqual(item.ToObject(), existing.ToObject()))
+                    if (StashEquality.SameValueZeroEquals(item, existing))
                     {
                         found = true;
                         break;
