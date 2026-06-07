@@ -1,0 +1,67 @@
+schema_version: 1
+feature: language-standard-values
+current: null
+updated: "2026-06-07T08:59:59Z"
+phases:
+  P1:
+    status: done
+    commit: c292e810f4fac44c34157fe03a5904c57ce8ea3f
+    verified: true
+    started: "2026-06-06T19:37:34Z"
+    completed: "2026-06-06T19:49:13Z"
+    attempts: 1
+    notes: Spec Edits 1+2+7 landed; D3 ratified; TypeModelConformanceTests (27 tests); MinScannedParticipants 8→9; all 4 verify steps green
+  P2:
+    status: done
+    commit: 598b386b85651a994ead3c34d8910c485afbab3e
+    verified: true
+    started: "2026-06-06T19:49:58Z"
+    completed: "2026-06-06T20:18:13Z"
+    attempts: 1
+    notes: Spec Edit 3 + D1 (empty-collection truthy law fix) + D5 (StashError.VMIsFalsy false) + 36 conformance tests + legacy test reclassification
+  P3:
+    status: done
+    commit: 8071e7d52cbeea76b983b026b6d00695b8484840
+    verified: true
+    started: "2026-06-06T20:22:12Z"
+    completed: "2026-06-06T20:43:57Z"
+    attempts: 1
+    notes: "D2 runtime fix: IsEqualCrossTag coerces int/float/byte cross-tag pairs by mathematical value; Edit 4 spec prose landed (trimmed to P3 scope — no per-category table, no secret paragraph); 22 conformance tests (literal+variable pairs); full suite green 14298/14304; bug filed for in/dict-key inconsistency"
+  P4:
+    status: done
+    commit: 69f93ebbd19fbe34cce1dcdddac34526ed1b15c3
+    verified: true
+    started: "2026-06-06T21:31:01Z"
+    completed: "2026-06-06T21:52:00Z"
+    attempts: 1
+    notes: Edit 4 per-category table + worked examples landed; EqualityPerCategoryConformanceTests 27 tests; MinScannedParticipants 11→12; secret row is prose-only (no executable secret test); all 3 verify steps green
+  P5:
+    status: done
+    commit: b25bc2f543ce3c3b73938995623ca083370e68cd
+    verified: true
+    started: "2026-06-06T21:52:52Z"
+    completed: "2026-06-06T22:05:44Z"
+    attempts: 1
+    notes: "Spec Edit 5 closed-list coercion landed; CoercionConformanceTests 23 tests (case 1 arithmetic+relational+equality, case 2 byte→int, case 3 string concat, negative space); MinScannedParticipants 12→13; all 3 verify steps green"
+  P6:
+    status: done
+    commit: c32fcfec435262f722a0d257e20574f4b2ef80c5
+    verified: true
+    started: "2026-06-06T22:07:00Z"
+    completed: "2026-06-06T22:43:00Z"
+    attempts: 1
+    notes: "Edit 6 + D4 secret reference-identity flip landed; full dotnet test green (14373/0/6). Two done_when clauses were spec-authoring errors corrected to reality (spec-is-law, language-changes.md): (1) idempotent-wrap = value non-nesting, NOT handle identity — Option A is the only D4-consistent answer (Option B would invent unratified handle-sharing); (2) secrets are not permitted dict keys (RuntimeError) — conformance test asserts the throw; 'where permitted, keys by identity' prose deferred to reviewer. Both within ratified D4 scope; no user ratification needed."
+  P7:
+    status: done
+    commit: 05c09b053c67fd986dbf94b898c6cb012fbe585d
+    verified: true
+    started: "2026-06-06T22:43:31Z"
+    completed: "2026-06-06T22:57:44Z"
+    attempts: 1
+    notes: "Reference regen confirmed no-op; coverage.md row #2 sealed (6 classes/159 tests, corrected from draft; scoreboard 0→1 sealed, 7→6 unsealed); workstream #3 complete; contradictions table V&T row struck; full suite 14373/0/6"
+review:
+  status: resolved
+  started: "2026-06-06T23:16:09Z"
+  resolved: "2026-06-07T08:59:59Z"
+  findings_open: 0
+  findings_fixed: 0

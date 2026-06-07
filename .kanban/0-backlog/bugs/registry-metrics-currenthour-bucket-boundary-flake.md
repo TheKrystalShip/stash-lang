@@ -69,3 +69,13 @@ The existing 12 metrics-endpoint tests must continue to pass.
 - Surfaced during `registry-audit-log-v2` (self-hosted-registry P3) autopilot, pass-2 baseline; the audit feature itself is clean (the failures are in a disjoint test family).
 - Bug lives in download-metrics test code (`registry-download-metrics`, self-hosted-registry P2). Likely introduced with those tests.
 - Relates to the project memory `feedback-no-useless-skips` (flakes are debt to eliminate, not tolerate) — this should be fixed, not quarantined.
+
+## Recurrence — 2026-06-07 (`language-standard-values`, `language-standard` milestone)
+
+The same two tests flaked again during the `language-standard-values` `/done` `final_verify` (a §Values & Types feature touching **no** metrics code) — confirming this is a recurring, cross-feature gate-stall, not a one-off. Both passed 2/2 in isolation; `promote-done` was re-run once and went green (14383 passed / 0 failed / 6 skipped).
+
+Two observations from this sighting that refine the report above:
+- The live seed offset is now **`DateTime.UtcNow.AddMinutes(-3)`** (e.g. `VersionMetricsEndpointTests.cs:227`), not `-5`. So the failure window is the **first ~3 minutes** of a clock hour, not 5 — the suggested fix (A: pin the seed inside the current hour) is unchanged and still correct; only the window width differs.
+- This is the **second distinct feature** (`registry-audit-log-v2`, then `language-standard-values`) whose hard gate this flake has stalled. It directly contradicts the `CLAUDE.md` "the suite is green, there are no flakies" invariant for these two tests — raising the priority of fix (A).
+
+A second stub (`flaky-metrics-openbucket-currenthour-clock-boundary.md`) was filed for this recurrence before the duplicate was noticed; it has been folded into this canonical record and removed.

@@ -588,8 +588,9 @@ The core value categories are:
 | `byte`      | integer value in the range 0..255            |
 | `string`    | text value                                   |
 | `array`     | ordered mutable sequence                     |
-| typed array | primitive homogeneous array such as `byte[]` |
+| typed array | primitive homogeneous byte array (`byte[]`) |
 | `dict`      | key-value mapping                            |
+| `range`     | half-open integer range (a..b)               |
 | `struct`    | user-defined aggregate instance              |
 | `enum`      | enum member value                            |
 | `interface` | interface type used for conformance checks   |
@@ -600,68 +601,254 @@ The core value categories are:
 | `secret`    | redaction wrapper                            |
 | `ip`        | IP address or network                        |
 | `duration`  | elapsed time duration                        |
-| `bytesize`  | byte quantity                                |
+| `bytes`     | byte quantity                                |
 | `semver`    | semantic version                             |
+
+The type names above are the complete closed set returned by `typeof`. A future
+runtime value category is a breaking change to §Values and Types; tooling and
+libraries may rely on this set being closed.
+
+### Ranges
+
+A `range` value (constructed by the `..` operator; see §Expressions) is a
+first-class value with `typeof` string `"range"`. Ranges compare by reference
+identity (`1..3 == 1..3` is `false` for two distinct constructions; the same
+range value compared to itself is `true`). A range is always truthy,
+regardless of whether the range is empty (`0..0`). Iteration semantics, `in`
+membership, and arithmetic interactions are defined in §Expressions.
 
 ### `typeof` and `nameof`
 
-`typeof(value)` returns a string naming the runtime category of `value`.
-`nameof(value)` returns the declared type or binding name where available. For user
-types, `nameof` must preserve the user-visible struct, enum, or interface name.
+`typeof(value)` returns one of the strings enumerated in the type table above —
+a closed vocabulary. It is total: it never raises for any value, including
+`null`. For `int`, `float`, `bool`, `null`, `byte`, `string`, `array`, `dict`,
+`range`, `function`, `namespace`, `secret`, `duration`, `bytes`, `ip`, and
+`semver`, the string names the runtime category directly.
 
-```stash
-typeof(1);        // "int"
-typeof(null);     // "null"
-nameof(Server);   // "Server"
-```
+For aggregate, opaque, and user-defined values:
 
-The complete standard-library contract for these functions is in the
-[Standard Library Reference](Stash%20%E2%80%94%20Standard%20Library%20Reference.md).
+- `typeof(struct_instance)` returns `"struct"`. To recover the user-visible
+  struct name, use `nameof(instance)`.
+- `typeof(enum_value)` returns `"enum"`. `nameof(enum_value)` returns the
+  **fully-qualified member name** — the enum type name joined to the member
+  name by a dot (e.g. `nameof(Color.Red) == "Color.Red"`). This differs from
+  `nameof(Color)` (the enum *type* identifier), which returns the bare type
+  name `"Color"`. It also differs from struct instances, where
+  `nameof(struct_instance)` returns only the type name (e.g. `"P"`).
+- `typeof(struct_type)` / `typeof(enum_type)` (the type *identifier*) returns
+  `"struct"` / `"enum"` respectively; the *type* and its *instance* are
+  indistinguishable by `typeof`.
+- `typeof(future)` returns `"Future"` (capitalized; Future is a runtime category,
+  not a user-defined type — the capitalization is normative).
+- `typeof(error)` returns `"Error"` for any first-class Error value caught by
+  `try/catch`. The user-visible error type (e.g. `"TypeError"`) is recoverable
+  via `nameof(err)` or the `err.type` property.
+- `typeof(typed_array)` returns the element-type string suffixed with `[]`.
+  The only reachable typed array in the current runtime is `byte[]` (constructed
+  via `buf.from(...)`, `buf.alloc(...)`, or a `process.read*` byte buffer).
+  Adding a new typed-array category (e.g. `int[]`, `float[]`, `string[]`) is a
+  breaking change to §Values and Types per the closed-set sentence at the end of
+  the type table; type annotations of that form erase to plain `array` at compile
+  time and never produce those typeof strings.
+
+`nameof(value)` returns the declared type or binding name where one exists,
+and falls back to the same string `typeof` would return for values with no
+named declaration. For user-defined struct, enum, and interface types,
+`nameof` returns the user-visible name (e.g. `nameof(Server) == "Server"`).
+**Exception — enum values:** `nameof(enum_value)` returns the fully-qualified
+member path, not just the type name (e.g. `nameof(Color.Red) == "Color.Red"`
+rather than `"Color"`). The enum *type* identifier and struct instances do not
+share this exception: `nameof(Color) == "Color"` and `nameof(p) == "P"` (where
+`p` is a struct instance).
 
 ### Truthiness
 
-The following values are falsey:
+The following values, and no others, are **falsey**:
 
 - `null`
 - `false`
-- numeric zero
-- empty string
-- empty array
-- empty dictionary
+- the integer `0`
+- the float `0.0` (and the float `-0.0`)
+- the byte `0`
+- the empty string `""`
 
-All other values are truthy. Conditions in `if`, `while`, `do while`, ternary
-expressions, logical operators, and retry predicates use these rules.
+**Every other value is truthy.** This explicitly includes:
+
+- The empty array `[]` and the empty dictionary `{}`. Use `len(value) == 0` or
+  `arr.isEmpty(value)` / `dict.isEmpty(value)` for emptiness checks.
+- Every caught Error value. `try { ... } catch (e) { if (e) { ... } }` enters
+  the `if` body — `e` is a real value, not an absence-marker.
+- Every struct instance, enum value, function, namespace, future, range, secret,
+  `ip`, `duration`, `bytes`, and `semver` value, regardless of internal state.
+- `NaN` (the float). Use `value != value` to detect NaN.
+- The string `" "` (a single space).
+
+Conditions in `if`, `while`, `do while`, ternary expressions, logical operators
+(`&&`, `||`, `!`), and retry predicates (`until`) use these rules. The same rules
+apply uniformly in CLI, embedded host, LSP runtime, and DAP-driven execution
+contexts.
 
 ### Equality
 
 `==` evaluates to `true` when its operands are equal. `!=` evaluates to the logical
-negation of `==`.
+negation of `==`. Equality is **total**: it returns a boolean for any two operands
+and never raises.
 
-Primitive values compare by value. Struct instances, arrays, dictionaries, errors,
-futures, namespaces, and functions compare according to their runtime representation
-unless a more specific rule is defined by the implementation. Semantic-version
-values compare according to semantic-version rules.
+**Numeric-coercion rule.** The three numeric categories — `int`, `float`, `byte` —
+form a single equivalence class for `==` and `!=`. Operands from any two of these
+categories are compared by **mathematical value**: `1 == 1.0` is `true`, `0 == 0.0`
+is `true`, `-0.0 == 0` is `true`, `byte 0 == 0` is `true`, `byte 7 == 7.0` is
+`true`. This matches the byte→int and int↔float promotion in arithmetic and
+relational operators (see *Type Coercion*). NaN follows IEEE 754: `NaN != NaN` even
+with itself.
 
-Cross-type coercion must not be performed for equality unless explicitly specified
-for a type.
+**Non-numeric cross-category rule.** Outside the numeric equivalence class, two
+values of different runtime categories (per `typeof`) are never equal: `1 == true`
+is `false`, `0 == null` is `false`, `0 == ""` is `false`, `null == false` is
+`false`, `[] == null` is `false`. No other cross-category coercion is performed.
+
+**Per-category rule (within a category, or within the numeric equivalence class).**
+
+| Category | `==` semantics |
+| -------- | -------------- |
+| `null`, `bool`, `string` | by value |
+| `int`, `float`, `byte` | by **mathematical value across the three categories** (IEEE 754 for `float`: `0.0 == -0.0`, `NaN != NaN`) |
+| `duration`, `bytes`, `ip`, `semver` | by value (semver per semver precedence) |
+| `secret`, `array`, `dict`, `struct`, `enum`, `function`, `namespace`, `future`, `range`, `Error` | by reference identity (same value handle ↔ equal) |
+
+The reference-identity rule for `function` and `namespace` implies `io.println ==
+io.println` is `true` (the same registered function handle), and `io == io` is
+`true` (the same namespace singleton). Two arrays with the same elements but
+distinct constructions are **not** equal (`[1] == [1]` is `false`); use
+`arr.equals` / `dict.equals` for structural comparison. Two distinct
+`secret("x")` constructions are **not** equal (`secret("x") == secret("x")` is
+`false`) — to compare contents, `reveal()` first; for security-sensitive
+comparison use `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a
+constant-time comparator backed by `CryptographicOperations.FixedTimeEquals`;
+see *Secret Values*).
+
+**Membership and keying use tag-strict equality — not the numeric equivalence class.**
+The numeric-coercion rule above governs `==` and `!=` only. The `in` operator (array
+element membership and dict key lookup), `arr.contains`, and dictionary key storage
+use **tag-strict structural equality**: two numeric values are considered equal only
+when they share the same runtime category (`int`, `float`, or `byte`) and the same
+bit-level value. Concretely:
+
+- `1 in [1.0]` is `false` — integer `1` is not tag-equal to float `1.0`.
+- `arr.contains([1], 1.0)` is `false` — same reason.
+- Integer key `1` and float key `1.0` are **distinct dictionary keys**: a dictionary
+  populated with `d[1] = "int"` returns `null` for `d[1.0]`.
+
+This divergence from `==` is observable and deliberate in the current runtime. The
+hash-contract requirement (`a == b → same hash`) means extending numeric coercion to
+collection membership requires changing both `StashValue.Equals` and
+`StashValue.GetHashCode` for every numeric key — a coordinated change reserved for a
+dedicated future unit (see
+`.kanban/0-backlog/bugs/numeric-equality-inconsistency-in-operator-dict-keys.md`).
+To test mathematical membership today, normalize types first:
+`arr.contains(arr.map(xs, (x) => conv.toFloat(x)), 1.0)`.
+
+**Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
+value not equal to itself). `NaN` is reachable from a Stash script only via
+overflow arithmetic (`conv.toFloat("1e308") * 10.0` produces `Infinity`;
+`Infinity - Infinity` produces `NaN`); literal `0.0 / 0.0` raises
+`RuntimeError("Division by zero.")`.
+
+**The `==` operator's compile-time evaluation agrees with its runtime evaluation.**
+The compiler folds a literal equality only when the folded result equals the runtime
+result. In particular, `1 == 1.0` is `true` at both compile time and at runtime —
+the same boolean as `let i = 1; let f = 1.0; i == f`. A folder regression that
+diverges from the runtime path is a defect.
 
 ### Type Coercion
 
-Stash does not perform broad implicit conversion between unrelated types. Operators
-may define narrow coercions, such as string concatenation with `+`. Library
-functions in the `conv` namespace provide explicit conversions.
+Stash performs implicit conversion only in the following narrow, enumerated cases.
+No other operator or operation performs implicit conversion between types:
+
+1. **Numeric promotion in arithmetic, relational, AND equality operators.**
+   When `+`, `-`, `*`, `/`, `%`, `**`, `<`, `<=`, `>`, `>=`, `==`, `!=` are
+   applied to two numeric operands of different categories (any pair drawn from
+   `int`, `float`, `byte`), the operands are promoted to a common category by
+   mathematical value. For arithmetic and relational operators, the result category
+   is the wider of the two (`int`/`byte` → `int`; anything paired with `float` →
+   `float`). For equality (`==`/`!=`), the result is a `bool`; see *Equality* for
+   the full rule.
+2. **Byte promotion to int in arithmetic and relational operators.** A `byte`
+   operand to `+`, `-`, `*`, `/`, `%`, `**`, `<`, `<=`, `>`, `>=` is promoted
+   to `int` before the operation. The result category is `int` or `float`
+   (per rule 1), never `byte`. Byte equality is covered by rule 1 (the three
+   numeric categories form a single equivalence class for `==`/`!=`).
+3. **String concatenation with `+`.** When one operand of `+` is a `string`,
+   the other operand is stringified via the same rule as `conv.toStr` and the
+   result is a `string`. A `secret` operand of `+` produces a `secret` result
+   (see *Secret Values*).
+
+Outside these three cases, every operand mismatch raises a `RuntimeError` with
+the operand types in the message. Use the `conv` namespace for explicit
+conversions.
 
 ### Secret Values
 
-`secret(value)` wraps a value for redaction. A secret value must display as redacted
-when printed, stringified, interpolated, or concatenated. `reveal(secretValue)`
-returns the wrapped value.
+`secret(value)` wraps `value` for redaction. The wrapped value is stored
+unmodified inside the secret. A `secret` value displays as the redacted form
+`"******"` (six asterisks) in every stringification context — `io.println`,
+string interpolation (`"...${secret}..."`), `conv.toStr`, and the `+`
+string-concatenation operator (which propagates taint — see below). `reveal(s)`
+returns the wrapped value and is the only way to escape redaction; there is no capability gate on reveal.
 
 ```stash
 let token = secret("abc123");
-io.println(token);       // redacted
+io.println(token);       // ******
 let raw = reveal(token); // "abc123"
 ```
+
+`reveal` requires a secret argument. Passing a non-secret value to `reveal`
+raises a `RuntimeError`.
+
+**Idempotent wrap.** `secret(secret(x))` wraps `x` with no inner-secret
+nesting; `reveal(secret(secret(x))) == reveal(secret(x))`. Secrets do not
+nest; the inner secret's value is unwrapped before wrapping. The outer and
+inner handles are distinct objects (per *Equality* below), so `outer == inner`
+is `false`.
+
+```stash
+let inner = secret("x");
+let outer = secret(inner); // unwraps: reveal(outer) == "x"
+typeof(outer);             // "secret"
+// outer == inner is false — distinct handles (reference identity)
+```
+
+**Taint-propagating `+`.** When `+` is applied with a `secret` operand on
+either side, the result is a `secret` wrapping the concatenation. The non-
+secret operand is stringified through `conv.toStr` before concatenation. This
+applies whether the other operand is a `string`, a number, or any other value.
+
+```stash
+let s = secret("abc123");
+typeof(s + "!")      // "secret"
+typeof("prefix=" + s) // "secret"
+reveal(s + "!")      // "abc123!"
+reveal("prefix=" + s) // "prefix=abc123"
+```
+
+**Equality — reference identity.** `secret(a) == secret(b)` is `true` only
+when both operands are the **same secret handle** (`let t = secret("x"); t
+== t` is `true`); two distinct `secret("x")` constructions are **not** equal
+(`secret("x") == secret("x")` is `false`). The wrapped value never participates
+in equality. To compare contents, `reveal()` both secrets first and compare
+the revealed values; for security-sensitive comparison use
+`buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a constant-time
+comparator backed by `CryptographicOperations.FixedTimeEquals` that resists
+timing side-channels). This is safety-by-default: == cannot be used as an oracle for the wrapped value.
+
+A `secret` value cannot be used as a dict key. The current implementation
+restricts dict keys to `string`, `int`, `float`, and `bool`; passing a
+`secret` raises a `RuntimeError`. (If a future runtime permits secret
+dict-keys, they will key by reference identity per the equality rule above.)
+
+**`typeof` and truthiness.** `typeof(s) == "secret"` for any secret `s`.
+`nameof(s)` returns `"secret"`. A `secret` is truthy regardless of inner
+value — `secret(0)`, `secret(null)`, and `secret("")` are all truthy.
 
 ## Bindings and Scope
 
@@ -1144,6 +1331,11 @@ value falls within the range and aligns with the step.
 "host" in config;
 3 in 1..5;
 ```
+
+Array element membership and dict key membership use **tag-strict equality**, not the
+numeric-coercion rule of `==`. `1 in [1.0]` is `false`; a dict populated with integer
+key `1` does not match a float key `1.0` lookup. See *Equality → Membership and keying
+use tag-strict equality*.
 
 Using `in` with an unsupported right operand produces a runtime error.
 

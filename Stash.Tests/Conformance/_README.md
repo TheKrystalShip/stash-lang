@@ -62,12 +62,13 @@ See `Stash.Tests/CLAUDE.md` → "Conformance tests — proving the spec" for the
 
 ## Directory layout
 
-| Directory | Spec area | Populated by |
-| --------- | --------- | ------------ |
-| `Async/`  | §Async — Async Functions and Await (L1428–1787) | `language-standard-async` unit, P2–P7 |
+| Directory  | Spec area | Populated by |
+| ---------- | --------- | ------------ |
+| `Async/`   | §Async — Async Functions and Await (L1428–1787) | `language-standard-async` unit, P2–P7 |
+| `Values/`  | §Values and Types (L570–L664) | `language-standard-values` unit, P1–P7 |
 
-Future units (e.g. `language-standard-values`, `language-standard-lexical`) will add sibling
-directories here. The trait guard and naming convention apply uniformly to all of them.
+Future units (e.g. `language-standard-lexical`) will add sibling directories here. The trait
+guard and naming convention apply uniformly to all of them.
 
 ---
 

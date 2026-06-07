@@ -380,10 +380,12 @@ public class TypeProtocolTests
     // ======================= IVMTruthiness =======================
 
     [Fact]
-    public void Error_IsFalsy()
+    public void Error_IsTruthy()
     {
+        // D5 ratification (language-standard-values P2): caught Error values are truthy.
+        // VMIsFalsy is false — errors are truthy values, not absence-markers.
         var error = new StashError("msg", "RuntimeError");
-        Assert.True(((IVMTruthiness)error).VMIsFalsy);
+        Assert.False(((IVMTruthiness)error).VMIsFalsy);
     }
 
     [Fact]

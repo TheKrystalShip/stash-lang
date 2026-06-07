@@ -143,11 +143,22 @@ public class SecretTests : StashTestBase
     }
 
     // ── Equality ─────────────────────────────────────────────────────
+    // D4 (ratified 2026-06-06): secret equality is reference identity.
+    // Distinct constructions are NOT equal; the same handle IS equal.
 
     [Fact]
-    public void Secret_SameInnerValue_AreEqual()
+    public void Secret_SameInnerValue_DistinctConstructions_AreNotEqual()
     {
+        // D4: two distinct secret(42) constructions are different handles — not equal.
         var result = Run("let s1 = secret(42); let s2 = secret(42); let result = s1 == s2;");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Secret_AliasedHandle_IsEqual()
+    {
+        // D4: same handle aliased via let s2 = s1 — same reference, so equal.
+        var result = Run("let s1 = secret(42); let s2 = s1; let result = s1 == s2;");
         Assert.Equal(true, result);
     }
 
