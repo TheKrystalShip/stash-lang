@@ -2,7 +2,9 @@
 
 **Status:** Backlog — Bug
 **Created:** 2026-06-07
-**Discovery context:** Surfaced by the Resolver during the `language-standard-values` feature review fix pass (F03). The reviewer's finding F03 included a fifth conformance test: `nameof(Color.Red) -> "Color"`. Runtime verification with the freshly-built binary produced `"Color.Red"` instead. This revealed a spec/runtime discrepancy before the conformance test was written, blocking F03.
+**Discovery context:** Surfaced by the Resolver during the `language-standard-values` feature review fix pass (F03). The reviewer's finding F03 included a fifth conformance test: `nameof(Color.Red) -> "Color"`. Runtime verification with the freshly-built binary produced `"Color.Red"` instead. This revealed a spec/runtime discrepancy, triggering a human decision on the resolution path.
+
+**Option B ratified (2026-06-07):** The user chose to correct the spec to match the runtime ("Color.Red"), so the spec and runtime now agree. This item is no longer a spec/impl contradiction — it is a tracked **design-improvement** item for a future follow-up.
 
 ---
 
@@ -55,28 +57,39 @@ Candidate files:
 
 ## Suggested fix
 
-Two resolution paths — the human reviewer should decide which side is law:
+**Option B has been ratified** — the spec now documents `"Color.Red"` as the correct behavior. The spec and runtime agree; this is no longer a contradiction.
 
-- **(A) Fix the runtime** — make `nameof(enum_value)` return the declaring enum type name (e.g. `"Color"` for `Color.Red`), consistent with the spec's "declared enum-type name" language and analogous to how `nameof(struct_instance)` returns the struct type name. This makes the spec authoritative.
-- **(B) Correct the spec** — update §Values and Types L632-633 to document that `nameof(enum_value)` returns the fully-qualified member name (e.g. `"Color.Red"`), and update any conformance test to assert that behavior. This makes the runtime authoritative.
+**Recommended eventual fix (follow-up):** Change the runtime to return the **bare member name** `"Red"` — the common path taken by most languages:
+- C#: `nameof(Color.Red) == "Red"`
+- Python: `Color.RED.name == "RED"`
 
-The spec's "declared type name" phrasing and the struct analogy both favor **(A)**, but the decision requires a human call.
+This is the most intuitive and useful return value for dispatch, serialization, and display.
+
+**Alternative (option A):** Change the runtime to return the declaring type name `"Color"`, consistent with the struct-instance analogy (`nameof(struct_instance) == "P"`). This is the spec-consistency path — both instances return only the type name.
+
+Either follow-up requires a runtime change to `nameof` evaluation for enum values, a spec update, and a conformance test flip. The current conformance test (`Nameof_EnumValue_ReturnsQualifiedMemberName_PerSpecValuesTypeModel`) will flip red when the fix lands, serving as the change-detector.
+
+The original two resolution paths for context:
+- **(A) Fix the runtime to return `"Color"`** — analogous to struct instances; makes the spec's original "declared enum-type name" phrasing accurate.
+- **(B) Correct the spec to `"Color.Red"`** ← **CHOSEN** — the spec now documents the runtime's qualified-path behavior. See commit listed in Verification below.
 
 ## Verification
 
-After resolution:
+**Option B is done** — confirmed green as of the F03 fix commit in `language-standard-values`:
 
 ```bash
-# If (A) — runtime fixed:
+# Current behavior (spec now matches runtime):
 dotnet run --project Stash.Cli/ -- -c 'enum Color { Red, Green } io.println(nameof(Color.Red));'
-# Expected: "Color"
+# Returns: "Color.Red"  ← both spec and runtime agree (option B sealed)
 
-# Conformance test to add (currently blocked):
-# Nameof_EnumValue_ReturnsEnumTypeName_PerSpecValuesTypeModel in TypeModelConformanceTests.cs
+# Conformance test that pins this behavior (added in F03 fix):
+# Nameof_EnumValue_ReturnsQualifiedMemberName_PerSpecValuesTypeModel in TypeModelConformanceTests.cs
 
 dotnet test --filter "FullyQualifiedName~TypeModelConformanceTests"
 dotnet test --filter "Category=Conformance"
 ```
+
+When the eventual follow-up fix lands (changing the runtime to return `"Red"`), the conformance test above will flip red — that is the intended change-detector signal to update the assertion and the spec.
 
 ## Related
 

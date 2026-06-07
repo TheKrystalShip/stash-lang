@@ -290,6 +290,79 @@ let result = typeof(n);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Edit 2 — typeof vocabulary: ip and interface (closed-set completeness)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// typeof(@127.0.0.1) == "ip" — the ip literal category is part of the
+    /// closed typeof vocabulary (spec table §Values and Types L582-605).
+    /// </summary>
+    [Fact]
+    public void TypeOf_IpLiteral_ReturnsIp_PerSpecValuesTypeModel()
+    {
+        var result = Run("let result = typeof(@127.0.0.1);");
+        Assert.Equal("ip", result);
+    }
+
+    /// <summary>
+    /// typeof(Runnable) == "interface" — the interface type identifier returns
+    /// "interface" from typeof (spec table row; type identifier case).
+    /// </summary>
+    [Fact]
+    public void TypeOf_InterfaceType_ReturnsInterface_PerSpecValuesTypeModel()
+    {
+        var result = Run("interface Runnable { fn run() } let result = typeof(Runnable);");
+        Assert.Equal("interface", result);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Edit 2 — typeof for type identifiers: struct and enum (L634-636)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// typeof(P) == "struct" — the struct type identifier (not an instance) returns
+    /// "struct"; the type and its instance are indistinguishable by typeof
+    /// (spec §Values and Types L634-636).
+    /// </summary>
+    [Fact]
+    public void TypeOf_StructTypeIdentifier_ReturnsStruct_PerSpecValuesTypeModel()
+    {
+        var result = Run("struct P { x } let result = typeof(P);");
+        Assert.Equal("struct", result);
+    }
+
+    /// <summary>
+    /// typeof(Color) == "enum" — the enum type identifier returns "enum";
+    /// the type and its instance are indistinguishable by typeof
+    /// (spec §Values and Types L634-636).
+    /// </summary>
+    [Fact]
+    public void TypeOf_EnumTypeIdentifier_ReturnsEnum_PerSpecValuesTypeModel()
+    {
+        var result = Run("enum Color { Red } let result = typeof(Color);");
+        Assert.Equal("enum", result);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Edit 2 — nameof(enum_value) returns fully-qualified member name (option B)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// nameof(Color.Red) == "Color.Red" — the fully-qualified member name,
+    /// NOT the declaring type name "Color". This is the sealed option-B behavior
+    /// (runtime authoritative): spec §Values and Types L632-637 corrected to
+    /// document the qualified-path return value. See backlog bug
+    /// nameof-enum-value-returns-qualified-name-not-type-name.md for the
+    /// eventual follow-up (changing to the bare member name "Red").
+    /// </summary>
+    [Fact]
+    public void Nameof_EnumValue_ReturnsQualifiedMemberName_PerSpecValuesTypeModel()
+    {
+        var result = Run("enum Color { Red } let result = nameof(Color.Red);");
+        Assert.Equal("Color.Red", result);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Edit 7 + Edit 1 — Range as a first-class value
     // ─────────────────────────────────────────────────────────────────────────
 

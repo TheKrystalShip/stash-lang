@@ -630,7 +630,11 @@ For aggregate, opaque, and user-defined values:
 - `typeof(struct_instance)` returns `"struct"`. To recover the user-visible
   struct name, use `nameof(instance)`.
 - `typeof(enum_value)` returns `"enum"`. `nameof(enum_value)` returns the
-  declared enum-type name.
+  **fully-qualified member name** — the enum type name joined to the member
+  name by a dot (e.g. `nameof(Color.Red) == "Color.Red"`). This differs from
+  `nameof(Color)` (the enum *type* identifier), which returns the bare type
+  name `"Color"`. It also differs from struct instances, where
+  `nameof(struct_instance)` returns only the type name (e.g. `"P"`).
 - `typeof(struct_type)` / `typeof(enum_type)` (the type *identifier*) returns
   `"struct"` / `"enum"` respectively; the *type* and its *instance* are
   indistinguishable by `typeof`.
@@ -651,6 +655,11 @@ For aggregate, opaque, and user-defined values:
 and falls back to the same string `typeof` would return for values with no
 named declaration. For user-defined struct, enum, and interface types,
 `nameof` returns the user-visible name (e.g. `nameof(Server) == "Server"`).
+**Exception — enum values:** `nameof(enum_value)` returns the fully-qualified
+member path, not just the type name (e.g. `nameof(Color.Red) == "Color.Red"`
+rather than `"Color"`). The enum *type* identifier and struct instances do not
+share this exception: `nameof(Color) == "Color"` and `nameof(p) == "P"` (where
+`p` is a struct instance).
 
 ### Truthiness
 
