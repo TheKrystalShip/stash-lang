@@ -396,7 +396,7 @@ public sealed class EqualityNumericConformanceTests : StashTestBase
     public void DictKey_IntAndFloatAreDistinctKeys_FloatLookupReturnsNull_PerSpecValuesEquality()
     {
         var result = Run("let d = {}; d[1] = \"int\"; let result = d[1.0];");
-        Assert.Null(result,
+        Assert.True(result is null,
             "in/dict-key tag-strict (sealed in §Equality): d[1.0] must be null when d was populated with integer key 1 " +
             "— dict keys use tag-strict equality; integer 1 and float 1.0 are distinct keys.");
     }
@@ -409,7 +409,7 @@ public sealed class EqualityNumericConformanceTests : StashTestBase
     public void DictKey_IntKey_RoundTripsCorrectly_PerSpecValuesEquality()
     {
         var result = (string?)Run("let d = {}; d[1] = \"int\"; let result = d[1];");
-        Assert.Equal("int", result,
+        Assert.True(result == "int",
             "Sanity: d[1] after d[1]=\"int\" must return \"int\" — same integer key must round-trip.");
     }
 
