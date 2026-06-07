@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-equality
 current: null
-updated: "2026-06-07T13:47:24Z"
+updated: "2026-06-07T14:17:57Z"
 phases:
   P1:
     status: done
@@ -44,13 +44,13 @@ phases:
     attempts: 1
     notes: "Deleted ChunkBuilder.StashValueComparer (value-level float comparer), used StashValue.Equals (bit-level) for constant pool; ±0 now distinct; added InterningRegressionTests + EqualityModesVocabularyConformanceTests; KnownExemptions emptied; MinScannedParticipants raised to 21"
   P6:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 531d14b7754315cf6c613d8f7a4ab8fd3ded9ccb
+    verified: true
+    started: "2026-06-07T13:54:44Z"
+    completed: "2026-06-07T14:17:57Z"
+    attempts: 1
+    notes: "Closed §Equality: E3 three-named-modes + E4 stale-xref fix, examples/equality.stash, tooling sweep, coverage roll-up; full suite 14470/0/6"
 review:
   status: not_started
   started: null
