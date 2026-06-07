@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-values
 current: null
-updated: "2026-06-06T23:42:21Z"
+updated: "2026-06-07T08:09:27Z"
 phases:
   P1:
     status: done

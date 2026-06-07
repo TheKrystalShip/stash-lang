@@ -138,7 +138,8 @@ dotnet run --project Stash.Cli/ -- -c 'io.println(1 == 1.0); io.println(1 in [1.
 
 ## F03 — [MEDIUM] TypeModel conformance class misses `typeof(ip)`, `typeof(interface)`, `typeof(struct_type)`, `typeof(enum_type)`, `nameof(enum_value)` — closed-set claim under-tested
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 3ff0862e
 **Files:** `Stash.Tests/Conformance/Values/TypeModelConformanceTests.cs`, `docs/Stash — Language Specification.md:582-609`, `docs/Stash — Language Specification.md:620-648`
 **Phase:** P1
 **Commit:** c292e810
