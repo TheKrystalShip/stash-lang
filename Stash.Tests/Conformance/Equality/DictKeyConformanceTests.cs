@@ -247,4 +247,62 @@ public sealed class DictKeyConformanceTests : StashTestBase
         var result = Run("let arr = [1, 2]; let d = {}; d[arr] = 1; let result = d[arr];");
         Assert.Equal(1L, result);
     }
+
+    /// <summary>
+    /// Two distinct dict constructions are distinct keys (aggregate reference identity,
+    /// Edit E1 keying half). Dicts key by identity, not structural equality.
+    /// </summary>
+    [Fact]
+    public void DictKey_TwoDistinctDicts_AreDistinctKeys_PerSpecEqualityE1()
+    {
+        var result = Run("let d = {}; d[{x: 1}] = 1; let result = d[{x: 1}];");
+        Assert.Null(result);
+    }
+
+    /// <summary>
+    /// The same dict binding used twice is the same dict key.
+    /// </summary>
+    [Fact]
+    public void DictKey_SameDictHandle_IsSameKey_PerSpecEqualityE1()
+    {
+        var result = Run("let inner = {x: 1}; let d = {}; d[inner] = 1; let result = d[inner];");
+        Assert.Equal(1L, result);
+    }
+
+    /// <summary>
+    /// The same range binding used twice is the same dict key (reference identity).
+    /// Two distinct range literals are distinct keys.
+    /// </summary>
+    [Fact]
+    public void DictKey_RangeHandle_IsSameKey_PerSpecEqualityE1()
+    {
+        // Same binding → same key
+        var result1 = Run("let r = 1..3; let d = {}; d[r] = 1; let result = d[r];");
+        Assert.Equal(1L, result1);
+
+        // Two distinct range literals → distinct keys (struct comparison by identity)
+        var result2 = Run("let d = {}; d[1..3] = 1; let result = d[1..3];");
+        Assert.Null(result2);
+    }
+
+    /// <summary>
+    /// A namespace used as a dict key is the same key via its singleton reference.
+    /// A registered namespace is a singleton, so <c>d[io] = 1; d[io]</c> returns 1.
+    /// </summary>
+    [Fact]
+    public void DictKey_NamespaceHandle_IsSameKey_PerSpecEqualityE1()
+    {
+        var result = Run("let d = {}; d[io] = 1; let result = d[io];");
+        Assert.Equal(1L, result);
+    }
+
+    /// <summary>
+    /// A function used as a dict key is the same key via its function handle.
+    /// </summary>
+    [Fact]
+    public void DictKey_FunctionHandle_IsSameKey_PerSpecEqualityE1()
+    {
+        var result = Run("fn f() { return 0; }; let d = {}; d[f] = 1; let result = d[f];");
+        Assert.Equal(1L, result);
+    }
 }
