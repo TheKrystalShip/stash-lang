@@ -315,25 +315,35 @@ public sealed class DictKeyConformanceTests : StashTestBase
     /// (per the per-category equality rule): two distinct constructions with the same
     /// value payload are the same dict key.
     ///
+    /// Each subtest inserts under one freshly-constructed key and retrieves under a
+    /// separately-constructed key (same value, distinct object reference), so the
+    /// round-trip only succeeds if the dict uses value equality, not reference identity.
+    /// Arithmetic on literals (e.g. <c>512B + 512B</c>) forces two separate runtime
+    /// allocations via <c>StashByteSize.Add</c> / <c>StashDuration.Add</c> /
+    /// <c>StashIpAddress.Add</c>, defeating the constant-pool interning that would
+    /// otherwise collapse two identical literals to a single shared object.
+    ///
     /// §Equality keying clause — value-typed cohort (Edit E1 / F01 conformance gap closure).
     /// </summary>
     [Fact]
     public void DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1()
     {
-        // bytes: literal form `1KB`
-        var r1 = Run("let d = {}; d[1KB] = 1; let result = d[1KB];");
+        // bytes: two distinct StashByteSize instances (arithmetic forces fresh allocation)
+        // disassembly: `add rX` at k1 assignment and a separate `add rY` at k2 assignment —
+        // set.table uses k1's register, get.table uses k2's register (distinct references)
+        var r1 = Run("let d = {}; let k1 = 512B + 512B; d[k1] = 1; let k2 = 512B + 512B; let result = d[k2];");
         Assert.Equal(1L, r1);
 
-        // duration: literal form `5s`
-        var r2 = Run("let d = {}; d[5s] = 1; let result = d[5s];");
+        // duration: two distinct StashDuration instances (arithmetic forces fresh allocation)
+        var r2 = Run("let d = {}; let k1 = 3s + 2s; d[k1] = 1; let k2 = 3s + 2s; let result = d[k2];");
         Assert.Equal(1L, r2);
 
-        // semver: constructor form `semver("1.2.3")`
+        // semver: constructor form `semver("1.2.3")` — two separate builtin calls
         var r3 = Run("let d = {}; d[semver(\"1.2.3\")] = 1; let result = d[semver(\"1.2.3\")];");
         Assert.Equal(1L, r3);
 
-        // ip: literal form `@10.0.0.1`
-        var r4 = Run("let d = {}; d[@10.0.0.1] = 1; let result = d[@10.0.0.1];");
+        // ip: two distinct StashIpAddress instances (add-zero forces fresh allocation)
+        var r4 = Run("let d = {}; let k1 = @10.0.0.1 + 0; d[k1] = 1; let k2 = @10.0.0.1 + 0; let result = d[k2];");
         Assert.Equal(1L, r4);
     }
 }
