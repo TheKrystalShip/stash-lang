@@ -348,6 +348,85 @@ public sealed class EqualityNumericConformanceTests : StashTestBase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // §Equality — Membership and keying: tag-strict divergence (sealed)
+    //
+    // These tests pin the current tag-strict behavior for `in`, `arr.contains`,
+    // and dict key lookup, as documented in the "Membership and keying use
+    // tag-strict equality" clause of §Equality.
+    //
+    // IMPORTANT: These tests back the *sealed divergence* clause, not a bug.
+    // When the deferred SameValueZero-unification feature ships, these will
+    // flip from `false`/`null` to `true`/"int" — at that point flip the
+    // assertions here and prune the backlog entry.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>1 in [1.0]</c> is <c>false</c>: array membership uses tag-strict equality,
+    /// not the numeric-coercion rule of <c>==</c>.
+    /// Sealed in §Equality — "Membership and keying use tag-strict equality".
+    /// </summary>
+    [Fact]
+    public void InOperator_IntNotInFloatArray_IsFalse_PerSpecValuesEquality()
+    {
+        var result = (bool?)Run("let result = 1 in [1.0];");
+        Assert.False(result,
+            "in/dict-key tag-strict (sealed in §Equality): 1 in [1.0] must be false " +
+            "— array membership uses tag-strict equality, not the == numeric-coercion rule.");
+    }
+
+    /// <summary>
+    /// <c>arr.contains([1], 1.0)</c> is <c>false</c>: arr.contains uses tag-strict equality.
+    /// Sealed in §Equality — "Membership and keying use tag-strict equality".
+    /// </summary>
+    [Fact]
+    public void ArrContains_IntArrayDoesNotContainFloat_IsFalse_PerSpecValuesEquality()
+    {
+        var result = (bool?)Run("let result = arr.contains([1], 1.0);");
+        Assert.False(result,
+            "in/dict-key tag-strict (sealed in §Equality): arr.contains([1], 1.0) must be false " +
+            "— arr.contains uses tag-strict equality, not the == numeric-coercion rule.");
+    }
+
+    /// <summary>
+    /// Integer key <c>1</c> and float key <c>1.0</c> are distinct dictionary keys.
+    /// A dict populated with integer key <c>1</c> returns <c>null</c> for float key <c>1.0</c>.
+    /// Sealed in §Equality — "Membership and keying use tag-strict equality".
+    /// </summary>
+    [Fact]
+    public void DictKey_IntAndFloatAreDistinctKeys_FloatLookupReturnsNull_PerSpecValuesEquality()
+    {
+        var result = Run("let d = {}; d[1] = \"int\"; let result = d[1.0];");
+        Assert.Null(result,
+            "in/dict-key tag-strict (sealed in §Equality): d[1.0] must be null when d was populated with integer key 1 " +
+            "— dict keys use tag-strict equality; integer 1 and float 1.0 are distinct keys.");
+    }
+
+    /// <summary>
+    /// Integer key <c>1</c> round-trips correctly in a dict: <c>d[1]</c> returns the stored value.
+    /// Sanity cross-check to confirm the dict-assignment in the tag-strict test is valid.
+    /// </summary>
+    [Fact]
+    public void DictKey_IntKey_RoundTripsCorrectly_PerSpecValuesEquality()
+    {
+        var result = (string?)Run("let d = {}; d[1] = \"int\"; let result = d[1];");
+        Assert.Equal("int", result,
+            "Sanity: d[1] after d[1]=\"int\" must return \"int\" — same integer key must round-trip.");
+    }
+
+    /// <summary>
+    /// Sanity cross-check: <c>1 == 1.0</c> is <c>true</c> (D2 numeric coercion for <c>==</c>),
+    /// confirming the divergence from the tag-strict membership behavior above is observable.
+    /// </summary>
+    [Fact]
+    public void EqOperator_IntEqualsFloat_IsTrue_SanityForMembershipDivergence_PerSpecValuesEquality()
+    {
+        var result = (bool?)Run("let result = 1 == 1.0;");
+        Assert.True(result,
+            "Sanity cross-check: 1 == 1.0 must be true (D2 numeric coercion), " +
+            "confirming the observable divergence with tag-strict in/arr.contains/dict-key.");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Edit 4 — Precision guard: same-tag int equality must not use ToDouble
     // (large int64 values that are distinct must remain distinct)
     // ─────────────────────────────────────────────────────────────────────────

@@ -727,6 +727,27 @@ comparison use `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a
 constant-time comparator backed by `CryptographicOperations.FixedTimeEquals`;
 see *Secret Values*).
 
+**Membership and keying use tag-strict equality — not the numeric equivalence class.**
+The numeric-coercion rule above governs `==` and `!=` only. The `in` operator (array
+element membership and dict key lookup), `arr.contains`, and dictionary key storage
+use **tag-strict structural equality**: two numeric values are considered equal only
+when they share the same runtime category (`int`, `float`, or `byte`) and the same
+bit-level value. Concretely:
+
+- `1 in [1.0]` is `false` — integer `1` is not tag-equal to float `1.0`.
+- `arr.contains([1], 1.0)` is `false` — same reason.
+- Integer key `1` and float key `1.0` are **distinct dictionary keys**: a dictionary
+  populated with `d[1] = "int"` returns `null` for `d[1.0]`.
+
+This divergence from `==` is observable and deliberate in the current runtime. The
+hash-contract requirement (`a == b → same hash`) means extending numeric coercion to
+collection membership requires changing both `StashValue.Equals` and
+`StashValue.GetHashCode` for every numeric key — a coordinated change reserved for a
+dedicated future unit (see
+`.kanban/0-backlog/bugs/numeric-equality-inconsistency-in-operator-dict-keys.md`).
+To test mathematical membership today, normalize types first:
+`arr.contains(arr.map(xs, x => conv.toFloat(x)), 1.0)`.
+
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
 overflow arithmetic (`conv.toFloat("1e308") * 10.0` produces `Infinity`;
@@ -1310,6 +1331,10 @@ value falls within the range and aligns with the step.
 "host" in config;
 3 in 1..5;
 ```
+
+Array element membership and dict key membership use **tag-strict equality**, not the
+numeric-coercion rule of `==`. `1 in [1.0]` is `false`; `1.0 in {1: "v"}` does not
+find the integer key. See *Equality → Membership and keying use tag-strict equality*.
 
 Using `in` with an unsupported right operand produces a runtime error.
 
