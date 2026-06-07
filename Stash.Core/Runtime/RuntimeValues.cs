@@ -199,29 +199,6 @@ public static class RuntimeValues
     }
 
     /// <summary>
-    /// Tests two runtime values for equality without type coercion.
-    /// </summary>
-    public static bool IsEqual(object? left, object? right)
-    {
-        if (left is null && right is null)
-        {
-            return true;
-        }
-
-        if (left is null || right is null)
-        {
-            return false;
-        }
-
-        if (left.GetType() != right.GetType())
-        {
-            return false;
-        }
-
-        return object.Equals(left, right);
-    }
-
-    /// <summary>
     /// Checks whether a runtime value is a numeric type (long or double).
     /// </summary>
     public static bool IsNumeric(object? value) => value is long or double;

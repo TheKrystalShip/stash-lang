@@ -727,6 +727,8 @@ comparison use `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` (a
 constant-time comparator backed by `CryptographicOperations.FixedTimeEquals`;
 see *Secret Values*).
 
+**Strict assert equality (Edit E2, DE3).** The `assert.equal` and `assert.notEqual` built-ins use a type-strict equality: operands of different `typeof` are never equal even within the numeric equivalence class. `assert.equal(1, 1.0)` raises `AssertionError` even though `1 == 1.0` is `true`. Within a single type, value equality applies with the following floating-point specifics: `assert.equal(0.0, -0.0)` passes (±0 unified), and `assert.equal(NaN, NaN)` passes (NaN is reflexive under strict assert equality). Aggregates and secrets compare by reference identity: `assert.equal(secret("x"), secret("x"))` raises (two distinct constructions); `let t = secret("x"); assert.equal(t, t)` passes (aliased handle). Test authors who want operator-== semantics in an assertion write `assert.true(a == b);` instead.
+
 **Array membership uses SameValueZero — a value-equality comparator aligned with the
 numeric-coercion rule, with one floating-point delta.** The `in` operator (when the
 right-hand side is an array), `arr.contains`, `arr.indexOf`, `arr.remove`, and related
