@@ -7,6 +7,11 @@ normative clause in §Equality of the Language Specification*.
 Tests here are **not** regression tests for the implementation — `Stash.Tests/Interpreting/` holds
 those. Conformance tests prove the *spec*; behavior tests guard the *impl*.
 
+**Status: 🟢 §Equality sealed** (2026-06-07, `language-standard-equality`). All six clause groups below
+are **populated** (P1–P5 landed their classes; P6 closed the spec with Edits E3/E4 and the `coverage.md`
+roll-up). Every equality decision now resolves through the three named `StashEquality` modes —
+`OperatorEquals`, `SameValueZero`, `StrictEquals` — with no open carve-out.
+
 ---
 
 ## Six clause groups

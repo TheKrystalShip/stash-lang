@@ -1,0 +1,58 @@
+// equality.stash
+// Demonstrates Stash's three named equality modes:
+//   1. OperatorEquals  — backs == and !=  (numeric coercion, NaN != NaN)
+//   2. SameValueZero   — backs in / arr.contains / dict keys (NaN self-equal)
+//   3. StrictEquals    — backs assert.equal (type-strict, no numeric coercion)
+
+// ── 1. OperatorEquals — == and != ────────────────────────────────────────────
+// Numeric coercion: int, float, and byte form one equivalence class.
+io.println(1 == 1.0);        // true
+io.println(0 == 0.0);        // true
+io.println(1 == "1");        // false  (cross-category: no coercion outside numerics)
+
+// NaN follows IEEE 754 — not equal even to itself.
+// Canonical idiom: overflow to Infinity, then Infinity - Infinity gives NaN.
+const inf = conv.toFloat("1e308") * 10.0;  // Infinity
+const nan = inf - inf;                      // NaN
+// Compare against a copy so the linter does not flag it as a self-comparison;
+// the result is the same: NaN is never equal to any float, including itself.
+const nan2 = inf - inf;
+io.println(nan == nan2);     // false
+
+// ── 2. SameValueZero — in / arr.contains / dict keys ─────────────────────────
+// int/float/byte compare by mathematical value (same as ==)...
+io.println(1 in [1.0]);               // true
+io.println(arr.contains([1], 1.0));   // true
+
+// ...but NaN IS self-equal by value in collections (contrast with == above).
+io.println(nan in [nan]);              // true   ← SameValueZero delta vs ==
+io.println(arr.contains([nan], nan));  // true
+
+// Dict keys use the same SameValueZero comparator.
+const d = {};
+d[1] = "a";
+io.println(d[1.0]);          // a   (int key 1 and float key 1.0 are the same key)
+
+// ── 3. DE4 — secret reference identity ───────────────────────────────────────
+// Two distinct secret() constructions are NOT equal (reference identity).
+const a = secret("x");
+const b = secret("x");
+io.println(a in [b]);        // false  (distinct constructions → distinct handles)
+
+// An aliased handle IS the same element.
+const t = secret("x");
+io.println(t in [t]);        // true   (same handle)
+
+// ── 4. StrictEquals — assert.equal (type-strict) ─────────────────────────────
+// assert.equal uses StrictEquals: no cross-category numeric coercion.
+// 1 and 1.0 are == true but assert.equal rejects them (different typeof).
+try {
+    assert.equal(1, 1.0);
+    io.println("did not throw");
+} catch (_) {
+    io.println("assert.equal is strict: 1 vs 1.0 throws");  // assert.equal is strict: 1 vs 1.0 throws
+}
+
+// The escape hatch: assert.true(a == b) uses operator-== semantics.
+assert.true(1 == 1.0);
+io.println("assert.true(1 == 1.0) passes");  // assert.true(1 == 1.0) passes

@@ -48,7 +48,7 @@ the unsealed-vs-partial axis* — the operative discriminator remains the **pros
 | # | Spec § | Status | Conformance dir | Highest-value open items (evidence) | Existing tests |
 | - | ------ | ------ | --------------- | ----------------------------------- | -------------- |
 | 1 | **Lexical Structure** (L84) | 🔴 unsealed | — | False clause: L198 "any other backslash escape is a lex error" vs `Lexer.cs:812` silently preserves unknown escapes in Windows-path heuristic. Multi-line string dangling normative ref. | Lexing/ (3) |
-| 2 | **Values & Types** (L570) | 🟢 **sealed** | `Conformance/Values/` *(populated — 6 test classes, 159 tests)* | ✅ Sealed by `language-standard-values` (2026-06-07). Edits 1–7 + rulings D1–D5: type table closed + `range` added (E1); `typeof`/`nameof` vocab pinned (E2); truthiness closed falsey set + empty-collection truthy (D1) + caught-error truthy (D5) (E3); equality per-category table + numeric cross-type coercion (D2) + secret reference identity (D4) (E4); coercion closed list (E5); secret values normative prose (E6); `bytesize`→`bytes` rename spec-side only (D3) (E7). | Interpreting/ (7) + **Conformance/Values/ (6 classes, 159 tests)** |
+| 2 | **Values & Types** (L570) | 🟢 **sealed** | `Conformance/Values/` *(6 classes, 159 tests)* + `Conformance/Equality/` *(6 classes — membership/keying sealed by unit #3)* | ✅ Sealed by `language-standard-values` (2026-06-07); membership/dict-key equality surface sealed by `language-standard-equality` (2026-06-07). Edits 1–7 + rulings D1–D5: type table closed + `range` added (E1); `typeof`/`nameof` vocab pinned (E2); truthiness closed falsey set + empty-collection truthy (D1) + caught-error truthy (D5) (E3); equality per-category table + numeric cross-type coercion (D2) + secret reference identity (D4) (E4); coercion closed list (E5); secret values normative prose (E6); `bytesize`→`bytes` rename spec-side only (D3) (E7). | Interpreting/ (7) + **Conformance/Values/ (6 classes, 159 tests)** |
 | 3 | **Bindings & Scope** (L666) | 🟡 partial | — | Assign-to-`const` throws **unregistered** `RuntimeError` base, error type unspec (L689). Destructure-mismatch / `unset` failure error types unnamed. Same-scope redeclare unspec. (`readonly` sub-section is the spec's best-sealed prose.) | Readonly*, Scope* (11) |
 | 4 | **Expressions** (L942) | 🔴 unsealed | — | Relational `< > <= >=` have **no semantics clause** (only a precedence row). Dict-spread `{...x}` implemented, unspecified. Arithmetic edges (div/mod by zero, overflow) unspec. Every error is bare "a runtime error", no named type. Range inclusivity unstated. | Interpreting/ (7) |
 | 5 | **Statements & Control Flow** (L1208) | 🔴 unsealed | — | **Contradiction: `elevate` spec'd as "elevated privileges" (L1338) vs impl command-prefixing reality.** `lockOptions` (wait/stale) has no semantics. for-in iterable set + non-iterable error type unspec. switch-*statement* no-match unspec (asymmetric with switch-expr). | Interpreting/ (7) |
@@ -84,7 +84,12 @@ They are the async-gap failure mode generalized, and they unblock multiple rows 
    `CoercionConformanceTests`, `SecretConformanceTests`. Empty-array contradiction resolved per D1 (truthy,
    law corrected); cross-type `==` numeric coercion ratified per D2 (runtime fixed); `bytesize`→`bytes` spec-side
    per D3; secret equality by reference identity per D4; caught-error truthiness per D5. All later units can cite
-   §Values & Types instead of re-deriving these primitives.
+   §Values & Types instead of re-deriving these primitives. **Membership / dict-key half sealed separately by
+   `language-standard-equality`** (unit #3, 2026-06-07): the `in` operator, `arr.contains`/index/remove, and
+   dictionary keying all route through the named **`SameValueZero`** mode (`1 in [1.0]` and `d[1.0]` after
+   `d[1] = "a"` are both `true`), `assert.equal` stays type-strict via **`StrictEquals`**, and `==` keeps D2 via
+   **`OperatorEquals`** — the three named modes are the complete equality vocabulary (see §Equality → *Three named
+   modes — one source of truth*). Conformance in `Conformance/Equality/` (6 classes).
 4. **Specify closure / loop-variable capture once.** Straddles §Bindings (L780) and §Functions (L1414).
    Impl empirically **shares** the loop binding (a closure made in a loop observes the final value).
    Unspecified in *both* — a reviewer must spec it once, not double-spec or leave it in the seam.

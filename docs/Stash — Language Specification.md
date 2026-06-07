@@ -767,6 +767,20 @@ For non-numeric types, the per-category equality rule governs keying:
   A handle that is the same object is always the same key:
   `let t = secret("x"); d[t] = 1; d[t]` returns `1`.
 
+**Three named modes — one source of truth.** Every equality decision in Stash
+resolves through exactly three named modes, all defined in one place
+(`StashEquality`): **`OperatorEquals`** backs `==` and `!=` (the numeric-coercion
+rule above, with `NaN != NaN` per IEEE 754); **`SameValueZero`** backs collection
+membership and dictionary keying (the same numeric coercion, but with `NaN`
+self-equal by value); and **`StrictEquals`** backs `assert.equal` and
+`assert.notEqual` (type-strict — no cross-category numeric coercion). These three
+are the complete vocabulary of value equality: there is no fourth mode, and no code
+path compares two runtime values by any other rule. (The constant-pool interning key
+the compiler uses to deduplicate literals is *structural identity*, not a value-equality
+mode — it is intentionally at least as fine as `==` and is not part of this set.) A
+future addition to this set is a breaking change to §Equality and requires a new
+normative clause here.
+
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
 overflow arithmetic (`conv.toFloat("1e308") * 10.0` produces `Infinity`;
@@ -1354,8 +1368,8 @@ value falls within the range and aligns with the step.
 
 Array element membership uses **SameValueZero equality**: `1 in [1.0]` is `true`;
 `NaN in [NaN]` is `true`. See *Equality → Array membership uses SameValueZero*.
-Dict key membership currently uses tag-strict equality (a coordinated change
-to dict key storage is forthcoming).
+Dict key membership also uses **SameValueZero equality**: `1.0 in d` is `true` when
+`d` has the integer key `1`. See *Equality → Dictionary keys use SameValueZero*.
 
 Using `in` with an unsupported right operand produces a runtime error.
 
