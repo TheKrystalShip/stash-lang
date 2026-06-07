@@ -27,7 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
-_(none in flight)_
+- language-standard-equality — Unify equality behind one named chokepoint (SameValueZero collections) | .kanban/2-in-progress/language-standard-equality/ | 6 phases | started 2026-06-07
 
 ---
 

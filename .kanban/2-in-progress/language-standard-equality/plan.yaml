@@ -1,0 +1,365 @@
+# plan.yaml — small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec language-standard-equality
+
+schema_version: 1
+
+feature: language-standard-equality
+
+title: "Language Standard: Unify Equality Behind One Named Chokepoint"
+
+# Third unit of the language-standard milestone — reuses the Conformance/<Area>/
+# scaffold + trait guard built in language-standard-async (unit #1) and extended
+# by language-standard-values (unit #2). Seals the membership/dict-key carve-out
+# the §Equality clause parked in unit #2.
+milestone: language-standard
+
+brief: ./brief.md
+
+created: 2026-06-07
+architect_session: language-standard-equality-architect-2026-06-07
+
+# Default verify command run after every phase (cheap; per-phase verify holds the
+# heavier filters).
+default_verify:
+  - dotnet build Stash.sln
+
+# Broad scope — safety rail, not prison.
+scope:
+  - docs/Stash — Language Specification.md
+  - Stash.Core/Runtime/StashEquality.cs
+  - Stash.Core/Runtime/RuntimeValues.cs
+  - Stash.Core/Runtime/StashValue.cs
+  - Stash.Core/Runtime/Types/StashDictionary.cs
+  - Stash.Bytecode/Runtime/RuntimeOps.cs
+  - Stash.Bytecode/Bytecode/ChunkBuilder.cs
+  - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/DictBuiltIns.cs
+  - Stash.Stdlib/BuiltIns/AssertBuiltIns.cs
+  - Stash.Tests/Conformance/**
+  - examples/equality.stash
+  - .kanban/milestones/language-standard/coverage.md
+
+phases:
+  - id: P1
+    title: Build StashEquality chokepoint + route == operator + Detect meta-test
+    deps: []
+    files:
+      - Stash.Core/Runtime/StashEquality.cs
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+      - Stash.Tests/Conformance/_README.md
+      - Stash.Tests/Conformance/Equality/_README.md
+      - Stash.Tests/Conformance/Equality/OperatorChokepointConformanceTests.cs
+      - Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~OperatorChokepointConformanceTests|FullyQualifiedName~EqualityChokepointMetaTests|FullyQualifiedName~ConformanceTraitMetaTests"
+      - dotnet test --filter "FullyQualifiedName~InterpreterTests|FullyQualifiedName~BytecodeVmTests|FullyQualifiedName~EqualityNumericConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "`Stash.Core/Runtime/StashEquality.cs` exists in `namespace Stash.Core.Runtime` with three public members: `public static bool OperatorEquals(StashValue, StashValue)`, `public static IEqualityComparer<StashValue> SameValueZero { get; }` (or `public sealed class` exposing the singleton), `public static bool StrictEquals(StashValue, StashValue)`, all delegating to a private `NumericCoercingEquals(StashValue a, StashValue b, bool nanSelfEqual)` core for the numeric branch. The non-numeric branch delegates to `StashValue.Equals` (preserving secret reference identity per §Values D4)."
+      - "`OperatorEquals` passes `nanSelfEqual:false`; `SameValueZero` passes `nanSelfEqual:true`. The two share the int/float/byte coercion and ±0 unification rules; they differ in exactly the NaN-self-equality rule."
+      - "`StrictEquals` is tag-strict value equality (matches today's `RuntimeValues.IsEqual` profile via `object.Equals` → `Double.Equals` for float — ±0 unified, NaN reflexive)."
+      - "`Stash.Bytecode/Runtime/RuntimeOps.cs:IsEqual` (L49), `IsEqualCrossTag` (L67), and `IsEqualSlow` (L79) are rewritten as thin forwarders to `StashEquality.OperatorEquals`. The existing `IVMEquatable.VMEquals` dispatch for user struct/enum `==` is preserved exactly (do not regress user-defined `==`)."
+      - "**Behavior-preserving phase:** every pre-existing operator-equality test under `Stash.Tests/Bytecode/`, `Stash.Tests/Interpreting/`, and `Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs` passes byte-for-byte unchanged (DE1 unchanged). `1 == 1.0` is `true` (D2 honored); `NaN == NaN` is `false`; `+0.0 == -0.0` is `true`; user struct `==` still reaches `IVMEquatable.VMEquals`."
+      - "**No spec edit lands in P1** — the operator chokepoint is an internal migration. Spec Edits E1–E4 are sequenced to P2/P3/P4/P6 alongside the behavior they describe."
+      - "`Stash.Tests/Conformance/Equality/_README.md` exists naming the six clause groups this directory will populate (one per planned class)."
+      - "`Stash.Tests/Conformance/_README.md` directory layout table includes an `Equality/` row pointing at this unit."
+      - "`Stash.Tests/Conformance/Equality/OperatorChokepointConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing the chokepoint contract. Asserts (a) the operator routes through `StashEquality.OperatorEquals` (observable: `1 == 1.0` literal-vs-variable pair returns same boolean — re-asserted as a chokepoint-coverage cross-check); (b) `IVMEquatable.VMEquals` precedence preserved (a user struct with a custom `==` overload still dispatches to the user method)."
+      - "**Detect meta-test landed:** `Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs` exists, **green** with an explicit P1 exemption list naming every not-yet-migrated site. The exemption list is structured as `KnownExemptions = { (\"Stash.Core/Runtime/RuntimeValues.cs\", \"IsEqual\"), (\"Stash.Bytecode/Runtime/RuntimeOps.cs\", \"Contains\"), (\"Stash.Core/Runtime/Types/StashDictionary.cs\", \"_entries\"), (\"Stash.Bytecode/Bytecode/ChunkBuilder.cs\", \"StashValueComparer\"), (\"Stash.Stdlib/BuiltIns/ArrBuiltIns.cs\", \"<6 sites>\"), (\"Stash.Stdlib/BuiltIns/DictBuiltIns.cs\", \"<1 site>\"), (\"Stash.Stdlib/BuiltIns/AssertBuiltIns.cs\", \"<2 sites>\") }` — each later phase removes its entries."
+      - "Meta-test copies `Stash.Tests/Registry/Authz/NoMagicAuthStringsMetaTests.cs` shape: (a) `MetadataReference`s built from `TRUSTED_PLATFORM_ASSEMBLIES` + assemblies-under-test (NOT `AppDomain.CurrentDomain.GetAssemblies()` — CLAUDE.md Roslyn-determinism rule); (b) `MinScannedFiles` floor (a documented integer) to catch a vacuous 0-files pass; (c) **binding-floor**: asserts the `Stash.Core.Runtime.StashEquality` named type resolves to a non-error `INamedTypeSymbol` so the scan can't pass vacuously if the chokepoint is renamed; (d) **fail-path teeth self-test**: a separate test method feeds a fixture string containing a banned `.Equals(` outside `StashEquality` to the same scan logic and asserts the scan flags it."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 2 (covers `OperatorChokepointConformanceTests` + `EqualityChokepointMetaTests`; if the prior floor was 14 from values-P6 the new floor is 16); the trait-guard meta-test passes."
+      - "`dotnet test --filter \"Category=Conformance\"` is green and binds non-zero tests across all three suites (`Async/`, `Values/`, `Equality/`)."
+      - "Full `dotnet test` is green (the operator-forwarder change must not regress any test)."
+    notes: |
+      P1 is the chokepoint-build phase. Behavior-preserving by design: every
+      operator test must stay green byte-for-byte. The two new test classes
+      (`OperatorChokepointConformanceTests` + `EqualityChokepointMetaTests`)
+      are the conformance + Detect anchors the rest of the unit consumes.
+
+      The Detect meta-test goes up GREEN-WITH-A-PINNED-EXEMPTION-LIST per the
+      architect.md "go up red with an exemption list and shrink to empty as
+      phases migrate" pattern — green means the meta-test passes; red would
+      mean a not-yet-migrated site exists with no exemption entry. Each later
+      phase removes its entries from `KnownExemptions`. At P5 close the list
+      is the sanctioned interning use only.
+
+      Copy `NoMagicAuthStringsMetaTests` exactly for the Roslyn determinism
+      and binding-floor patterns — they are load-bearing per CLAUDE.md.
+
+  - id: P2
+    title: Membership — `in` + `arr.contains` route through SameValueZero (Edit E1 half)
+    deps: [P1]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+      - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+      - Stash.Tests/Conformance/Equality/MembershipConformanceTests.cs
+      - Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~MembershipConformanceTests|FullyQualifiedName~EqualityNumericConformanceTests|FullyQualifiedName~EqualityChokepointMetaTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "`Stash.Bytecode/Runtime/RuntimeOps.cs:Contains` (line 335 `sv.Equals(left)`) is rewritten to `StashEquality.SameValueZero.Equals(left, sv)` (or the equivalent `IEqualityComparer<StashValue>` call). The change is the single load-bearing `in`-operator migration."
+      - "Every `RuntimeValues.IsEqual(...)` call in `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs` (six sites: L155, L168, L211, L230, L249, L275 — plus the L642/L662 `arr.unique` sites if they reach equality) is rewritten to `StashEquality.SameValueZero.Equals(<StashValue>, <StashValue>)`, removing the `.ToObject()` boxing on each. (`arr.findFirst`-and-friends if discovered to use `IsEqual` are migrated too.)"
+      - "`EqualityChokepointMetaTests.KnownExemptions` shrinks: the `RuntimeOps.Contains` entry AND every `ArrBuiltIns.cs` site is **removed**. The meta-test passes with the remaining exemption list (`RuntimeValues.IsEqual`, `StashDictionary._entries`, `ChunkBuilder.StashValueComparer`, `DictBuiltIns:247`, `AssertBuiltIns:26,42`)."
+      - "**Runtime probe (pre-commit) confirms the fix:** `1 in [1.0]` returns `true`; `arr.contains([1], 1.0)` returns `true`; `arr.contains([0], -0.0)` returns `true`; `arr.contains([conv.toByte(7)], 7)` returns `true`; `arr.indexOf([1.0, 2.0], 1)` returns `0`; `arr.remove([1.0], 1)` returns `[]`. Record the probe output in the commit message."
+      - "**Spec Edit E1 (membership half) landed:** `docs/Stash — Language Specification.md` §Equality replaces the carve-out paragraph that begins `**Membership and keying use tag-strict equality — not the numeric equivalence class.**` (currently ~L730) with the SameValueZero membership prose containing the distinctive phrases `\"Membership and keying use SameValueZero\"`, `\"a value-equality comparator aligned with the numeric-coercion rule\"`, `\"1 in [1.0]\\` is \\`true\\`\"`, `\"arr.contains([1], 1.0)\\` is \\`true\\`\"`, and `\"NaN in [NaN]\\` is \\`true\\` (NaN-self-equal by value, not by identity)\"`. The dict-key half is **deferred to P3**; the spec text at this point names the membership sentences only (the keying sentences land alongside the dict-key migration so each phase's prose matches shipped behavior)."
+      - "**Conformance:** `Stash.Tests/Conformance/Equality/MembershipConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit E1 (membership half) and DE2."
+      - "Membership numeric-coercion conformance: `1 in [1.0]` is `true`; `1.0 in [1]` is `true`; `arr.contains([1], 1.0)` is `true`; `arr.contains([1.0], 1)` is `true`; `conv.toByte(7) in [7]` is `true`; `7 in [conv.toByte(7)]` is `true`; `conv.toByte(7) in [7.0]` is `true`."
+      - "Membership NaN-self-equal-by-value conformance: `let big = conv.toFloat(\"1e308\") * 10.0; let n = big - big; n in [n]` is `true`; `arr.contains([n], n)` is `true`; two distinct overflow-NaN values (computed separately) are mutually `in` each other (`NaN in [NaN]` cross-instance)."
+      - "Membership ±0 conformance: `0.0 in [-0.0]` is `true`; `arr.contains([0], -0.0)` is `true`; `arr.contains([0.0], 0)` is `true`."
+      - "Membership DE4 conformance (secret reference identity preserved): `let a = secret(\"x\"); let b = secret(\"x\"); a in [b]` is `false` (distinct constructions); `let t = secret(\"x\"); t in [t]` is `true` (aliased handle). The class XML doc names the DE4 lock and points at §Values & Types D4 as the source."
+      - "Membership reference-identity-other-aggregates conformance: `[1] in [[1]]` is `false` (distinct array constructions, both have value `[1]`); `{x:1} in [{x:1}]` is `false` (distinct struct/dict constructions)."
+      - "Membership arr-search-family conformance: `arr.indexOf([1.0, 2.0], 1)` is `0`; `arr.remove([1, 2], 2.0)` returns `[1]`."
+      - "**Sealed-divergence flip:** `Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs` ~L351–L426 region (`// §Equality — Membership and keying: tag-strict divergence (sealed)`) has its three sealed assertions flipped: `In_IntFloatMembership_TagStrict_PerSpec*` flips `Assert.False(...)` → `Assert.True(...)`; `ArrContains_IntFloatTarget_TagStrict_PerSpec*` flips `Assert.False(...)` → `Assert.True(...)`; the dict-key assertion is **left in place** (still asserts the *current* tag-strict behavior for dict keys, until P3 flips it). The XML doc comments naming `sealed in §Equality` are removed from the membership assertions and rewritten to cite Edit E1 (membership half)."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1 (covers `MembershipConformanceTests`); the trait-guard meta-test is green."
+      - "Full `dotnet test` is green (the membership migration must not regress any test consuming `in`/`arr.contains`/`arr.indexOf`/`arr.remove`)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      P2 lands the user-visible membership flip. The dict-key half of Edit E1
+      is intentionally deferred to P3 so each phase's spec prose matches the
+      shipped behavior; this is the §Async/§Values precedent (each phase
+      independently green).
+
+      The sealed-divergence region in `EqualityNumericConformanceTests.cs`
+      is flipped in TWO PHASES, not one: P2 flips the membership halves
+      (`In_*`, `ArrContains_*`), P3 flips the dict-key half. Keeping them
+      separate preserves the per-phase-green invariant.
+
+      Inspect the `arr.unique` site (`ArrBuiltIns.cs:642,662`) carefully —
+      its semantics depend on whether it currently de-dups by tag-strict
+      or by `RuntimeValues.IsEqual`. Migrating it to SameValueZero is the
+      consistent choice (one `arr.unique([1, 1.0])` returns `[1]`), but
+      pin the chosen direction in the commit message + a conformance test.
+
+  - id: P3
+    title: Dict keys — migrate _entries to Dictionary<StashValue, StashValue> with SameValueZero (Edit E1 keying half)
+    deps: [P2]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Core/Runtime/Types/StashDictionary.cs
+      - Stash.Stdlib/BuiltIns/DictBuiltIns.cs
+      - Stash.Tests/Conformance/Equality/DictKeyConformanceTests.cs
+      - Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~DictKeyConformanceTests|FullyQualifiedName~EqualityNumericConformanceTests|FullyQualifiedName~StashDictionaryTests|FullyQualifiedName~DictBuiltInsTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "`Stash.Core/Runtime/Types/StashDictionary.cs:_entries` (line 16) is migrated from `Dictionary<object, StashValue>` to `Dictionary<StashValue, StashValue>` constructed with the `StashEquality.SameValueZero` comparer: `new(StashEquality.SameValueZero)`."
+      - "The boxed-key sites are rewritten: `StashValue.FromObject(kvp.Key)` at L68 and L99 becomes `kvp.Key` (the key is already a `StashValue`); `index.ToObject()!` at L189 and L196 becomes `index` (the key is passed directly). Every `Get`/`Set`/`ContainsKey`/`Remove` API takes/returns `StashValue` keys consistently."
+      - "`Stash.Stdlib/BuiltIns/DictBuiltIns.cs:247` (the `RuntimeValues.IsEqual(entry.Key, k)` site) is migrated to `StashEquality.SameValueZero.Equals(entry.Key, k)`. The surrounding loop's key handling is reconciled with the new `StashValue`-typed key surface."
+      - "Any C#-public-surface callers of `StashDictionary.Get`/`Set` outside `Stash.Stdlib` and `Stash.Bytecode` are surveyed for key-type compatibility (the P3 investigation in the brief); if a leak is surfaced, file a backlog stub and revert P3 to the boxed-`object` adapter fallback. Expected outcome: no leak (StashDictionary's public surface only touches `StashValue` keys via `Index`/`SetIndex`)."
+      - "`EqualityChokepointMetaTests.KnownExemptions` shrinks: the `StashDictionary._entries` entry AND the `DictBuiltIns.cs:247` entry are **removed**. The meta-test passes with the remaining exemption list (`RuntimeValues.IsEqual`, `ChunkBuilder.StashValueComparer`, `AssertBuiltIns:26,42`)."
+      - "**Runtime probe (pre-commit) confirms the fix:** `let d = {}; d[1] = \"a\"; d[1.0]` returns `\"a\"`; `let d = {}; d[0.0] = \"a\"; d[-0.0]` returns `\"a\"`; `let d = {}; d[1] = \"a\"; d[conv.toByte(1)]` returns `\"a\"`; `let big = conv.toFloat(\"1e308\") * 10.0; let n = big - big; let d = {}; d[n] = \"x\"; d[n]` returns `\"x\"` (NaN-key round-trip). Record the probe output in the commit message."
+      - "**Spec Edit E1 (dict-key half) landed + §Equality clause fully sealed:** `docs/Stash — Language Specification.md` §Equality contains the dict-key sentences inside the SameValueZero clause: `\"Integer key \\`1\\` and float key \\`1.0\\` are the same dictionary key\"`, `\"d[1] = \\\"a\\\"\\` returns \\`\\\"a\\\"\\` for \\`d[1.0]\\`\"`, `\"The floats \\`+0.0\\` and \\`-0.0\\` are the same key\"`, `\"A \\`NaN\\` key round-trips\"`. The non-numeric branch sentence naming secret-reference-identity and aggregate-reference-identity is present. The §Equality membership/keying clause is now complete (membership half from P2 + keying half from P3 = full Edit E1)."
+      - "**Sealed-divergence flip (keying half):** `Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs` ~L390–L401 region (`DictKey_IntFloat_TagStrict_PerSpec*` or equivalent) has its assertion flipped: `Assert.Null(...)` → `Assert.Equal(\"int\", ...)` (or the appropriate non-null value the dict now returns). The XML doc comment naming `sealed in §Equality` is removed from the dict-key assertion and rewritten to cite Edit E1 (keying half). The sealed-divergence `region` block and its `IMPORTANT: These tests back the sealed divergence clause` comment are deleted (membership halves flipped in P2 + keying half flipped in P3 = the whole region is sealed-positive now)."
+      - "**Conformance:** `Stash.Tests/Conformance/Equality/DictKeyConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit E1 (keying half) and DE2."
+      - "Dict-key cross-type conformance: `let d = {}; d[1] = \"a\"; d[1.0]` returns `\"a\"`; `let d = {}; d[1.0] = \"a\"; d[1]` returns `\"a\"`; `let d = {}; d[conv.toByte(7)] = \"a\"; d[7]` returns `\"a\"`; `let d = {}; d[7] = \"a\"; d[conv.toByte(7)]` returns `\"a\"`; `let d = {}; d[7.0] = \"a\"; d[conv.toByte(7)]` returns `\"a\"`."
+      - "Dict-key ±0 conformance: `let d = {}; d[0.0] = \"a\"; d[-0.0]` returns `\"a\"`; `let d = {}; d[-0.0] = \"a\"; d[0.0]` returns `\"a\"`; `let d = {}; d[0] = \"a\"; d[-0.0]` returns `\"a\"`."
+      - "Dict-key NaN round-trip conformance: `let big = conv.toFloat(\"1e308\") * 10.0; let n = big - big; let d = {}; d[n] = \"x\"; d[n]` returns `\"x\"`; `n in d` is `true`."
+      - "Dict-key DE4 conformance (secret reference identity preserved): `let d = {}; d[secret(\"x\")] = 1; d[secret(\"x\")]` returns `null` (two distinct constructions are distinct keys); `let t = secret(\"x\"); d[t] = 1; d[t]` returns `1` (same handle is the same key); `let t = secret(\"x\"); d[t] = 1; t in d` is `true`. The class XML doc names the DE4 lock and points at §Values & Types D4 as the source."
+      - "Dict-key hash-equals consistency conformance: for any `a SameValueZero b`, `StashEquality.SameValueZero.GetHashCode(a) == StashEquality.SameValueZero.GetHashCode(b)`. Asserted directly via reflection or via observable round-trip (insert with `a`, retrieve with `b`, succeed) across all coercion pairs (int/float/byte, ±0, NaN)."
+      - "Dict-key reference-identity-aggregates conformance: two distinct `[1, 2]` arrays are distinct keys (`let d = {}; d[[1,2]] = 1; d[[1,2]]` returns `null`); two distinct dicts are distinct keys; two distinct struct instances are distinct keys; functions, namespaces, futures, ranges, and Error values are keyed by reference identity."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1 (covers `DictKeyConformanceTests`); the trait-guard meta-test is green."
+      - "Full `dotnet test` is green (the dict-key migration must not regress any test consuming `StashDictionary` keys — dict iteration, dict.has, dict.keys, dict.merge, dict.filter, dict-pattern destructuring)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      P3 is the riskiest phase: it migrates a foundational runtime data
+      structure (`StashDictionary._entries`) from a boxed-`object` key to a
+      `StashValue` key. Survey the public-surface key-type leak BEFORE
+      starting the rewrite: `grep -rn "StashDictionary" Stash.Hosting/
+      Stash.Bytecode/ Stash.Stdlib/` and inspect every `Set(`/`Get(`/`Has(`/
+      `Remove(` call's key argument type. If any caller passes a raw
+      `object`, the migration is blocked and the boxed-`object` adapter
+      fallback is the correct retreat.
+
+      The hash-equals consistency conformance test is load-bearing: a
+      `SameValueZero`-equal-but-different-hash pair silently corrupts the
+      dictionary (insert with `a`, retrieve with `b` misses even though
+      they're equal). Test every coercion pair: int↔float same-value,
+      ±0 unification, NaN reflexivity, byte↔int same-value.
+
+      The dict-pattern destructuring code path (`Compiler.Collections.cs`
+      and the `Destructure` opcode) likely consumes `StashValue` keys
+      already (it sees Stash literals); confirm with a destructuring
+      conformance test that survives the migration.
+
+  - id: P4
+    title: Assert — route through StrictEquals + retire RuntimeValues.IsEqual (Edit E2)
+    deps: [P3]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Stdlib/BuiltIns/AssertBuiltIns.cs
+      - Stash.Core/Runtime/RuntimeValues.cs
+      - Stash.Tests/Conformance/Equality/StrictAssertConformanceTests.cs
+      - Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~StrictAssertConformanceTests|FullyQualifiedName~AssertBuiltInsTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "`Stash.Stdlib/BuiltIns/AssertBuiltIns.cs:26` (the `assert.equal` site) is rewritten to call `StashEquality.StrictEquals(actual, expected)`; `AssertBuiltIns.cs:42` (the `assert.notEqual` site) is rewritten symmetrically. The `.ToObject()` boxing on the comparison is removed."
+      - "`StashEquality.StrictEquals(StashValue, StashValue)` profile is sealed at today's `RuntimeValues.IsEqual`-via-`object.Equals` behavior: tag-strict (operands of different `typeof` return `false`); within-tag value equality through `Double.Equals` for float (±0 unified, NaN reflexive — matches the probed P0 behavior); reference identity for aggregates/secrets via `StashValue.Equals`. This profile is asserted by the conformance tests in this phase."
+      - "**`RuntimeValues.IsEqual` is deleted** from `Stash.Core/Runtime/RuntimeValues.cs:205`. Pre-deletion sweep confirms zero remaining callers: `grep -rn 'RuntimeValues.IsEqual\\|RuntimeValues\\.IsEqual' Stash.Bytecode/ Stash.Core/ Stash.Stdlib/ Stash.Hosting/ Stash.Lsp/ Stash.Dap/ Stash.Cli/` returns no live call sites. `RuntimeValues.IsNumeric` and `RuntimeValues.ToDouble` are **preserved** (they are reused by `StashEquality` and by arithmetic call sites)."
+      - "`EqualityChokepointMetaTests.KnownExemptions` shrinks: the `RuntimeValues.IsEqual` entry AND the `AssertBuiltIns:26,42` entries are **removed**. The meta-test passes with the remaining exemption list (`ChunkBuilder.StashValueComparer` — the sole entry, sanctioned for interning use, plus internal `StashEquality` delegations)."
+      - "**Runtime probe (pre-commit) confirms behavior preservation:** `try { assert.equal(1, 1.0); io.println(\"PASS\"); } catch (e) { io.println(\"THROWS:\" + nameof(e)); }` prints `THROWS:AssertionError`; `try { assert.equal(0.0, -0.0); io.println(\"PASS\"); } catch (e) { io.println(\"THROWS\"); }` prints `PASS`; `let big = conv.toFloat(\"1e308\") * 10.0; let n = big - big; try { assert.equal(n, n); io.println(\"PASS\"); } catch (e) { io.println(\"THROWS\"); }` prints `PASS`; `try { assert.equal(secret(\"x\"), secret(\"x\")); io.println(\"PASS\"); } catch (e) { io.println(\"THROWS\"); }` prints `THROWS`. Record the probe output in the commit message."
+      - "**Spec Edit E2 landed:** `docs/Stash — Language Specification.md` §Equality contains the assert-strict clause as a new paragraph immediately after the per-category equality table (around L729, before the membership/SameValueZero clause). The new prose contains the distinctive phrases `\"Strict assert equality\"`, `\"The `assert.equal` and `assert.notEqual` built-ins use a type-strict equality\"`, `\"assert.equal(1, 1.0)\\` raises \\`AssertionError\\` even though \\`1 == 1.0\\` is \\`true\\`\"`, `\"assert.equal(0.0, -0.0)\\` passes\"`, `\"assert.equal(NaN, NaN)\\` passes\"`, and `\"assert.equal(secret(\\\"x\\\"), secret(\\\"x\\\"))\\` raises\"`."
+      - "Spec Edit E2 explicitly names the test-author idiom: `\"Test authors who want operator-== semantics in an assertion write \\`assert.isTrue(a == b);\\` instead\"`."
+      - "**Conformance:** `Stash.Tests/Conformance/Equality/StrictAssertConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing Edit E2 and DE3."
+      - "StrictEquals tag-strict conformance: `assert.equal(1, 1.0)` throws `AssertionError`; `assert.equal(1.0, 1)` throws; `assert.equal(conv.toByte(0), 0)` throws (byte vs int — tag-strict); `assert.equal(1, true)` throws (different tags); `assert.equal(0, null)` throws; `assert.equal(0, \"\")` throws."
+      - "StrictEquals within-tag-value conformance: `assert.equal(0.0, -0.0)` passes; `assert.equal(0, 0)` passes; `assert.equal(1.0, 1.0)` passes; `assert.equal(\"a\", \"a\")` passes (string by value); `assert.equal(null, null)` passes; `assert.equal(true, true)` passes."
+      - "StrictEquals NaN conformance: `let big = conv.toFloat(\"1e308\") * 10.0; let n = big - big; assert.equal(n, n)` passes (NaN reflexive via Double.Equals — the probed behavior)."
+      - "StrictEquals DE4 conformance: `assert.equal(secret(\"x\"), secret(\"x\"))` throws (distinct constructions); `let t = secret(\"x\"); assert.equal(t, t)` passes (aliased handle); `assert.notEqual(secret(\"x\"), secret(\"x\"))` passes."
+      - "StrictEquals aggregate-reference-identity conformance: `assert.equal([1], [1])` throws (distinct constructions); `let a = [1]; assert.equal(a, a)` passes."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 1 (covers `StrictAssertConformanceTests`); the trait-guard meta-test is green."
+      - "Full `dotnet test` is green (the assert migration must not regress any `assert.equal`/`assert.notEqual` test in the existing suite; the `RuntimeValues.IsEqual` deletion must not break any caller — pre-deletion grep confirmed zero callers)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      P4 lands DE3's named strict mode + retires the legacy `RuntimeValues.
+      IsEqual` (#2 in the seed's five-path table). The behavior is preserved
+      byte-for-byte — every probed today still works the same, but the
+      semantics now live in `StashEquality.StrictEquals` and have a normative
+      spec clause (Edit E2).
+
+      The `RuntimeValues.IsEqual` deletion is the load-bearing chokepoint
+      retirement: it forces a follow-up grep across the whole codebase. If
+      ANY non-stdlib caller surfaces (e.g. in `Stash.Hosting`, `Stash.Lsp`,
+      `Stash.Dap`, or the `Stash.Cli` self-test paths), it must either
+      route through `StashEquality` or be filed as a backlog stub before
+      P4 commits.
+
+      Note: `RuntimeValues.IsEqual` for `null` parameters returns `true` for
+      both-null and `false` for one-null. The new `StashEquality.StrictEquals`
+      operates on `StashValue` (never `null`-the-reference, only
+      `StashValue.Null`-the-value); the assert call site passes
+      `StashValue.Null` for nullable arguments, and the within-tag rule
+      handles it (Null vs Null returns true).
+
+  - id: P5
+    title: Interning fold — delete ChunkBuilder.StashValueComparer + lock the vocabulary
+    deps: [P4]
+    files:
+      - Stash.Bytecode/Bytecode/ChunkBuilder.cs
+      - Stash.Core/Runtime/StashValue.cs
+      - Stash.Tests/Conformance/Equality/InterningRegressionTests.cs
+      - Stash.Tests/Conformance/Equality/EqualityModesVocabularyConformanceTests.cs
+      - Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~InterningRegressionTests|FullyQualifiedName~EqualityModesVocabularyConformanceTests|FullyQualifiedName~ChunkBuilderTests|FullyQualifiedName~DisassemblerTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "**`ChunkBuilder.StashValueComparer` deleted:** `Stash.Bytecode/Bytecode/ChunkBuilder.cs` lines 1220–1247 (the entire `private sealed class StashValueComparer : IEqualityComparer<StashValue>` block) is removed. Line 17 (`private readonly Dictionary<StashValue, ushort> _constantMap = new(StashValueComparer.Instance);`) is rewritten to `private readonly Dictionary<StashValue, ushort> _constantMap = new();` — the default `IEquatable<StashValue>` from `StashValue` is now the comparer."
+      - "**`StashValue.cs:152` comment updated:** `// bit-level: NaN equals itself for collection ops` is rewritten to `// bit-level: structural identity for the constant-pool key — see Stash.Core.Runtime.StashEquality for runtime equality`. (The `Float` branch's `_data == other._data` rule itself is unchanged — its semantics are still bit-level, only the comment naming its purpose changes.)"
+      - "**`EqualityChokepointMetaTests.KnownExemptions` is at the minimal sanctioned-uses-only state:** the only entries remaining are (a) `StashValue` itself (its own `IEquatable<StashValue>` implementation — the constant-pool key, **NOT** a runtime equality mode), (b) `ChunkBuilder._constantMap` (the sole consumer of the interning key), and (c) the `StashEquality` module's own internal delegations to `StashValue.Equals` and `object.Equals` in its non-numeric branch. The meta-test passes with this list. The list is append-only post-unit-close."
+      - "**Interning regression test landed:** `Stash.Tests/Conformance/Equality/InterningRegressionTests.cs` exists, with class-level XML doc citing the at-least-as-fine constraint. Asserts: (a) a script using `let x = 1; let y = 1.0;` produces two distinct constant-pool entries (verifiable via `--disassemble`); (b) `let x = 0.0; let y = -0.0;` produces two distinct entries (bit-level distinct); (c) a script using two `NaN` literals — if reachable — produces one entry (bit-level same); (d) `let x = 1; let y = conv.toByte(1);` produces two distinct entries (different tags); (e) re-running the same script with `--no-optimize` does not collapse the int and float constants."
+      - "**Vocabulary closure conformance test landed:** `Stash.Tests/Conformance/Equality/EqualityModesVocabularyConformanceTests.cs` exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Uses reflection to enumerate the public surface of `Stash.Core.Runtime.StashEquality` (members of `Type.GetMembers(BindingFlags.Public | BindingFlags.Static) | BindingFlags.Public | BindingFlags.Instance`) and asserts the set of normatively-named modes equals exactly `{\"OperatorEquals\", \"SameValueZero\", \"StrictEquals\"}` (plus the private `NumericCoercingEquals` core, which is allowed via a `BindingFlags.NonPublic` filter exception)."
+      - "**No spec edit lands in P5** — the interning key is not a normative runtime equality mode."
+      - "`ConformanceTraitMetaTests.MinScannedParticipants` is raised by 2 (covers `InterningRegressionTests` + `EqualityModesVocabularyConformanceTests`); the trait-guard meta-test is green."
+      - "Full `dotnet test` is green (the interning fold must not regress any `ChunkBuilder` / `Disassembler` / bytecode-serialization test). The bytecode format-version is NOT bumped (the on-disk format is unaffected; only the in-memory constant-pool comparer changes)."
+      - "`dotnet test --filter \"Category=Conformance\"` is green."
+    notes: |
+      P5 closes the chokepoint by retiring path #4. The bit-level comparer
+      semantics replace the value-`==` comparer semantics for the constant
+      pool — a **safe correction**: bit-level is strictly finer (±0
+      distinct, where value-`==` was merging them). A `0.0` and a `-0.0`
+      literal that previously deduplicated into one constant now stay
+      distinct. This is the intended structural-identity behavior; verify
+      no .stashc fixture broke.
+
+      The vocabulary closure conformance test is the enforcement mechanism
+      for Edit E3's "Three named modes — one source of truth" clause. A
+      future addition of a fourth mode to `StashEquality` trips the test
+      RED and forces a spec edit + a Decision Log entry (matching the
+      §Values & Types Edit 1 closing sentence's "future runtime category
+      is a breaking change" pattern).
+
+      Do NOT change the `Float` branch's `_data == other._data` semantics
+      in `StashValue.Equals` — its semantics are correct for the
+      structural-identity role. Only update the comment.
+
+  - id: P6
+    title: Closing — Edits E3 + E4, examples, tooling sweep, coverage roll-up
+    deps: [P5]
+    files:
+      - docs/Stash — Language Specification.md
+      - examples/equality.stash
+      - .kanban/milestones/language-standard/coverage.md
+      - Stash.Tests/Conformance/Equality/_README.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet run --project Stash.Cli/ -- examples/equality.stash
+      - dotnet test --filter "FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~Wave2ThrowsCoverageTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "**Spec Edit E3 landed:** `docs/Stash — Language Specification.md` §Equality contains the three-named-modes closing sentence, placed immediately before the *Floating-point edges* paragraph (around L751). The new prose contains the distinctive phrases `\"Three named modes — one source of truth\"`, `\"OperatorEquals\"`, `\"SameValueZero\"`, `\"StrictEquals\"` (or `\"strict\"` in narrative form), and `\"A future addition to this set is a breaking change to §Equality\"`."
+      - "**Spec Edit E4 landed:** the backlog-stub pointer paragraph (currently `The hash-contract requirement ... a coordinated change reserved for a dedicated future unit (see \\`.kanban/0-backlog/bugs/numeric-equality-inconsistency-in-operator-dict-keys.md\\`)` through the `arr.contains(arr.map(...))` workaround example) is **deleted** from §Equality. The §Equality section now flows: operator-coercion rule → per-category table → assert-strict clause (E2) → membership/SameValueZero clause (E1) → three-named-modes closing sentence (E3) → floating-point edges → compile-time agreement → §Type Coercion."
+      - "**`examples/equality.stash` exists** (authored by the `stash-author` agent — this phase **delegates to `stash-author`** rather than authoring the .stash file directly). The example demonstrates the three named modes through observable behavior: (a) `==` cross-type numeric (`1 == 1.0` → `true`, `1 == \"1\"` → `false`); (b) `in` SameValueZero (`1 in [1.0]` → `true`, `NaN in [NaN]` → `true`, `secret(\"x\") in [secret(\"x\")]` → `false` — DE4); (c) `assert.equal` strict (`try { assert.equal(1, 1.0); } catch (e) { io.println(\"strict throws\"); }`). Uses `io.println` to show results. **Verified with the freshly-built binary** (`dotnet run --project Stash.Cli/ -- examples/equality.stash`) per `.claude/language-changes.md` — record the output in the commit message."
+      - "**Tooling components explicitly verified per `.claude/language-changes.md` Section 2 (state each, do not skip):**"
+      - "  - **LSP** (`Stash.Lsp/Handlers/SemanticTokensHandler.cs`, `CompletionHandler.cs`): no change needed — no new syntax, no new stdlib function, no new keyword. Existing `assert.*`, `arr.*`, `dict.*`, and `==` highlighting unchanged."
+      - "  - **DAP** (`Stash.Dap/DebugSession.cs`): no change needed — equality decisions are runtime-internal; variable display + watch expressions don't render equality semantics directly."
+      - "  - **Playground** (`Stash.Playground/wwwroot/js/stash-language.js`): no change needed — Monarch tokenizer unchanged; no new keyword or operator."
+      - "  - **VS Code extension** (`.vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json`): no change needed — TextMate grammar unchanged."
+      - "  - **Static analysis** (`Stash.Analysis/`): no change needed — `==`/`in` patterns are unchanged; no new diagnostic rule. (If a P-phase surfaced a new SA-rule opportunity — e.g. `SA08XX warn: arr.contains(intArr, floatTarget) was tag-strict but is now SameValueZero` — file as a backlog stub.)"
+      - "**Throws-coverage + completion-surface tests confirmed green with no churn:** `Wave1ThrowsCoverageTests`, `Wave2ThrowsCoverageTests`, and `CompletionSurfaceSnapshotTests` pass. No new stdlib function added → no `<exception>` metadata edits, no allow-list edits, no snapshot regeneration. `StandardLibraryReferenceTests` also passes (no metadata changes)."
+      - "**`coverage.md` updated:**"
+      - "  - The §Values & Types row (#2) `Highest-value open items` column drops the `Membership/keying carve-out — backlog-stub pointer` note (the carve-out is sealed by this unit). The seal-status remains `🟢 sealed`."
+      - "  - Cross-cutting workstream #3 (truthiness/equality/coercion substrate) note is **extended** to mention the membership/dict-keys surface as part of the sealed substrate, with an inline pointer to `Conformance/Equality/`."
+      - "  - The live spec-vs-impl contradictions table: if a §Equality entry exists (e.g. the membership/keying contradiction), it is **struck through** or **removed** (sealed by this unit)."
+      - "  - The Scoreboard counts are NOT changed (§Values & Types is already `🟢 sealed`; §Equality is a sub-clause, not a separate row); update the `Conformance dir` cell on row #2 to include `Conformance/Equality/` alongside `Conformance/Values/` if that cell tracks unit-level conformance dirs."
+      - "**`Stash.Tests/Conformance/Equality/_README.md` updated** to mark the six clause groups as populated and to add a closing-status line noting the §Equality clause is sealed."
+      - "Full `dotnet test` is green; `dotnet test --filter \"Category=Conformance\"` binds non-zero tests across `Async/`, `Values/`, and `Equality/` suites and is green."
+      - "`stash scripts/checkpoint/checkpoint.stash validate-spec language-standard-equality` passes."
+    notes: |
+      P6 is the documentation roll-up + final gate. Three artifacts ship:
+      Edit E3 (closing-sentence spec edit) + Edit E4 (delete the
+      backlog-pointer paragraph), `examples/equality.stash` (authored by
+      `stash-author`, not by the orchestrator), and the `coverage.md`
+      update.
+
+      **`stash-author` is invoked from this phase** to write
+      `examples/equality.stash`. Per `CLAUDE.md` → "Avoid 3-deep agent
+      nesting on `.stash` phases — skip the implementer," P6 can dispatch
+      directly orchestrator→`stash-author` (one level) and run the phase
+      mechanics (`verify-phase`, the feat commit, `advance-checkpoint`,
+      the chore commit) inline. The docs-first protocol still binds the
+      orchestrator: read the relevant §Equality + §Values & Types +
+      `Standard Library Reference` sections first, emit the API plan,
+      then dispatch `stash-author` to write the example.
+
+      The tooling sweep is mandatory per `.claude/language-changes.md` —
+      every component is stated explicitly, even if the verdict is "no
+      change needed." This is the project's checklist-of-record.
+
+      No `MinScannedParticipants` bump in P6 — no new participant lands;
+      the closing phase is documentation + verification only (matches
+      §Async P8 and §Values P7 precedent).
+
+# Final acceptance command — run by `/done` before promoting to 4-done/.
+# Must include the full test suite at minimum. The Category=Conformance filter
+# is a discrete extra step — a vacuous pass (zero bound tests) fails this step
+# even if the full suite is green.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - dotnet test --filter "Category=Conformance"
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test
