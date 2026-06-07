@@ -1,7 +1,7 @@
 schema_version: 1
 feature: language-standard-equality
 current: null
-updated: "2026-06-07T12:57:24Z"
+updated: "2026-06-07T13:23:38Z"
 phases:
   P1:
     status: done
@@ -28,13 +28,13 @@ phases:
     attempts: 1
     notes: "StashDictionary._entries → Dictionary<StashValue,StashValue> SameValueZero; all callers updated; E1 keying spec sealed; DictKeyConformanceTests added + aggregate ref-identity tests; 14438/0/6 full suite"
   P4:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 37dfaf5f2a1808eedfccb65135078a0d8a3f8ac7
+    verified: true
+    started: "2026-06-07T12:59:58Z"
+    completed: "2026-06-07T13:23:38Z"
+    attempts: 1
+    notes: assert.equal/notEqual → StrictEquals; RuntimeValues.IsEqual deleted; E2 spec landed; StrictAssertConformanceTests (18 tests); 14456/0/6 full suite
   P5:
     status: pending
     commit: null
