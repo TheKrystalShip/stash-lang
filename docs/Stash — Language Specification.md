@@ -731,11 +731,12 @@ see *Secret Values*).
 
 **Array membership uses SameValueZero — a value-equality comparator aligned with the
 numeric-coercion rule, with one floating-point delta.** The `in` operator (when the
-right-hand side is an array), `arr.contains`, `arr.indexOf`, `arr.remove`, and related
-array-search built-ins use **SameValueZero equality**: int/float/byte operands compare
-by mathematical value (the numeric-coercion rule above), the floats `+0.0` and `-0.0`
-are the same value, and `NaN` is **self-equal by value**. Two `NaN`s in the same array
-are considered equal even though `NaN != NaN` under `==`.
+right-hand side is an array), `arr.contains`, `arr.includes`, `arr.indexOf`,
+`arr.lastIndexOf`, `arr.remove`, and `arr.unique` (de-duplication compares elements
+pairwise under SameValueZero) all use **SameValueZero equality**: int/float/byte operands
+compare by mathematical value (the numeric-coercion rule above), the floats `+0.0` and
+`-0.0` are the same value, and `NaN` is **self-equal by value**. Two `NaN`s in the same
+array are considered equal even though `NaN != NaN` under `==`.
 
 Concretely:
 
@@ -761,6 +762,10 @@ retrieved by the same `NaN` expression.
 For non-numeric types, the per-category equality rule governs keying:
 
 - Strings key by value (two `"foo"` expressions are the same key).
+- `duration`, `bytes`, `ip`, and `semver` key by value (per the per-category equality
+  rule above): `let d = {}; d[1KB] = 1; d[1KB]` returns `1`. Two `5s` duration
+  expressions, two `@10.0.0.1` ip expressions, and two `semver("1.2.3")` expressions
+  each produce the same key.
 - Secrets, arrays, dicts, struct instances, functions, namespaces, futures, ranges,
   and Error values key by reference identity — two distinct `secret("x")` constructions
   are distinct keys; two `[1, 2]` arrays with distinct identities are distinct keys.

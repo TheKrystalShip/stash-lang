@@ -313,4 +313,32 @@ let result = n1 in [n2];");
         var list = Assert.IsType<System.Collections.Generic.List<object?>>(result);
         Assert.Single(list);
     }
+
+    // ── arr.includes / arr.lastIndexOf: SameValueZero (DE2) ───────────────────
+
+    /// <summary>
+    /// <c>arr.includes([1.0], 1)</c> is <c>true</c> — integer 1 found in float array via SameValueZero.
+    /// §Equality Edit E1, membership half; closes F02 conformance gap for <c>arr.includes</c>.
+    /// </summary>
+    [Fact]
+    public void ArrIncludes_IntInFloatArray_IsTrue_PerSpecEqualityMembership()
+    {
+        var result = (bool?)Run("let result = arr.includes([1.0], 1);");
+        Assert.True(result,
+            "§Equality SameValueZero (DE2): arr.includes([1.0], 1) must be true — arr.includes uses SameValueZero, coercing int/float by mathematical value.");
+    }
+
+    /// <summary>
+    /// <c>arr.lastIndexOf([1.0, 2, 1.0], 1)</c> returns <c>2</c> — integer 1 matches the last
+    /// float 1.0 at index 2 via SameValueZero.
+    /// §Equality Edit E1, membership half; closes F02 conformance gap for <c>arr.lastIndexOf</c>.
+    /// </summary>
+    [Fact]
+    public void ArrLastIndexOf_IntInFloatArray_ReturnsLastIndex_PerSpecEqualityMembership()
+    {
+        // §Equality SameValueZero (DE2): arr.lastIndexOf([1.0, 2, 1.0], 1) must return 2
+        // — arr.lastIndexOf uses SameValueZero, coercing int/float by mathematical value.
+        var result = Run("let result = arr.lastIndexOf([1.0, 2, 1.0], 1);");
+        Assert.Equal(2L, result);
+    }
 }

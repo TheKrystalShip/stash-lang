@@ -305,4 +305,35 @@ public sealed class DictKeyConformanceTests : StashTestBase
         var result = Run("fn f() { return 0; }; let d = {}; d[f] = 1; let result = d[f];");
         Assert.Equal(1L, result);
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Value-typed keying: duration / bytes / ip / semver (§Equality keying clause)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>duration</c>, <c>bytes</c>, <c>ip</c>, and <c>semver</c> key by value
+    /// (per the per-category equality rule): two distinct constructions with the same
+    /// value payload are the same dict key.
+    ///
+    /// §Equality keying clause — value-typed cohort (Edit E1 / F01 conformance gap closure).
+    /// </summary>
+    [Fact]
+    public void DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1()
+    {
+        // bytes: literal form `1KB`
+        var r1 = Run("let d = {}; d[1KB] = 1; let result = d[1KB];");
+        Assert.Equal(1L, r1);
+
+        // duration: literal form `5s`
+        var r2 = Run("let d = {}; d[5s] = 1; let result = d[5s];");
+        Assert.Equal(1L, r2);
+
+        // semver: constructor form `semver("1.2.3")`
+        var r3 = Run("let d = {}; d[semver(\"1.2.3\")] = 1; let result = d[semver(\"1.2.3\")];");
+        Assert.Equal(1L, r3);
+
+        // ip: literal form `@10.0.0.1`
+        var r4 = Run("let d = {}; d[@10.0.0.1] = 1; let result = d[@10.0.0.1];");
+        Assert.Equal(1L, r4);
+    }
 }
