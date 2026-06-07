@@ -29,8 +29,16 @@ sealing negative space the §Equality / §Values keying surface left thin.
 | -------- | ----- |
 | CRITICAL | 0     |
 | HIGH     | 0     |
-| MEDIUM   | 2     |
+| MEDIUM   | 3     |
 | LOW      | 1     |
+
+**Re-review (pass 2, 2026-06-07):** F01–F03 are confirmed fixed. F04 (new,
+MEDIUM) is opened: the F01 resolver's new conformance test
+`DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1` is vacuous for 3 of 4
+types (bytes/duration/ip literals fold to a single constant-pool entry, so
+the test cannot distinguish value-keying from reference-identity keying for
+those types — only the semver subtest is genuine). Spec sealing and runtime
+behavior are both correct; the gap is purely in the test's guarding power.
 
 Highest-priority concern: **F01 — value-typed keying (`duration`/`bytes`/`ip`/`semver`) is
 unspecified negative space in the §Equality keying clause.** A reader of L755–L768 cannot
@@ -261,5 +269,154 @@ dotnet test --filter "FullyQualifiedName~EqualityChokepointMetaTests"
 
 Plus, if option (a) is taken, scan-add-no-violations confirmation that the new
 directory doesn't introduce findings.
+
+---
+
+## F04 — [MEDIUM] `DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1` is vacuous for 3 of 4 types — constant-pool interning collapses literal `1KB`/`5s`/`@10.0.0.1` to a single object
+
+**Status:** open
+**Files:** `Stash.Tests/Conformance/Equality/DictKeyConformanceTests.cs:309-335`
+**Phase:** F01 fix (commit `9756804c`) — regression caught in re-review
+**Commit:** 9756804c
+
+### Observation
+
+The F01 resolver added `DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1`,
+which checks four value-typed key cohorts:
+
+```csharp
+var r1 = Run("let d = {}; d[1KB] = 1; let result = d[1KB];");        // bytes literal
+var r2 = Run("let d = {}; d[5s] = 1; let result = d[5s];");          // duration literal
+var r3 = Run("let d = {}; d[semver(\"1.2.3\")] = 1; let result = d[semver(\"1.2.3\")];");
+var r4 = Run("let d = {}; d[@10.0.0.1] = 1; let result = d[@10.0.0.1];");  // ip literal
+```
+
+The intent — per the resolver's docstring and the §Equality keying clause it's
+sealing — is to prove that **two distinct constructions of the same value
+produce the same dict key** ("Two `5s` duration expressions, two `@10.0.0.1`
+ip expressions, and two `semver("1.2.3")` expressions each produce the same
+key"). For semver this works: `semver("1.2.3")` is a function call, and the
+disassembler shows it compiles to two distinct `call` instructions producing
+two distinct `StashSemVer` instances.
+
+But the three literal-form cases (`1KB`, `5s`, `@10.0.0.1`) are
+**constant-folded at compile time into a single deduplicated constant-pool
+entry**, so both `d[1KB]` references load the same `StashValue` object.
+Disassembly of `let d = {}; d[1KB] = 1; let result = d[1KB];`:
+
+```
+.const:
+  [0] StashByteSize
+  [1] 1
+…
+0003:  load.k              r3, k0                   ; StashByteSize
+…
+0006:  get.table           r1, r2, r3              ; r1=result
+```
+
+`r3` (the key) is loaded once from `k0` and reused for both `set.table` and
+`get.table`. Same single-`k0` pattern confirmed for `5s` (`StashDuration` in
+`k0`) and `@10.0.0.1` (`StashIpAddress` in `k0`).
+
+A dict lookup with the SAME object reference for set-key and get-key passes
+under reference-identity keying, value keying, **and any equality mode that
+makes a value equal to itself** — so the test cannot distinguish
+"`bytes`/`duration`/`ip` key by value" from "`bytes`/`duration`/`ip` key by
+reference identity". If a future implementation regressed `StashByteSize` to
+key by reference identity (dropping the `IEquatable`/`GetHashCode`-by-value
+delegation), this test would still pass.
+
+This is the same defect class the language-standard milestone exists to close:
+a conformance test whose name and docstring assert "key by value" should
+fail under "key by reference" — this one does not. The runtime behavior is
+correct (a manual probe via the CLI confirms all four return `1` and the
+behavior is genuinely value-based; the bytecode is doing the work via
+`SameValueZero` → `StashValue.Equals` → the type's value `Equals`), and the
+spec prose is correctly sealed in F01's fix. The gap is purely in the
+conformance test's *guarding power* for three types.
+
+### Why this matters
+
+The whole charter of `language-standard-*` is "behavior implemented and tested
+but absent or thin in the spec is a finding — this is the exact drift that
+shipped `async` cooperative-cancellation … undocumented." The mirror image
+applies: a conformance test whose only job is to lock in a spec claim must
+fail when the implementation diverges from that claim. F01's resolver fix
+left the spec sealed but the regression-guard partially open — three of the
+four named types are guarded only by the same-reference-trivially-equals path,
+not by SameValueZero → value-Equals.
+
+The follow-on cost is real:
+
+- A future implementer who refactors `StashByteSize` to drop value-`Equals`
+  (e.g., to make it a struct keyed by ref-equal handle to a pool) will
+  flip dict semantics for `bytes` keys without a single conformance test
+  going red.
+- F02 (sibling fix) explicitly tests `arr.includes([1.0], 1)` and
+  `arr.lastIndexOf([1.0, 2, 1.0], 1)` — both genuinely require SameValueZero
+  to coerce int↔float, so they cannot pass under reference identity. The
+  bar for F01's test is the same.
+- The task's hard rule for this re-review names it directly: "a test that
+  actually exercises a round-trip (insert under one construction, retrieve
+  under a second distinct construction → value found)." That bar is met for
+  semver only.
+
+This is a re-review MEDIUM, not HIGH: the spec is sealed and runtime behavior
+is correct. The cost is future drift surveillance; nothing ships broken today.
+
+### Suggested fix
+
+For each of `bytes`, `duration`, `ip`, force two distinct constructions of
+the same value. The semver subtest is the working model: a constructor-form
+call (`semver("1.2.3")` × 2) produces two distinct instances at runtime.
+
+Two construction patterns that defeat constant-pool folding:
+
+1. **Function-returns-fresh.** Wrap the literal in a Stash function that
+   returns a fresh instance on every call. The function call site is not
+   constant-foldable:
+
+   ```stash
+   fn fresh_kb() { return 1KB; }
+   let d = {};
+   d[fresh_kb()] = 1;
+   let result = d[fresh_kb()];
+   ```
+
+   A function call to user-defined `fresh_kb` cannot be folded by the
+   compiler (it would require inlining + re-interning, which the optimizer
+   doesn't do). Confirm with `--disassemble` that two distinct
+   instructions produce the key. If two folded literals become two
+   `call`-fresh instructions, the test is genuine.
+
+2. **Conv / parse path.** If a stdlib path exists that constructs a fresh
+   `StashByteSize` / `StashDuration` / `StashIpAddress` per call (e.g.
+   `cli.parse` constructs distinct instances via `TryParse` — see
+   `CliBuiltIns.Parse.cs:1331-1358`), thread one input through it twice.
+   This is heavier; pattern (1) is the simpler path.
+
+A working test reaches the value-`Equals` path because the two key objects
+are distinct references; if `StashByteSize` keyed by reference identity, the
+test would return `null`/throw, not `1`.
+
+The resolver should `--disassemble` each subtest before/after the rewrite
+to confirm the key is no longer a single `load.k k0` reuse but a
+constructor/call producing distinct instances on each side of the round
+trip.
+
+### Verify
+
+```bash
+dotnet test --filter "FullyQualifiedName~DictKey_ValueTypedKeys_KeyByValue_PerSpecEqualityE1"
+dotnet test --filter "Category=Conformance"
+```
+
+Plus a disassemble probe per type to confirm the test is no longer vacuous
+(two distinct constructions, not a single `load.k`):
+
+```bash
+dotnet run --project Stash.Cli/ -- --disassemble -c 'fn fresh_kb() { return 1KB; } let d = {}; d[fresh_kb()] = 1; let result = d[fresh_kb()];'
+# expect two distinct `call` instructions producing the keys, not a single `load.k k0` reuse
+```
 
 ---
