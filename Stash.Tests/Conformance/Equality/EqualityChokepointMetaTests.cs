@@ -88,8 +88,12 @@ public sealed class EqualityChokepointMetaTests
     /// Scoped to the runtime-relevant subdirectories: <c>Stash.Core/Runtime/</c>,
     /// <c>Stash.Bytecode/Runtime/</c>, <c>Stash.Bytecode/Bytecode/</c>, and
     /// <c>Stash.Stdlib/BuiltIns/</c>. Excludes <c>Stash.Core/Common/</c> (non-runtime
-    /// utility classes) and <c>Stash.Bytecode/VM/</c> (VM dispatch — covered by
-    /// <see cref="ExcludedRelPaths"/> entry for <c>VirtualMachine.Arithmetic.cs</c>).
+    /// utility classes) and <c>Stash.Bytecode/VM/</c> (VM dispatch — by-design unscanned
+    /// because all equality decisions route through
+    /// <c>Stash.Bytecode/Runtime/RuntimeOps.cs:IsEqual</c>, which is itself in
+    /// <c>Stash.Bytecode/Runtime/</c> (scanned) and forwards to
+    /// <c>StashEquality.OperatorEquals</c>). No <see cref="ExcludedRelPaths"/> entry is
+    /// in play for the VM directory; it is simply absent from this list.
     /// </summary>
     private static readonly string[] ScanDirectories =
     {
