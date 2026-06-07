@@ -49,11 +49,8 @@ public sealed class EqualityChokepointMetaTests
     /// regardless of OS.
     /// </para>
     /// </summary>
-    private static readonly IReadOnlyList<(string RelPath, string MemberHint)> KnownExemptions = new[]
-    {
-        // ── Path #4: ChunkBuilder.StashValueComparer — constant-pool comparer (migrated P5) ──
-        ("Stash.Bytecode/Bytecode/ChunkBuilder.cs",   "StashValueComparer"),
-    };
+    private static readonly IReadOnlyList<(string RelPath, string MemberHint)> KnownExemptions =
+        Array.Empty<(string, string)>();
 
     // ── Repo-root discovery ───────────────────────────────────────────────────
 

@@ -149,7 +149,7 @@ public readonly struct StashValue : IEquatable<StashValue>
         {
             StashValueTag.Null => true,
             StashValueTag.Bool or StashValueTag.Int or StashValueTag.Byte => _data == other._data,
-            StashValueTag.Float => _data == other._data, // bit-level: NaN equals itself for collection ops
+            StashValueTag.Float => _data == other._data, // bit-level: structural identity for the constant-pool key — see Stash.Core.Runtime.StashEquality for runtime equality
             StashValueTag.Obj => object.Equals(_obj, other._obj),
             _ => false,
         };

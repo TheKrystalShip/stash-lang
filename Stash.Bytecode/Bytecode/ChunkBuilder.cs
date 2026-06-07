@@ -14,7 +14,7 @@ public sealed class ChunkBuilder
 {
     private readonly List<uint> _code = new();
     private readonly List<StashValue> _constants = new();
-    private readonly Dictionary<StashValue, ushort> _constantMap = new(StashValueComparer.Instance);
+    private readonly Dictionary<StashValue, ushort> _constantMap = new();
     private readonly List<SourceMapEntry> _sourceEntries = new();
     private readonly List<UpvalueDescriptor> _upvalues = new();
     private int _icSlotCount;
@@ -1213,36 +1213,4 @@ public sealed class ChunkBuilder
         }
     }
 
-    // ==================================================================
-    // Private helpers
-    // ==================================================================
-
-    private sealed class StashValueComparer : IEqualityComparer<StashValue>
-    {
-        public static readonly StashValueComparer Instance = new();
-
-        public bool Equals(StashValue x, StashValue y)
-        {
-            if (x.Tag != y.Tag) return false;
-            return x.Tag switch
-            {
-                StashValueTag.Null => true,
-                StashValueTag.Bool => x.AsBool == y.AsBool,
-                StashValueTag.Int => x.AsInt == y.AsInt,
-                StashValueTag.Float => x.AsFloat == y.AsFloat,
-                StashValueTag.Obj => object.Equals(x.AsObj, y.AsObj),
-                _ => false,
-            };
-        }
-
-        public int GetHashCode(StashValue v) => v.Tag switch
-        {
-            StashValueTag.Null => 0,
-            StashValueTag.Bool => v.AsBool ? 1 : 0,
-            StashValueTag.Int => v.AsInt.GetHashCode(),
-            StashValueTag.Float => v.AsFloat.GetHashCode(),
-            StashValueTag.Obj => v.AsObj?.GetHashCode() ?? 0,
-            _ => 0,
-        };
-    }
 }
