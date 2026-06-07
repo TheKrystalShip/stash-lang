@@ -201,7 +201,8 @@ grep -n "arr.unique\|arr.includes\|arr.lastIndexOf" "docs/Stash — Language Spe
 
 ## F03 — [LOW] Stale comment in `EqualityChokepointMetaTests` references non-existent exclusion entry
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 1c6f8e40
 **Files:** `Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs:91-92`
 **Phase:** P1 (meta-test landed) / P5 (KnownExemptions emptied)
 **Commit:** 2fc3ca5c (initial), 98460fb8 (P5)
