@@ -1,0 +1,668 @@
+# plan.yaml - small machine-readable phase plan
+#
+# Authored by the architect, consumed by checkpoint scripts. Keep design prose in
+# brief.md; keep only script inputs here.
+# Validate with: stash scripts/checkpoint/checkpoint.stash validate-spec language-standard-errors
+
+schema_version: 1
+
+feature: language-standard-errors
+
+title: "Error-Type Taxonomy - seal Errors section and retype the runtime"
+
+# Fourth unit of the language-standard milestone. Reuses the Conformance/<Area>/
+# scaffold + trait guard from language-standard-async (unit #1), values (unit #2),
+# and equality (unit #3). Seals "Errors and Cleanup" section + the cross-cutting
+# error-type taxonomy (coverage.md cross-cutting workstream #2).
+milestone: language-standard
+
+brief: ./brief.md
+
+created: 2026-06-07
+architect_session: language-standard-errors-architect-2026-06-07
+
+# Default verify command run after every phase (cheap; per-phase verify holds the
+# heavier filters).
+default_verify:
+  - dotnet build Stash.sln
+
+# Broad scope - safety rail, not prison.
+scope:
+  - docs/Stash — Language Specification.md
+  - Stash.Core/Runtime/RuntimeError.cs
+  - Stash.Core/Runtime/AssertionError.cs
+  - Stash.Core/Runtime/ErrorTypeRegistry.cs
+  - Stash.Core/Runtime/Errors/**
+  - Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs
+  - Stash.Bytecode/VM/VirtualMachine.Variables.cs
+  - Stash.Bytecode/VM/VirtualMachine.Arithmetic.cs
+  - Stash.Bytecode/VM/VirtualMachine.Collections.cs
+  - Stash.Bytecode/VM/VirtualMachine.TypeOps.cs
+  - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+  - Stash.Bytecode/Runtime/RuntimeOps.cs
+  - Stash.Core/Runtime/Types/**
+  - Stash.Stdlib/BuiltIns/**
+  - Stash.Stdlib.Generators/StashErrorRegistryGenerator.cs
+  - Stash.Cli/**
+  - Stash.Hosting/**
+  - Stash.Tests/Conformance/**
+  - Stash.Tests/Bytecode/**
+  - Stash.Tests/Interpreting/**
+  - Stash.Tests/Stdlib/**
+  - Stash.Tests/Embedding/**
+  - Stash.Tests/Debugging/**
+  - examples/errors.stash
+  - .kanban/milestones/language-standard/coverage.md
+
+phases:
+  - id: P1
+    title: "Chokepoint + guards: Error root, system-fault split, Detect meta-tests, AssertionError registered"
+    deps: []
+    files:
+      - Stash.Core/Runtime/Errors/StashErrorAttribute.cs
+      - Stash.Core/Runtime/Errors/Error.cs
+      - Stash.Core/Runtime/ErrorTypeRegistry.cs
+      - Stash.Core/Runtime/AssertionError.cs
+      - Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs
+      - Stash.Stdlib.Generators/StashErrorRegistryGenerator.cs
+      - Stash.Tests/Conformance/Errors/_README.md
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/Errors/ErrorTypeContractConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/SystemFaultCatchModelConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/ThrowWrappingConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Tests/Conformance/_README.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~ErrorTypeContractConformanceTests|FullyQualifiedName~SystemFaultCatchModelConformanceTests|FullyQualifiedName~ThrowWrappingConformanceTests|FullyQualifiedName~ConformanceTraitMetaTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Stash.Core/Runtime/Errors/Error.cs exists - a concrete C# class `public class Error : RuntimeError`, attributed `[StashError(Description = \"Base catchable runtime error.\")]`, with one public constructor `Error(string message, SourceSpan? span = null)`."
+      - "StashErrorAttribute.cs gains a `public string? Parent { get; init; }` property documenting that omitting `Parent` defaults the parent to `Error` (the registered root); System Faults (`CancellationError`) carry an explicit `Parent = null` to opt out of the `Error` subtree. The source generator (StashErrorRegistryGenerator) is extended to emit a `BuiltInErrorRegistry.ParentOf` lookup and to fail compilation if any registered type's parent chain (a) cycles, (b) names a non-existent type, or (c) has more than one root (the closed set is `{ \"Error\", null }` where null marks a System Fault)."
+      - "Stash.Core/Runtime/AssertionError.cs gains `[StashError(Description = \"An assert.* built-in's predicate failed.\", Properties = new[] {\"expected\", \"actual\"}, PropertyTypes = new[] {\"any\", \"any\"})]`. The Expected/Actual C# fields are surfaced via a new `GetProperties()` override returning `{\"expected\": Expected, \"actual\": Actual}`."
+      - "Stash.Core/Runtime/Errors/CancellationError.cs carries `[StashError(Description = \"...\", Parent = null)]` (explicit `Parent = null` opts out of the `Error` subtree; the existing `Description` is preserved)."
+      - "Stash.Core/Runtime/ErrorTypeRegistry.cs:Matches gains a bounded subtype walk: matches if `targetType == errorType` OR `targetType` is reached by walking the parent chain from `errorType` (built from `BuiltInErrorRegistry.ParentOf`). The walk terminates at a null parent (System Fault root) or at `Error` (catchable root). `Matches(_, \"Error\")` matches every type under the `Error` subtree but NOT a System Fault."
+      - "Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs:31 (the `throw \"string\"` path) constructs `new Error(msg, span)` instead of `new RuntimeError(msg, span)`. :70 (the non-error fallback) constructs `new Error(...)`. :39 (the dict-throw-no-type-field default) constructs the user error with `Error` not `RuntimeError`. :755 (bare `throw;` outside catch) constructs `new Error(...)`."
+      - "ExecuteCatchMatch (VirtualMachine.ControlFlow.cs:695-735) gates the empty-typeNames catch-all on the `Error` subtree: if the thrown error's registered type is a System Fault (i.e. its parent chain does NOT reach `Error`), the empty-typeNames clause does NOT match. Explicit named catch clauses (e.g. `catch (CancellationError e)`) still match via the existing CLR-identity fast-path / name-based fallback."
+      - "Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs exists - Roslyn sink-scan meta-test flagging any `throw new RuntimeError(` outside an explicit KnownExemptions list. The list is structured BY BUCKET: each not-yet-migrated bucket (Bytecode-typeops, Bytecode-collections, Bytecode-arithmetic, Bytecode-variables, Bytecode-modules, Core-types, Stdlib-args, Stdlib-misc, Cli, Hosting) is its own entry, removed by the bucket-phase that retypes it. Meta-test goes up GREEN with the full list. Pattern copies EqualityChokepointMetaTests exactly: MetadataReferences from TRUSTED_PLATFORM_ASSEMBLIES + assemblies-under-test (CLAUDE.md Roslyn-determinism rule); MinScannedFiles floor; binding-floor asserting `Stash.Runtime.Errors.Error` resolves to a non-error INamedTypeSymbol; fail-path teeth self-test feeding a fixture with a banned `throw new RuntimeError(` to the scan logic and asserting it is flagged."
+      - "Stash.Tests/Conformance/Errors/ErrorTypeContractConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked - reflection scan over every `class X : RuntimeError` in Stash.Core.Runtime.Errors and adjacent registered-type homes. Asserts each non-abstract subclass (a) carries `[StashError]`, (b) its name ends in `Error` (including `[StashError(Name=...)]` overrides), (c) appears in BuiltInErrorRegistry. Goes up green at P1; catches the AssertionError registration the same phase fixes."
+      - "Stash.Tests/Conformance/Errors/SystemFaultCatchModelConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked - asserts (a) `catch (Error e)` traps a `throw \"boom\"` whose `.type == \"Error\"`; (b) `catch (e)` (untyped) traps the same; (c) `catch (Error e)` does NOT trap a CancellationError (use `task.cancel` to produce one); (d) `catch (e)` (untyped) does NOT trap a CancellationError; (e) explicit `catch (CancellationError e)` traps the CancellationError. Plus a meta-test enumerating every registered type via reflection and asserting each has a parent chain that terminates at exactly one of `Error` or null (System Fault root)."
+      - "Stash.Tests/Conformance/Errors/ThrowWrappingConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked - per the Errors *Throw* clause: `throw \"boom\"` -> caught `.type == \"Error\"`; `throw 42` -> caught `.type == \"Error\"`; `throw {\"key\": \"val\"};` (dict, no `type` field) -> caught `.type == \"Error\"`; `throw {type: \"MyError\", message: \"m\"};` -> caught `.type == \"MyError\"` (UserRuntimeError preserved); bare `throw;` outside catch -> caught `.type == \"Error\"` with message `Rethrow used outside of a catch block.`."
+      - "Cross-unit conformance test moves landed in P1 (matching the spec-edit half - sealed Async amendment): Stash.Tests/Conformance/Async/FuturesCoreConformanceTests.cs:184 (`D7_ThrowString_WrapsToRuntimeError_PerSpecAsyncD7`) is renamed to `D7_ThrowString_WrapsToError_PerSpecAsyncD7`; the `Assert.Equal(\"RuntimeError\", error.ErrorType)` flips to `Assert.Equal(\"Error\", error.ErrorType)`. Conformance/Async/CombinatorsConformanceTests.cs:150 C#-escape mention has its RuntimeError references replaced with Error (test + XML doc). NO new conformance test asserts the old `RuntimeError` value (no two-tests-asserting-opposite-things)."
+      - "Spec edit (cross-unit Async L1708/L1710) landed: docs/Stash — Language Specification.md L1708 says `wraps to a generic Error` (was RuntimeError); L1710 says `throw \"string\" inside a task wraps to Error(\"string\")` (was RuntimeError). Distinctive phrase for grep: `wraps to a generic` Error and `wraps to` Error(\"string\")."
+      - "Existing exact-type `Assert.Throws<RuntimeError>` sites that P1 invalidates are updated in P1 (in-scope per Decision Log): any test that exercises `throw \"string\"` / dict-no-type / bare-`throw;` outside catch and asserts the exact base type must update to assert against `Error` (via `Assert.Throws<Error>` or `Assert.ThrowsAny<RuntimeError>` + `Assert.Equal(\"Error\", e.ErrorType)`). Pre-commit run of `dotnet test --filter \"FullyQualifiedName~VirtualMachineTests|FullyQualifiedName~InterpreterTests|FullyQualifiedName~DeferTests\"` (or equivalent) is green."
+      - "**Cancellation-catch blast radius updates landed in P1 (the L4 parallel of the Flag-1 finding).** Today every existing `try { await <cancelled> } catch (e) { ... }` and `try { ... } catch (Error e) { ... }` traps a CancellationError; after P1 it does not (the empty-typeNames fast path is gated on the Error subtree). Every such test must update to `catch (CancellationError e)` (or split into two clauses). Confirmed call sites include `Stash.Tests/Interpreting/Async/CancellationAndTimeout/CancellationTests.cs:100`, `Stash.Tests/Conformance/Async/CancellationConformanceTests.cs:353` (the event.loop() cancellation test), and any other test that exercises task.cancel or event-loop-cancellation through an untyped catch. **Pre-commit grep:** `grep -rnB2 -A2 'catch (e)\\|catch (Error' Stash.Tests/Conformance/Async/ Stash.Tests/Interpreting/Async/CancellationAndTimeout/ Stash.Tests/Interpreting/TaskBuiltInsTests.cs Stash.Tests/Interpreting/TimeoutExprTests.cs` and update every match that exercises cancellation. Record the migration count in the commit message. **Examples scan:** `grep -rln 'task.cancel\\|CancellationError' examples/` — if any example relies on the old behavior, update it too (the brief documents none today, but verify)."
+      - "**`TruthinessConformanceTests.cs:244` cross-unit move:** the test comment 'A caught Error (thrown string -> RuntimeError) is truthy' is updated to 'A caught Error (thrown string -> Error) is truthy'. The behavior (caught-error truthy) is preserved per sealed §Values D5; only the type-name reference updates."
+      - "**`Error` C# name-collision pre-flight passed:** `grep -rnE 'enum Error\\b|class Error\\b' --include=\"*.cs\"` reports no existing collisions in any Stash project. Files that `using Stash.Runtime.Errors;` are inspected (Stash.Stdlib/BuiltIns/IniBuiltIns.cs, TimeBuiltIns.cs, SvArgs.cs) to confirm no unqualified `Error` token in those files would surprise-bind to the new class. Record the pre-flight output in the P1 commit message."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by the count of new participants landed in P1 (4: BareBaseErrorChokepointMetaTests, ErrorTypeContractConformanceTests, SystemFaultCatchModelConformanceTests, ThrowWrappingConformanceTests); the trait-guard meta-test passes."
+      - "Stash.Tests/Conformance/_README.md directory-layout table includes an `Errors/` row pointing at this unit. Stash.Tests/Conformance/Errors/_README.md exists and names the conformance areas this directory will populate (one per planned class)."
+      - "dotnet test --filter \"Category=Conformance\" is green and binds non-zero tests across Async/, Values/, Equality/, and Errors/."
+      - "Full dotnet test is green."
+    notes: |
+      P1 is the chokepoint-build phase. Behavior changes are SCOPED but
+      NOT minimal: three semantic flips land here that a reviewer must see
+      named explicitly (NOT hidden under "MINIMAL"):
+
+      1. The four ExecuteThrow paths flip from `new RuntimeError(...)`
+         to `new Error(...)`. User-visible surface: `.type` changes from
+         "RuntimeError" to "Error" for any untyped throw.
+
+      2. The empty-typeNames catch-all fast path is gated on the Error
+         subtree. User-visible surface: `catch (e)` and `catch (Error e)`
+         STOP trapping CancellationError. Today every existing
+         `try { await <cancelled> } catch (e) { ... }` traps; after P1
+         the cancellation propagates. This is the L4 user-locked behavior
+         and the most subtle change — every existing test that catches a
+         cancellation via untyped `catch (e)` must update to
+         `catch (CancellationError e)`. The blast-radius pre-grep is
+         mandatory.
+
+      3. AssertionError registration. Name-preserving (already named
+         AssertionError); the only new visible surface is `.expected` and
+         `.actual` exposure via GetProperties().
+
+      The Async sealed-clause amendment (L1708/L1710) lands here because
+      the throw-wrap behavior is what L1708/L1710 describe; the test move
+      (renaming + retype) is the cross-unit discipline.
+
+      Negative space: ExitException, ScriptCancelledException, and
+      StepLimitExceededException all derive from System.Exception (not
+      RuntimeError), so they bypass the StashError catch machinery
+      already; P1 establishes nothing for them — only documents existing
+      behavior. The only registered System Fault is CancellationError;
+      `SystemFaultCatchModelConformanceTests` asserts the closed set is
+      exactly that one name.
+
+  - id: P2
+    title: "Bucket - VM arithmetic: DivisionByZeroError under ArithmeticError + Values L793 amendment"
+    deps: [P1]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Core/Runtime/Errors/ArithmeticError.cs
+      - Stash.Core/Runtime/Errors/DivisionByZeroError.cs
+      - Stash.Bytecode/VM/VirtualMachine.Arithmetic.cs
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+      - Stash.Tests/Conformance/Errors/ArithmeticConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/Values/CoercionConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~ArithmeticConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~CoercionConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Stash.Core/Runtime/Errors/ArithmeticError.cs exists, `[StashError(Description = \"Catch-supertype for arithmetic faults.\")]`, concrete class deriving from RuntimeError."
+      - "Stash.Core/Runtime/Errors/DivisionByZeroError.cs exists, `[StashError(Description = \"Division by zero in an integer division or literal 0.0/0.0.\", Parent = \"ArithmeticError\")]`, deriving from ArithmeticError."
+      - "Stash.Bytecode/VM/VirtualMachine.Arithmetic.cs:165,172 and Stash.Bytecode/Runtime/RuntimeOps.cs:275,283 throw `new DivisionByZeroError(\"Division by zero.\", span)` instead of `new RuntimeError(...)`."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: the Bytecode-arithmetic-divbyzero bucket entry is removed."
+      - "Runtime probe (pre-commit) confirms the fix: `try { let x = 1 / 0; } catch (DivisionByZeroError e) { io.println(\"by-zero\"); } catch (ArithmeticError e) { io.println(\"arith\"); } catch (Error e) { io.println(\"base\"); }` prints `by-zero`. Record probe output in the commit."
+      - "Spec Edit (cross-unit Values L793) landed: `RuntimeError(\"Division by zero.\")` replaced with `DivisionByZeroError(\"Division by zero.\")` at L793. The distinctive phrase that grep can find: ``DivisionByZeroError(\"Division by zero.\")`` literally appears at L793."
+      - "Conformance: Stash.Tests/Conformance/Errors/ArithmeticConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Asserts: (a) `1/0` raises DivisionByZeroError catchable by all three of DivisionByZeroError, ArithmeticError, Error; (b) `1.0/0.0` literal raises DivisionByZeroError; (c) non-literal float division by zero (`let x = 1.0; let y = 0.0; x/y`) produces Infinity or NaN per Values (no throw)."
+      - "Cross-unit sealed-test moves landed: any conformance test in Stash.Tests/Conformance/Values/ that asserts the bare-base type on division-by-zero is updated in-place (rename + retype). No two-tests-asserting-opposite-things."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1 (covers ArithmeticConformanceTests)."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P2 introduces the first grouping parent (ArithmeticError). The
+      Matches subtype walk lands in P1 - P2 is the first use of it.
+      Confirm with a runtime test that `catch (ArithmeticError e)` after
+      `catch (DivisionByZeroError e)` is unreachable (the analyzer's
+      existing SA0169 flags it; the conformance test asserts the runtime
+      behavior is consistent).
+
+  - id: P3
+    title: "Bucket - VM operand-mismatch: TypeError + Values L824/L844 amendment"
+    deps: [P2]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Bytecode/VM/VirtualMachine.Arithmetic.cs
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+      - Stash.Bytecode/VM/VirtualMachine.TypeOps.cs
+      - Stash.Core/Runtime/Types/StashSecret.cs
+      - Stash.Stdlib/BuiltIns/SecretBuiltIns.cs
+      - Stash.Tests/Conformance/Errors/OperandTypeConformanceTests.cs
+      - Stash.Tests/Conformance/Values/CoercionConformanceTests.cs
+      - Stash.Tests/Conformance/Values/SecretConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~OperandTypeConformanceTests|FullyQualifiedName~CoercionConformanceTests|FullyQualifiedName~SecretConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Every bare-base throw in Stash.Bytecode/Runtime/RuntimeOps.cs for operand-type mismatch (~L161, L243, L268) is retyped to `new TypeError(...)`. VirtualMachine.Arithmetic.cs:275 (++/-- on non-numeric) is retyped to `new TypeError(...)`. The `reveal`-on-non-secret throw site (SecretBuiltIns.cs or StashSecret.cs) is retyped to `new TypeError(...)`."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: the Bytecode-operand and reveal bucket entries are removed."
+      - "Runtime probe: `try { 1 + \"a\"; } catch (TypeError e) { io.println(\"ok\"); }` prints `ok`; `try { reveal(\"not-a-secret\"); } catch (TypeError e) { io.println(\"ok\"); }` prints `ok`. Record probe output."
+      - "Spec Edits (cross-unit Values L824 + L844) landed: L824 `every operand mismatch raises a TypeError` (was RuntimeError); L844 `raises a TypeError` (was RuntimeError). Distinctive phrase for grep: `every operand mismatch raises a` TypeError at L824."
+      - "Cross-unit sealed-test moves landed: Stash.Tests/Conformance/Values/CoercionConformanceTests.cs L302/L319-region tests update from `Assert.ThrowsAny<RuntimeError>` to `Assert.ThrowsAny<TypeError>` (or equivalent CLR fast-path assertion). Their XML doc comments rewrite from `a plain RuntimeError (the base type, not a registered subtype)` to `a TypeError`. Stash.Tests/Conformance/Values/SecretConformanceTests.cs:341,351 (`Reveal_NonSecret_ThrowsRuntimeError_*`, `Reveal_PlainString_ThrowsRuntimeError_*`) is renamed to `Reveal_NonSecret_ThrowsTypeError_*` and retyped. No two-tests-asserting-opposite-things."
+      - "Conformance: Stash.Tests/Conformance/Errors/OperandTypeConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Asserts every operand-mismatch surface (arithmetic, relational, ++/--, in-non-iterable-right, reveal-non-secret) raises TypeError catchable by TypeError or Error."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1."
+      - "Full dotnet test is green. The 62-site retype must not regress any existing operand-mismatch test (the test bases use `Assert.ThrowsAny<RuntimeError>` which accepts subclasses, so a TypeError still satisfies them; exact-type `Assert.Throws<RuntimeError>` sites in this bucket are updated in this phase)."
+      - "dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P3 is the largest single-bucket retype (~62 sites). The advisor flag
+      about exact-type assertions bites here: grep
+      `Assert\.Throws<RuntimeError>` and update any that exercise operand
+      mismatch (likely in VirtualMachineTests, InterpreterTests,
+      BitwiseOperatorTests, BytecodeVmTests).
+
+      Values L824/L844 are sealed by unit #2; the test moves are
+      cross-unit discipline (update in-place; don't add a second contradicting
+      test). The XML doc comments naming "the base type, not a registered
+      subtype" must be rewritten to remove the now-false explanation.
+
+  - id: P4
+    title: "Bucket - VM index/bounds + non-integer index: IndexError + TypeError + Expressions L1360 amendment"
+    deps: [P3]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Bytecode/VM/VirtualMachine.Collections.cs
+      - Stash.Stdlib/BuiltIns/BufBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/StrBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/ArrBuiltIns.cs
+      - Stash.Tests/Conformance/Errors/IndexConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~IndexConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~BufBuiltInsTests|FullyQualifiedName~StrBuiltInsTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Every bare-base throw in Stash.Bytecode/VM/VirtualMachine.Collections.cs for index-out-of-bounds (L26, L38, L66) is retyped to `new IndexError(...)`. Non-integer index sites (L23, L33) retype to `new TypeError(...)`. Stash.Stdlib/BuiltIns/BufBuiltIns.cs:183,893 (buf OOB) retypes to IndexError."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: the Bytecode-collections and Stdlib-buf-OOB bucket entries are removed."
+      - "Runtime probe: `try { let a = [1,2,3]; a[5]; } catch (IndexError e) { io.println(\"oob\"); }` prints `oob`; `try { let s = \"abc\"; s[5]; } catch (IndexError e) { io.println(\"oob\"); }` prints `oob`; `try { let a = [1]; a[\"k\"]; } catch (TypeError e) { io.println(\"non-int\"); }` prints `non-int`. Record probe output."
+      - "Spec Edit (Expressions L1360) landed: the unnamed `runtime error` becomes `IndexError`. Distinctive phrase for grep at L1360 region: `raises` IndexError (positive form). The non-integer-index clause amends to `raises` TypeError."
+      - "Conformance: Stash.Tests/Conformance/Errors/IndexConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Asserts: (a) array OOB raises IndexError; (b) string OOB raises IndexError; (c) byte-array OOB raises IndexError; (d) non-integer index (string-key on array) raises TypeError; (e) all are catchable by Error too."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P4 unifies VM and stdlib OOB behavior (~38 sites total). Today's
+      str.substring already uses IndexError; this phase brings the VM
+      and buf family into line. The 6 existing stdlib IndexError
+      callers are untouched (their behavior is preserved; the new VM sites
+      JUST start agreeing).
+
+  - id: P5
+    title: "Bucket - VM bindings/fields/aggregate: NameError, FieldError, ConstAssignError + Bindings/Expressions/Aggregate amendments"
+    deps: [P4]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Core/Runtime/Errors/NameError.cs
+      - Stash.Core/Runtime/Errors/FieldError.cs
+      - Stash.Core/Runtime/Errors/ConstAssignError.cs
+      - Stash.Bytecode/VM/VirtualMachine.Variables.cs
+      - Stash.Bytecode/VM/VirtualMachine.TypeOps.cs
+      - Stash.Core/Runtime/Types/StashInstance.cs
+      - Stash.Tests/Conformance/Errors/BindingsConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/FieldConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - .kanban/milestones/language-standard/coverage.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~BindingsConformanceTests|FullyQualifiedName~FieldConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~InterpreterTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Stash.Core/Runtime/Errors/NameError.cs exists, `[StashError(Description = \"Undefined variable read or undeclared assignment.\")]`, deriving from RuntimeError."
+      - "Stash.Core/Runtime/Errors/FieldError.cs exists, `[StashError(Description = \"Undefined or missing struct field; field access on non-struct.\")]`, deriving from RuntimeError."
+      - "Stash.Core/Runtime/Errors/ConstAssignError.cs exists, `[StashError(Description = \"Assignment to a const binding.\")]`, deriving from RuntimeError. (Per D3 user override: a NEW dedicated binding-specific type, distinct from ReadOnlyError which stays scoped to frozen-value / readonly-namespace-member mutation.)"
+      - "Stash.Bytecode/VM/VirtualMachine.Variables.cs:44,53 (undefined variable read) retype to `new NameError(...)`. :77,90 (const-assign) retype to `new ConstAssignError(...)` (per D3 user override - NOT ReadOnlyError). Any sites for assign-to-undeclared retype to `new NameError(...)`."
+      - "Stash.Bytecode/VM/VirtualMachine.TypeOps.cs:488,506 and StashInstance.cs:78,87 (field-on-non-struct, missing field read, unknown field assign) retype to `new FieldError(...)`. The Aggregate L2149 missing-required-fields check is implemented or honestly down-coded - see D8: the check at TypeOps.cs:347 is made real (a struct literal that omits a required field raises `FieldError(\"Missing required field 'X'.\")`)."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: Bytecode-variables, Bytecode-typeops-fields, Core-types-instance entries are removed."
+      - "Runtime probe: `try { undefined_name; } catch (NameError e) { io.println(\"name\"); }` prints `name`; `try { struct S { x: int }; let s = S { x: 1 }; s.y; } catch (FieldError e) { io.println(\"field\"); }` prints `field`; `try { let x = 1; x.foo; } catch (FieldError e) { io.println(\"non-struct\"); }` prints `non-struct`; `try { const c = 1; c = 2; } catch (ConstAssignError e) { io.println(\"const\"); }` prints `const`; `try { const c = 1; c = 2; } catch (ReadOnlyError e) { io.println(\"NO\"); } catch (e) { io.println(\"fell-through-as:\" + e.type); }` prints `fell-through-as:ConstAssignError` (ConstAssignError is NOT caught by ReadOnlyError); `try { struct S { x: int, y: int }; let s = S { x: 1 }; } catch (FieldError e) { io.println(\"missing\"); }` prints `missing`. Record probe output."
+      - "Spec Edits landed: Bindings L905 amend (insert `Reading an undefined variable raises NameError` + change `Assignment to an undeclared name raises NameError`); L915 (`raises ConstAssignError` for const-assign, NOT ReadOnlyError); Expressions L1392 (`raises NameError` for unknown type names); Expressions L1437 (`raises FieldError` for missing-field); Aggregate L2149 (`raise FieldError` for missing-required / unknown-field). Distinctive phrases for grep at each line."
+      - "Conformance: BindingsConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked, asserting undefined-name raises NameError; const-assign raises ConstAssignError (NOT ReadOnlyError - verify both via positive and negative catch clauses); both catchable by Error. FieldConformanceTests.cs exists, asserting field-on-non-struct, missing-required-field, unknown-field-read, unknown-field-assign all raise FieldError catchable by Error. The ConstAssignError-vs-ReadOnlyError disjoint-catch assertion is the proof of the D3 user override (mutation of a frozen value should still raise ReadOnlyError; assigning to a const binding should raise ConstAssignError; the two clauses NEVER cross-catch)."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 2."
+      - "Coverage.md update (in this phase, not deferred to the closing phase): the Aggregate Types row's `Highest-value open items` column has the `missing required fields produce a runtime error (L2149) ... TypeOps.cs:347 does not check` contradiction marked resolved. The Bindings row's `const-assign throws unregistered RuntimeError base` open item is marked resolved (now ConstAssignError, registered)."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P5 is the biggest spec-edit phase before the closing phase. Three
+      core types introduced in one phase because (a) the L2149 contradiction
+      resolution (the missing-required-field check) belongs with FieldError,
+      and (b) the ConstAssignError split (D3 user override) belongs with
+      NameError since both touch Variables.cs in the same handful of lines.
+
+      The Aggregate L2149 false clause: TypeOps.cs:347 today does NOT
+      check missing required fields. P5 implements the check
+      (StashInstance constructor or TypeOps struct-literal lowering
+      validates the field set). The check + the FieldError retype land
+      together so the spec amendment and the implementation agree.
+
+      ConstAssignError-vs-ReadOnlyError disjoint-catch is a load-bearing
+      conformance assertion: a fixture that wraps `const c = 1; c = 2;`
+      in `catch (ReadOnlyError e)` must NOT catch (the two types are
+      sibling leaves under Error, not parent/child). Symmetrically a
+      `catch (ConstAssignError e)` over a `dict.freeze().mutate()` must
+      not catch. This proves the D3 split actually shipped.
+
+  - id: P6
+    title: "Bucket - VM imports/module: ImportError family + Modules L320 amendment"
+    deps: [P5]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Core/Runtime/Errors/ImportError.cs
+      - Stash.Core/Runtime/Errors/ModuleNotFoundError.cs
+      - Stash.Core/Runtime/Errors/ImportCycleError.cs
+      - Stash.Core/Runtime/Errors/ExportError.cs
+      - Stash.Bytecode/VM/VirtualMachine.Modules.cs
+      - Stash.Tests/Conformance/Errors/ImportConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - .kanban/milestones/language-standard/coverage.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~ImportConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~ImportExportRuntimeTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Four new error types exist in Stash.Core/Runtime/Errors/: ImportError (concrete catch-supertype, `[StashError(Description = \"Catch-supertype for import faults.\")]`); ModuleNotFoundError, ImportCycleError, ExportError each `[StashError(Parent = \"ImportError\", Description = ...)]`."
+      - "Stash.Bytecode/VM/VirtualMachine.Modules.cs: :79 (cycle) -> ImportCycleError; :102,272 (not found) -> ModuleNotFoundError; :316 (no entry point), :340 (not exported) -> ExportError; :330,355 (non-string path) -> TypeError."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: the Bytecode-modules bucket entry is removed."
+      - "Runtime probe: `try { import \"./missing-module.stash\"; } catch (ModuleNotFoundError e) { io.println(\"nf\"); }` prints `nf`; the same test with `catch (ImportError e)` also catches; the same with `catch (Error e)` also catches. Two-file circular import test catches ImportCycleError. Record probe output."
+      - "Spec Edit (Modules L320) landed: `Import cycles raise ImportCycleError` (was unnamed). A new normative paragraph after it: `Resolving an import path to no module raises ModuleNotFoundError. Importing a name not exported by the resolved module raises ExportError. Importing a package with no entry point raises ExportError. An import path that is not a string raises TypeError.` Distinctive phrases for grep at each clause."
+      - "Conformance: ImportConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Asserts each of the four import-failure modes raises the expected type, AND catchable by ImportError parent, AND catchable by Error root. Non-string path raises TypeError."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1."
+      - "Coverage.md update: the Source Files & Modules row's `Highest-value open items` column has the unnamed-error items marked resolved (cycle/not-found/non-string-path/not-exported)."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P6 introduces the second (and final-for-this-unit) grouping parent.
+      Same pattern as P2's ArithmeticError. The ImportError parent
+      is concrete (a user can `throw new ImportError(...)` if they
+      really want to) but its primary role is as the catch-supertype
+      for the four leaves.
+
+  - id: P7
+    title: "Bucket - VM control-flow + state: TypeError/StateError/LockError/NotSupportedError + Statements amendments"
+    deps: [P6]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs
+      - Stash.Bytecode/VM/VirtualMachine.Functions.cs
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+      - Stash.Tests/Conformance/Errors/StatementsConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~StatementsConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~LockTests|FullyQualifiedName~ElevateTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Bare-base sites in VirtualMachine.ControlFlow.cs and VirtualMachine.Functions.cs retype: `for-in` non-iterable -> TypeError; `return` outside function -> StateError; elevation-denied (ControlFlow.cs:119) -> NotSupportedError; call-non-callable -> TypeError; `in` with unsupported right operand -> TypeError; indexing non-indexable -> TypeError."
+      - "LockError is already correctly raised at ControlFlow.cs:184 (existing); confirm no bare-base remains in lock paths."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: Bytecode-controlflow, Bytecode-functions bucket entries are removed."
+      - "Runtime probe: `try { for (x in 5) {} } catch (TypeError e) { io.println(\"non-iter\"); }` prints `non-iter`; `try { return 1; } catch (StateError e) { io.println(\"ret\"); }` prints `ret`; `try { let x = 1; x(); } catch (TypeError e) { io.println(\"non-call\"); }` prints `non-call`. Record probe output."
+      - "Spec Edits landed: Statements L1514 (`raises TypeError` for `for-in` non-iterable); L1525 (`raises StateError` for return-outside-fn); L1563 (`raises LockError` for lock failure); L1582 (`raises NotSupportedError` for elevation-denied). Expressions L1198 (`raises TypeError` indexing non-indexable), L1280 (`raises TypeError` calling non-callable), L1313 (`raises TypeError` invalid operand types), L1379 (`raises TypeError` `in` unsupported right operand), L1421 (`TypeError` for `++`/`--` non-numeric), L1405 (`raises TypeError` non-assignable target). Distinctive phrases per line."
+      - "Conformance: StatementsConformanceTests.cs exists, asserting each control-flow/expression-failure surface raises the expected type, catchable by Error."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P7 is the Expressions + Statements amendment phase. Several
+      bare-base sites here overlap with the operand-mismatch bucket from
+      P3 (e.g. call-non-callable is "operand mismatch" in spirit). The
+      retype decisions per D10 are: anything "this operand isn't a
+      <thing>" is TypeError; anything "this state isn't valid for
+      this operation" is StateError.
+
+  - id: P8
+    title: "Bucket - VM types/value-domain: ValueError + remaining Core/Runtime/Types"
+    deps: [P7]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Core/Runtime/Types/StashByteArray.cs
+      - Stash.Core/Runtime/Types/StashIntArray.cs
+      - Stash.Core/Runtime/Types/StashStringArray.cs
+      - Stash.Core/Runtime/Types/StashDictionary.cs
+      - Stash.Bytecode/VM/VirtualMachine.Arithmetic.cs
+      - Stash.Tests/Conformance/Errors/ValueDomainConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~ValueDomainConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~StashTypedArrayStdlibTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Stash.Core/Runtime/Types/StashByteArray.cs:164,167 (byte out of [0,255]) retypes to `new ValueError(...)`. StashIntArray.cs:57, StashStringArray.cs:65 (wrong element type) retype to `new TypeError(...)` (wrong-type) - element-type mismatch is a type mismatch."
+      - "VirtualMachine.Arithmetic.cs:334,351 (shift count out of range) retype to `new ValueError(...)`."
+      - "StashDictionary.cs:169,200 (null-key write) retype to `new ValueError(...)` or TypeError per the situation (null is not a valid key - value-domain rejection; consider TypeError if it reads more naturally as 'null is not a valid key type'). Decide and pin in the commit. Note: the dict-key-READ-missing path stays returning null (HARD boundary - does not change)."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks: Core-types-array, Bytecode-arithmetic-shift, Core-types-dict bucket entries are removed."
+      - "Runtime probe: `try { let b = buf(1); b[0] = 300; } catch (ValueError e) { io.println(\"byte-range\"); }` prints `byte-range`; `try { let a = intArr([1]); a[0] = \"x\"; } catch (TypeError e) { io.println(\"wrong-type\"); }` prints `wrong-type`; `try { 1 << 100; } catch (ValueError e) { io.println(\"shift\"); }` prints `shift`. Record probe output."
+      - "Conformance: ValueDomainConformanceTests.cs exists, asserting each value-domain failure raises the expected type."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P8 closes out the remaining Core+Bytecode bucket exemptions. After
+      this phase, the chokepoint exemption list has nothing under
+      Stash.Core/** or Stash.Bytecode/** except the sanctioned Error-
+      derivation single-use.
+
+  - id: P9
+    title: "Bucket - Stdlib + CLI + Hosting contract-layer retype (~155 sites + Cli renames)"
+    deps: [P8]
+    files:
+      - Stash.Stdlib/BuiltIns/HttpBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/SftpBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/TestBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/TimeBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/SysBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Validation.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Build.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Schema.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Help.cs
+      - Stash.Core/Runtime/Errors/CliAmbiguousOptionError.cs
+      - Stash.Core/Runtime/Errors/CliInvalidValueError.cs
+      - Stash.Core/Runtime/Errors/CliMissingRequiredError.cs
+      - Stash.Core/Runtime/Errors/CliMissingValueError.cs
+      - Stash.Core/Runtime/Errors/CliUnexpectedPositionalError.cs
+      - Stash.Core/Runtime/Errors/CliUnknownCommandError.cs
+      - Stash.Core/Runtime/Errors/CliUnknownOptionError.cs
+      - Stash.Cli/**
+      - Stash.Hosting/Internal/InvokeHostDelegate.cs
+      - docs/Stash — Standard Library Reference.md
+      - Stash.Tests/Conformance/Errors/StdlibContractConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~StdlibContractConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~CliBuiltInsTests|FullyQualifiedName~HttpBuiltInsTests|FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~Wave2ThrowsCoverageTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Cli* renames (per D17): every type in Stash.Core/Runtime/Errors/Cli*.cs whose name lacks the `Error` suffix is renamed: CliAmbiguousOption -> CliAmbiguousOptionError, CliInvalidValue -> CliInvalidValueError, CliMissingRequired -> CliMissingRequiredError, CliMissingValue -> CliMissingValueError, CliUnexpectedPositional -> CliUnexpectedPositionalError, CliUnknownCommand -> CliUnknownCommandError, CliUnknownOption -> CliUnknownOptionError. (CliSchemaError and CliValidationFailed are also evaluated; CliValidationFailed lacks Error suffix - rename to CliValidationError if confirmed by user, else exempt with a stash-error Name= override.) All ~60 throw sites in CliBuiltIns.* update to the new names."
+      - "Stdlib bare-base retype: every `throw new RuntimeError(` in Stash.Stdlib/BuiltIns/ retypes. Categories: arity/argument-count guards -> TypeError (per D11); value-domain checks -> ValueError; state preconditions (SFTP connection closed, test-outside-describe) -> StateError; timeout (HttpBuiltIns.cs:338) -> TimeoutError; I/O failures still bare-base -> IOError."
+      - "CLI bare-base retype: the 5 sites in Stash.Cli/** retype to appropriate Cli*Error or Error-derivatives."
+      - "Hosting bare-base retype: the 1 site in Stash.Hosting/Internal/InvokeHostDelegate.cs:81 (if still bare-base) retypes to HostError."
+      - "BareBaseErrorChokepointMetaTests.KnownExemptions shrinks to the SINGLE sanctioned exemption: the Stash.Core.Runtime.Errors.Error class's own `: RuntimeError` C# derivation (the concrete root's derivation from the abstract base). Every other entry is removed."
+      - "Runtime probe: `try { http.download(\"http://example.com/x\", \"/tmp/x\", { timeout: 0.001 }); } catch (TimeoutError e) { io.println(\"timeout\"); }` prints `timeout`; `try { time.parse(); } catch (TypeError e) { io.println(\"arity\"); }` prints `arity` (or similar arity-failure surface). Record probe output."
+      - "Stash.Docs regenerate: run `dotnet run --project Stash.Docs/` and commit the updated docs/Stash — Standard Library Reference.md. StandardLibraryReferenceTests passes."
+      - "Wave1ThrowsCoverageTests / Wave2ThrowsCoverageTests updates: for each stdlib function whose <exception> throws-metadata changed (a previously-bare-base function now throws a registered type), update its <exception cref=...> doc-comment to cite the registered type. The wave-coverage tests pass; new allow-list entries are added ONLY for functions that legitimately do not throw (e.g. an infallible accessor whose retype was a doc cleanup). Per the language-changes.md memory: <exception> must cref a *registered* type; check BOTH Wave1 and Wave2 allow-lists (Wave1 vs Wave2 namespaces are split)."
+      - "Conformance: StdlibContractConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Reflection scan enumerates every `[StashError]`-registered type and asserts: (a) name ends in `Error`; (b) BuiltInErrorRegistry.ParentOf(name) resolves; (c) the parent chain terminates at `Error` (or null for the closed System Faults list). Plus per-Cli-error renamed-throw conformance tests."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1 (covers StdlibContractConformanceTests)."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green. StandardLibraryReferenceTests is green (regenerated reference matches metadata)."
+    notes: |
+      P9 is the largest single phase (~155 sites). The Cli* renames are
+      mechanical (find/replace + recompile + fix any test fixtures that
+      catch by string name). The bulk of the retype is arity/argument
+      guards (~50+ in stdlib) -> TypeError; the rest splits across
+      ValueError, IOError, StateError, TimeoutError.
+
+      Stash.Docs regeneration is mandatory per .claude/language-changes.md -
+      adding new registered types adds them to the generated reference.
+      The `dotnet run --project Stash.Docs/` run produces the diff;
+      commit the regenerated Standard Library Reference.md.
+
+      Wave1/Wave2ThrowsCoverageTests interact: a function newly
+      throwing a registered type may need its <exception> doc-comment
+      updated. Per the language-changes.md memory: <exception> must
+      cref a *registered* type; a generic Error cref counts if the
+      function legitimately throws only the root.
+
+  - id: P10
+    title: "Cause chaining mechanics: .cause field-form + StashError accessor + ExecuteThrow validation (D22)"
+    deps: [P9]
+    files:
+      - Stash.Core/Runtime/Types/StashError.cs
+      - Stash.Core/Runtime/RuntimeError.cs
+      - Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs
+      - Stash.Tests/Conformance/Errors/CauseChainConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~CauseChainConformanceTests|FullyQualifiedName~InterpreterTests|FullyQualifiedName~VirtualMachineTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Stash.Core/Runtime/RuntimeError.cs gains `public RuntimeError? Cause { get; set; }` (or equivalent field). Defaults to null."
+      - "Stash.Core/Runtime/Types/StashError.cs (the first-class Stash error VALUE) gains a `.cause` accessor that returns a StashError wrapping the underlying RuntimeError.Cause, or `StashValue.Null` when Cause is null. The accessor joins .type/.message/.stack/.suppressed as a fifth always-present member surfaced via the StashError property/index handler."
+      - "Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs:ExecuteThrow recognizes the `cause` field in the dict-throw path (around :41-46) and the struct-throw path (around :60-65): pulls it out of the dict/struct, validates it is either an Error value or null (anything else raises `new TypeError(\"'cause' must be an Error value or null, got <typeof>\", span)` at the throw site - the new error is NOT raised; the validation throws first), and sets the resulting error's `Cause` property. Other dict/struct fields continue to flow into `Properties` as today (`cause` is excluded from Properties)."
+      - "Built-in error-type constructors (TypeError, ValueError, IOError, etc.) accept an optional `cause` parameter at construction (a `RuntimeError? cause = null` second/last argument); their `[StashError(Properties = ...)]` declarations do NOT list `cause` (it's a structural member of the root, not a per-type typed property)."
+      - "Runtime probe (pre-commit) confirms cause chaining: `try { try { throw IOError { message: \"inner\" }; } catch (e) { throw ValueError { message: \"outer\", cause: e }; } } catch (e) { io.println(e.message); io.println(e.cause.type); io.println(e.cause.message); io.println(e.cause.cause == null); }` prints `outer`, `IOError`, `inner`, `true`. `try { throw \"boom\"; } catch (e) { io.println(e.cause == null); }` prints `true` (default-null). `try { throw ValueError { message: \"x\", cause: 42 }; } catch (TypeError e) { io.println(\"validated\"); }` prints `validated` (non-Error cause is rejected at throw site)."
+      - "Conformance: Stash.Tests/Conformance/Errors/CauseChainConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked, with class-level XML doc citing D22. Asserts: (a) `.cause` is null when unset; (b) `.cause` round-trips an Error value through dict-throw and struct-throw; (c) deep chains (3+ levels) walk correctly via repeated `.cause`; (d) `throw E { cause: <non-Error-non-null> }` raises TypeError at the throw site; (e) rethrow (`throw;`) preserves `.cause`; (f) no implicit chaining - a `throw` inside a `catch` that does NOT name `cause:` produces an error whose `.cause` is null (NOT auto-set to the caught error); (g) a cause-chain cycle (manually constructed: an error whose .cause points back to itself via mutation) is observable to a walker but does NOT cause a runtime infinite loop on its own (the runtime never walks the chain implicitly)."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1 (covers CauseChainConformanceTests)."
+      - "Full dotnet test is green. The .cause addition must not regress any existing error-payload-access test (.type/.message/.stack/.suppressed all still work). dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P10 is the mechanics-only phase for explicit error chaining (D22).
+      The field form means zero grammar change - ExecuteThrow already
+      copies dict/struct fields into Properties; this phase intercepts
+      the `cause` field name BEFORE that copy, validates it, and routes
+      it to a dedicated Cause property on RuntimeError. Other dict
+      fields continue to flow into Properties unchanged.
+
+      The `cause` field is NOT a per-type typed property (no [StashError]
+      Properties list mentions it). It is a structural member of the
+      root, like `.message`/`.stack`/`.suppressed` - surfaced on every
+      registered error type uniformly via StashError's accessor.
+
+      P10 lands the BEHAVIOR. P11 lands the SPEC PROSE (subsection in
+      Error Values + Error Chaining + Error Type Contract). Splitting
+      lets the mechanics land + tests prove correct, then P11 is a
+      pure-docs phase that names the law that's already true.
+
+      The cycle non-detection rule is deliberate: bounding the chain in
+      the runtime adds cost to a feature most users will use 0-2 levels
+      deep. A misbehaving walker that loops is the same defect class as
+      any other naive recursion; the spec names that the runtime doesn't
+      protect against it.
+
+  - id: P11
+    title: "Cause chaining spec prose: §Errors Error Chaining subsection + Error Values payload member + Error Type Contract clause (D22)"
+    deps: [P10]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Tests/Conformance/Errors/CauseChainConformanceTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~CauseChainConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Spec edit (cross-section, lives in the Errors section which is fully rewritten in the closing phase - this phase lands the .cause-specific subsections AHEAD of the closing rewrite so the rewrite incorporates them). The Errors section's *Error Values* subsection gains a fifth bullet for `.cause: Error?` (the underlying error this error was raised in response to, or null) with the explicit-only / no-auto-chaining negative-space sentence. A new *Error Chaining* subsection is inserted between *Throw* and *Try Expressions* containing the example (`throw IOError { message: \"...\", cause: prev }`), the chain-walking idiom, and the four normative bullets (cause must be Error or null, no cycle detection, defaults null no implicit, non-Error cause raises TypeError at throw site). The *Error Type Contract* subsection's payload clause names all FIVE always-present members including `.cause`. Distinctive phrases for grep: ``.cause`: `Error?``, `Error Chaining`, `explicit-only`."
+      - "The CauseChainConformanceTests test class XML doc updates to cite the spec subsections (Error Values fifth bullet + Error Chaining subsection) - same in-place test-update discipline as the cross-unit moves."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P11 is the SPEC-PROSE-ONLY phase for D22. Behavior is sealed in P10;
+      this phase lifts that behavior to law. The Error Chaining
+      subsection lands here in advance of the full Errors-section
+      rewrite (the closing phase) so the closing phase's rewrite has the
+      complete prose to integrate. Per cross-unit discipline: the
+      P10 conformance class is updated in-place, not duplicated.
+
+  - id: P12
+    title: "SA0170 catch-name validation (analyzer rule + spec note) (D23)"
+    deps: [P11]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
+      - Stash.Analysis/Visitors/*.cs
+      - Stash.Analysis/Resolvers/*.cs
+      - Stash.Tests/Analysis/SA0170UnknownCatchTypeTests.cs
+      - Stash.Tests/Conformance/Errors/CatchNameValidationConformanceTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+    verify:
+      - dotnet build Stash.sln
+      - dotnet test --filter "FullyQualifiedName~SA0170UnknownCatchTypeTests|FullyQualifiedName~CatchNameValidationConformanceTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Stash.Analysis/Models/DiagnosticDescriptors.cs gains `SA0170` with `DiagnosticLevel.Warning`, category `Throws` (or `Control flow`), and message template `\"Catch clause references type '{0}' which is not a registered error type and not a struct or error type declared in this scope.\"`. SA0170 is the next free number in the catch-family run (SA0163-SA0169 are used)."
+      - "The analyzer visitor that walks `catch (Name e)` clauses (in Stash.Analysis/Visitors/ - the existing visitor that emits SA0161/SA0162/SA0169 for catch issues) gains the SA0170 emission: when the catch name is (a) NOT a member of BuiltInErrorRegistry.ByName, AND (b) NOT a struct/error-type binding in the analyzer's resolver scope, emit SA0170. The rule does NOT fire on `catch (e)` (untyped catch-all), `catch (Error e)` (catch-all - matches every Error subtype), or `catch (RuntimeError e)` (existing SA0163 covers that case)."
+      - "Reachability of the registered-type set from the analyzer is confirmed: `Stash.Analysis` already references (or transitively reaches) `Stash.Core.Runtime.Errors.BuiltInErrorRegistry`; if not, this phase adds the necessary project reference / DTO. The analyzer must NOT depend on the analyzer-time *generated* registry — it must read the registered names as ordinary code-time data (a `ProjectReference` is fine; an indirect runtime-only dependency is not)."
+      - "Runtime probe (no behavior change at runtime - per D21 the runtime rule is unchanged): `try { throw ValueError { message: \"x\" }; } catch (TpyeError e) { io.println(\"matched\"); } catch (ValueError e) { io.println(\"fell-through-to-valueerror\"); }` prints `fell-through-to-valueerror` (SA0170 would warn at static-analysis time on the `TpyeError` clause; runtime is unchanged)."
+      - "Spec edit lands: the Errors section's *Try / Catch / Finally Statements* subsection's `catch clause naming an unregistered type` bullet gains the parenthetical naming SA0170 as the tooling aid (the runtime rule stays silent-no-match; the prose names that the static analyzer additionally warns when the type is statically provable to be unknown, and explicitly excludes catch names that could match a dynamically-named user error). Distinctive phrase for grep: `SA0170`."
+      - "Analyzer tests: Stash.Tests/Analysis/SA0170UnknownCatchTypeTests.cs exists, asserting (a) a catch on a registered name (TypeError, ValueError, IOError, ...) emits no SA0170; (b) a catch on a typo (TpyeError) emits SA0170 with the offending name in the message; (c) a catch on the user-error name from a same-file `throw { type: \"MyError\", ... }` emits no SA0170 (the type is dynamically-known); (d) a catch on a same-file user struct `struct MyError { message: string }` emits no SA0170 (the struct is statically-known); (e) untyped `catch (e)` and `catch (Error e)` emit no SA0170; (f) `catch (RuntimeError e)` emits SA0163 not SA0170 (existing rule has precedence)."
+      - "Conformance: Stash.Tests/Conformance/Errors/CatchNameValidationConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked. Asserts the spec's *runtime* clause: an unknown catch name silently never matches (control falls through to the next clause or out of try). Does NOT assert SA0170's static behavior (that's covered by the analyzer tests above; the conformance test proves the unchanged runtime law)."
+      - "Tooling sweep per `.claude/language-changes.md` §2 static-analysis row: the SA0170 addition is the row's actual update; no other tooling component is affected."
+      - "ConformanceTraitMetaTests.MinScannedParticipants is raised by 1 (covers CatchNameValidationConformanceTests)."
+      - "Full dotnet test is green. dotnet test --filter \"Category=Conformance\" is green."
+    notes: |
+      P12 is the lightest of the new phases (one SA rule, one spec note,
+      conformance + analyzer tests). The runtime is unchanged - per D21
+      the rule was already ratified as silent-no-match; SA0170 adds the
+      static-time aid without changing the runtime semantics.
+
+      The dynamic-name carve-out (catches whose name matches a user-error
+      `type` field) is the load-bearing correctness invariant: getting
+      it wrong would flag every dict-throw user-error catch as bogus.
+      The analyzer's resolver scope already tracks struct/error
+      declarations; the new check is just `if name not in
+      {registered-built-ins} ∪ {in-scope-struct-decls} ∪ {in-scope-error-decls}
+      then emit`.
+
+      SA0163 (existing - catches RuntimeError, discouraged) and SA0170
+      (new - catches unknown name) are separate rules and the analyzer
+      should not double-emit. `catch (RuntimeError e)` is currently
+      legal-but-discouraged (SA0163 warning); after the closing-phase
+      abstract-flip, `RuntimeError` is no longer a Stash-facing name
+      (a code change covered in the closing phase). At that point
+      SA0163 is rewritten or deleted; SA0170 takes over (a catch on
+      the now-abstract `RuntimeError` falls into SA0170's "not a
+      registered error type" branch).
+
+  - id: P13
+    title: "Closing - Errors rewrite + uncaught-CLI + RuntimeError abstract-flip (Construct) + example + coverage roll-up"
+    deps: [P12]
+    files:
+      - docs/Stash — Language Specification.md
+      - Stash.Core/Runtime/RuntimeError.cs
+      - Stash.Cli/Program.cs
+      - Stash.Cli/Runtime/UncaughtErrorReporter.cs
+      - Stash.Analysis/Models/DiagnosticDescriptors.cs
+      - Stash.Tests/Conformance/Errors/UncaughtTopLevelConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/DeferSuppressedConformanceTests.cs
+      - Stash.Tests/Conformance/Errors/BareBaseErrorChokepointMetaTests.cs
+      - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
+      - Stash.Tests/Conformance/Errors/_README.md
+      - examples/errors.stash
+      - .kanban/milestones/language-standard/coverage.md
+    verify:
+      - dotnet build Stash.sln
+      - dotnet run --project Stash.Cli/ -- examples/errors.stash
+      - dotnet test --filter "FullyQualifiedName~UncaughtTopLevelConformanceTests|FullyQualifiedName~DeferSuppressedConformanceTests|FullyQualifiedName~BareBaseErrorChokepointMetaTests|FullyQualifiedName~StandardLibraryReferenceTests|FullyQualifiedName~Wave1ThrowsCoverageTests|FullyQualifiedName~Wave2ThrowsCoverageTests|FullyQualifiedName~CompletionSurfaceSnapshotTests"
+      - dotnet test --filter "Category=Conformance"
+      - dotnet test
+    done_when:
+      - "Errors and Cleanup section rewrite landed in full. docs/Stash — Language Specification.md Errors section contains the full normative prose specified in brief.md *Specification Delta*: (a) Error Values subsection naming the FIVE always-present members (`.type`, `.message`, `.stack`, `.suppressed`, `.cause` — `.cause` integrated from the P11 subsection edit) + delegation note for typed properties; (b) Built-in Error Types table listing all 17 core types with `Parent` column (16 + `ConstAssignError` added in P5 per D3 user override); (c) System Faults subsection naming CancellationError + exit propagation; (d) Error Type Contract subsection listing the L1 contract requirements (now naming all five always-present members per P11); (e) Throw subsection covering the five throw forms; (f) Error Chaining subsection (integrated from P11 — sits between Throw and Try Expressions); (g) Try Expressions subsection respecting the System-Fault propagation; (h) Try/Catch/Finally Statements with the typed/untyped/unknown-name semantics (including the SA0170 tooling-aid parenthetical from P12); (i) Retry Expressions (unchanged); (j) Timeout Expressions with TimeoutError named; (k) Defer and Suppressed Errors subsection (the new `.suppressed` law); (l) Uncaught Errors subsection (the CLI behavior law). Distinctive phrases for grep at each subsection."
+      - "Stash.Core/Runtime/RuntimeError.cs -> abstract. `public class RuntimeError : Exception` becomes `public abstract class RuntimeError : Exception`. Any remaining `new RuntimeError(...)` site fails to compile. (Detect meta-test's last exemption - the `Error : RuntimeError` derivation - is the only allowed construction-site reference, and Error constructs itself with `: base(...)`)."
+      - "CLI top-level handler implements Errors *Uncaught Errors* behavior. Stash.Cli/Program.cs (or a new Stash.Cli/Runtime/UncaughtErrorReporter.cs) catches the top-level error, formats per the spec: `<type>: <message>\\n  at <function> (<file>:<line>:<col>)\\n...` + suppressed errors block; exits with code 1 for Error, 130 for CancellationError, requested code for exit."
+      - "examples/errors.stash exists (authored by the stash-author agent - this phase delegates to stash-author per CLAUDE.md `Avoid 3-deep agent nesting on .stash phases - skip the implementer`). The example demonstrates: (a) throwing and catching TypeError from a `+` operand mismatch; (b) catching NameError from an undefined variable; (c) catching IndexError from array OOB; (d) catching ImportError (group) from a ModuleNotFoundError; (e) the System Fault split - `catch (e)` does NOT trap CancellationError; (f) `.suppressed` - a defer block that throws appends to the primary error's suppressed array; (g) `.cause` explicit chaining - a low-level IOError wrapped in a domain ValueError, walked via `e.cause`; (h) ConstAssignError - assigning to `const` is caught separately from ReadOnlyError. Uses io.println to show results. Verified with the freshly-built binary per .claude/language-changes.md - record the output in the commit message."
+      - "Conformance: UncaughtTopLevelConformanceTests.cs exists, `[Trait(\"Category\",\"Conformance\")]`-marked - asserts the CLI prints the spec'd format and exits with the spec'd codes for uncaught Error, uncaught CancellationError, and exit(N). (Test invokes a freshly-built CLI with a fixture .stash file and asserts stderr + exit code.) DeferSuppressedConformanceTests.cs exists, asserting the `.suppressed` ordering (FIFO, first-suppressed first), multiple suppressions per error, suppression-during-no-propagation becoming the primary error."
+      - "Detect meta-test final state: BareBaseErrorChokepointMetaTests.KnownExemptions contains exactly ONE entry: the Stash.Core.Runtime.Errors.Error class's own `: RuntimeError` derivation (the C# source-line of `public class Error : RuntimeError`). Any other entry is a contract violation. The meta-test is green with this single entry."
+      - "Tooling components explicitly verified per .claude/language-changes.md Section 2 (state each, do not skip):"
+      - "  - LSP (Stash.Lsp/Handlers/SemanticTokensHandler.cs, CompletionHandler.cs): no syntax change; existing catch/throw/try highlighting unchanged. New error-type names appear in BuiltInErrorRegistry and surface in completions automatically (re-baseline CompletionSurfaceSnapshotTests if the new types surface in any tracked cursor position)."
+      - "  - DAP (Stash.Dap/DebugSession.cs): no change needed - error-type display in the variables panel reads `.type` (a string) which already works."
+      - "  - Playground (Stash.Playground/wwwroot/js/stash-language.js): no change needed - Monarch tokenizer unchanged; no new keyword."
+      - "  - VS Code extension (.vscode/extensions/stash-lang/syntaxes/stash.tmLanguage.json): no change needed - TextMate grammar unchanged."
+      - "  - Static analysis (Stash.Analysis/): SA0170 (the new catch-name-validation warning, landed in P12 per D23) is in place. SA0163 (which discourages `catch (RuntimeError e)`) is deleted or rewritten in THIS phase as the *negative* completion of the abstract-flip: RuntimeError is no longer a Stash-facing name after the P13 abstract-flip, so `catch (RuntimeError e)` now falls into SA0170's `not a registered error type` branch and SA0163 is obsolete. The DiagnosticDescriptors.cs:32 entry is removed; any tests asserting SA0163 emission are deleted or retargeted to SA0170."
+      - "Throws-coverage / completion-surface / std-ref tests confirmed green: Wave1ThrowsCoverageTests, Wave2ThrowsCoverageTests, CompletionSurfaceSnapshotTests, StandardLibraryReferenceTests all pass. Snapshot regen via `STASH_SNAPSHOT_REGEN=1 dotnet test ...CompletionSurfaceSnapshotTests` if the new error-type names surface in a snapshot."
+      - "coverage.md updated:"
+      - "  - The Errors & Cleanup row #8 status flips from `unsealed` to `sealed`. The Conformance dir cell becomes `Conformance/Errors/` (with class count + test count). The Highest-value open items cell is rewritten to `Sealed by language-standard-errors (2026-06-XX). Errors rewrite + L1 contract + system-fault split + uncaught-CLI law; full error-type taxonomy.`."
+      - "  - The scoreboard counts update: sealed from 1 (Values) to 2 (Values + Errors). unsealed drops by 1 (Errors moves out)."
+      - "  - Cross-cutting workstream #2 (error-type taxonomy) is marked Complete with citation to this unit and Conformance/Errors/."
+      - "  - The live spec-vs-impl contradictions table: the Aggregate L2149 'missing required fields' and the Bindings 'const-assign throws unregistered base' entries are marked resolved."
+      - "  - The Bindings row's Highest-value open items cell drops the `const-assign throws unregistered RuntimeError base` open item (now sealed). Bindings stays partial (the remaining open items - destructure-mismatch, unset failure, same-scope-redeclare - are unsealed)."
+      - "  - The Source Files & Modules row's Highest-value open items cell drops the unnamed-error items (now sealed). Modules stays partial (the remaining open items - module-caching/single-evaluation, import-of-non-exported normative contract - are unsealed)."
+      - "Stash.Tests/Conformance/Errors/_README.md updated to mark every clause group as populated and add a closing-status line noting the Errors clause is sealed."
+      - "Full dotnet test is green; dotnet test --filter \"Category=Conformance\" binds non-zero tests across Async/, Values/, Equality/, and Errors/ suites and is green."
+      - "stash scripts/checkpoint/checkpoint.stash validate-spec language-standard-errors passes."
+    notes: |
+      P13 is the closing/Construct phase. Three load-bearing artifacts
+      ship together: (1) the Errors rewrite (the actual law - now
+      including the .cause Error Chaining subsection from P11 and the
+      SA0170 reconciliation note from P12); (2) the uncaught-CLI handler
+      (the law's enforcement at the top-level); (3) the abstract-flip on
+      RuntimeError (the Construct upgrade that makes a future
+      `new RuntimeError(...)` a compile error).
+
+      stash-author is invoked from this phase to write
+      examples/errors.stash. Per CLAUDE.md `Avoid 3-deep agent nesting
+      on .stash phases - skip the implementer`, P13 can dispatch directly
+      orchestrator -> stash-author (one level) and run the phase
+      mechanics (verify-phase, the feat commit, advance-checkpoint, the
+      chore commit) inline. The docs-first protocol still binds the
+      orchestrator: read the relevant Errors + Async + Statements
+      sections + Standard Library Reference first, emit the API plan,
+      then dispatch.
+
+      The SA0163 deletion is the *negative* completion: the analyzer
+      rule that today discourages `catch (RuntimeError e)` is obsolete
+      after this unit (RuntimeError is no longer Stash-facing). SA0170
+      (from P12) covers the failure mode. Don't forget to drop or
+      rewrite SA0163.
+
+# Final acceptance command - run by /done before promoting to 4-done/.
+# Must include the full test suite at minimum. The Category=Conformance filter
+# is a discrete extra step - a vacuous pass (zero bound tests) fails this step
+# even if the full suite is green.
+final_verify:
+  - dotnet build Stash.sln
+  - dotnet test
+  - dotnet test --filter "Category=Conformance"
+  - stash scripts/checkpoint/checkpoint.stash lint
+  - stash scripts/checkpoint/checkpoint.stash lint --self-test

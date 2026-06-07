@@ -27,7 +27,7 @@ Format (one line per active feature):
 The architect adds a line here on bootstrap; `/done` removes it on promotion.
 -->
 
-_(none — between features)_
+- language-standard-errors — Error-Type Taxonomy: seal §Errors and retype the runtime | .kanban/2-in-progress/language-standard-errors/ | 13 phases | started 2026-06-07 | milestone: language-standard
 
 ---
 

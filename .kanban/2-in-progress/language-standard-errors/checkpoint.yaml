@@ -1,0 +1,115 @@
+schema_version: 1
+feature: language-standard-errors
+current: null
+updated: "2026-06-07T19:34:57Z"
+phases:
+  P1:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P10:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P2:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P3:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P4:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P5:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P6:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P7:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P8:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P9:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P11:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P12:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+  P13:
+    status: pending
+    commit: null
+    verified: false
+    started: null
+    completed: null
+    attempts: 0
+    notes: ''
+review:
+  status: not_started
+  started: null
+  resolved: null
+  findings_open: 0
+  findings_fixed: 0
