@@ -1,16 +1,16 @@
 schema_version: 1
 feature: language-standard-equality
 current: null
-updated: "2026-06-07T10:37:27Z"
+updated: "2026-06-07T11:29:49Z"
 phases:
   P1:
-    status: pending
-    commit: null
-    verified: false
-    started: null
-    completed: null
-    attempts: 0
-    notes: ''
+    status: done
+    commit: 2fc3ca5cf5119bcb46b8ea5c6ea17566d1fa4bdd
+    verified: true
+    started: "2026-06-07T10:52:51Z"
+    completed: "2026-06-07T11:29:49Z"
+    attempts: 1
+    notes: StashEquality chokepoint built; RuntimeOps forwarder installed; Detect meta-test + conformance tests green; 14396/0/6 full suite
   P2:
     status: pending
     commit: null
