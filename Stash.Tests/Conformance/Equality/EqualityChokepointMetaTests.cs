@@ -49,6 +49,12 @@ public sealed class EqualityChokepointMetaTests
     /// regardless of OS.
     /// </para>
     /// </summary>
+    // P5-closed: ChunkBuilder.StashValueComparer deleted; _constantMap now uses StashValue's
+    // own IEquatable<StashValue> (bit-level).  The sanctioned interning sites mentioned in
+    // the P5 done_when — (a) StashValue.cs and (c) StashEquality.cs — are already handled
+    // by ExcludedRelPaths (never scanned); (b) _constantMap is a field declaration, not a
+    // .Equals()/IsEqual() call site, so it was never a flagged violation.
+    // Result: no scan-visible exemptions remain.
     private static readonly IReadOnlyList<(string RelPath, string MemberHint)> KnownExemptions =
         Array.Empty<(string, string)>();
 
