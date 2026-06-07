@@ -46,7 +46,8 @@ behavior either.
 
 ## F01 — [MEDIUM] Value-typed keying (`duration`/`bytes`/`ip`/`semver`) is unspecified
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9756804c
 **Files:** `docs/Stash — Language Specification.md:755-768`, `Stash.Tests/Conformance/Equality/DictKeyConformanceTests.cs`
 **Phase:** P3 / P6 (spec-prose + conformance gap)
 **Commit:** 9476aadd (P3 keying spec), 531d14b7 (P6 closing)
@@ -135,7 +136,8 @@ grep -n "duration\|bytes\|semver" "docs/Stash — Language Specification.md" | g
 
 ## F02 — [MEDIUM] `arr.unique`'s SameValueZero dedup direction is sealed in conformance but absent from spec prose
 
-**Status:** open
+**Status:** fixed
+**Fixed in:** 9756804c
 **Files:** `docs/Stash — Language Specification.md:734-738`, `Stash.Stdlib/BuiltIns/ArrBuiltIns.cs:627-655`
 **Phase:** P2 (membership flip)
 **Commit:** 53240e57 (P2)
