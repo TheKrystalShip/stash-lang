@@ -339,7 +339,7 @@ internal static class RuntimeOps
             string str when left.AsObj is string sub => str.Contains(sub),
             string => throw new RuntimeError(
                 "Left operand of 'in' must be a string when checking string containment.", span),
-            StashDictionary dict => !left.IsNull && dict.Has(left.ToObject()!),
+            StashDictionary dict => !left.IsNull && dict.Has(left),
             StashRange range when left.IsInt => range.Contains(left.AsInt),
             StashRange range when left.IsFloat && left.AsFloat == Math.Floor(left.AsFloat) => range.Contains((long)left.AsFloat),
             StashRange => throw new RuntimeError(

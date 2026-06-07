@@ -6310,11 +6310,13 @@ let result = labels;
         Assert.Equal("yes", Run("let d = dict.new(); d[true] = \"yes\"; d[false] = \"no\"; let result = d[true];"));
     }
 
-    // Array key should fail
+    // Array key is now valid — keys by reference identity (Edit E1, keying half)
     [Fact]
-    public void Dict_ArrayKey_Throws()
+    public void Dict_ArrayKey_StoresByReferenceIdentity()
     {
-        RunExpectingError("let d = dict.new(); d[[1,2]] = \"val\";");
+        // Same array reference → same key
+        var result = Run("let arr = [1, 2]; let d = dict.new(); d[arr] = \"val\"; let result = d[arr];");
+        Assert.Equal("val", result);
     }
 
     // ── str namespace ────────────────────────────────────────────────

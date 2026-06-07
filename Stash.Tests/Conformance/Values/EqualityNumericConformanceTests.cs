@@ -348,13 +348,14 @@ public sealed class EqualityNumericConformanceTests : StashTestBase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // §Equality — Membership: SameValueZero (Edit E1, membership half, P2)
+    // §Equality — Membership and keying: SameValueZero (Edit E1, P2+P3)
     //
     // P2 flipped array membership to SameValueZero: `in` and `arr.contains`
     // now coerce int/float/byte by mathematical value (matching the `==` rule)
     // with the additional delta that NaN is self-equal by value.
     //
-    // Dict-key lookup remains tag-strict in P2 (flipped in P3).
+    // P3 flipped dict-key storage to SameValueZero: `d[1] = "a"; d[1.0]`
+    // now returns `"a"`. Edit E1 is fully sealed (membership + keying).
     // ─────────────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -385,17 +386,15 @@ public sealed class EqualityNumericConformanceTests : StashTestBase
     }
 
     /// <summary>
-    /// Integer key <c>1</c> and float key <c>1.0</c> are distinct dictionary keys.
-    /// A dict populated with integer key <c>1</c> returns <c>null</c> for float key <c>1.0</c>.
-    /// Dict-key SameValueZero migration is deferred to P3; this assertion tracks current behavior.
+    /// Integer key <c>1</c> and float key <c>1.0</c> are the same dictionary key (Edit E1, keying half).
+    /// A dict populated with integer key <c>1</c> returns <c>"int"</c> for float key <c>1.0</c>.
+    /// Sealed in §Equality — "Dictionary keys use SameValueZero" (Edit E1, keying half, P3).
     /// </summary>
     [Fact]
-    public void DictKey_IntAndFloatAreDistinctKeys_FloatLookupReturnsNull_PerSpecValuesEquality()
+    public void DictKey_IntAndFloatAreSameKey_FloatLookupReturnsValue_PerSpecEqualityE1()
     {
-        var result = Run("let d = {}; d[1] = \"int\"; let result = d[1.0];");
-        Assert.True(result is null,
-            "Dict-key tag-strict (P3 pending): d[1.0] must be null when d was populated with integer key 1 " +
-            "— dict keys still use tag-strict equality until P3 migrates StashDictionary._entries.");
+        var result = (string?)Run("let d = {}; d[1] = \"int\"; let result = d[1.0];");
+        Assert.Equal("int", result);
     }
 
     /// <summary>

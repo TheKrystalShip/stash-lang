@@ -212,14 +212,15 @@ public static partial class JsonBuiltIns
     /// <summary>Converts a dictionary key to a JSON-quoted string.</summary>
     /// <param name="key">The dictionary key to convert.</param>
     /// <returns>A JSON-quoted string representation of the key.</returns>
-    private static string StringifyKey(object key)
+    private static string StringifyKey(StashValue key)
     {
-        return key switch
+        return key.Tag switch
         {
-            string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            long l => JsonSerializer.Serialize(l.ToString(CultureInfo.InvariantCulture), StashJsonContext.Default.String),
-            double d => JsonSerializer.Serialize(d.ToString("G", CultureInfo.InvariantCulture), StashJsonContext.Default.String),
-            bool b => JsonSerializer.Serialize(b ? "true" : "false", StashJsonContext.Default.String),
+            StashValueTag.Obj when key.AsObj is string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
+            StashValueTag.Int  => JsonSerializer.Serialize(key.AsInt.ToString(CultureInfo.InvariantCulture), StashJsonContext.Default.String),
+            StashValueTag.Float => JsonSerializer.Serialize(key.AsFloat.ToString("G", CultureInfo.InvariantCulture), StashJsonContext.Default.String),
+            StashValueTag.Byte => JsonSerializer.Serialize(key.AsByte.ToString(CultureInfo.InvariantCulture), StashJsonContext.Default.String),
+            StashValueTag.Bool => JsonSerializer.Serialize(key.AsBool ? "true" : "false", StashJsonContext.Default.String),
             _ => throw new TypeError("json.stringify: dict key must be a string, number, or bool.")
         };
     }

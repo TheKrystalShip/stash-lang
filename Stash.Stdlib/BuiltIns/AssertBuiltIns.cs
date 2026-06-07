@@ -281,7 +281,7 @@ public static partial class AssertBuiltIns
             {
                 foreach (var kvp in dictE.RawEntries())
                 {
-                    string keyStr = RuntimeValues.Stringify(kvp.Key);
+                    string keyStr = RuntimeValues.Stringify(kvp.Key.ToObject());
                     string keyPath = $"{path}[\"{keyStr}\"]";
                     if (!dictA.Has(kvp.Key))
                         return (false, keyPath, RuntimeValues.Stringify(kvp.Value.ToObject()), "missing");
@@ -292,7 +292,7 @@ public static partial class AssertBuiltIns
                 {
                     if (!dictE.Has(kvp.Key))
                     {
-                        string keyStr = RuntimeValues.Stringify(kvp.Key);
+                        string keyStr = RuntimeValues.Stringify(kvp.Key.ToObject());
                         return (false, $"{path}[\"{keyStr}\"]", "missing", RuntimeValues.Stringify(kvp.Value.ToObject()));
                     }
                 }

@@ -239,9 +239,9 @@ public static partial class HttpBuiltIns
         var headersVal = options.Get("headers").ToObject();
         if (headersVal is StashDictionary headersDict)
         {
-            foreach (var key in headersDict.RawKeys())
+            foreach (StashValue key in headersDict.RawKeys())
             {
-                var keyStr = RuntimeValues.Stringify(key);
+                var keyStr = RuntimeValues.Stringify(key.ToObject());
                 var valStr = RuntimeValues.Stringify(headersDict.Get(key).ToObject());
                 requestMessage.Headers.TryAddWithoutValidation(keyStr, valStr);
             }
@@ -358,9 +358,9 @@ public static partial class HttpBuiltIns
         var headersVal = options.Get("headers").ToObject();
         if (headersVal is StashDictionary headersDict)
         {
-            foreach (var key in headersDict.RawKeys())
+            foreach (StashValue key in headersDict.RawKeys())
             {
-                var keyStr = RuntimeValues.Stringify(key);
+                var keyStr = RuntimeValues.Stringify(key.ToObject());
                 var valStr = RuntimeValues.Stringify(headersDict.Get(key).ToObject());
                 request.Headers.TryAddWithoutValidation(keyStr, valStr);
             }

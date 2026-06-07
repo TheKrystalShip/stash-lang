@@ -750,8 +750,20 @@ are **not** the same array element (reference identity per §Secret Values); two
 the same elements but distinct constructions are **not** the same element (reference
 identity).
 
-**Dictionary key lookup** currently uses tag-strict equality (a coordinated change to dict
-key storage is forthcoming).
+**Dictionary keys use SameValueZero — the same comparator as array membership (Edit E1,
+keying half).** Integer key `1` and float key `1.0` are the same dictionary key:
+`let d = {}; d[1] = "a"` returns `"a"` for `d[1.0]`. The floats `+0.0` and `-0.0`
+are the same key. A `NaN` key round-trips: a value stored under a `NaN` key is
+retrieved by the same `NaN` expression.
+
+For non-numeric types, the per-category equality rule governs keying:
+
+- Strings key by value (two `"foo"` expressions are the same key).
+- Secrets, arrays, dicts, struct instances, functions, namespaces, futures, ranges,
+  and Error values key by reference identity — two distinct `secret("x")` constructions
+  are distinct keys; two `[1, 2]` arrays with distinct identities are distinct keys.
+  A handle that is the same object is always the same key:
+  `let t = secret("x"); d[t] = 1; d[t]` returns `1`.
 
 **Floating-point edges.** `0.0 == -0.0` is `true`. `NaN != NaN` (and is the only
 value not equal to itself). `NaN` is reachable from a Stash script only via
@@ -846,10 +858,11 @@ the revealed values; for security-sensitive comparison use
 comparator backed by `CryptographicOperations.FixedTimeEquals` that resists
 timing side-channels). This is safety-by-default: == cannot be used as an oracle for the wrapped value.
 
-A `secret` value cannot be used as a dict key. The current implementation
-restricts dict keys to `string`, `int`, `float`, and `bool`; passing a
-`secret` raises a `RuntimeError`. (If a future runtime permits secret
-dict-keys, they will key by reference identity per the equality rule above.)
+A `secret` value may be used as a dictionary key; it keys by reference
+identity per the equality rule above (§Equality, Edit E1 keying half). Two
+distinct `secret("x")` constructions are distinct keys: `d[secret("x")] = 1`
+followed by `d[secret("x")]` returns `null`. A named binding is the same key
+as itself: `let t = secret("x"); d[t] = 1; d[t]` returns `1`.
 
 **`typeof` and truthiness.** `typeof(s) == "secret"` for any secret `s`.
 `nameof(s)` returns `"secret"`. A `secret` is truthy regardless of inner

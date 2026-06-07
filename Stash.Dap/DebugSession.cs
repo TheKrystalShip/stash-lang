@@ -782,9 +782,9 @@ public class DebugSession : IDebugger
                     break;
 
                 case StashDictionary dict:
-                    foreach (var key in dict.RawKeys())
+                    foreach (StashValue key in dict.RawKeys())
                     {
-                        variables.Add(FormatVariable(RuntimeValues.Stringify(key), dict.Get(key).ToObject()));
+                        variables.Add(FormatVariable(RuntimeValues.Stringify(key.ToObject()), dict.Get(key).ToObject()));
                     }
 
                     break;

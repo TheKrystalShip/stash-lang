@@ -299,7 +299,7 @@ public class TemplateRenderer
                 var keys = new List<StashValue>();
                 foreach (var entry in dict.RawEntries())
                 {
-                    keys.Add(StashValue.FromObject(entry.Key));
+                    keys.Add(entry.Key);
                 }
                 return keys;
 
@@ -358,7 +358,7 @@ public class TemplateRenderer
 
         foreach (var entry in data.RawEntries())
         {
-            if (entry.Key is string key)
+            if (entry.Key.AsObj is string key)
             {
                 _evaluator.DefineVariable(env, key, entry.Value.ToObject());
             }

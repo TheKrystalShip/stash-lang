@@ -278,11 +278,11 @@ public static partial class CliBuiltIns
             throw new TypeError("'cli.command' requires a dict mapping subcommand names to CliSchema values.");
 
         // Validate each value is a CliSchema instance
-        foreach (object key in def.RawKeys())
+        foreach (StashValue key in def.RawKeys())
         {
             StashValue v = def.Get(key);
             if (!v.IsObj || v.AsObj is not StashInstance inst || inst.TypeName != "CliSchema")
-                throw new TypeError($"'cli.command': value for subcommand '{key}' must be a CliSchema (returned by cli.schema).");
+                throw new TypeError($"'cli.command': value for subcommand '{key.ToObject()}' must be a CliSchema (returned by cli.schema).");
         }
 
         var fields = new Dictionary<string, StashValue>

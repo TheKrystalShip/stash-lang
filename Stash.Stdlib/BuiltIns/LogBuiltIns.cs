@@ -241,9 +241,9 @@ public static partial class LogBuiltIns
     private static void AppendTextFields(StringBuilder sb, StashDictionary? dict)
     {
         if (dict is null) return;
-        foreach (object key in dict.RawKeys())
+        foreach (StashValue key in dict.RawKeys())
         {
-            string k = key.ToString() ?? "";
+            string k = key.ToObject()?.ToString() ?? "";
             string v = RuntimeValues.Stringify(dict.Get(key).ToObject());
             sb.Append(' ');
             sb.Append(k);
@@ -290,9 +290,9 @@ public static partial class LogBuiltIns
     private static void WriteJsonFields(Utf8JsonWriter writer, StashDictionary? dict)
     {
         if (dict is null) return;
-        foreach (object key in dict.RawKeys())
+        foreach (StashValue key in dict.RawKeys())
         {
-            string k = key.ToString() ?? "";
+            string k = key.ToObject()?.ToString() ?? "";
             object? val = dict.Get(key).ToObject();
             WriteJsonValue(writer, k, val);
         }
@@ -387,11 +387,11 @@ public static partial class LogBuiltIns
     private static StashDictionary? MergeFields(StashDictionary preset, StashDictionary? extra)
     {
         var merged = new StashDictionary();
-        foreach (object key in preset.RawKeys())
+        foreach (StashValue key in preset.RawKeys())
             merged.Set(key, preset.Get(key));
         if (extra is not null)
         {
-            foreach (object key in extra.RawKeys())
+            foreach (StashValue key in extra.RawKeys())
                 merged.Set(key, extra.Get(key));
         }
         return merged;

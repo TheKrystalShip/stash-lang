@@ -185,7 +185,7 @@ public static partial class YamlBuiltIns
         var result = new Dictionary<string, object?>();
         foreach (var entry in dict.RawEntries())
         {
-            string keyStr = entry.Key?.ToString() ?? "null";
+            string keyStr = entry.Key.ToObject()?.ToString() ?? "null";
             result[keyStr] = ConvertToYaml(entry.Value.ToObject());
         }
 

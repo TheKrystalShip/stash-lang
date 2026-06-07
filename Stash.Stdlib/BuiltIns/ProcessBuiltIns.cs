@@ -1388,7 +1388,7 @@ public static partial class ProcessBuiltIns
 
         var result = new Dictionary<string, string>();
         foreach (var kvp in dict.GetAllEntries())
-            result[kvp.Key.ToString()!] = StringifyArg(kvp.Value);
+            result[kvp.Key.ToObject()?.ToString() ?? ""] = StringifyArg(kvp.Value);
         return result;
     }
 

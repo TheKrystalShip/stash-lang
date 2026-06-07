@@ -147,11 +147,40 @@ phases:
     files:
       - docs/Stash — Language Specification.md
       - Stash.Core/Runtime/Types/StashDictionary.cs
+      - Stash.Core/Runtime/RuntimeValues.cs
       - Stash.Stdlib/BuiltIns/DictBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/AssertBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Build.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Help.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Parse.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.Schema.cs
+      - Stash.Stdlib/BuiltIns/CliBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/CsvBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/HttpBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/IniBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/JsonBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/LogBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/NetSocketImpl.cs
+      - Stash.Stdlib/BuiltIns/ProcessBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/SchedulerBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/TomlBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/XmlBuiltIns.cs
+      - Stash.Stdlib/BuiltIns/YamlBuiltIns.cs
+      - Stash.Bytecode/StashTypeConverter.cs
+      - Stash.Bytecode/Runtime/RuntimeOps.cs
+      - Stash.Bytecode/VM/VirtualMachine.Collections.cs
+      - Stash.Bytecode/VM/VirtualMachine.ControlFlow.cs
+      - Stash.Dap/DebugSession.cs
+      - Stash.Hosting/Marshalling/JsonStashBridge.cs
+      - Stash.Tpl/TemplateRenderer.cs
       - Stash.Tests/Conformance/Equality/DictKeyConformanceTests.cs
       - Stash.Tests/Conformance/Equality/EqualityChokepointMetaTests.cs
       - Stash.Tests/Conformance/ConformanceTraitMetaTests.cs
       - Stash.Tests/Conformance/Values/EqualityNumericConformanceTests.cs
+      - Stash.Tests/Conformance/Values/SecretConformanceTests.cs
+      - Stash.Tests/Bytecode/BytecodeTestBase.cs
+      - Stash.Tests/Interpreting/StashTestBase.cs
+      - Stash.Tests/Interpreting/InterpreterTests.cs
     verify:
       - dotnet build Stash.sln
       - dotnet test --filter "FullyQualifiedName~DictKeyConformanceTests|FullyQualifiedName~EqualityNumericConformanceTests|FullyQualifiedName~StashDictionaryTests|FullyQualifiedName~DictBuiltInsTests"

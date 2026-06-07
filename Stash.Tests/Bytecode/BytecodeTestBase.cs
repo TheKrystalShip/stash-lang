@@ -40,7 +40,7 @@ public abstract class BytecodeTestBase
         }
         if (value is StashDictionary dict)
         {
-            foreach (object key in dict.RawKeys())
+            foreach (StashValue key in dict.RawKeys())
             {
                 StashValue sv = dict.Get(key);
                 object? val = sv.ToObject();

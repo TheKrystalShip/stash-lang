@@ -51,18 +51,13 @@ public sealed class EqualityChokepointMetaTests
     /// </summary>
     private static readonly IReadOnlyList<(string RelPath, string MemberHint)> KnownExemptions = new[]
     {
-        // ── Path #2: RuntimeValues.IsEqual — used by dict/assert callers (migrated P3/P4) ──
-        // Note: arr consumers migrated in P2; RuntimeValues.IsEqual itself stays until P4.
+        // ── Path #2: RuntimeValues.IsEqual — used by assert callers (migrated P4) ──
+        // Note: arr consumers migrated in P2; dict consumer migrated in P3.
+        // RuntimeValues.IsEqual itself stays until P4.
         ("Stash.Core/Runtime/RuntimeValues.cs",       "IsEqual"),
-
-        // ── Path #5: StashDictionary._entries — Dictionary<object,_> (migrated P3) ──
-        ("Stash.Core/Runtime/Types/StashDictionary.cs", "_entries"),
 
         // ── Path #4: ChunkBuilder.StashValueComparer — constant-pool comparer (migrated P5) ──
         ("Stash.Bytecode/Bytecode/ChunkBuilder.cs",   "StashValueComparer"),
-
-        // ── Path #2 (dict consumer): DictBuiltIns.cs — 1 site using RuntimeValues.IsEqual ──
-        ("Stash.Stdlib/BuiltIns/DictBuiltIns.cs",     "<1 site>"),
 
         // ── Path #2 (assert consumers): AssertBuiltIns.cs — 2 sites using RuntimeValues.IsEqual ──
         ("Stash.Stdlib/BuiltIns/AssertBuiltIns.cs",   "<2 sites>"),

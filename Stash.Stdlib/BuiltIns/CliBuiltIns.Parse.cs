@@ -586,9 +586,9 @@ public static partial class CliBuiltIns
         List<StashValue> positionals = GetListField(leafSchema, "positionals");
         StashDictionary options = GetDictField(leafSchema, "options");
 
-        foreach (object rawKey in options.RawKeys())
+        foreach (StashValue rawKey in options.RawKeys())
         {
-            string propName = rawKey?.ToString() ?? "";
+            string propName = rawKey.ToObject()?.ToString() ?? "";
             if (sourceValues.Has(propName))
                 result.Set(propName, sourceValues.Get(propName));
         }
@@ -608,9 +608,9 @@ public static partial class CliBuiltIns
     private static List<string> GetSubcommandNames(StashDictionary commandsDict)
     {
         var names = new List<string>();
-        foreach (object rawKey in commandsDict.RawKeys())
+        foreach (StashValue rawKey in commandsDict.RawKeys())
         {
-            string name = rawKey?.ToString() ?? "";
+            string name = rawKey.ToObject()?.ToString() ?? "";
             if (!string.IsNullOrEmpty(name))
                 names.Add(name);
         }
@@ -681,10 +681,10 @@ public static partial class CliBuiltIns
         Dictionary<string, string> shortToProp,
         Dictionary<string, string> aliasToProp)
     {
-        foreach (object rawKey in optionsDict.RawKeys())
+        foreach (StashValue rawKey in optionsDict.RawKeys())
         {
-            string propKey = rawKey?.ToString() ?? "";
-            StashValue sv = optionsDict.Get(rawKey!);
+            string propKey = rawKey.ToObject()?.ToString() ?? "";
+            StashValue sv = optionsDict.Get(rawKey);
             if (!sv.IsObj || sv.AsObj is not StashInstance spec) continue;
 
             specByPropName[propKey] = spec;

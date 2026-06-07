@@ -301,10 +301,10 @@ public static partial class XmlBuiltIns
         var attrsVal = node.GetField("attrs", null);
         if (!attrsVal.IsNull && attrsVal.AsObj is StashDictionary attrs)
         {
-            foreach (object key in attrs.RawKeys())
+            foreach (StashValue key in attrs.RawKeys())
             {
                 string? val = attrs.Get(key).AsObj as string;
-                if (val != null) el.SetAttributeValue(key.ToString()!, val);
+                if (val != null) el.SetAttributeValue(key.ToObject()?.ToString() ?? "", val);
             }
         }
 
