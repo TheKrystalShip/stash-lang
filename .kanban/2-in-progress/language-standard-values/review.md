@@ -293,3 +293,78 @@ The existing conformance tests cover both behaviors unchanged.
 grep -n 'Idempotent wrap' "docs/Stash — Language Specification.md"   # still present, prose updated
 dotnet test --filter "FullyQualifiedName~SecretConformanceTests"
 ```
+
+---
+
+## Review Pass 2 — clean (no new findings)
+
+**Pass 2 date:** 2026-06-07
+**Pass 2 range reviewed:** `50a73828..dfefe7fe` (the five F01–F05 fix commits + two follow-ups)
+**Baseline at pass 2:** full `dotnet test` 14,383 passed / 0 failed / 6 skipped — green; `Category=Conformance` green.
+
+The single re-review checked the resolution work for regressions, internal contradictions, and seal drift; none were found. Key checks performed and the result:
+
+1. **F01 — `buf.equals(buf.from(reveal(a)), buf.from(reveal(b)))` is runnable.** Probed
+   end-to-end against the freshly-built CLI: returns `true` for two secrets wrapping
+   equal contents. Both spec hits (§Equality and §Secret Values) consistently
+   recommend the same callable API; `grep -n 'crypto.constantTimeEquals' "docs/Stash —
+   Language Specification.md"` returns zero (and the conformance class no longer
+   echoes the wrong name either).
+2. **F02 carve-out internal consistency.** The §Equality opening prose ("Equality is
+   total"), the numeric-coercion rule ("single equivalence class for `==` and `!=`"),
+   the per-category table, and the new "Membership and keying use tag-strict
+   equality" carve-out read consistently together. The carve-out *scopes* the
+   equivalence class to `==`/`!=` via its opening sentence — "The numeric-coercion
+   rule above governs `==` and `!=` only" — rather than contradicting it. The
+   §Expressions → Membership clause (L1335-1338) is bi-directionally
+   cross-referenced with the new §Equality clause.
+3. **F02 carve-out honesty.** The clause states the divergence as *observable and
+   deliberate in the current runtime* and points the eventual unification at the
+   ratified backlog spec-seed
+   (`numeric-equality-inconsistency-in-operator-dict-keys.md`). It does NOT
+   overclaim "fully unified" anywhere. The spec-seed itself is sound — names the
+   three fix sites (`RuntimeOps.Contains`, `ArrBuiltIns` ~6 sites,
+   `StashDictionary` comparer), the critical `StashValue.Equals`/`GetHashCode`
+   no-touch constraint, and a concrete SameValueZero algorithm with `-0.0` and NaN
+   semantics specified.
+4. **F02 conformance tests have teeth (no vacuous pass).** xUnit's
+   `Assert.False(bool? cond, msg)` throws on `null` (verified against
+   `BooleanAsserts.cs` source: `if (!condition.HasValue || condition.GetValueOrDefault())
+   throw …`). The dict-key `Assert.True(result is null, …)` shape is fine. Spec edits
+   in commit `24c4e73b` corrected the two earlier invalid examples (`x =>` → `(x) =>`,
+   inline integer-key dict literal); both repaired examples now run cleanly against
+   the freshly-built CLI.
+5. **F03 nameof(enum_value) clause internal consistency.** The general `nameof` prose
+   at L654-657 covers "values with a named declaration" returning the "user-visible
+   name"; the explicit "Exception — enum values" at L658-662 narrows that arm for
+   enum members to the qualified-path `"Color.Red"`. The struct-instance,
+   enum-type-identifier, and interface cases retain their original returns and are
+   explicitly named in the exception clause's last sentence. The five new
+   TypeModel conformance tests (`TypeOf_IpLiteral`, `TypeOf_InterfaceType`,
+   `TypeOf_StructTypeIdentifier`, `TypeOf_EnumTypeIdentifier`,
+   `Nameof_EnumValue_ReturnsQualifiedMemberName`) match the sealed clauses
+   exactly; runtime probes confirm all five return the asserted strings.
+6. **F03 backlog stub.** The
+   `nameof-enum-value-returns-qualified-name-not-type-name.md` spec-seed accurately
+   records the option-B ratification, names the (current `"Color.Red"` →
+   recommended `"Red"`) eventual change with C#/Python comparators, and identifies
+   the conformance test as the change-detector.
+7. **F04 typed-array prose.** §Type Model L591 narrows the typed-array row to
+   `byte[]`; §typeof L646-652 frames `int[]`/`float[]`/`string[]` as not-currently-
+   reachable, ties the closed-set sentence to a breaking-change boundary, and
+   notes type annotations erase to plain `array`. Spec ↔ test surface
+   asymmetry that triggered pass-1 F04 is resolved.
+8. **F05 secret prose tightening + D4 invariants.** §Secret Values "Idempotent wrap"
+   now explicitly states `reveal(secret(secret(x))) == reveal(secret(x))` AND
+   `outer == inner` is `false` (handle distinctness, per Equality). The dict-key
+   clause collapsed to one prohibition sentence with a parenthetical for the
+   hypothetical future relaxation. Runtime probes confirm
+   `secret("x") == secret("x")` is `false` (D4 reference identity) and
+   `let t = secret("y"); t == t` is `true`.
+9. **No spec scope creep.** All edits since pass 1 live inside §Values & Types
+   L582-L851 (plus the cross-reference at §Expressions → Membership L1335-1338,
+   which was already there and only got the divergence pointer). Acceptance Criteria
+   #1–#13 from the brief remain satisfied.
+
+The seal is internally consistent, externally honest about the deferred
+SameValueZero unification, and runtime-verified end-to-end. **Ready for `/done`.**
